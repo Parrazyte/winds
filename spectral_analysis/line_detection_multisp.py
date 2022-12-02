@@ -3,15 +3,16 @@
 """
 Created on Mon Oct 11 11:17:29 2021
 
-@author: parrama
+Compute spectral analysis and attempts to detect absorption lines in the iron band
+for all spectra in the current merge directory
 
-Line detection script
+When finished or if asked to, computes a global PDF merging the result of the line detection process for each exposure 
+with previous data reduction results if any
 
-to be launched in a merge directory
+Can also add very basic correlation/distribution of the line parameters
+(these should be looked at with visual_line)
 
 If using multi_obj, it is assumed the lineplots directory is outdir
-
-remember to change settings to launch this script in the current namespace to keep the xspec window id in memory
 """
 
 #general imports
@@ -538,6 +539,7 @@ computing the line ignore values, which we cap from the lower and upper bound of
 we also avoid getting upper bounds lower than the lower bounds because xspec reads it in reverse and still ignores the band you want to keep
 ####should eventually be expanded to include the energies of each band as for the lower bound they are higher and we could have the opposite issue with re-noticing low energies
 '''
+
 if line_cont_ig_arg=='iron':
     
     if sat in ['XMM','Chandra','NICER','Swift','Suzaku']:

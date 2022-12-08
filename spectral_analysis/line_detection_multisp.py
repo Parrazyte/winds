@@ -64,8 +64,11 @@ from xspec import AllModels,AllData,Fit,Spectrum,Model,Plot,Xset,FakeitSettings,
 
 #custom script with a few shorter xspec commands
 from xspec_config_multisp import allmodel_data,model_data,model_load,addcomp,editmod,Pset,Pnull,rescale,reset,Plot_screen,store_plot,freeze,allfreeze,unfreeze,\
-                         calc_error,delcomp,fitmod,fitcomp,model_list,calc_fit,plot_line_comps,lines_std,c_light,\
-                         lines_e_dict,xcolors_grp,comb_chi2map,plot_std_ener,n_absline,range_absline,lines_std_names,ravel_ragged
+                         calc_error,delcomp,fitmod,fitcomp,model_list,calc_fit,plot_line_comps,\
+                         xcolors_grp,comb_chi2map,plot_std_ener
+
+#custom script with a some lines and fit utilities and variables
+from fitting_tools import c_light,lines_std_names,lines_e_dict,ravel_ragged,n_absline,range_absline
 
 #importing some graph tools from the streamlit script
 from visual_line_tools import load_catalogs,dist_mass,obj_values,abslines_values,values_manip,distrib_graph,correl_graph,n_infos,incl_dic
@@ -131,7 +134,7 @@ ap.add_argument("-h_update",nargs=1,help='update the bg, rmf and arf file names 
 
 '''####ANALYSIS RESTRICTION'''
 
-ap.add_argument('-restrict',nargs=1,help='restrict the computation to a number of predefined exposures',default=True,type=bool)
+ap.add_argument('-restrict',nargs=1,help='restrict the computation to a number of predefined exposures',default=False,type=bool)
 #in this mode, the line detection function isn't wrapped in a try, and the summary isn't updasted
 
 observ_restrict=['0670673001_pn_U002_Timing_auto_sp_src_grp_20.ds'
@@ -180,7 +183,7 @@ ap.add_argument('-skip_started',nargs=1,help='skip all exposures listed in the l
 #note : will skip exposures for which the exposure didn't compute or with errors
 
 ap.add_argument('-skip_complete',nargs=1,help='skip completed exposures listed in the local summary_line_det file',
-                default=False,type=bool)
+                default=True,type=bool)
 
 ap.add_argument('-skip_nongrating',nargs=1,help='skip non grating Chandra obs (used to reprocess with changes in the restrictions)',
                 default=False,type=bool)
@@ -2429,8 +2432,6 @@ def line_detect(epoch_id):
         #clearing the chain before doing anything else
         AllChains.clear()
         
-        breakpoint()
-        
         Fit.perform()
         
         #computing the 3-sigma width without the MC to avoid issues with values being too different from 0
@@ -2659,15 +2660,14 @@ def line_detect(epoch_id):
             
             #adding the index to the list of line indexes to be tested
             line_id_list+=[i_line]
-            
-        #now we compute the list of intervals that can be made from that
-        steppar_ind_unique=np.unique(steppar_ind_list)
-        
-        steppar_ind_inter=list(interval_extract(steppar_ind_unique))
-                    
-            
+                        
         if is_absline and assess_line:      
 
+            #now we compute the list of intervals that can be made from that
+            steppar_ind_unique=np.unique(steppar_ind_list)
+            
+            steppar_ind_inter=list(interval_extract(steppar_ind_unique))
+        
             #fake loop
             with tqdm(total=nfakes) as pbar:
                 for f_ind in range(nfakes):

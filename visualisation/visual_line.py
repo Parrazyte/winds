@@ -8,6 +8,11 @@ Created on Sun Mar  6 00:11:45 2022
 
 #general imports
 import os,sys
+
+# sys.path.append('/home/parrama/Documents/Work/PhD/Scripts/Python')
+# sys.path.append('/home/parrama/Documents/Work/PhD/Scripts/Python/visualisation')
+# sys.path.append('/home/parrama/Documents/Work/PhD/Scripts/Python/spectral_analysis')
+
 import glob
 
 import argparse
@@ -44,16 +49,17 @@ from ast import literal_eval
 #Catalogs and manipulation
 from astroquery.vizier import Vizier
 
-#custom script with a few shorter xspec commands
-from xspec_config import model_list,lines_std,c_light,range_absline,lines_std_names
+#custom script with some lines and fit utilities and variables
+from fitting_tools import lines_std,lines_std_names,ravel_ragged,range_absline
 
 #visualisation functions
-from visual_line_tools import ravel_ragged,load_catalogs,dist_mass,obj_values,abslines_values,values_manip,distrib_graph,correl_graph,incl_dic,\
-    n_infos, plot_maxi_lightcurve, telescope_colors, sources_det_dic
+from visual_line_tools import load_catalogs,dist_mass,obj_values,abslines_values,values_manip,distrib_graph,correl_graph,incl_dic,\
+    n_infos, plot_maxi_lightcurve, telescope_colors, sources_det_dic, dippers_list
 
-import mpld3
 
-import streamlit.components.v1 as components
+# import mpld3
+
+# import streamlit.components.v1 as components
 
 
 ap = argparse.ArgumentParser(description='Script to display lines in XMM Spectra.\n)')
@@ -387,12 +393,14 @@ with st.sidebar.expander('Absorption lines restriction'):
 mask_lines=np.array([elem in selectbox_abstype for elem in line_display_str])
 
 with st.sidebar.expander('inclination'):
-    
     slider_inclin=st.slider('Inclination restriction (°)',min_value=0.,max_value=90.,step=0.5,value=[0.,90.])
     
     include_noinclin=st.checkbox('Include Sources with no inclination information',value=True)
     
     incl_inside=st.checkbox('Only include sources with uncertainties compatible with the current limits',value=False)
+    
+    radio_dipper=st.radio('Dipping sources restriction',('Off','Restrict to dippers','Restrict to non-dippers'))
+    
     
 #not used currently
 # radio_dispmode=st.sidebar.radio('HID display',('Autofit line detections','blind search peak detections'))
@@ -572,7 +580,14 @@ mask_inclin=[include_noinclin if elem not in incl_dic else getoverlap((incl_dic[
 #masking objects whose inclination bond go beyond the inclination restrictions if asked to
 if incl_inside:
     mask_inclin=[False if elem not in incl_dic else round(getoverlap((incl_dic[elem][0]-incl_dic[elem][1],incl_dic[elem][0]+incl_dic[elem][2]),                slider_inclin),3)==incl_dic[elem][1]+incl_dic[elem][2] for elem in obj_list]
+    
+#masking dippers/non dipper if asked to
+mask_dippers=[elem in dippers_list for elem in obj_list]
 
+if radio_dipper=='Restrict to dippers':
+    mask_inclin=mask_inclin & mask_dippers
+elif radio_dipper=='Restrict to non-dippers':
+    mask_inclin=mask_inclin & ~ mask_dippers
 #double mask taking into account both single/multiple display mode and the inclination    
 
 mask_obj_base=(mask_obj_single) & (mask_inclin)
@@ -1770,6 +1785,6 @@ if display_general_infos:
     st.write('number of individual detections:'+str(n_detections))
     st.write('number of individual significant detections:'+str(n_detections_sign))
     for i in range_absline:
-        st.write('number of sources with '+str(lines_std_names)[i+3])+' detections:'+str(n_sources_withdet_perline[i]))
-        st.write('number of individual'+str(lines_std_names)[i+3])+' detections:'+str(n_detections_perline[0][i]))
-        st.write('number of individual significant'+str(lines_std_names)[i+3])+' detections:'+str(n_detections_perline[1][i]))
+        st.write('number of sources with '+str(lines_std_names[i+3])+' detections:'+str(n_sources_withdet_perline[i]))
+        st.write('number of individual'+str(lines_std_names[i+3])+' detections:'+str(n_detections_perline[0][i]))
+        st.write('number of individual significant'+str(lines_std_names[i+3])+' detections:'+str(n_detections_perline[1][i]))

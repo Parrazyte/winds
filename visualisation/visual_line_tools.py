@@ -50,8 +50,8 @@ from ast import literal_eval
 
 '''Astro'''
 
-#custom script with a few shorter xspec commands
-from xspec_config_multisp import model_list,lines_std,c_light,lines_std_names,lines_e_dict,ravel_ragged
+#custom script with some lines and fit utilities and variables
+from fitting_tools import lines_std,c_light,lines_std_names,lines_e_dict,ravel_ragged
 
 #Catalogs and manipulation
 from astroquery.vizier import Vizier
@@ -106,6 +106,20 @@ incl_dic={
         'GRS1716-249':[50,10,10]
         
          }
+
+dippers_list=['4U1543-475',
+              '4U1630-47',
+              'GROJ1655-40',
+              'H1743-322',
+              'IGRJ17091-3624',
+              'IGRJ17451-3022',
+              'MAXIJ1305-704',
+              'MAXIJ1659-152',
+              'MAXIJ1803-298',
+              'MAXIJ1820+070',
+              'SwiftJ1357.2-0933',
+              'SwiftJ1658.2-4242',
+              'XTEJ1817-330']
 
 #custom distande dictionnary for measurements which are not up to date in blackcat/watchdog
 dist_dic={
@@ -490,7 +504,7 @@ def dist_mass(dict_linevis):
         #fixing the source mass at 10 solar Masses since we have very few reliable estimates of the BH masses anyway
         #except for NS whose masses are in a dictionnary
         if names[i] in mass_dic:
-            m_obj[i]=mass_dic[names[i]]
+            m_obj[i]=mass_dic[names[i]][0]
         else:
             m_obj[i]=8
     

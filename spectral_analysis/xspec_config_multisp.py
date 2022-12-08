@@ -10,6 +10,8 @@ import matplotlib.pyplot as plt
 
 from xspec import AllModels,AllData,Fit,Spectrum,Model,Plot,Xset,fit,AllChains,Chain
 
+from fitting_tools import sign_delchis_table,ravel_ragged,lines_std,lines_e_dict,lines_w_dict,\
+        link_groups
 
 from contextlib import redirect_stdout
 import subprocess
@@ -92,32 +94,6 @@ class MinorSymLogLocator(Locator):
     def tick_values(self, vmin, vmax):
         raise NotImplementedError('Cannot get tick locations for a '
                           '%s type.' % type(self))
-        
-def ravel_ragged(array):
-    
-    '''ravels a 2/3d array/list even with ragged nested sequences'''
-
-    #leaving if the array is 0d
-    
-    if type(array) not in [np.ndarray,list] or len(array)==0:
-        return array
-    #or 1d
-    if type(array[0]) not in [np.ndarray,list]:
-        return array
-
-    #testing if the array is 3d
-    if type(array[0][0]) in [np.ndarray,list]:
-        return np.array([array[i][j][k] for i in range(len(array)) for j in range(len(array[i])) for k in range(len(array[i][j]))])
-    else:
-        return np.array([array[i][j] for i in range(len(array)) for j in range(len(array[i]))])
-    
-
-#few constants in km/s
-c_light=299792.458
-
-#table of delchis necessary for the 99% significance of a number of d.o.f. added in a model (1 to 10 here)
-#(from https://fr.wikipedia.org/wiki/Loi_du_%CF%87%C2%B2)
-sign_delchis_table=[6.63,9.21,11.34,13.28,15.09,16.81,18.48,20.09,21.67,23.21]
     
 model_dir='/home/parrama/Soft/Xspec/Models'
 
@@ -146,103 +122,6 @@ xspec_multmods=\
       cpflux     kdblur2     partcov     rgsxsrc     vmshift     zmshift
      gsmooth    kerrconv      rdblur       simpl     mtable{4u1630_best.fits}
 '''.split()
-
-####Line informations
-'''Line informations'''
-
-lines_std={
-                    'FeKaem':r'Fe K$\alpha$',
-                    'FeKbem':r'Fe K$\beta$',
-                    'FeDiazem':'Fe Diaz',
-                  'FeKa25abs':r'FeXXV K$\alpha$',
-                  'FeKa26abs':r'FeXXVI K$\alpha$',
-                  'NiKa27abs':r'NiXXVII K$\alpha$',
-                  'FeKb25abs':r'FeXXV K$\beta$',
-                  'FeKb26abs':r'FeXXVI K$\beta$',
-                  'FeKg26abs':r'FeXXVI K$\gamma$',
-                  #these 4 are put at the end so they are not used in fakes computation etc since the computation will stop 
-                  #at 3+the number of abslines
-                  'FeKa25em':r'FeXXV K$\alpha$',
-                  'FeKa26em':r'FeXXVI K$\alpha$',
-                  #this are the narrow equivalent to FeKa and FeKb, but they are used as much more "physical" lines and as such 
-                  #have restrained energy ranges compared to their broad counterparts
-                  'FeKa0em':r'Fe K$\alpha$',
-                  'FeKb0em':r'Fe K$\beta$'}
-
-lines_std_names=list(lines_std.keys())
-
-#Note : some line positions are explicitely assumed in some parts of the code (notably the first 3 being the broad emission lines)
-
-#number of absorption lines in the current model list
-n_absline=len([elem for elem in lines_std_names if 'abs' in elem])
-
-range_absline=range(n_absline)
-
-lines_e_dict={
-                    'FeKaem':[6.4],
-                    'FeKbem':[7.06],
-                    'FeDiazem':[7.0],
-                  'FeKa25abs':[6.7,-5000,10000],
-                  'FeKa26abs':[6.97,-5000,10000],
-                  'NiKa27abs':[7.8,-5000,3000],
-                  'FeKb25abs':[7.89,-5000,10000],
-                  'FeKb26abs':[8.25,-5000,10000],
-                  'FeKg26abs':[8.7,-5000,10000],
-                  #these 4 are put at the end so they are not used in fakes computation etc since the computation will stop 
-                  #at 3+the number of abslines
-                  'FeKa25em':[6.7,-3000,3000],
-                  'FeKa26em':[6.97,-3000,3000],
-                  #this are the narrow equivalent to FeKa and FeKb, but they are used as much more "physical" lines and as such 
-                  #have restrained energy ranges compared to their broad counterparts
-                  'FeKa0em':[6.4,-3000,3000],
-                  'FeKb0em':[7.06,-3000,3000]}
-
-# higher bshift range for IGRJ17091-3624
-# lines_e_dict={
-#                     'FeKaem':[6.4],
-#                     'FeKbem':[7.06],
-#                     'FeDiazem':[7.0],
-#                   'FeKa25abs':[6.7,-5000,15000],
-#                   'FeKa26abs':[6.97,-5000,15000],
-#                   'NiKa27abs':[7.8,-5000,3000],
-#                   'FeKb25abs':[7.89,-5000,15000],
-#                   'FeKb26abs':[8.25,-5000,15000],
-#                   'FeKg26abs':[8.7,-5000,15000]}
-
-#restrict to Miller 2006 values for H1743-322 11048
-# lines_e_dict={
-#                     'FeKaem':[6.4],
-#                     'FeKbem':[7.06],
-#                     'FeDiazem':[7.0],
-#                   'FeKa25abs':[6.7,-480,480],
-#                   'FeKa26abs':[6.97,0,840],
-#                   'NiKa27abs':[7.8,-5000,3000],
-#                   'FeKb25abs':[7.89,-5000,10000],
-#                   'FeKb26abs':[8.25,-5000,10000],
-#                   'FeKg26abs':[8.7,-5000,10000]}
-
-
-#forcing broad gaussians to avoid degeneracies with the absorption line
-#resolved widths for abs lines (when using HETG)
-#this value is not used if the line is specified as narrow
-lines_w_dict={
-                'FeKaem':[0.2,0.1,1.5],
-                'FeKbem':[0.2,0.1,1.5],
-                'FeDiazem':[0.2,0.1,1.5],
-                  'FeKa25abs':[1e-3,0.,0.05],
-                  'FeKa26abs':[1e-3,0.,0.05],
-                  'NiKa27abs':[1e-3,0.,0.05],
-                  'FeKb25abs':[1e-3,0.,0.05],
-                  'FeKb26abs':[1e-3,0.,0.05],
-                  'FeKg26abs':[1e-3,0.,0.05],
-                  'FeKa0em':[1e-3,0.,0.05],
-                  'FeKb0em':[1e-3,0.,0.05],
-                  'FeKa25em':[1e-3,0.,0.05],
-                  'FeKb26em':[1e-3,0.,0.05],
-                  }
-
-#link groups to tie line energies together
-link_groups=np.array([['FeKa25abs','FeKb25abs'],['FeKa26abs','FeKb26abs','FeKg26abs'],['NiKa27abs']],dtype=object)
     
 xcolors_grp=['black','red','green','blue','cyan','purple','yellow']
 
@@ -1606,7 +1485,7 @@ def calc_fit(timeout=30,logfile=None,iterations=None,delchi_tresh=0.1,nonew=Fals
         Fit.nIterations=old_iterations
    
 
-def calc_error(logfile,maxredchi=1e6,param='all',timeout=60,delchi_thresh=0.1,indiv=True,give_errors=False,freeze_pegged=False):
+def calc_error(logfile,maxredchi=1e6,param='all',timeout=60,delchi_thresh=0.1,indiv=True,give_errors=False,freeze_pegged=False,test=False):
     
     '''
     Computes the fit errors in a multiprocessing environment to enable stopping the process after a specific time
@@ -1696,6 +1575,9 @@ def calc_error(logfile,maxredchi=1e6,param='all',timeout=60,delchi_thresh=0.1,in
             
             if freeze_pegged:
                 par_peg_ids=parse_xlog(log_lines,goal='lasterrors',freeze_pegged=freeze_pegged)
+                if test:
+                    breakpoint()
+                
             elif give_errors:
                 new_errors=parse_xlog(log_lines,goal='lasterrors')
                 
@@ -1705,7 +1587,7 @@ def calc_error(logfile,maxredchi=1e6,param='all',timeout=60,delchi_thresh=0.1,in
                     error_pars[(int(error_str)-1)//AllModels(1).nParameters][(int(error_str)-1)%AllModels(1).nParameters]=\
                         new_errors[(int(error_str)-1)//AllModels(1).nParameters][(int(error_str)-1)%AllModels(1).nParameters]
 
-                        
+                
             print('\nParsing the logs to see if a new minimum was found...')            
             
             #searching for the model
@@ -1908,6 +1790,415 @@ class fitmod:
             comp.logfile=self.logfile
             comp.logfile_write=self.logfile_write
 
+    def list_comps_errlocked(self):
+
+        '''
+        computes a list of error locked components that will be frozen before the error computation
+        
+        defined in a separate function to allow more flexibility later
+        '''
+        
+        comps_errlocked=[]
+        
+        #refreezing the abs components before the error computation
+        for allcomp in [elem for elem in self.includedlist if elem is not None]:
+
+            #adding non fixed absorption components
+            if allcomp.included and allcomp.absorption and self.fixed_abs is None:
+                    comps_errlocked+=[allcomp]
+                        
+        return comps_errlocked
+    
+    def test_addcomp(self,chain=False,lock_lines=False):
+        
+        '''
+        Tests each of the component in the available list which are not yet in the model for how significant their addition is
+        Adds the most significant out of all of them
+        returns 1 as a break value to stop the loop process whenever there are no more (significant if needed) components to be added 
+        (and thus there's no need to recheck for component deletion)
+         
+        '''
+
+        #list of currently NOT included components (doesn't take into account continuum components not in the model list)
+        curr_exclist=[elem for elem in self.complist if elem not in self.includedlist]
+        
+        if len(curr_exclist)==0:
+            return True
+        
+        self.print_xlog('\nlog:Current available components:\n')
+        self.print_xlog(str([curr_exclist[i].compname for i in range(len(curr_exclist))]))
+        
+        #array for the improvement of each component which can be added
+        component_delchis=np.zeros(len(curr_exclist))
+            
+        for i_excomp,component in enumerate(curr_exclist):
+                
+            #avoiding starting the model with a multiplicative component
+            if component.multipl and len(self.includedlist)==0:
+                continue
+            
+            if component.line and lock_lines:
+                continue
+            
+            #not adding continuum components already in the model
+            self.print_xlog('\nlog:Testing significance of '+component.compname+' component.')                    
+            
+            #storing the chi2 before adding the component
+            init_chi=Fit.statistic
+            
+            #copy of the includedlist for rollback after testing the component significance
+            prev_includedlist=copy(self.includedlist)
+            
+            self.includedlist=component.addtomod(fixed_vals=[self.fixed_abs] if component.absorption\
+                                                 and self.fixed_abs is not None else None,
+                                                 incl_list=self.includedlist)
+            
+            #updating the fitcomps before anything else
+            self.update_fitcomps()
+                
+            self.print_xlog('\nlog:Fitting the new component by itself...')
+            #fitting the component only
+            component.fit(logfile=self.logfile if chain else None)
+    
+            #fetching the interactive components from the list if it is provided                
+            if self.interact_groups is not None:
+                #searching the component in the intervals
+                for group in self.interact_groups:
+                    if component.compname in group:
+                        comp_group=np.array(group)[np.array(group)!=component.compname]
+                        break
+                    
+            '''
+            unfreezing the components previously added and fitting once more every time
+            we unfreeze them in reverse model order (i.e. ~increasing significance)
+            '''
+    
+            #list of components not in the same group as the currently tested component
+            comps_errlocked=self.list_comps_errlocked()
+                            
+            for i_comp,added_comp in enumerate(self.includedlist[::-1]):
+                
+                #skipping placeholders
+                if added_comp is None:
+                    continue
+                
+                #if we arrived at the first (last) component of the initial continuum
+                if added_comp in self.cont_complist:
+                    self.print_xlog('\nlog:Unfreezing the continuum')
+                    
+                    #we unfreeze all the remaining components (all from the continuum) and test them for absorption components
+                    #which we error_lock
+                    for cont_comp in self.includedlist[::-1][i_comp:]:
+                        #here we do check for placeholders directly in the test since i_comp can factor in some placeholders
+                        if cont_comp is not None and (not cont_comp.line or not lock_lines):
+                            cont_comp.unfreeze()
+    
+                        #unfreezing constant factors for all but the first datagroup
+                        if AllModels(1).componentNames[0]=='constant' and AllData.nGroups>1:
+                            for i_grp in range(2,AllData.nGroups+1):
+                                AllModels(i_grp)(1).frozen=False
+                                
+                elif not added_comp.line or not lock_lines:
+                    self.print_xlog('\nlog:Unfreezing '+added_comp.compname+' component.')
+                    added_comp.unfreeze()
+                
+                #fitting with the new freeze state
+                calc_fit(logfile=self.logfile if chain else None)
+                
+                #this is only for non continuum components
+                if self.interact_groups is not None:
+                    
+                    if added_comp.compname not in comp_group:
+                        self.print_xlog('\nlog:Component '+added_comp.compname+' not in group of component '+component.compname+'.\n'+
+                              'adding it to the error-locked list before interaction to avoid bogging the fit down...')
+                        comps_errlocked+=[added_comp]
+                    else:
+                        self.print_xlog('\nlog:Component '+added_comp.compname+' in the same group as component '+component.compname+'.\n')
+                        
+                #freezing the error locked components before the error computation
+                for elem_comp in comps_errlocked:
+                    elem_comp.freeze()
+                
+                #if we reached the continuum step, we compute the errors starting at parameter 1 (i.e. all parameters)
+                if added_comp.continuum:
+                    error_str='1-'+str(AllModels(1).nParameters*AllData.nGroups)
+                    
+                #in the other case, we start at the current component's first parameter index
+                else:
+                    error_str=str(added_comp.parlist[0])+'-'+str(AllModels(1).nParameters*AllData.nGroups)
+                    
+                calc_error(self.logfile,param=error_str,indiv=True)
+            
+                #unfreezing everything back
+                for elem_comp in comps_errlocked:
+                    elem_comp.unfreeze()
+                
+                #we can stop the loop after the continuum unfreezing iteration
+                if added_comp in self.cont_complist:
+                    break
+                
+            new_chi=Fit.statistic
+            
+            #storing the final fit in the component's save
+            component.fitted_mod=allmodel_data()
+            
+            self.print_xlog('\nlog:Chi2 before adding the component:'+str(init_chi))
+            self.print_xlog('\nlog:Chi2 after adding the component:'+str(new_chi))
+            #testing the 99% significance of the comp with the associated number of d.o.f. added 
+            #i.e. the number of parameters - the number of parameters we keep frozen
+            self.print_xlog('\nlog:Delta chi2 for this component: '+str(init_chi-new_chi))
+            
+            #we always accept the component when there is no model
+            #-1 because our table starts at index 0 for 1 d.o.f.
+            
+            if component.mandatory:
+                self.print_xlog('\nlog:Mandatory component')
+                component_delchis[i_excomp]=1e10
+            elif component.absorption and self.fixed_abs is not None:
+                self.print_xlog('\nlog:Fixed absorption value provided. Assuming mandatory component')
+                #note: we use a different chi² value to avoid conflicts when selecting one. They will simply be chosen
+                #one after the other
+                component_delchis[i_excomp]=1e9
+            else:
+                #at this stage there's no question of unlinking energies for absorption lines so we can use n_unlocked_pars_base
+                if init_chi-new_chi<sign_delchis_table[component.n_unlocked_pars_base-1] and init_chi!=0:
+                    self.print_xlog('\nlog:The '+component.compname+' component is not statistically significant at this stage.')
+                else:
+                    self.print_xlog('\nlog:The '+component.compname+' component is statistically significant.')
+                    component_delchis[i_excomp]=init_chi-new_chi
+            
+            #deleting the component (we only add the best one each time)
+            component.delfrommod()
+            
+            #Note:here we do not actually delete the component but instead rollback to an early model state, so we do not need
+            #to call update_fitcomps but in a more complex situation it would be necessary
+            
+            #letting some time for the component to be deleted
+            time.sleep(1)
+    
+            #restoring the previous includedlist
+            self.includedlist=prev_includedlist
+            
+        #filling the first remaining free element of the delchi evolution array with the current delchis array
+        self.progressive_delchis+=[component_delchis]
+        
+        if len(component_delchis.nonzero()[0])==0:
+            self.print_xlog('\nlog:No significant component remaining. Stopping fit process...')
+            return True
+        
+        #when there is no model the comparison won't work directly so we do it in two steps
+        bestcomp=np.array(curr_exclist)[component_delchis==max(component_delchis[component_delchis.nonzero()])][0]
+        
+        self.print_xlog('\nlog:The most significant component is '+bestcomp.compname+'. Adding it to the current model...')
+
+        #re-adding it with its fit already loaded
+        self.includedlist=bestcomp.addtomod(fixed_vals=[self.fixed_abs] if component.absorption\
+                                            and self.fixed_abs is not None else None,
+                                            incl_list=self.includedlist,fitted=True)
+            
+        #updating the fitcomps before anything else
+        self.update_fitcomps()
+        
+        return False
+                
+    def test_delcomp(self,chain=False,lock_lines=False,in_add=False):
+
+        '''
+        Testing the effect of manually deleting any of the currently included components with the new configuration
+        
+        We do not cover the last added component since we just added it
+        while in theory it's possible that its addition could allow to find a new minimum allowing the deletion of another component 
+        which in turn allows to find a new minimum without this one, it seems very unlikely
+        
+        this step is skipped for lines in locked lines mode
+        
+        in_add differentiates between the use while components are being added and the second use at the end 
+        (in which we test all components, and test unlinking the lines)
+        '''
+            
+        if in_add:
+            list_comp_test=self.includedlist[:-1]
+        else:
+            list_comp_test=self.includedlist
+            
+        for component in list_comp_test:
+            
+            #skipping placeholders
+            if component is None:
+                continue
+            
+            if not component.included:
+                continue
+            
+            if component.mandatory:
+                continue
+            
+            #skipping deletion of fixed absorption
+            if component.absorption and self.fixed_abs is not None:
+                continue
+            
+            #skipping deletion of lines in locked lines mode
+            if lock_lines and component.line:
+                continue     
+            
+            #stopping the process if only one additive component remains
+            if len([comp for comp in [elem for elem in self.includedlist if elem is not None] if not comp.multipl])>1:
+                break
+            
+            #now we need to test for the unlinking of vashifts for the significance
+            if component.named_line:
+                n_unlocked_pars=2-(1 if AllModels(1)(component.parlist[0]).link!='' else 0)
+            else:
+                n_unlocked_pars=component.n_unlocked_pars_base
+            
+            self.print_xlog('\nlog:Testing the effect of deleting component '+component.compname)
+                
+            new_chi=Fit.statistic
+            #storing the current model iteration
+            new_bestmod=allmodel_data()
+    
+            #here we don't use an enumerate in the loop itself since the positions can be modified when components are deleted
+            i_comp=np.argwhere(np.array(self.includedlist)==component)[0][0]
+            
+            #storing the previous includedlist to come back to it at the end of the loop iteration
+            prev_includedlist=self.includedlist
+            
+            try:
+            
+                #deleting the component and storing how many components were deleted in the process
+                n_delcomp=component.delfrommod(rollback=False)
+
+            except:
+                breakpoint()
+                
+            #updating the current includedlist to delete as many components as what was deleted in xspec
+            self.includedlist=self.includedlist[:i_comp+1-n_delcomp]+self.includedlist[i_comp+1:]
+            #this time we need to update
+            self.update_fitcomps()
+                
+            #refitting and recomputing the errors with everything free
+            calc_fit(logfile=self.logfile if chain else None)
+            
+            #restricting the test to components which are not 'very' significant
+            #we fix the limit to 10 times the delchi for the significance threshold with their corresponding number of parameters
+            if Fit.statistic-new_chi>sign_delchis_table[n_unlocked_pars-1]*10:
+                self.print_xlog('\nlog:Very significant component detected. Skipping deletion test.')
+                model_load(new_bestmod)
+                
+                #updating the includedlist
+                self.includedlist=prev_includedlist
+                self.update_fitcomps()
+                continue
+            
+            #we need this variable again
+            comps_errlocked=self.list_comps_errlocked()
+                    
+            for comp_locked in comps_errlocked:
+                comp_locked.freeze()
+                
+            calc_error(self.logfile,param='1-'+str(AllModels(1).nParameters*AllData.nGroups),indiv=True)
+                
+            for comp_locked in comps_errlocked:
+                comp_locked.unfreeze()
+                
+            #when we test for delcomp at the end of the procedure, we adding a new test:
+            #to try to unlink before assessing the significance of the component
+            if in_add:
+                npars_unlinked=0
+            else:
+                npars_unlinked=self.test_unlink_lines()
+            
+            if Fit.statistic-new_chi<sign_delchis_table[n_unlocked_pars-1+npars_unlinked] and Fit.statistic!=0:
+                
+                self.print_xlog('\nlog:Component '+component.compname+' is not significant anymore. Deleting it from the fit...')
+                
+                #stricto sensu we should delete them in reverse order of fit relevancy but it shouldn't really matter
+                new_chi=Fit.statistic
+                
+                #these are not done yet for the component since we delete without rollback
+                component.reset_attributes()
+                
+                #storing the new model iteration
+                new_bestmod=allmodel_data()
+                
+            else:
+                #we just rollback to the fit before deletion and keep exploring
+                #note: the fitcomp parameters are not deleted
+                
+                self.print_xlog('\nlog:Component '+component.compname+' is still significant.')
+                model_load(new_bestmod)
+                
+                #updating the includedlist
+                self.includedlist=prev_includedlist
+                
+                self.update_fitcomps()
+                        
+    
+    def test_unlink_lines(self,chain=False,lock_lines=False):
+            
+        n_unlinked=0
+        
+        for comp_unlink in [elem for elem in self.includedlist if elem is not None]:
+            
+            #restricting to named absorption line components
+            if not comp_unlink.named_line:
+                continue
+            
+            #resticting to those who are linked
+            if AllModels(par_degroup(comp_unlink.parlist[0])[0])(par_degroup(comp_unlink.parlist[0])[1]).link=='':
+                continue
+            
+            #saving the model before making any change
+            new_bestmod=allmodel_data()
+            
+            #saving the initial fit statistic for comparison
+            base_chi_unlink=Fit.statistic
+            
+            self.print_xlog('\nlog:Testing significance of unlinking blueshift of component '+comp_unlink.compname)
+            
+            #saving values to avoid issues with bounds
+            par_unlink_values=AllModels(par_degroup(comp_unlink.parlist[0])[0])(par_degroup(comp_unlink.parlist[0])[1]).values
+            AllModels(par_degroup(comp_unlink.parlist[0])[0])(par_degroup(comp_unlink.parlist[0])[1]).link=''
+            AllModels(par_degroup(comp_unlink.parlist[0])[0])(par_degroup(comp_unlink.parlist[0])[1]).values=par_unlink_values
+            
+            #first fit while freezing all other components
+            for other_comp_unlink in [elem for elem in self.includedlist if elem is not None]:
+                if other_comp_unlink==comp_unlink:
+                    continue
+                other_comp_unlink.freeze()
+                
+            calc_error(self.logfile,param='1-'+str(AllModels(1).nParameters*AllData.nGroups),indiv=True)
+            
+            #unfreezing the other ones        
+            for other_comp_unlink in [elem for elem in self.includedlist if elem is not None]:
+                if other_comp_unlink==comp_unlink or (other_comp_unlink.line and lock_lines) :
+                    continue
+                other_comp_unlink.unfreeze()
+                
+            calc_fit(logfile=self.logfile if chain else None)
+            
+            comps_errlocked=self.list_comps_errlocked()
+            
+            for comp_locked in comps_errlocked:
+                comp_locked.freeze()
+                
+            calc_error(self.logfile,param='1-'+str(AllModels(1).nParameters*AllData.nGroups),indiv=True)
+                
+            for comp_locked in comps_errlocked:
+                comp_locked.unfreeze()
+            
+            new_chi_unlink=Fit.statistic
+            
+            #testing the significance of the new version of the model (here we added 1 d.o.f.)
+            if base_chi_unlink-new_chi_unlink>sign_delchis_table[0]:
+                self.print_xlog('\nlog:Freeing blueshift of component '+comp_unlink.compname+' is statistically significant.')
+                n_unlinked+=1
+            else:
+                self.print_xlog('\nlog:Freeing blueshift of component '+comp_unlink.compname+' is not significant. Reverting to linked model.')
+                model_load(new_bestmod)
+        
+        return n_unlinked
+                    
     def global_fit(self,chain=False,directory=None,observ_id=None,freeze_final_pegged=True,lock_lines=False):
         
         '''
@@ -1930,558 +2221,58 @@ class fitmod:
         #of course we need to take off the placeholders to compare the lists
         while [elem for elem in self.includedlist if elem is not None]!=self.complist:
             
-            #list of currently NOT included components (doesn't take into account continuum components not in the model list)
-            curr_exclist=[elem for elem in self.complist if elem not in self.includedlist]
-            
-            if len(curr_exclist)==0:
+            comp_finished=self.test_addcomp(chain=chain,lock_lines=lock_lines)
+                      
+            if comp_finished:
                 break
             
-            self.print_xlog('\nlog:Current available components:\n')
-            self.print_xlog(str([curr_exclist[i].compname for i in range(len(curr_exclist))]))
-            
-            #array for the improvement of each component which can be added
-            component_delchis=np.zeros(len(curr_exclist))
-
-
-            ####testing addition of new components
-            '''Testing which of the remaining available components is the best one and trying to add them'''
-            
-            for i_excomp,component in enumerate(curr_exclist):
-                    
-                #avoiding starting the model with a multiplicative component
-                if component.multipl and len(self.includedlist)==0:
-                    continue
-                
-                if component.line and lock_lines:
-                    continue
-                
-                #not adding continuum components already in the model
-                self.print_xlog('\nlog:Testing significance of '+component.compname+' component.')                    
-                
-                #storing the chi2 before adding the component
-                init_chi=Fit.statistic
-                
-                #copy of the includedlist for rollback after testing the component significance
-                prev_includedlist=copy(self.includedlist)
-                
-                self.includedlist=component.addtomod(fixed_vals=[self.fixed_abs] if component.absorption\
-                                                     and self.fixed_abs is not None else None,
-                                                     incl_list=self.includedlist)
-                
-                #updating the fitcomps before anything else
-                self.update_fitcomps()
-                    
-                self.print_xlog('\nlog:Fitting the new component by itself...')
-                #fitting the component only
-                component.fit(logfile=self.logfile if chain else None)
-
-                #fetching the interactive components from the list if it is provided                
-                if self.interact_groups is not None:
-                    #searching the component in the intervals
-                    for group in self.interact_groups:
-                        if component.compname in group:
-                            comp_group=np.array(group)[np.array(group)!=component.compname]
-                            break
-                        
-                '''
-                unfreezing the components previously added and fitting once more every time
-                we unfreeze them in reverse model order (i.e. ~increasing significance)
-                '''
-
-                #list of components not in the same group as the currently tested component
-                comps_errlocked=[]
-            
-                #parsing all the non placeholder components to fetch all the absorptions we'll need to freeze
-                for comp in [elem for elem in self.includedlist if elem is not None]:
-                    
-                    if comp.absorption and comp.compname!=component.compname:
-                        comps_errlocked+=[comp]
-                                
-                for i_comp,added_comp in enumerate(self.includedlist[::-1]):
-                    
-                    #skipping placeholders
-                    if added_comp is None:
-                        continue
-                    
-                    #if we arrived at the first (last) component of the initial continuum
-                    if added_comp in self.cont_complist:
-                        self.print_xlog('\nlog:Unfreezing the continuum')
-                        
-                        #we unfreeze all the remaining components (all from the continuum) and test them for absorption components
-                        #which we error_lock
-                        for cont_comp in self.includedlist[::-1][i_comp:]:
-                            #here we do check for placeholders directly in the test since i_comp can factor in some placeholders
-                            if cont_comp is not None and (not cont_comp.line or not lock_lines):
-                                cont_comp.unfreeze()
-
-                            #unfreezing constant factors for all but the first datagroup
-                            if AllModels(1).componentNames[0]=='constant' and AllData.nGroups>1:
-                                for i_grp in range(2,AllData.nGroups+1):
-                                    AllModels(i_grp)(1).frozen=False
-                                    
-                    elif not added_comp.line or not lock_lines:
-                        self.print_xlog('\nlog:Unfreezing '+added_comp.compname+' component.')
-                        added_comp.unfreeze()
-                    
-                    #fitting with the new freeze state
-                    calc_fit(logfile=self.logfile if chain else None)
-                    
-                    #this is only for non continuum components
-                    if self.interact_groups is not None:
-                        
-                        if added_comp.compname not in comp_group:
-                            self.print_xlog('\nlog:Component '+added_comp.compname+' not in group of component '+component.compname+'.\n'+
-                                  'adding it to the error-locked list before interaction to avoid bogging the fit down...')
-                            comps_errlocked+=[added_comp]
-                        else:
-                            self.print_xlog('\nlog:Component '+added_comp.compname+' in the same group as component '+component.compname+'.\n')
-                            
-                    #freezing the error locked components before the error computation
-                    for elem_comp in comps_errlocked:
-                        elem_comp.freeze()
-                    
-                    #if we reached the continuum step, we compute the errors starting at parameter 1 (i.e. all parameters)
-                    if added_comp.continuum:
-                        error_str='1-'+str(AllModels(1).nParameters*AllData.nGroups)
-                        
-                    #in the other case, we start at the current component's first parameter index
-                    else:
-                        error_str=str(added_comp.parlist[0])+'-'+str(AllModels(1).nParameters*AllData.nGroups)
-                        
-                    calc_error(self.logfile,param=error_str,indiv=True)
-                
-                    #unfreezing everything back
-                    for elem_comp in comps_errlocked:
-                        elem_comp.unfreeze()
-                    
-                    #we can stop the loop after the continuum unfreezing iteration
-                    if added_comp in self.cont_complist:
-                        break
-                    
-                new_chi=Fit.statistic
-                
-                #storing the final fit in the component's save
-                component.fitted_mod=allmodel_data()
-                
-                self.print_xlog('\nlog:Chi2 before adding the component:'+str(init_chi))
-                self.print_xlog('\nlog:Chi2 after adding the component:'+str(new_chi))
-                #testing the 99% significance of the comp with the associated number of d.o.f. added 
-                #i.e. the number of parameters - the number of parameters we keep frozen
-                self.print_xlog('\nlog:Delta chi2 for this component: '+str(init_chi-new_chi))
-                
-                #we always accept the component when there is no model
-                #-1 because our table starts at index 0 for 1 d.o.f.
-                
-                if component.mandatory:
-                    self.print_xlog('\nlog:Mandatory component')
-                    component_delchis[i_excomp]=1e10
-                elif component.absorption and self.fixed_abs is not None:
-                    self.print_xlog('\nlog:Fixed absorption value provided. Assuming mandatory component')
-                    #note: we use a different chi² value to avoid conflicts when selecting one. They will simply be chosen
-                    #one after the other
-                    component_delchis[i_excomp]=1e9
-                else:
-                    #at this stage there's no question of unlinking energies for absorption lines so we can use n_unlocked_pars_base
-                    if init_chi-new_chi<sign_delchis_table[component.n_unlocked_pars_base-1] and init_chi!=0:
-                        self.print_xlog('\nlog:The '+component.compname+' component is not statistically significant at this stage.')
-                    else:
-                        self.print_xlog('\nlog:The '+component.compname+' component is statistically significant.')
-                        component_delchis[i_excomp]=init_chi-new_chi
-                
-                #deleting the component (we only add the best one each time)
-                component.delfrommod()
-                
-                #Note:here we do not actually delete the component but instead rollback to an early model state, so we do not need
-                #to call update_fitcomps but in a more complex situation it would be necessary
-                
-                #letting some time for the component to be deleted
-                time.sleep(1)
-
-                #restoring the previous includedlist
-                self.includedlist=prev_includedlist
-
-                
-            #filling the first remaining free element of the delchi evolution array with the current delchis array
-            self.progressive_delchis+=[component_delchis]
-            
-            if len(component_delchis.nonzero()[0])==0:
-                self.print_xlog('\nlog:No significant component remaining. Stopping fit process...')
-                break
-            
-            #when there is no model the comparison won't work directly so we do it in two steps
-            bestcomp=np.array(curr_exclist)[component_delchis==max(component_delchis[component_delchis.nonzero()])][0]
-            
-            self.print_xlog('\nlog:The most significant component is '+bestcomp.compname+'. Adding it to the current model...')
-
-            #re-adding it with its fit already loaded
-            self.includedlist=bestcomp.addtomod(fixed_vals=[self.fixed_abs] if component.absorption\
-                                                and self.fixed_abs is not None else None,
-                                                incl_list=self.includedlist,fitted=True)
-                
-            #updating the fitcomps before anything else
-            self.update_fitcomps()
-                
-            #saving the current model state before trying to delete components
-            new_bestmod=allmodel_data()
-            
-            #Plotting the current state
-            Plot('ldata,ratio,delchi')
-            
-            ####testing deletion of existing components
-            '''
-            Testing the effect of manually deleting any of the currently included components with the new configuration
-            
-            We do not cover the last added component since we just added it
-            while in theory it's possible that its addition could allow to find a new minimum allowing the deletion of another component 
-            which in turn allows to find a new minimum without this one, it seems very unlikely
-            
-            this step is skipped in locked lines mode
-            '''
-            
-            #we only do this for >2 components since the first one is necessarily significant and the second one too if it was added
+            #we only do this for >2 components since the first one is necessarily significant and the second one too if it was just added
             if len(self.includedlist)<3:
                 continue
             
-            new_chi=Fit.statistic
-                        
-            for component in self.includedlist[:-1]:
-                
-                #skipping placeholders
-                if component is None:
-                    continue
-                
-                if not component.included:
-                    continue
-                
-                if component.mandatory:
-                    continue
-                
-                #skipping deletion of fixed absorption
-                if component.absorption and self.fixed_abs is not None:
-                    continue
-                
-                #skipping deletion of lines in locked lines mode
-                if lock_lines and component.line:
-                    continue                    
-                
-                self.print_xlog('\nlog:Testing the effect of deleting component '+component.compname)
-
-                #here we don't use an enumerate in the loop itself since the positions can be modified when components are deleted
-                i_comp=np.argwhere(np.array(self.includedlist[:-1])==component)[0][0]
-                
-                #storing the previous includedlist to come back to it at the end of the loop iteration
-                prev_includedlist=self.includedlist
-                    
-                #deleting the component and storing how many components were deleted in the process
-                n_delcomp=component.delfrommod(rollback=False)
-                                        
-                #updating the current includedlist to delete as many components as what was deleted in xspec
-                self.includedlist=self.includedlist[:i_comp+1-n_delcomp]+self.includedlist[i_comp+1:]
-                
-                #this time we need to update
-                self.update_fitcomps()
-                
-                #refitting and recomputing the errors with everything free
-                calc_fit(logfile=self.logfile if chain else None)
-                
-                #restricting the error computations to components which are not 'very' significant
-                #we fix the limit to 10 times the delchi for the significance threshold with their corresponding number of parameters
-                if Fit.statistic-new_chi>sign_delchis_table[component.n_unlocked_pars_base-1]*10:
-                    
-                    self.print_xlog('\nlog:Very significant component detected. Skipping deletion test.')
-                    model_load(new_bestmod)
-                    self.includedlist=prev_includedlist
-                    self.update_fitcomps()
-                    continue
-
-                #we need this variable again
-                comps_errlocked=[]
-                
-                #refreezing the abs components before the error computation
-                for allcomp in [elem for elem in self.includedlist if elem is not None]:
-
-                    if allcomp.included and allcomp.absorption:
-                            comps_errlocked+=[allcomp]
-                        
-                for comp_locked in comps_errlocked:
-                    comp_locked.freeze()
-                    
-                calc_error(self.logfile,param='1-'+str(AllModels(1).nParameters*AllData.nGroups),indiv=True)
-                    
-                for comp_locked in comps_errlocked:
-                    comp_locked.unfreeze()
-                    
-                #at this stage there's no question of unlinking energies for absorption lines so we can use n_unlocked_pars_base
-                if Fit.statistic-new_chi<sign_delchis_table[component.n_unlocked_pars_base-1] and Fit.statistic!=0:
-                    
-                    self.print_xlog('\nlog:Component '+component.compname+' is not significant anymore. Deleting it from the fit...')
-                    
-                    #stricto sensu we should delete them in reverse order of fit relevancy but it shouldn't really matter
-                    new_chi=Fit.statistic
-                    
-                    #these are not done yet for the component since we delete without rollback
-                    component.reset_attributes()
-                    
-                    #storing the new model iteration for the following
-                    new_bestmod=allmodel_data()
-                    
-                else:
-                    #we just rollback to the fit before deletion and keep exploring
-                    #note: the fitcomp parameters are not deleted
-                    
-                    self.print_xlog('\nlog:Component '+component.compname+' is still significant.')
-                    model_load(new_bestmod)
-                    
-                    #updating the includedlist
-                    self.includedlist=prev_includedlist
-                    
-                    self.update_fitcomps()
-                        
-        ####testing unlinking line complexes energies
+            self.test_delcomp(chain,lock_lines,in_add=True)
+        
         '''Checking if unlinking the energies of each absorption line is statistically significant'''
-
-        comps_errlocked=[]
-        #redefining the last version of the errorlocked component list to make sure it's up to date
-        for allcomp in [elem for elem in self.includedlist if elem is not None]:
-            if allcomp.included and allcomp.absorption:
-                            comps_errlocked+=[allcomp]
                             
-        for comp in [elem for elem in self.includedlist if elem is not None]:
-            
-            #restricting to named absorption line components and skipping this step in locked lines mode
-            if not comp.named_line or lock_lines:
-                continue
-            
-            #resticting to those who are linked
-            if AllModels(par_degroup(comp.parlist[0])[0])(par_degroup(comp.parlist[0])[1]).link=='':
-                continue
-            
-            #saving the model before making any change
-            prev_save=allmodel_data()
-            
-            #saving the initial fit statistic for comparison
-            base_chi_unlink=Fit.statistic
-            
-            self.print_xlog('\nlog:Testing significance of unlinking blueshift of component '+comp.compname)
-            
-            #we save the values and reload them after unlinking to avoid issues with the bounds (which are reset when unlinking)
-            
-            par_linked_values=AllModels(par_degroup(comp.parlist[0])[0])(par_degroup(comp.parlist[0])[1]).values
-            AllModels(par_degroup(comp.parlist[0])[0])(par_degroup(comp.parlist[0])[1]).link=''
-            AllModels(par_degroup(comp.parlist[0])[0])(par_degroup(comp.parlist[0])[1]).values=par_linked_values
-            
-            #first fit while freezing all other components (we don't really care about re-freezing the constant factors)
-            for other_comp in [elem for elem in self.includedlist if elem is not None]:
-                if other_comp==comp:
-                    continue
-                other_comp.freeze()
-                
-            calc_error(self.logfile,param='1-'+str(AllModels(1).nParameters*AllData.nGroups),indiv=True)
-            
-            #unfreezing the other ones        
-            for other_comp in [elem for elem in self.includedlist if elem is not None]:
-                if other_comp==comp or (other_comp.line and lock_lines):
-                    continue
-                other_comp.unfreeze()
-                
-            calc_fit(logfile=self.logfile if chain else None)
-            
-            for comp_locked in comps_errlocked:
-                comp_locked.freeze()
-                
-            calc_error(self.logfile,param='1-'+str(AllModels(1).nParameters*AllData.nGroups),indiv=True)
-                
-            for comp_locked in comps_errlocked:
-                comp_locked.unfreeze()
-                
-            calc_error(self.logfile,param=str(comp.parlist[0])+'-'+str(comp.parlist[-1]),indiv=True)
-            
-            new_chi_unlink=Fit.statistic
-            
-            #testing the significance of the new version of the model (here we added 1 d.o.f.)
-            if base_chi_unlink-new_chi_unlink>sign_delchis_table[0]:
-                self.print_xlog('\nlog:Freeing blueshift of component '+comp.compname+' is statistically significant.')
-            else:
-                self.print_xlog('\nlog:Freeing blueshift of component '+comp.compname+' is not significant. Reverting to linked model.')
-                model_load(prev_save)
+        self.test_unlink_lines(chain=chain,lock_lines=lock_lines)
         
-        #longer error computation run but just to get a new minimum + freezing the pegged parameters
-        par_peg_ids=calc_error(self.logfile,param='1-'+str(AllModels(1).nParameters*AllData.nGroups),freeze_pegged=freeze_final_pegged,indiv=True)
+        testlist=[not AllModels(1)(i).frozen for i in range(1,AllModels(1).nParameters+1)]
+        
+        if sum(testlist)==0:
+            breakpoint()
+                
+        test=allmodel_data()
+        
+        ####THIS ONE CAUSES THE FREEZE BUT DOESNT GIVE THE PEGGED IDS BACK, check how it is performed in calc_error
+        
+        if 'FeKa26abs_agaussian' in self.name_complist:
+            breakpoint()
+            
+        #testing if freezing the pegged parameters improves the fit
+        par_peg_ids=calc_error(self.logfile,param='1-'+str(AllModels(1).nParameters*AllData.nGroups),freeze_pegged=freeze_final_pegged,indiv=True,
+                               test='FeKa26abs_agaussian' in self.name_complist)
+        
 
-        #new fit with the new frozen state
-        calc_fit(logfile=self.logfile if chain else None)        
-        calc_error(self.logfile,param='1-'+str(AllModels(1).nParameters*AllData.nGroups),indiv=True)
+        testlist=[not AllModels(1)(i).frozen for i in range(1,AllModels(1).nParameters+1)]
+        
+        if sum(testlist)==0:
+            breakpoint()
             
-        new_bestmod=allmodel_data()
-        
-        new_chi=Fit.statistic
-        
-        ####last component deletion
+        if len(par_peg_ids)!=0:
+            
+            #new fit/component deletion with the new frozen state
+            calc_fit(logfile=self.logfile if chain else None)        
+            calc_error(self.logfile,param='1-'+str(AllModels(1).nParameters*AllData.nGroups),indiv=True)
+
         '''
         last run of component deletion with the new minimum
         '''
         
-        if len([elem for elem in [comp for comp in self.includedlist if comp is not None] if not elem.multipl])>2:
-            for component in self.includedlist:
-                
-                #skipping placeholders
-                if component is None:
-                    continue
-                
-                if not component.included:
-                    continue
-                
-                if component.mandatory:
-                    continue
-                
-                #skipping deletion of fixed absorption
-                if component.absorption and self.fixed_abs is not None:
-                    continue
-                
-                #skipping deletion of lines in locked lines mode
-                if lock_lines and component.line:
-                    continue     
-                
-                #now we need to test for the unlinking of vashifts for the significance
-                if component.named_line:
-                    n_unlocked_pars=2-(1 if AllModels(1)(component.parlist[0]).link!='' else 0)
-                else:
-                    n_unlocked_pars=component.n_unlocked_pars_base
-                
-                self.print_xlog('\nlog:Testing the effect of deleting component '+component.compname)
-                    
-                #here we don't use an enumerate in the loop itself since the positions can be modified when components are deleted
-                i_comp=np.argwhere(np.array(self.includedlist)==component)[0][0]
-                
-                #storing the previous includedlist to come back to it at the end of the loop iteration
-                prev_includedlist=self.includedlist
-
-                #deleting the component and storing how many components were deleted in the process
-                n_delcomp=component.delfrommod(rollback=False)
-                    
-                #updating the current includedlist to delete as many components as what was deleted in xspec
-                self.includedlist=self.includedlist[:i_comp+1-n_delcomp]+self.includedlist[i_comp+1:]
-
-                #this time we need to update
-                self.update_fitcomps()
-                    
-                #refitting and recomputing the errors with everything free
-                calc_fit(logfile=self.logfile if chain else None)
-                
-                #restricting the test to components which are not 'very' significant
-                #we fix the limit to 10 times the delchi for the significance threshold with their corresponding number of parameters
-                if Fit.statistic-new_chi>sign_delchis_table[n_unlocked_pars-1]*10:
-                    self.print_xlog('\nlog:Very significant component detected. Skipping deletion test.')
-                    model_load(new_bestmod)
-                    
-                    #updating the includedlist
-                    self.includedlist=prev_includedlist
-                    self.update_fitcomps()
-                    continue
-                
-                #we need this variable again
-                comps_errlocked=[]
-                
-                #refreezing the abs components before the error computation
-                for allcomp in [elem for elem in self.includedlist if elem is not None]:
-                    if allcomp.included and allcomp.absorption:
-                        comps_errlocked+=[allcomp]
-                        
-                for comp_locked in comps_errlocked:
-                    comp_locked.freeze()
-                    
-                calc_error(self.logfile,param='1-'+str(AllModels(1).nParameters*AllData.nGroups),indiv=True)
-                    
-                for comp_locked in comps_errlocked:
-                    comp_locked.unfreeze()
-                    
-                #adding a new test to try to unlink before the significance assessment for the component
-                
-                n_unlinked=0
-                
-                for comp_unlink in [elem for elem in self.includedlist if elem is not None]:
-                    
-                    #restricting to named absorption line components
-                    if not comp_unlink.named_line:
-                        continue
-                    
-                    #resticting to those who are linked
-                    if AllModels(par_degroup(comp_unlink.parlist[0])[0])(par_degroup(comp_unlink.parlist[0])[1]).link=='':
-                        continue
-                    
-                    #saving the model before making any change
-                    prev_save=allmodel_data()
-                    
-                    #saving the initial fit statistic for comparison
-                    base_chi_unlink=Fit.statistic
-                    
-                    self.print_xlog('\nlog:Testing significance of unlinking blueshift of component '+comp_unlink.compname)
-                    
-                    #saving values to avoid issues with bounds
-                    par_unlink_values=AllModels(par_degroup(comp_unlink.parlist[0])[0])(par_degroup(comp_unlink.parlist[0])[1]).values
-                    AllModels(par_degroup(comp_unlink.parlist[0])[0])(par_degroup(comp_unlink.parlist[0])[1]).link=''
-                    AllModels(par_degroup(comp_unlink.parlist[0])[0])(par_degroup(comp_unlink.parlist[0])[1]).values=par_unlink_values
-                    
-                    #first fit while freezing all other components
-                    for other_comp_unlink in [elem for elem in self.includedlist if elem is not None]:
-                        if other_comp_unlink==comp_unlink:
-                            continue
-                        other_comp_unlink.freeze()
-                        
-                    calc_error(self.logfile,param='1-'+str(AllModels(1).nParameters*AllData.nGroups),indiv=True)
-                    
-                    #unfreezing the other ones        
-                    for other_comp_unlink in [elem for elem in self.includedlist if elem is not None]:
-                        if other_comp_unlink==comp_unlink or (other_comp_unlink.line and lock_lines) :
-                            continue
-                        other_comp_unlink.unfreeze()
-                        
-                    calc_fit(logfile=self.logfile if chain else None)
-                    
-                    for comp_locked in comps_errlocked:
-                        comp_locked.freeze()
-                        
-                    calc_error(self.logfile,param='1-'+str(AllModels(1).nParameters*AllData.nGroups),indiv=True)
-                        
-                    for comp_locked in comps_errlocked:
-                        comp_locked.unfreeze()
-                        
-                    calc_error(self.logfile,param=str(comp.parlist[0])+'-'+str(comp.parlist[-1]),indiv=True)
-                    
-                    new_chi_unlink=Fit.statistic
-                    
-                    #testing the significance of the new version of the model (here we added 1 d.o.f.)
-                    if base_chi_unlink-new_chi_unlink>sign_delchis_table[0]:
-                        self.print_xlog('\nlog:Freeing blueshift of component '+comp_unlink.compname+' is statistically significant.')
-                        n_unlinked+=1
-                    else:
-                        self.print_xlog('\nlog:Freeing blueshift of component '+comp_unlink.compname+' is not significant. Reverting to linked model.')
-                        model_load(prev_save)
-                
-                    
-                if Fit.statistic-new_chi<sign_delchis_table[n_unlocked_pars-1+n_unlinked] and Fit.statistic!=0:
-                    
-                    self.print_xlog('\nlog:Component '+component.compname+' is not significant anymore. Deleting it from the fit...')
-                    
-                    #stricto sensu we should delete them in reverse order of fit relevancy but it shouldn't really matter
-                    new_chi=Fit.statistic
-                    
-                    #these are not done yet for the component since we delete without rollback
-                    component.reset_attributes()
-                    
-                    new_bestmod=allmodel_data()
-                else:
-                    #we just rollback to the fit before deletion and keep exploring
-                    #note: the fitcomp parameters are not deleted
-                    
-                    self.print_xlog('\nlog:Component '+component.compname+' is still significant.')
-                    model_load(new_bestmod)
-                    
-                    #updating the includedlist
-                    self.includedlist=prev_includedlist
-                    
-                    self.update_fitcomps()
         
+        if len([elem for elem in [comp for comp in self.includedlist if comp is not None] if not elem.multipl])>2:
+            
+            self.test_delcomp(chain,lock_lines,in_add=False)
+            
         #creating the MC chain for the model
         #defaut Markov : algorithm = gw, bur=0, filetype=fits, length=100,
         #proposal=gaussian fit, Rand=False, Rescale=None, Temperature=1., Walkers=10
@@ -2494,7 +2285,10 @@ class fitmod:
         
         if freeze_final_pegged:
             if len(par_peg_ids)!=0:
+            
+                self.print_xlog('testing if unpegging parameters improves the latest version of the fit')
                 for par_peg_grp,par_peg_id in enumerate(par_peg_ids):
+                    ####this feels wrong, par_peg_grp shouldn't be the index of the enumerate ! Check that this is working correctly
                     AllModels(par_peg_grp)(par_peg_id).frozen=False
                     par_peg_allgrp=(par_peg_grp-1)*AllModels(1).nParameters+par_peg_id
                     #no need for indiv mode here since we compute the error for a single parameter
@@ -2502,6 +2296,7 @@ class fitmod:
                     AllModels(par_peg_grp)(par_peg_id).frozen=True
         
         ####chain
+        
         '''
         Chain creation
         '''
@@ -2511,11 +2306,31 @@ class fitmod:
             #new fit + error computation to get everything working for the MC (since freezing parameters will have broken the fit)
             calc_fit(logfile=self.logfile if chain else None)               
                     
-            #note: we need to test again for pegging parameters as this can keep the MC chain from working
-            calc_error(self.logfile,param='1-'+str(AllModels(1).nParameters*AllData.nGroups),freeze_pegged=freeze_final_pegged,indiv=True)
-            #new fit in case there were things to peg in the previous iteration
-            Fit.perform() 
+            test=allmodel_data()
             
+            #note: we need to test again for pegging parameters as this can keep the MC chain from working
+            par_peg_ids=calc_error(self.logfile,param='1-'+str(AllModels(1).nParameters*AllData.nGroups),freeze_pegged=freeze_final_pegged,indiv=True)
+            try:
+                #new fit in case there were things to peg in the previous iteration
+                Fit.perform() 
+            except:
+                
+                #this can happen in rare cases so we do one more round of deletion
+                
+                if len(par_peg_ids)!=0:
+                    breakpoint()
+                    
+                    for par_peg_grp,par_peg_id in enumerate(par_peg_ids):
+                        ####this feels wrong, par_peg_grp shouldn't be the index of the enumerate ! Check that this is working correctly
+                        AllModels(par_peg_grp)(par_peg_id).frozen=False
+                    
+                
+                self.test_delcomp(chain,lock_lines)
+                
+                breakpoint()
+                
+                Fit.perform()
+                
             #updating the fitcomps in case a sneaky model freeze happens due to a parameter being frozen automatically by xspec 
             #(which wouldn't be considered in the current comp.unlocked_pars)
             
@@ -2749,12 +2564,12 @@ class fitmod:
     
         for i_line,line in enumerate(abslines):
             
-            self.print_xlog('Computing upper limit of component '+line)
-            
             #skipping significant lines
             if bool_sign[i_line]:
                 continue
-            
+            else:
+                self.print_xlog('Computing upper limit of component '+line)
+                
             fitcomp_line=getattr(self,line)
 
             '''
@@ -3140,7 +2955,7 @@ class fitcomp:
         if width_par.frozen:
             return np.array([0,0,0])
         
-        # ####changing the delta of the width parameter to 1e-3
+        #### changing the delta of the width parameter to 1e-3
         # width_par.values=[width_par.values[0]]+[1e-3]+width_par.values[2:]
 
         try:

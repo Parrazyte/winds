@@ -11,7 +11,7 @@ import matplotlib.pyplot as plt
 from xspec import AllModels,AllData,Fit,Spectrum,Model,Plot,Xset,fit,AllChains,Chain
 
 from fitting_tools import sign_delchis_table,ravel_ragged,lines_std,lines_e_dict,lines_w_dict,\
-        link_groups
+        link_groups,lines_std_names
 
 from contextlib import redirect_stdout
 import subprocess
@@ -767,9 +767,14 @@ def addcomp(compname,position='last',endmult=None,return_pos=False,modclass=AllM
             xspec_model(gap_end).values=[-1e-4,1e-7,-5e-2,-5e-2,0,0]
             
             #### disabling FeKa25 if needed
-            # if gaussian_type=='FeKa25':
+            # if gaussian_type=='FeKa25abs':
             #     xspec_model(gap_end).values=[-1e-7,1e-7,-5e-2,-5e-2,0,0]
             #     xspec_model(gap_end).frozen=True
+            
+            #### ON: disabling NiKa27 to avoid degneracies
+            if gaussian_type=='NiKa27abs':
+                xspec_model(gap_end).values=[-1e-7,1e-7,-5e-2,-5e-2,0,0]
+                xspec_model(gap_end).frozen=True
         else:
             #restricting the other parameters
             xspec_model(gap_end).values=[1e-3,1e-6,0,0,1,1]
@@ -1501,11 +1506,12 @@ def calc_error(logfile,maxredchi=1e6,param='all',timeout=60,delchi_thresh=0.1,in
     logfile.readlines()
     Fit.show()
     fitshow_lines=logfile.readlines()
+        
     #redoing a fit if it needs to be done
     if ' Current data and model not fit yet.\n' in fitshow_lines:
         #re-computing the fit without the multiprocessing to be able to launch the errors
         calc_fit()
-        
+    
     print('\nComputing errors for up to '+str(timeout/4 if indiv else timeout)+' seconds'+(' per parameter.' if indiv else ''))
     
     if param=='all':
@@ -1514,7 +1520,11 @@ def calc_error(logfile,maxredchi=1e6,param='all',timeout=60,delchi_thresh=0.1,in
         glob_string_par=param    
     
     if indiv:
-        error_strlist=np.arange(int(glob_string_par.split('-')[0]),int(glob_string_par.split('-')[1])+1).astype(str).tolist()
+        #allowing computations of error for single parameters (thus with no - in the string)
+        if len(glob_string_par)==1:
+            error_strlist=[glob_string_par]
+        else:
+            error_strlist=np.arange(int(glob_string_par.split('-')[0]),int(glob_string_par.split('-')[1])+1).astype(str).tolist()
     else:
         error_strlist=[glob_string_par]
     
@@ -1536,6 +1546,10 @@ def calc_error(logfile,maxredchi=1e6,param='all',timeout=60,delchi_thresh=0.1,in
     #creating the test variable for a new best fit
     is_newmodel=True
     
+    log_lines=[]
+    
+    par_peg_ids=[]
+        
     #loop on the parameter str list, enclosed in a break to reset it when a new model is found (for indiv mode)
     while is_newmodel:
         
@@ -1569,17 +1583,18 @@ def calc_error(logfile,maxredchi=1e6,param='all',timeout=60,delchi_thresh=0.1,in
                 p_error.terminate()
             
             #logging the messages printed during the error computation
-            log_lines=logfile.readlines()
+            log_lines+=[logfile.readlines()]
                 
             print('\nError computation finished.')
             
             if freeze_pegged:
-                par_peg_ids=parse_xlog(log_lines,goal='lasterrors',freeze_pegged=freeze_pegged)
-                if test:
-                    breakpoint()
+                curr_par_peg_ids=parse_xlog(log_lines[-1],goal='lasterrors',freeze_pegged=freeze_pegged)
+                #adding the pegged parameters to the list of pegged parameters at each error computation
+                if curr_par_peg_ids!=[]:
+                    par_peg_ids+=curr_par_peg_ids
                 
             elif give_errors:
-                new_errors=parse_xlog(log_lines,goal='lasterrors')
+                new_errors=parse_xlog(log_lines[-1],goal='lasterrors')
                 
                 #in indiv mode we only update the value of the parameter for which the error was just computed
                 if indiv:
@@ -1591,7 +1606,7 @@ def calc_error(logfile,maxredchi=1e6,param='all',timeout=60,delchi_thresh=0.1,in
             print('\nParsing the logs to see if a new minimum was found...')            
             
             #searching for the model
-            is_newmodel=parse_xlog(log_lines,goal='lastmodel',no_display=True) 
+            is_newmodel=parse_xlog(log_lines[-1],goal='lastmodel',no_display=True) 
                 
             if is_newmodel:
                 #recreating a valid fit
@@ -1614,7 +1629,7 @@ def calc_error(logfile,maxredchi=1e6,param='all',timeout=60,delchi_thresh=0.1,in
     
     #changing back the Xset
     Xset.logChatter=curr_logchatter
-    
+        
     if freeze_pegged:
         return par_peg_ids
     if give_errors:
@@ -1961,7 +1976,8 @@ class fitmod:
                 component_delchis[i_excomp]=1e9
             else:
                 #at this stage there's no question of unlinking energies for absorption lines so we can use n_unlocked_pars_base
-                if init_chi-new_chi<sign_delchis_table[component.n_unlocked_pars_base-1] and init_chi!=0:
+
+                if init_chi-new_chi<sign_delchis_table[component.n_unlocked_pars_base-1] and init_chi!=0.:
                     self.print_xlog('\nlog:The '+component.compname+' component is not statistically significant at this stage.')
                 else:
                     self.print_xlog('\nlog:The '+component.compname+' component is statistically significant.')
@@ -2042,7 +2058,7 @@ class fitmod:
                 continue     
             
             #stopping the process if only one additive component remains
-            if len([comp for comp in [elem for elem in self.includedlist if elem is not None] if not comp.multipl])>1:
+            if len([comp for comp in [elem for elem in self.includedlist if elem is not None] if not comp.multipl])==1:
                 break
             
             #now we need to test for the unlinking of vashifts for the significance
@@ -2063,13 +2079,8 @@ class fitmod:
             #storing the previous includedlist to come back to it at the end of the loop iteration
             prev_includedlist=self.includedlist
             
-            try:
-            
-                #deleting the component and storing how many components were deleted in the process
-                n_delcomp=component.delfrommod(rollback=False)
-
-            except:
-                breakpoint()
+            #deleting the component and storing how many components were deleted in the process
+            n_delcomp=component.delfrommod(rollback=False)
                 
             #updating the current includedlist to delete as many components as what was deleted in xspec
             self.includedlist=self.includedlist[:i_comp+1-n_delcomp]+self.includedlist[i_comp+1:]
@@ -2236,27 +2247,12 @@ class fitmod:
                             
         self.test_unlink_lines(chain=chain,lock_lines=lock_lines)
         
-        testlist=[not AllModels(1)(i).frozen for i in range(1,AllModels(1).nParameters+1)]
-        
-        if sum(testlist)==0:
-            breakpoint()
                 
         test=allmodel_data()
-        
-        ####THIS ONE CAUSES THE FREEZE BUT DOESNT GIVE THE PEGGED IDS BACK, check how it is performed in calc_error
-        
-        if 'FeKa26abs_agaussian' in self.name_complist:
-            breakpoint()
             
         #testing if freezing the pegged parameters improves the fit
         par_peg_ids=calc_error(self.logfile,param='1-'+str(AllModels(1).nParameters*AllData.nGroups),freeze_pegged=freeze_final_pegged,indiv=True,
-                               test='FeKa26abs_agaussian' in self.name_complist)
-        
-
-        testlist=[not AllModels(1)(i).frozen for i in range(1,AllModels(1).nParameters+1)]
-        
-        if sum(testlist)==0:
-            breakpoint()
+                               test='FeKa26abs_agaussian' in self.name_complist and round(AllData(1).energies[0][0])==3)
             
         if len(par_peg_ids)!=0:
             
@@ -2285,10 +2281,9 @@ class fitmod:
         
         if freeze_final_pegged:
             if len(par_peg_ids)!=0:
-            
+
                 self.print_xlog('testing if unpegging parameters improves the latest version of the fit')
-                for par_peg_grp,par_peg_id in enumerate(par_peg_ids):
-                    ####this feels wrong, par_peg_grp shouldn't be the index of the enumerate ! Check that this is working correctly
+                for par_peg_grp,par_peg_id in par_peg_ids:
                     AllModels(par_peg_grp)(par_peg_id).frozen=False
                     par_peg_allgrp=(par_peg_grp-1)*AllModels(1).nParameters+par_peg_id
                     #no need for indiv mode here since we compute the error for a single parameter
@@ -2309,7 +2304,7 @@ class fitmod:
             test=allmodel_data()
             
             #note: we need to test again for pegging parameters as this can keep the MC chain from working
-            par_peg_ids=calc_error(self.logfile,param='1-'+str(AllModels(1).nParameters*AllData.nGroups),freeze_pegged=freeze_final_pegged,indiv=True)
+            par_peg_ids+=calc_error(self.logfile,param='1-'+str(AllModels(1).nParameters*AllData.nGroups),freeze_pegged=freeze_final_pegged,indiv=True)
             try:
                 #new fit in case there were things to peg in the previous iteration
                 Fit.perform() 
@@ -2318,16 +2313,12 @@ class fitmod:
                 #this can happen in rare cases so we do one more round of deletion
                 
                 if len(par_peg_ids)!=0:
-                    breakpoint()
-                    
-                    for par_peg_grp,par_peg_id in enumerate(par_peg_ids):
-                        ####this feels wrong, par_peg_grp shouldn't be the index of the enumerate ! Check that this is working correctly
+
+                    for par_peg_grp,par_peg_id in par_peg_ids:
                         AllModels(par_peg_grp)(par_peg_id).frozen=False
                     
                 
                 self.test_delcomp(chain,lock_lines)
-                
-                breakpoint()
                 
                 Fit.perform()
                 
@@ -2958,12 +2949,9 @@ class fitcomp:
         #### changing the delta of the width parameter to 1e-3
         # width_par.values=[width_par.values[0]]+[1e-3]+width_par.values[2:]
 
-        try:
-            #computing the width with the current fit
-            Fit.error('stop ,,0.1 max 100 9.00 '+str(self.parlist[-2]))
-        except:
-            breakpoint()
-            
+        #computing the width with the current fit
+        Fit.error('stop ,,0.1 max 100 9.00 '+str(self.parlist[-2]))
+        
         return np.array([width_par.values[0],width_par.values[0]-width_par.error[0],width_par.error[1]-width_par.values[0]])
                          
             

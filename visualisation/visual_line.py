@@ -582,12 +582,12 @@ if incl_inside:
     mask_inclin=[False if elem not in incl_dic else round(getoverlap((incl_dic[elem][0]-incl_dic[elem][1],incl_dic[elem][0]+incl_dic[elem][2]),                slider_inclin),3)==incl_dic[elem][1]+incl_dic[elem][2] for elem in obj_list]
     
 #masking dippers/non dipper if asked to
-mask_dippers=[elem in dippers_list for elem in obj_list]
+mask_dippers=np.array([elem in dippers_list for elem in obj_list])
 
 if radio_dipper=='Restrict to dippers':
-    mask_inclin=mask_inclin & mask_dippers
+    mask_inclin=(mask_inclin) & (mask_dippers)
 elif radio_dipper=='Restrict to non-dippers':
-    mask_inclin=mask_inclin & ~ mask_dippers
+    mask_inclin=(mask_inclin) & ~(mask_dippers)
 #double mask taking into account both single/multiple display mode and the inclination    
 
 mask_obj_base=(mask_obj_single) & (mask_inclin)

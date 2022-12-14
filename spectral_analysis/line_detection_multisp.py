@@ -2728,11 +2728,8 @@ def line_detect(epoch_id):
                     
                     for steppar_inter in steppar_ind_inter:
 
-                        try:
-                            #giving the width value of the corresponding line before computing the steppar
-                            AllModels(1)(AllModels(1).nParameters-1).values=[sign_widths_arr[0]]+AllModels(1)(AllModels(1).nParameters-1).values[1:]
-                        except:
-                            breakpoint()
+                        #giving the width value of the corresponding line before computing the steppar
+                        AllModels(1)(AllModels(1).nParameters-1).values=[sign_widths_arr[0]]+AllModels(1)(AllModels(1).nParameters-1).values[1:]
                             
                         #exploring the parameters
                         Fit.steppar('nolog '+str(mod_fake.nParameters-2)+' '+str(line_search_e_space[steppar_inter[0]])+\

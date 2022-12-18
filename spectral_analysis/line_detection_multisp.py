@@ -100,7 +100,7 @@ ap.add_argument("-grouping",nargs=1,help='specfile grouping for XMM spectra in [
 ap.add_argument("-prefix",nargs=1,help='restrict analysis to a specific prefix',default='auto',type=str)
 
 ####output directory
-ap.add_argument("-outdir",nargs=1,help="name of output directory for line plots",default="lineplots_fitul",type=str)
+ap.add_argument("-outdir",nargs=1,help="name of output directory for line plots",default="lineplots_newfit",type=str)
 
 #overwrite
 ap.add_argument('-overwrite',nargs=1,
@@ -2849,8 +2849,10 @@ def line_detect(epoch_id):
         mask_abslines_sign=abslines_sign>sign_threshold
                 
         #computing the upper limits for the non significant lines
-        abslines_eqw_upper=fitlines.get_eqwidth_uls(mask_abslines_sign,abslines_bshift,sign_widths_arr)
-                    
+        try:
+            abslines_eqw_upper=fitlines.get_eqwidth_uls(mask_abslines_sign,abslines_bshift,sign_widths_arr)
+        except:
+            breakpoint()                    
         #here will need to reload an accurate model before updating the fitcomps
         '''HTML TABLE FOR the pdf summary'''
                     
@@ -3188,7 +3190,7 @@ for epoch_id,epoch_files in enumerate(epoch_list):
              print('\nSpectrum analysis already performed. Skipping...')
              continue
          
-    elif sat in ['Chandra','NICER']:
+    elif sat in ['Chandra','NICER','XMM']:
         
         ###TODO: same thing for XMM
         if (skip_started and len([elem_sp for elem_sp in epoch_files[:1] if elem_sp.split('_sp')[0] not in started_expos])==0) or \

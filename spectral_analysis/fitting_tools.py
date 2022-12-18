@@ -15,6 +15,8 @@ c_light=299792.458
 #(from https://fr.wikipedia.org/wiki/Loi_du_%CF%87%C2%B2)
 sign_delchis_table=[6.63,9.21,11.34,13.28,15.09,16.81,18.48,20.09,21.67,23.21]
 
+ftest_threshold=0.01
+
 def ravel_ragged(array):
     
     '''ravels a 2/3d array/list even with ragged nested sequences'''

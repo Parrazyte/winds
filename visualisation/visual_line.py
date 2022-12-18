@@ -417,6 +417,8 @@ with st.sidebar.expander('inclination'):
     
 restrict_time=st.sidebar.checkbox('Restrict time interval',value=True)
         
+display_source_table=st.sidebar.checkbox('Display source parameters table',value=False)
+
 st.sidebar.header('HID options')
 
 #not used right now
@@ -533,8 +535,6 @@ with st.sidebar.expander('Lightcurves'):
         '''
         Saves the current maxi_graph in a svg (i.e. with clickable points) format.
         '''
-
-        print('pouet')
         if display_single:
             fig_maxi_lc.savefig(save_dir+'/'+choice_source[0]+'_maxilc_'+str(round(time.time()))+'.'+save_format,bbox_inches='tight')
             fig_maxi_hr.savefig(save_dir+'/'+choice_source[0]+'_maxihr_'+str(round(time.time()))+'.'+save_format,bbox_inches='tight')
@@ -641,9 +641,7 @@ if radio_info_cmap in ['Blueshift','Delchi']:
     radio_cmap_i=1 if radio_info_cmap=='Blueshift' else 2
 else:
     radio_cmap_i=0
-
-
-
+    
 #computing the extremal values of the whole sample/plotted sample to get coherent colormap normalisations, and creating the range of object colors
 if global_colors:
     global_plotted_sign=abslines_plot[4][0].ravel()
@@ -1399,6 +1397,18 @@ if radio_info_cmap=='Instrument':
 
 st.pyplot(fig_hid)
 
+'''
+SOURCE TABLE
+'''
+
+if display_source_table:
+    
+    df_source_arr=np.array([obj_list,dist_obj_list,mass_obj_list,incl_plot.T[0],incl_plot.T[1],incl_plot.T[2]]).astype(str).T
+    
+    df_source=pd.DataFrame(df_source_arr,columns=['source','distance (kpc)','mass (M_sun)','inclination (°)','incl err -','incl err +'])
+    
+    st.dataframe(df_source)
+    
     
 #### Transposing the tables into plot arrays
 

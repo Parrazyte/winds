@@ -11,7 +11,7 @@ import matplotlib.pyplot as plt
 from xspec import AllModels,AllData,Fit,Spectrum,Model,Plot,Xset,fit,AllChains,Chain
 
 from fitting_tools import sign_delchis_table,ravel_ragged,lines_std,lines_e_dict,lines_w_dict,\
-        link_groups,lines_std_names
+        link_groups,lines_std_names,ftest_threshold
 
 from contextlib import redirect_stdout
 import subprocess
@@ -1521,7 +1521,7 @@ def calc_error(logfile,maxredchi=1e6,param='all',timeout=60,delchi_thresh=0.1,in
     
     if indiv:
         #allowing computations of error for single parameters (thus with no - in the string)
-        if len(glob_string_par)==1:
+        if len(glob_string_par)<=2:
             error_strlist=[glob_string_par]
         else:
             error_strlist=np.arange(int(glob_string_par.split('-')[0]),int(glob_string_par.split('-')[1])+1).astype(str).tolist()
@@ -1665,7 +1665,7 @@ class fitmod:
         #attempting to identify already existing elements in the current model
         
         self.cont_complist=[]
-        self.cont_compnames=[]
+        # self.cont_compnames=[]
         self.name_cont_complist=[]
         
         try:
@@ -1678,7 +1678,6 @@ class fitmod:
         
         if is_model:
             self.cont_save=allmodel_data()
-            
             print('\nUsing current loaded model as continuum.')
             self.cont_pars=[i for i in range(1,AllModels(1).nParameters+1)]
             
@@ -1858,8 +1857,9 @@ class fitmod:
             #not adding continuum components already in the model
             self.print_xlog('\nlog:Testing significance of '+component.compname+' component.')                    
             
-            #storing the chi2 before adding the component
+            #storing the chi2/dof before adding the component
             init_chi=Fit.statistic
+            init_dof=Fit.dof
             
             #copy of the includedlist for rollback after testing the component significance
             prev_includedlist=copy(self.includedlist)
@@ -1953,7 +1953,7 @@ class fitmod:
                     break
                 
             new_chi=Fit.statistic
-            
+            new_dof=Fit.dof
             #storing the final fit in the component's save
             component.fitted_mod=allmodel_data()
             
@@ -1976,13 +1976,23 @@ class fitmod:
                 component_delchis[i_excomp]=1e9
             else:
                 #at this stage there's no question of unlinking energies for absorption lines so we can use n_unlocked_pars_base
-
-                if init_chi-new_chi<sign_delchis_table[component.n_unlocked_pars_base-1] and init_chi!=0.:
-                    self.print_xlog('\nlog:The '+component.compname+' component is not statistically significant at this stage.')
+                    
+                if init_chi!=0:
+                    ftest_val=Fit.ftest(new_chi,new_dof,init_chi,init_dof)
                 else:
+                    ftest_val=0
+                    
+                if ftest_val<ftest_threshold and ftest_val>=0:
+
                     self.print_xlog('\nlog:The '+component.compname+' component is statistically significant.')
+                        
                     component_delchis[i_excomp]=init_chi-new_chi
-            
+                    
+                else:
+                
+                    self.print_xlog('\nlog:The '+component.compname+' component is not statistically significant at this stage.')
+
+
             #deleting the component (we only add the best one each time)
             component.delfrommod()
             
@@ -2063,13 +2073,15 @@ class fitmod:
             
             #now we need to test for the unlinking of vashifts for the significance
             if component.named_line:
-                n_unlocked_pars=2-(1 if AllModels(1)(component.parlist[0]).link!='' else 0)
+                n_unlocked_pars_with_unlink=2-(1 if AllModels(1)(component.parlist[0]).link!='' else 0)
             else:
-                n_unlocked_pars=component.n_unlocked_pars_base
+                n_unlocked_pars_with_unlink=component.n_unlocked_pars_base
             
             self.print_xlog('\nlog:Testing the effect of deleting component '+component.compname)
                 
             new_chi=Fit.statistic
+            new_dof=Fit.dof
+            
             #storing the current model iteration
             new_bestmod=allmodel_data()
     
@@ -2090,9 +2102,14 @@ class fitmod:
             #refitting and recomputing the errors with everything free
             calc_fit(logfile=self.logfile if chain else None)
             
+            del_chi=Fit.statistic
+            del_dof=Fit.dof
+            
             #restricting the test to components which are not 'very' significant
             #we fix the limit to 10 times the delchi for the significance threshold with their corresponding number of parameters
-            if Fit.statistic-new_chi>sign_delchis_table[n_unlocked_pars-1]*10:
+            ftest_val=Fit.ftest(new_chi,new_dof,del_chi,new_dof+n_unlocked_pars_with_unlink)
+            
+            if ftest_val<ftest_threshold/100 and ftest_val>0:
                 self.print_xlog('\nlog:Very significant component detected. Skipping deletion test.')
                 model_load(new_bestmod)
                 
@@ -2100,7 +2117,7 @@ class fitmod:
                 self.includedlist=prev_includedlist
                 self.update_fitcomps()
                 continue
-            
+                
             #we need this variable again
             comps_errlocked=self.list_comps_errlocked()
                     
@@ -2118,8 +2135,13 @@ class fitmod:
                 npars_unlinked=0
             else:
                 npars_unlinked=self.test_unlink_lines()
+                
             
-            if Fit.statistic-new_chi<sign_delchis_table[n_unlocked_pars-1+npars_unlinked] and Fit.statistic!=0:
+            del_chi=Fit.statistic
+            
+            ftest_val=Fit.ftest(new_chi,new_dof,del_chi,new_dof+component.n_unlocked_pars_base+npars_unlinked)
+            
+            if ftest_val>ftest_threshold or ftest_val<0 and Fit.statistic!=0:
                 
                 self.print_xlog('\nlog:Component '+component.compname+' is not significant anymore. Deleting it from the fit...')
                 
@@ -2164,6 +2186,7 @@ class fitmod:
             
             #saving the initial fit statistic for comparison
             base_chi_unlink=Fit.statistic
+            base_dof_unlink=Fit.dof
             
             self.print_xlog('\nlog:Testing significance of unlinking blueshift of component '+comp_unlink.compname)
             
@@ -2186,6 +2209,8 @@ class fitmod:
                     continue
                 other_comp_unlink.unfreeze()
                 
+            #### NEED TO ADD CHANGE HERE SO THAT UNLINKED COMPONENTS GO INTO THE FREEZE STATE ELSE THEY GET FROZEN WITH FREEZING/UNFREEZING 
+            
             calc_fit(logfile=self.logfile if chain else None)
             
             comps_errlocked=self.list_comps_errlocked()
@@ -2199,9 +2224,15 @@ class fitmod:
                 comp_locked.unfreeze()
             
             new_chi_unlink=Fit.statistic
+            new_dof_unlink=Fit.dof
             
             #testing the significance of the new version of the model (here we added 1 d.o.f.)
-            if base_chi_unlink-new_chi_unlink>sign_delchis_table[0]:
+            try:
+                ftest_val=Fit.ftest(new_chi_unlink,new_dof_unlink,base_chi_unlink,base_dof_unlink)
+            except:
+                breakpoint()
+                
+            if ftest_val<ftest_threshold and ftest_val>0:
                 self.print_xlog('\nlog:Freeing blueshift of component '+comp_unlink.compname+' is statistically significant.')
                 n_unlinked+=1
             else:
@@ -2210,6 +2241,31 @@ class fitmod:
         
         return n_unlinked
                     
+    def idtocomp(self,par_peg_ids):
+        
+        '''
+        transforms a list of group/id parameter couple into a list of component/index of the parameter in the list of that comp
+        
+        allows to keep track of parameters even after modifying components
+        
+        '''
+        
+        includedcomps=np.array([comp for comp in self.includedlist if comp is not None])
+        
+        parlist_included=np.array([elem.parlist for elem in includedcomps])
+        
+        #here the 1 index is here because both the group and the parameter number are stored
+        mask_comp_pegged=[[elem[1] in comp_parlist for comp_parlist in parlist_included] for elem in par_peg_ids]
+        
+        id_comp_pegged=[np.argwhere(elem)[0][0] for elem in mask_comp_pegged]
+        
+        par_peg_comps=[[includedcomps[id_comp_pegged[i_peg]],
+                        np.argwhere(np.array(parlist_included[id_comp_pegged[i_peg]])==par_peg_ids[i_peg][1])[0][0]]\
+                       for i_peg,mask in enumerate(mask_comp_pegged)]
+        
+        ####¢ontinue this then add it to the par_peg_ids use before a delcomp to unfreeze correctly afterwards
+        return par_peg_comps
+    
     def global_fit(self,chain=False,directory=None,observ_id=None,freeze_final_pegged=True,lock_lines=False):
         
         '''
@@ -2245,29 +2301,35 @@ class fitmod:
         
         '''Checking if unlinking the energies of each absorption line is statistically significant'''
                             
-        self.test_unlink_lines(chain=chain,lock_lines=lock_lines)
+        #storing the chi value at this stage
+        chi_pre_unlink=Fit.statistic
+        dof_pre_unlink=Fit.dof
         
-                
-        test=allmodel_data()
-            
+        self.test_unlink_lines(chain=chain,lock_lines=lock_lines)        
+
         #testing if freezing the pegged parameters improves the fit
         par_peg_ids=calc_error(self.logfile,param='1-'+str(AllModels(1).nParameters*AllData.nGroups),freeze_pegged=freeze_final_pegged,indiv=True,
                                test='FeKa26abs_agaussian' in self.name_complist and round(AllData(1).energies[0][0])==3)
-            
+        
+        #computing the component position of the frozen parameter to allow to unfreeze them later even with modified component positions
+        par_peg_comps=self.idtocomp(par_peg_ids)
+        
         if len(par_peg_ids)!=0:
             
-            #new fit/component deletion with the new frozen state
+            #new fit with the new frozen state
             calc_fit(logfile=self.logfile if chain else None)        
             calc_error(self.logfile,param='1-'+str(AllModels(1).nParameters*AllData.nGroups),indiv=True)
 
         '''
         last run of component deletion with the new minimum
         '''
-        
-        
-        if len([elem for elem in [comp for comp in self.includedlist if comp is not None] if not elem.multipl])>2:
-            
-            self.test_delcomp(chain,lock_lines,in_add=False)
+        #skipped if the fit has not been modified in the unlinking/pegging etc
+        if not (abs(Fit.statistic-chi_pre_unlink)<0.1 and Fit.dof==dof_pre_unlink):
+            if len([elem for elem in [comp for comp in self.includedlist if comp is not None] if not elem.multipl])>=2:
+                
+                self.test_delcomp(chain,lock_lines,in_add=False)
+        else:
+            self.print_xlog('\nNo modification after main component test loop. Skipping last component deletion test.')
             
         #creating the MC chain for the model
         #defaut Markov : algorithm = gw, bur=0, filetype=fits, length=100,
@@ -2276,19 +2338,33 @@ class fitmod:
         
         ####testing unpegging pegged parameters
         '''
-        testing if unpegging the parameters 1 by 1 improves the latest version of the fit
+        testing if unpegging pegged parameters 1 by 1 improves the latest version of the fit
         '''
         
-        if freeze_final_pegged:
-            if len(par_peg_ids)!=0:
+        if freeze_final_pegged and len(par_peg_ids)!=0:
 
                 self.print_xlog('testing if unpegging parameters improves the latest version of the fit')
-                for par_peg_grp,par_peg_id in par_peg_ids:
-                    AllModels(par_peg_grp)(par_peg_id).frozen=False
-                    par_peg_allgrp=(par_peg_grp-1)*AllModels(1).nParameters+par_peg_id
+                for i_par_peg in range(len(par_peg_ids)):
+                    
+                    pegged_comp=par_peg_comps[i_par_peg][0]
+                    #testing if the parameter is still included
+                    if not pegged_comp.included:
+                        continue
+                    
+                    #defining the current pegged_par index with the new configuration                    
+                    pegged_par_index=par_peg_comps[i_par_peg][0].parlist[par_peg_comps[i_par_peg][1]]
+
+                    #unfreezing the parameter
+                    AllModels(par_peg_ids[i_par_peg][0])(pegged_par_index).frozen=False
+                        
+                    #computing the parameter position in all groups values    
+                    par_peg_allgrp=(par_peg_ids[i_par_peg][0]-1)*AllModels(1).nParameters+par_peg_ids[i_par_peg][1]
+                    
                     #no need for indiv mode here since we compute the error for a single parameter
                     calc_error(self.logfile,param=str(par_peg_allgrp))
-                    AllModels(par_peg_grp)(par_peg_id).frozen=True
+                    
+                    #re-freezing the parameter
+                    AllModels(par_peg_ids[i_par_peg][0])(pegged_par_index).frozen=False
         
         ####chain
         
@@ -2305,13 +2381,15 @@ class fitmod:
             
             #note: we need to test again for pegging parameters as this can keep the MC chain from working
             par_peg_ids+=calc_error(self.logfile,param='1-'+str(AllModels(1).nParameters*AllData.nGroups),freeze_pegged=freeze_final_pegged,indiv=True)
+                        
             try:
                 #new fit in case there were things to peg in the previous iteration
                 Fit.perform() 
             except:
                 
-                #this can happen in rare cases so we do one more round of deletion
+                breakpoint()
                 
+                #this can happen in rare cases so we re-open the parameters and do one more round of deletion
                 if len(par_peg_ids)!=0:
 
                     for par_peg_grp,par_peg_id in par_peg_ids:
@@ -2342,8 +2420,10 @@ class fitmod:
                 
             self.print_xlog('\nlog:Creating Markov Chain from the fit...')
             
-
-            Chain(directory+'/'+observ_id+'_chain_autofit.fits')
+            try:
+                Chain(directory+'/'+observ_id+'_chain_autofit.fits')
+            except:
+                breakpoint()
                 
                 
             #longer error computation with the MC (and no indiv needed here)
@@ -2604,7 +2684,7 @@ class fitmod:
             else:
                 self.print_xlog('Using full available blueshift range.\n')
                 #standard range
-                bshift_range=lines_e_dict[self.compname.split('_')[0]][1:]
+                bshift_range=lines_e_dict[fitcomp_line.compname.split('_')[0]][1:]
                 width_val=0
                 
             #computing the upper limit with the given bshift range
@@ -3022,11 +3102,14 @@ class fitcomp:
                 #restoring the initial model
                 model_load(curr_model)
                 
-                #deleting the component if needed
-                if self.included:
-                    #deleting the component
-                    delcomp(self.compname)
-                
+                try:
+                    #deleting the component if needed
+                    if self.included:
+                        #deleting the component
+                        delcomp(self.compname)
+                except:
+                    breakpoint()
+                    
                 #adding an equivalent component, without providing the included group because we don't want to link it
                 addcomp(self.compname,position='lastin')
                 

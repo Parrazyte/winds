@@ -7,12 +7,7 @@ Created on Sun Mar  6 00:11:45 2022
 """
 
 #general imports
-import os,sys
-
-import glob
-
-import argparse
-
+import io
 import numpy as np
 import pandas as pd
 
@@ -23,311 +18,36 @@ import matplotlib as mpl
 import matplotlib.pyplot as plt
 import matplotlib.colors as colors
 from matplotlib.lines import Line2D
-from matplotlib.ticker import Locator
-from matplotlib.ticker import MaxNLocator
+
 import matplotlib.dates as mdates
 
-import time
+
 from astropy.time import Time
 from copy import deepcopy
-
-#correlation values and uncertainties with MC distribution from the uncertainties
-from custom_pymccorrelation import pymccorrelation
 
 #Note : as of the writing of this code, the standard pymccorrelation doesn't accept differing +/- uncertainties, so I tweaked their 
 #'perturb values' function
 
-from ast import literal_eval
+
 # import time
 
 import dill
 '''Astro'''
 
-#Catalogs and manipulation
-from astroquery.vizier import Vizier
 
 #custom script with some lines and fit utilities and variables
 from fitting_tools import lines_std,lines_std_names,ravel_ragged,range_absline
 
 #visualisation functions
-from visual_line_tools import load_catalogs,dist_mass,obj_values,abslines_values,values_manip,distrib_graph,correl_graph,incl_dic,\
+from visual_line_tools import distrib_graph,correl_graph,incl_dic,\
     n_infos, plot_lightcurve, telescope_colors, sources_det_dic, dippers_list
 
+def getoverlap(a, b):
+    return max(0, min(a[1], b[1]) - max(a[0], b[0]))
 
 # import mpld3
 
 # import streamlit.components.v1 as components
-
-
-ap = argparse.ArgumentParser(description='Script to display lines in XMM Spectra.\n)')
-
-'''GENERAL OPTIONS'''
-
-
-ap.add_argument("-cameras",nargs=1,help='Cameras to use for the spectral analysis',default='all',type=str)
-ap.add_argument("-expmodes",nargs=1,help='restrict the analysis to a single type of exposure',default='all',type=str)
-ap.add_argument("-grouping",nargs=1,help='specfile grouping to use in [5,10,20] cts/bin',default='20',type=str)
-ap.add_argument("-prefix",nargs=1,help='restrict analysis to a specific prefix',default='auto',type=str)
-ap.add_argument("-outdir",nargs=1,help="name of output directory for line plots",default="lineplots_multisp_pnv5",type=str)
-
-'''DIRECTORY SPECIFICS'''
-
-ap.add_argument("-local",nargs=1,help='launch analysis in the current directory instead',default=True,type=bool)
-
-'''MODES'''
-
-ap.add_argument('-multi_obj',nargs=1,help='compute the hid for multiple obj directories inside the current directory',
-                default=True)
-
-'''SPECTRUM PARAMETERS'''
-
-
-ap.add_argument("-line_cont_range",nargs=1,help='min and max energies of the line continuum broand band fit',default='4 10',type=str)
-ap.add_argument("-line_cont_ig",nargs=1,help='min and max energies of the ignore zone in the line continuum broand band fit',
-                default='6.-8.',type=str)
-ap.add_argument("-line_search_e",nargs=1,help='min, max and step of the line energy search',default='4 10 0.05',type=str)
-
-ap.add_argument("-line_search_norm",nargs=1,help='min, max and nsteps (for one sign)  of the line norm search (which operates in log scale)',
-                default='0.01 10 500',type=str)
-
-'''VISUALISATION'''
-
-args=ap.parse_args()
-
-'''
-Notes:
--Only works for the auto observations (due to prefix naming) for now
-
--For now we fix the masses of all the objets at 10M_sol
-
--Due to the way the number of steps is computed, we explore one less value for the positive side of the normalisation
-
--The norm_stepval argument is for a fixed flux band, and the value is scaled in the computation depending on the line energy step
-'''
-
-cameras=args.cameras
-expmodes=args.expmodes
-grouping=args.grouping
-prefix=args.prefix
-local=args.local
-outdir=args.outdir
-
-line_cont_range=np.array(args.line_cont_range.split(' ')).astype(float)
-line_cont_ig=args.line_cont_ig
-line_search_e=np.array(args.line_search_e.split(' ')).astype(float)
-line_search_norm=np.array(args.line_search_norm.split(' ')).astype(float)
-
-multi_obj=args.multi_obj
-
-#readjusting the variables in lists
-if cameras=='all':
-    cameras=['pn','mos1','mos2','heg']
-else:
-    cameras=[cameras]
-    if 'pn' in cameras[0]:
-        cameras=cameras+['pn']
-    if 'mos1' in cameras[0]:
-        cameras=cameras+['mos1']
-    if 'mos2' in cameras[0]:
-        cameras=cameras+['mos2']    
-    if 'heg' in cameras[0]:
-        cameras=cameras+['heg']
-    cameras=cameras[1:]
-
-if expmodes=='all':
-    expmodes=['Imaging','Timing']
-else:
-    expmodes=[expmodes]
-    if 'timing' in expmodes[0] or 'Timing' in expmodes[0]:
-        expmodes=expmodes+['Timing']
-    if 'imaging' in expmodes[0] or 'Imaging' in expmodes[0]:
-        expmodes=expmodes+['Imaging']
-    expmodes=expmodes[1:]
-    
-def getoverlap(a, b):
-    return max(0, min(a[1], b[1]) - max(a[0], b[0]))
-    
-# @st.cache
-# def folder_state(folderpath='./'):
-#     #fetching the previously computed directories from the summary folder file
-#     try:
-#         with open(os.path.join(folderpath,outdir,'summary_line_det.log')) as summary_expos:
-#             launched_expos=summary_expos.readlines()
-    
-#             #creating variable for completed analysis only
-#             completed_expos=['_'.join(elem.split('\t')[:-1]) for elem in launched_expos if 'Line detection complete.' in elem]
-#             launched_expos=['_'.join(elem.split('\t')[:-1]) for elem in launched_expos]
-#     except:
-#         launched_expos=[]
-#         completed_expos=[]
-        
-#     return launched_expos,completed_expos
-
-'''initialisation'''
-
-# #for the current directory:
-# started_expos,done_expos=folder_state()
- 
-#bad spectra manually taken off
-bad_flags=[]
-
-
-#we create these variables in any case because the multi_obj plots require them
-line_search_e_space=np.arange(line_search_e[0],line_search_e[1]+line_search_e[2],line_search_e[2])
-#this one is here to avoid adding one point if incorrect roundings create problem
-line_search_e_space=line_search_e_space[line_search_e_space<=line_search_e[1]]
-
-
-norm_par_space=np.concatenate((-np.logspace(np.log10(line_search_norm[1]),np.log10(line_search_norm[0]),int(line_search_norm[2]/2)),np.array([0]),
-                                np.logspace(np.log10(line_search_norm[0]),np.log10(line_search_norm[1]),int(line_search_norm[2]/2))))
-norm_nsteps=len(norm_par_space)
-
-if multi_obj==False:
-    
-    #assuming the last top directory is the object name
-    obj_name=os.getcwd().split('/')[-2]
-
-    #listing the exposure ids in the bigbatch directory
-    bigbatch_files=glob.glob('**')
-    
-    #tacking off 'spectrum' allows to disregard the failed combined lightcurve computations of some obsids as unique exposures compared to their 
-    #spectra
-    exposid_list=np.unique(['_'.join(elem.split('_')[:4]).replace('rate','').replace('.ds','')+'_auto' for elem in bigbatch_files\
-                  if '/' not in elem and 'spectrum' not in elem and elem[:10].isdigit() and True in ['_'+elemcam+'_' in elem for elemcam in cameras]])
-    #fetching the summary files for the data reduction steps
-    with open('glob_summary_extract_reg.log') as sumfile:
-        glob_summary_reg=sumfile.readlines()[1:]
-    with open('glob_summary_extract_sp.log') as sumfile:
-        glob_summary_sp=sumfile.readlines()[1:]
-
-    #loading the diagnostic messages after the analysis has been done
-    if os.path.isfile(os.path.join(outdir,'summary_line_det.log')):
-        with open(os.path.join(outdir,'summary_line_det.log')) as sumfile:
-            glob_summary_linedet=sumfile.readlines()[1:]
-    
-    #creating summary files for the rest of the exposures
-    lineplots_files=[elem.split('/')[1] for elem in glob.glob(outdir+'/*',recursive=True)]
-    
-    aborted_exposid=[elem for elem in exposid_list if not elem+'_recap.pdf' in lineplots_files]
-
-'''''''''''''''''''''''''''''''''''''''
-''''''Hardness-Luminosity Diagrams''''''
-'''''''''''''''''''''''''''''''''''''''
-
-'Distance and Mass determination'
-
-#wrapped in a function to be cached in streamlit
-
-catal_blackcat,catal_watchdog,catal_blackcat_obj,catal_watchdog_obj,catal_maxi_df,catal_maxi_simbad=load_catalogs()
-
-telescope_list=('XMM','Chandra','NICER','Suzaku','Swift')
-
-st.sidebar.header('Sample selection')
-#We put the telescope option before anything else to filter which file will be used
-choice_telescope=st.sidebar.multiselect('Telescopes', ('XMM','Chandra','NICER','Suzaku','Swift'),default=('XMM','Chandra','NICER','Suzaku','Swift'))
-
-radio_ignore_full=st.sidebar.radio('Include problematic data (_full) folders',('No','Yes'))
-
-ignore_full=radio_ignore_full=='No'
-
-#### file search
-
-all_files=glob.glob('**',recursive=True)
-lineval_id='line_values_'+args.line_search_e.replace(' ','_')+'_'+args.line_search_norm.replace(' ','_')+'.txt'
-lineval_files=[elem for elem in all_files if outdir+'/' in elem and lineval_id in elem and ('/Sample/' in elem or 'XTEJ1701-462/' in elem)]
-
-abslines_id='autofit_values_'+args.line_search_e.replace(' ','_')+'_'+args.line_search_norm.replace(' ','_')+'.txt'
-abslines_files=[elem for elem in all_files if outdir+'/' in elem and abslines_id in elem and ('/Sample/' in elem or 'XTEJ1701-462/' in elem)]
-
-#telescope selection
-lineval_files=[elem for elem_telescope in choice_telescope for elem in lineval_files if elem_telescope+'/' in elem]
-abslines_files=[elem for elem_telescope in choice_telescope for elem in abslines_files if elem_telescope+'/' in elem]
-
-if ignore_full:
-    lineval_files=[elem for elem in lineval_files if '_full' not in elem]
-    abslines_files=[elem for elem in abslines_files if '_full' not in elem]
-    
-if multi_obj:
-    obj_list=np.unique(np.array([elem.split('/')[-4] for elem in lineval_files]))
-else:
-    obj_list=np.array([obj_name])
-    
-#note: there's no need to order anymore since the file values are attributed for each object of object list in the visual_line functions
-
-#creating the dictionnary for all of the arguments to pass to the visualisation functions
-dict_linevis={
-    'ctl_blackcat':catal_blackcat,
-    'ctl_blackcat_obj':catal_blackcat_obj,
-    'ctl_watchdog':catal_watchdog,
-    'ctl_watchdog_obj':catal_watchdog_obj,
-    'lineval_files':lineval_files,
-    'obj_list':obj_list,
-    'cameras':cameras,
-    'expmodes':expmodes,
-    'multi_obj':multi_obj,
-    'range_absline':range_absline,
-    'n_infos':n_infos,
-    'args_cam':args.cameras,
-    'args_line_search_e':args.line_search_e,
-    'args_line_search_norm':args.line_search_norm,
-    'visual_line':True
-    }
-
-#### main arrays computation
-
-#getting the single parameters
-dist_obj_list,mass_obj_list=dist_mass(dict_linevis)
-
-#distance factor for the flux conversion later on
-dist_factor=4*np.pi*(dist_obj_list*1e3*3.086e18)**2
-
-#L_Edd unit factor
-Edd_factor=dist_factor/(1.26e38*mass_obj_list)
-
-#Reading the results files
-observ_list,lineval_list,flux_list,date_list,instru_list,exptime_list=obj_values(lineval_files,Edd_factor,dict_linevis)
-
-dict_linevis['flux_list']=flux_list
-
-#the values here are for each observation
-abslines_infos,autofit_infos=abslines_values(abslines_files,dict_linevis)
-
-#getting all the variations we need
-abslines_infos_perline,abslines_infos_perobj,abslines_plot,abslines_ener,flux_plot,hid_plot,incl_plot,width_plot,nh_plot=values_manip(abslines_infos,dict_linevis,autofit_infos)
-
-
-dump_session=st.sidebar.checkbox('dump session',value=False)
-
-dump_dict={}
-if dump_session:
-        
-    dump_dict['instru_list']=instru_list
-    dump_dict['telescope_list']=telescope_list
-    dump_dict['choice_telescope']=choice_telescope
-    dump_dict['dist_obj_list']=dist_obj_list
-    dump_dict['mass_obj_list']=mass_obj_list
-    dump_dict['line_search_e']=line_search_e
-    dump_dict['multi_obj']=multi_obj
-    dump_dict['observ_list']=observ_list
-    dump_dict['bad_flags']=bad_flags
-    dump_dict['obj_list']=obj_list
-    dump_dict['date_list']=date_list
-    dump_dict['abslines_plot']=abslines_plot
-    dump_dict['hid_plot']=hid_plot
-    dump_dict['flux_plot']=flux_plot
-    dump_dict['nh_plot']=nh_plot
-    dump_dict['incl_plot']=incl_plot
-    dump_dict['abslines_infos_perobj']=abslines_infos_perobj
-    dump_dict['flux_list']=flux_list
-    dump_dict['abslines_ener']=abslines_ener
-    dump_dict['width_plot']=width_plot
-    dump_dict['dict_linevis']=dict_linevis
-    dump_dict['catal_maxi_df']=catal_maxi_df
-    dump_dict['catal_maxi_simbad']=catal_maxi_simbad
-
-    with open('/home/parrama/Documents/Work/PhD/Scripts/Python/visualisation/visual_line_vars.pkl','wb') as dump_file:
-        dill.dump(dump_dict,file=dump_file)
-
 
 '''
 in the abslines_infos_perline form, the order is:
@@ -338,52 +58,32 @@ in the abslines_infos_perline form, the order is:
     -it's uncertainty (3 rows, main value/neg uncert/pos uncert,useless for the delchi and sign)
 '''
 
-flag_noexp=0
-#taking of the bad files points from the HiD
-if multi_obj:
+with open('./visual_line_vars.pkl','rb') as dump_file:
+    dump_dict=dill.load(dump_file)
     
-    #in multi object mode, we loop one more time for each object   
-    for i in range(len(observ_list)):     
-        
-        bad_index=[]
-        #check if the obsid identifiers of every index is in the bad flag list
-        for j in range(len(observ_list[i])):
-            if np.any(observ_list[i][j] in bad_flags):
-                bad_index+=[j]
-                
-        #and delete the resulting indexes from the arrays
-        observ_list[i]=np.delete(observ_list[i],bad_index)
-        lineval_list[i]=np.delete(lineval_list[i],bad_index,axis=0)
-        flux_list[i]=np.delete(flux_list[i],bad_index,axis=0)
-        # links_list[i]=np.delete(links_list[i],bad_index)
-
-#same process for a single object
-else:
-    bad_index=[]
-
-    #checking if the observ list isn't empty before trying to delete anything
-    if len(observ_list)!=0:
-        for j in range(len(observ_list[0])):
-            if np.any(observ_list[0][j] in bad_flags):
-                bad_index+=[j]
-                
-        #and delete the resulting indexes from the arrays
-        observ_list[0]=np.delete(observ_list[0],bad_index)
-        lineval_list[0]=np.delete(lineval_list[0],bad_index,axis=0)
-        flux_list[0]=np.delete(flux_list[0],bad_index,axis=0)
-        # links_list[0]=np.delete(links_list[0],bad_index)
-
-#checking if the obsid identifiers of every index is in the bad flag list or if there's just no file
-if len(observ_list.ravel())==0:
-    st.write('\nNo line detection to build HID graph.')
-
-#some naming variables for the files
-save_dir='glob_batch' if multi_obj else outdir
-
-if multi_obj:
-    save_str_prefix=''
-else:
-    save_str_prefix=obj_list[0]+'_'
+instru_list=dump_dict['instru_list']
+telescope_list=dump_dict['telescope_list']
+choice_telescope=dump_dict['choice_telescope']
+dist_obj_list=dump_dict['dist_obj_list']
+mass_obj_list=dump_dict['mass_obj_list']
+line_search_e=dump_dict['line_search_e']
+multi_obj=dump_dict['multi_obj']
+observ_list=dump_dict['observ_list']
+bad_flags=dump_dict['bad_flags']
+obj_list=dump_dict['obj_list']
+date_list=dump_dict['date_list']
+abslines_plot=dump_dict['abslines_plot']
+hid_plot=dump_dict['hid_plot']
+flux_plot=dump_dict['flux_plot']
+nh_plot=dump_dict['nh_plot']
+incl_plot=dump_dict['incl_plot']
+abslines_infos_perobj=dump_dict['abslines_infos_perobj']
+flux_list=dump_dict['flux_list']
+abslines_ener=dump_dict['abslines_ener']
+width_plot=dump_dict['width_plot']
+dict_linevis=dump_dict['dict_linevis']
+catal_maxi_df=dump_dict['catal_maxi_df']
+catal_maxi_simbad=dump_dict['catal_maxi_simbad']
 
 '''Page creation'''
 #### Streamlit page creation
@@ -508,16 +208,6 @@ if display_single:
                
 save_format=st.sidebar.radio('Graph format:',('pdf','svg','png'))
 
-def save_hld():
-    '''
-    Saves the current graph in a svg (i.e. with clickable points) format.
-    '''
-
-    fig_hid.savefig(save_dir+'/'+save_str_prefix+'HLD_cam_'+args.cameras+'_'+\
-                args.line_search_e.replace(' ','_')+'_'+args.line_search_norm.replace(' ','_')+'curr_'+str(round(time.time()))+'.'+save_format,bbox_inches='tight')
-        
-st.sidebar.button('Save current HID view',on_click=save_hld)
-
         
 with st.sidebar.expander('Visualisation'):
     
@@ -560,16 +250,17 @@ with st.sidebar.expander('Lightcurves'):
     
     plot_maxi_ew=st.checkbox('Superpose measured EW',value=False)
     
-    def save_lc():
+    ####ADD LC DOWNLOAD
+    # def save_lc():
         
-        '''
-        Saves the current maxi_graph in a svg (i.e. with clickable points) format.
-        '''
-        if display_single:
-            fig_lc_monit.savefig(save_dir+'/'+choice_source[0]+'_lc_'+str(round(time.time()))+'.'+save_format,bbox_inches='tight')
-            fig_hr_monit.savefig(save_dir+'/'+choice_source[0]+'_hr_'+str(round(time.time()))+'.'+save_format,bbox_inches='tight')
+    #     '''
+    #     Saves the current maxi_graph in a svg (i.e. with clickable points) format.
+    #     '''
+    #     if display_single:
+    #         fig_lc_monit.savefig(save_dir+'/'+choice_source[0]+'_lc_'+str(round(time.time()))+'.'+save_format,bbox_inches='tight')
+    #         fig_hr_monit.savefig(save_dir+'/'+choice_source[0]+'_hr_'+str(round(time.time()))+'.'+save_format,bbox_inches='tight')
             
-    st.button('Save current MAXI curves',on_click=save_lc,key='save_lc_key')
+    # st.button('Save current MAXI curves',on_click=save_lc,key='save_lc_key')
     
 compute_only_withdet=st.sidebar.checkbox('Skip parameter analysis when no detection remain with the current constraints',value=False)
 
@@ -1427,6 +1118,25 @@ if radio_info_cmap=='Instrument':
 
 st.pyplot(fig_hid)
 
+# @st.cache
+# def convert_image(fig,s_format):
+
+#     fig_save = io.BytesIO()
+
+#     fig.savefig(fig_save, format=s_format,bbox_inches='tight')
+    
+#     return fig_save
+
+# save_fig_hid= convert_image(fig_hid,s_format=save_format)
+
+# st.download_button(
+#      label="Download data as CSV",
+#      data=save_fig_hid,
+#      file_name='large_df.csv',
+#      mime='text/csv',
+#  )
+
+
 '''
 SOURCE TABLE
 '''
@@ -1475,8 +1185,8 @@ dict_linevis['mask_lines']=mask_lines
 dict_linevis['bins_bshift']=bins_bshift
 dict_linevis['bins_ener']=bins_ener
 dict_linevis['display_nonsign']=display_nonsign
-dict_linevis['save_dir']=save_dir
-dict_linevis['save_str_prefix']= save_str_prefix
+dict_linevis['save_dir']=None
+dict_linevis['save_str_prefix']= None
 
 '''''''''''''''''''''
  ####MAXI LIGHTCURVE
@@ -1517,12 +1227,6 @@ if compute_only_withdet:
         elif sum(global_sign_mask)==0:
             st.text('There are no detections for current object/date selection. Cannot compute parameter analysis.')
         st.stop()
-    
-os.system('mkdir -p '+save_dir+'/graphs')
-os.system('mkdir -p '+save_dir+'/graphs/distrib')
-os.system('mkdir -p '+save_dir+'/graphs/intrinsic')
-os.system('mkdir -p '+save_dir+'/graphs/hid')
-os.system('mkdir -p '+save_dir+'/graphs/inclin')
 
 '''
 AUTOFIT LINES

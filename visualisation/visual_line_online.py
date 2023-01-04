@@ -29,7 +29,7 @@ import dill
 from fitting_tools import lines_std,lines_std_names,ravel_ragged,range_absline
 
 #visualisation functions
-from visual_line_tools import distrib_graph,correl_graph,incl_dic,\
+from visual_line_online_tools import dump_dict,distrib_graph,correl_graph,incl_dic,\
     n_infos, plot_lightcurve, telescope_colors, sources_det_dic, dippers_list
     
 '''Astro'''
@@ -52,9 +52,6 @@ in the abslines_infos_perline form, the order is:
     -the info (5 rows, eqw/bshift/delchi/sign)
     -it's uncertainty (3 rows, main value/neg uncert/pos uncert,useless for the delchi and sign)
 '''
-
-with open('./visual_line_vars.pkl','rb') as dump_file:
-    dump_dict=dill.load(dump_file)
     
 instru_list=dump_dict['instru_list']
 telescope_list=dump_dict['telescope_list']

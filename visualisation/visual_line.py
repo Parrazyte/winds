@@ -300,6 +300,8 @@ dump_session=st.sidebar.checkbox('dump session',value=False)
 
 dump_dict={}
 if dump_session:
+    
+    from visual_line_tools import dict_lc_rxte
         
     dump_dict['instru_list']=instru_list
     dump_dict['telescope_list']=telescope_list
@@ -324,7 +326,8 @@ if dump_session:
     dump_dict['dict_linevis']=dict_linevis
     dump_dict['catal_maxi_df']=catal_maxi_df
     dump_dict['catal_maxi_simbad']=catal_maxi_simbad
-
+    dump_dict['dict_lc_rxte']=dict_lc_rxte
+    
     with open('/home/parrama/Documents/Work/PhD/Scripts/Python/visualisation/visual_line_vars.pkl','wb') as dump_file:
         dill.dump(dump_dict,file=dump_file)
 

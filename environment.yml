@@ -1,0 +1,12 @@
+name: base
+channels:
+  - defaults
+dependencies:
+  - astropy=4.3.1=py38h09021b7_0
+  - dill=0.3.6=py38h06a4308_0
+  - matplotlib=3.5.3=py38h06a4308_0
+  - matplotlib-base=3.5.3=py38hf590b9c_0
+  - matplotlib-inline=0.1.6=py38h06a4308_0
+  - pip:
+    - astroquery==0.4.4.dev7007
+prefix: /home/parrama/Soft/Anaconda/anaconda3

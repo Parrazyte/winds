@@ -211,7 +211,7 @@ with st.sidebar.expander('Visualisation'):
     
     display_obj_zerodet=st.checkbox('Color sources with no detection',value=True)
     
-    display_hid_error=st.checkbox('Display errorbar for HID position',value=True)
+    display_hid_error=st.checkbox('Display errorbar for HID position',value=False)
     
     display_central_abs=st.checkbox('Display centers for absorption detections',value=False)
 
@@ -219,13 +219,13 @@ with st.sidebar.expander('Visualisation'):
     
     global_colors=st.checkbox('Normalise colors/colormaps over the entire sample',value=False)
         
-    paper_look=st.checkbox('Paper look',value=True)
+    paper_look=True
     
-    bigger_text=st.checkbox('Bigger text size',value=True)
+    bigger_text=True
     
-    square_mode=st.checkbox('Square mode',value=True)
+    square_mode=True
 
-    show_linked=st.checkbox('Distinguish linked detections',value=False)
+    show_linked=False
     
 if alpha_abs:
     alpha_abs=0.5

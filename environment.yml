@@ -5,7 +5,7 @@ dependencies:
   - pip=22.2.2=py38h06a4308_0
   - pip:
     - astroquery==0.4.4
-    - astropy==4.3.1
+    - astropy==5.2
     - dill==0.3.6
     - matplotlib==3.5.3
   

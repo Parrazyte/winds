@@ -193,7 +193,7 @@ display_nondet=st.sidebar.checkbox('Display non detection',value=True)
 
 if display_nondet:
     with st.sidebar.expander('Upper limits'):
-        display_upper=st.checkbox('Display upper limits',value=True)    
+        display_upper=st.checkbox('Display upper limits',value=False)    
         if display_upper:
                 selectbox_upperlines=st.multiselect('Lines selection for upper limit display:',
                                                             options=line_display_str[mask_lines],default=line_display_str[mask_lines][:2])
@@ -235,7 +235,14 @@ else:
 with st.sidebar.expander('Lightcurves'):
     
     plot_lc_monit=st.checkbox('Plot monitoring lightcurve',value=False)
+    if not display_single:
+        plot_lc_monit=False
+        
     plot_hr_monit=st.checkbox('Plot monitoring HR',value=False)
+    
+    if not display_single:
+        plot_hr_monit=False
+        
     monit_highlight_hid=st.checkbox('Highlight HID coverage',value=False)
     
     if plot_lc_monit or plot_hr_monit:

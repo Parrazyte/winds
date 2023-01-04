@@ -12,7 +12,45 @@ with previous data reduction results if any
 Can also add very basic correlation/distribution of the line parameters
 (these should be looked at with visual_line)
 
-If using multi_obj, it is assumed the lineplots directory is outdir
+If using multi_obj, it is assumed the lineplots directory is outdirf
+
+
+
+
+
+Changelog:
+
+V X(26:12:22):
+    -restricting cont_powerlaw gamma to [1,3] instead of [0,4]
+    -restricting diskbb kt to at least somewhat constrained values
+    -switching to Kaatra binning for all XMM spectra
+    -switching to C-stat for analysis
+
+V X(25:12:22):
+    -force narrow lines for XMM since none of them are resolved to help ftest and speed up computations
+    -testing raising low-E to 2keV due to huge residuals
+    
+V X(24:12:22):
+    -added proper saving for distinct blueshift flag
+    
+V X (23:12:22):
+    -fixed issue in change in includedlist in mixlines
+    -changed order of component deletion to reverse significance to avoid issues with lines deleting in an order we don't want
+    -changed parameter unfreezing before second autofit to also thaw line parameters pegged during the first autofit to allow
+    -to refit (and repeg but only if needed) them
+    -taken off line linking and insted added flag for lines with bshift distinct at 3 sigma in the same complex
+
+V X (22:12:22):
+    -new emission framework working
+    -fixed EW computation issue for NiKa27 
+    -fixed general EW computation issue with pegged parameter
+    -> fixed missing implicit peg in model display of 1 datagroup models
+    -added freeze computation before the EW upper limit computation since the EW has the same issue than the chain
+    - changed log file of fitlines to the correct one after switching xspec log to fakes
+    -edited txt table display
+    -some changes in mass values in visual_line_tools to be more precise
+    -solved issues in the distance dichotomy in visual_line_tools
+    
 """
 
 #general imports
@@ -64,11 +102,11 @@ from xspec import AllModels,AllData,Fit,Spectrum,Model,Plot,Xset,FakeitSettings,
 
 #custom script with a few shorter xspec commands
 from xspec_config_multisp import allmodel_data,model_data,model_load,addcomp,editmod,Pset,Pnull,rescale,reset,Plot_screen,store_plot,freeze,allfreeze,unfreeze,\
-                         calc_error,delcomp,fitmod,fitcomp,model_list,calc_fit,plot_line_comps,\
+                         calc_error,delcomp,fitmod,fitcomp,calc_fit,plot_line_comps,\
                          xcolors_grp,comb_chi2map,plot_std_ener
 
 #custom script with a some lines and fit utilities and variables
-from fitting_tools import c_light,lines_std_names,lines_e_dict,ravel_ragged,n_absline,range_absline
+from fitting_tools import c_light,lines_std_names,lines_e_dict,ravel_ragged,n_absline,range_absline,model_list
 
 #importing some graph tools from the streamlit script
 from visual_line_tools import load_catalogs,dist_mass,obj_values,abslines_values,values_manip,distrib_graph,correl_graph,n_infos,incl_dic
@@ -96,11 +134,14 @@ ap = argparse.ArgumentParser(description='Script to detect lines in XMM Spectra.
 ap.add_argument('-satellite',nargs=1,help='telescope to fetch spectra from',default='XMM',type=str)
 ap.add_argument("-cameras",nargs=1,help='Cameras to use for spectral analysis',default='pn',type=str)
 ap.add_argument("-expmodes",nargs=1,help='restrict the analysis to a single type of exposure',default='all',type=str)
-ap.add_argument("-grouping",nargs=1,help='specfile grouping for XMM spectra in [5,10,20] cts/bin',default='20',type=str)
+ap.add_argument("-grouping",nargs=1,help='specfile grouping for XMM spectra in [5,10,20] cts/bin',default='opt',type=str)
+
+ap.add_argument('-fitstat',nargs=1,help='fit statistic to be used for the spectral analysis',default='cstat',type=str)
+
 ap.add_argument("-prefix",nargs=1,help='restrict analysis to a specific prefix',default='auto',type=str)
 
 ####output directory
-ap.add_argument("-outdir",nargs=1,help="name of output directory for line plots",default="lineplots_newfit",type=str)
+ap.add_argument("-outdir",nargs=1,help="name of output directory for line plots",default="lineplots_opt_max_width",type=str)
 
 #overwrite
 ap.add_argument('-overwrite',nargs=1,
@@ -126,6 +167,9 @@ ap.add_argument('-xspec_window',nargs=1,help='xspec window id (auto tries to pic
 
 ap.add_argument('-pre_reduced_NICER',nargs=1,help='change NICER data format to pre-reduced obsids',default=False,type=bool)
 
+####autofit model
+ap.add_argument('-autofit_model',nargs=1,help='model list to use for the autofit computation',default='lines_narrow',type=str)
+
 '''DIRECTORY SPECIFICS'''
 
 ap.add_argument("-local",nargs=1,help='launch analysis in the current directory instead',default=True,type=bool)
@@ -134,14 +178,21 @@ ap.add_argument("-h_update",nargs=1,help='update the bg, rmf and arf file names 
 
 '''####ANALYSIS RESTRICTION'''
 
-ap.add_argument('-restrict',nargs=1,help='restrict the computation to a number of predefined exposures',default=False,type=bool)
+ap.add_argument('-restrict',nargs=1,help='restrict the computation to a number of predefined exposures',default=True,type=bool)
 #in this mode, the line detection function isn't wrapped in a try, and the summary isn't updasted
 
-observ_restrict=['0670673001_pn_U002_Timing_auto_sp_src_grp_20.ds'
-                 ]
+observ_restrict=['0155762601_pn_S001_Timing_auto_sp_src_grp_opt.ds']
 
 '''    
+GRS strong curvature spectra
+    ['0506161201_pn_U002_Timing_auto_sp_src_grp_opt.ds',
+    '0506161101_pn_S001_Timing_auto_sp_src_grp_opt.ds']
+    
+GROJ strong curve
+'0155762601_pn_S001_Timing_auto_sp_src_grp_opt.ds'
+
 4U spectra where need to test noem 
+'4568_heg_-1_grp_opt.pha','4568_heg_1_grp_opt.pha'
     '22377_heg_-1_grp_opt.pha','22377_heg_1_grp_opt.pha'
     '22378_heg_-1_grp_opt.pha','22378_heg_1_grp_opt.pha'
     '19904_heg_-1_grp_opt.pha','19904_heg_1_grp_opt.pha'
@@ -159,8 +210,7 @@ obs initially missing from tgcat
     
 good fast 4U XMM test: 0670673001_pn_U002_Timing_auto_sp_src_grp_20.ds
 
-GRS huge em spectra
-    '0144090101_pn_U002_Timing_auto_sp_src_grp_20.ds']
+
 
 
 1H abs off    
@@ -183,7 +233,7 @@ ap.add_argument('-skip_started',nargs=1,help='skip all exposures listed in the l
 #note : will skip exposures for which the exposure didn't compute or with errors
 
 ap.add_argument('-skip_complete',nargs=1,help='skip completed exposures listed in the local summary_line_det file',
-                default=True,type=bool)
+                default=False,type=bool)
 
 ap.add_argument('-skip_nongrating',nargs=1,help='skip non grating Chandra obs (used to reprocess with changes in the restrictions)',
                 default=False,type=bool)
@@ -250,10 +300,6 @@ ap.add_argument('-sign_threshold',nargs=1,help='data significance used to start 
 ap.add_argument('-force_autofit',nargs=1,help='force autofit even when there are no abs peaks detected',default=True,type=bool)
 ap.add_argument('-trig_interval',nargs=1,help='interval restriction for the absorption peak to trigger the autofit process',default='6.5 9.1',
                 type=str)
-
-####autofit model
-ap.add_argument('-autofit_model',nargs=1,help='model list to use for the autofit computation',default='lines_resolved',type=str)
-
 
 ap.add_argument('-overlap_flag',nargs=1,help='overlap value to trigger the overlap flag, in absorption line area fraction',default=0.5,
                 type=float)
@@ -334,6 +380,7 @@ max_bg_imaging=args.max_bg_imaging
 paper_look=args.paper_look
 plot_mode=args.plot_mode
 log_console=args.log_console
+fitstat=args.fitstat
 
 #assessing upper limits require the autofit to proceed
 if assess_ul_detec:
@@ -527,6 +574,9 @@ if sat in ['XMM','NICER','Suzaku','Swift']:
     else:
         e_sat_low=0.3
     if sat in ['XMM','Suzaku','Swift']:
+        if sat=='XMM':
+            e_sat_low=2.
+            
         e_sat_high_init=10.
     else:
         e_sat_high_init=10.
@@ -596,7 +646,7 @@ if multi_obj==False:
     if sat=='XMM':
         for elem_cam in cameras:
             for elem_exp in expmodes:
-                spfile_list=spfile_list+glob.glob('*'+elem_cam+'*'+elem_exp+'_'+prefix+'_sp_src_grp_'+grouping+'*')
+                spfile_list=spfile_list+glob.glob('*'+elem_cam+'*'+elem_exp+'_'+prefix+'_sp_src_grp_'+grouping+'.*')
                 #taking of modified spectra with background checked
                 spfile_list=[elem for elem in spfile_list if 'bgtested' not in elem]
     elif sat in ['Chandra','NICER','Suzaku','Swift']:
@@ -1110,8 +1160,10 @@ def line_detect(epoch_id):
     obs_grating=False
     #churazov weight for HETG spectra to compensate the lack of grouping besides Kastra
 
-    ###TODO: Change this to C-stat
-    Fit.weight='churazov'
+    #Switching fit to C-stat
+    Fit.statMethod=fitstat
+    
+    # Fit.weight='churazov'
     
     if sat=='Chandra':
         
@@ -1158,9 +1210,9 @@ def line_detect(epoch_id):
     if h_update and sat=='XMM':
         for i_sp,elem_sp in enumerate(epoch_files):
             with fits.open(elem_sp,mode='update') as hdul:
-                hdul[1].header['BACKFILE']='_'.join(spec_inf[i_sp][:-4])+'_sp_bg.ds'
-                hdul[1].header['RESPFILE']='_'.join(spec_inf[i_sp][:-4])+'.rmf'
-                hdul[1].header['ANCRFILE']='_'.join(spec_inf[i_sp][:-4])+'.arf'
+                hdul[1].header['BACKFILE']=elem_sp.split('_sp')[0]+'_sp_bg.ds'
+                hdul[1].header['RESPFILE']=elem_sp.split('_sp')[0]+'.rmf'
+                hdul[1].header['ANCRFILE']=elem_sp.split('_sp')[0]+'.arf'
                 #saving changes
                 hdul.flush()
     
@@ -1248,7 +1300,6 @@ def line_detect(epoch_id):
         
         #pile-up test
         #we use the ungrouped spectra for the headers since part of the header is often changed during the regrouping
-    
         try :
             pileup_lines=fits.open(epoch_observ[i_sp]+'_sp_src.ds')[0].header['PILE-UP'].split(',')
             pileup_value=pileup_val(pileup_lines[-1])
@@ -1529,7 +1580,8 @@ def line_detect(epoch_id):
         rescale(auto=True)
         
         #screening the xspec plot and the model informations for future use
-        Plot_screen("ldata,ratio,delchi",outdir+'/'+epoch_observ[0]+"_screen_xspec_broadband_linecont")
+        Plot_screen("ldata,ratio,delchi",outdir+'/'+epoch_observ[0]+"_screen_xspec_broadband_linecont",
+                    includedlist=fitcont_high.includedlist)
         
         #saving the model str
         catch_model_str(curr_logfile,savepath=outdir+'/'+epoch_observ[0]+'_mod_broadband_linecont.txt')
@@ -1567,7 +1619,7 @@ def line_detect(epoch_id):
             
         return [mod_high_dat,flux_base,fitcont_high]
         
-    def store_fit(mode='broadband'):
+    def store_fit(mode='broadband',fitmod=None):
         
         '''
         plots and saves various informations about a fit
@@ -1576,7 +1628,8 @@ def line_detect(epoch_id):
         #Since the automatic rescaling goes haywire when using the add command, we manually rescale (with our own custom command)
         rescale(auto=True)
         
-        Plot_screen("ldata,ratio,delchi",outdir+'/'+epoch_observ[0]+'_screen_xspec_'+mode)
+        Plot_screen("ldata,ratio,delchi",outdir+'/'+epoch_observ[0]+'_screen_xspec_'+mode,
+                    includedlist=None if fitmod is None else fitmod.includedlist)
         
         #saving the model str
         catch_model_str(curr_logfile,savepath=outdir+'/'+epoch_observ[0]+'_mod_'+mode+'.txt')
@@ -1651,7 +1704,7 @@ def line_detect(epoch_id):
         
         AllData.notice(line_cont_ig)
         
-        store_fit(mode='broadhid'+add_str)
+        store_fit(mode='broadhid'+add_str,fitmod=fitmodel)
         
         #storing the fitmod class into a file
         fitmodel.dump(outdir+'/'+epoch_observ[0]+'_fitmod_broadhid'+add_str+'.pkl')
@@ -1752,7 +1805,7 @@ def line_detect(epoch_id):
             
         AllData.notice(line_cont_ig)
         
-        store_fit()
+        store_fit(mode='broadband',fitmod=fitcont_broad)
         
         #storing the class
         fitcont_broad.dump(outdir+'/'+epoch_observ[0]+'_fitmod_broadband.pkl')
@@ -2167,7 +2220,7 @@ def line_detect(epoch_id):
         fitmod_cont.reload()
         
         #feching the list of components we're gonna use
-        comp_lines=model_list('lines_resolved' if sat=='Chandra' and autofit_model=='lines' else autofit_model)
+        comp_lines=model_list(autofit_model)
         
         #creating a new logfile for the autofit
         curr_logfile_write=Xset.openLog(outdir+'/'+epoch_observ[0]+'_xspec_log_autofit.log')
@@ -2197,7 +2250,7 @@ def line_detect(epoch_id):
             AllChains.clear()
 
             #saving the initial autofit result for checking purposes
-            store_fit(mode='autofit_init')
+            store_fit(mode='autofit_init',fitmod=fitlines)
             
             #storing the fitmod class into a file
             fitlines.dump(outdir+'/'+epoch_observ[0]+'_fitmod_autofit_init.pkl')
@@ -2212,11 +2265,9 @@ def line_detect(epoch_id):
             fitlines.logfile_write=curr_logfile_write
             fitlines.update_fitcomps()
             
-            linespar_freeze=[]
-            #storing the previous freeze states from each line component
+            #freezing every line component
             for comp in [elem for elem in fitlines.includedlist if elem is not None]:
                 if comp.line:
-                    linespar_freeze+=[[elem in comp.unlocked_pars for elem in comp.parlist]]
 
                     freeze(parlist=comp.unlocked_pars)
 
@@ -2226,24 +2277,28 @@ def line_detect(epoch_id):
             AllData.ignore('**-'+str(e_sat_low)+' '+str(e_sat_high)+'-**')
             
             #thawing the absorption to allow improving its value
-            if fitlines.glob_phabs.included:
+            if 'glob_phabs' in fitlines.name_cont_complist and fitlines.glob_phabs.included:
                 AllModels(1)(fitlines.glob_phabs.parlist[0]).frozen=False
                 
             #we reset the value of the fixed abs to allow it to be free if it gets deleted and put again
             fitlines.fixed_abs=None
-
+            
+            #fitting the model to the new energy band first
+            calc_fit(logfile=fitlines.logfile)
+            
+            #autofit
             fitlines.global_fit(chain=True,lock_lines=True,directory=outdir,observ_id=epoch_observ[0])
             
             AllChains.clear()
             
-            store_fit(mode='broadband_post_auto')
+            store_fit(mode='broadband_post_auto',fitmod=fitlines)
         
             #storing the class
             fitlines.dump(outdir+'/'+epoch_observ[0]+'_fitmod_broadband_post_auto.pkl')
                 
             #re fixing the absorption parameter and storing the value to retain it if the absorption gets taken off and tested again
 
-            if fitlines.glob_phabs.included:
+            if 'glob_phabs' in fitlines.name_cont_complist and fitlines.glob_phabs.included:
                 broad_absval=AllModels(1)(fitlines.glob_phabs.parlist[0]).values[0]
                 AllModels(1)(fitlines.glob_phabs.parlist[0]).frozen=True
             else:
@@ -2255,44 +2310,54 @@ def line_detect(epoch_id):
             AllData.notice('all')
             AllData.ignore('bad')
             AllData.ignore('**-'+str(hid_cont_range[0])+' '+str(hid_cont_range[1])+'-**')
+            
+            #fitting the model to the new energy band first
+            calc_fit(logfile=fitlines.logfile)
+            
+            #autofit
             fitlines.global_fit(chain=True,lock_lines=True,directory=outdir,observ_id=epoch_observ[0])
                 
             AllChains.clear()
             main_spflux=hid_fit_infos(fitlines,broad_absval,post_autofit=True)
             
 
-            #restoring the line freeze states
-            #we can safely assume than even if the parameter numbers changed, the line will keep the same position so we can apply the mask to the 
-            #new set of parameters using the same component order as before
-            i_line_thaw=0
-            for comp in [elem for elem in fitlines.includedlist if elem is not None]:
-                if comp.line:
-                    #unfreezing the parameter with the mask created before
-                    unfreeze(parlist=np.array(comp.parlist)[linespar_freeze[i_line_thaw]])
+            '''
+            restoring the line freeze states
+            here we restore the INITIAL component freeze state, effectively thawing all components pegged during the first autofit
+            '''
 
-                    #updating the index of the line compoent to keep in line with the mask
-                    i_line_thaw+=1
+            for comp in [elem for elem in fitlines.includedlist if elem is not None]:
+                
+                if comp.line:
+                    #unfreezing the parameter with the mask created at the first addition of the component
+                    unfreeze(parlist=np.array(comp.parlist)[comp.unlocked_pars_base_mask])
                     
             #refitting in the autofit range to get the newer version of the autofit and continuum
             AllData.notice('all')
             AllData.ignore('bad')
-            AllData.ignore('**-'+str(line_cont_range[0])+' '+str(line_cont_range[1])+'-**')            
+            AllData.ignore('**-'+str(line_cont_range[0])+' '+str(line_cont_range[1])+'-**')       
+            
+            #fitting the model to the new energy band first
+            calc_fit(logfile=fitlines.logfile)
+            
+            #autofit
             fitlines.global_fit(chain=True,directory=outdir,observ_id=epoch_observ[0])
             
             #storing the final fit
             data_autofit=allmodel_data()
         
-            
         #storing the final plot and parameters
         #screening the xspec plot 
-        Plot_screen("ldata,ratio,delchi",outdir+'/'+epoch_observ[0]+"_screen_xspec_autofit")
+        Plot_screen("ldata,ratio,delchi",outdir+'/'+epoch_observ[0]+"_screen_xspec_autofit",
+                    includedlist=fitlines.includedlist)
         
         if sat=='Chandra':
             
             #plotting a zoomed version for HETG spectra
             AllData.ignore('**-6.5 '+str(float(min(9,e_sat_high)))+'-**')
             
-            Plot_screen("ldata,ratio,delchi",outdir+'/'+epoch_observ[0]+"_screen_xspec_autofit_zoom")
+            Plot_screen("ldata,ratio,delchi",outdir+'/'+epoch_observ[0]+"_screen_xspec_autofit_zoom",
+                        includedlist=fitlines.includedlist)
             
             #putting back the energy range
             AllData.notice(str(line_cont_range[0])+'-'+str(line_cont_range[1]))
@@ -2338,7 +2403,7 @@ def line_detect(epoch_id):
         plot_autofit_lines=plot_autofit_comps[2+len(addcomps_cont):]
         
         '''
-        Testing the overlap of absorption lines with emission lines
+        #### Testing the overlap of absorption lines with emission lines
         We compare the overlapping area (in count space) of each absorption line to the sum of emission lines
         The final threshold is set in fraction of the absorption line area
         
@@ -2354,15 +2419,17 @@ def line_detect(epoch_id):
                             if 'gaussian' in elem.compname]
         
         for ind_line,line_fitcomp in enumerate(included_linecomps):
+            
             #skipping absorption lines
             if line_fitcomp.named_absline:
                 continue
             
-            #width limit test
-            if AllModels(1)(line_fitcomp.parlist[1])*8<(line_search_e[1]-line_search_e[0]):
+            # #width limit test
+            # of now that the line comps are not allowed to have stupid widths
+            # if AllModels(1)(line_fitcomp.parlist[1])*8<(line_search_e[1]-line_search_e[0]):
                 
-                #adding the right component to the sum
-                sum_autofit_emlines+=plot_autofit_lines[ind_line]
+            #adding the right component to the sum
+            sum_autofit_emlines+=plot_autofit_lines[ind_line]
                                                     
         abslines_em_overlap=np.zeros(n_absline)
         
@@ -2427,7 +2494,7 @@ def line_detect(epoch_id):
         #### Computing line parameters
         
         #fetching informations about the absorption lines
-        abslines_flux,abslines_eqw,abslines_bshift,abslines_delchi=fitlines.get_absline_info(autofit_drawpars)
+        abslines_flux,abslines_eqw,abslines_bshift,abslines_delchi,abslines_bshift_distinct=fitlines.get_absline_info(autofit_drawpars)
 
         #clearing the chain before doing anything else
         AllChains.clear()
@@ -2599,6 +2666,11 @@ def line_detect(epoch_id):
         curr_logfile_write.reconfigure(line_buffering=True)
         curr_logfile=open(curr_logfile_write.name,'r')
         
+        #updating it in the fitmod
+        fitlines.logfile=curr_logfile
+        fitlines.logfile_write=curr_logfile_write
+        fitlines.update_fitcomps()
+        
         Xset.logChatter=2
         
         '''
@@ -2732,57 +2804,22 @@ def line_detect(epoch_id):
                         AllModels(1)(AllModels(1).nParameters-1).values=[sign_widths_arr[0]]+AllModels(1)(AllModels(1).nParameters-1).values[1:]
                             
                         #exploring the parameters
-                        Fit.steppar('nolog '+str(mod_fake.nParameters-2)+' '+str(line_search_e_space[steppar_inter[0]])+\
-                                    ' '+str(line_search_e_space[steppar_inter[1]])+' '\
-                                   +str(steppar_inter[1]-steppar_inter[0]))
+                        try:
+                            Fit.steppar('nolog '+str(mod_fake.nParameters-2)+' '+str(round(line_search_e_space[steppar_inter[0]],3))+\
+                                        ' '+str(round(line_search_e_space[steppar_inter[1]],3))+' '\
+                                       +str(steppar_inter[1]-steppar_inter[0]))
+                                
+                            #updating the delchi array with the part of the parameters that got updated
+                            delchi_arr_fake[f_ind][steppar_inter[0]:steppar_inter[1]+1]=\
+                                abs(np.array([min(elem,0) for elem in Fit.stepparResults('delstat')]))
+                        except:
+                            #can happen if there are issues in the data quality, we just don't consider the fakes then
+                            pass
                             
-                        #updating the delchi array with the part of the parameters that got updated
-                        delchi_arr_fake[f_ind][steppar_inter[0]:steppar_inter[1]+1]=\
-                            abs(np.array([min(elem,0) for elem in Fit.stepparResults('delstat')]))
-                    
                     Xset.chatter=5
                     Xset.logChatter=5
-                    
-                    #not used anymore because it was not what we wanted
-                    # '''
-                    # computing an upper limit distribution for the photon noise 90\% EQW UL of each line
-                    # '''
-                                        
-                    # if assess_ul_detec:
-                    #     for i_line in range(len(abslines_sign)):
-                        
-                    #         #skipping the computation for lines beyond the iron Ka complex in restrict mode when we don't go above 8keV anyway
-                    #         if restrict_graded or restrict_fakes and i_line>=2:
-                    #             continue
-                            
-                    #         #here we skip the first two emission lines
-                    #         line_name=list(lines_e_dict.keys())[i_line+3]
-                            
-                    #         #fetching the lower and upper bounds of the energies from the blueshifts
-                    #         line_upper_e=lines_e_dict[line_name][0]*(1+lines_e_dict[line_name][2]/c_light)
-                            
-                    #         #putting the energy at the line maximum energy
-                    #         mod_fake(AllModels(1).nParameters-2).values=[line_upper_e]+mod_fake(AllModels(1).nParameters-2).values[1:]
-                            
-                    #         mod_fake(AllModels(1).nParameters-2).frozen=True
-                    #         Fit.perform()
-                            
-                    #         #computing the 90% error on the eqw
-                    #         #note: this crashes in multigroup but passing the error makes it work for some reason
-                    #         try:
-                    #             AllModels.eqwidth(len(AllModels(1).componentNames),err=True,number=100,level=90)
-                    #         except:
-                    #             pass
-                            
-                    #         #and storing the absolute value of the lower bound (the eqwidth tuple has the lower bound in second)
-                    #         #note: we always take the value of the first data group as it is the one with the 'correct' (constant=1) normalisation
-                    #         eqw_arr_fake[f_ind][i_line]=abs(AllData(1).eqwidth[1])*1e3
-                                
                             
                     pbar.update(1)
-                    
-            # #storing the EQW array
-            # np.save(outdir+'/'+epoch_observ[0]+'_eqw_arr_fake.npy',eqw_arr_fake)
             
             #assessing the significance of each line
             for i_line in range(len(abslines_sign)):
@@ -2822,11 +2859,6 @@ def line_detect(epoch_id):
                 
                 line_comp.significant=abslines_sign[i_line]
                 
-                # #assessing the EQW upper limit for each line
-                # if assess_ul_detec:
-                #     eqw_arr_fake_line=eqw_arr_fake.T[i_line]
-                #     eqw_arr_fake_line.sort()
-                    
                 '''
                 computing the UL for detectability at the given threshold
                 Here we convert the delchi threshold for significance to the EW that we would obtain for a line at the maximum blueshift 
@@ -2845,14 +2877,17 @@ def line_detect(epoch_id):
         #reloading the autofit model with no absorption to compute the upper limits
         model_load(data_autofit_noabs)
         
+        #freezing the model to avoid it being affected by the missing absorption lines
+        #note : it would be better to let it free when no absorption lines are there but we keep the same procedure for 
+        #consistency
+        allfreeze()
+        
         #computing a mask for significant lines
         mask_abslines_sign=abslines_sign>sign_threshold
                 
         #computing the upper limits for the non significant lines
-        try:
-            abslines_eqw_upper=fitlines.get_eqwidth_uls(mask_abslines_sign,abslines_bshift,sign_widths_arr)
-        except:
-            breakpoint()                    
+        abslines_eqw_upper=fitlines.get_eqwidth_uls(mask_abslines_sign,abslines_bshift,sign_widths_arr,pre_delete=True)
+
         #here will need to reload an accurate model before updating the fitcomps
         '''HTML TABLE FOR the pdf summary'''
                     
@@ -2928,7 +2963,7 @@ def line_detect(epoch_id):
                 <td>/</td>
               </tr>
             '''
-            
+
             html_summary=\
             '''
             <table>
@@ -2938,31 +2973,32 @@ def line_detect(epoch_id):
                 <th width="9%">rest energy</th>
                 <th width="9%">em overlap</th>
                 <th width="14%">line flux</th>
-                <th width="14%">blueshift<br></th>
+                <th width="14%">blueshift</th>
+                <th width="8%">3sig. distinct</th>
                 <th width="9%">width</th>
-                <th width="14%">equivalent width</th>
+                <th width="9%">EW</th>
                 <th width="9%">EW '''+str(sign_threshold)+''' UL</th>
-                <th width="6%">significance</th>
-                <th width="6%">delchi²</th>
-              </tr>
-            </thead>
-            <thead>
-              <tr>
-                <th width="10%"> </th>
-                <th width="10%"> keV </th>
-                <th width="10%"> </th>
-                <th width="15%">1e-12 erg/s/cm²</th>
-                <th width="15%">km/s<br></th>
-                <th width="9%">eV(+-3sigma)</th>
-                <th width="15%">eV</th>
-                <th width="10%">eV </th>
-                <th width="7%"></th>
-                <th width="7%"></th>
+                <th width="5%">MC sign.</th>
+                <th width="5%">delchi²</th>
               </tr>
             </thead>
             <tbody>
-            '''
+            <tr>
+                <td></td>
+                <td>keV</td>
+                <td></td>
+                <td>1e-12 erg/s/cm²</td>
+                <td>km/s</td>
+                <td></td>
+                <td>eV (+-3sigma)</td>
+                <td>eV</td>
+                <td>eV</td>
+                <td></td>
+                <td></td>
 
+            </tr>
+            '''
+            
             for i_line,line_name in enumerate([elem for elem in lines_e_dict.keys() if 'em' not in elem]):
                 html_summary+='''
               <tr>
@@ -2972,6 +3008,7 @@ def line_detect(epoch_id):
                     strmaker(abslines_em_overlap[i_line],is_overlap=True))+'''</td>
                 <td>'''+strmaker(abslines_flux[i_line]*1e12)+'''</td>
                 <td>'''+strmaker(abslines_bshift[i_line])+'''</td>
+                <td>'''+str('/' if abslines_bshift_distinct[i_line] is None else abslines_bshift_distinct[i_line])+'''</td>
                 <td>'''+strmaker(abslines_width[i_line]*1e3)+'''</td>
                 <td>'''+strmaker(abslines_eqw[i_line])+'''</td>
                 <td>'''+strmaker(abslines_eqw_upper[i_line])+'''</td>
@@ -3031,13 +3068,14 @@ def line_detect(epoch_id):
             Xset.logChatter=10
             
         #storing line string
-        autofit_store_str=epoch_observ[0]+'\t'+str(abslines_eqw.tolist())+'\t'+str(abslines_bshift.tolist())+'\t'+\
-            str(abslines_delchi.tolist())+'\t'+str(abslines_flux.tolist())+'\t'+str(abslines_sign.tolist())+'\t'+\
-            str(abslines_eqw_upper.tolist())+'\t'+str(abslines_em_overlap.tolist())+'\t'+str(abslines_width.tolist())+'\t'+str(autofit_parerrors.tolist())+'\t'+\
-            str(autofit_parnames.tolist())+'\n'
+        autofit_store_str=epoch_observ[0]+'\t'+\
+            str(abslines_eqw.tolist())+'\t'+str(abslines_bshift.tolist())+'\t'+str(abslines_delchi.tolist())+'\t'+\
+            str(abslines_flux.tolist())+'\t'+str(abslines_sign.tolist())+'\t'+str(abslines_eqw_upper.tolist())+'\t'+\
+            str(abslines_em_overlap.tolist())+'\t'+str(abslines_width.tolist())+'\t'+str(abslines_bshift_distinct.tolist())+'\t'+\
+            str(autofit_parerrors.tolist())+'\t'+str(autofit_parnames.tolist())+'\n'
             
     else:
-        autofit_store_str=epoch_observ[0]+'\t'+'\t'+'\t'+'\t'+'\t'+'\t'+'\t'+'\t'+'\t'+'\n'
+        autofit_store_str=epoch_observ[0]+'\t'+'\t'+'\t'+'\t'+'\t'+'\t'+'\t'+'\t'+'\t'+'\t'+'\n'
     
     
     '''Storing the results'''
@@ -3048,7 +3086,8 @@ def line_detect(epoch_id):
     if autofit or flag_lowSNR_line:
         
         autofit_store_header='Observ_id\tabslines_eqw\tabslines_bshift\tablines_delchi\tabslines_flux\t'+\
-        'abslines_sign\tabslines_eqw_upper\tabslines_em_overlap\tabslines_width\tautofit_parerrors\tautofit_parnames\n'
+        'abslines_sign\tabslines_eqw_upper\tabslines_em_overlap\tabslines_width\tabslines_bshift_distinct'+\
+            '\tautofit_parerrors\tautofit_parnames\n'
         
         file_edit(path=autofit_store_path,line_id=epoch_observ[0],line_data=autofit_store_str,header=autofit_store_header)
     
@@ -3192,9 +3231,9 @@ for epoch_id,epoch_files in enumerate(epoch_list):
          
     elif sat in ['Chandra','NICER','XMM']:
         
-        ###TODO: same thing for XMM
         if (skip_started and len([elem_sp for elem_sp in epoch_files[:1] if elem_sp.split('_sp')[0] not in started_expos])==0) or \
            (skip_complete and len([elem_sp for elem_sp in epoch_files[:1] if elem_sp.split('_sp')[0] not in done_expos])==0):
+               
             print('\nSpectrum analysis already performed. Skipping...')
             continue
     
@@ -3322,7 +3361,7 @@ dist_factor=4*np.pi*(dist_obj_list*1e3*3.086e18)**2
 Edd_factor=dist_factor/(1.26e38*mass_obj_list)
 
 #Reading the results files
-observ_list,lineval_list,flux_list,date_list,instru_list=obj_values(lineval_files,Edd_factor,dict_linevis)
+observ_list,lineval_list,flux_list,date_list,instru_list,exptime_list=obj_values(lineval_files,Edd_factor,dict_linevis)
 
 dict_linevis['flux_list']=flux_list
 

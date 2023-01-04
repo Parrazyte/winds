@@ -10,8 +10,8 @@ import matplotlib.pyplot as plt
 
 from xspec import AllModels,AllData,Fit,Spectrum,Model,Plot,Xset,fit,AllChains,Chain
 
-from fitting_tools import sign_delchis_table,ravel_ragged,lines_std,lines_e_dict,lines_w_dict,\
-        link_groups,lines_std_names,ftest_threshold
+from fitting_tools import sign_delchis_table,ravel_ragged,lines_std,lines_e_dict,lines_w_dict,lines_broad_w_dict,\
+        link_groups,lines_std_names,ftest_threshold,ftest_leeway
 
 from contextlib import redirect_stdout
 import subprocess
@@ -32,6 +32,10 @@ import matplotlib.colors as colors
 from bipolar import hotcold
 
 from matplotlib.gridspec import GridSpec
+
+def getoverlap(a, b):
+    return max(0, min(a[1], b[1]) - max(a[0], b[0]))
+    
 
 class MinorSymLogLocator(Locator):
     """
@@ -504,29 +508,43 @@ def addcomp(compname,position='last',endmult=None,return_pos=False,modclass=AllM
         -cont_+component: added inside a first/second component absorption if any
         
     Lines :
-        use (Linetype)-(n/a/na)gaussian
+        use (Linetype)-(n/a/na/...)gaussian
         
         'n' -> narrow (frozen Sigma=0) gaussian
         'a'-> absorption (locked <0 norm) gaussian
+        'g'-> broad (forced high width values) gaussian
         
         named lines (to be included as prefix):
+        
+        for 'named' lines with the ionisation number, adds a vashift component with [X,Yk] in blueshift and a gaussian with energy frozen at the line 
+        baseline energy level (see constants at the start of the code for up to date parameter definitions)
+        
+        'FeKa0' ->  neutral Fe emission at 6.40
+        'FeKb0' ->  neutral Fe emission at 7.06
+        'FeKa25' -> FeXXV absorption at 6.70keV.                                                
+        'FeKa26' -> FeXXVI absorption at 6.97keV
+        
+        'NiKa27' -> NiXXVII absorption at 7.80 keV -> currently locked at 3000km/s max (i.e. ~7.88keV max) to avoid overlap with FeKb2
+        'FeKb25' -> FeXXV absorption at 7.89keV
+        'FeKb26' -> FeXXVI absorption at 8.25keV
+        'FeKg26' -> FeXXVI absorption at 8.70 keV
+        
+            (old models) 
         'FeKa'->neutral Fe emission at 6.40
         'FeKb'->neutral Fe emission at 7.06
         
-        'FeDiaz' ->unphysical Fe emission line, replacing both FeKa and FeKb. Line energy only constrained to [6.-8.] keV
+        both of these have loose energy constraints instead of vashift ranges
         
-        for absorption lines below, adds a vashift component with [0,10k] in blueshift and a nagaussian with energy frozen at the line 
-        baseline energy level (see constants at the start of the code for up to date parameter definitions)
-        
-        'FeKa25' ->FeXXV absorption at 6.70keV.                                                
-        'FeKa26' ->FeXXVI absorption at 6.97keV
-        
-        'NiKa27' ->NiXXVII absorption at 7.80 keV -> currently locked at 3000km/s max (i.e. ~7.88keV max) to avoid overlap with FeKb2
-        'FeKb25' ->FeXXV absorption at 7.89keV
-        'FeKb26' ->FeXXVI absorption at 8.25keV
-        'FeKg26' ->FeXXVI absorption at 8.70 keV
+        'FeDiaz' ->unphysical Fe emission line, replacing both FeKa and FeKb. Line energy only constrained to a range in [6.-8.] keV
         
         if an includedlist of fitcomps is given in argument, will attempt to link energies in forward order for the same complexes
+        
+    Relativistic line:
+        -FeKa_laor -> empirical laor line to account for huge em lines in some spectra of hig inclined binaries
+        energy between 6.4 and 7.06
+        inclination between 50 and 90
+        index free
+        Rin and Rout frozen
         
     all compnames must stay 'attribute'-valid else we won't be able to call them explicitely in fitcomps
     '''
@@ -578,29 +596,34 @@ def addcomp(compname,position='last',endmult=None,return_pos=False,modclass=AllM
             pass
                 
     #testing for lines
-    if 'gaussian' in compname:
+    if 'gaussian' in comp_split:
         
         line=True
         
         gaussian_type=comp_custom
         
-        if 'nag' in comp_split or 'ng' in comp_split or 'ag' in comp_split:
-            if 'nag' in comp_split or 'ng' in comp_split:
-                narrow_gaussian=True
-                #allows n/agaussian to work
-            if 'ag' in comp_split:
-                abs_gaussian=True
+        #restricting to the letter prefix
+        comp_split_prefix=comp_split.replace('gaussian','')
         
+        #identifying the shape of the line
+        narrow_gaussian='n' in comp_split_prefix
+        broad_gaussian='b' in comp_split_prefix
+        abs_gaussian='a' in comp_split_prefix
+
+        #updating the comp split which will be implemented without the letter keywords
         comp_split='gaussian'
 
-        #restricting vashift use to named physical lines (with a number)
-        if gaussian_type is not None and sum([elem.isdigit() for elem in gaussian_type])!=0:
+        #restricting vashift use to named lines
+        if gaussian_type is not None and sum([char.isdigit() for char in gaussian_type])>0:
             
             comp_split='vashift*gaussian'
             named_line=True
             
-            #identifying the link group (there can only be one since they do not share any element)
-            added_link_group=[elem for elem in link_groups if gaussian_type in elem][0]
+            #### link groups off for now
+            # #and link groups to absorption lines (stays None for emission lines)
+            # if gaussian_type.endswith('abs'):
+            #     #(there can only be one since they do not share any element)
+            #     added_link_group=[elem for elem in link_groups if gaussian_type in elem][0]
         else:
             named_line=False
     else:
@@ -751,10 +774,14 @@ def addcomp(compname,position='last',endmult=None,return_pos=False,modclass=AllM
     
     #restricting the continuum powerlaw's photon index to physical values
     if compname=='cont_powerlaw':
-        xspec_model(gap_end-1).values=[1.0, 0.01, 0.0, 0.0, 4.0, 4.0]
-        #restricting the curvature bb's kt to physical values
+        xspec_model(gap_end-1).values=[1.0, 0.01, 1.0, 1.0, 3.0, 3.0]
+        
+    #restricting the curvature bb/diskbb's kt to physical values
+    if compname=='cont_diskbb':
+        xspec_model(gap_end-1).values=[1.0, 0.01, 0.5, 0.5, 3.0, 3.0]
+    #restricting the curvature bb's kt to physical values
     if compname=='cont_bb':
-        xspec_model(gap_end-1).values=[1.0, 0.01, 0.0, 0.0, 4.0, 4.0]
+        xspec_model(gap_end-1).values=[1.0, 0.01, 0.1, 0.1, 4.0, 4.0]
     
     '''gaussian specifics (additive only)'''
     
@@ -771,12 +798,12 @@ def addcomp(compname,position='last',endmult=None,return_pos=False,modclass=AllM
             #     xspec_model(gap_end).values=[-1e-7,1e-7,-5e-2,-5e-2,0,0]
             #     xspec_model(gap_end).frozen=True
             
-            #### ON: disabling NiKa27 to avoid degneracies
+            #### ON: disabling NiKa27 to avoid degeneracies
             if gaussian_type=='NiKa27abs':
                 xspec_model(gap_end).values=[-1e-7,1e-7,-5e-2,-5e-2,0,0]
                 xspec_model(gap_end).frozen=True
         else:
-            #restricting the other parameters
+            #stronger normalisations allowed for the emission lines
             xspec_model(gap_end).values=[1e-3,1e-6,0,0,1,1]
             
             #### switching emission lines on and off if needed
@@ -789,7 +816,7 @@ def addcomp(compname,position='last',endmult=None,return_pos=False,modclass=AllM
         xspec_model(gap_end-1).values=[0]+xspec_model(gap_end-1).values[1:]
         xspec_model(gap_end-1).frozen=True
         
-    #changin more infos for specific lines
+    #changing more infos for specific lines
     if gaussian_type is not None:
         
         #selecting the corresponding energy
@@ -805,16 +832,29 @@ def addcomp(compname,position='last',endmult=None,return_pos=False,modclass=AllM
                 xspec_model(gap_end-2).values=[ener_line,ener_line/100,6.0,6.0,8.0,8.0]
             else:                
                 #outputing the line values (delta of 1/100 of the line ener, no redshift, +0.4keV blueshift max)
-                xspec_model(gap_end-2).values=[ener_line,ener_line/100,ener_line-0.6,ener_line-0.6,ener_line+0.6,ener_line+0.6]
+                xspec_model(gap_end-2).values=[ener_line,ener_line/100,ener_line-0.2,ener_line-0.2,ener_line+0.2,ener_line+0.2]
 
-        #widths changes        
-        width_line=lines_w_dict[gaussian_type]
+
+        #resticting the with of broad lines
+        if broad_gaussian:
             
-        if not narrow_gaussian:
-            
+            #widths changes        
+            width_line=lines_broad_w_dict[gaussian_type]
+        
             #restricting widths of absorption lines and narrow emission lines
             xspec_model(gap_end-1).values=[width_line[0],
-                                           (1e-5 if abs_gaussian else 1e-3),
+                                           (1e-3),
+                                           width_line[1],width_line[1],
+                                           width_line[2],width_line[2]]
+        #and non-0 width lines
+        elif not narrow_gaussian:
+            
+            #widths changes        
+            width_line=lines_w_dict[gaussian_type]
+        
+            #restricting widths of absorption lines and narrow emission lines
+            xspec_model(gap_end-1).values=[width_line[0],
+                                           (1e-3),
                                            width_line[1],width_line[1],
                                            width_line[2],width_line[2]]
             
@@ -836,6 +876,22 @@ def addcomp(compname,position='last',endmult=None,return_pos=False,modclass=AllM
                                            -lines_e_dict[gaussian_type][1],
                                            -lines_e_dict[gaussian_type][1]]
 
+    '''laor specifics'''
+    
+    if comp_split=='laor':
+        #selecting a broad energy range
+        if 'FeKa' in comp_custom:
+            xspec_model(gap_end-5).values=[6.6,0.01,6.4,6.4,7.06,7.06]
+        
+        #unfreezing some parameters
+        #the index
+        xspec_model(gap_end-4).frozen=False
+        #the inclination
+        xspec_model(gap_end-1).frozen=False
+        
+        #high-inclination constraints
+        xspec_model(gap_end-1).values=[70,1,50,50,90,90]
+        
     '''
     linking the vashifts from the same group IN FORWARD ORDER ONLY
     In order to do that, we parse the existing components to see if there are already existing components from the same link group. If so, 
@@ -1001,9 +1057,6 @@ def delcomp(compname,modclass=AllModels,give_ndel=False):
             del_asscomp=first_mod.componentNames[id_delcomp_list[-1]-1]
             
             id_delcomp_list+=[id_delcomp_list[-1]-1]
-            
-            
-            ###TODO:test if this works
             
             #removing the right parenthesis if it exists
             new_exp_aft=new_exp_aft[1:] if new_exp_aft[0]==')' and new_exp_bef[new_exp_bef.find(del_asscomp)]=='(' else new_exp_aft
@@ -1196,21 +1249,24 @@ def unfreeze(model=None,modclass=AllModels,parlist=None):
 
     freeze(model=model,modclass=modclass,unfreeze=True,parlist=parlist)
     
-def parse_xlog(log_lines,goal='lastmodel',no_display=False,replace_frozen=False,freeze_pegged=False):
+def parse_xlog(log_lines,goal='lastmodel',no_display=False,replace_frozen=False,
+               freeze_pegged=False):
     
     '''
     Parses the Xspec log file to search for a specific information. 
-    Useful when we break an xspec function before it updates the model/Fit.
+    Useful when xspec functions break before updating the model/Fit.
     
     To avoid losing precision since the parameters are only displayed up to a certain precision, 
-    if replace_frozen is set to False, we only replace non frozen parameters
+    if replace_frozen is set to False, only non-frozen parameters are replaced
     
-    if freeze_pegged is set to true, detects all parameters which were pegged to a value during the error computation and freezes them
-    (useful to avoid breaking the MC chain when the fit is insensitive to some parameters)
-    Also freezes parameter frozen implicitely (delta at negative values) during the fit
-    '''
+    if freeze_pegged is set to true, detects all parameters which were pegged to a value during:
+        -error computations for explicit
+        -the model display for implicit
         
-    '''
+    and freezes them
+    (useful to avoid breaking the MC chain/EW when the fit is insensitive to some parameters)
+    Also freezes parameter frozen implicitely (delta at negative values) during the fit
+
     In orer to find the last model, we:
         -explore in reverse order the given xspec log lines
         -catch the last occurence of a line beginning by 'Model' (which is only used for displaying models)
@@ -1371,13 +1427,19 @@ def parse_xlog(log_lines,goal='lastmodel',no_display=False,replace_frozen=False,
             #replacing each parameter's value by parameter number, replacing the value array and changing the first element
             for line in var_lines:
                 AllModels(1)(int(line.split()[0])).values=[float(line.split()[-3])]+AllModels(1)(int(line.split()[0])).values[1:]
+                #freezing lines frozen during the fitting operation if the option is selected
+                if freeze_pegged and line.endswith('+/-  -1.00000     \n'):
+                    AllModels(1)(int(line.split()[0])).frozen=True
+                        
             
             #also replacing frozen values if it is asked
             if replace_frozen:
                 frozen_lines=[line for line in model_lines if line.endswith('frozen\n')]
                 for line in frozen_lines:
                     AllModels(1)(int(line.split()[0])).values=[float(line.split()[-2])]+AllModels(1)(int(line.split()[0])).values[1:]
-        
+            
+
+                        
     else:
         
         if goal=='lastmodel':
@@ -1637,6 +1699,12 @@ def calc_error(logfile,maxredchi=1e6,param='all',timeout=60,delchi_thresh=0.1,in
             
 '''Automatic fit'''
 
+def load_fitmod(path):
+    with open(path,'rb') as file:
+        fitmod_save=dill.load(file)
+        
+    return fitmod_save
+        
 class fitmod:
     '''
     class used for a list of fitting components which will be used to fit in order
@@ -1646,6 +1714,7 @@ class fitmod:
     Starts with the current model as continuum (or from scratch if there's no model)
                                                 
     If absval is not set to none, forces a specific value for the absorption
+
     '''
 
     def __init__(self,complist,logfile,logfile_write,absval=None,interact_groups=None,idlist=None,prev_fitmod=None):
@@ -1718,8 +1787,10 @@ class fitmod:
                     
                     
         #linking an attribute to each individual fitcomp and adding them to a list for convenience
+          
         for i in range(len(self.name_complist)):
             
+
             #adding the continuum components not already in the model to the list of components to be added if there aren't in the 
             #current continuum
             #here we assume there are no numbered continuum components (should be editing for more complex continuums)
@@ -1766,35 +1837,36 @@ class fitmod:
         in which each component's index will correspond to its corresponding xspec component index. 
         This way, we skip any need of understanding how xspec named or renamed anything
         '''
-        
-        for i_comp,fitcomp in enumerate(self.includedlist):
+
+        for i_comp,comp in enumerate(self.includedlist):
             
             #skipping multiple component placeholders
-            if fitcomp is None:
+            if comp is None:
                 continue
-                            
-            fitcomp.xcompnames=[AllModels(1).componentNames[i] for i in range(i_comp-len(fitcomp.xcompnames)+1,i_comp+1)]                
+            
+            comp.xcompnames=[AllModels(1).componentNames[i] for i in range(i_comp-len(comp.xcompnames)+1,i_comp+1)]                
 
-            fitcomp.xcomps=[getattr(AllModels(1),fitcomp.xcompnames[i]) for i in range(len(fitcomp.xcompnames))]
+            comp.xcomps=[getattr(AllModels(1),comp.xcompnames[i]) for i in range(len(comp.xcompnames))]
             
             #xspec numbering here so needs to be shifted
-            fitcomp.compnumbers=np.arange(i_comp-len(fitcomp.xcompnames)+2,i_comp+2).astype(int).tolist()
+            comp.compnumbers=np.arange(i_comp-len(comp.xcompnames)+2,i_comp+2).astype(int).tolist()
 
             #we directly define the parlist from the first parameter of the first component and the last of the last component
             #to ensure consistency with multi-components
             
             #note:for now we don't consider the parameter list in subsequent dagroups except for glob_constant
-            first_par=getattr(fitcomp.xcomps[0],fitcomp.xcomps[0].parameterNames[0]).index
-            last_par=getattr(fitcomp.xcomps[-1],fitcomp.xcomps[-1].parameterNames[-1]).index
-            fitcomp.parlist=np.arange(first_par,last_par+1).astype(int).tolist()
+            first_par=getattr(comp.xcomps[0],comp.xcomps[0].parameterNames[0]).index
+            last_par=getattr(comp.xcomps[-1],comp.xcomps[-1].parameterNames[-1]).index
+            comp.parlist=np.arange(first_par,last_par+1).astype(int).tolist()
                        
             #testing if the component is a global_constant
-            if 'constant' in fitcomp.compname and fitcomp.parlist[0]==1 and AllModels(1)(1).values[0]==1:
-                fitcomp.parlist+=[1+AllModels(1).nParameters*i_grp for i_grp in range(1,AllData.nGroups)]
+            if 'constant' in comp.compname and comp.parlist[0]==1 and AllModels(1)(1).values[0]==1:
+                comp.parlist+=[1+AllModels(1).nParameters*i_grp for i_grp in range(1,AllData.nGroups)]
                 
-            fitcomp.unlocked_pars=[i for i in fitcomp.parlist if (not AllModels(par_degroup(i)[0])(par_degroup(i)[1]).frozen and\
+            comp.unlocked_pars=[i for i in comp.parlist if (not AllModels(par_degroup(i)[0])(par_degroup(i)[1]).frozen and\
                                                                   AllModels(par_degroup(i)[0])(par_degroup(i)[1]).link=='')]
-                    
+
+            
         #we also update the list of component xcomps (no multi-components here so w can take the first element in xcompnames safely)
         self.cont_xcompnames=[self.cont_complist[i].xcompnames[0] if self.cont_complist[i].included else ''\
                               for i in range(len(self.cont_complist))]
@@ -1823,7 +1895,7 @@ class fitmod:
                         
         return comps_errlocked
     
-    def test_addcomp(self,chain=False,lock_lines=False):
+    def test_addcomp(self,chain=False,lock_lines=False,nomixline=True):
         
         '''
         Tests each of the component in the available list which are not yet in the model for how significant their addition is
@@ -1831,6 +1903,12 @@ class fitmod:
         returns 1 as a break value to stop the loop process whenever there are no more (significant if needed) components to be added 
         (and thus there's no need to recheck for component deletion)
          
+    
+        if nomixline is set to True,
+        the emission/absorption line components of the same type are mutually exclusive (aka including one deletes the other)
+         
+        the addition test uses a slightly lower threshold than theftest_threshold to allow the model to get into a better fit states in 
+        which components become significant ftest wise
         '''
 
         #list of currently NOT included components (doesn't take into account continuum components not in the model list)
@@ -1843,7 +1921,7 @@ class fitmod:
         self.print_xlog(str([curr_exclist[i].compname for i in range(len(curr_exclist))]))
         
         #array for the improvement of each component which can be added
-        component_delchis=np.zeros(len(curr_exclist))
+        component_ftest=np.zeros(len(curr_exclist))
             
         for i_excomp,component in enumerate(curr_exclist):
                 
@@ -1853,6 +1931,32 @@ class fitmod:
             
             if component.line and lock_lines:
                 continue
+            
+            #excluding addition of named components with pendants when not allowing mixing between emission and absorption of the same line
+            if component.named_line and nomixline:
+
+                #fetching the name of the pendant
+                if component.named_absline:
+                    line_pendant_prefix=component.compname.split('_')[0].replace('abs','em')
+                else:
+                    line_pendant_prefix=component.compname.split('_')[0].replace('em','abs')
+
+                #fetching the line pendant component                
+                line_pendant_name_list=[elem for elem in self.name_complist if line_pendant_prefix in elem]
+                
+                if len(line_pendant_name_list)!=0:
+                    if len(line_pendant_name_list)!=1:
+                        #should not happen
+                        breakpoint()
+                        
+                    line_pendant_name=line_pendant_name_list[0]
+                    
+                    line_pendant_comp=getattr(self,line_pendant_name)
+                    
+                    #skipping the component addition if the pendant is already included
+                    if line_pendant_comp.included:
+                        continue
+                
             
             #not adding continuum components already in the model
             self.print_xlog('\nlog:Testing significance of '+component.compname+' component.')                    
@@ -1873,7 +1977,7 @@ class fitmod:
                 
             self.print_xlog('\nlog:Fitting the new component by itself...')
             #fitting the component only
-            component.fit(logfile=self.logfile if chain else None)
+            component.fit()
     
             #fetching the interactive components from the list if it is provided                
             if self.interact_groups is not None:
@@ -1968,25 +2072,35 @@ class fitmod:
             
             if component.mandatory:
                 self.print_xlog('\nlog:Mandatory component')
-                component_delchis[i_excomp]=1e10
+                component_ftest[i_excomp]=1e-100
             elif component.absorption and self.fixed_abs is not None:
                 self.print_xlog('\nlog:Fixed absorption value provided. Assuming mandatory component')
                 #note: we use a different chi² value to avoid conflicts when selecting one. They will simply be chosen
                 #one after the other
-                component_delchis[i_excomp]=1e9
+                component_ftest[i_excomp]=1e-99
             else:
                 #at this stage there's no question of unlinking energies for absorption lines so we can use n_unlocked_pars_base
                     
                 if init_chi!=0:
                     ftest_val=Fit.ftest(new_chi,new_dof,init_chi,init_dof)
-                else:
-                    ftest_val=0
                     
-                if ftest_val<ftest_threshold and ftest_val>=0:
+                    ftest_condition=ftest_val<ftest_threshold+ftest_leeway
+                    
+                    delchi_condition=init_chi-new_chi>sign_delchis_table[max(0,init_dof-new_dof-1)]
+                else:
+                    #storing the chi² for direct comparison instead 
+                    ftest_val=new_chi
+                    
+                    ftest_condition=True
+                    
+                    delchi_condition=True
+                
+                if ftest_condition and ftest_val>=0 and delchi_condition:
 
                     self.print_xlog('\nlog:The '+component.compname+' component is statistically significant.')
                         
-                    component_delchis[i_excomp]=init_chi-new_chi
+                    #replacing strictly 0 values by a very low non zero value to avoid issues with the nonzero command later down
+                    component_ftest[i_excomp]=ftest_val if ftest_val!=0 else 1e-98
                     
                 else:
                 
@@ -2004,16 +2118,16 @@ class fitmod:
     
             #restoring the previous includedlist
             self.includedlist=prev_includedlist
-            
-        #filling the first remaining free element of the delchi evolution array with the current delchis array
-        self.progressive_delchis+=[component_delchis]
         
-        if len(component_delchis.nonzero()[0])==0:
+        #filling the first remaining free element of the delchi evolution array with the current delchis array
+        self.progressive_delchis+=[component_ftest]
+        
+        if len(component_ftest.nonzero()[0])==0:
             self.print_xlog('\nlog:No significant component remaining. Stopping fit process...')
             return True
         
         #when there is no model the comparison won't work directly so we do it in two steps
-        bestcomp=np.array(curr_exclist)[component_delchis==max(component_delchis[component_delchis.nonzero()])][0]
+        bestcomp=np.array(curr_exclist)[component_ftest==min(component_ftest[component_ftest.nonzero()])][0]
         
         self.print_xlog('\nlog:The most significant component is '+bestcomp.compname+'. Adding it to the current model...')
 
@@ -2040,6 +2154,10 @@ class fitmod:
         
         in_add differentiates between the use while components are being added and the second use at the end 
         (in which we test all components, and test unlinking the lines)
+        also, in in_add mode, we add the same leeway than in test_addcomp to allow to get to the best fit position
+        
+        in the second test_delcomp out of the addition loop, this margin is not used anymore and thus the end components are still 
+        significant at the right threshold
         '''
             
         if in_add:
@@ -2047,7 +2165,7 @@ class fitmod:
         else:
             list_comp_test=self.includedlist
             
-        for component in list_comp_test:
+        for component in list_comp_test[::-1]:
             
             #skipping placeholders
             if component is None:
@@ -2103,7 +2221,6 @@ class fitmod:
             calc_fit(logfile=self.logfile if chain else None)
             
             del_chi=Fit.statistic
-            del_dof=Fit.dof
             
             #restricting the test to components which are not 'very' significant
             #we fix the limit to 10 times the delchi for the significance threshold with their corresponding number of parameters
@@ -2131,17 +2248,20 @@ class fitmod:
                 
             #when we test for delcomp at the end of the procedure, we adding a new test:
             #to try to unlink before assessing the significance of the component
-            if in_add:
+            if in_add or lock_lines:
                 npars_unlinked=0
             else:
-                npars_unlinked=self.test_unlink_lines()
+                npars_unlinked=self.test_unlink_lines(chain=chain)
                 
             
             del_chi=Fit.statistic
             
             ftest_val=Fit.ftest(new_chi,new_dof,del_chi,new_dof+component.n_unlocked_pars_base+npars_unlinked)
             
-            if ftest_val>ftest_threshold or ftest_val<0 and Fit.statistic!=0:
+            #second test keeps the sign_delchis_table to avoid too 'low' values of deltachi for very good fits
+            
+            if Fit.statistic!=0 and ftest_val>ftest_threshold+(ftest_leeway if in_add else 0) or ftest_val<0 and\
+                del_chi-new_chi<sign_delchis_table[min(0,component.n_unlocked_pars_base+npars_unlinked-1)]:
                 
                 self.print_xlog('\nlog:Component '+component.compname+' is not significant anymore. Deleting it from the fit...')
                 
@@ -2165,16 +2285,23 @@ class fitmod:
                 self.includedlist=prev_includedlist
                 
                 self.update_fitcomps()
-                        
-    
+                           
     def test_unlink_lines(self,chain=False,lock_lines=False):
+        
+        '''
+        tests the significance of unlinking the lines if they are linked
+        
+        Uses ftest (which might not be ok) as a discriminant
+        
+        Note: currently not used, instead the blueshift of the lines are tested at 3 sigma to see if complex are compatible
+        '''
             
         n_unlinked=0
         
         for comp_unlink in [elem for elem in self.includedlist if elem is not None]:
             
             #restricting to named absorption line components
-            if not comp_unlink.named_line:
+            if not comp_unlink.named_absline:
                 continue
             
             #resticting to those who are linked
@@ -2192,9 +2319,14 @@ class fitmod:
             
             #saving values to avoid issues with bounds
             par_unlink_values=AllModels(par_degroup(comp_unlink.parlist[0])[0])(par_degroup(comp_unlink.parlist[0])[1]).values
+            
+            #unlinking and restoring the values
             AllModels(par_degroup(comp_unlink.parlist[0])[0])(par_degroup(comp_unlink.parlist[0])[1]).link=''
             AllModels(par_degroup(comp_unlink.parlist[0])[0])(par_degroup(comp_unlink.parlist[0])[1]).values=par_unlink_values
             
+            #adding the new d.o.f. to the thawed parameters of the component
+            comp_unlink.unlocked_pars+=[par_degroup(comp_unlink.parlist[0])[1]]
+                                                    
             #first fit while freezing all other components
             for other_comp_unlink in [elem for elem in self.includedlist if elem is not None]:
                 if other_comp_unlink==comp_unlink:
@@ -2208,9 +2340,7 @@ class fitmod:
                 if other_comp_unlink==comp_unlink or (other_comp_unlink.line and lock_lines) :
                     continue
                 other_comp_unlink.unfreeze()
-                
-            #### NEED TO ADD CHANGE HERE SO THAT UNLINKED COMPONENTS GO INTO THE FREEZE STATE ELSE THEY GET FROZEN WITH FREEZING/UNFREEZING 
-            
+
             calc_fit(logfile=self.logfile if chain else None)
             
             comps_errlocked=self.list_comps_errlocked()
@@ -2227,20 +2357,129 @@ class fitmod:
             new_dof_unlink=Fit.dof
             
             #testing the significance of the new version of the model (here we added 1 d.o.f.)
-            try:
-                ftest_val=Fit.ftest(new_chi_unlink,new_dof_unlink,base_chi_unlink,base_dof_unlink)
-            except:
-                breakpoint()
+            ftest_val=Fit.ftest(new_chi_unlink,new_dof_unlink,base_chi_unlink,base_dof_unlink)
                 
-            if ftest_val<ftest_threshold and ftest_val>0:
+            if ftest_val<ftest_threshold and ftest_val>0 and base_chi_unlink-new_chi_unlink>sign_delchis_table[0]:
                 self.print_xlog('\nlog:Freeing blueshift of component '+comp_unlink.compname+' is statistically significant.')
                 n_unlinked+=1
             else:
                 self.print_xlog('\nlog:Freeing blueshift of component '+comp_unlink.compname+' is not significant. Reverting to linked model.')
                 model_load(new_bestmod)
+                
+                #deleting the d.o.f.
+                comp_unlink.unlocked_pars=comp_unlink.unlocked_pars[:-1]
         
         return n_unlinked
+        
+    def test_mix_lines(self,chain=False):
+            
+        '''
+        Testing the effect of manually replacing emission/absorption components of a given complex by their counterpart when both
+        are in the model
+        
+        separated from the addcomp process because it can't be compared with adding other components
+        
+        this step is skipped for lines in locked lines mode
+        
+        '''
+        
+        for line_component in [comp for comp in self.includedlist if comp is not None and comp.named_line]:
+            
+            if not line_component.included:
+                continue
+
+            #fetching the name of the pendant
+            if line_component.named_absline:
+                line_pendant_prefix=line_component.compname.split('_')[0].replace('abs','em')
+            else:
+                line_pendant_prefix=line_component.compname.split('_')[0].replace('em','abs')
+
+            
+            #fetching the line pendant component                
+            line_pendant_name_list=[elem for elem in self.name_complist if line_pendant_prefix in elem]
+            
+            #and testing if the line pendant is not part of the model list
+            if len(line_pendant_name_list)==0:
+                continue
                     
+            line_pendant_name=line_pendant_name_list[0]
+            
+            line_pendant=getattr(self,line_pendant_name)
+            
+            #no ftest here because we can't compare directly like this
+            curr_chi=Fit.statistic
+
+            curr_mod=allmodel_data()
+            curr_includedlist=self.includedlist
+
+
+            #deleting the current line component
+            delcomp(line_component.xcompnames[-1])
+
+                
+            #manually des-including the component to keep its parameters and everything
+            #since we also need to delete the None one, we first fetch the position of the component
+            line_comp_id=np.argwhere(np.array(self.includedlist)==line_component)[0][0]
+            
+            #deleting two components to also delete the None one
+            self.includedlist=self.includedlist[:line_comp_id-1]+self.includedlist[line_comp_id+1:]
+            
+            #updating the fitcomps
+            self.update_fitcomps()
+            
+            #adding the other component
+            self.includedlist=line_pendant.addtomod(incl_list=self.includedlist)
+            
+            #updating the fitcomps before anything else
+            self.update_fitcomps()
+                
+            self.print_xlog('\nlog:Fitting the new component by itself...')
+            
+            #fitting the component only
+            line_pendant.fit()
+                
+            #unfreezing the rest of the components
+            for comp in [elem for elem in self.includedlist if elem is not None]:
+                comp.unfreeze()
+
+            #Fitting with the whole model free
+            calc_fit(logfile=self.logfile if chain else None)
+            
+            comps_errlocked=self.list_comps_errlocked()
+            #freezing the error locked components before the error computation
+            for elem_comp in comps_errlocked:
+                elem_comp.freeze()
+
+            #computing the errors
+            calc_error(self.logfile,param='1-'+str(AllModels(1).nParameters*AllData.nGroups),indiv=True)
+
+            #re-unlocking error components
+            for elem_comp in comps_errlocked:
+                elem_comp.unfreeze()
+
+            #testing if the new fit situation is better
+            #could be improved but need more mathematical justification
+            invert_line=Fit.statistic<curr_chi
+            
+            if invert_line:
+                #we can now properly delete the other componet info
+                line_component.reset_attributes()
+                
+            else:
+
+                #deleting the inverted line
+                line_pendant.delfrommod(rollback=False)
+
+                    
+                line_pendant.reset_attributes()
+                
+                #re-instating the initial fitmod iteration with the other line included and the corresponding model
+                self.includedlist=curr_includedlist
+                model_load(curr_mod)
+
+                #and updating the fitcomps
+                self.update_fitcomps()
+                
     def idtocomp(self,par_peg_ids):
         
         '''
@@ -2258,15 +2497,14 @@ class fitmod:
         mask_comp_pegged=[[elem[1] in comp_parlist for comp_parlist in parlist_included] for elem in par_peg_ids]
         
         id_comp_pegged=[np.argwhere(elem)[0][0] for elem in mask_comp_pegged]
-        
+            
         par_peg_comps=[[includedcomps[id_comp_pegged[i_peg]],
                         np.argwhere(np.array(parlist_included[id_comp_pegged[i_peg]])==par_peg_ids[i_peg][1])[0][0]]\
                        for i_peg,mask in enumerate(mask_comp_pegged)]
         
-        ####¢ontinue this then add it to the par_peg_ids use before a delcomp to unfreeze correctly afterwards
         return par_peg_comps
     
-    def global_fit(self,chain=False,directory=None,observ_id=None,freeze_final_pegged=True,lock_lines=False):
+    def global_fit(self,chain=False,directory=None,observ_id=None,freeze_final_pegged=True,lock_lines=False,nomixline=True):
         
         '''
         Fits components progressively in order of fit significance when being added 1 by 1
@@ -2288,24 +2526,28 @@ class fitmod:
         #of course we need to take off the placeholders to compare the lists
         while [elem for elem in self.includedlist if elem is not None]!=self.complist:
             
-            comp_finished=self.test_addcomp(chain=chain,lock_lines=lock_lines)
+            comp_finished=self.test_addcomp(chain=chain,lock_lines=lock_lines,nomixline=nomixline)
                       
             if comp_finished:
                 break
             
             #we only do this for >2 components since the first one is necessarily significant and the second one too if it was just added
-            if len(self.includedlist)<3:
-                continue
+            if len(self.includedlist)>2:
+                
+                self.test_delcomp(chain,lock_lines,in_add=True)
             
-            self.test_delcomp(chain,lock_lines,in_add=True)
-        
+            #testing for line inversion when available
+            if not lock_lines and nomixline:
+                self.test_mix_lines(chain)
+
         '''Checking if unlinking the energies of each absorption line is statistically significant'''
                             
         #storing the chi value at this stage
         chi_pre_unlink=Fit.statistic
         dof_pre_unlink=Fit.dof
         
-        self.test_unlink_lines(chain=chain,lock_lines=lock_lines)        
+        if not lock_lines:
+            self.test_unlink_lines(chain=chain)        
 
         #testing if freezing the pegged parameters improves the fit
         par_peg_ids=calc_error(self.logfile,param='1-'+str(AllModels(1).nParameters*AllData.nGroups),freeze_pegged=freeze_final_pegged,indiv=True,
@@ -2323,18 +2565,15 @@ class fitmod:
         '''
         last run of component deletion with the new minimum
         '''
-        #skipped if the fit has not been modified in the unlinking/pegging etc
-        if not (abs(Fit.statistic-chi_pre_unlink)<0.1 and Fit.dof==dof_pre_unlink):
-            if len([elem for elem in [comp for comp in self.includedlist if comp is not None] if not elem.multipl])>=2:
-                
-                self.test_delcomp(chain,lock_lines,in_add=False)
-        else:
-            self.print_xlog('\nNo modification after main component test loop. Skipping last component deletion test.')
-            
-        #creating the MC chain for the model
-        #defaut Markov : algorithm = gw, bur=0, filetype=fits, length=100,
-        #proposal=gaussian fit, Rand=False, Rescale=None, Temperature=1., Walkers=10
-        #definition of chain parameters
+        
+        #this test is not skipped even if the fit has not been modified in the unlinking/pegging etc because it uses a stricter threshold
+        self.test_delcomp(chain,lock_lines,in_add=False)
+        
+        # currently disabled
+        # if not (abs(Fit.statistic-chi_pre_unlink)<0.1 and Fit.dof==dof_pre_unlink):
+        #     if len([elem for elem in [comp for comp in self.includedlist if comp is not None] if not elem.multipl])>=2:
+        # else:
+        #     self.print_xlog('\nNo modification after main component test loop. Skipping last component deletion test.')
         
         ####testing unpegging pegged parameters
         '''
@@ -2370,6 +2609,12 @@ class fitmod:
         
         '''
         Chain creation
+        
+        creating the MC chain for the model
+        defaut Markov : algorithm = gw, bur=0, filetype=fits, length=100,
+        proposal=gaussian fit, Rand=False, Rescale=None, Temperature=1., Walkers=10
+        definition of chain parameters
+        
         '''
         
         if chain:
@@ -2386,8 +2631,6 @@ class fitmod:
                 #new fit in case there were things to peg in the previous iteration
                 Fit.perform() 
             except:
-                
-                breakpoint()
                 
                 #this can happen in rare cases so we re-open the parameters and do one more round of deletion
                 if len(par_peg_ids)!=0:
@@ -2512,11 +2755,53 @@ class fitmod:
         abslines_flux=np.zeros((n_abslines,3))
         abslines_eqw=np.zeros((n_abslines,3))
         abslines_bshift=np.array([[None]*3]*n_abslines)
+        abslines_bshift_distinct=np.array([None]*n_abslines)
         abslines_delchi=np.zeros(n_abslines)
         
         base_chi=Fit.statistic
         
         Fit.perform()
+        
+        #computing how distinct the bshift distribution of the lines are in the same complex
+        for i_line,line in enumerate(abs_lines):
+            
+            #no meaning for lines in Ka
+            if i_line<3:
+                continue
+            if i_line in [3,4]:
+                line_shift=3
+            else:
+                line_shift=5
+                
+            #fetching the current line fitcomp
+            current_line_comp=[elem for elem in self.complist if lines_std_names[3+i_line] in elem.compname][0]
+
+            #and the associated Ka line fitcomp
+            Ka_line_comp=[elem for elem in self.complist if lines_std_names[3+i_line-line_shift] in elem.compname][0]
+
+            #skipping computation if both lines are not included
+            if not (current_line_comp.included and Ka_line_comp.included):
+                continue
+            
+            #skipping the computation if either of the parameter is frozen (aka pegged aka unconstrained)
+            if not current_line_comp.parlist[0] in current_line_comp.unlocked_pars and\
+                    Ka_line_comp.parlist[0] in Ka_line_comp.unlocked_pars:
+                continue
+            
+            #computing the bshift 3sigma distribution of the line
+            Fit.error('max 100 8.81 '+str(current_line_comp.parlist[0]))
+            
+            #fetching the resulting interval
+            line_bshift_inter=AllModels(1)(current_line_comp.parlist[0]).error[:2]
+            
+            #same thing with the Ka line
+            Fit.error('max 100 8.81 '+str(Ka_line_comp.parlist[0]))
+            
+            #fetching the resulting interval
+            Ka_bshift_inter=AllModels(1)(Ka_line_comp.parlist[0]).error[:2]
+            
+            #computing if the intervals intersect
+            abslines_bshift_distinct[i_line]=getoverlap(line_bshift_inter,Ka_bshift_inter)==0
         
         for i_line,line in enumerate(abs_lines):
             
@@ -2620,10 +2905,10 @@ class fitmod:
         #recreating a valid fit for the error computation
         calc_fit()
         
-        return abslines_flux,abslines_eqw,abslines_bshift,abslines_delchi
+        return abslines_flux,abslines_eqw,abslines_bshift,abslines_delchi,abslines_bshift_distinct
     
 
-    def get_eqwidth_uls(self,bool_sign,lines_bshift,sign_widths):
+    def get_eqwidth_uls(self,bool_sign,lines_bshift,sign_widths,pre_delete=False):
         
         '''
         Computes the eqwdith upper limit of each non significant line, with other parameters free except the other absorption lines
@@ -2688,7 +2973,7 @@ class fitmod:
                 width_val=0
                 
             #computing the upper limit with the given bshift range
-            abslines_eqw_ul[i_line]=fitcomp_line.get_eqwidth_ul(bshift_range,width_val)
+            abslines_eqw_ul[i_line]=fitcomp_line.get_eqwidth_ul(bshift_range,width_val,pre_delete=pre_delete)
             
         return abslines_eqw_ul
     
@@ -2714,12 +2999,16 @@ class fitmod:
         self.logfile_write=None
         self.logfile=None
         
+        #updating the fitcomps to avoid resetting the logfile when loading
+        self.update_fitcomps()
+        
         with open(path,'wb') as file:
             dill.dump(self,file)
             
         #reloading
         self.logfile_write=logfile_write
         self.logfile=logfile
+        self.update_fitcomps()
     
     def reload(self):
         
@@ -2742,7 +3031,7 @@ class fitcomp:
     Warning: delfrommod with rollback set to True will reload the save made before the component was added for the last time !
     '''
     
-    def __init__(self,compname,logfile,identifier=None,continuum=False):
+    def __init__(self,compname,logfile=None,logfile_write=None,identifier=None,continuum=False):
         
         #component addcomp name
         self.compname=compname
@@ -2756,12 +3045,15 @@ class fitcomp:
         #storing the logfile variable
         self.logfile=logfile
         
+        self.logfile_write=logfile_write
+        
         #save of the model post component added + fit
         self.fitted_mod=None
         
         #various parameters used when the component is added to the model
         self.parlist=None
         self.unlocked_pars=None
+        self.unlocked_pars_base_mask=None
         self.n_unlocked_pars_base=0
         self.compnumbers=None
         self.xcompnames=None
@@ -2782,12 +3074,12 @@ class fitcomp:
         else:
             self.absorption=False
             
-        if 'gaussian' in comp_split:
+        if 'gaussian' in comp_split or 'laor' in comp_split:
             self.line=True
         else:
             self.line=False
             
-        #defining if the component is a named absorption line (i.e. there will be a vashift before)
+        #defining if the component is a named line (i.e. there will be a vashift before)
         if comp_prefix in [elem for elem in lines_std_names if sum([char.isdigit() for char in elem])>0]:
             self.named_line=True
             
@@ -2838,7 +3130,7 @@ class fitcomp:
         self.logfile_write.write(string)
         self.logfile_write.flush()
         
-    def addtomod(self,incl_list,fixed_vals,fitted=False):
+    def addtomod(self,incl_list,fixed_vals=None,fitted=False):
         
         '''
         add the component to the model and store more fit specific parameters
@@ -2862,7 +3154,7 @@ class fitcomp:
                 self.old_mod_npars=0
                 
             #defining the list of parameter numbers associated to this/these component(s) and its/their component number(s)
-            
+                
             self.parlist,self.compnumbers=addcomp(self.compname,position='lastin',included_list=incl_list,return_pos=True)
             
             #fixing parameters if values are provided
@@ -2874,10 +3166,14 @@ class fitcomp:
                     
             #note: the compnumbers are defined in xspec indexes, which start at 1
 
-            #computing the locked parameters, i.e. the parameters frozen at the creation of the component
+            #computing the unlocked parameters, i.e. the parameters not frozen at the creation of the component
             self.unlocked_pars=[i for i in self.parlist if (not AllModels(par_degroup(i)[0])(par_degroup(i)[1]).frozen and\
                                                             AllModels(par_degroup(i)[0])(par_degroup(i)[1]).link=='')]
-                
+            
+            #computing a mask of base unlocked parameters to rethaw pegged parameters during the second round of autofit
+            self.unlocked_pars_base_mask=[(not AllModels(par_degroup(i)[0])(par_degroup(i)[1]).frozen and\
+                                                            AllModels(par_degroup(i)[0])(par_degroup(i)[1]).link=='') for i in self.parlist]
+            
             if self.compname=='glob_constant' and AllData.nGroups>1:
                 self.unlocked_pars+=[1+AllModels(1).nParameters*i_grp for i_grp in range(1,AllData.nGroups)]
                 
@@ -2918,6 +3214,7 @@ class fitcomp:
         self.included=False
         self.init_model=None
         self.significant=False
+        self.unlocked_pars_base_mask=None
         
     def delfrommod(self,rollback=True):
         
@@ -2984,12 +3281,14 @@ class fitcomp:
         Xset.logChatter=0
         
         for par in self.unlocked_pars:
-                AllModels(par_degroup(par)[0])(par_degroup(par)[1]).frozen=False
-                
+            AllModels(par_degroup(par)[0])(par_degroup(par)[1]).frozen=False
+
         Xset.chatter=prev_chatter
         Xset.logChatter=prev_logchatter
-        
-    def fit(self,logfile=None):
+
+
+            
+    def fit(self):
         
         '''
         Fit + errors of this component by itself
@@ -3010,7 +3309,7 @@ class fitcomp:
         
         #computing errors for the component parameters only
         
-        calc_error(self.logfile,param=str(self.parlist[0])+'-'+str(self.parlist[-1]),indiv=True)
+        calc_error(logfile=self.logfile,param=str(self.parlist[0])+'-'+str(self.parlist[-1]),indiv=True)
 
         self.fitted_mod=allmodel_data()
 
@@ -3026,11 +3325,17 @@ class fitcomp:
         if width_par.frozen:
             return np.array([0,0,0])
         
-        #### changing the delta of the width parameter to 1e-3
-        # width_par.values=[width_par.values[0]]+[1e-3]+width_par.values[2:]
+        self.logfile.readlines()
 
         #computing the width with the current fit
         Fit.error('stop ,,0.1 max 100 9.00 '+str(self.parlist[-2]))
+        
+        #storing the error lines
+        log_lines=self.logfile.readlines()
+        
+        #testing if the parameter is pegged to 0 at 3 sigma
+        if  '***Warning: Parameter pegged at hard limit: 0\n' in log_lines:
+            return np.array([0,0,0])
         
         return np.array([width_par.values[0],width_par.values[0]-width_par.error[0],width_par.error[1]-width_par.values[0]])
                          
@@ -3070,16 +3375,19 @@ class fitcomp:
             
         return eqwidth_arr
     
-    def get_eqwidth_ul(self,bshift_range,line_width=0):
+    def get_eqwidth_ul(self,bshift_range,line_width=0,pre_delete=False):
         
         '''
         Note : we compute the eqw ul from the first data group
         Also tests the upper limit for included components by removing them first
         '''
         
+        if self.compname.split('_')[0]=='NiKa27abs':
+            return 0
+        
         curr_model=allmodel_data()
                 
-        max_eqw=[]
+        distrib_eqw=[]
         
         prev_chatter=Xset.chatter
         prev_logChatter=Xset.logChatter
@@ -3094,7 +3402,7 @@ class fitcomp:
             bshift_space=np.linspace(-bshift_range[1],-bshift_range[0],101)
             
                 
-        with tqdm(total=101) as pbar:
+        with tqdm(total=len(bshift_space)) as pbar:
             
             #loop on a sampling in the line blueshift range
             for vshift in  bshift_space:
@@ -3102,20 +3410,23 @@ class fitcomp:
                 #restoring the initial model
                 model_load(curr_model)
                 
-                try:
-                    #deleting the component if needed
-                    if self.included:
-                        #deleting the component
-                        delcomp(self.compname)
-                except:
-                    breakpoint()
+                #deleting the component if needed and the model is not in a no-abs line version
+                if self.included and not pre_delete:
+                    delcomp(self.compname)
+
                     
                 #adding an equivalent component, without providing the included group because we don't want to link it
                 addcomp(self.compname,position='lastin')
                 
                 npars=AllModels(1).nParameters
                 
-                #freezing the width value at 0
+                #skipping the computation if the line is above the maximum energy
+                if AllModels(1)(npars-2).values[0]>AllData(1).energies[-1][1]:
+                    self.print_xlog('Line above maximum energy range. Skipping computation...')
+                    distrib_eqw+=[0]
+                    break
+                
+                #freezing the width value
                 AllModels(1)(npars-1).values=[line_width]+AllModels(1)(npars-1).values[1:]
                 AllModels(1)(npars-1).frozen=1
                 
@@ -3127,17 +3438,24 @@ class fitcomp:
                     
                 #fitting
                 Fit.perform()
-                
+                    
                 Xset.logChatter=10
+                
+                #reading and freezing the pegged parameters to keep the EW computation from crashing
+                self.logfile.readlines()
+                AllModels.show()
+                model_lines=self.logfile.readlines()
+                parse_xlog(model_lines,freeze_pegged=True,no_display=True)
+                Fit.perform()
+                
                 try:
                     #computing the EQW with errors
                     AllModels.eqwidth(len(AllModels(1).componentNames),err=True,number=1000,level=99.7)
-                    #replacing the previous max_eqw value if this lower bound is lower
-                    max_eqw+=[abs(AllData(1).eqwidth[1])]
+                    #adding the eqw value to the distribution
+                    distrib_eqw+=[abs(AllData(1).eqwidth[1])]
                 except:
                     self.print_xlog('Issue during EW computation')
-                    max_eqw+=[0]
-                    pass
+                    distrib_eqw+=[0]
                 
                 Xset.logChatter=5
                 
@@ -3148,117 +3466,9 @@ class fitcomp:
         
         #reloading the previous model iteration
         model_load(curr_model)
-        
-        return np.array(max(max_eqw))*1e3
+            
+        return max(distrib_eqw)*1e3
 
-def model_list(model_id='lines',give_groups=False):
-    
-    '''
-    wrapper for the fitmod class with a bunch of models
-        
-    Model types:
-        -lines : add high energy lines to a continuum.
-                Available components (to be updated):
-                    -2 gaussian emission lines at roughly >6.4/7.06 keV (narrow or not)
-                    -6 narrow absorption lines (see addcomp)
-                    -the diskbb and powerlaw to try to add them if they're needed
-                    
-                at every step, tries adding every remaining line in the continuum, and choose the best one out of all
-                only considers each addition if the improved chi² is below a difference depending of the number of 
-                free parameters in the added component
-                
-                interact comps lists the components susceptibles of interacting together during the fit 
-                The other components of each group will be the only ones unfrozen when computing errors of a component in the group
-                
-        -lines_diaz:
-                Almost the same thing but with a single emission component with [6.-8.keV] as energy interval
-             
-        -cont: create a (potentially absorbed) continuum with a diskbb and/or powerlaw
-                available components:
-                    -global phabs
-                    -powerlaw
-                    -diskbb
-    '''
-    
-    if model_id=='lines':
-        
-        '''
-        Notes : no need to include continuum componennts here anymore since we now use the continuum fitmod as argument in the lines fitmod
-        '''
-        
-        # avail_comps=['FeKaem_gaussian','FeKa26abs_nagaussian']
-        avail_comps=['FeKaem_gaussian','FeKbem_gaussian',
-                      'FeKa25abs_nagaussian','FeKa26abs_nagaussian','NiKa27abs_nagaussian',
-                      'FeKb25abs_nagaussian','FeKb26abs_nagaussian','FeKg26abs_nagaussian']
-        
-        
-    if model_id=='lines_emiwind':
-        
-        '''
-        Model to test residuals with emission lines only in neutral wind emitters (V404 Cyg & V4641 Sgr)
-        
-        Contains :
-            -two broad neutral emission components
-            -4 narrow emission line components
-        '''
-
-        avail_comps=['FeKaem_gaussian','FeKa0em_gaussian','FeKbem_gaussian','FeKb0em_ngaussian','FeKa25em_gaussian','FeKa26em_gaussian']
-        
-
-        
-    
-    if model_id=='lines_resolved':
-        avail_comps=['FeKaem_gaussian','FeKbem_gaussian',
-                      'FeKa25abs_agaussian','FeKa26abs_agaussian','NiKa27abs_agaussian',
-                      'FeKb25abs_agaussian','FeKb26abs_agaussian','FeKg26abs_agaussian']
-        
-    if model_id=='lines_resolved_noem':
-        avail_comps=['FeKa25abs_agaussian','FeKa26abs_agaussian','NiKa27abs_agaussian',
-                      'FeKb25abs_agaussian','FeKb26abs_agaussian','FeKg26abs_agaussian']
-        
-    if model_id=='lines_old':
-        
-        # avail_comps=['FeKaem_gaussian','FeKa26abs_nagaussian']
-        avail_comps=['cont_diskbb','cont_powerlaw','FeKaem_gaussian','FeKbem_gaussian',
-                      'FeKa25abs_nagaussian','FeKa26abs_nagaussian','NiKa27abs_nagaussian',
-                      'FeKb25abs_nagaussian','FeKb26abs_nagaussian','FeKg26abs_nagaussian']
-        
-    
-    if model_id=='lines_resolved_old':
-        avail_comps=['cont_diskbb','cont_powerlaw','FeKaem_gaussian','FeKbem_gaussian',
-                      'FeKa25abs_agaussian','FeKa26abs_agaussian','NiKa27abs_agaussian',
-                      'FeKb25abs_agaussian','FeKb26abs_agaussian','FeKg26abs_agaussian']
-        
-        
-    elif model_id=='lines_ns':
-        # avail_comps=['FeKaem_gaussian','FeKa26abs_nagaussian']
-        avail_comps=['cont_diskbb','cont_powerlaw','cont_bb','FeKaem_gaussian','FeKbem_gaussian',
-                      'FeKa25abs_nagaussian','FeKa26abs_nagaussian','NiKa27abs_nagaussian',
-                      'FeKb25abs_nagaussian','FeKb26abs_nagaussian','FeKg26abs_nagaussian']
-        
-    elif model_id=='lines_ns_noem':
-        avail_comps=['cont_diskbb','cont_powerlaw','cont_bb','FeKaem_gaussian','FeKbem_gaussian',''
-                      'FeKa25abs_nagaussian','FeKa26abs_nagaussian','NiKa27abs_nagaussian',
-                      'FeKb25abs_nagaussian','FeKb26abs_nagaussian','FeKg26abs_nagaussian']
-                
-    if model_id=='lines_diaz':
-        avail_comps=['FeDiaz_gaussian',
-                     'FeKa25abs_nagaussian','FeKa26abs_nagaussian','NiKa27abs_nagaussian',
-                      'FeKb25abs_nagaussian','FeKb26abs_nagaussian','FeKg26abs_nagaussian']
-    
-    if model_id=='cont':
-        
-        avail_comps=['glob_constant','glob_phabs','cont_diskbb','cont_powerlaw']
-        
-        interact_groups=avail_comps
-        
-    if model_id=='cont_bkn':
-        avail_comps=['bknpow','glob_phabs']
-        
-    if give_groups:
-        return avail_comps,interact_groups
-    else:
-        return avail_comps
 
 ####Plot commands
 '''Plot commands'''
@@ -3355,8 +3565,6 @@ def reset():
     AllData.clear()
     AllModels.clear()
     Xset.abund='wilm'
-    fit.statistic='chi'
-    fit.weight='standard'
     Fit.nIterations=1000
     
 class plot_save:
@@ -3863,7 +4071,7 @@ def comb_chi2map(fig_comb,chi_dict,title='',comb_label=''):
     
     plot_std_ener(ax_comb[0],ax_comb[1],plot_em=True)
         
-def xPlot(types,axes_input=None,plot_saves_input=None,plot_arg=None):
+def xPlot(types,axes_input=None,plot_saves_input=None,plot_arg=None,includedlist=None):
     
     '''
     Replot xspec plots using matplotib. Accepts custom types:
@@ -3879,6 +4087,8 @@ def xPlot(types,axes_input=None,plot_saves_input=None,plot_arg=None):
     Else, creates a range of plot_saves using plot_saver from the asked set of plot types
     
     if axes is not None, uses the axes as baselines to create the plots. Else, return an array of axes with the plots
+    
+    if includedlist is not None, replace xspec component names with fitcomp names
     '''
     
     if axes_input is None:
@@ -3962,8 +4172,6 @@ def xPlot(types,axes_input=None,plot_saves_input=None,plot_arg=None):
                                      marker='x',mew=0.5,label='background' if id_grp==0 else '')
                 
                 #plotting model components
-                
-                #### Probably needs to be adjusted to avoid double plotting single components
         
         #locking the axe limits
         curr_ax.set_xlim(round(min(ravel_ragged(curr_save.x-curr_save.xErr)),1),round(max(ravel_ragged(curr_save.x+curr_save.xErr)),1))
@@ -3973,9 +4181,11 @@ def xPlot(types,axes_input=None,plot_saves_input=None,plot_arg=None):
         without perturbing the previous limits if they were beyond
         we don't bother doing that for the background
         '''
+        
         curr_ax.set_ylim(min(curr_ax.get_ylim()[0],round(min(ravel_ragged(curr_save.y-curr_save.yErr)),1)),
                          max(curr_ax.get_ylim()[1],round(max(ravel_ragged(curr_save.y+curr_save.yErr)),1)))
         
+        #plotting the components after locking axis limits to avoid huge rescaling
         if 'data' in plot_type and curr_save.add and curr_save.ismod:
             
             #assigning colors to the components
@@ -3983,10 +4193,16 @@ def xPlot(types,axes_input=None,plot_saves_input=None,plot_arg=None):
             
             colors_addcomp=mpl.cm.ScalarMappable(norm=norm_colors_addcomp,cmap=mpl.cm.plasma)
         
+            #using fitcomp labels if possible            
+            if includedlist is not None:
+                label_comps=[comp.compname for comp in [elem for elem in includedlist if elem is not None and not elem.multipl]]
+            else:
+                label_comps=curr_save.addcompnames
+                
             for id_grp in range(curr_save.nGroups):
                 for i_comp in range(len(curr_save.addcomps[id_grp])):
                     curr_ax.plot(curr_save.x[id_grp],curr_save.addcomps[id_grp][i_comp],color=colors_addcomp.to_rgba(i_comp),
-                                 label=curr_save.addcompnames[i_comp],linestyle=':',linewidth=1)
+                                 label=label_comps[i_comp],linestyle=':',linewidth=1)
                 
         #ratio line
         if 'ratio' in plot_type:
@@ -4001,7 +4217,7 @@ def xPlot(types,axes_input=None,plot_saves_input=None,plot_arg=None):
     if axes_input is None:
         return axes
 
-def Plot_screen(datatype,path,mode='matplotlib',xspec_windid=None):
+def Plot_screen(datatype,path,mode='matplotlib',xspec_windid=None,includedlist=None):
     
     '''Screen a specific xspec plot, either through matplotlib or through direct plotting through xspec's interface'''
     
@@ -4009,7 +4225,7 @@ def Plot_screen(datatype,path,mode='matplotlib',xspec_windid=None):
         path_use=path+('.pdf' if mode=='matplotlib' else '.png')
     
     if mode=='matplotlib':
-        xPlot(datatype)
+        xPlot(datatype,includedlist=includedlist)
         if not path.endswith('.png') or path.endswith('.svg') or path.endswith('.pdf'):
             path_use=path+('.pdf')
             plt.savefig(path_use)

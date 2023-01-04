@@ -9,10 +9,6 @@ Created on Sun Mar  6 00:11:45 2022
 #general imports
 import os,sys
 
-# sys.path.append('/home/parrama/Documents/Work/PhD/Scripts/Python')
-# sys.path.append('/home/parrama/Documents/Work/PhD/Scripts/Python/visualisation')
-# sys.path.append('/home/parrama/Documents/Work/PhD/Scripts/Python/spectral_analysis')
-
 import glob
 
 import argparse
@@ -54,7 +50,7 @@ from fitting_tools import lines_std,lines_std_names,ravel_ragged,range_absline
 
 #visualisation functions
 from visual_line_tools import load_catalogs,dist_mass,obj_values,abslines_values,values_manip,distrib_graph,correl_graph,incl_dic,\
-    n_infos, plot_maxi_lightcurve, telescope_colors, sources_det_dic, dippers_list
+    n_infos, plot_lightcurve, telescope_colors, sources_det_dic, dippers_list
 
 
 # import mpld3
@@ -288,7 +284,7 @@ dist_factor=4*np.pi*(dist_obj_list*1e3*3.086e18)**2
 Edd_factor=dist_factor/(1.26e38*mass_obj_list)
 
 #Reading the results files
-observ_list,lineval_list,flux_list,date_list,instru_list=obj_values(lineval_files,Edd_factor,dict_linevis)
+observ_list,lineval_list,flux_list,date_list,instru_list,exptime_list=obj_values(lineval_files,Edd_factor,dict_linevis)
 
 dict_linevis['flux_list']=flux_list
 
@@ -297,7 +293,6 @@ abslines_infos,autofit_infos=abslines_values(abslines_files,dict_linevis)
 
 #getting all the variations we need
 abslines_infos_perline,abslines_infos_perobj,abslines_plot,abslines_ener,flux_plot,hid_plot,incl_plot,width_plot,nh_plot=values_manip(abslines_infos,dict_linevis,autofit_infos)
-
 
 '''
 in the abslines_infos_perline form, the order is:
@@ -516,30 +511,30 @@ else:
     
 with st.sidebar.expander('Lightcurves'):
     
-    plot_maxi_lc=st.checkbox('Plot maxi lightcurve',value=False)
-    plot_maxi_hr=st.checkbox('Plot maxi HR',value=False)
-    maxi_highlight_hid=st.checkbox('Highlight HID coverage',value=False)
+    plot_lc_monit=st.checkbox('Plot monitoring lightcurve',value=False)
+    plot_hr_monit=st.checkbox('Plot monitoring HR',value=False)
+    monit_highlight_hid=st.checkbox('Highlight HID coverage',value=False)
     
-    if plot_maxi_lc or plot_maxi_hr:
-        zoom_lc=st.checkbox('Zoom on the restricted time period in the MAXI lightcurve',value=False)
+    if plot_lc_monit or plot_hr_monit:
+        zoom_lc=st.checkbox('Zoom on the restricted time period in the lightcurve',value=False)
     else:
         zoom_lc=False
         
-    fig_maxi_lc=None
-    fig_maxi_hr=None
+    fig_lc_monit=None
+    fig_hr_monit=None
     
     plot_maxi_ew=st.checkbox('Superpose measured EW',value=False)
     
-    def save_maxi():
+    def save_lc():
         
         '''
         Saves the current maxi_graph in a svg (i.e. with clickable points) format.
         '''
         if display_single:
-            fig_maxi_lc.savefig(save_dir+'/'+choice_source[0]+'_maxilc_'+str(round(time.time()))+'.'+save_format,bbox_inches='tight')
-            fig_maxi_hr.savefig(save_dir+'/'+choice_source[0]+'_maxihr_'+str(round(time.time()))+'.'+save_format,bbox_inches='tight')
+            fig_lc_monit.savefig(save_dir+'/'+choice_source[0]+'_lc_'+str(round(time.time()))+'.'+save_format,bbox_inches='tight')
+            fig_hr_monit.savefig(save_dir+'/'+choice_source[0]+'_hr_'+str(round(time.time()))+'.'+save_format,bbox_inches='tight')
             
-    st.button('Save current MAXI curves',on_click=save_maxi,key='maxi_key')
+    st.button('Save current MAXI curves',on_click=save_lc,key='save_lc_key')
     
 compute_only_withdet=st.sidebar.checkbox('Skip parameter analysis when no detection remain with the current constraints',value=False)
 
@@ -1451,27 +1446,28 @@ dict_linevis['save_str_prefix']= save_str_prefix
 '''''''''''''''''''''
  ####MAXI LIGHTCURVE
 '''''''''''''''''''''
-if plot_maxi_lc:
+if plot_lc_monit:
     
-    fig_maxi_lc=plot_maxi_lightcurve(dict_linevis,catal_maxi_df,catal_maxi_simbad,choice_source,display_hid_interval=maxi_highlight_hid,
+    fig_lc_monit=plot_lightcurve(dict_linevis,catal_maxi_df,catal_maxi_simbad,choice_source,display_hid_interval=monit_highlight_hid,
                                      superpose_ew=plot_maxi_ew)
 
     #wrapper to avoid streamlit trying to plot a None when resetting while loading
-    if fig_maxi_lc is not None:
-        st.pyplot(fig_maxi_lc)
+    if fig_lc_monit is not None:
+        st.pyplot(fig_lc_monit)
 
-if plot_maxi_hr:
+if plot_hr_monit:
     
-    fig_maxi_hr=plot_maxi_lightcurve(dict_linevis,catal_maxi_df,catal_maxi_simbad,choice_source,mode='HR',display_hid_interval=maxi_highlight_hid,
+    fig_hr_monit=plot_lightcurve(dict_linevis,catal_maxi_df,catal_maxi_simbad,choice_source,mode='HR',display_hid_interval=monit_highlight_hid,
                                      superpose_ew=plot_maxi_ew)
     # fig_maxi_lc_html = mpld3.fig_to_html(fig_maxi_lc)
     # components.html(fig_maxi_lc_html,height=500,width=1000)
 
     #wrapper to avoid streamlit trying to plot a None when resetting while loading
-    if fig_maxi_hr is not None:
-        st.pyplot(fig_maxi_hr)
+    if plot_hr_monit is not None:
+        st.pyplot(fig_hr_monit)
 
-if (plot_maxi_lc and fig_maxi_lc is None) or (plot_maxi_hr and fig_maxi_hr is None) :
+
+if (plot_lc_monit and fig_lc_monit is None) or (plot_hr_monit and fig_hr_monit is None) :
     st.text('No match in MAXI source list found.')
         
 '''''''''''''''''''''

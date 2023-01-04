@@ -2013,7 +2013,7 @@ def extract_reg(directory,mode='manual',cams='all',expos_mode='all',overwrite=Tr
                         ds9_pid_sp_start=ds9_pid_sp_start
                         ds9launch=True
                     except:
-                        pass
+                        time.sleep(1)
                     
                 expression_source,expression_bg,distrib_summary,ds9_pid_sp_reg,best_SNR=\
                 opti_snr_timing(distrib_timingimg,ds9_pid_prev=ds9_pid_sp_start)
@@ -2804,7 +2804,7 @@ def extract_reg(directory,mode='manual',cams='all',expos_mode='all',overwrite=Tr
                 -Only stops excising when the given treshold is attained
                 -No spatial limit to the excision besides the source size.
 
-            for imaging, excises a linear range of circular regions up to the minimal value between 
+            for imaging, excises a linear range of circular regions up to the minimal value
             for timing, excises widths one pixel by one up to half the size of the source region
             '''
             

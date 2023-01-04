@@ -28,6 +28,8 @@ from matplotlib.ticker import Locator
 from matplotlib.ticker import MaxNLocator
 import matplotlib.dates as mdates
 
+#pickle for the rxte lightcurve dictionnary
+import pickle
 
 from astropy.io import fits
 from astropy.time import Time
@@ -129,21 +131,21 @@ dist_dic={
     'GRS 1915+105':[8.6,1.6,2],
     'GRS1915+105':[8.6,1.6,2],
     'MAXIJ1348-630':[3.39,0.385,0.382],
-    'H1743-322':[8.5,0.8,0.8]
+    'H1743-322':[8.5,0.8,0.8],
+    'SwiftJ1357.2-0933':[8,0,0],
     }
 
 #note : only dynamical measurements for BHs
 mass_dic={
     '1H1659-487':[5.9,3.6,3.6],
-    'GRS 1915+105':[12,2,2],
+    'GRS 1915+105':[12.4,1.8,2],
     'GRS1915+105':[12,2,2],
     'MAXIJ1820+070':[6.9,1.2,1.2],
-    'GROJ1655-40':[6,0.4,0.4],
-    'XTEJ1650-500':[7.3,4.3,0],
+    'GROJ1655-40':[5.4,0.3,0.3],
     'SAXJ1819.3-2525':[6.4,0.6,0.6],
     'GS2023+338':[9,0.6,0.2],
     'XTEJ1550-564':[11.7,3.9,3.9],
-    'MAXIJ1305-704':[8.9,1.6,1],
+    'MAXIJ1305-704':[8.9,1.,1.6],
     '4U1543-475':[8.4,1,1],
     'XTEJ1118+480':[7.55,0.65,0.65],
     #NS:
@@ -152,6 +154,10 @@ mass_dic={
 
 sources_det_dic=['GRS1915+105','GRS 1915+105','GROJ1655-40','H1743-322','4U1630-47','IGRJ17451-3022']
 
+rxte_lc_path='/media/parrama/6f58c7c3-ba85-45e6-b8b8-a8f0d564ec15/Observ/BHLMXB/RXTE/RXTE_lc_dict.pickle'
+
+with open(rxte_lc_path,'rb') as rxte_lc_file:
+    dict_lc_rxte=pickle.load(rxte_lc_file)
 
 #current number of informations in abslines_infos
 n_infos=7
@@ -281,7 +287,27 @@ def fetch_maxi_lightcurve(ctl_maxi_df,ctl_maxi_simbad,name):
 
     return source_lc
 
-def plot_maxi_lightcurve(dict_linevis,ctl_maxi_df,ctl_maxi_simbad,name,mode='full',display_hid_interval=True,superpose_ew=False):
+def fetch_rxte_lightcurve(name,dict_rxte=dict_lc_rxte):
+    
+    '''
+    Attempts to fetch a lightcurve for the given namen in the lightcurve rxte dictionnary
+    
+    the dictionnary has dataframes of all the main band 1-day averaged lightcurves found in the RXTE archive for the sample,
+    with simbad ids as keys
+    '''
+    
+    simbad_query=silent_Simbad_query([name[0].split('_')[0]])
+    
+    
+    if simbad_query is None:
+        return None
+
+    if simbad_query[0]['MAIN_ID'] not in dict_lc_rxte.keys():
+        return None
+    
+    return dict_lc_rxte[simbad_query[0]['MAIN_ID']]
+
+def plot_lightcurve(dict_linevis,ctl_maxi_df,ctl_maxi_simbad,name,dict_rxte=dict_lc_rxte,mode='full',display_hid_interval=True,superpose_ew=False):
 
     '''
     plots various MAXI based lightcurve for sources in the Sample if a match is found in the MAXI source list
@@ -302,56 +328,125 @@ def plot_maxi_lightcurve(dict_linevis,ctl_maxi_df,ctl_maxi_simbad,name,mode='ful
     mask_lines=dict_linevis['mask_lines']
     conf_thresh=dict_linevis['slider_sign']
     
-    lc_df=fetch_maxi_lightcurve(ctl_maxi_df,ctl_maxi_simbad,name)
+    maxi_lc_df=fetch_maxi_lightcurve(ctl_maxi_df,ctl_maxi_simbad,name)
     
-    if lc_df is None:
+    rxte_lc_df=fetch_rxte_lightcurve(name, dict_lc_rxte)
+    
+    if maxi_lc_df is None and rxte_lc_df is None:
         return None
     
-    fig_maxi,ax_maxi=plt.subplots(figsize=(12,4))
+    fig_lc,ax_lc=plt.subplots(figsize=(12,4))
     
-    ax_maxi.set_xlabel('Time')
+    #main axis definitions
+    ax_lc.set_xlabel('Time')
     if mode=='full':
-        ax_maxi.set_title(name[0]+' broad band MAXI lightcurve')
-        ax_maxi.set_ylabel(lc_df.columns[1])
+        ax_lc.set_title(name[0]+' broad band lightcurve')
+        
+        maxi_y_str='MAXI '+maxi_lc_df.columns[1] if maxi_lc_df is not None else ''
+        rxte_y_str='RXTE '+rxte_lc_df.columns[1]+'/25' if rxte_lc_df is not None else ''
+        ax_lc.set_ylabel(maxi_y_str+('/' if maxi_lc_df is not None and rxte_lc_df is not None else '')+rxte_y_str)
     elif mode=='HR':
-        ax_maxi.set_title(name[0]+' MAXI HR ratio evolution')
-        ax_maxi.set_ylabel('counts HR in [4-10]/[2-4] bands')
+        ax_lc.set_title(name[0]+' HR ratio evolution')
+        ax_lc.set_ylabel('MAXI counts HR in [4-10]/[2-4] bands')
         
-    #creating a variable for the dates
-    num_maxi_dates=mdates.date2num(Time(lc_df[lc_df.columns[0]],format='mjd').datetime)
+        maxi_y_str='MAXI counts HR in [4-10]/[2-4] keV' if maxi_lc_df is not None else ''
+        rxte_y_str='RXTE band C/(B+A) [5-12]/[1.5-5] keV' if rxte_lc_df is not None else ''
+        ax_lc.set_ylabel(maxi_y_str+\
+                         ("/" if maxi_lc_df is not None and rxte_lc_df is not None else '')+\
+                         rxte_y_str,fontsize=8 if maxi_lc_df is not None and rxte_lc_df is not None else None)
+        
+        
+    '''MAXI'''
     
-    if mode=='full':    
-        ax_maxi.set_yscale('log')
+    #empty list initialisation to append easily the dates list afterwards no matter 
+    num_maxi_dates=[]
+    num_rxte_dates=[]
+    
+    if rxte_lc_df is not None:
+            
+        #creating a variable for the dates
+        num_rxte_dates=mdates.date2num(Time(rxte_lc_df[rxte_lc_df.columns[0]],format='mjd').datetime)
         
-        #plotting the full lightcurve
-        ax_maxi.errorbar(num_maxi_dates,lc_df[lc_df.columns[1]],xerr=0.5,yerr=lc_df[lc_df.columns[2]],
-                    linestyle='',color='black',marker='',elinewidth=0.5,label='MAXI standard counts')
-        ax_maxi.set_ylim(0.1,ax_maxi.get_ylim()[1])
+        if mode=='full':    
+            ax_lc.set_yscale('log')
+            
+            #plotting the full lightcurve
+            #note: the conversion factor is here to convert(ish) the rxte counts into maxi counts
+            ax_lc.errorbar(num_rxte_dates,rxte_lc_df[rxte_lc_df.columns[1]]/25,xerr=0.5,yerr=rxte_lc_df[rxte_lc_df.columns[2]]/25,
+                        linestyle='',color='sienna',marker='',elinewidth=0.5,label='RXTE standard counts')
+            ax_lc.set_ylim(0.1,ax_lc.get_ylim()[1])
+    
+        if mode=='HR':
+            
+            '''
+            for RXTE, 
+            band A is [1.5-3] keV
+            band B is [3-5] keV
+            band C is [5-12] keV
+            
+            for the HR, we do C/A+B
+            '''
+            
+            #computing the HR evolution and uncertainties
+            
+            rxte_hr_denom=rxte_lc_df[rxte_lc_df.columns[3]]+rxte_lc_df[rxte_lc_df.columns[5]]
+            rxte_hr=rxte_lc_df[rxte_lc_df.columns[7]]/rxte_hr_denom
+            
+            rxte_hr_err=(rxte_lc_df[rxte_lc_df.columns[8]]/rxte_lc_df[rxte_lc_df.columns[7]]+(rxte_lc_df[rxte_lc_df.columns[4]]+rxte_lc_df[rxte_lc_df.columns[6]])/rxte_hr_denom)*rxte_hr
+            
+            ax_lc.set_yscale('log')
+            
+            ax_lc.set_ylim(0.05,5)
+            
+            #plotting the full lightcurve
+            rxte_hr_errbar=ax_lc.errorbar(num_rxte_dates,rxte_hr,xerr=0.5,yerr=rxte_hr_err,
+                        linestyle='',color='sienna',marker='',elinewidth=0.5,label='RXTE HR')
+    
+            #adapting the transparency to hide the noisy elements
+            rxte_hr_alpha_val=1/(20*abs(rxte_hr_err/rxte_hr)**2)
+            rxte_hr_alpha=[min(1,elem) for elem in rxte_hr_alpha_val]
+            
+            #replacing indiviudally the alpha values for each point but the line
+            for elem_children in rxte_hr_errbar.get_children()[1:]:
+    
+                elem_children.set_alpha(rxte_hr_alpha)
+                
+    if maxi_lc_df is not None:
+            
+        #creating a variable for the dates
+        num_maxi_dates=mdates.date2num(Time(maxi_lc_df[maxi_lc_df.columns[0]],format='mjd').datetime)
+        
+        if mode=='full':    
+            ax_lc.set_yscale('log')
+            
+            #plotting the full lightcurve
+            ax_lc.errorbar(num_maxi_dates,maxi_lc_df[maxi_lc_df.columns[1]],xerr=0.5,yerr=maxi_lc_df[maxi_lc_df.columns[2]],
+                        linestyle='',color='black',marker='',elinewidth=0.5,label='MAXI standard counts')
+            ax_lc.set_ylim(0.1,ax_lc.get_ylim()[1])
+    
+        if mode=='HR':
+            #computing the HR evolution and uncertainties
+            maxi_hr=maxi_lc_df[maxi_lc_df.columns[5]]/maxi_lc_df[maxi_lc_df.columns[3]]
+            
+            maxi_hr_err=(maxi_lc_df[maxi_lc_df.columns[6]]/maxi_lc_df[maxi_lc_df.columns[5]]+maxi_lc_df[maxi_lc_df.columns[4]]/maxi_lc_df[maxi_lc_df.columns[3]])*maxi_hr
+            ax_lc.set_yscale('log')
+            
+            ax_lc.set_ylim(0.05,5)
+            
+            #plotting the full lightcurve
+            maxi_hr_errbar=ax_lc.errorbar(num_maxi_dates,maxi_hr,xerr=0.5,yerr=maxi_hr_err,
+                        linestyle='',color='black',marker='',elinewidth=0.5,label='MAXI HR')
+    
+            #adapting the transparency to hide the noisy elements
+            maxi_hr_alpha_val=1/(20*abs(maxi_hr_err)*2)/abs(maxi_hr)
+            maxi_hr_alpha=[min(1,elem) for elem in maxi_hr_alpha_val]
+            
+            #replacing indiviudally the alpha values for each point but the line
+            for elem_children in maxi_hr_errbar.get_children()[1:]:
+    
+                elem_children.set_alpha(maxi_hr_alpha)
 
-    if mode=='HR':
-        #computing the HR evolution and uncertainties
-        maxi_hr=lc_df[lc_df.columns[5]]/lc_df[lc_df.columns[3]]
-        
-        maxi_hr_err=(lc_df[lc_df.columns[6]]/lc_df[lc_df.columns[5]]+lc_df[lc_df.columns[4]]/lc_df[lc_df.columns[3]])*maxi_hr
-        ax_maxi.set_yscale('log')
-        
-        ax_maxi.set_ylim(0.05,5)
-        
-        #plotting the full lightcurve
-        maxi_hr_errbar=ax_maxi.errorbar(num_maxi_dates,maxi_hr,xerr=0.5,yerr=maxi_hr_err,
-                    linestyle='',color='black',marker='',elinewidth=0.5,label='MAXI HR')
-
-        #adapting the transparency to hide the noisy elements
-        maxi_hr_alpha_val=1/(10*abs(maxi_hr_err)*2)/abs(maxi_hr)
-        maxi_hr_alpha=[min(1,elem) for elem in maxi_hr_alpha_val]
-        
-        #replacing indiviudally the alpha values for each point but the line
-        for elem_children in maxi_hr_errbar.get_children()[1:]:
-
-            elem_children.set_alpha(maxi_hr_alpha)
-                    
-
-        # ax_maxi.set_ylim(0.1,ax_maxi.get_ylim()[1])
+        # ax_lc.set_ylim(0.1,ax_lc.get_ylim()[1])
         
     #displaying observations with other instruments
     
@@ -359,10 +454,10 @@ def plot_maxi_lightcurve(dict_linevis,ctl_maxi_df,ctl_maxi_simbad,name,mode='ful
         
     if superpose_ew:
         #creating a second y axis with common x axis
-        ax_maxi_ew=ax_maxi.twinx()
-        ax_maxi_ew.set_yscale('log')
-        ax_maxi_ew.set_ylabel('EW (eV)')
-        ax_maxi_ew.set_ylim(5,100)
+        ax_lc_ew=ax_lc.twinx()
+        ax_lc_ew.set_yscale('log')
+        ax_lc_ew.set_ylabel('EW (eV)')
+        ax_lc_ew.set_ylim(5,100)
         
         #plotting the detection and upper limits following what we do for the scatter graphs
     
@@ -398,12 +493,12 @@ def plot_maxi_lightcurve(dict_linevis,ctl_maxi_df,ctl_maxi_simbad,name,mode='ful
         #zipping the errorbars to allow different colors
         for x_data,y_data,y_err,color in zip(x_data_det,y_data_det,y_error_det,color_det):
             
-            ax_maxi_ew.errorbar(x_data,y_data,xerr=0.5,yerr=np.array([y_err]).T,color=color,marker='d',markersize=2,elinewidth=1)
+            ax_lc_ew.errorbar(x_data,y_data,xerr=0.5,yerr=np.array([y_err]).T,color=color,marker='d',markersize=2,elinewidth=1)
             
 
         for x_data,y_data,color in zip(x_data_ul,y_data_ul,color_ul):
          
-            ax_maxi_ew.errorbar(x_data,y_data,xerr=0.5,yerr=0.05*y_data,marker='.',color=color,uplims=True,markersize=2,elinewidth=1,capsize=2)
+            ax_lc_ew.errorbar(x_data,y_data,xerr=0.5,yerr=0.05*y_data,marker='.',color=color,uplims=True,markersize=2,elinewidth=1,capsize=2)
 
                 
     for i_obs,date_obs in enumerate(date_list):
@@ -411,21 +506,26 @@ def plot_maxi_lightcurve(dict_linevis,ctl_maxi_df,ctl_maxi_simbad,name,mode='ful
         num_date_obs=mdates.date2num(Time(date_obs).datetime)
         
         #we add a condition for the label to only plot each instrument once
-        ax_maxi.axvline(x=num_date_obs,ymin=0,ymax=1,color=telescope_colors[instru_list[i_obs]],
+        ax_lc.axvline(x=num_date_obs,ymin=0,ymax=1,color=telescope_colors[instru_list[i_obs]],
                         label=instru_list[i_obs]+' exposure' if instru_list[i_obs] not in label_tel_list else '',ls=':',lw=0.5)
 
         if instru_list[i_obs] not in label_tel_list:
             label_tel_list+=[instru_list[i_obs]]
         
     #resizing the x axis and highlighting depending on wether we are zooming on a restricted time interval or not
+    
+    tot_dates_list=[]
+    tot_dates_list+=[] if maxi_lc_df is None else num_maxi_dates.tolist()
+    tot_dates_list+=[] if rxte_lc_df is None else num_rxte_dates.tolist()
+    
     if zoom_lc:
-        ax_maxi.set_xlim(max(mdates.date2num(slider_date[0]),min(num_maxi_dates)),
-                                             min(mdates.date2num(slider_date[1]),max(num_maxi_dates)))
-        time_range=min(mdates.date2num(slider_date[1]),max(num_maxi_dates))-max(mdates.date2num(slider_date[0]),min(num_maxi_dates))
+        ax_lc.set_xlim(max(mdates.date2num(slider_date[0]),min(tot_dates_list)),
+                                             min(mdates.date2num(slider_date[1]),max(tot_dates_list)))
+        time_range=min(mdates.date2num(slider_date[1]),max(tot_dates_list))-max(mdates.date2num(slider_date[0]),min(tot_dates_list))
         
     else:
-        ax_maxi.set_xlim(min(num_maxi_dates),max(num_maxi_dates))
-        time_range=max(num_maxi_dates)-min(num_maxi_dates)
+        ax_lc.set_xlim(min(tot_dates_list),max(tot_dates_list))
+        time_range=max(tot_dates_list)-min(tot_dates_list)
         
         #highlighting the time interval in the main HID
         
@@ -441,15 +541,16 @@ def plot_maxi_lightcurve(dict_linevis,ctl_maxi_df,ctl_maxi_simbad,name,mode='ful
     # else:
     #     date_format=mdates.AutoDateFormatter(mdates.AutoDateLocator())
 
-    ax_maxi.xaxis.set_major_formatter(date_format)
+    ax_lc.xaxis.set_major_formatter(date_format)
                     
-    for label in ax_maxi.get_xticklabels(which='major'):
+    for label in ax_lc.get_xticklabels(which='major'):
         label.set(rotation=45, horizontalalignment='right')
             
-    ax_maxi.legend()
+    ax_lc.legend()
     
-    return fig_maxi
-@st.cache
+    return fig_lc
+
+# @st.cache
 def dist_mass(dict_linevis):
     
     ctl_blackcat=dict_linevis['ctl_blackcat']
@@ -463,21 +564,23 @@ def dist_mass(dict_linevis):
     
     for i in range(len(names)):
         d_obj[i]='nan'
-        
+
         if names[i] in dist_dic:
             #putting manual/updated distance values first
             d_obj[i]=dist_dic[names[i]][0]
-            
+
         else:
+            
+            obj_row=None
             #searching for the distances corresponding to the object namess in the first (most recently updated) catalog
             for elem in ctl_blackcat_obj:
                 if names[i] in elem:
                     obj_row=np.argwhere(ctl_blackcat_obj==elem)[0][0]
-            try:
-                d_obj[i]=ctl_blackcat.iloc[obj_row]['d [kpc]']
-            except:
-                pass
+                    break                    
             
+            if obj_row is not None:
+                d_obj[i]=ctl_blackcat.iloc[obj_row]['d [kpc]']
+                
             #formatting : using only the main values + we do not want to use this catalog's results if they are simply upper/lower limits
             d_obj[i]=str(d_obj[i])
             d_obj[i]=d_obj[i].split('/')[-1].split('±')[0].split('~')[-1].split('∼')[-1]
@@ -497,13 +600,19 @@ def dist_mass(dict_linevis):
             #searching in the second catalog if nothing was found in the first one
             if d_obj[i]=='nan':
                 if len(np.argwhere(ctl_watchdog_obj==names[i]))!=0:
-                    d_obj[i]=float(ctl_watchdog[np.argwhere(ctl_watchdog_obj==names[i])[0][0]]['Dist1'])
-                else:
-                    #giving a default value of 8kpc to the objects for which we do not have good distance measurements
-                    d_obj[i]=8
+                    
+                    #watchdog assigns by default 5+-3 kpc to sources with no distance estimate so we need to check for that
+                    #(there is no source with an actual 5kpc distance)
+                    if float(ctl_watchdog[np.argwhere(ctl_watchdog_obj==names[i])[0][0]]['Dist1'])!=5:
+                        d_obj[i]=float(ctl_watchdog[np.argwhere(ctl_watchdog_obj==names[i])[0][0]]['Dist1'])
+                        
+            if d_obj[i]=='nan':
+                #giving a default value of 8kpc to the objects for which we do not have good distance measurements
+                d_obj[i]=8
+
             else:
                 d_obj[i]=float(d_obj[i])
-
+        
         #fixing the source mass at 10 solar Masses since we have very few reliable estimates of the BH masses anyway
         #except for NS whose masses are in a dictionnary
         if names[i] in mass_dic:
@@ -535,7 +644,7 @@ def obj_values(file_paths,E_factors,dict_linevis):
     
     date_list=np.array([None]*len(obj_list))
     instru_list=np.array([None]*len(obj_list))
-    
+    exptime_list=np.array([None]*len(obj_list))
     # ind_links=np.array([None]*len(obj_list))
     
     for i in range(len(obj_list)):
@@ -549,8 +658,6 @@ def obj_values(file_paths,E_factors,dict_linevis):
         curr_E_factor=E_factors[i]
         
         store_lines=[]
-    
-        # obj_dir=[elem[:elem.rfind('/')] for elem in curr_obj_paths]
         
         for elem_path in curr_obj_paths:
             
@@ -600,7 +707,7 @@ def obj_values(file_paths,E_factors,dict_linevis):
 
         curr_date_list=np.array([None]*len(obs_list[i]))
         curr_instru_list=np.array([None]*len(obs_list[i]))
-
+        curr_exptime_list=np.array([None]*len(obs_list[i]))
         #fetching spectrum informations
         
         if visual_line:
@@ -657,6 +764,8 @@ def obj_values(file_paths,E_factors,dict_linevis):
                             breakpoint()
 
                 with fits.open(filepath) as hdul:
+                    
+                    curr_exptime_list[i_obs]=hdul[1].header['EXPOSURE']
                     try:
                         curr_date_list[i_obs]=hdul[0].header['DATE-OBS']
                     except:
@@ -666,9 +775,8 @@ def obj_values(file_paths,E_factors,dict_linevis):
                             curr_date_list[i_obs]=Time(hdul[1].header['MJDSTART'],format='mjd').isot
 
         date_list[i]=curr_date_list
-            
         instru_list[i]=curr_instru_list
-
+        exptime_list[i]=curr_exptime_list
         # ind_links[i]=os.path.join(os.getcwd(),obj_dir)+'/'+np.array(obs_list[i])+'_recap.pdf'
     
     if multi_obj:
@@ -676,7 +784,7 @@ def obj_values(file_paths,E_factors,dict_linevis):
     else:
          f_list=np.array([elem for elem in f_list])
     
-    return obs_list,lval_list,f_list,date_list,instru_list
+    return obs_list,lval_list,f_list,date_list,instru_list,exptime_list
 
 @st.cache
 def abslines_values(file_paths,dict_linevis):
@@ -742,6 +850,8 @@ def abslines_values(file_paths,dict_linevis):
                     curr_abslines_infos[l][m]=np.array(literal_eval(curr_line[m+1].replace(',','').replace(' ',',')))\
                         if curr_line[m+1]!='' else None
                 except:
+                    breakpoint()
+                    
                     #covering the detections before I fixed the error of not converting the array to a list
                     ###TODO: take this off
                     curr_abslines_infos[l][m]=np.array(literal_eval(','.join(curr_line[m+1].split())))\

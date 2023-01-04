@@ -36,7 +36,14 @@ from custom_pymccorrelation import pymccorrelation
 
 # import time
 
-'''Astro'''
+'''Custom'''
+
+from pathlib import Path
+import sys
+
+
+#adding the top directory to the path to avoid issues when importing fitting_tools
+sys.path.append(str(Path(__file__).resolve().parent.parent))
 
 #custom script with some lines and fit utilities and variables
 from fitting_tools import lines_std,lines_std_names,ravel_ragged

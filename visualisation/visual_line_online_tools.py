@@ -146,7 +146,7 @@ mass_dic={
 
 sources_det_dic=['GRS1915+105','GRS 1915+105','GROJ1655-40','H1743-322','4U1630-47','IGRJ17451-3022']
 
-with open('visual_line_vars.pkl','rb') as dump_file:
+with open('/app/winds/visualisation/visual_line_vars.pkl','rb') as dump_file:
     dump_dict=dill.load(dump_file)
     
 dict_lc_rxte=dump_dict['dict_lc_rxte']

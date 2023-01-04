@@ -38,7 +38,7 @@ from fitting_tools import lines_std,lines_std_names,ravel_ragged,range_absline
 from visual_line_online_tools import dump_dict,distrib_graph,correl_graph,incl_dic,\
     n_infos, plot_lightcurve, telescope_colors, sources_det_dic, dippers_list
     
-'''Astro'''
+# '''Astro'''
 
 
 
@@ -50,14 +50,14 @@ def getoverlap(a, b):
 
 # import streamlit.components.v1 as components
 
-'''
-in the abslines_infos_perline form, the order is:
-    -each habsorption line
-    -the number of sources
-    -the number of obs for each source
-    -the info (5 rows, eqw/bshift/delchi/sign)
-    -it's uncertainty (3 rows, main value/neg uncert/pos uncert,useless for the delchi and sign)
-'''
+# '''
+# in the abslines_infos_perline form, the order is:
+#     -each habsorption line
+#     -the number of sources
+#     -the number of obs for each source
+#     -the info (5 rows, eqw/bshift/delchi/sign)
+#     -it's uncertainty (3 rows, main value/neg uncert/pos uncert,useless for the delchi and sign)
+# '''
     
 instru_list=dump_dict['instru_list']
 telescope_list=dump_dict['telescope_list']
@@ -83,7 +83,7 @@ dict_linevis=dump_dict['dict_linevis']
 catal_maxi_df=dump_dict['catal_maxi_df']
 catal_maxi_simbad=dump_dict['catal_maxi_simbad']
 
-'''Page creation'''
+# '''Page creation'''
 #### Streamlit page creation
 
 line_display_str=np.array([r'FeXXV Ka (6.70 keV)',r'FeXXVI  Ka (6.97 keV)','NiXXVII Ka (7.80 keV)',
@@ -271,7 +271,7 @@ else:
 ax_hid.clear()
 
 
-'''HID GRAPH'''
+# '''HID GRAPH'''
 
 #log x scale for an easier comparison with Ponti diagrams
 ax_hid.set_xscale('log')
@@ -279,7 +279,7 @@ ax_hid.set_xlabel('Hardness Ratio ([6-10]/[3-6] keV bands)')
 ax_hid.set_ylabel(r'Luminosity in the [3-10] keV band in (L/L$_{Edd}$) units')
 ax_hid.set_yscale('log')
 
-'''Dichotomy'''
+# '''Dichotomy'''
 
 #fetching the line indexes when plotting eqw ratio as colormap
 eqw_ratio_ids=np.argwhere([elem in selectbox_ratioeqw for elem in line_display_str]).T[0]
@@ -461,9 +461,9 @@ for i_obj,abslines_obj in enumerate(abslines_infos_perobj[mask_obj]):
     else:
         i_obj_glob=i_obj
         
-    '''
-    The shape of each abslines_obj is (uncert,info,line,obs)
-    '''
+    # '''
+    # The shape of each abslines_obj is (uncert,info,line,obs)
+    # '''
     
     #defining the hid positions of each point
     x_hid=flux_list[mask_obj][i_obj].T[2][0]/flux_list[mask_obj][i_obj].T[1][0]
@@ -783,9 +783,9 @@ for i_obj_base,abslines_obj_base in enumerate(abslines_infos_perobj[mask_obj_bas
     else:
         i_obj_glob=i_obj_base
     
-    '''
-    The shape of each abslines_obj is (uncert,info,line,obs)
-    '''
+    # '''
+    # The shape of each abslines_obj is (uncert,info,line,obs)
+    # '''
         
     #we use non-detection-masked arrays for non detection to plot them even while restricting the colors to a part of the sample 
     x_hid_base=flux_list[mask_obj_base][i_obj_base].T[2][0]/flux_list[mask_obj_base][i_obj_base].T[1][0]
@@ -1135,9 +1135,9 @@ st.pyplot(fig_hid)
 #  )
 
 
-'''
-SOURCE TABLE
-'''
+# '''
+# SOURCE TABLE
+# '''
 
 if display_source_table:
     
@@ -1186,9 +1186,9 @@ dict_linevis['display_nonsign']=display_nonsign
 dict_linevis['save_dir']=None
 dict_linevis['save_str_prefix']= None
 
-'''''''''''''''''''''
- ####MAXI LIGHTCURVE
-'''''''''''''''''''''
+# '''''''''''''''''''''
+#  ####MAXI LIGHTCURVE
+# '''''''''''''''''''''
 if plot_lc_monit:
     
     fig_lc_monit=plot_lightcurve(dict_linevis,catal_maxi_df,catal_maxi_simbad,choice_source,display_hid_interval=monit_highlight_hid,
@@ -1213,9 +1213,9 @@ if plot_hr_monit:
 if (plot_lc_monit and fig_lc_monit is None) or (plot_hr_monit and fig_hr_monit is None) :
     st.text('No match in MAXI source list found.')
         
-'''''''''''''''''''''
-   ####DIAGRAMS
-'''''''''''''''''''''
+# '''''''''''''''''''''
+#    ####DIAGRAMS
+# '''''''''''''''''''''
 
 if compute_only_withdet:
     
@@ -1226,11 +1226,11 @@ if compute_only_withdet:
             st.text('There are no detections for current object/date selection. Cannot compute parameter analysis.')
         st.stop()
 
-'''
-AUTOFIT LINES
-'''
+# '''
+# AUTOFIT LINES
+# '''
 
-'''Distributions'''
+# '''Distributions'''
     
     
 def streamlit_distrib():
@@ -1274,9 +1274,9 @@ def streamlit_distrib():
             with col_list['lineflux']:
                 st.pyplot(distrib_lineflux)
     
-'''1-1 Correlations'''
+# '''1-1 Correlations'''
 
-'''Intrinsic line parameters'''
+# '''Intrinsic line parameters'''
 
 def streamlit_scat(mode):
     

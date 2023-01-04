@@ -138,19 +138,19 @@ lines_w_dict={
                   'FeKa26em':[1e-3,0.,0.5],
                   }
 
-lines_broad_w_dict={
-                  'FeKa0em':[0.3,0.2,0.7],
-                  'FeKb0em':[0.3,0.2,0.7],
-                  'FeKa25em':[0.3,0.2,0.7],
-                  'FeKa26em':[0.3,0.2,0.7],
-                  }
-
 # lines_broad_w_dict={
-#                   'FeKa0em':[0.3,0.2,1.5],
-#                   'FeKb0em':[0.3,0.2,1.5],
-#                   'FeKa25em':[0.3,0.2,1.5],
-#                   'FeKa26em':[0.3,0.2,1.5],
+#                   'FeKa0em':[0.3,0.2,0.7],
+#                   'FeKb0em':[0.3,0.2,0.7],
+#                   'FeKa25em':[0.3,0.2,0.7],
+#                   'FeKa26em':[0.3,0.2,0.7],
 #                   }
+
+lines_broad_w_dict={
+                  'FeKa0em':[0.3,0.2,1.5],
+                  'FeKb0em':[0.3,0.2,1.5],
+                  'FeKa25em':[0.3,0.2,1.5],
+                  'FeKa26em':[0.3,0.2,1.5],
+                  }
 
 #link groups to tie line energies together
 link_groups=np.array([['FeKa25abs','FeKb25abs'],['FeKa26abs','FeKb26abs','FeKg26abs'],['NiKa27abs']],dtype=object)

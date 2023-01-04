@@ -181,7 +181,8 @@ ap.add_argument("-h_update",nargs=1,help='update the bg, rmf and arf file names 
 ap.add_argument('-restrict',nargs=1,help='restrict the computation to a number of predefined exposures',default=True,type=bool)
 #in this mode, the line detection function isn't wrapped in a try, and the summary isn't updasted
 
-observ_restrict=['0155762601_pn_S001_Timing_auto_sp_src_grp_opt.ds']
+observ_restrict=['0506161201_pn_U002_Timing_auto_sp_src_grp_opt.ds',
+    '0506161101_pn_S001_Timing_auto_sp_src_grp_opt.ds']
 
 '''    
 GRS strong curvature spectra

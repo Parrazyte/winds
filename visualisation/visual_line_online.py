@@ -10,30 +10,20 @@ Created on Sun Mar  6 00:11:45 2022
 import io
 import numpy as np
 import pandas as pd
-
+from copy import deepcopy
 import streamlit as st
-#matplotlib imports
 
+#matplotlib imports
 import matplotlib as mpl
 import matplotlib.pyplot as plt
 import matplotlib.colors as colors
 from matplotlib.lines import Line2D
-
 import matplotlib.dates as mdates
 
-
+#custom imports
 from astropy.time import Time
-from copy import deepcopy
-
-#Note : as of the writing of this code, the standard pymccorrelation doesn't accept differing +/- uncertainties, so I tweaked their 
-#'perturb values' function
-
-
 # import time
-
 import dill
-'''Astro'''
-
 
 #custom script with some lines and fit utilities and variables
 from fitting_tools import lines_std,lines_std_names,ravel_ragged,range_absline
@@ -41,6 +31,11 @@ from fitting_tools import lines_std,lines_std_names,ravel_ragged,range_absline
 #visualisation functions
 from visual_line_tools import distrib_graph,correl_graph,incl_dic,\
     n_infos, plot_lightcurve, telescope_colors, sources_det_dic, dippers_list
+    
+'''Astro'''
+
+
+
 
 def getoverlap(a, b):
     return max(0, min(a[1], b[1]) - max(a[0], b[0]))

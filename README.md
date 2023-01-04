@@ -12,6 +12,10 @@ Spectral analysis:
 Visualisation:
 
 -Streamlit-based interactive visualisation tool for the result of the line detection
+
+Both local and online (streamlit) version:
+[![Streamlit App](https://static.streamlit.io/badges/streamlit_badge_black_white.svg)](https://visual-line.streamlit.app)
+
 -More specific tools
 
 Simulations:

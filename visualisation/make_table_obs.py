@@ -19,11 +19,10 @@ import numpy as np
 
 
 #custom script with some lines and fit utilities and variables
-from fitting_tools import lines_std,lines_std_names,ravel_ragged,range_absline
+from fitting_tools import range_absline
 
 #visualisation functions
-from visual_line_tools import load_catalogs,dist_mass,obj_values,abslines_values,values_manip,distrib_graph,correl_graph,incl_dic,\
-    n_infos, plot_maxi_lightcurve, telescope_colors, sources_det_dic, dippers_list
+from visual_line_tools import n_infos, obj_values,abslines_values
 
 
 ap = argparse.ArgumentParser(description='Script to display lines in XMM Spectra.\n)')
@@ -35,7 +34,7 @@ ap.add_argument("-cameras",nargs=1,help='Cameras to use for the spectral analysi
 ap.add_argument("-expmodes",nargs=1,help='restrict the analysis to a single type of exposure',default='all',type=str)
 ap.add_argument("-grouping",nargs=1,help='specfile grouping to use in [5,10,20] cts/bin',default='20',type=str)
 ap.add_argument("-prefix",nargs=1,help='restrict analysis to a specific prefix',default='auto',type=str)
-ap.add_argument("-outdir",nargs=1,help="name of output directory for line plots",default="lineplots_multisp_pnv5",type=str)
+ap.add_argument("-outdir",nargs=1,help="name of output directory for line plots",default="lineplots_opt",type=str)
 
 '''DIRECTORY SPECIFICS'''
 
@@ -232,14 +231,14 @@ for i_obj,obj in enumerate(obj_list):
         for i_line in range(6):
             
             #skipping NiKa27
-            if i_line==3:
+            if i_line==2:
                 continue
             
             #significance threshold dichotomy
             if abslines_infos[i_obj][i_exp][4][i_line]<0.997:
                 
-                #adding the upper limit when no significant line is detected, if the upper limit has been computed
-                if abslines_infos[i_obj][i_exp][5][i_line]==0:
+                #adding the upper limit when no significant line is detected, if the upper limit has been computed or is too high
+                if abslines_infos[i_obj][i_exp][5][i_line]==0 or abslines_infos[i_obj][i_exp][5][i_line]>=100:
                     line_list+=['&/']
                 else:
                     line_list+=['&$\leq'+str(round(abslines_infos[i_obj][i_exp][5][i_line]))+'$']
@@ -267,5 +266,5 @@ for i_obj,obj in enumerate(obj_list):
 os.system('mkdir -p glob_batch')
 
 #writing the list in a file
-with open('glob_batch/obs_table.txt','w+') as file:
+with open('glob_batch/obs_table_'+outdir+'.txt','w+') as file:
     file.writelines(line_list)

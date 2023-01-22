@@ -21,6 +21,9 @@ import streamlit as st
 
 import matplotlib as mpl
 import matplotlib.pyplot as plt
+#disabling the warning for many open figures because that's exactly the point of the code
+plt.rcParams.update({'figure.max_open_warning': 0})
+
 import matplotlib.colors as colors
 from matplotlib.lines import Line2D
 from matplotlib.ticker import Locator
@@ -28,7 +31,7 @@ from matplotlib.ticker import MaxNLocator
 import matplotlib.dates as mdates
 
 import time
-from astropy.time import Time
+from astropy.time import Time,TimeDelta
 from copy import deepcopy
 
 #correlation values and uncertainties with MC distribution from the uncertainties
@@ -66,9 +69,8 @@ ap = argparse.ArgumentParser(description='Script to display lines in XMM Spectra
 
 ap.add_argument("-cameras",nargs=1,help='Cameras to use for the spectral analysis',default='all',type=str)
 ap.add_argument("-expmodes",nargs=1,help='restrict the analysis to a single type of exposure',default='all',type=str)
-ap.add_argument("-grouping",nargs=1,help='specfile grouping to use in [5,10,20] cts/bin',default='20',type=str)
 ap.add_argument("-prefix",nargs=1,help='restrict analysis to a specific prefix',default='auto',type=str)
-ap.add_argument("-outdir",nargs=1,help="name of output directory for line plots",default="lineplots_multisp_pnv5",type=str)
+ap.add_argument("-outdir",nargs=1,help="name of output directory for line plots",default="lineplots_opt",type=str)
 
 '''DIRECTORY SPECIFICS'''
 
@@ -107,7 +109,6 @@ Notes:
 
 cameras=args.cameras
 expmodes=args.expmodes
-grouping=args.grouping
 prefix=args.prefix
 local=args.local
 outdir=args.outdir
@@ -182,7 +183,7 @@ norm_par_space=np.concatenate((-np.logspace(np.log10(line_search_norm[1]),np.log
                                 np.logspace(np.log10(line_search_norm[0]),np.log10(line_search_norm[1]),int(line_search_norm[2]/2))))
 norm_nsteps=len(norm_par_space)
 
-if multi_obj==False:
+if not multi_obj:
     
     #assuming the last top directory is the object name
     obj_name=os.getcwd().split('/')[-2]
@@ -224,7 +225,7 @@ telescope_list=('XMM','Chandra','NICER','Suzaku','Swift')
 
 st.sidebar.header('Sample selection')
 #We put the telescope option before anything else to filter which file will be used
-choice_telescope=st.sidebar.multiselect('Telescopes', ('XMM','Chandra','NICER','Suzaku','Swift'),default=('XMM','Chandra','NICER','Suzaku','Swift'))
+choice_telescope=st.sidebar.multiselect('Telescopes', ('XMM','Chandra','NICER','Suzaku','Swift'),default=('XMM','Chandra'))
 
 radio_ignore_full=st.sidebar.radio('Include problematic data (_full) folders',('No','Yes'))
 
@@ -337,7 +338,7 @@ in the abslines_infos_perline form, the order is:
     -each habsorption line
     -the number of sources
     -the number of obs for each source
-    -the info (5 rows, eqw/bshift/delchi/sign)
+    -the info (5 rows, EW/bshift/delchi/sign)
     -it's uncertainty (3 rows, main value/neg uncert/pos uncert,useless for the delchi and sign)
 '''
 
@@ -397,9 +398,6 @@ line_display_str=np.array([r'FeXXV Ka (6.70 keV)',r'FeXXVI  Ka (6.97 keV)','NiXX
 if multi_obj:
     radio_single=st.sidebar.radio('Display options:',('All Objects','Multiple Objects','Single Object'))
     
-    restrict_sources_detection=st.sidebar.checkbox('Restrict to sources with detection')
-    ####Done manually as of now, should be changed
-    
     if radio_single=='Single Object':
         display_single=True
     else:
@@ -411,6 +409,10 @@ if multi_obj:
         display_multi=False
         
     if display_multi:
+        restrict_sources_detection=st.sidebar.checkbox('Restrict to sources with significant detection')
+        ####source with det restriction done manually as of now, should be changed
+        
+    if display_multi:
         with st.sidebar.expander('Source'):
             choice_source=st.multiselect('',options=[elem for elem in obj_list if elem in sources_det_dic] if restrict_sources_detection else obj_list,default=[elem for elem in obj_list if elem in sources_det_dic] if restrict_sources_detection else obj_list)     
         
@@ -418,9 +420,10 @@ if multi_obj:
         #switching to array to keep the same syntax later on
         choice_source=[st.sidebar.selectbox('Source',obj_list)]
 
+####Nickel display is turned off here
 with st.sidebar.expander('Absorption lines restriction'):
     selectbox_abstype=st.multiselect('',
-                    options=line_display_str,default=line_display_str)
+                    options=line_display_str[:2].tolist()+line_display_str[3:].tolist(),default=line_display_str[:2])
 
 #creating the line mask from that
 mask_lines=np.array([elem in selectbox_abstype for elem in line_display_str])
@@ -432,7 +435,7 @@ with st.sidebar.expander('inclination'):
     
     incl_inside=st.checkbox('Only include sources with uncertainties compatible with the current limits',value=False)
     
-    radio_dipper=st.radio('Dipping sources restriction',('Off','Restrict to dippers','Restrict to non-dippers'))
+    radio_dipper=st.radio('Dipping sources restriction',('Off','Add dippers','Restrict to dippers','Restrict to non-dippers'))
     
     
 #not used currently
@@ -452,6 +455,7 @@ restrict_time=st.sidebar.checkbox('Restrict time interval',value=True)
         
 display_source_table=st.sidebar.checkbox('Display source parameters table',value=False)
 
+####Streamlit HID options
 st.sidebar.header('HID options')
 
 #not used right now
@@ -468,7 +472,7 @@ if display_nonsign:
 else:
     restrict_threshold=True
         
-radio_info_cmap=st.sidebar.radio('HID colormap',('Source','Blueshift','Delchi','EQW ratio','Inclination','Time','Instrument','nH'))
+radio_info_cmap=st.sidebar.radio('HID colormap',('Source','Blueshift','Delchi','EW ratio','Inclination','Time','Instrument','nH'))
 
 if radio_info_cmap!='Source':
     display_edgesource=st.sidebar.checkbox('Color code sources in marker edges',value=False)
@@ -485,14 +489,14 @@ else:
     cmap_inclination_limit=False
     cmap_incl_type=1
     
-if radio_info_cmap=='EQW ratio':
-    with st.sidebar.expander('Lines selection for EQW ratio:'):
+if radio_info_cmap=='EW ratio':
+    with st.sidebar.expander('Lines selection for EW ratio:'):
         selectbox_ratioeqw=st.sidebar.multiselect('',options=line_display_str[mask_lines],default=line_display_str[mask_lines][:2])
         
 else:
     selectbox_ratioeqw=''
     
-    checkbox_zoom=st.sidebar.checkbox('Zoom around the displayed elements',value=False)
+checkbox_zoom=st.sidebar.checkbox('Zoom around the displayed elements',value=False)
             
 display_nondet=st.sidebar.checkbox('Display non detection',value=True)
 
@@ -507,7 +511,7 @@ else:
     display_upper=False
     
 if display_single:
-    display_evol_single=st.sidebar.checkbox('Highlight time evolution in the HID',value=True)
+    display_evol_single=st.sidebar.checkbox('Highlight time evolution in the HID',value=False)
                
 save_format=st.sidebar.radio('Graph format:',('pdf','svg','png'))
 
@@ -526,7 +530,7 @@ with st.sidebar.expander('Visualisation'):
     
     display_obj_zerodet=st.checkbox('Color sources with no detection',value=True)
     
-    display_hid_error=st.checkbox('Display errorbar for HID position',value=True)
+    display_hid_error=st.checkbox('Display errorbar for HID position',value=False)
     
     display_central_abs=st.checkbox('Display centers for absorption detections',value=False)
 
@@ -551,6 +555,7 @@ with st.sidebar.expander('Lightcurves'):
     
     plot_lc_monit=st.checkbox('Plot monitoring lightcurve',value=False)
     plot_hr_monit=st.checkbox('Plot monitoring HR',value=False)
+        
     monit_highlight_hid=st.checkbox('Highlight HID coverage',value=False)
     
     if plot_lc_monit or plot_hr_monit:
@@ -569,8 +574,8 @@ with st.sidebar.expander('Lightcurves'):
         Saves the current maxi_graph in a svg (i.e. with clickable points) format.
         '''
         if display_single:
-            fig_lc_monit.savefig(save_dir+'/'+choice_source[0]+'_lc_'+str(round(time.time()))+'.'+save_format,bbox_inches='tight')
-            fig_hr_monit.savefig(save_dir+'/'+choice_source[0]+'_hr_'+str(round(time.time()))+'.'+save_format,bbox_inches='tight')
+            fig_lc_monit.savefig(save_dir+'/'+'LC_'+choice_source[0]+'_'+str(round(time.time()))+'.'+save_format,bbox_inches='tight')
+            fig_hr_monit.savefig(save_dir+'/'+'HR_'+choice_source[0]+'_'+str(round(time.time()))+'.'+save_format,bbox_inches='tight')
             
     st.button('Save current MAXI curves',on_click=save_lc,key='save_lc_key')
     
@@ -595,7 +600,7 @@ ax_hid.set_yscale('log')
 
 '''Dichotomy'''
 
-#fetching the line indexes when plotting eqw ratio as colormap
+#fetching the line indexes when plotting EW ratio as colormap
 eqw_ratio_ids=np.argwhere([elem in selectbox_ratioeqw for elem in line_display_str]).T[0]
 
 #string of the colormap legend for the informations
@@ -603,9 +608,9 @@ radio_info_label=['Blueshift', r'$\Delta\chi^2$', 'Equivalent width ratio']
 
 #masking for restriction to single objects
 if display_single or display_multi:
-    mask_obj_single=np.array([elem in choice_source for elem in obj_list])
+    mask_obj_select=np.array([elem in choice_source for elem in obj_list])
 else:
-    mask_obj_single=np.repeat(True,len(obj_list))
+    mask_obj_select=np.repeat(True,len(obj_list))
     
 #masking the objects depending on inclination
 mask_inclin=[include_noinclin if elem not in incl_dic else getoverlap((incl_dic[elem][0]-incl_dic[elem][1],incl_dic[elem][0]+incl_dic[elem][2]),slider_inclin)>0 for elem in obj_list]
@@ -619,18 +624,26 @@ mask_dippers=np.array([elem in dippers_list for elem in obj_list])
 
 if radio_dipper=='Restrict to dippers':
     mask_inclin=(mask_inclin) & (mask_dippers)
+if radio_dipper=='Add dippers':
+    mask_inclin=(mask_inclin) | (mask_dippers)
 elif radio_dipper=='Restrict to non-dippers':
     mask_inclin=(mask_inclin) & ~(mask_dippers)
+    
 #double mask taking into account both single/multiple display mode and the inclination    
 
-mask_obj_base=(mask_obj_single) & (mask_inclin)
+mask_obj_base=(mask_obj_select) & (mask_inclin)
     
 ####Dates restriction
+
+#time delta to add some leeway to the limits available and avoid directly cropping at the observations
+delta_1y=TimeDelta(365,format='jd')
+delta_1m=TimeDelta(30,format='jd')
+
 if restrict_time:
-    slider_date=st.slider('Dates restriction',min_value=Time(min(ravel_ragged(date_list[mask_obj_base]))).datetime,
-                          max_value=Time(max(ravel_ragged(date_list[mask_obj_base]))).datetime,
-                          value=[Time(min(ravel_ragged(date_list[mask_obj_base]))).datetime,
-                                 Time(max(ravel_ragged(date_list[mask_obj_base]))).datetime])
+    slider_date=st.slider('Dates restriction',min_value=(Time(min(ravel_ragged(date_list[mask_obj_base])))-delta_1y).datetime,
+                          max_value=(Time(max(ravel_ragged(date_list[mask_obj_base])))+delta_1y).datetime,
+                          value=[(Time(min(ravel_ragged(date_list[mask_obj_base])))-delta_1m).datetime,
+                                 (Time(max(ravel_ragged(date_list[mask_obj_base])))+delta_1m).datetime])
 else:
     slider_date=[Time(min(ravel_ragged(date_list[mask_obj_base]))).datetime,
                                  Time(max(ravel_ragged(date_list[mask_obj_base]))).datetime]
@@ -721,7 +734,7 @@ global_sign_data=np.array([subelem for elem in global_plotted_data for subelem i
 cmap_info=mpl.cm.plasma_r if radio_info_cmap not in ['Time','nH'] else mpl.cm.plasma
 
 #normalisation of the colormap
-if radio_cmap_i==1 or radio_info_cmap=='EQW ratio':
+if radio_cmap_i==1 or radio_info_cmap=='EW ratio':
     gamma_colors=1 if radio_cmap_i==1 else 0.5
     cmap_norm_info=colors.PowerNorm(gamma=gamma_colors)
     
@@ -800,25 +813,25 @@ for i_obj,abslines_obj in enumerate(abslines_infos_perobj[mask_obj]):
     obj_val_cmap_sign=np.array(
         [np.nan if len(abslines_obj[0][radio_cmap_i][mask_lines].T[i_obs][mask_sign.T[i_obs]])==0 else\
                                    (max(abslines_obj[0][radio_cmap_i][mask_lines].T[i_obs][mask_sign.T[i_obs]])\
-                                    if radio_info_cmap!='EQW ratio' else\
+                                    if radio_info_cmap!='EW ratio' else\
                                         0 if abslines_obj[0][radio_cmap_i][eqw_ratio_ids[0]].T[i_obs]==0 else \
                                         abslines_obj[0][radio_cmap_i][eqw_ratio_ids[1]].T[i_obs]/\
                                         abslines_obj[0][radio_cmap_i][eqw_ratio_ids[0]].T[i_obs])\
                                    for i_obs in range(len(abslines_obj[0][radio_cmap_i][mask_lines].T))])
 
         
-    #the size is always tied to the EQW
+    #the size is always tied to the EW
     obj_size_sign=np.array([np.nan if len(abslines_obj[0][0][mask_lines].T[i_obs][mask_sign.T[i_obs]])==0 else\
                                max(abslines_obj[0][0][mask_lines].T[i_obs][mask_sign.T[i_obs]])\
                                    for i_obs in range(len(abslines_obj[0][0][mask_lines].T))])
         
     #and we can create the plot mask from it (should be the same wether we take obj_size_sign or the size)
-    if radio_info_cmap!='EQW ratio':
+    if radio_info_cmap!='EW ratio':
         obj_val_mask_sign=~np.isnan(obj_size_sign)
     else:
         obj_val_mask_sign=np.array((~np.isnan(obj_size_sign)).tolist() and (obj_val_cmap_sign!=0).tolist())
     
-    #creating a display order which is the reverse of the eqw size order to make sure we do not hide part the detections
+    #creating a display order which is the reverse of the EW size order to make sure we do not hide part the detections
     obj_order_sign=obj_size_sign[obj_val_mask_sign].argsort()[::-1]
             
     #same thing for all detections
@@ -832,7 +845,7 @@ for i_obj,abslines_obj in enumerate(abslines_infos_perobj[mask_obj]):
              
     obj_val_mask=~np.isnan(obj_size)
 
-    #creating a display order which is the reverse of the eqw size order to make sure we show as many detections as possible
+    #creating a display order which is the reverse of the EW size order to make sure we show as many detections as possible
     obj_order=obj_size[obj_val_mask].argsort()[::-1]
     
     # not used for now                
@@ -978,7 +991,7 @@ for i_obj,abslines_obj in enumerate(abslines_infos_perobj[mask_obj]):
             else:
                 
                 #dynamical limits for the rest
-                if global_colors and radio_info_cmap not in ('EQW ratio','Inclination','Time','nH'):
+                if global_colors and radio_info_cmap not in ('EW ratio','Inclination','Time','nH'):
                     if display_nonsign:
                         elem_scatter.set_clim(vmin=min(global_det_data),vmax=max(global_det_data))
                     else:
@@ -995,7 +1008,7 @@ for i_obj,abslines_obj in enumerate(abslines_infos_perobj[mask_obj]):
             
         #defining the ticks from the currently plotted objects
         
-        if radio_cmap_i==1 or radio_info_cmap=='EQW ratio':
+        if radio_cmap_i==1 or radio_info_cmap=='EW ratio':
 
             cmap_min_sign=1 if min(plotted_colors_var)==0 else min(plotted_colors_var)/abs(min(plotted_colors_var))
 
@@ -1014,7 +1027,7 @@ for i_obj,abslines_obj in enumerate(abslines_infos_perobj[mask_obj]):
             
             #adjusting to round numbers
             
-            if radio_info_cmap=='EQW ratio':
+            if radio_info_cmap=='EW ratio':
 
                 cmap_norm_ticks=np.concatenate((cmap_norm_ticks,np.array([1])))
 
@@ -1073,10 +1086,10 @@ for i_obj,abslines_obj in enumerate(abslines_infos_perobj[mask_obj]):
                 cb.set_label(r'nH ($10^{22}$ cm$^{-1}$)',labelpad=10)
             else:
                 if restrict_threshold:
-                    cb.set_label(('maximal ' if radio_info_cmap!='EQW ratio' else '')+radio_info_label[radio_cmap_i-1].lower()+
+                    cb.set_label(('maximal ' if radio_info_cmap!='EW ratio' else '')+radio_info_label[radio_cmap_i-1].lower()+
                                  ' in significant detections\n for each observation'+cb_add_str,labelpad=10)
                 else:
-                    cb.set_label(('maximal ' if radio_info_cmap!='EQW ratio' else '')+radio_info_label[radio_cmap_i-1].lower()+
+                    cb.set_label(('maximal ' if radio_info_cmap!='EW ratio' else '')+radio_info_label[radio_cmap_i-1].lower()+
                                  ' in all detections\n for each observation'+cb_add_str,labelpad=10)
                  
                     
@@ -1161,7 +1174,7 @@ for i_obj_base,abslines_obj_base in enumerate(abslines_infos_perobj[mask_obj_bas
                                        max(abslines_obj_base[0][5][mask_lines_ul].T[i_obs][~mask_det_ul.T[i_obs]])\
                                            for i_obs in range(len(abslines_obj_base[0][0][mask_lines_ul].T))])
             
-            #creating a display order which is the reverse of the eqw size order to make sure we do not hide part the ul
+            #creating a display order which is the reverse of the EW size order to make sure we do not hide part the ul
             #not needed now that the UL are not filled colorwise
             # obj_order_sign_ul=obj_size_ul[mask_nondet_ul].argsort()[::-1]
             
@@ -1370,7 +1383,7 @@ mpl.rcParams['legend.fontsize']=7
 
 #marker legend
 fig_hid.legend(handles=hid_det_examples,loc='center left',labels=['upper limit' if display_upper else 'non detection ','absorption line detection\n above '+(r'3$\sigma$' if slider_sign==0.997 else str(slider_sign*100)+'%')+' significance','absorption line detection below '+str(slider_sign*100)+' significance.'],title='Markers',
-            bbox_to_anchor=(0.125,0.815) if bigger_text and square_mode else (0.125,0.82),handler_map = {tuple:mpl.legend_handler.HandlerTuple(None)},
+            bbox_to_anchor=(0.690,0.815) if bigger_text and square_mode else (0.125,0.82),handler_map = {tuple:mpl.legend_handler.HandlerTuple(None)},
             handlelength=2,handleheight=2.,columnspacing=1.)
 
 #note: upper left anchor (0.125,0.815)
@@ -1436,9 +1449,11 @@ SOURCE TABLE
 
 if display_source_table:
     
-    df_source_arr=np.array([obj_list,dist_obj_list,mass_obj_list,incl_plot.T[0],incl_plot.T[1],incl_plot.T[2]]).astype(str).T
+    df_source_arr=np.array([obj_list,dist_obj_list,mass_obj_list,incl_plot.T[0],incl_plot.T[1],incl_plot.T[2],
+                           [sum(elem=='XMM') for elem in instru_list],[sum(elem=='Chandra') for elem in instru_list]]).astype(str).T
     
-    df_source=pd.DataFrame(df_source_arr,columns=['source','distance (kpc)','mass (M_sun)','inclination (°)','incl err -','incl err +'])
+    df_source=pd.DataFrame(df_source_arr,columns=['source','distance (kpc)','mass (M_sun)','inclination (°)','incl err -','incl err +',
+                                                  'XMM exposures','Chandra exposures'])
     
     st.dataframe(df_source)
     
@@ -1449,7 +1464,7 @@ flag_noabsline=False
 
 #bin values for all the histograms below
 #for the blueshift and energies the range is locked so we can use a global binning for all the diagrams
-bins_bshift=np.linspace(-5e3,1e4,num=25,endpoint=True)
+bins_bshift=np.linspace(-5e3,1e4,num=31,endpoint=True)
 bins_ener=np.arange(6.,9.,2*line_search_e[2])
 
 #creating restricted ploting arrays witht the current streamlit object and lines selections
@@ -1482,35 +1497,79 @@ dict_linevis['save_dir']=save_dir
 dict_linevis['save_str_prefix']= save_str_prefix
 
 '''''''''''''''''''''
- ####MAXI LIGHTCURVE
+ ####Monitoring
 '''''''''''''''''''''
 if plot_lc_monit:
     
-    fig_lc_monit=plot_lightcurve(dict_linevis,catal_maxi_df,catal_maxi_simbad,choice_source,display_hid_interval=monit_highlight_hid,
-                                     superpose_ew=plot_maxi_ew)
-
-    #wrapper to avoid streamlit trying to plot a None when resetting while loading
-    if fig_lc_monit is not None:
-        st.pyplot(fig_lc_monit)
+    if not display_single:
+        st.text('Lightcurve monitoring plots are restricted to single source mode.')
+        
+    else:
+        fig_lc_monit=plot_lightcurve(dict_linevis,catal_maxi_df,catal_maxi_simbad,choice_source,display_hid_interval=monit_highlight_hid,
+                                         superpose_ew=plot_maxi_ew)
+    
+        #wrapper to avoid streamlit trying to plot a None when resetting while loading
+        if fig_lc_monit is not None:
+            st.pyplot(fig_lc_monit)
 
 if plot_hr_monit:
     
-    fig_hr_monit=plot_lightcurve(dict_linevis,catal_maxi_df,catal_maxi_simbad,choice_source,mode='HR',display_hid_interval=monit_highlight_hid,
-                                     superpose_ew=plot_maxi_ew)
-    # fig_maxi_lc_html = mpld3.fig_to_html(fig_maxi_lc)
-    # components.html(fig_maxi_lc_html,height=500,width=1000)
+    if not display_single:
+        st.text('HR monitoring plots are restricted to single source mode.')
+        
+    else:
+        
+        fig_hr_monit=plot_lightcurve(dict_linevis,catal_maxi_df,catal_maxi_simbad,choice_source,mode='HR',display_hid_interval=monit_highlight_hid,
+                                         superpose_ew=plot_maxi_ew)
+        # fig_maxi_lc_html = mpld3.fig_to_html(fig_maxi_lc)
+        # components.html(fig_maxi_lc_html,height=500,width=1000)
+        
+        #wrapper to avoid streamlit trying to plot a None when resetting while loading
+        if fig_hr_monit is not None:
+            st.pyplot(fig_hr_monit)
 
-    #wrapper to avoid streamlit trying to plot a None when resetting while loading
-    if plot_hr_monit is not None:
-        st.pyplot(fig_hr_monit)
 
-
-if (plot_lc_monit and fig_lc_monit is None) or (plot_hr_monit and fig_hr_monit is None) :
-    st.text('No match in MAXI source list found.')
+if ((plot_lc_monit and fig_lc_monit is None) or (plot_hr_monit and fig_hr_monit is None)) and display_single:
+    st.text('No match in MAXI/RXTE source list found.')
         
 '''''''''''''''''''''
-   ####DIAGRAMS
+   #### Parameter analysis
 '''''''''''''''''''''
+
+with st.sidebar.expander('Parameter analysis'):
+    
+    display_param_withdet=st.checkbox('Restrict parameter analysis to sources with significant detections',value=True)
+    st.header('Distributions')
+    display_distrib=st.checkbox('Plot distributions',value=True)
+    use_distrib_lines=st.checkbox('Show line by line distribution',value=True)
+    split_distrib=st.radio('Split distributions:',('Off','Source','Instrument'),index=1)
+    st.header('Distributions')
+    display_scat_intr=st.checkbox('Correlations between intrinsic parameters',value=True)
+    display_scat_hid=st.checkbox('Correlations with observation parameters',value=False)
+    display_scat_inclin=st.checkbox('Correlations with source parameters',value=False)
+    display_scat_eqwcomp=st.checkbox('Plot EW vs EW correlations',value=False)
+    if display_scat_eqwcomp:        
+        eqwratio_comp=st.multiselect('Lines to compare', [elem for elem in lines_std_names[3:9] if 'abs' in elem],default=lines_std_names[3:5])
+    use_eqwratio=st.checkbox('Add EW ratios as an intrinsic parameter',value=False)
+    if use_eqwratio:
+        eqwratio_type=st.selectbox('Ratio to use',['FeKa26/FeKa25 (Ka)','FeKb26/FeKb25 (Kb)','FeKb25/FeKa25 (25)','FeKb26/FeKa26 (26)'])\
+            .split(' ')[1].replace('(','').replace(')','')
+    use_width=st.checkbox('Add width as an intrinsic parameter',value=False)
+    use_time=st.checkbox('Plot time evolution of intrinsic parameters',value=False)
+    use_lineflux=st.checkbox('Add lineflux as an intrinsic parameter')
+    compute_correl=st.checkbox('Compute Pearson/Spearman for the scatter plots',value=True)
+    display_pearson=st.checkbox('Display Pearson rank',value=False)
+    st.header('Visualisation')
+    radio_color_scatter=st.radio('Scatter plot color options:',('None','Instrument','Source','Time','HR','width','nH'))
+    scale_log_eqw=st.checkbox('Use a log scale for the equivalent width and line fluxes')
+    scale_log_hr=st.checkbox('Use a log scale for the HID parameters',value=True)
+    display_abserr_bshift=st.checkbox('Display absolute blueshift errors for Chandra',value=True)
+    plot_trend=st.checkbox('Display linear trend lines in the scatter plots',value=False)
+    
+    st.header('Upper limits')
+    show_scatter_ul=st.checkbox('Display upper limits in EW plots',value=True if display_single else False)
+    lock_lims_det=not(st.checkbox('Include upper limits in graph bounds computations',value=True))
+        
 
 if compute_only_withdet:
     
@@ -1520,7 +1579,37 @@ if compute_only_withdet:
         elif sum(global_sign_mask)==0:
             st.text('There are no detections for current object/date selection. Cannot compute parameter analysis.')
         st.stop()
+        
+#overwriting the objet mask with sources with detection for parameter analysis if asked to
+if display_param_withdet:
     
+    mask_obj=(np.array([elem in sources_det_dic for elem in obj_list])) & (mask_obj_base)
+
+    #recreating restricted ploting arrays witht the current streamlit object and lines selections    
+    abslines_plot_restrict=deepcopy(abslines_plot)
+    for i_info in range(len(abslines_plot_restrict)):
+        for i_incer in range(len(abslines_plot_restrict[i_info])):
+            abslines_plot_restrict[i_info][i_incer]=abslines_plot_restrict[i_info][i_incer][mask_lines].T[mask_obj].T
+            
+    abslines_ener_restrict=deepcopy(abslines_ener)
+    for i_incer in range(len(abslines_ener_restrict)):
+        abslines_ener_restrict[i_incer]=abslines_ener_restrict[i_incer][mask_lines].T[mask_obj].T
+    
+    width_plot_restrict=deepcopy(width_plot)
+    width_plot_restrict=np.transpose(np.transpose(width_plot_restrict,(1,0,2))[mask_lines].T[mask_obj],(1,2,0))
+    hid_plot_restrict=hid_plot.T[mask_obj].T
+    incl_plot_restrict=incl_plot[mask_obj]
+    
+    #and passing in the dictionnary for use in the functions
+    dict_linevis['mask_obj']=mask_obj
+    dict_linevis['abslines_plot_restrict']=abslines_plot_restrict
+    dict_linevis['abslines_ener_restrict']=abslines_ener_restrict
+    dict_linevis['width_plot_restrict']=width_plot_restrict
+    dict_linevis['hid_plot_restrict']=hid_plot_restrict
+    dict_linevis['incl_plot_restrict']=incl_plot_restrict
+    dict_linevis['display_pearson']=display_pearson
+    dict_linevis['display_abserr_bshift']=display_abserr_bshift
+
 os.system('mkdir -p '+save_dir+'/graphs')
 os.system('mkdir -p '+save_dir+'/graphs/distrib')
 os.system('mkdir -p '+save_dir+'/graphs/intrinsic')
@@ -1532,18 +1621,25 @@ AUTOFIT LINES
 '''
 
 '''Distributions'''
-    
-    
+
 def streamlit_distrib():
-    distrib_eqw=distrib_graph(abslines_plot_restrict,'eqw',dict_linevis,conf_thresh=slider_sign,streamlit=True,bigger_text=bigger_text)
-    distrib_bshift=distrib_graph(abslines_plot_restrict,'bshift',dict_linevis,conf_thresh=slider_sign,streamlit=True,bigger_text=bigger_text)
+    distrib_eqw=distrib_graph(abslines_plot_restrict,'eqw',dict_linevis,conf_thresh=slider_sign,streamlit=True,bigger_text=bigger_text,split=split_distrib)
+    distrib_bshift=distrib_graph(abslines_plot_restrict,'bshift',dict_linevis,conf_thresh=slider_sign,streamlit=True,bigger_text=bigger_text,split=split_distrib)
     distrib_ener=distrib_graph(abslines_plot_restrict,'ener',dict_linevis,abslines_ener_restrict,conf_thresh=slider_sign,streamlit=True,
-                               bigger_text=bigger_text)
+                               bigger_text=bigger_text,split=split_distrib)
     if use_eqwratio:
         distrib_eqwratio=distrib_graph(abslines_plot_restrict,'eqwratio'+eqwratio_type,dict_linevis,conf_thresh=slider_sign,streamlit=True,
-                                       bigger_text=bigger_text)
+                                       bigger_text=bigger_text,split=split_distrib)
+        
     if n_infos>=5 and use_lineflux:
-        distrib_lineflux=distrib_graph(abslines_plot_restrict,'lineflux',dict_linevis,conf_thresh=slider_sign,streamlit=True,bigger_text=bigger_text)
+        distrib_lineflux=distrib_graph(abslines_plot_restrict,'lineflux',dict_linevis,conf_thresh=slider_sign,streamlit=True,bigger_text=bigger_text,split=split_distrib)
+        
+    if use_width:
+        distrib_width=distrib_graph(abslines_plot_restrict,'width',dict_linevis,conf_thresh=slider_sign,streamlit=True,
+                                       bigger_text=bigger_text,split=split_distrib)
+        
+    if use_distrib_lines:
+        distrib_lines=distrib_graph(abslines_plot_restrict,'lines',dict_linevis,conf_thresh=slider_sign,streamlit=True,bigger_text=bigger_text,split=split_distrib)
         
     with st.expander('Distribution graphs'):
         
@@ -1553,6 +1649,12 @@ def streamlit_distrib():
             col_list['eqwratio']=None
         if n_infos>=5 and use_lineflux:
             col_list['lineflux']=None
+
+        if use_distrib_lines:
+            col_list['lines']=None
+            
+        if use_width:
+            col_list['width']=None
             
         st_cols=st.columns(len(col_list))
         
@@ -1574,7 +1676,15 @@ def streamlit_distrib():
         if use_lineflux and n_infos>=5:
             with col_list['lineflux']:
                 st.pyplot(distrib_lineflux)
-    
+        
+        if use_distrib_lines:
+            with col_list['lines']:
+                st.pyplot(distrib_lines)
+                
+        if use_width:
+            with col_list['width']:
+                st.pyplot(distrib_width)
+                
 '''1-1 Correlations'''
 
 '''Intrinsic line parameters'''
@@ -1731,36 +1841,6 @@ def streamlit_scat(mode):
             
 mpl.rcParams.update({'font.size': 14})
 
-#### Streamlit Parameter analysis
-
-with st.sidebar.expander('Parameter analysis'):
-    
-    st.header('Data selection')
-    display_distrib=st.checkbox('Plot distributions')
-    display_scat_intr=st.checkbox('Correlations between intrinsic parameters',value=False)
-    display_scat_hid=st.checkbox('Correlations with observation parameters',value=False)
-    display_scat_inclin=st.checkbox('Correlations with source parameters',value=False)
-    display_scat_eqwcomp=st.checkbox('Plot eqw vs eqw correlations',value=False)
-    if display_scat_eqwcomp:
-        eqwratio_comp=st.multiselect('Lines to compare', [elem for elem in lines_std_names[3:] if 'abs' in elem],default=lines_std[3:5])
-    use_eqwratio=st.checkbox('Add eqw ratios as an intrinsic parameter')
-    if use_eqwratio:
-        eqwratio_type=st.selectbox('Ratio to use',['FeKa26/FeKa25 (Ka)','FeKb26/FeKb25 (Kb)','FeKb25/FeKa25 (25)','FeKb26/FeKa26 (26)'])\
-            .split(' ')[1].replace('(','').replace(')','')
-    use_width=st.checkbox('Plot width evolution of intrinsic parameters',value=False)
-    use_time=st.checkbox('Plot time evolution of intrinsic parameters',value=False)
-    use_lineflux=st.checkbox('Add lineflux as an intrinsic parameter')
-    compute_correl=st.checkbox('Compute Pearson/Spearman for the scatter plots',value=True)
-    
-    st.header('Visualisation')
-    radio_color_scatter=st.radio('Scatter plot color options:',('None','Instrument','Source','Time','HR','width','nH'))
-    scale_log_eqw=st.checkbox('Use a log scale for the equivalent width and line fluxes in scatters')
-    scale_log_hr=st.checkbox('Use a log scale for the HID parameters',value=True)
-    plot_trend=st.checkbox('Display linear trend lines in the scatter plots',value=False)
-    
-    st.header('Upper limits')
-    show_scatter_ul=st.checkbox('Display upper limits in eqw plots',value=True if display_single else False)
-    lock_lims_det=not(st.checkbox('Include upper limits in graph bounds computations',value=True))
 
 #storing arguments to reduce the number of arguments in the scatter plot functions    
 dict_linevis['scale_log_hr']=scale_log_hr

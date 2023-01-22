@@ -20,6 +20,13 @@ If using multi_obj, it is assumed the lineplots directory is outdirf
 
 Changelog:
 
+V 1.0(10:01:23):
+    -strong line modeling implemented with laor
+    -added options to manually select the ftest threshold and a ftest leeway (for initial comp additions) in the autofit
+    -added the option to split (or not) the components when fitting (turning it off when using laor helps tremendously)
+    -fixed issue when using an empty string as line_ig 
+    -fixed various issues
+    
 V X(26:12:22):
     -restricting cont_powerlaw gamma to [1,3] instead of [0,4]
     -restricting diskbb kt to at least somewhat constrained values
@@ -131,8 +138,8 @@ ap = argparse.ArgumentParser(description='Script to detect lines in XMM Spectra.
 
 '''GENERAL OPTIONS'''
 
-ap.add_argument('-satellite',nargs=1,help='telescope to fetch spectra from',default='XMM',type=str)
-ap.add_argument("-cameras",nargs=1,help='Cameras to use for spectral analysis',default='pn',type=str)
+ap.add_argument('-satellite',nargs=1,help='telescope to fetch spectra from',default='Chandra',type=str)
+ap.add_argument("-cameras",nargs=1,help='Cameras to use for spectral analysis',default='hetg',type=str)
 ap.add_argument("-expmodes",nargs=1,help='restrict the analysis to a single type of exposure',default='all',type=str)
 ap.add_argument("-grouping",nargs=1,help='specfile grouping for XMM spectra in [5,10,20] cts/bin',default='opt',type=str)
 
@@ -141,7 +148,8 @@ ap.add_argument('-fitstat',nargs=1,help='fit statistic to be used for the spectr
 ap.add_argument("-prefix",nargs=1,help='restrict analysis to a specific prefix',default='auto',type=str)
 
 ####output directory
-ap.add_argument("-outdir",nargs=1,help="name of output directory for line plots",default="lineplots_opt_max_width",type=str)
+ap.add_argument("-outdir",nargs=1,help="name of output directory for line plots",
+                default="lineplots_opt",type=str)
 
 #overwrite
 ap.add_argument('-overwrite',nargs=1,
@@ -167,8 +175,12 @@ ap.add_argument('-xspec_window',nargs=1,help='xspec window id (auto tries to pic
 
 ap.add_argument('-pre_reduced_NICER',nargs=1,help='change NICER data format to pre-reduced obsids',default=False,type=bool)
 
-####autofit model
-ap.add_argument('-autofit_model',nargs=1,help='model list to use for the autofit computation',default='lines_narrow',type=str)
+#### Models and abslines lock
+ap.add_argument('-cont_model',nargs=1,help='model list to use for the autofit computation',default='cont',type=str)
+ap.add_argument('-autofit_model',nargs=1,help='model list to use for the autofit computation',default='lines_resolved',type=str)
+ap.add_argument('-no_abslines',nargs=1,help='turn off absorption lines addition in the fit (still allows for UL computations)',
+                default=False,type=str)
+
 
 '''DIRECTORY SPECIFICS'''
 
@@ -178,20 +190,57 @@ ap.add_argument("-h_update",nargs=1,help='update the bg, rmf and arf file names 
 
 '''####ANALYSIS RESTRICTION'''
 
-ap.add_argument('-restrict',nargs=1,help='restrict the computation to a number of predefined exposures',default=True,type=bool)
+ap.add_argument('-restrict',nargs=1,help='restrict the computation to a number of predefined exposures',default=False,type=bool)
 #in this mode, the line detection function isn't wrapped in a try, and the summary isn't updasted
 
-observ_restrict=['0506161201_pn_U002_Timing_auto_sp_src_grp_opt.ds',
-    '0506161101_pn_S001_Timing_auto_sp_src_grp_opt.ds']
+observ_restrict=['10661_heg_-1_grp_opt.pha','10661_heg_1_grp_opt.pha']
 
-'''    
-GRS strong curvature spectra
+''' 
+Chandra:
+-GRS:
+Low-E spectrum:
+    ['660_heg_-1_grp_opt.pha','660_heg_1_grp_opt.pha']
+Need no abs:
+    ['4587_heg_-1_grp_opt.pha','4587_heg_1_grp_opt.pha']
+
+-4U1630-47:
+    ['22377_heg_-1_grp_opt.pha','22377_heg_1_grp_opt.pha',
+     '22378_heg_-1_grp_opt.pha','22378_heg_1_grp_opt.pha']
+
+MAXIJ1535:
+spectra with start at 2 keV to avoid issues issues with the continuum due to response errors + -1 order only
+'20203_heg_-1_grp_opt.pha','20203_heg_1_grp_opt.pha',
+ '20204_heg_-1_grp_opt.pha','20204_heg_1_grp_opt.pha',
+ '20205_heg_-1_grp_opt.pha','20205_heg_1_grp_opt.pha'
+ 
+XTEJ1817-330:
+only one order:
+    ['6615_heg_-1_grp_opt.pha','6615_heg_1_grp_opt.pha',
+     '6616_heg_-1_grp_opt.pha','6616_heg_1_grp_opt.pha',
+     '6617_heg_-1_grp_opt.pha','6617_heg_1_grp_opt.pha']
+
+lim at 8keV due to CC graded:
+    '6618_heg_-1_grp_opt.pha','6618_heg_1_grp_opt.pha'
+    
+
+ 
+
+XMM:   
+-GRS strong curvature spectra
     ['0506161201_pn_U002_Timing_auto_sp_src_grp_opt.ds',
     '0506161101_pn_S001_Timing_auto_sp_src_grp_opt.ds']
     
-GROJ strong curve
+-GROJ strong curve
 '0155762601_pn_S001_Timing_auto_sp_src_grp_opt.ds'
 
+-4U strong curvature need leeway at 0.02
+'0670671501_pn_U014_Timing_auto_sp_src_grp_opt.ds'
+
+-GX339-4 need no abs
+-'0605610201_pn_S003_Timing_auto_sp_src_grp_opt.ds'
+
+------------
+old:
 4U spectra where need to test noem 
 '4568_heg_-1_grp_opt.pha','4568_heg_1_grp_opt.pha'
     '22377_heg_-1_grp_opt.pha','22377_heg_1_grp_opt.pha'
@@ -234,13 +283,13 @@ ap.add_argument('-skip_started',nargs=1,help='skip all exposures listed in the l
 #note : will skip exposures for which the exposure didn't compute or with errors
 
 ap.add_argument('-skip_complete',nargs=1,help='skip completed exposures listed in the local summary_line_det file',
-                default=False,type=bool)
+                default=True,type=bool)
 
 ap.add_argument('-skip_nongrating',nargs=1,help='skip non grating Chandra obs (used to reprocess with changes in the restrictions)',
                 default=False,type=bool)
 
-ap.add_argument('-write_pdf',nargs=1,help='overwrite finished pdf at the end of the line detection',default=True,type=bool)
-
+ap.add_argument('-write_pdf',nargs=1,help='overwrite finished pdf at the end of the line detection',
+                default=True,type=bool)
 
 '''MODES'''
 
@@ -258,6 +307,8 @@ ap.add_argument('-autofit',nargs=1,help='enable auto fit with lines if the peak 
 
 ap.add_argument('-refit_cont',nargs=1,help='After the autofit, refit the continuum without excluding the iron region, using the lines found during the procedure, then re-estimate the fit parameters and HID.',default=True)
 
+####split fit
+ap.add_argument('-split_fit',nargs=1,help='Split fitting procedure between components instead of fitting the whole model directly',default=True)
 #line significance assessment parameter
 ap.add_argument('-assess_line',nargs=1,help='use fakeit simulations to estimate the significance of each absorption line',default=True,type=bool)
 
@@ -273,8 +324,11 @@ ap.add_argument("-pmiss",nargs=1,help='include spectra with no pileup info',defa
 ap.add_argument("-hid_cont_range",nargs=1,help='min and max energies of the hid band fit',default='3 10',type=str)
 
 ap.add_argument("-line_cont_range",nargs=1,help='min and max energies of the line continuum broand band fit',default='4 10',type=str)
+
+#### line cont ig
 ap.add_argument("-line_cont_ig_arg",nargs=1,help='min and max energies of the ignore zone in the line continuum broand band fit',
                 default='iron',type=str)
+
 ap.add_argument("-line_search_e",nargs=1,help='min, max and step of the line energy search',default='4 10 0.05',type=str)
 
 ap.add_argument("-line_search_norm",nargs=1,help='min, max and nsteps (for one sign)  of the line norm search (which operates in log scale)',
@@ -285,6 +339,10 @@ ap.add_argument('-restrict_fakes',nargs=1,help='restrict range of fake computati
 
 #Chandra issues
 ap.add_argument('-restrict_graded',nargs=1,help='restrict range of line analysis to 8keV max for old CC33_graded spectra',default=False,type=bool)
+
+#### restrict order
+ap.add_argument('-restrict_order',nargs=1,help='restrict HETG spectral analysis to the -1 order only',
+                default=False,type=bool)
 
 '''PEAK/MC DETECTION PARAMETERS'''
 
@@ -361,6 +419,8 @@ refit_cont=args.refit_cont
 launch_cpd=args.launch_cpd
 pdf_only=args.pdf_only
 glob_summary_save_line_infos=args.line_infos_pdf
+restrict_order=args.restrict_order
+no_abslines=args.no_abslines
 
 outdir=args.outdir
 pileup_lim=args.pileup_lim
@@ -382,6 +442,8 @@ paper_look=args.paper_look
 plot_mode=args.plot_mode
 log_console=args.log_console
 fitstat=args.fitstat
+cont_model=args.cont_model
+split_fit=args.split_fit
 
 #assessing upper limits require the autofit to proceed
 if assess_ul_detec:
@@ -575,7 +637,7 @@ if sat in ['XMM','NICER','Suzaku','Swift']:
     else:
         e_sat_low=0.3
     if sat in ['XMM','Suzaku','Swift']:
-        if sat=='XMM':
+        if sat=='XMM':  
             e_sat_low=2.
             
         e_sat_high_init=10.
@@ -611,6 +673,8 @@ if line_cont_ig_arg=='iron':
                         
     else:
         line_cont_ig='6.-8.'
+else:
+    line_cont_ig=''
         
 if local==False:
     os.chdir('bigbatch')
@@ -1386,14 +1450,16 @@ def line_detect(epoch_id):
     elif sat=='Chandra':
         
         #loading both 1st order grating of the HETG
-        AllData('1:1 '+epoch_files[0]+' 2:2 '+epoch_files[1])
+        AllData('1:1 '+epoch_files[0]+('' if restrict_order else ' 2:2 '+epoch_files[1]))
         
         #should not be needed
         # AllData(1).response=epoch_files[0].replace('_grp_opt.pha','.rmf')
         # AllData(2).response=epoch_files[1].replace('_grp_opt.pha','.rmf')
         
         AllData(1).response.arf=epoch_files[0].replace('_grp_opt.pha','.arf')
-        AllData(2).response.arf=epoch_files[1].replace('_grp_opt.pha','.arf')
+        
+        if not restrict_order:
+            AllData(2).response.arf=epoch_files[1].replace('_grp_opt.pha','.arf')
         
         #screening the spectra
         AllData.ignore('**-'+str(e_sat_low)+' '+str(e_sat_high)+'-**')
@@ -1489,7 +1555,7 @@ def line_detect(epoch_id):
                            ') in HID detection range.')
             
     #creating the continuum model list
-    comp_cont=model_list('cont')
+    comp_cont=model_list(cont_model)
     
     #taking off the constant factor if there's only one data group
     if AllData.nGroups==1:
@@ -1536,7 +1602,7 @@ def line_detect(epoch_id):
             
         # try:
             #fitting
-        fitcont_high.global_fit()
+        fitcont_high.global_fit(split_fit=split_fit)
         
         # mod_fitcont=allmodel_data()
         
@@ -1553,7 +1619,7 @@ def line_detect(epoch_id):
         
         # try:
         #     #fitting
-        #     fitcont_high_bkn.global_fit()
+        #     fitcont_high_bkn.global_fit(split_fit=split_fit))
             
         #     chi2_cont_bkn=Fit.statistic
         # except:
@@ -1570,7 +1636,8 @@ def line_detect(epoch_id):
                 
         
         #renoticing the line energy range
-        AllData.notice(line_cont_ig)
+        if line_cont_ig!='':
+            AllData.notice(line_cont_ig)
 
         #saving the model data to reload it after the broad band fit if needed
         mod_high_dat=allmodel_data()
@@ -1702,8 +1769,9 @@ def line_detect(epoch_id):
         spflux_single=np.array(spflux_single)
         
         AllChains.clear()
-        
-        AllData.notice(line_cont_ig)
+
+        if line_cont_ig!='':
+            AllData.notice(line_cont_ig)
         
         store_fit(mode='broadhid'+add_str,fitmod=fitmodel)
         
@@ -1766,7 +1834,7 @@ def line_detect(epoch_id):
         
         # try:
         #fitting
-        fitcont_broad.global_fit()
+        fitcont_broad.global_fit(split_fit=split_fit)
         
         mod_fitcont=allmodel_data()
         
@@ -1782,7 +1850,7 @@ def line_detect(epoch_id):
         
         # try:
         #     #fitting
-        #     fitcont_broad_bkn.global_fit()
+        #     fitcont_broad_bkn.global_fit(split_fit=split_fit))
             
         #     chi2_cont_bkn=Fit.statistic
         # except:
@@ -1798,13 +1866,14 @@ def line_detect(epoch_id):
         #     if chi2_cont<chi2_cont_bkn:
         #         model_load(mod_fitcont)
 
-        #storing the absorption of the broad fit
-        if fitcont_broad.glob_phabs.included:
+        #storing the absorption of the broad fit if there is absorption
+        if 'glob_phabs' in fitcont_broad.name_complist and fitcont_broad.glob_phabs.included:
             broad_absval=AllModels(1)(fitcont_broad.glob_phabs.parlist[0]).values[0]
         else:
             broad_absval=0
             
-        AllData.notice(line_cont_ig)
+        if line_cont_ig!='':
+            AllData.notice(line_cont_ig)
         
         store_fit(mode='broadband',fitmod=fitcont_broad)
         
@@ -1830,7 +1899,7 @@ def line_detect(epoch_id):
         
         # try:
         #fitting
-        fitcont_hid.global_fit()
+        fitcont_hid.global_fit(split_fit=split_fit)
         
         mod_fitcont=allmodel_data()
         
@@ -1846,7 +1915,7 @@ def line_detect(epoch_id):
         
         # try:
         #     #fitting
-        #     fitcont_hid_bkn.global_fit()
+        #     fitcont_hid_bkn.global_fit(split_fit=split_fit))
             
         #     chi2_cont_bkn=Fit.statistic
         # except:
@@ -1886,9 +1955,6 @@ def line_detect(epoch_id):
         
     #creation of the eqwidth conversion variable
     eqwidth_conv=np.zeros(len(line_search_e_space))
-
-    #for the line plots we don't need the background nor the rest anymore
-    Plot.background=False
     
     #re-limiting to the line search energy range
     AllData.notice('all')
@@ -1910,6 +1976,11 @@ def line_detect(epoch_id):
         2D delchi map
         '''
         
+        curr_plot_bg_state=Plot.background
+        
+        #for the line plots we don't need the background
+        Plot.background=False
+    
         #defining the chi array for each epoch
         chi_arr=np.zeros((len(line_search_e_space),norm_nsteps))
 
@@ -2198,6 +2269,9 @@ def line_detect(epoch_id):
         plt.savefig(outdir+'/'+epoch_observ[0]+'_'+suffix+'_line_comb_plot_'+args.line_search_e.replace(' ','_')+'_'+args.line_search_norm.replace(' ','_')+'.png')
         plt.close(figure_comb)
         
+        #putting the background plotting to its previous state
+        Plot.background=curr_plot_bg_state
+        
         if suffix=='cont':
             return is_abspeak,peak_points,peak_widths,peak_delchis,peak_eqws
 
@@ -2232,7 +2306,8 @@ def line_detect(epoch_id):
         fitlines=fitmod(comp_lines,curr_logfile,curr_logfile_write,prev_fitmod=fitmod_cont)
         
         #global fit
-        fitlines.global_fit(chain=True,directory=outdir,observ_id=epoch_observ[0])
+        fitlines.global_fit(chain=True,directory=outdir,observ_id=epoch_observ[0],split_fit=split_fit,
+                            no_abslines=no_abslines)
             
         #storing the final fit
         data_autofit=allmodel_data()
@@ -2288,7 +2363,7 @@ def line_detect(epoch_id):
             calc_fit(logfile=fitlines.logfile)
             
             #autofit
-            fitlines.global_fit(chain=True,lock_lines=True,directory=outdir,observ_id=epoch_observ[0])
+            fitlines.global_fit(chain=True,lock_lines=True,directory=outdir,observ_id=epoch_observ[0],split_fit=split_fit)
             
             AllChains.clear()
             
@@ -2316,7 +2391,7 @@ def line_detect(epoch_id):
             calc_fit(logfile=fitlines.logfile)
             
             #autofit
-            fitlines.global_fit(chain=True,lock_lines=True,directory=outdir,observ_id=epoch_observ[0])
+            fitlines.global_fit(chain=True,lock_lines=True,directory=outdir,observ_id=epoch_observ[0],split_fit=split_fit)
                 
             AllChains.clear()
             main_spflux=hid_fit_infos(fitlines,broad_absval,post_autofit=True)
@@ -2342,7 +2417,8 @@ def line_detect(epoch_id):
             calc_fit(logfile=fitlines.logfile)
             
             #autofit
-            fitlines.global_fit(chain=True,directory=outdir,observ_id=epoch_observ[0])
+            fitlines.global_fit(chain=True,directory=outdir,observ_id=epoch_observ[0],split_fit=split_fit,
+                                no_abslines=no_abslines)
             
             #storing the final fit
             data_autofit=allmodel_data()
@@ -2891,7 +2967,7 @@ def line_detect(epoch_id):
 
         #here will need to reload an accurate model before updating the fitcomps
         '''HTML TABLE FOR the pdf summary'''
-                    
+            
         def html_table_maker():
             
             def strmaker(value_arr,is_overlap=False):
@@ -3471,9 +3547,14 @@ def update_graph(val=None):
     if disp_chi2:
         ax_cb=plt.axes([0.92, 0.25, 0.02, 0.63])
         
-    width_lim=slider_width.val
-    elim_low=slider_e.val[0]
-    elim_high=slider_e.val[1]
+    width_lim=100
+    #width_lim=slider_width.val
+    
+    elim_low=0
+    elim_high=100
+        
+    # elim_low=slider_e.val[0]
+    # elim_high=slider_e.val[1]
     
     ax_hid.clear()
     
@@ -3508,6 +3589,7 @@ def update_graph(val=None):
         #passing objects which do not have any point
         if len(lineval_list[o])==0:
                continue
+           
         ind_line_pos=[]
         ind_line_neg=[]
         max_delchi_pos=[]
@@ -3527,7 +3609,7 @@ def update_graph(val=None):
             curr_max_eqw_neg=[]
             
             for j,peaks in enumerate(values[0]):
-                if peaks in np.argwhere(line_search_e_space>=elim_low) and peaks in np.argwhere(line_search_e_space<=elim_high):
+                if 1:
                     
                     #limiting the detection depending on the width of the line
                     if values[2][j]*line_search_e[2]<=width_lim:
@@ -3650,8 +3732,12 @@ def update_graph(val=None):
         #in obj color mode we plot one object per label so we reset the label counter at each object
         label_obj_plotted=0
         
-        if ind_noline_list[o]!=[]:
+        #passing objects which do not have any point
+        if len(flux_list[o])==0:
+
+            continue
             
+        else:
             #label definition
             if disp_chi2 and label_noline_plotted==0:                    
                     label_noline='no detection above 3 sigma'
@@ -3669,8 +3755,7 @@ def update_graph(val=None):
                                                      marker=marker_noline,s=size_noline,color='grey' if disp_chi2 else cmap_vars_plasma[o],
                                                      label=label_noline)
             # scatter_noline[o].set_urls(link_list[o][ind_noline_list[o]])
-        
-        
+            
         #scatter plot for the absorption lines
         if ind_line_neg_list[o]!=[]:
             
@@ -3760,16 +3845,17 @@ def update_graph(val=None):
 
     #setting the limits of the graph
     
-    #limits of the points
-    hid_min_x=min([min(flux_list[i].T[2][0]/flux_list[i].T[1][0]) for i in range(len(flux_list))])
-    hid_max_x=max([max(flux_list[i].T[2][0]/flux_list[i].T[1][0]) for i in range(len(flux_list))])
-    
-    hid_min_y=min([min(flux_list[i].T[4][0]) for i in range(len(flux_list))])
-    hid_max_y=max([max(flux_list[i].T[4][0]) for i in range(len(flux_list))])
-    
-    #putting the axis limits at standard bounds or the points if the points extend further
-    ax_hid.set_xlim((min(hid_min_x*0.9,0.1),max(hid_max_x*1.1,3)))
-    ax_hid.set_ylim((min(hid_min_y*0.9,1e-5),max(hid_max_y*1.1,1)))
+    if len(flux_list[o])>0:
+        #limits of the points
+        hid_min_x=min([min(flux_list[i].T[2][0]/flux_list[i].T[1][0]) for i in range(len(flux_list))])
+        hid_max_x=max([max(flux_list[i].T[2][0]/flux_list[i].T[1][0]) for i in range(len(flux_list))])
+        
+        hid_min_y=min([min(flux_list[i].T[4][0]) for i in range(len(flux_list))])
+        hid_max_y=max([max(flux_list[i].T[4][0]) for i in range(len(flux_list))])
+        
+        #putting the axis limits at standard bounds or the points if the points extend further
+        ax_hid.set_xlim((min(hid_min_x*0.9,0.1),max(hid_max_x*1.1,3)))
+        ax_hid.set_ylim((min(hid_min_y*0.9,1e-5),max(hid_max_y*1.1,1)))
     
     
     if disp_chi2: 
@@ -3809,6 +3895,8 @@ def update_graph(val=None):
                handlelength=6,handleheight=4,columnspacing=1.1)
     fig_hid.show()
     
+    return fig_hid
+    
 slider_width.on_changed(update_graph)
 slider_e.on_changed(update_graph)
 
@@ -3845,8 +3933,10 @@ else:
     ax_save_pdf=plt.axes([0.03,0.025,0.1,0.04])
     
 button_save_pdf=Button(ax_save_pdf,'Save pdf',hovercolor='grey')
+
+fig_hid_base=1
     
-def save_pdf(event=None):
+def save_pdf(event=None,fig=fig_hid_base):
     
     '''
     Saves a global PDF with, for each currently drawn point, a copy of the figure with the point highlighted, and the associated PDF
@@ -3867,8 +3957,10 @@ def save_pdf(event=None):
     '''
             
     #fetching the axe
-    ax_hid=plt.gca().get_figure().get_axes()[0]
-    
+    if fig is not None:
+        ax_hid=plt.gca().get_figure().get_axes()[0]
+    else:
+        ax_hid=fig.get_axes()[0]
     #fetching the (up to 3) Path Collections of the scatter plots
     linecols_hid=[elem for elem in ax_hid.get_children()[:3] if type(elem)==mpl.collections.PathCollection]
     
@@ -4236,7 +4328,7 @@ if flag_noexp and not multi_obj:
     save_pdf()
     sys.exit()
 else:
-    update_graph()
+    fig_hid_base=update_graph()
     
 '''''''''''''''''''''
       DIAGRAMS

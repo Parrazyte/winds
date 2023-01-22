@@ -18,9 +18,9 @@ sign_delchis_table=[6.63,9.21,11.34,13.28,15.09,16.81,18.48,20.09,21.67,23.21]
 #same with 99.7% (3 sigma)
 sign_3sig_delchi_stable=[8.81]
 
-ftest_threshold=0.01
+def_ftest_threshold=0.01
 
-ftest_leeway=0.01
+def_ftest_leeway=0.02
 
 def ravel_ragged(array):
     
@@ -78,7 +78,7 @@ lines_e_dict={
                   'FeKa25abs':[6.7,-5000,10000],
                   'FeKa26abs':[6.97,-5000,10000],
                   'NiKa27abs':[7.8,-5000,3000],
-                  'FeKb25abs':[7.89,-5000,10000],
+                  'FeKb25abs':[7.88,-5000,10000],
                   'FeKb26abs':[8.25,-5000,10000],
                   'FeKg26abs':[8.7,-5000,10000],
                   #these 4 are put at the end so they are not used in fakes computation etc since the computation will stop 
@@ -124,37 +124,54 @@ lines_w_dict={
                 'FeKaem':[0.3,0.2,0.5],
                 'FeKbem':[0.3,0.2,0.5],
                 'FeDiazem':[0.2,0.1,1.5],
-                  'FeKa25abs':[1e-3,0.,0.05],
-                  'FeKa26abs':[1e-3,0.,0.05],
-                  'NiKa27abs':[1e-3,0.,0.05],
-                  'FeKb25abs':[1e-3,0.,0.05],
-                  'FeKb26abs':[1e-3,0.,0.05],
-                  'FeKg26abs':[1e-3,0.,0.05],
-                  
-                  #these are emission lines and thus can have bigger widths even without being broad
-                  'FeKa0em':[1e-3,0.,0.05],
-                  'FeKb0em':[1e-3,0.,0.05],
-                  'FeKa25em':[1e-3,0.,0.5],
-                  'FeKa26em':[1e-3,0.,0.5],
+                #note: starting with 1e-3 can make the fit gets stuck at 0 width (doesn't get out even with errors) although higher width values
+                #are improving
+                
+                  'FeKa25abs':[1e-2,0.,0.05],
+                  'FeKa26abs':[1e-2,0.,0.05],
+                  'NiKa27abs':[1e-2,0.,0.05],
+                  'FeKb25abs':[1e-2,0.,0.05],
+                  'FeKb26abs':[1e-2,0.,0.05],
+                  'FeKg26abs':[1e-2,0.,0.05],
+                  #these are emission lines and thus we let some have bigger widths even without being broad
+                  'FeKa0em':[1e-2,0.,0.05],
+                  'FeKb0em':[1e-2,0.,0.05],
+                  'FeKa25em':[1e-2,0.,0.05],
+                  'FeKa26em':[1e-2,0.,0.05],
                   }
-
-# lines_broad_w_dict={
-#                   'FeKa0em':[0.3,0.2,0.7],
-#                   'FeKb0em':[0.3,0.2,0.7],
-#                   'FeKa25em':[0.3,0.2,0.7],
-#                   'FeKa26em':[0.3,0.2,0.7],
-#                   }
 
 lines_broad_w_dict={
-                  'FeKa0em':[0.3,0.2,1.5],
-                  'FeKb0em':[0.3,0.2,1.5],
-                  'FeKa25em':[0.3,0.2,1.5],
-                  'FeKa26em':[0.3,0.2,1.5],
+                  'FeKa0em':[0.3,0.2,0.7],
+                  'FeKb0em':[0.3,0.2,0.7],
+                  'FeKa25em':[0.3,0.2,0.7],
+                  'FeKa26em':[0.3,0.2,0.7],
                   }
+
+#for V404/V4641
+# lines_broad_w_dict={
+#                   'FeKa0em':[0.3,0.2,1.],
+#                   'FeKb0em':[0.3,0.2,1.],
+#                   'FeKa25em':[0.3,0.2,1.],
+#                   'FeKa26em':[0.3,0.2,1.],
+#                   }
+
+# lines_broad_w_dict={
+#                   'FeKa0em':[0.3,0.2,1.5],
+#                   'FeKb0em':[0.3,0.2,1.5],
+#                   'FeKa25em':[0.3,0.2,1.5],
+#                   'FeKa26em':[0.3,0.2,1.5],
+#                   }
 
 #link groups to tie line energies together
 link_groups=np.array([['FeKa25abs','FeKb25abs'],['FeKa26abs','FeKb26abs','FeKg26abs'],['NiKa27abs']],dtype=object)
 
+def ang2kev(x):
+
+    '''note : same thing on the other side due to the inverse
+    
+    also same thing for mAngtoeV'''
+
+    return 12.398/x
 
 def model_list(model_id='lines',give_groups=False):
     
@@ -197,27 +214,47 @@ def model_list(model_id='lines',give_groups=False):
         
     if model_id=='lines_laor':
         '''
-        subset of lines_narrow for spectra with huge emission
+        subset of lines_narrow for spectra with huge emission in continuum. No emission line is allowed here
         '''
-        avail_comps=['FeKa_laor',
-                      'FeKa25abs_nagaussian','FeKa26abs_nagaussian','NiKa27abs_nagaussian',
+        avail_comps=['FeKa25abs_nagaussian','FeKa26abs_nagaussian','NiKa27abs_nagaussian',
                       'FeKb25abs_nagaussian','FeKb26abs_nagaussian','FeKg26abs_nagaussian']
         
-    #old stuff
-    
     if model_id=='lines_emiwind':
         
         '''
         Model to test residuals with emission lines only in neutral wind emitters (V404 Cyg & V4641 Sgr)
         
         Contains :
-            -two broad neutral emission components
-            -4 narrow emission line components
+            -1 broad neutral emission component
+            -4 "narrow-ish" emission line components
+            -6 "narrow-ish" absorption line components (can be disabled with no_abslines in the main script
         '''
 
-        avail_comps=['FeKaem_gaussian','FeKa0em_gaussian','FeKbem_gaussian','FeKb0em_ngaussian','FeKa25em_gaussian','FeKa26em_gaussian']
+        avail_comps=['FeKa0em_bgaussian','FeKa0em_gaussian','FeKb0em_gaussian','FeKa25em_gaussian','FeKa26em_gaussian',
+                     'FeKa25abs_nagaussian','FeKa26abs_nagaussian','NiKa27abs_nagaussian',
+                                   'FeKb25abs_nagaussian','FeKb26abs_nagaussian','FeKg26abs_nagaussian']
         
+    if model_id=='cont_laor':
 
+        '''
+        subset of continuum for spectra with huge emission
+        '''
+
+        avail_comps=['glob_constant','glob_phabs','cont_diskbb','cont_powerlaw','FeKa_laor']
+        
+        interact_groups=avail_comps
+    
+    if model_id=='cont':
+        
+        avail_comps=['glob_constant','glob_phabs','cont_diskbb','cont_powerlaw']
+        
+        interact_groups=avail_comps      
+
+    if model_id=='cont_noabs':
+        
+        avail_comps=['glob_constant','cont_diskbb','cont_powerlaw']
+        
+        interact_groups=avail_comps   
     
     if model_id=='lines':
         
@@ -265,13 +302,7 @@ def model_list(model_id='lines',give_groups=False):
         avail_comps=['FeDiaz_gaussian',
                      'FeKa25abs_nagaussian','FeKa26abs_nagaussian','NiKa27abs_nagaussian',
                       'FeKb25abs_nagaussian','FeKb26abs_nagaussian','FeKg26abs_nagaussian']
-    
-    if model_id=='cont':
-        
-        avail_comps=['glob_constant','glob_phabs','cont_diskbb','cont_powerlaw']
-        
-        interact_groups=avail_comps
-        
+            
     if model_id=='cont_bkn':
         avail_comps=['bknpow','glob_phabs']
         

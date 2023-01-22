@@ -13,7 +13,7 @@ import os
 import time
 import numpy as np
 
-def regroup_XMM_spectra(extension='sp_src.ds',group='optmin_20',camera='pn',skip_started=True):
+def regroup_XMM_spectra(extension='sp_src.ds',group='opt',camera='pn',skip_started=True):
     
     '''To be launched above the folders where to regroup'''
             

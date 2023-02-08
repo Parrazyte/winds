@@ -166,6 +166,10 @@ def getoverlap(a, b):
 
 '''initialisation'''
 
+#global normalisations values for the points
+norm_s_lin=5
+norm_s_pow=1.15
+
 # #for the current directory:
 # started_expos,done_expos=folder_state()
  
@@ -695,7 +699,9 @@ if global_colors:
     #objects colormap
     norm_colors_obj=mpl.colors.Normalize(vmin=0,vmax=len(abslines_infos_perobj)+1)
     colors_obj=mpl.cm.ScalarMappable(norm=norm_colors_obj,cmap=mpl.cm.hsv)
-
+    #the date is an observation-level parameter so it needs to be repeated to have the same dimension as the other global variables
+    global_plotted_datetime=np.array([elem for elem in date_list for i in range(sum(mask_lines))],dtype='object')
+    
 else:
     global_plotted_sign=abslines_plot[4][0][mask_lines].T[mask_obj].ravel()
     global_plotted_data=abslines_plot[radio_cmap_i][0][mask_lines].T[mask_obj].ravel()
@@ -906,7 +912,7 @@ for i_obj,abslines_obj in enumerate(abslines_infos_perobj[mask_obj]):
         #displaying "significant only" cmaps/sizes
         scat_col+=[ax_hid.scatter(x_hid[obj_val_mask_sign][obj_order_sign],y_hid[obj_val_mask_sign][obj_order_sign],
                                   marker=marker_abs,color=colors_obj.to_rgba(i_obj_glob) if radio_info_cmap=='Source' else None,
-        c=c_scat,s=5*obj_size_sign[obj_val_mask_sign][obj_order_sign]**1.15,
+        c=c_scat,s=norm_s_lin*obj_size_sign[obj_val_mask_sign][obj_order_sign]**norm_s_pow,
                        edgecolor='black' if not display_edgesource else colors_obj.to_rgba(i_obj_glob),
                        linewidth=1+int(display_edgesource)/2,
                        norm=cmap_norm_info,
@@ -923,7 +929,7 @@ for i_obj,abslines_obj in enumerate(abslines_infos_perobj[mask_obj]):
         #displaying "all" cmaps/sizes but only where's at least one significant detection (so we don't hatch)
         scat_col+=[ax_hid.scatter(x_hid[obj_val_mask_sign][obj_order_sign],y_hid[obj_val_mask_sign][obj_order_sign],
                                   marker=marker_abs,color=colors_obj.to_rgba(i_obj_glob) if radio_info_cmap=='Source' else None,
-        c=c_scat,s=5*obj_size[obj_val_mask_sign][obj_order_sign]**1.15,
+        c=c_scat,s=norm_s_lin*obj_size[obj_val_mask_sign][obj_order_sign]**norm_s_pow,
                        edgecolor='black' if not display_edgesource else colors_obj.to_rgba(i_obj_glob),
                        linewidth=1+int(display_edgesource),
                        norm=cmap_norm_info,
@@ -954,7 +960,7 @@ for i_obj,abslines_obj in enumerate(abslines_infos_perobj[mask_obj]):
         #and "unsignificant only" in any case is hatched. Edgecolor sets the color of the hatch
         scat_col+=[ax_hid.scatter(x_hid[obj_val_mask_nonsign],y_hid[obj_val_mask_nonsign],marker=marker_abs,
                        color=colors_obj.to_rgba(i_obj_glob) if radio_info_cmap=='Source' else None,
-        c=c_scat_nonsign,s=5*obj_size[obj_val_mask_nonsign]**1.15,hatch='///',
+        c=c_scat_nonsign,s=norm_s_lin*obj_size[obj_val_mask_nonsign]**norm_s_pow,hatch='///',
                        edgecolor='grey' if not display_edgesource else colors_obj.to_rgba(i_obj_glob),
                        linewidth=1+int(display_edgesource),
                        norm=cmap_norm_info,
@@ -1200,7 +1206,7 @@ for i_obj_base,abslines_obj_base in enumerate(abslines_infos_perobj[mask_obj_bas
             
             elem_scatter_nondet=ax_hid.scatter(
                 x_hid_base[mask_nondet_ul],y_hid_base[mask_nondet_ul],marker=marker_ul_curr,
-                           color='none',edgecolor=edgec_scat,s=5*obj_size_ul[mask_nondet_ul]**1.15,
+                           color='none',edgecolor=edgec_scat,s=norm_s_lin*obj_size_ul[mask_nondet_ul]**norm_s_pow,
                            label='' if not display_obj_zerodet else (obj_list[mask_obj][i_obj_base] if not label_obj_plotted[i_obj_base] and\
                                (radio_info_cmap=='Source' or display_edgesource) else ''),zorder=500,alpha=1.0,
                                cmap=cmap_info if radio_info_cmap in ['Inclination','Time'] else None)
@@ -1395,37 +1401,37 @@ fig_hid.legend(handles=hid_det_examples,loc='center left',labels=['upper limit' 
 if display_upper:
     #displaying the 
     if radio_info_cmap=='Source':
-        hid_size_examples=[(Line2D([0],[0],marker=marker_abs,color='black',markersize=(5*5**1.15)**(1/2),linestyle='None'),
-                Line2D([0],[0],marker=marker_ul,color='None',markeredgecolor='grey',markersize=(5*5**1.15)**(1/2),linestyle='None',zorder=500),
-                Line2D([0],[0],marker=marker_ul_top,color='None',markeredgecolor='grey',markersize=(5*5**1.15)**(1/2),linestyle='None',zorder=500)),
-                        (Line2D([0],[0],marker=marker_abs,color='black',markersize=(5*20**1.15)**(1/2),linestyle='None'),
-                Line2D([0],[0],marker=marker_ul,color='None',markeredgecolor='grey',markersize=(5*20**1.15)**(1/2),linestyle='None',zorder=500),
-                Line2D([0],[0],marker=marker_ul_top,color='None',markeredgecolor='grey',markersize=(5*20**1.15)**(1/2),linestyle='None',zorder=500)),
-                        (Line2D([0],[0],marker=marker_abs,color='black',markersize=(5*50**1.15)**(1/2),linestyle='None'),
-                Line2D([0],[0],marker=marker_ul,color='None',markeredgecolor='grey',markersize=(5*50**1.15)**(1/2),linestyle='None',zorder=500),
-                Line2D([0],[0],marker=marker_ul_top,color='None',markeredgecolor='grey',markersize=(5*50**1.15)**(1/2),linestyle='None',zorder=500))]
+        hid_size_examples=[(Line2D([0],[0],marker=marker_abs,color='black',markersize=(norm_s_lin*5**norm_s_pow)**(1/2),linestyle='None'),
+                Line2D([0],[0],marker=marker_ul,color='None',markeredgecolor='grey',markersize=(norm_s_lin*5**norm_s_pow)**(1/2),linestyle='None',zorder=500),
+                Line2D([0],[0],marker=marker_ul_top,color='None',markeredgecolor='grey',markersize=(norm_s_lin*5**norm_s_pow)**(1/2),linestyle='None',zorder=500)),
+                        (Line2D([0],[0],marker=marker_abs,color='black',markersize=(norm_s_lin*20**norm_s_pow)**(1/2),linestyle='None'),
+                Line2D([0],[0],marker=marker_ul,color='None',markeredgecolor='grey',markersize=(norm_s_lin*20**norm_s_pow)**(1/2),linestyle='None',zorder=500),
+                Line2D([0],[0],marker=marker_ul_top,color='None',markeredgecolor='grey',markersize=(norm_s_lin*20**norm_s_pow)**(1/2),linestyle='None',zorder=500)),
+                        (Line2D([0],[0],marker=marker_abs,color='black',markersize=(norm_s_lin*50**norm_s_pow)**(1/2),linestyle='None'),
+                Line2D([0],[0],marker=marker_ul,color='None',markeredgecolor='grey',markersize=(norm_s_lin*50**norm_s_pow)**(1/2),linestyle='None',zorder=500),
+                Line2D([0],[0],marker=marker_ul_top,color='None',markeredgecolor='grey',markersize=(norm_s_lin*50**norm_s_pow)**(1/2),linestyle='None',zorder=500))]
     else:
-        hid_size_examples=[(Line2D([0],[0],marker=marker_abs,color='black',markersize=(5*5**1.15)**(1/2),linestyle='None'),
-                Line2D([0],[0],marker=marker_ul,color='None',markeredgecolor='grey',markersize=(5*5**1.15)**(1/2),linestyle='None',zorder=500)),
-                        (Line2D([0],[0],marker=marker_abs,color='black',markersize=(5*20**1.15)**(1/2),linestyle='None'),
-                Line2D([0],[0],marker=marker_ul,color='None',markeredgecolor='grey',markersize=(5*20**1.15)**(1/2),linestyle='None',zorder=500)),
-                        (Line2D([0],[0],marker=marker_abs,color='black',markersize=(5*50**1.15)**(1/2),linestyle='None'),
-                Line2D([0],[0],marker=marker_ul,color='None',markeredgecolor='grey',markersize=(5*50**1.15)**(1/2),linestyle='None',zorder=500))]
+        hid_size_examples=[(Line2D([0],[0],marker=marker_abs,color='black',markersize=(norm_s_lin*5**norm_s_pow)**(1/2),linestyle='None'),
+                Line2D([0],[0],marker=marker_ul,color='None',markeredgecolor='grey',markersize=(norm_s_lin*5**norm_s_pow)**(1/2),linestyle='None',zorder=500)),
+                        (Line2D([0],[0],marker=marker_abs,color='black',markersize=(norm_s_lin*20**norm_s_pow)**(1/2),linestyle='None'),
+                Line2D([0],[0],marker=marker_ul,color='None',markeredgecolor='grey',markersize=(norm_s_lin*20**norm_s_pow)**(1/2),linestyle='None',zorder=500)),
+                        (Line2D([0],[0],marker=marker_abs,color='black',markersize=(norm_s_lin*50**norm_s_pow)**(1/2),linestyle='None'),
+                Line2D([0],[0],marker=marker_ul,color='None',markeredgecolor='grey',markersize=(norm_s_lin*50**norm_s_pow)**(1/2),linestyle='None',zorder=500))]
 else:
-    hid_size_examples=[(Line2D([0],[0],marker=marker_abs,color='black',markersize=(5*5**1.15)**(1/2),linestyle='None')),
-                        (Line2D([0],[0],marker=marker_abs,color='black',markersize=(5*20**1.15)**(1/2),linestyle='None')),
-                        (Line2D([0],[0],marker=marker_abs,color='black',markersize=(5*50**1.15)**(1/2),linestyle='None'))]
+    hid_size_examples=[(Line2D([0],[0],marker=marker_abs,color='black',markersize=(norm_s_lin*5**norm_s_pow)**(1/2),linestyle='None')),
+                        (Line2D([0],[0],marker=marker_abs,color='black',markersize=(norm_s_lin*20**norm_s_pow)**(1/2),linestyle='None')),
+                        (Line2D([0],[0],marker=marker_abs,color='black',markersize=(norm_s_lin*50**norm_s_pow)**(1/2),linestyle='None'))]
 
 eqw_legend=fig_hid.legend(handles=hid_size_examples,loc='center left',labels=['5 eV','20 eV','50 eV'],
                           title='Equivalent widths',
             bbox_to_anchor=(0.125,0.218) if bigger_text and square_mode else (0.125,0.218),handleheight=4, handlelength=4,facecolor='None')
 
 if radio_info_cmap=='Instrument':
-    instru_examples=np.array([Line2D([0],[0],marker=marker_abs,color='red',markeredgecolor='black',markersize=(5*5**1.15)**(1/2),linestyle='None'),
-                     Line2D([0],[0],marker=marker_abs,color='blue',markeredgecolor='black',markersize=(5*5**1.15)**(1/2),linestyle='None'),
-                     Line2D([0],[0],marker=marker_abs,color='green',markeredgecolor='black',markersize=(5*5**1.15)**(1/2),linestyle='None'),
-                     Line2D([0],[0],marker=marker_abs,color='magenta',markeredgecolor='black',markersize=(5*5**1.15)**(1/2),linestyle='None'),
-                     Line2D([0],[0],marker=marker_abs,color='orange',markeredgecolor='black',markersize=(5*5**1.15)**(1/2),linestyle='None')])
+    instru_examples=np.array([Line2D([0],[0],marker=marker_abs,color='red',markeredgecolor='black',markersize=(norm_s_lin*5**norm_s_pow)**(1/2),linestyle='None'),
+                     Line2D([0],[0],marker=marker_abs,color='blue',markeredgecolor='black',markersize=(norm_s_lin*5**norm_s_pow)**(1/2),linestyle='None'),
+                     Line2D([0],[0],marker=marker_abs,color='green',markeredgecolor='black',markersize=(norm_s_lin*5**norm_s_pow)**(1/2),linestyle='None'),
+                     Line2D([0],[0],marker=marker_abs,color='magenta',markeredgecolor='black',markersize=(norm_s_lin*5**norm_s_pow)**(1/2),linestyle='None'),
+                     Line2D([0],[0],marker=marker_abs,color='orange',markeredgecolor='black',markersize=(norm_s_lin*5**norm_s_pow)**(1/2),linestyle='None')])
                 
     instru_ind=[np.argwhere(np.array(telescope_list)==elem)[0][0] for elem in np.array(choice_telescope)]
     
@@ -1538,13 +1544,17 @@ if ((plot_lc_monit and fig_lc_monit is None) or (plot_hr_monit and fig_hr_monit 
 
 with st.sidebar.expander('Parameter analysis'):
     
-    display_param_withdet=st.checkbox('Restrict parameter analysis to sources with significant detections',value=True)
+    display_param_withdet=st.checkbox('Restrict parameter analysis to sources with significant detections',value=False)
     st.header('Distributions')
     display_distrib=st.checkbox('Plot distributions',value=True)
     use_distrib_lines=st.checkbox('Show line by line distribution',value=True)
     split_distrib=st.radio('Split distributions:',('Off','Source','Instrument'),index=1)
+    
+    if split_distrib=='Source' and (display_single or sum(mask_obj)==1):
+            split_distrib='Off'
+            
     st.header('Distributions')
-    display_scat_intr=st.checkbox('Correlations between intrinsic parameters',value=True)
+    display_scat_intr=st.checkbox('Correlations between intrinsic parameters',value=False)
     display_scat_hid=st.checkbox('Correlations with observation parameters',value=False)
     display_scat_inclin=st.checkbox('Correlations with source parameters',value=False)
     display_scat_eqwcomp=st.checkbox('Plot EW vs EW correlations',value=False)
@@ -1561,6 +1571,7 @@ with st.sidebar.expander('Parameter analysis'):
     display_pearson=st.checkbox('Display Pearson rank',value=False)
     st.header('Visualisation')
     radio_color_scatter=st.radio('Scatter plot color options:',('None','Instrument','Source','Time','HR','width','nH'))
+    glob_col_source=st.checkbox('Normalize source colors over the entire sample',value=True)
     scale_log_eqw=st.checkbox('Use a log scale for the equivalent width and line fluxes')
     scale_log_hr=st.checkbox('Use a log scale for the HID parameters',value=True)
     display_abserr_bshift=st.checkbox('Display absolute blueshift errors for Chandra',value=True)
@@ -1607,8 +1618,11 @@ if display_param_withdet:
     dict_linevis['width_plot_restrict']=width_plot_restrict
     dict_linevis['hid_plot_restrict']=hid_plot_restrict
     dict_linevis['incl_plot_restrict']=incl_plot_restrict
-    dict_linevis['display_pearson']=display_pearson
-    dict_linevis['display_abserr_bshift']=display_abserr_bshift
+    
+    
+dict_linevis['display_pearson']=display_pearson
+dict_linevis['display_abserr_bshift']=display_abserr_bshift
+dict_linevis['glob_col_source']=glob_col_source
 
 os.system('mkdir -p '+save_dir+'/graphs')
 os.system('mkdir -p '+save_dir+'/graphs/distrib')
@@ -1727,7 +1741,8 @@ def streamlit_scat(mode):
             scat_ener+=[correl_graph(abslines_plot_restrict,'time_ener',abslines_ener_restrict,dict_linevis,mode_vals=None,mode='observ',
                                         conf_thresh=slider_sign,streamlit=True,compute_correl=compute_correl,bigger_text=bigger_text,
                                         show_linked=show_linked,show_ul_eqw=show_scatter_ul)]
-            scat_width+=[correl_graph(abslines_plot_restrict,'time_width',abslines_ener_restrict,dict_linevis,mode_vals=None,mode='observ',
+            if use_width:
+                scat_width+=[correl_graph(abslines_plot_restrict,'time_width',abslines_ener_restrict,dict_linevis,mode_vals=None,mode='observ',
                                         conf_thresh=slider_sign,streamlit=True,compute_correl=compute_correl,bigger_text=bigger_text,
                                         show_linked=show_linked,show_ul_eqw=show_scatter_ul)]
             
@@ -1741,6 +1756,11 @@ def streamlit_scat(mode):
             scat_ener+=[correl_graph(abslines_plot_restrict,'ener_width',abslines_ener_restrict,dict_linevis,mode_vals=None,
                                         conf_thresh=slider_sign,streamlit=True,compute_correl=compute_correl,bigger_text=bigger_text,
                                         show_linked=show_linked,show_ul_eqw=show_scatter_ul)]
+            if use_eqwratio:
+                scat_width=[correl_graph(abslines_plot_restrict,'eqwratio'+eqwratio_type+'_width1',abslines_ener_restrict,dict_linevis,mode_vals=hid_plot_restrict,conf_thresh=slider_sign,streamlit=True,compute_correl=compute_correl,bigger_text=bigger_text,
+                                            show_linked=show_linked,show_ul_eqw=show_scatter_ul)]
+                scat_eqwratio=[correl_graph(abslines_plot_restrict,'eqwratio'+eqwratio_type+'_width2',abslines_ener_restrict,dict_linevis,mode_vals=hid_plot_restrict,conf_thresh=slider_sign,streamlit=True,compute_correl=compute_correl,bigger_text=bigger_text,
+                                            show_linked=show_linked,show_ul_eqw=show_scatter_ul)]
     elif mode=='observ':
         scat_eqw=\
         [correl_graph(abslines_plot_restrict,'eqw_HR',abslines_ener_restrict,dict_linevis,mode_vals=hid_plot_restrict,mode='observ',conf_thresh=slider_sign,
@@ -1807,7 +1827,7 @@ def streamlit_scat(mode):
             col_list['width']=None
         
         #defining columns for each data type
-        if use_eqwratio and mode=='observ':
+        if use_eqwratio and (mode=='observ' or use_width):
             col_list['eqwratio']=None
         if n_infos>=5 and use_lineflux:
             col_list['lineflux']=None
@@ -1827,7 +1847,7 @@ def streamlit_scat(mode):
         if mode!='eqwratio':
             with col_list['ener']:
                 [st.pyplot(elem) for elem in scat_ener]
-            if use_eqwratio and mode=='observ':
+            if use_eqwratio and (mode=='observ' or use_width):
                 with col_list['eqwratio']:
                     [st.pyplot(elem) for elem in scat_eqwratio]
                     
@@ -1859,7 +1879,14 @@ dict_linevis['width_plot_restrict']=width_plot_restrict
 dict_linevis['nh_plot_restrict']=nh_plot_restrict
 
 if display_distrib:
-    streamlit_distrib()
+    
+    if sum(global_mask_intime_norepeat)==0 or sum(global_sign_mask)==0:
+        if sum(global_mask_intime_norepeat)==0:
+            st.text('No point left in selected dates interval. Cannot compute distributions.')
+        else:
+            st.text('No significant detection left with current source selection. Cannot compute distributions.')
+    else:
+        streamlit_distrib()
     
 if display_scat_intr:
     streamlit_scat('intrinsic')

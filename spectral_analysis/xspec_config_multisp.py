@@ -3812,6 +3812,11 @@ def plot_std_ener(ax_ratio,ax_contour=None,plot_em=False):
         if i_line==2 or i_line>8:
             continue
         
+        #skipping Nika27:
+            if i_line==5:
+                continue
+            
+        
         #skipping display if emission lines are not asked
         if 'em' in line and not plot_em:
             continue
@@ -3942,7 +3947,7 @@ def contour_chi2map(fig,axe,chi_dict,title='',combined=False):
     else:
         axe.legend(loc='right',bbox_to_anchor=(1.25,0.5))
                 
-def coltour_chi2map(fig,axe,chi_dict,title='',combined=False,ax_bar=None):
+def coltour_chi2map(fig,axe,chi_dict,title='',combined=False,ax_bar=None,norm=None):
 
     chi_arr=chi_dict['chi_arr']
     chi_base=chi_dict['chi_base']
@@ -3962,13 +3967,18 @@ def coltour_chi2map(fig,axe,chi_dict,title='',combined=False,ax_bar=None):
     if combined==False:
         axe.set_xlabel('Energy (keV)')
         axe.set_title(title)
+        
+    #hiding the ticks values for the lower x axis if in paper mode
+    if combined=='paper':
+        plt.setp(axe.get_xticklabels(), visible=False)
+            
     
     '''COLOR PLOT'''
     
     #here we do some more modifications
     chi_arr_plot=chi_map
     
-    #swapping the sign of the delchis for the emission and absorption lines in order to display them with both parts of the cmap
+    #swapping the sign of the delchis for the emission and absorption lines in order to display them with both parts of the cmap + using a square root norm for easier visualisation
     for i in range(len(chi_arr_plot)):
         chi_arr_plot[i]=np.concatenate((-(chi_arr_plot[i][:int(len(chi_arr_plot[i])/2)])**(1/2),
                                          (chi_arr_plot[i][int(len(chi_arr_plot[i])/2):])**(1/2)))
@@ -3978,24 +3988,28 @@ def coltour_chi2map(fig,axe,chi_dict,title='',combined=False,ax_bar=None):
         bigline_flag=1
     else:
         bigline_flag=0
-    
+        if norm is not None:
+            norm_col=np.array(norm)**(1/2)
+        
     #creating the bipolar cm
     cm_bipolar=hotcold(neutral=1)
     
     #and the non symetric normalisation
-    cm_norm=colors.TwoSlopeNorm(vcenter=0,vmin=chi_arr_plot.min(), vmax=chi_arr_plot.max())
+    cm_norm=colors.TwoSlopeNorm(vcenter=0,vmin=chi_arr_plot.min() if norm is None else -norm_col[0],
+                                            vmax=chi_arr_plot.max()  if norm is None else norm_col[1])
     
     #create evenly spaced ticks with different scales in top and bottom
-    cm_ticks=np.concatenate((np.linspace(chi_arr_plot.min(),0,6,endpoint=True),
-                             np.linspace(0,chi_arr_plot.max(),6,endpoint=True)))
+    cm_ticks=np.concatenate((np.linspace(chi_arr_plot.min()  if norm is None else -norm_col[0],0,6,endpoint=True),
+                             np.linspace(0,chi_arr_plot.max()  if norm is None else norm_col[1],6,endpoint=True)))
     
-    #renaming the ticks to positive values only since the negative side is only for the colormap
+    #renaming the ticks to positive values only since the negative side is only for the colormap + re-squaring to get the
+    #right values
     cm_ticklabels=(cm_ticks**2).round(1).astype(str)
     
     #this allows to superpose the image to a log scale (imshow scals with pixels so it doesn't work)
     img=axe.pcolormesh(line_search_e_space,norm_par_space,chi_map.T,norm=cm_norm,cmap=cm_bipolar.reversed())
     
-    if not combined:
+    if combined==False:
         colorbar=plt.colorbar(img,ax=axe,spacing='proportional',ticks=cm_ticks)
         colorbar.ax.set_yticklabels(cm_ticklabels)
         
@@ -4016,9 +4030,13 @@ def coltour_chi2map(fig,axe,chi_dict,title='',combined=False,ax_bar=None):
                           r'68% conf. with 2 d.o.f.']
     contours_var_ls=['solid','dashed','dotted']
     
-    contours_var=axe.contour(line_search_e_space,norm_par_space,chi_arr.T,levels=chi_contours,colors='black',
-                             linestyles=contours_var_ls,label=contours_var_labels)
-    
+    try:
+        contours_var=axe.contour(line_search_e_space,norm_par_space,chi_arr.T,levels=chi_contours,colors='black',
+                                 linestyles=contours_var_ls,label=contours_var_labels)
+    except:
+        print("tchou")
+        raise ValueError
+        
     #avoiding error if there are no contours to plot
     for l in range(len(contours_var.collections)):
         
@@ -4062,11 +4080,14 @@ def coltour_chi2map(fig,axe,chi_dict,title='',combined=False,ax_bar=None):
     axe.yaxis.set_minor_locator(MinorSymLogLocator(line_search_norm[0]))
     
     if combined==False:
-        axe.legend()
         fig.tight_layout()
     else:
-
-        axe.legend(title='Bottom panel labels',loc='right',bbox_to_anchor=(1.25,1.5))
+        if combined=='paper':
+            axe.legend(loc='upper left')
+        elif combined=='nolegend':
+            pass
+        else:
+            axe.legend(title='Bottom panel labels',loc='right',bbox_to_anchor=(1.25,1.5))
 
             
 def comb_chi2map(fig_comb,chi_dict,title='',comb_label=''):
@@ -4176,8 +4197,8 @@ def xPlot(types,axes_input=None,plot_saves_input=None,plot_arg=None,includedlist
         axes=[plt.subplot(elem) for elem in grid]
         
     else:
-        axes=axes_input
-    
+        axes=[axes_input] if type(axes_input) is not list else axes_input
+        
     if plot_saves_input is None:
         plot_saves=plot_saver(','.join([elem if '_' not in elem else elem.split('_')[1] for elem in types.split(',')]))
     else:
@@ -4195,8 +4216,6 @@ def xPlot(types,axes_input=None,plot_saves_input=None,plot_arg=None,includedlist
         
     types_split=types.split(',')
     
-    n_plots=len(types_split)
-    
     for i_ax,plot_type in enumerate(types_split):
         
         curr_ax=axes[i_ax]
@@ -4204,17 +4223,23 @@ def xPlot(types,axes_input=None,plot_saves_input=None,plot_arg=None,includedlist
         
         #plotting the title for the first axe
         if i_ax==0:
-            curr_ax.set_title(curr_save.labels[-1])
+
+            if axes_input is None:
+                curr_ax.set_title(curr_save.labels[-1])
             
             #putting a wavelength copy of the x axis at the top           
             curr_ax_second=curr_ax.secondary_xaxis('top',functions=(ang2kev,ang2kev))
             curr_ax_second.set_xlabel('Angstrom')
             curr_ax_second.minorticks_on()
             
-        #hiding the ticks for the lower x axis if it's not in the last plot:
-        if i_ax!=len(types_split)-1:
-            curr_ax.set_xticklabels([])
-        
+        #hiding the ticks values for the lower x axis if it's not in the last plot or if we're in a provided subplot
+        if i_ax!=len(types_split)-1 or axes_input is not None:
+            plt.setp(curr_ax.get_xticklabels(), visible=False)
+            
+            # # removing the last major tick label 
+            # yticks = curr_ax.yaxis.get_major_ticks()
+            # yticks[-1].label1.set_visible(False)
+
         curr_ax.minorticks_on()
             
         '''
@@ -4228,6 +4253,7 @@ def xPlot(types,axes_input=None,plot_saves_input=None,plot_arg=None,includedlist
         if curr_save.yLog:
             curr_ax.set_yscale('log')
         
+    
         for id_grp in range(curr_save.nGroups):
             
             #plotting each data group
@@ -4253,17 +4279,18 @@ def xPlot(types,axes_input=None,plot_saves_input=None,plot_arg=None,includedlist
                 #plotting model components
         
         #locking the axe limits
-        curr_ax.set_xlim(round(min(ravel_ragged(curr_save.x-curr_save.xErr)),1),round(max(ravel_ragged(curr_save.x+curr_save.xErr)),1))
+        curr_ax.set_xlim(round(min(ravel_ragged(curr_save.x-curr_save.xErr)),2),round(max(ravel_ragged(curr_save.x+curr_save.xErr)),2))
         
         '''
         locking the y axis limits requires considering the uncertainties (which are not considered for rescaling) 
         without perturbing the previous limits if they were beyond
         we don't bother doing that for the background
         '''
-        
+
         curr_ax.set_ylim(min(curr_ax.get_ylim()[0],round(min(ravel_ragged(curr_save.y-curr_save.yErr)),1)),
-                         max(curr_ax.get_ylim()[1],round(max(ravel_ragged(curr_save.y+curr_save.yErr)),1)))
-        
+                          max(curr_ax.get_ylim()[1],round(max(ravel_ragged(curr_save.y+curr_save.yErr)),1)))
+
+            
         #plotting the components after locking axis limits to avoid huge rescaling
         if 'data' in plot_type and curr_save.add and curr_save.ismod:
             
@@ -4280,7 +4307,7 @@ def xPlot(types,axes_input=None,plot_saves_input=None,plot_arg=None,includedlist
                 
             for id_grp in range(curr_save.nGroups):
                 for i_comp in range(len(curr_save.addcomps[id_grp])):
-                    curr_ax.plot(curr_save.x[id_grp],curr_save.addcomps[id_grp][i_comp],color=colors_addcomp.to_rgba(i_comp),
+                    curr_ax.plot(curr_save.x[0],curr_save.addcomps[id_grp][i_comp],color=colors_addcomp.to_rgba(i_comp),
                                  label=label_comps[i_comp],linestyle=':',linewidth=1)
                 
         #ratio line
@@ -4292,9 +4319,11 @@ def xPlot(types,axes_input=None,plot_saves_input=None,plot_arg=None,includedlist
         #plotting the legend for the first axe    
         curr_ax.legend()
     
-    fig.tight_layout()
     if axes_input is None:
+        fig.tight_layout()
         return axes
+    else:
+        return None,None
 
 def Plot_screen(datatype,path,mode='matplotlib',xspec_windid=None,includedlist=None):
     

@@ -1548,7 +1548,7 @@ with st.sidebar.expander('Parameter analysis'):
     st.header('Distributions')
     display_distrib=st.checkbox('Plot distributions',value=True)
     use_distrib_lines=st.checkbox('Show line by line distribution',value=True)
-    split_distrib=st.radio('Split distributions:',('Off','Source','Instrument'),index=1)
+    split_distrib=st.radio('Split distributions:',('Off','Source','Instrument'),index=2)
     
     if split_distrib=='Source' and (display_single or sum(mask_obj)==1):
             split_distrib='Off'

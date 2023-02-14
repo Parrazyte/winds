@@ -71,7 +71,11 @@ def perturb_values(x, y, dx, dy, Nperturb=10000):
     values draw from Gaussian distributions centered at x+-dx and y+-dy.
     """
 
-    validate_inputs(x, y, dx, dy)
+    if y is not None:
+        validate_inputs(x, y, dx, dy)
+    else:
+        validate_inputs(x,dx,x,dx)
+        
 
     Nvalues = len(x)
 
@@ -105,37 +109,41 @@ def perturb_values(x, y, dx, dy, Nperturb=10000):
                         scale=dx,
                         size=(Nperturb, Nvalues))
 
-    #same thing for y:
-    if _np.ndim(dy)==2:
-        #drawing two independant samples with gaussian shape on each side (or None if there is no uncertainty)
-        #Note : we take the absolute values of the uncertainties to make sure they are valid scale parameters
-        yp_disjointed=_np.array([[(-1)**i*abs(rng.normal(loc=0,scale=abs(dy[i][j]),size=(Nperturb))) if dy[i][j]!=0 else None\
-                                  for i in range(len(dy))] for j in [0,1]],dtype=object)
-        
-        #different transpositions depending on if the array ends up with Nones or not
-        if _np.ndim(yp_disjointed)==2:
-            yp_disjointed=yp_disjointed.T
-        else:
-            yp_disjointed=_np.transpose(yp_disjointed,axes=(1,0,2))
+    if y is not None:
+        #same thing for y:
+        if _np.ndim(dy)==2:
+            #drawing two independant samples with gaussian shape on each side (or None if there is no uncertainty)
+            #Note : we take the absolute values of the uncertainties to make sure they are valid scale parameters
+            yp_disjointed=_np.array([[(-1)**i*abs(rng.normal(loc=0,scale=abs(dy[i][j]),size=(Nperturb))) if dy[i][j]!=0 else None\
+                                      for i in range(len(dy))] for j in [0,1]],dtype=object)
             
-        #concatenating each observation half to half, or entirely on the side which has uncertainties if only one side has, or just putting zeros       
-        #depending on which value actually has uncertainties
-        yp=_np.array([_np.repeat(0,Nperturb) if elem[0] is None and elem[1] is None else\
-            _np.concatenate((elem[0][:int(Nperturb/2)],elem[1][int(Nperturb/2):])) if elem[0] is not None and elem[1] is not None else\
-            elem[0] if elem[0] is not None else elem[1] for elem in yp_disjointed])
+            #different transpositions depending on if the array ends up with Nones or not
+            if _np.ndim(yp_disjointed)==2:
+                yp_disjointed=yp_disjointed.T
+            else:
+                yp_disjointed=_np.transpose(yp_disjointed,axes=(1,0,2))
+                
+            #concatenating each observation half to half, or entirely on the side which has uncertainties if only one side has, or just putting zeros       
+            #depending on which value actually has uncertainties
+            yp=_np.array([_np.repeat(0,Nperturb) if elem[0] is None and elem[1] is None else\
+                _np.concatenate((elem[0][:int(Nperturb/2)],elem[1][int(Nperturb/2):])) if elem[0] is not None and elem[1] is not None else\
+                elem[0] if elem[0] is not None else elem[1] for elem in yp_disjointed])
+    
+            yp=yp.T+y
+        else:
+            yp = rng.normal(loc=y,
+                            scale=dy,
+                            size=(Nperturb, Nvalues))
+        
+        if Nperturb == 1:
+            xp = xp.flatten()
+            yp = yp.flatten()
 
-        yp=yp.T+y
+        fake_barycenter=_np.array([xp.mean(1),yp.mean(1)]).T
     else:
-        yp = rng.normal(loc=y,
-                        scale=dy,
-                        size=(Nperturb, Nvalues))
-    
-    if Nperturb == 1:
-        xp = xp.flatten()
-        yp = yp.flatten()
-
-    fake_barycenter=_np.array([xp.mean(1),yp.mean(1)]).T
-    
+        yp=None
+        fake_barycenter=None
+        
     return xp, yp,fake_barycenter
 
 

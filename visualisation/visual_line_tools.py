@@ -168,7 +168,7 @@ info_str=['equivalent widths','velocity shifts','energies','line flux','time','w
 
 info_hid_str=['Hardness Ratio','Flux','Time']
 
-axis_str=['Line equivalent width (eV)','Line velocity shift (km/s)','Line energy (keV)',r'line flux (erg/s/cm$^{-2}$)',None,r'Line width (km/s)']
+axis_str=['Line equivalent width (eV)','Line velocity shift (km/s)','Line energy (keV)',r'line flux (erg/s/cm$^{-2}$)',None,r'Line FWHM (km/s)']
 
 axis_hid_str=['Hardness Ratio ([6-10]/[3-6] keV bands)',r'Luminosity in the [3-10] keV band in (L/L$_{Edd}$) units']
 
@@ -849,7 +849,14 @@ def abslines_values(file_paths,dict_linevis):
             for  m in range(len(curr_line[1:-2])):
                 
                 # try:
-                curr_abslines_infos[l][m]=np.array(literal_eval(curr_line[m+1].replace(',','').replace(' ',',')))\
+                
+                #inverting the sign of the blueshift values
+                if m==1:
+                    invert_factor=-1
+                else:
+                    invert_factor=1
+                    
+                curr_abslines_infos[l][m]=invert_factor*np.array(literal_eval(curr_line[m+1].replace(',','').replace(' ',',')))\
                     if curr_line[m+1]!='' else None
                 # except:
                 #     
@@ -1070,12 +1077,12 @@ def values_manip(abslines_inf,dict_linevis,autofit_inf):
                         '''
                         If the width is compatible with 0 at 3 sigma (confirmed by checking the width value in absline_plot),
                         we put 0 as main value and lower uncertainty and use the 90% upper limit 
-                        Else we use the standard value
+                        Else we use the standard value multiplied by the fwhm/1 sigma conversion factor (2.3548)
                         '''
                         
                         #here we fetch the correct line by applying the mask. The 0 after is there to avoid a len 1 nested array
                         width_vals=autofit_inf[i_obj][i_obs][0][0][mask_sigma][0].astype(float)[i_uncert]\
-                                              /lines_e_dict[lines_std_names[3+i_line]][0]*c_light
+                                              /lines_e_dict[lines_std_names[3+i_line]][0]*c_light*2.3548
                                                   
                         #index 7 is the width
                         if abslines_plt[7][0][i_line][i_obj][i_obs]==0:
@@ -1089,8 +1096,9 @@ def values_manip(abslines_inf,dict_linevis,autofit_inf):
                                 if autofit_inf[i_obj][i_obs][0][0][mask_sigma][0].astype(float)[2]==0:
                                     width_part_obj[i_obs]=0
                                 else:
+                                    #the numerical factor transforms the 1 sigma width into a FWHM
                                     width_part_obj[i_obs]=autofit_inf[i_obj][i_obs][0][0][mask_sigma][0].astype(float)[[0,2]].sum()\
-                                                      /lines_e_dict[lines_std_names[3+i_line]][0]*c_light
+                                                      /lines_e_dict[lines_std_names[3+i_line]][0]*c_light*2.3548
                         else:
                             width_part_obj[i_obs]=width_vals
                         
@@ -1200,7 +1208,7 @@ def distrib_graph(data_perinfo,info,dict_linevis,data_ener=None,conf_thresh=0.99
     bins_time=None
     
     #linear bin widths between 0 (where most widths value lie) and 0.05 which is the hard limit
-    bins_width=np.linspace(0,2200,21)
+    bins_width=np.linspace(0,5500,21)
 
     #sorting the bins in an array depending on the info asked
     bins_info=[bins_eqw,bins_bshift,bins_ener,bins_flux,bins_time,bins_width]
@@ -1240,7 +1248,7 @@ def distrib_graph(data_perinfo,info,dict_linevis,data_ener=None,conf_thresh=0.99
             
 
         #using a log x axis if the 
-        ax_hist.set_ylabel(r'Detection')
+        ax_hist.set_ylabel(r'Detections')
         ax_hist.set_xlabel('' if line_mode else axis_str[ind_info]+(' ratio' if ratio_mode else ''))
         
         if split_off:
@@ -1456,6 +1464,8 @@ def distrib_graph(data_perinfo,info,dict_linevis,data_ener=None,conf_thresh=0.99
                                      label=obj_disp_list[source_withdet_mask],bins=hist_bins,rwidth=0.8,align='left')
 
                     elif split_instru:
+                        
+                        breakpoint()
                         
                         ax_hist.hist(hist_data_split,color=[telescope_colors[instru_unique[i_instru]] for i_instru in range(len(instru_unique))],
                                      label=instru_unique,bins=hist_bins,rwidth=0.8,align='left')
@@ -1696,9 +1706,9 @@ def correl_graph(data_perinfo,infos,data_ener,dict_linevis,mode='intrinsic',mode
         fig_scat,ax_scat=plt.subplots(1,1,figsize=figsize_val if bigger_text else (11,10.5))
         
         if 'width' in infos_split[1]:
-            ax_scat.set_ylim(0,2500)
+            ax_scat.set_ylim(0,5500)
         elif 'width' in infos_split[0]:
-            ax_scat.set_xlim(0,2500)
+            ax_scat.set_xlim(0,5500)
             
         if not bigger_text:
             if indiv:

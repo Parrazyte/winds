@@ -91,6 +91,7 @@
 	real(8)	vturb_x, vturb_in(1000), t_guess, t_init
 	real(8) logxi_input(1000)
 	real(8) eta_s, mdot_obs, mdot_Mhd, mu
+	
 !* Physical constants
 
 	c_Km = 3.0e5 ! light speed in Km/s unit

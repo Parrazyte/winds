@@ -16,27 +16,16 @@ import time
 
 from xspec import AllModels,AllData,Fit,Spectrum,Model,Plot,Xset,FakeitSettings,AllChains,Chain
 
-from xstarsub_dummy import ener,ispecg,ispecgg,ispcg2,x116n5
-
-#adding some libraries 
-os.environ['LD_LIBRARY_PATH']+=os.pathsep+'/home/parrama/Soft/Heasoft/heasoft-6.29/x86_64-pc-linux-gnu-libc2.31/lib'
+from xstarsub_dummy import ener,x116n5
 
 h_cgs = 6.624e-27
 eV2erg = 1.6e-12
 erg2eV = 1.0/eV2erg
 Ryd2eV = 13.5864
 
-
-def update_xstar_fortran_libs(path='./'):
-    '''
-    Fetches the xstar libraries in the current heasoft version and recreates the f2py libraries from them
-    included: ener,ispecg,ispecgg,ispcg2
+#### CHECK LINE 25089 FOR FILE WRITING AND ADD TO UPDATED SUBROUTINE
     
-    '''
-    
-    
-    
-def xstar_wind(ep, p_mhd, mu, angle,dict_solution, ncn2=63599, chatter=0):
+def xstar_wind(ep, p_mhd, mu, angle,dict_solution, chatter=0):
     
     
     '''
@@ -49,21 +38,12 @@ def xstar_wind(ep, p_mhd, mu, angle,dict_solution, ncn2=63599, chatter=0):
     eventual calls to fortran with arrays as arguments will need to use inverted arrays:
         the indexation is not the same as in python so using order='F' when creating arrays is important
     
-    the fourth line of the xstar subroutine includes the param file variables, so the param file should be in the same folder
-    
-    xstar also uses atdb.fits & coheat.dat
-    
     '''
     
     '''
     #### Physical constants
     '''
     
-    def xstar_function(epi,ncn2,lpri,lunlog,xlum,enlum,zremsz,xpx,xpxcol,zeta,nbox,r_or_f,nbox_restart,vobsx,vturb_x):
-        
-        '''
-        wrapper around the xstar function itself. Since it's too reliant on 
-        '''
     #! light speed in Km/s unit
     c_Km = 2.99792e5 
     #! light speed in cm/s unit
@@ -76,14 +56,9 @@ def xstar_wind(ep, p_mhd, mu, angle,dict_solution, ncn2=63599, chatter=0):
     Km2m = 1000.0
     m2cm = 100.0
     
-    
-    #chatter value, 0 for not print, 1 for printing
-    if chatter>=10:
-        lpri=1
-    else:
-        lpri=0
-        
+    lpri=0
     lunlog=6 
+    ncn2 = 63599
     
     #! in units of 1.0e38 erg/s !* computed by integrating over HighSoft_keV.dat and multiplied by D^2
     #!*4*Pi multiplication comes as xstar assumes spherical cloud.
@@ -124,17 +99,7 @@ def xstar_wind(ep, p_mhd, mu, angle,dict_solution, ncn2=63599, chatter=0):
     
     #### variable definition
     
-    #one of the intrinsic xstar parameters (listed in the param file), the maximal number of points in the grids
-    #used here to give the maximal size of the arrays
-    ncn=99999
-    
     nbox_stop=np.zeros(10,int)
-    
-    eptmp,zrtmp,zremsz=np.zeros((ncn,3))
-    
-    eptmp_shifted,zrtmp_shifted=np.zeros((ncn,2))
-    
-    #no need to create epi,xlum and enlum because they are outputs or defined elsewhere
     
     xpxcoll,xpxl,zetal,vobsl,vrel,del_E=np.zeros((1000,6))
     
@@ -153,6 +118,7 @@ def xstar_wind(ep, p_mhd, mu, angle,dict_solution, ncn2=63599, chatter=0):
     vturb_in=np.zeros(1000)
     
     logxi_input=np.zeros(1000)
+    
     
     #### building the stop distances
     
@@ -204,9 +170,11 @@ def xstar_wind(ep, p_mhd, mu, angle,dict_solution, ncn2=63599, chatter=0):
     #449
     fileobj_box_ascii_stop_dis=open("./box_Ascii_stop_dist"+str(stop_dl)+".dat")
     
-    fileobj_box_ascii_stop_dis.write('#Rsph_cgs_mid(nbox) log10(density_cgs_mid(nbox)) log10(NhOfBox(nbox)) logxi_mid(nbox) '+
-                                     ' vobs_mid(nbox)\n')
+    ####Q: how do you print nbox indexes before having defined nbox ?
+    ####A: No I think if I am not mistaking. nbox_index is calculated at line no. 452 which is just after the do while loop for preparing the boxes. Please note that stop_d_index is different than nbox_index. stop_d_index is the index for number of stopping distances at which final spectra will be simulated. For example, let's assume we give last anchoring radius of magnetic field line at 10**6 Rg. And also in the same computation, we want to save the final spectra for last anchoring radii = 10**4 and 10**5 Rg. In that case stop_d_index will be 3.
     
+    # fileobj_box_ascii_stop_dis.write(str(Rsph_cgs_mid[nbox])+','+str(np.log10(density_cgs_mid[nbox]))+','+str(np.log10(NhOfBox[nbox]))
+    #                                 +','+str(logxi_mid[nbox])+','+str(vobs_mid[nbox])+'\n')
     #450
     fileobj_box_ascii_last=open("last_box_Ascii"+str(stop_dl)+".dat")
         
@@ -240,6 +208,8 @@ def xstar_wind(ep, p_mhd, mu, angle,dict_solution, ncn2=63599, chatter=0):
         if logxi <= 6.0: 
             print("starting anchoring radius ro_by_Rg=",ro_by_Rg)
 
+            ####Q: replacing goto 580 by a break ok ? 
+            ####A: yes, it is fine. There is no break in fortran:)
             break
         else:
             #! A distance command : Step increase in the anchoring radius of the magnetic streamline
@@ -466,10 +436,16 @@ def xstar_wind(ep, p_mhd, mu, angle,dict_solution, ncn2=63599, chatter=0):
     # input and "box_Ascii_stop_dist" for actual physical variables.
     # !********************************************************************
 
-    epi=ener(ncn2) 
+    ####Q: don't know the outputs here
+    ####A: ener() is a function defined in line 5598. It creates the energy grid. ncn2 is the number of continuum bins used in xstar (section 5.12 in the xstar manual attached). Basically this is the energy grid on which xstar is doing the computation. The time consumption is very much dependent on the velue of ncn2. The used value of 63599 is calculated depending on the requirement of energy resolution. I am missing the exact numbers at this moment but you can calculate using the formula given in the manual.
+    
+    epi=ener(epi,ncn2) 
       
     #no need to initialize the elements of zremsz at zero since its created as so
 
+
+    ####Q: reading information from previous boxes ok ?
+    ####A: I am not getting your query here...
     #211
     with open('./box_Ascii_stop_dist_for_xstar'+str(stop_dl)+'.dat') as fileobj_box_ascii_stop_dist:
         box_stop_dist_list=fileobj_box_ascii_stop_dist.readlines()
@@ -534,21 +510,29 @@ def xstar_wind(ep, p_mhd, mu, angle,dict_solution, ncn2=63599, chatter=0):
             #! eptmp, zrtmp becomes the input spectra.
             for i in range(Nengrid):
                 eptmp[i],zrtmp[i]=incident_spectra_lines[i+1]
-            
+
+            #### Q: don't know the outputs here
+            ####A: eptmp and zrtmp are the incident spectra provided by us. In ispecg function, zremsz is the output I think. Please check the corresponding function. I think we need verbal discussion to resolve to understand here.
+        
             #! ispecg transfers the incident spectra zrtmp to zremsz in epi(ncn2) grid
-            zremsz=ispecg(eptmp,zrtmp,Nengrid,epi,ncn2,xlum,lpri)
+            ispecg(eptmp,zrtmp,Nengrid,epi,ncn2,zremsz,xlum,lpri,lun11)
+
+            ispecgg(xlum,epi,ncn2,zremsz,lpri,lunlog) 
 
             #! Normalize the spectrum
-            #### still don't understand the lun11 here
-            zremsz=ispecgg(xlum,epi,ncn2,zremsz,lpri,lunlog) 
 
             with open('./Incident_spectra.dat') as fileobj_inc_spectra:
                 for i in range(ncn2):    
                     fileobj_inc_spectra.write(str(epi[i])+','+str(zremsz[i])+'\n')
                     
+                    ####Q: ????
+                    ####A: This is the format with which the data should be written in the file. e10.5 is exponential format with 5 digits after decimel. 4X is 4 spaces and then next number. You can ignore these for sure..
+                    #format(e10.5,4X,e10.5) 
+
+
+            ispcg2(zremsz,epi,ncn2,enlum,lpri,lunlog) 
 
             #! calculate photon numbers
-            enlum=ispcg2(zremsz,epi,ncn2,lpri,lunlog)            
 
             for i in range(1,ncn2):
                 epi[i] = epi[i]*del_E[nbox]
@@ -563,21 +547,28 @@ def xstar_wind(ep, p_mhd, mu, angle,dict_solution, ncn2=63599, chatter=0):
                 
                 with open('./shifted_input'+str(nbox)+'.dat') as fileobj_shifted_box:
                     shifted_box_lines=fileobj_shifted_box.readlines()
+                ####Q: ????
+                ####A: Ignore this blindly. This is one way to provide the file name what I wish in fortran.
+                #file_name = trim(file_name)
+                #read(100+nbox,*) arb_c, arb_c
 
                 for i in range(ncn2):
                     epi[i],zremsz[i]=np.array(shifted_box_lines[i].split(',')[2:]).astype(float)
+                    
+                    ####Q: ????
+                    ####A: Please ignore this.
+                    #format(e10.5,4X,e10.5)
                 
                 pass_writing=True
                 
+                ####Q: why goto 888 here, ok to just pass the else and add the condition to skip the shifted spectra ?
+                ####A: No, this is the step if we restart the calculation from box at midway. Let's say, total number of boxes are 60. Now if we restrting the calculation from box no. 40, then nbox_restart will be 40 and it will read the input spectra for box no. 40 in place of the incident spectra. As the prepared input spectra for box no. 40 is already Doppler shifted, go to 888 is to skip that part. From 888, it will call xstar to calculate things as the input spectra for box 40 is already readymade.
                 pass
-            
-            if pass_writing:
-                pass
-            
+
             #! Read output spectra from previous box, file named as varying_spectra.dat
 
             with open('./varying_spectra.dat') as fileobj_varying_spectra:
-                varying_spectra_lines=fileobj_varying_spectra.readlines()
+                varying_spectra_lines=_varying_spectra.readlines()
                 
             for i in range(ncn2):
                 eptmp[i],zrtmp[i]=np.array(varying_spectra_lines[i].split(',')).astype(float)
@@ -597,28 +588,33 @@ def xstar_wind(ep, p_mhd, mu, angle,dict_solution, ncn2=63599, chatter=0):
                     zrtmp_shifted[i] = zrtmp[i]*del_E_final[c_n]
                     #!*zrtmp_shifted[i] = zrtmp[i]*1.00000
 
+            #Q: ????    
+            #A: Please ignore for python.
+            #format(e10.5,4X,e10.5)  
+
             #!* Mapping to epi grid after doppler shifting
 
-            #l is an index to avoid searching through the whole energy grid at each point. Since we're increasing the energy, 
-            #for each subsequent point we only need to search to increasing parts of the grid
-            
-            l = 0
-                
             for i in range(ncn2):
                 
-                for j in range(l,ncn2):
+                ####Q: should this be shifted to zero if this is an iterative index?
+                ####A: As you can see that index i for do loop runs from 1 to ncn2, it is okay for l=1. This is due to the fact that arrays in fortran start from 1, not from 0:). But giving a look, I think, I missed the j loop to start from l. This is just to save some computation. What I have written, l parameter is not making any sense. 
+                l = 1
+
+                for j in range(ncn2):
                     
                     if epi[i]>=eptmp_shifted[j] and epi[i]<eptmp_shifted[j+1]:
 
                         zrtmp[i] = zrtmp_shifted[j]+((zrtmp_shifted[j+1]-zrtmp_shifted[j])\
                                                      /(eptmp_shifted[j+1]-eptmp_shifted[j]))*(epi[i]-eptmp_shifted[j])
 
-                        l = j
+                        l = i
 
+                        ####Q: break + shifting condition ok ?
+                        ####A: We will discuss this verbally. I am not clear enough in my writing
                         break
 
                 #adding an l=i condition to skip this in the case of the test above
-                if l!=j and (epi[i]<eptmp_shifted[0] or epi[i]>eptmp_shifted[ncn2]):
+                if l!=i and (epi[i]<eptmp_shifted[0] or epi[i]>eptmp_shifted[ncn2]):
 
                     zrtmp[i] = 0
 
@@ -635,11 +631,20 @@ def xstar_wind(ep, p_mhd, mu, angle,dict_solution, ncn2=63599, chatter=0):
                 filename_shifted_input='./shifted_input'+str(nbox)+'.dat'
             else:
                 filename_shifted_input='./shifted_input_final'+str(c_n)+'.dat'
+    
+            ###Q: ????
+            ####A: Please ignore for python.
+            #file_name = trim(file_name)
             
             with open(filename_shifted_input) as fileobj_shifted_input:
                 fileobj_shifted_input.write('#energy(eV)  transmitted(1.0e38erg/s/erg)')
                 for i in range(ncn2):            
                     fileobj_shifted_input.write(str(epi[i])+','+str(zremsz[i]))
+    
+             
+            ####Q: ????
+            ####A: Please ignore.
+            #format(e10.5,4X,e10.5)
 
         
         # !***************************************************
@@ -662,20 +667,22 @@ def xstar_wind(ep, p_mhd, mu, angle,dict_solution, ncn2=63599, chatter=0):
            vobsx = vobsl_last[c_n]
            vturb_x = vobsl[nbox_stop[c_n]]-vobsl_last[c_n]
 
-        '''
-        The lines of sight considered should already be compton thin, the whole line of sight has to be compton thick and this is 
-        checked directly from jonathan's solution
-        The following test is just a sanity check
-        '''
-        
+
         if (xpxcol>1.5e24):
             print('Thomson depth of the cloud becomes unity')
             
-            break
+            ####should the goto 997 be a continue or a break ? 
+            ####A: This step is to terminate the program if the Thomson depth of any box becomes unity. Because in that case we should not see anything. Actually when we decide the line of sight, this fact is already considered. On top of that, this loop is placed to check again.
+            continue
 
-        zremsz=x116n5(epi,ncn2,lpri,lunlog,xlum,enlum,xpx,xpxcol,zeta,nbox,r_or_f,nbox_restart,vobsx,vturb_x)
-        
-        ####!* Computing spectra and blueshift for the final box depending on stop_dist.
+        ####Q: don't know the outputs here
+        ####A: Here zremsz is the output, i.e. the flux. Please check the exact units. x116n5 is the main function of xstar which is actually doing all the computation.
+        x116n5(epi,ncn2,lpri,lunlog,xlum,enlum,zremsz,xpx,xpxcol,zeta,nbox,r_or_f,nbox_restart,vobsx,vturb_x)
+
+
+        ####Q: note: changed the goto 124 with r_or_f==1 with an additional restriction in the test below to skip it otherwise
+        ####A: r_or_f==1 indicates that this is the final box. So, it directly goes to do the final blue shift. I beleive that I made this part unnecessarily complicated. Will be clear to you once we discuss verbally.
+        #!* Computing spectra and blueshift for the final box depending on stop_dist.
 
         if r_or_f !=1 and nbox==nbox_stop[c_n]:
             
@@ -688,111 +695,47 @@ def xstar_wind(ep, p_mhd, mu, angle,dict_solution, ncn2=63599, chatter=0):
             
             #!del_E_final[c_n] = 1.00
             
-            #here in the fortran code we go back to the beginning of the code (where opening ./varying_spectra.dat)
-            #we can't continue the loop because we are now computing the final box, which is not a standard "n+1" box
-            #instead here we repeat the commands that should be run again
-            
-            #! Read output the new spectra from previous box which xstar has modified, file named as varying_spectra.dat
+            ####Q: don't undertsand what happens at the goto 123
+            ####A: This if loop is if the last regular box is reached. Please note that the final box index is separate than the regular box indexes. Again with verbal discussion, it will be much clearer I hope.
+            #go to 123
 
-            with open('./varying_spectra.dat') as fileobj_varying_spectra:
-                varying_spectra_lines=fileobj_varying_spectra.readlines()
-                
-            for i in range(ncn2):
-                eptmp[i],zrtmp[i]=np.array(varying_spectra_lines[i].split(',')).astype(float)
-                
-                if r_or_f == 0:
-                    #! for the final box if r_or_f == 1
-
-                    eptmp_shifted[i] = eptmp[i]*del_E[nbox]
-                    zrtmp_shifted[i] = zrtmp[i]*del_E[nbox]
-                    #!*zrtmp_shifted(i) = zrtmp(i)*1.00000
-
-                else:
-                    #! for the final box
-
-                    eptmp_shifted[i] = eptmp[i]*del_E_final[c_n]
-                    zrtmp_shifted[i] = zrtmp[i]*del_E_final[c_n]
-                    #!*zrtmp_shifted[i] = zrtmp[i]*1.00000 
-
-            #!* Mapping to epi grid after doppler shifting
-
-            #l is an index to avoid searching through the whole energy grid at each point. Since we're increasing the energy, 
-            #for each subsequent point we only need to search to increasing parts of the grid
-            
-            l = 0
-                
-            for i in range(ncn2):
-                
-                for j in range(l,ncn2):
-                    
-                    if epi[i]>=eptmp_shifted[j] and epi[i]<eptmp_shifted[j+1]:
-
-                        zrtmp[i] = zrtmp_shifted[j]+((zrtmp_shifted[j+1]-zrtmp_shifted[j])\
-                                                     /(eptmp_shifted[j+1]-eptmp_shifted[j]))*(epi[i]-eptmp_shifted[j])
-
-                        l = j
-
-                        break
-
-                #adding an l=i condition to skip this in the case of the test above
-                if l!=j and (epi[i]<eptmp_shifted[0] or epi[i]>eptmp_shifted[ncn2]):
-
-                    zrtmp[i] = 0
-
-                #!* zremsz becomes the incident spectrum for the next box
-                zremsz[i] = zrtmp[i] 
-
-
-            #no need for tests on the final box and restart since we know we're at the final box here
-            
-            filename_shifted_input='./shifted_input_final'+str(c_n)+'.dat'
-                
-            with open(filename_shifted_input) as fileobj_shifted_input:
-                fileobj_shifted_input.write('#energy(eV)  transmitted(1.0e38erg/s/erg)')
-                for i in range(ncn2):            
-                    fileobj_shifted_input.write(str(epi[i])+','+str(zremsz[i]))
-    
-            xpx = 10.0**(xpxl_last[c_n])
-            xpxcol = 10.0**(xpxcoll_last[c_n])
-            zeta = zetal_last[c_n]
-            vobsx = vobsl_last[c_n]
-            vturb_x = vobsl[nbox_stop[c_n]]-vobsl_last[c_n]
-    
-            '''
-            The lines of sight considered should already be compton thin, the whole line of sight has to be compton thick and this is 
-            checked directly from jonathan's solution
-            The following test is just a sanity check
-            '''
-            
-            if (xpxcol>1.5e24):
-                print('Thomson depth of the cloud becomes unity')
-                
-                break
-    
-            zremsz=x116n5(epi,ncn2,lpri,lunlog,xlum,enlum,xpx,xpxcol,zeta,nbox,r_or_f,nbox_restart,vobsx,vturb_x)
-        
         #! Blueshift for the final box
         del_E_bs[c_n] = np.sqrt((1+vobsl_last[c_n]/c_Km)/(1-vobsl_last[c_n]/c_Km))
 
         with open('./output_spectra_final'+str(nbox)+'.dat') as fileobj_final_output_spectra:
 
+            #Q:????
+            ####A: Please ignore
+            #file_name = trim(file_name)
+
             final_output_spectra_lines=fileobj_final_output_spectra.readlines()
         
+        ####Q: is this just for skipping the first line ?
+        ####A: Yes, this is to skip the first line. Possibly the most inefficient way.
+        #read(500+c_n,*) arb_c, arb_c, arb_c, arb_c, arb_c  
+        
         for ll in range(ncn2):
-
-            #note: keeping only columns 0 and 2 (out of 5 columns) as these are the one we're interested in here
-            eptmp[ll],zrtmp[ll]=np.array(final_output_spectra_lines[ll+1].split(',')).astype(float)[0,2]
+            ####Q: what is arb_r here ? 
+            ####A: arb_r here is arbitrary real, just to skip those numbers present in the file as not required for that step.
+            eptmp[ll],arb_r,zrtmp[ll],arb_r,arb_r=np.array(final_output_spectra_lines[ll+1].split(',')).astype(float)
             eptmp[ll] = eptmp[ll]*del_E_bs[c_n]
             zrtmp[ll] = zrtmp[ll]*del_E_bs[c_n]
             #!*zrtmp[ll] = zrtmp[ll]*1.00000
             
         with open('./Final_blueshifted'+str(stop_d[c_n])+'.dat') as fileobj_final_blueshift:
 
+            #Q: ????
+            #A: Please ignore.
+            #file_name = trim(file_name)
 
             fileobj_final_blueshift.write('#energy(eV)  transmitted(1.0e38erg/s/erg)\n')
 
             for ll in range(ncn2):
                 fileobj_final_blueshift.write(str(eptmp[ll])+','+str(zrtmp[ll]))
+    
+                #Q: ????
+                #A: Please ignore for python.
+                #format(e10.5,4X,e10.5,4X,e10.5,4X,e10.5,4X,e10.5)  
 
 
         r_or_f= 0

@@ -103,9 +103,9 @@ model_dir='/home/parrama/Soft/Xspec/Models'
 
 #example of model loading
 # AllModels.initpackage('tbnew_mod',"lmodel_tbnew.dat",dirPath=model_dir+'/tbnew')
-
-#this line still has to be used every time. The model name in xspec is NOT tbnew_mod though
-AllModels.lmod('tbnew_mod',dirPath=model_dir+'/tbnew')
+#### should be updated for the new custom model addition in xspec 12.13 and pyxspec 2.1.1
+# #this line still has to be used every time. The model name in xspec is NOT tbnew_mod though
+# AllModels.lmod('tbnew_mod',dirPath=model_dir+'/tbnew')
 
 #list of multiplicative/convolution models (as of version 12.12 + with tbnew added)
 xspec_multmods=\
@@ -2543,8 +2543,8 @@ class fitmod:
         
         includedcomps=np.array([comp for comp in self.includedlist if comp is not None])
         
-        parlist_included=np.array([elem.parlist for elem in includedcomps])
-        
+        parlist_included=np.array([elem.parlist for elem in includedcomps],dtype=object)
+            
         #here the 1 index is here because both the group and the parameter number are stored
         mask_comp_pegged=[[elem[1] in comp_parlist for comp_parlist in parlist_included] for elem in par_peg_ids]
         

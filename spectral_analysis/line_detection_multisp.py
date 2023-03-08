@@ -149,7 +149,7 @@ ap.add_argument("-prefix",nargs=1,help='restrict analysis to a specific prefix',
 
 ####output directory
 ap.add_argument("-outdir",nargs=1,help="name of output directory for line plots",
-                default="lineplots_opt_paper_renorm",type=str)
+                default="lineplots_opt",type=str)
 
 #overwrite
 ap.add_argument('-overwrite',nargs=1,
@@ -193,7 +193,7 @@ ap.add_argument("-h_update",nargs=1,help='update the bg, rmf and arf file names 
 ap.add_argument('-restrict',nargs=1,help='restrict the computation to a number of predefined exposures',default=True,type=bool)
 #in this mode, the line detection function isn't wrapped in a try, and the summary isn't updasted
 
-observ_restrict=['0670673001_pn_U002_Timing_auto_sp_src_grp_opt.ds','13717_heg_-1_grp_opt.pha','13717_heg_1_grp_opt.pha']
+observ_restrict=['660_heg_-1_grp_opt.pha','660_heg_1_grp_opt.pha']
 
 ''' 
 Chandra:
@@ -315,11 +315,9 @@ ap.add_argument('-refit_cont',nargs=1,help='After the autofit, refit the continu
 
 ####split fit
 ap.add_argument('-split_fit',nargs=1,help='Split fitting procedure between components instead of fitting the whole model directly',default=True)
+
 #line significance assessment parameter
 ap.add_argument('-assess_line',nargs=1,help='use fakeit simulations to estimate the significance of each absorption line',default=True,type=bool)
-
-ap.add_argument('-assess_ul_detec',nargs=1,help='use fakeit simulations to estimate the upper limit of each line',default=False,type=bool)
-
 
 '''SPECTRUM PARAMETERS'''
 
@@ -341,7 +339,7 @@ ap.add_argument("-line_search_norm",nargs=1,help='min, max and nsteps (for one s
                 default='0.01 10 500',type=str)
 
 #skips fakes testing at high energy to gain time
-ap.add_argument('-restrict_fakes',nargs=1,help='restrict range of fake computation to 8keV max',default=True,type=bool)
+ap.add_argument('-restrict_fakes',nargs=1,help='restrict range of fake computation to 8keV max',default=False,type=bool)
 
 #Chandra issues
 ap.add_argument('-restrict_graded',nargs=1,help='restrict range of line analysis to 8keV max for old CC33_graded spectra',default=False,type=bool)
@@ -411,7 +409,6 @@ write_pdf=args.write_pdf
 trig_interval=np.array(args.trig_interval.split(' ')).astype(float)
 hid_cont_range=np.array(args.hid_cont_range.split(' ')).astype(float)
 catch_errors=args.catch_errors
-assess_ul_detec=args.assess_ul_detec
 sign_threshold=args.sign_threshold
 overlap_flag=args.overlap_flag
 xspec_window=args.xspec_window
@@ -451,10 +448,6 @@ fitstat=args.fitstat
 cont_model=args.cont_model
 split_fit=args.split_fit
 
-#assessing upper limits require the autofit to proceed
-if assess_ul_detec:
-    force_autofit=True
-    
 '''utility functions'''
 
 #switching off matplotlib plot displays unless with plt.show()
@@ -2791,8 +2784,6 @@ def line_detect(epoch_id):
         plt.savefig(outdir+'/'+epoch_observ[0]+'_paper_plot_'+args.line_search_e.replace(' ','_')+'_'+args.line_search_norm.replace(' ','_')+'.pdf')
                 
         plt.close(fig_paper)
-
-        breakpoint()
         
         model_load(data_autofit_noabs)
         
@@ -2810,8 +2801,7 @@ def line_detect(epoch_id):
         The standard condition for starting the process is if assess line is set to true AND if there is an absorption line in the autofit 
         We thus gain time when the initial peak detection was a fluke or we forced the autofit without an absorption, 
         in which cases there's no need to compute the fakes
-        
-        The computation can be forced by setting assess_ul_detec to True
+
         '''
         
         #### Significance assessment

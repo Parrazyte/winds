@@ -39,7 +39,10 @@
       real tread,tloop,tfunc,trates1,thcor,trates2,tucalc(ntp),theat
       integer ncall(ntp)
       end module times
-      program x116n5
+      
+      module xstar
+	  subroutine x116n5(epi,ncn2,lpri,lunlog,xlum,enlum,zremsz,xpx,  &
+     &     xpxcol,zeta,nbox,r_or_f,nbox_restart,vobsx,vturb_x)
 !
       use globaldata
       use times
@@ -377,7 +380,6 @@
      &       tau0,dpthc,dpthcont,tauc,                                  &
      &       np2,ncsvn,nlsvn,                                           &
      &       ntotit,                                                    &
-     &       xii,rrrt,pirt,htt,cll,htt2,cll2,httot,cltot,hmctot,elcter, &
      &       httot2,cltot2,                                             &
      &       xilevg,bilevg,rnisg,elum,elumo,fline,flinel,               &
      &       rcem,oplin,rccemis,brcems,opakc,opakcont,cemab,            &
@@ -463,7 +465,181 @@
      &             xilevg,bilevg,rnisg,                                 &
      &            rcem,oplin,rccemis,brcems,opakc,opakcont,cemab,       &
      &            cabab,opakab,fline,flinel,elin,errc)                
-!          
+
+!***********************************************************************
+!* This portion is to write the ion fractions in a file
+	if(ldir.lt.0) then
+
+	open(unit=679,file="temp_ion_fraction_details.dat",&
+     &  Access = 'append', status='old')	!* This file is to write different variables estimated from xstar.
+
+	open(unit=680,file="xstar_output_details.dat",Access='append',&
+     &	 status='old')	!* This file is to write different variables estimated from xstar.
+
+	if((nbox==nbox_restart).and.(jkp==1)) then
+
+	write(679,*)"#nbox(1) jkp(2) rad_start(3) rad_end(4)&
+     &	 delta_r(5)  xpxcol/xpx(6) zeta_start(7)  zeta_end(8)  &
+     &   zeta_avg(9) xpx(10) vobsx(11) xpxcol(12) temp_box(13) O8(14) &
+     &   O7(15) &
+     &	Ne10(16) Ne9(17) Na11(18) Na10(19) Mg12(20) Mg11(21) Al13(22)&
+     &  Al12(23) Si14(24) Si13(25) S16(26) S15(27) Ar18(28) Ar17(29)&
+     &	 Ca20(30) Ca19(31) Fe26(32) Fe25(33) Nh_O8(34) Nh_O7(35)&
+     &   Nh_Ne10(36) Nh_Ne9(37) Nh_Na11(38) Nh_Na10(39) Nh_Mg12(40)&
+     &   Nh_Mg11(41) Nh_Al13(42) Nh_Al12(43) Nh_Si14(44) Nh_Si13(45)&
+     &	Nh_S16(46) Nh_S15(47) Nh_Ar18(48) Nh_Ar17(49) Nh_Ca20(50) &
+     &	Nh_Ca19(51) Nh_Fe26(52) Nh_Fe25(53)"
+
+	write(680,*) "#nbox(1) jkp(2) r(3) delta_r(4) xpxcol/xpx(5) &
+     &	zeta(6) xpx(7) vobsx(8) xpxcol(9) temp_box(10) O8(11) O7(12) &
+     &	Ne10(13) Ne9(14) Na11(15) Na10(16) Mg12(17) Mg11(18) Al13(19)&
+     &  Al12(20) Si14(21) Si13(22) S16(23) S15(24) Ar18(25) Ar17(26)&
+     &	 Ca20(27) Ca19(28) Fe26(29) Fe25(30)"
+
+
+	end if
+
+!* Different H-like and He-like ions and their corresponding index
+!* O8, O7, Ne10, Ne9, Na11, Na10, Mg12, Mg11, Al13, Al12, Si14, Si13, S16, S15, Ar18, Ar17, Ca20, Ca19, Fe26, Fe25
+!* 36, 35, 55,   54,  66,   65,   78,   77,   91,   90,   105,  104,  136, 135, 171,  170,  210,  209,  351,  350
+
+	if(jkp==1) then
+
+	O8	= 0.0
+	O7	= 0.0
+	Ne10	= 0.0
+	Ne9	= 0.0
+	Na11	= 0.0
+	Na10	= 0.0
+	Mg12	= 0.0
+	Mg11	= 0.0
+	Al13	= 0.0
+	Al12	= 0.0
+	Si14	= 0.0
+	Si13	= 0.0
+	S16	= 0.0
+	S15	= 0.0
+	Ar18	= 0.0
+	Ar17	= 0.0
+	Ca20	= 0.0
+	Ca19	= 0.0
+	Fe26	= 0.0
+	Fe25	= 0.0
+
+	rad_start	= r
+	zeta_start	= zeta
+	delta_r	= 0.0
+	temp_box= 0.0
+	zeta_avg= 0.0
+
+	end if 	                            !*	End of jkp==1 loop 
+
+	O8	= O8+xii(36)
+	O7	= O7+xii(35)
+	Ne10	= Ne10+xii(55)
+	Ne9	= Ne9+xii(54)
+	Na11	= Na11+xii(66)
+	Na10	= Na10+xii(65)
+	Mg12	= Mg12+xii(78)
+	Mg11	= Mg11+xii(77)
+	Al13	= Al13+xii(91)
+	Al12	= Al12+xii(90)
+	Si14	= Si14+xii(105)
+	Si13	= Si13+xii(104)
+	S16	= S16+xii(136)
+	S15	= S15+xii(135)
+	Ar18	= Ar18+xii(171)
+	Ar17	= Ar17+xii(170)
+	Ca20	= Ca20+xii(210)
+	Ca19	= Ca19+xii(209)
+	Fe26	= Fe26+xii(351)
+	Fe25	= Fe25+xii(350)
+
+	rad_end	= r
+	delta_r	= delta_r+delr
+	temp_box= temp_box+t*1.0e4
+	zeta_end= zeta
+	zeta_avg= zeta_avg+zeta
+
+	write(680,*) nbox, jkp, r, delr, xpxcol/xpx, zeta, &
+     &	xpx, vobsx, xpxcol, t*1.0e4, xii(36), xii(35), xii(55),&
+     &  xii(54), xii(66), xii(65), xii(78), xii(77), xii(91),&
+     &  xii(90), xii(105), xii(104), xii(136), xii(135), xii(171),&
+     &  xii(170), xii(210), xii(209), xii(351), xii(350)
+
+	if(jkp.gt.1) then
+
+	O8	= O8/jkp
+	O7	= O7/jkp
+	Ne10	= Ne10/jkp
+	Ne9	= Ne9/jkp
+	Na11	= Na11/jkp
+	Na10	= Na10/jkp
+	Mg12	= Mg12/jkp
+	Mg11	= Mg11/jkp
+	Al13	= Al13/jkp
+	Al12	= Al12/jkp
+	Si14	= Si14/jkp
+	Si13	= Si13/jkp
+	S16	= S16/jkp
+	S15	= S15/jkp
+	Ar18	= Ar18/jkp
+	Ar17	= Ar17/jkp
+	Ca20	= Ca20/jkp
+	Ca19	= Ca19/jkp
+	Fe26	= Fe26/jkp
+	Fe25	= Fe25/jkp
+
+	Nh_O8	= O8*ababs(8)*xpx*delta_r
+	Nh_O7	= O7*ababs(8)*xpx*delta_r
+	Nh_Ne10	= Ne10*ababs(10)*xpx*delta_r
+	Nh_Ne9	= Ne9*ababs(10)*xpx*delta_r
+	Nh_Na11	= Na11*ababs(11)*xpx*delta_r
+	Nh_Na10	= Na10*ababs(11)*xpx*delta_r
+	Nh_Mg12	= Mg12*ababs(12)*xpx*delta_r
+	Nh_Mg11	= Mg11*ababs(12)*xpx*delta_r
+	Nh_Al13	= Al13*ababs(13)*xpx*delta_r
+	Nh_Al12	= Al12*ababs(13)*xpx*delta_r
+	Nh_Si14	= Si14*ababs(14)*xpx*delta_r
+	Nh_Si13	= Si13*ababs(14)*xpx*delta_r
+	Nh_S16	= S16*ababs(16)*xpx*delta_r
+	Nh_S15	= S15*ababs(16)*xpx*delta_r
+	Nh_Ar18	= Ar18*ababs(18)*xpx*delta_r
+	Nh_Ar17	= Ar17*ababs(18)*xpx*delta_r
+	Nh_Ca20	= Ca20*ababs(20)*xpx*delta_r
+	Nh_Ca19	= Ca19*ababs(20)*xpx*delta_r
+	Nh_Fe26	= Fe26*ababs(26)*xpx*delta_r
+	Nh_Fe25	= Fe25*ababs(26)*xpx*delta_r
+
+	rad_pos		= rad_pos/jkp
+	temp_box	= temp_box/jkp
+	zeta_avg	= zeta_avg/jkp
+
+	write(679,*) nbox, jkp, rad_start, rad_end, delta_r,&
+     &  xpxcol/xpx, zeta_start, zeta_end, zeta_avg, xpx,&
+     &	vobsx, xpxcol, temp_box, O8, O7, Ne10, Ne9, Na11, Na10, Mg12,&
+     &  Mg11, Al13, Al12, Si14, Si13, S16, S15, Ar18, Ar17, Ca20, &
+     &	Ca19, Fe26, Fe25, Nh_O8, Nh_O7, Nh_Ne10, Nh_Ne9, Nh_Na11,&
+     &  Nh_Na10, Nh_Mg12, Nh_Mg11, Nh_Al13, Nh_Al12, Nh_Si14, Nh_Si13,&
+     &  Nh_S16, Nh_S15, Nh_Ar18, Nh_Ar17, Nh_Ca20, Nh_Ca19, Nh_Fe26, &
+     &	Nh_Fe25
+
+	t_init		= t
+
+	write(*,*)"t_init=",t_init
+
+	end if				    !*  End of jkp.gt.1 loop
+
+	close(679)
+
+	close(680)
+
+	open(unit=682,file='temp_guess.dat',status='unknown')
+	write(682,*)t_init
+	close(682)
+
+	end if  !* if loop on ldir ends here
+!***********************************************************************
 !          do transfer.  assumes comp2 and bremem have been called             
 !          already                                                           
            call heatt(lpri2,lunlog,                                     &
@@ -29612,6 +29788,50 @@
         if (status .gt. 0)call printerror(lun11,status) 
         enddo 
                                                                         
+!**********************************************************************
+! writing output spectra in a dat file for each box.
+
+	if (r_or_f==0) then
+        write (file_name, "(A14,I4.4,A4)") "output_spectra",nbox,".dat"
+	else
+	write (file_name, "(A20,I4.4,A4)") &
+     &	"output_spectra_final",nbox,".dat"
+	end if
+
+        file_name = trim(file_name)
+	open(unit=100+nbox,file=file_name,status='unknown') 
+
+	write(100+nbox,*) "#energy        incident(1.0e38erg/s/erg)   & 
+     &  transmitted   emit_inward   emit_outward	transmission_coef"
+
+    do ll=1,ncn2
+        if (zrems(2,ll).gt.0) then
+        	trans_coef = zrems(2,ll)/zrems(1,ll)
+        	else 
+        	trans_coef = 0.0
+        end if
+		write(100+nbox,333) epi(ll), zrems(1,ll), zrems(2,ll),     &
+     &  zrems(3,ll), zrems(4,ll), trans_coef
+	enddo
+ 333    format(e10.5,4X,e10.5,4X,e10.5,4X,e10.5,4X,e10.5,4X,e10.5)  
+
+	close(100+nbox)
+!**********************************************************************
+! writing transmitted spectra in a dat file to feed to next box
+
+	if (r_or_f==0) then
+	open(unit=222,file='varying_spectra.dat',status='unknown') 
+
+        do ll=1,ncn2
+	write(222,555) epi(ll), zrems(2,ll)
+	enddo
+ 555    format(e10.5,4X,e10.5)  
+
+	close(222)
+	end if
+	
+!***********************************************************************
+
 !     compute checksums                                                 
       if(verbose.gt.0) write (lun11,*)'writespectra: writingchecksum' 
       status=0 
@@ -31593,3 +31813,10 @@
         enddo
       return
       end
+      
+      ! end of whole program subroutine
+      return
+      end
+      
+      !end of xstar module
+      end module xstar

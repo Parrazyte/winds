@@ -150,8 +150,9 @@ mass_dic={
     'MAXIJ1305-704':[8.9,1.,1.6],
     '4U1543-475':[8.4,1,1],
     'XTEJ1118+480':[7.55,0.65,0.65],
+    # 'IGRJ17451-3022':[1.5,0,0],
     #NS:
-    'XTEJ1701-462':1.4
+    'XTEJ1701-462':[1.4,0,0]
     }
 
 sources_det_dic=['GRS1915+105','GRS 1915+105','GROJ1655-40','H1743-322','4U1630-47','IGRJ17451-3022']
@@ -397,7 +398,7 @@ def plot_lightcurve(dict_linevis,ctl_maxi_df,ctl_maxi_simbad,name,dict_rxte=dict
             
             ax_lc.set_yscale('log')
             
-            ax_lc.set_ylim(0.05,5)
+            ax_lc.set_ylim(0.1,4)
             
             #plotting the full lightcurve
             rxte_hr_errbar=ax_lc.errorbar(num_rxte_dates,rxte_hr,xerr=0.5,yerr=rxte_hr_err,
@@ -432,7 +433,7 @@ def plot_lightcurve(dict_linevis,ctl_maxi_df,ctl_maxi_simbad,name,dict_rxte=dict
             maxi_hr_err=(maxi_lc_df[maxi_lc_df.columns[6]]/maxi_lc_df[maxi_lc_df.columns[5]]+maxi_lc_df[maxi_lc_df.columns[4]]/maxi_lc_df[maxi_lc_df.columns[3]])*maxi_hr
             ax_lc.set_yscale('log')
             
-            ax_lc.set_ylim(0.05,5)
+            ax_lc.set_ylim(0.3,2)
             
             #plotting the full lightcurve
             maxi_hr_errbar=ax_lc.errorbar(num_maxi_dates,maxi_hr,xerr=0.5,yerr=maxi_hr_err,
@@ -847,17 +848,20 @@ def abslines_values(file_paths,dict_linevis):
             curr_autofit_infos[l]=np.array([None,None])
             
             for  m in range(len(curr_line[1:-2])):
-                
-                # try:
-                
-                #inverting the sign of the blueshift values
-                if m==1:
-                    invert_factor=-1
-                else:
-                    invert_factor=1
-                    
-                curr_abslines_infos[l][m]=invert_factor*np.array(literal_eval(curr_line[m+1].replace(',','').replace(' ',',')))\
+
+
+                elem_array=np.array(literal_eval(curr_line[m+1].replace(',','').replace(' ',',')))\
                     if curr_line[m+1]!='' else None
+                
+                #inverting the sign of the blueshift values                    
+                if m==1:
+                    for o in range(elem_array.shape[0]):
+                        for p in range(elem_array.shape[1]):
+                            if elem_array[o][p] is not None:
+                                elem_array[o][p]*=-1
+                
+                curr_abslines_infos[l][m]=elem_array
+                    
                 # except:
                 #     
                     
@@ -1143,10 +1147,12 @@ def distrib_graph(data_perinfo,info,dict_linevis,data_ener=None,conf_thresh=0.99
         date_list=dict_linevis['date_list'][mask_obj]
         width_plot_restrict=dict_linevis['width_plot_restrict']
         glob_col_source=dict_linevis['glob_col_source']
+        cmap_color_det=dict_linevis['cmap_color_det']
     else:
         display_nonsign=True
         scale_log_eqw=False
         glob_col_source=False
+        cmap_color_det=mpl.cm.plasma
         
         
     save_dir=dict_linevis['save_dir']
@@ -1192,7 +1198,7 @@ def distrib_graph(data_perinfo,info,dict_linevis,data_ener=None,conf_thresh=0.99
     else:
         bins_eqw=np.linspace(5,max(100,(max(ravel_ragged(data_perinfo[0][0]))//5+1)*5),20)
         
-    bins_eqwratio=np.geomspace(0.5,5,20)
+    bins_eqwratio=np.linspace(0.2,4,20)
     
     if n_infos>=5:
         if len(ravel_ragged(data_perinfo[3][0])[ravel_ragged(data_perinfo[4][0])>0])>0 and len(ravel_ragged(data_perinfo[3][0]).nonzero()[0])!=0:
@@ -1208,7 +1214,7 @@ def distrib_graph(data_perinfo,info,dict_linevis,data_ener=None,conf_thresh=0.99
     bins_time=None
     
     #linear bin widths between 0 (where most widths value lie) and 0.05 which is the hard limit
-    bins_width=np.linspace(0,5500,21)
+    bins_width=np.linspace(0,5500,12)
 
     #sorting the bins in an array depending on the info asked
     bins_info=[bins_eqw,bins_bshift,bins_ener,bins_flux,bins_time,bins_width]
@@ -1290,16 +1296,18 @@ def distrib_graph(data_perinfo,info,dict_linevis,data_ener=None,conf_thresh=0.99
                 #note: here we don't link bool sign to bool det because we won't bother plotting non significant lines
                 bool_sign_split=np.array([(elem>=conf_thresh) & (~np.isnan(elem)) for elem in sign_det_split],
                                          dtype=object)
-            
-            if info=='width':
-                
-                #creating a mask for widths that are not compatible with 0 at 3 sigma\
-                #(different from the scatter here as we don't want the 0 values)
-                bool_sign_width_split=np.array([ravel_ragged(data_perinfo[7][0][i].T[j]).astype(float)!=0\
-                                                for j in range(len(obj_disp_list))],dtype=object)
+                        
+                if info=='width':
                     
-                bool_sign_split=np.array([elem & elem2 for elem,elem2 in zip(bool_sign_split, bool_sign_width_split)])
-            
+                    #creating a mask for widths that are not compatible with 0 at 3 sigma\
+                    #(different from the scatter here as we don't want the 0 values)
+                    bool_sign_width_split=np.array([ravel_ragged(data_perinfo[7][0][i].T[j]).astype(float)!=0\
+                                                    for j in range(len(obj_disp_list))],dtype=object)
+                        
+
+                    bool_sign_split=np.array([elem & elem2 for elem,elem2 in zip(bool_sign_split, bool_sign_width_split)],dtype=object)
+
+                    
             if split_instru:
                 
                 instru_list_repeat=np.array([instru_list for repeater in (i if type(i)==range else [i])])
@@ -1310,6 +1318,7 @@ def distrib_graph(data_perinfo,info,dict_linevis,data_ener=None,conf_thresh=0.99
                 bool_sign_split=[(bool_signdet) & (ravel_ragged(instru_list_repeat)==instru_unique[i_instru])\
                                   for i_instru in range(len(instru_unique))]
             
+                
         #### creating the hist variables
         if line_mode:
             
@@ -1391,6 +1400,10 @@ def distrib_graph(data_perinfo,info,dict_linevis,data_ener=None,conf_thresh=0.99
                     #no need for transposition here
                     hist_data_split=np.array([ravel_ragged(data_plot[0][i])[bool_sign_split[i_line]] for i_line in range(len(instru_unique))],dtype=object)
 
+                #adjusting the length to avoid a size 1 array which would cause issue
+                if len(hist_data_split)==1:
+                    hist_data_split=hist_data_split[0]
+                    
                         
         hist_cols=['blue','grey']
         hist_labels=['detections above '+str(conf_thresh*100)+'% treshold','detections below '+str(conf_thresh*100)+'% treshold']
@@ -1412,8 +1425,8 @@ def distrib_graph(data_perinfo,info,dict_linevis,data_ener=None,conf_thresh=0.99
                     n_obj_withdet=len(id_obj_withdet)
                                 
                 #color mapping accordingly for source split
-                norm_colors_obj=mpl.colors.Normalize(vmin=0,vmax=n_obj_withdet)
-                colors_func_obj=mpl.cm.ScalarMappable(norm=norm_colors_obj,cmap=mpl.cm.hsv_r)
+                norm_colors_obj=mpl.colors.Normalize(vmin=0,vmax=n_obj_withdet-1)
+                colors_func_obj=mpl.cm.ScalarMappable(norm=norm_colors_obj,cmap=cmap_color_det)
                 
                 if line_mode:
                     
@@ -1457,18 +1470,23 @@ def distrib_graph(data_perinfo,info,dict_linevis,data_ener=None,conf_thresh=0.99
                         #skipping displaying bars for objects with no detection
                         source_withdet_mask=[sum(elem)>0 for elem in bool_sign_split]
                         
+                        # breakpoint()
                         
                         #resticting histogram plotting to sources with detection to havoid plotting many useless empty source hists
                         ax_hist.hist(hist_data_split[source_withdet_mask],
                                      color=np.array([colors_func_obj.to_rgba(i_obj_det) for i_obj_det in range(n_obj_withdet)])[(source_withdet_mask if glob_col_source else np.repeat(True,n_obj_withdet))],
-                                     label=obj_disp_list[source_withdet_mask],bins=hist_bins,rwidth=0.8,align='left')
+                                     label=obj_disp_list[source_withdet_mask],bins=hist_bins,rwidth=0.8,align='left',stacked=True)
+                        
+                        # breakpoint()
 
                     elif split_instru:
-                        
-                        breakpoint()
-                        
+                            
                         ax_hist.hist(hist_data_split,color=[telescope_colors[instru_unique[i_instru]] for i_instru in range(len(instru_unique))],
-                                     label=instru_unique,bins=hist_bins,rwidth=0.8,align='left')
+                                      label=instru_unique,bins=hist_bins,rwidth=0.8,align='left')
+
+                        #if we want combined (not stacked) + transparent                        
+                        # t=[ax_hist.hist(hist_data_split[i_instru],color=telescope_colors[instru_unique[i_instru]],
+                        #              label=instru_unique[i_instru],bins=hist_bins,rwidth=0.8,align='left',alpha=0.5) for i_instru in range(len(instru_unique))]
                         
                     #adding minor x ticks only (we don't want minor y ticks because they don't make sense for distributions)
                     ax_hist.xaxis.set_minor_locator(AutoMinorLocator())
@@ -1572,6 +1590,8 @@ def correl_graph(data_perinfo,infos,data_ener,dict_linevis,mode='intrinsic',mode
         display_pearson=dict_linevis['display_pearson']
         display_abserr_bshift=dict_linevis['display_abserr_bshift']
         glob_col_source=dict_linevis['glob_col_source']
+        display_th_width_ew=dict_linevis['display_th_width_ew']
+        cmap_color_det=dict_linevis['cmap_color_det']
     else:
         display_nonsign=True
         scale_log_hr=True
@@ -1581,6 +1601,8 @@ def correl_graph(data_perinfo,infos,data_ener,dict_linevis,mode='intrinsic',mode
         display_pearson=False
         display_abserr_bshift=False
         glob_col_source=False
+        display_th_width_ew=False
+        cmap_color_det=mpl.cm.plasma
         
     mask_obj=dict_linevis['mask_obj']
     abslines_ener=dict_linevis['abslines_ener']
@@ -1733,15 +1755,8 @@ def correl_graph(data_perinfo,infos,data_ener,dict_linevis,mode='intrinsic',mode
         #putting a logarithmic y scale if it shows equivalent widths or one of the hid parameters
         if mode!='source' and ((mode=='observ' and scale_log_hr and not time_mode) or ((ind_infos[0 if time_mode else 1] in [0,3] or mode=='eqwratio') and scale_log_eqw)):
                             
-            ax_scat.set_yscale('log')
-
-        #logarithmic scale by default for eqw ratios
-        if ratio_mode:
-            if time_mode:
-                ax_scat.set_yscale('log')
-            else:
-                ax_scat.set_xscale('log')
-        
+            ax_scat.set_yscale('log')                
+                
         #putting a logarithmic x scale if it shows equivalent widths
         if ind_infos[0] in [0,3] and scale_log_eqw and not time_mode:
             ax_scat.set_xscale('log')
@@ -1812,7 +1827,7 @@ def correl_graph(data_perinfo,infos,data_ener,dict_linevis,mode='intrinsic',mode
             bool_sign_ratio=np.array([bool_sign_x[bool_det_ratio],bool_sign_y[bool_det_ratio]]).T.min(1)>=conf_thresh
             
             #applying the width mask (or just a True out of width mode)
-            bool_sign_ratio=bool_sign_ratio & bool_sign_ratio_width[bool_det_ratio]
+            bool_sign_ratio=bool_sign_ratio & (True if bool_sign_ratio_width is True else bool_sign_ratio_width[bool_det_ratio])
 
                 
             #masks for upper limits (needs at least one axis to have detection and significance)
@@ -2291,7 +2306,7 @@ def correl_graph(data_perinfo,infos,data_ener,dict_linevis,mode='intrinsic',mode
                 line_e=lines_e_dict[lines_std_names[3+line_id]][0]
                 
                 #computing the (non symmetrical in energy space) blueshift error with 0.006 absolute eror
-                speed_abs_err=np.array([line_e-ang2kev(ang2kev(line_e)+0.003),ang2kev(ang2kev(line_e)-0.003)-line_e])*c_light/line_e
+                speed_abs_err=np.array([line_e-ang2kev(ang2kev(line_e)+0.006),ang2kev(ang2kev(line_e)-0.006)-line_e])*c_light/line_e
                 
                 ax_scat.axvspan(-speed_abs_err[0],speed_abs_err[1],color='grey',label='Absolute error region',alpha=0.3)
             
@@ -2304,11 +2319,11 @@ def correl_graph(data_perinfo,infos,data_ener,dict_linevis,mode='intrinsic',mode
                 line_e=lines_e_dict[lines_std_names[3+line_id]][0]
                 
                 #computing the (non symmetrical in energy space) blueshift error with 0.006 absolute eror
-                speed_abs_err=np.array([line_e-ang2kev(ang2kev(line_e)+0.003),ang2kev(ang2kev(line_e)-0.003)-line_e])*c_light/line_e
+                speed_abs_err=np.array([line_e-ang2kev(ang2kev(line_e)+0.006),ang2kev(ang2kev(line_e)-0.006)-line_e])*c_light/line_e
                 
                 ax_scat.axvspan(-speed_abs_err[0],speed_abs_err[1],color='grey',label='FeKavi Absolute error',alpha=0.3)
                 
-        #### coloring
+        #### Color definition
         
         #for the colors, we use the same logic than to create y_data with observation/source level parameters here
         
@@ -2498,8 +2513,8 @@ def correl_graph(data_perinfo,infos,data_ener,dict_linevis,mode='intrinsic',mode
                 disp_objects=np.unique(ravel_ragged(color_data_tot))
             
             #and compute a color mapping accordingly
-            norm_colors_obj=mpl.colors.Normalize(vmin=0,vmax=len(disp_objects))
-            colors_func_obj=mpl.cm.ScalarMappable(norm=norm_colors_obj,cmap=mpl.cm.hsv_r)
+            norm_colors_obj=mpl.colors.Normalize(vmin=0,vmax=len(disp_objects)-1)
+            colors_func_obj=mpl.cm.ScalarMappable(norm=norm_colors_obj,cmap=cmap_color_det)
         
             color_arr=np.array([colors_func_obj.to_rgba(np.argwhere(disp_objects==elem)[0][0]) for s in ([0,1] if display_nonsign else [0]) for elem in color_data[s]])
                 
@@ -2568,7 +2583,18 @@ def correl_graph(data_perinfo,infos,data_ener,dict_linevis,mode='intrinsic',mode
                         #lolims here
                         plot_ul_err([-1,0],x_data_ll,y_data_ll,x_data_ll*0.05,y_error_ll.T,color_arr_ul_y)
 
-                    
+        
+        #### adding cropping on the EW ratio X axis to fix unknown issue
+        
+        if ratio_mode:
+            if width_mode:
+                if min(ravel_ragged(x_data))>0.28 and max(ravel_ragged(x_data))<3.5:
+                    ax_scat.set_xlim(0.28,3.5)
+            else:
+                if min(ravel_ragged(x_data))>0.28:
+                    ax_scat.set_xlim(0.28,ax_scat.get_xlim()[1])
+
+        #### Color replacements in the scatter to match the colormap
         if color_scatter!='None':
             
             for s,elem_errbar in enumerate(errbar_list):
@@ -2755,12 +2781,55 @@ def correl_graph(data_perinfo,infos,data_ener,dict_linevis,mode='intrinsic',mode
         #resizing for a square graph shape
         forceAspect(ax_scat,aspect=1)
         
+        
+        #### theoretical line drawing for eqw_width
+        if infos=='eqw_width' and display_th_width_ew:
+            
+            line_id=np.argwhere(np.array(mask_lines))[0][0]
+            if line_id==0:
+                files=glob.glob('/home/parrama/Documents/Work/PhD/docs/atom/Fe25*_*.dat')
+            elif line_id==1:
+                files=glob.glob('/home/parrama/Documents/Work/PhD/docs/atom/Fe26*_*.dat')
+                
+            nh_values=np.array([elem.split('/')[-1].replace('.dat','').split('_')[1] for elem in files]).astype(float)
+            
+            nh_order=nh_values.argsort()
+            
+            nh_values.sort()
+            
+            ls_curve=['solid','dotted','dashed','dashdot',(0, (3, 5, 1, 5, 1, 5))]
+            
+            colors_curve=['black','black','black','black','black']
+
+            for id_curve,nh_curve_path in enumerate(np.array(files)[nh_order]):
+                nh_array=np.array(pd.read_csv(nh_curve_path,sep='      ',engine='python',header=None)).T
+                
+                plt.plot(nh_array[0],nh_array[1],label=r'$N_i= $'+str(nh_values[id_curve])+r'$ cm^{-2}$',color=colors_curve[id_curve],
+                         alpha=0.5,ls=ls_curve[id_curve%len(ls_curve)])
+                
+        #logarithmic scale by default for eqw ratios
+        if ratio_mode:
+        
+            if time_mode:
+                ax_scat.set_yscale('log')
+                ax_scat.yaxis.set_major_formatter(mpl.ticker.FormatStrFormatter('%.1f'))
+                ax_scat.set_yticks(np.arange(0.3,0.8,0.2).tolist()+[1,3,5])
+                
+                ax_scat.get_yaxis().set_major_formatter(mpl.ticker.ScalarFormatter())
+                
+            else:
+                ax_scat.set_xscale('log')
+                ax_scat.xaxis.set_major_formatter(mpl.ticker.FormatStrFormatter('%.1f'))
+                ax_scat.set_xticks(np.arange(0.3,0.8,0.2).tolist()+[1,3,5])
+                
+                ax_scat.get_xaxis().set_major_formatter(mpl.ticker.ScalarFormatter())
+                                    
         #### legend display
-        if show_linked or compute_correl or color_scatter not in ['Time','HR','width','nH',None]:
+        if show_linked or compute_correl or color_scatter not in ['Time','HR','width','nH',None]:       
             
             scat_legend=plt.legend(fontsize=10,title=legend_title)
             plt.setp(scat_legend.get_title(),fontsize='small')
-            
+                
         plt.tight_layout()
         
 

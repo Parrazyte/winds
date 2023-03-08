@@ -21,6 +21,7 @@ import streamlit as st
 
 import matplotlib as mpl
 import matplotlib.pyplot as plt
+from matplotlib.legend_handler import HandlerTuple
 #disabling the warning for many open figures because that's exactly the point of the code
 plt.rcParams.update({'figure.max_open_warning': 0})
 
@@ -432,12 +433,14 @@ with st.sidebar.expander('Absorption lines restriction'):
 #creating the line mask from that
 mask_lines=np.array([elem in selectbox_abstype for elem in line_display_str])
 
-with st.sidebar.expander('inclination'):
+with st.sidebar.expander('Inclination'):
     slider_inclin=st.slider('Inclination restriction (°)',min_value=0.,max_value=90.,step=0.5,value=[0.,90.])
     
     include_noinclin=st.checkbox('Include Sources with no inclination information',value=True)
     
-    incl_inside=st.checkbox('Only include sources with uncertainties compatible with the current limits',value=False)
+    incl_inside=st.checkbox('Only include sources with uncertainties strictly compatible with the current limits',value=False)
+    
+    display_incl_inside=st.checkbox('Display ULs differently for sources with uncertainties not strictly compatible with the current limits',value=False)
     
     radio_dipper=st.radio('Dipping sources restriction',('Off','Add dippers','Restrict to dippers','Restrict to non-dippers'))
     
@@ -532,6 +535,8 @@ st.sidebar.button('Save current HID view',on_click=save_hld)
         
 with st.sidebar.expander('Visualisation'):
     
+    display_dicho=st.checkbox('Display the standard thresholds',value=True)
+    
     display_obj_zerodet=st.checkbox('Color sources with no detection',value=True)
     
     display_hid_error=st.checkbox('Display errorbar for HID position',value=False)
@@ -539,6 +544,8 @@ with st.sidebar.expander('Visualisation'):
     display_central_abs=st.checkbox('Display centers for absorption detections',value=False)
 
     alpha_abs=st.checkbox('Plot with transparency',value=False)
+    
+    split_cmap_source=st.checkbox('Use different colormaps for detections and non-detections',value=True)
     
     global_colors=st.checkbox('Normalise colors/colormaps over the entire sample',value=False)
         
@@ -619,9 +626,12 @@ else:
 #masking the objects depending on inclination
 mask_inclin=[include_noinclin if elem not in incl_dic else getoverlap((incl_dic[elem][0]-incl_dic[elem][1],incl_dic[elem][0]+incl_dic[elem][2]),slider_inclin)>0 for elem in obj_list]
 
-#masking objects whose inclination bond go beyond the inclination restrictions if asked to
+#creating the mask for highlighting objects whose inclination limits go beyond the inclination restrictions if asked to
+bool_incl_inside=np.array([False if elem not in incl_dic else round(getoverlap((incl_dic[elem][0]-incl_dic[elem][1],
+            incl_dic[elem][0]+incl_dic[elem][2]),slider_inclin),3)==incl_dic[elem][1]+incl_dic[elem][2] for elem in obj_list])
+    
 if incl_inside:
-    mask_inclin=[False if elem not in incl_dic else round(getoverlap((incl_dic[elem][0]-incl_dic[elem][1],incl_dic[elem][0]+incl_dic[elem][2]),                slider_inclin),3)==incl_dic[elem][1]+incl_dic[elem][2] for elem in obj_list]
+    mask_inclin=bool_incl_inside
     
 #masking dippers/non dipper if asked to
 mask_dippers=np.array([elem in dippers_list for elem in obj_list])
@@ -637,7 +647,7 @@ elif radio_dipper=='Restrict to non-dippers':
 
 mask_obj_base=(mask_obj_select) & (mask_inclin)
     
-####Dates restriction
+#### Array restrictions
 
 #time delta to add some leeway to the limits available and avoid directly cropping at the observations
 delta_1y=TimeDelta(365,format='jd')
@@ -659,16 +669,28 @@ mask_obj_intime=np.array([((np.array([Time(subelem) for subelem in elem])>=Time(
 #restricting mask_obj_base with the new base
 mask_obj_base=mask_obj_base & mask_obj_intime
 
+# #creating restricted ploting arrays witht the current streamlit object and lines selections
+# abslines_plot_restrict=deepcopy(abslines_plot)
+# for i_info in range(len(abslines_plot_restrict)):
+#     for i_incer in range(len(abslines_plot_restrict[i_info])):
+#         abslines_plot_restrict[i_info][i_incer]=abslines_plot_restrict[i_info][i_incer][mask_lines].T[mask_obj].T
+    
+mask_obs_intime_repeat=np.array([np.repeat(((np.array([Time(subelem) for subelem in elem])>=Time(slider_date[0])) &\
+                  (np.array([Time(subelem) for subelem in elem])<=Time(slider_date[1]))),sum(mask_lines)) for elem in date_list],dtype=object)
+
 #checking which sources have no detection in the current combination
-global_displayed_sign=abslines_plot[4][0][mask_lines].T
+global_displayed_sign=np.array([ravel_ragged(elem)[mask] for elem,mask in zip(abslines_plot[4][0][mask_lines].T,mask_obs_intime_repeat)],dtype=object)
 
 #creating a mask from the ones with at least one detection 
 #(or at least one significant detections if we don't consider non significant detections)
 if display_nonsign:
-    mask_obj_withdet=np.array([(np.array([subelem for subelem in elem])>0).any() for elem in global_displayed_sign])
+    mask_obj_withdet=np.array([(elem>0).any() for elem in global_displayed_sign])
 else:
-    mask_obj_withdet=np.array([(np.array([subelem for subelem in elem])>slider_sign).any() for elem in global_displayed_sign])
+    mask_obj_withdet=np.array([(elem>slider_sign).any() for elem in global_displayed_sign])
     
+#storing the number of objects with detections
+n_obj_withdet=sum(mask_obj_withdet & mask_obj_base)
+
 if not display_obj_zerodet:
     mask_obj=mask_obj_base & mask_obj_withdet
 else:
@@ -692,13 +714,33 @@ if radio_info_cmap in ['Blueshift','Delchi']:
 else:
     radio_cmap_i=0
     
+#colormap when not splitting detections
+cmap_color_source=mpl.cm.hsv_r
+cyclic_cmap=True
+
+#colormaps when splitting detections
+cmap_color_det=mpl.cm.plasma
+cyclic_cmap_det=False
+
+cmap_color_nondet=mpl.cm.viridis_r
+cyclic_cmap_nondet=False
+
 #computing the extremal values of the whole sample/plotted sample to get coherent colormap normalisations, and creating the range of object colors
+
 if global_colors:
     global_plotted_sign=abslines_plot[4][0].ravel()
     global_plotted_data=abslines_plot[radio_cmap_i][0].ravel()
-    #objects colormap
-    norm_colors_obj=mpl.colors.Normalize(vmin=0,vmax=len(abslines_infos_perobj)+1)
-    colors_obj=mpl.cm.ScalarMappable(norm=norm_colors_obj,cmap=mpl.cm.hsv)
+    
+    #objects colormap for common display
+    norm_colors_obj=mpl.colors.Normalize(vmin=0,vmax=max(0,len(abslines_infos_perobj)+(-1 if not cyclic_cmap else 0)))
+    colors_obj=mpl.cm.ScalarMappable(norm=norm_colors_obj,cmap=cmap_color_source)
+    
+    norm_colors_det=mpl.colors.Normalize(vmin=0,vmax=max(0,n_obj_withdet+(-1 if not cyclic_cmap_det else 0)+(1 if n_obj_withdet==0 else 0)))
+    colors_det=mpl.cm.ScalarMappable(norm=norm_colors_det,cmap=cmap_color_det)
+    
+    norm_colors_nondet=mpl.colors.Normalize(vmin=0,vmax=max(0,len(abslines_infos_perobj)-n_obj_withdet+(-1 if not cyclic_cmap_nondet else 0)))
+    colors_nondet=mpl.cm.ScalarMappable(norm=norm_colors_nondet,cmap=cmap_color_nondet)
+    
     #the date is an observation-level parameter so it needs to be repeated to have the same dimension as the other global variables
     global_plotted_datetime=np.array([elem for elem in date_list for i in range(sum(mask_lines))],dtype='object')
     
@@ -710,11 +752,15 @@ else:
     global_plotted_datetime=np.array([elem for elem in date_list[mask_obj] for i in range(sum(mask_lines))],dtype='object')
 
     #objects colormap
-    norm_colors_obj=mpl.colors.Normalize(vmin=0,vmax=len(abslines_infos_perobj[mask_obj])+1)
-    colors_obj=mpl.cm.ScalarMappable(norm=norm_colors_obj,cmap=mpl.cm.hsv)
+    norm_colors_obj=mpl.colors.Normalize(vmin=0,vmax=max(0,len(abslines_infos_perobj[mask_obj])+(-1 if not cyclic_cmap else 0)))
+    colors_obj=mpl.cm.ScalarMappable(norm=norm_colors_obj,cmap=cmap_color_source)
+
+    norm_colors_det=mpl.colors.Normalize(vmin=0,vmax=max(0,n_obj_withdet+(-1 if not cyclic_cmap_det else 0)))
+    colors_det=mpl.cm.ScalarMappable(norm=norm_colors_det,cmap=cmap_color_det)
     
-# else:
-#     global_plotted_instr=
+    norm_colors_nondet=mpl.colors.Normalize(vmin=0,
+                        vmax=max(0,len(abslines_infos_perobj[mask_obj])-n_obj_withdet+(-1 if not cyclic_cmap_nondet else 0)))
+    colors_nondet=mpl.cm.ScalarMappable(norm=norm_colors_nondet,cmap=cmap_color_nondet)
 
 #adapting the plotted data in regular array for each object in order to help
 #global masks to take off elements we don't want in the comparison
@@ -770,13 +816,14 @@ if radio_info_cmap not in ['Source','Instrument']:
 #markers
 marker_abs='o'
 marker_nondet='d'
-marker_ul='v'
-marker_ul_top='^'
+marker_ul='h'
+marker_ul_top='H'
 
 alpha_ul=0.3
 
-label_obj_plotted=np.repeat(False
-                            ,len(abslines_infos_perobj[mask_obj]))
+#note: the value will finish at false for sources with no non-detections
+label_obj_plotted=np.repeat(False,len(abslines_infos_perobj[mask_obj]))
+
 is_colored_scat=False
 
 #creating the plotted colors variable#defining the mask for detections and non detection
@@ -784,6 +831,9 @@ plotted_colors_var=[]
 
 #### detections HID
 
+id_obj_det=0
+
+#### Still issues with colormapping when restricting time
 
 #loop on the objects for detections (restricted or not depending on if the mode is detection only)
 for i_obj,abslines_obj in enumerate(abslines_infos_perobj[mask_obj]):
@@ -901,7 +951,7 @@ for i_obj,abslines_obj in enumerate(abslines_infos_perobj[mask_obj]):
         obj_val_cmap_sign[obj_val_mask_sign][obj_order_sign]
             
     
-        ###TODO : test the dates here with just IGRJ17451 to solve color problem
+    #### TODO : test the dates here with just IGRJ17451 to solve color problem
 
     #adding a failsafe to avoid problems when nothing is displayed
     if c_scat is not None and len(c_scat)==0:
@@ -911,7 +961,8 @@ for i_obj,abslines_obj in enumerate(abslines_infos_perobj[mask_obj]):
         
         #displaying "significant only" cmaps/sizes
         scat_col+=[ax_hid.scatter(x_hid[obj_val_mask_sign][obj_order_sign],y_hid[obj_val_mask_sign][obj_order_sign],
-                                  marker=marker_abs,color=colors_obj.to_rgba(i_obj_glob) if radio_info_cmap=='Source' else None,
+                                  marker=marker_abs,color=(colors_obj.to_rgba(i_obj_glob) if not split_cmap_source else\
+                                                           colors_det.to_rgba(id_obj_det)) if radio_info_cmap=='Source' else None,
         c=c_scat,s=norm_s_lin*obj_size_sign[obj_val_mask_sign][obj_order_sign]**norm_s_pow,
                        edgecolor='black' if not display_edgesource else colors_obj.to_rgba(i_obj_glob),
                        linewidth=1+int(display_edgesource)/2,
@@ -928,7 +979,9 @@ for i_obj,abslines_obj in enumerate(abslines_infos_perobj[mask_obj]):
                 
         #displaying "all" cmaps/sizes but only where's at least one significant detection (so we don't hatch)
         scat_col+=[ax_hid.scatter(x_hid[obj_val_mask_sign][obj_order_sign],y_hid[obj_val_mask_sign][obj_order_sign],
-                                  marker=marker_abs,color=colors_obj.to_rgba(i_obj_glob) if radio_info_cmap=='Source' else None,
+                                  marker=marker_abs,
+                                  color=(colors_obj.to_rgba(i_obj_glob) if not split_cmap_source else\
+                                         colors_det.to_rgba(id_obj_det)) if radio_info_cmap=='Source' else None,
         c=c_scat,s=norm_s_lin*obj_size[obj_val_mask_sign][obj_order_sign]**norm_s_pow,
                        edgecolor='black' if not display_edgesource else colors_obj.to_rgba(i_obj_glob),
                        linewidth=1+int(display_edgesource),
@@ -959,7 +1012,7 @@ for i_obj,abslines_obj in enumerate(abslines_infos_perobj[mask_obj]):
             
         #and "unsignificant only" in any case is hatched. Edgecolor sets the color of the hatch
         scat_col+=[ax_hid.scatter(x_hid[obj_val_mask_nonsign],y_hid[obj_val_mask_nonsign],marker=marker_abs,
-                       color=colors_obj.to_rgba(i_obj_glob) if radio_info_cmap=='Source' else None,
+                       color=(colors_obj.to_rgba(i_obj_glob) if not split_cmap_source else colors_det.to_rgba(id_obj_det)) if radio_info_cmap=='Source' else None,
         c=c_scat_nonsign,s=norm_s_lin*obj_size[obj_val_mask_nonsign]**norm_s_pow,hatch='///',
                        edgecolor='grey' if not display_edgesource else colors_obj.to_rgba(i_obj_glob),
                        linewidth=1+int(display_edgesource),
@@ -973,6 +1026,8 @@ for i_obj,abslines_obj in enumerate(abslines_infos_perobj[mask_obj]):
     
         plotted_colors_var+=[elem for elem in (incl_cmap_restrict.T[cmap_incl_type] if radio_info_cmap=='Inclination' else obj_val_cmap[obj_val_mask_nonsign].tolist()) if not np.isnan(elem)]
         
+    if len(x_hid[obj_val_mask_sign])>0 or (len(x_hid[obj_val_mask_nonsign])>0 and display_nonsign):
+        id_obj_det+=1
     
     #resizing all the colors and plotting the colorbar, only done at the last iteration
     if radio_info_cmap not in ['Source','Instrument'] and i_obj==len(abslines_infos_perobj[mask_obj])-1 and len(plotted_colors_var)>0:
@@ -1097,11 +1152,15 @@ for i_obj,abslines_obj in enumerate(abslines_infos_perobj[mask_obj]):
                 else:
                     cb.set_label(('maximal ' if radio_info_cmap!='EW ratio' else '')+radio_info_label[radio_cmap_i-1].lower()+
                                  ' in all detections\n for each observation'+cb_add_str,labelpad=10)
-                 
                     
 label_obj_plotted=np.repeat(False,len(abslines_infos_perobj[mask_obj]))
 
 #### non detections HID
+
+id_obj_det=0
+id_obj_nondet=0
+
+scatter_nondet=[]
 
 #loop for non detection, separated to be able to restrict the color range in case of non detection
 for i_obj_base,abslines_obj_base in enumerate(abslines_infos_perobj[mask_obj_base]):
@@ -1155,7 +1214,18 @@ for i_obj_base,abslines_obj_base in enumerate(abslines_infos_perobj[mask_obj_bas
     mask_nondet=(np.isnan(np.array([np.nan if len(abslines_obj_base[0][0][mask_lines].T[i_obs][mask_det.T[i_obs]])==0 else\
                                max(abslines_obj_base[0][0][mask_lines].T[i_obs][mask_det.T[i_obs]])\
                                    for i_obs in range(len(abslines_obj_base[0][0][mask_lines].T))]))) & (mask_intime_norepeat)
+    
+    #testing if the source has detections with current restrictions to adapt the color when using source colors, if asked to
+    if obj_list[mask_obj][i_obj_base] not in obj_list[mask_obj_withdet]:
+        source_nondet=True
 
+    else:
+        source_nondet=False
+
+        #increasing the counter for sources with no non detections but detections
+        if len(x_hid_base[mask_nondet])==0:
+            id_obj_det+=1
+            
     if len(x_hid_base[mask_nondet])>0:
         #note: due to problems with colormapping of the edgecolors we directly compute the color of the edges with a normalisation
         norm_cmap_incl = mpl.colors.Normalize(0,90)
@@ -1185,15 +1255,19 @@ for i_obj_base,abslines_obj_base in enumerate(abslines_infos_perobj[mask_obj_bas
             # obj_order_sign_ul=obj_size_ul[mask_nondet_ul].argsort()[::-1]
             
             #there is no need to use different markers unless we display source per color, so we limit the different triangle to this case
-            marker_ul_curr=marker_ul_top if i_obj_base%2!=0 and radio_info_cmap=='Source' else marker_ul
+            marker_ul_curr=marker_ul_top if\
+                ((id_obj_nondet if source_nondet else id_obj_det) if split_cmap_source else i_obj_base)%2!=0 and\
+                 radio_info_cmap=='Source' else marker_ul
                             
             if radio_info_cmap=='Instrument':
                 color_data=[telescope_colors[elem] for elem in instru_list[mask_obj_base][i_obj_base][mask_nondet_ul]]
                 
                 edgec_scat=[colors.to_rgba(elem) for elem in color_data]
             else:
-                
-                edgec_scat=colors_obj.to_rgba(i_obj_glob) if radio_info_cmap=='Source' and display_obj_zerodet else\
+                                
+                edgec_scat=(colors_obj.to_rgba(i_obj_glob) if not split_cmap_source else\
+                            (colors_nondet.to_rgba(id_obj_nondet) if source_nondet else\
+                             colors_det.to_rgba(id_obj_det))) if radio_info_cmap=='Source' and display_obj_zerodet else\
                             cmap_info(norm_cmap_incl(incl_cmap_base[i_obj_base][cmap_incl_type]))\
                             if (not np.isnan(incl_cmap_base[i_obj_base][cmap_incl_type]) and radio_info_cmap=='Inclination') else\
                     cmap_info(norm_cmap_time(mdates.date2num(date_list[mask_obj_base][i_obj_base][mask_nondet_ul])))\
@@ -1209,15 +1283,21 @@ for i_obj_base,abslines_obj_base in enumerate(abslines_infos_perobj[mask_obj_bas
                            color='none',edgecolor=edgec_scat,s=norm_s_lin*obj_size_ul[mask_nondet_ul]**norm_s_pow,
                            label='' if not display_obj_zerodet else (obj_list[mask_obj][i_obj_base] if not label_obj_plotted[i_obj_base] and\
                                (radio_info_cmap=='Source' or display_edgesource) else ''),zorder=500,alpha=1.0,
-                               cmap=cmap_info if radio_info_cmap in ['Inclination','Time'] else None)
+                               cmap=cmap_info if radio_info_cmap in ['Inclination','Time'] else None,ls='--' if display_incl_inside and not bool_incl_inside[mask_obj_base][i_obj_base] else 'solid')
+                
+            scatter_nondet+=[elem_scatter_nondet]
+            
         else:
 
             if radio_info_cmap=='Instrument':
                 color_data=[telescope_colors[elem] for elem in instru_list[mask_obj_base][i_obj_base][mask_nondet]]
                 
                 c_scat_nondet=[colors.to_rgba(elem) for elem in color_data]
-            else:                    
-                c_scat_nondet=colors_obj.to_rgba(i_obj_glob) if radio_info_cmap=='Source' and display_obj_zerodet else\
+            else:
+                
+                c_scat_nondet=np.array([(colors_obj.to_rgba(i_obj_glob) if not split_cmap_source else\
+                            (colors_nondet.to_rgba(id_obj_nondet) if source_nondet else\
+                             colors_det.to_rgba(id_obj_det)))]) if radio_info_cmap=='Source' and display_obj_zerodet else\
                             cmap_info(norm_cmap_incl(incl_cmap_base[i_obj_base][cmap_incl_type]))\
                             if (not np.isnan(incl_cmap_base[i_obj_base][cmap_incl_type]) and radio_info_cmap=='Inclination') else\
                     mdates.date2num(date_list[mask_obj_base][i_obj_base][mask_nondet])\
@@ -1225,6 +1305,8 @@ for i_obj_base,abslines_obj_base in enumerate(abslines_infos_perobj[mask_obj_bas
                             nh_plot.T[mask_obj_base].T[0][i_obj_base][mask_nondet] if radio_info_cmap=='nH' else\
                             'grey'
 
+            print(i_obj_base,id_obj_nondet,c_scat_nondet,obj_list[mask_obj][i_obj_base])
+            
             elem_scatter_nondet=ax_hid.scatter(x_hid_base[mask_nondet],y_hid_base[mask_nondet],marker=marker_nondet,
                            c=c_scat_nondet,cmap=cmap_info,norm=cmap_norm_info,
                            label='' if not display_obj_zerodet else (obj_list[mask_obj][i_obj_base] if not label_obj_plotted[i_obj_base] and\
@@ -1330,7 +1412,16 @@ for i_obj_base,abslines_obj_base in enumerate(abslines_infos_perobj[mask_obj_bas
                     cb=plt.colorbar(elem_scatter_empty,cax=ax_cb,extend='min')
                     
                     cb.set_label(r'nH ($10^{22}$ cm$^{-1}$)')
-                        
+                    
+        
+        #only adding to the index if there are non detections
+        if source_nondet:
+           id_obj_nondet+=1
+        else:
+            id_obj_det+=1
+
+# breakpoint()
+
 #### Displaying arrow evolution if needed and if there are points
 if display_single and display_evol_single and sum(global_mask_intime_norepeat)>1:
     
@@ -1352,26 +1443,118 @@ if display_single and display_evol_single and sum(global_mask_intime_norepeat)>1
     
     for X,Y,dX,dY in zip(xpos,ypos,xdir,ydir):
         ax_hid.annotate("",xytext=(X,Y),xy=(X+0.001*dX,Y+0.001*dY),arrowprops=dict(arrowstyle='->',color='grey'),size=10)
-        
+     
+####displaying the thresholds if asked to
+
+if display_dicho:
+    #horizontal
+    ax_hid.axline((0.01,1e-2),(10,1e-2),ls='--',color='grey')
     
+    #vertical
+    ax_hid.axline((0.8,1e-6),(0.8,10),ls='--',color='grey')
+
+    #restricting the graph to the portion inside the threhsolds
+    # ax_hid.set_xlim(ax_hid.get_xlim()[0],0.8)
+    # ax_hid.set_ylim(1e-2,ax_hid.get_ylim()[1])
+    
+    
+''''''''''''''''''
+#### legends
+''''''''''''''''''
+
+
+
 if radio_info_cmap=='Source' or display_edgesource:
     if paper_look:
+        
+        #looks good considering the size of the graph
+        n_col_leg_source=5 if sum(mask_obj)<30 else 6
+        
         old_legend_size=mpl.rcParams['legend.fontsize']
+        
         mpl.rcParams['legend.fontsize']=5.5 if sum(mask_obj)>30 and radio_info_cmap=='Source' else 7
-        hid_legend=fig_hid.legend(loc='upper right',ncol=1,bbox_to_anchor=(1.11,0.895) if bigger_text and radio_info_cmap=='Source' \
-                                  and display_obj_zerodet else (0.9,0.88))
+        
+        hid_legend=fig_hid.legend(loc='lower center',ncol=n_col_leg_source,bbox_to_anchor=(0.475,-0.11))
+            
+        elem_leg_source, labels_leg_source = plt.gca().get_legend_handles_labels()
+        
+        #selecting sources with both detections and non detections
+        sources_uniques=np.unique(labels_leg_source,return_counts=True)
+        sources_detnondet=sources_uniques[0][sources_uniques[1]!=1]
+                            
+        #recreating the elem_leg and labels_leg with grouping but only if the colormaps are separated because then it makes sense
+        if split_cmap_source:
+            
+            leg_source_gr=[]
+            labels_leg_source_gr=[]
+            
+            for elem_leg,elem_label in zip(elem_leg_source,labels_leg_source):
+                if elem_label in sources_detnondet:
+                    
+                    #only doing it for the first iteration
+                    if elem_label not in labels_leg_source_gr:
+                        leg_source_gr+=[tuple(np.array(elem_leg_source)[np.array(labels_leg_source)==elem_label])]
+                        labels_leg_source_gr+=[elem_label]
+            
+                else:
+                    leg_source_gr+=[elem_leg]
+                    labels_leg_source_gr+=[elem_label]
+            
+            #updating the handle list 
+            elem_leg_source=leg_source_gr
+            labels_leg_source=labels_leg_source_gr
+        
+        n_obj_leg_source=len(elem_leg_source)
+
+        def n_lines():
+            return len(elem_leg_source)//n_col_leg_source+(1 if len(elem_leg_source)%n_col_leg_source!=0 else 0)
+        
+        #inserting blank spaces until the detections have a column for themselves        
+        while n_lines()<n_obj_withdet:
+            
+            # elem_leg_source.insert(5,plt.Line2D([],[], alpha=0))
+            # labels_leg_source.insert(5,'')
+            
+            elem_leg_source+=[plt.Line2D([],[], alpha=0)]
+            labels_leg_source+=['']
+        
+        #removing the first version with a non-aesthetic number of columns
+        hid_legend.remove()
+        
+        #recreating it with updated spacing
+        hid_legend=fig_hid.legend(elem_leg_source,labels_leg_source,loc='lower center',
+                                  ncol=n_col_leg_source,bbox_to_anchor=(0.475,-0.02*n_lines()),handler_map={tuple: HandlerTuple(ndivide=None,pad=1.)})
+        
+        '''
+        maintaining a constant marker size in the legend (but only for markers)
+        note: here we cannot use directly legend_handles because they don't consider the second part of the legend tuples
+        We thus use the findobj method to search in all elements of the legend
+        '''
+        for elem_legend in  hid_legend.findobj():
+            
+            #### find a way to change the size of this
+            
+            if type(elem_legend)==mpl.collections.PathCollection:
+                if len(elem_legend._sizes)!=0:
+                    for i in range(len(elem_legend._sizes)):
+
+                        elem_legend._sizes[i]=80 if display_upper else 40
+                        
+                        #changing the dash type of dashed element for better visualisation:
+                        if elem_legend.get_dashes()!=[(0.0, None)]:
+                            elem_legend.set_dashes((0, (5, 1)))
+        
+        # old legend version
+        # hid_legend=fig_hid.legend(loc='upper right',ncol=1,bbox_to_anchor=(1.11,0.895) if bigger_text and radio_info_cmap=='Source' \
+        #                           and display_obj_zerodet else (0.9,0.88))
+        
         mpl.rcParams['legend.fontsize']=old_legend_size
+        
     else:
         hid_legend=fig_hid.legend(loc='upper left',ncol=2,bbox_to_anchor=(0.01,0.99))
             
-    #maintaining a constant marker size in the legend (but only for markers)
-    for elem_legend in hid_legend.legendHandles:
-        if type(elem_legend)==mpl.collections.PathCollection:
-            if len(elem_legend._sizes)!=0:
-                for i in range(len(elem_legend._sizes)):
-                    elem_legend._sizes[i]=30 if (sum(mask_obj)>30 and radio_info_cmap=='Source') else 50
 
-#### legends
+
 
 hid_det_examples=[
     ((Line2D([0],[0],marker=marker_ul,color='white',markersize=50**(1/2),alpha=alpha_ul,linestyle='None',markeredgecolor='black',markeredgewidth=2),
@@ -1389,7 +1572,7 @@ mpl.rcParams['legend.fontsize']=7
 
 #marker legend
 fig_hid.legend(handles=hid_det_examples,loc='center left',labels=['upper limit' if display_upper else 'non detection ','absorption line detection\n above '+(r'3$\sigma$' if slider_sign==0.997 else str(slider_sign*100)+'%')+' significance','absorption line detection below '+str(slider_sign*100)+' significance.'],title='Markers',
-            bbox_to_anchor=(0.690,0.815) if bigger_text and square_mode else (0.125,0.82),handler_map = {tuple:mpl.legend_handler.HandlerTuple(None)},
+            bbox_to_anchor=(0.125,0.815) if bigger_text and square_mode else (0.125,0.82),handler_map = {tuple:mpl.legend_handler.HandlerTuple(None)},
             handlelength=2,handleheight=2.,columnspacing=1.)
 
 #note: upper left anchor (0.125,0.815)
@@ -1470,11 +1653,10 @@ flag_noabsline=False
 
 #bin values for all the histograms below
 #for the blueshift and energies the range is locked so we can use a global binning for all the diagrams
-bins_bshift=np.linspace(-5e3,1e4,num=31,endpoint=True)
+bins_bshift=np.linspace(-1e4,5e3,num=31,endpoint=True)
 bins_ener=np.arange(6.,9.,2*line_search_e[2])
 
 #creating restricted ploting arrays witht the current streamlit object and lines selections
-
 abslines_plot_restrict=deepcopy(abslines_plot)
 for i_info in range(len(abslines_plot_restrict)):
     for i_incer in range(len(abslines_plot_restrict[i_info])):
@@ -1483,7 +1665,7 @@ for i_info in range(len(abslines_plot_restrict)):
 abslines_ener_restrict=deepcopy(abslines_ener)
 for i_incer in range(len(abslines_ener_restrict)):
     abslines_ener_restrict[i_incer]=abslines_ener_restrict[i_incer][mask_lines].T[mask_obj].T
-
+    
 width_plot_restrict=deepcopy(width_plot)
 width_plot_restrict=np.transpose(np.transpose(width_plot_restrict,(1,0,2))[mask_lines].T[mask_obj],(1,2,0))
 
@@ -1494,7 +1676,7 @@ dict_linevis['date_list']=date_list
 dict_linevis['instru_list']=instru_list
 dict_linevis['abslines_plot_restrict']=abslines_plot_restrict
 dict_linevis['slider_sign']=slider_sign
-
+dict_linevis['cmap_color_det']=cmap_color_det
 dict_linevis['mask_lines']=mask_lines
 dict_linevis['bins_bshift']=bins_bshift
 dict_linevis['bins_ener']=bins_ener
@@ -1546,14 +1728,14 @@ with st.sidebar.expander('Parameter analysis'):
     
     display_param_withdet=st.checkbox('Restrict parameter analysis to sources with significant detections',value=False)
     st.header('Distributions')
-    display_distrib=st.checkbox('Plot distributions',value=True)
+    display_distrib=st.checkbox('Plot distributions',value=False)
     use_distrib_lines=st.checkbox('Show line by line distribution',value=True)
-    split_distrib=st.radio('Split distributions:',('Off','Source','Instrument'),index=2)
+    split_distrib=st.radio('Split distributions:',('Off','Source','Instrument'),index=1)
     
     if split_distrib=='Source' and (display_single or sum(mask_obj)==1):
             split_distrib='Off'
             
-    st.header('Distributions')
+    st.header('Correlations')
     display_scat_intr=st.checkbox('Correlations between intrinsic parameters',value=False)
     display_scat_hid=st.checkbox('Correlations with observation parameters',value=False)
     display_scat_inclin=st.checkbox('Correlations with source parameters',value=False)
@@ -1564,13 +1746,16 @@ with st.sidebar.expander('Parameter analysis'):
     if use_eqwratio:
         eqwratio_type=st.selectbox('Ratio to use',['FeKa26/FeKa25 (Ka)','FeKb26/FeKb25 (Kb)','FeKb25/FeKa25 (25)','FeKb26/FeKa26 (26)'])\
             .split(' ')[1].replace('(','').replace(')','')
+            
     use_width=st.checkbox('Add width as an intrinsic parameter',value=False)
+    display_th_width_ew=st.checkbox('Display theoretical individual width vs EW evolution',value=False)
+    
     use_time=st.checkbox('Plot time evolution of intrinsic parameters',value=False)
     use_lineflux=st.checkbox('Add lineflux as an intrinsic parameter')
     compute_correl=st.checkbox('Compute Pearson/Spearman for the scatter plots',value=True)
     display_pearson=st.checkbox('Display Pearson rank',value=False)
     st.header('Visualisation')
-    radio_color_scatter=st.radio('Scatter plot color options:',('None','Instrument','Source','Time','HR','width','nH'))
+    radio_color_scatter=st.radio('Scatter plot color options:',('None','Source','Instrument','Time','HR','width','nH'),index=1)
     glob_col_source=st.checkbox('Normalize source colors over the entire sample',value=True)
     scale_log_eqw=st.checkbox('Use a log scale for the equivalent width and line fluxes')
     scale_log_hr=st.checkbox('Use a log scale for the HID parameters',value=True)
@@ -1623,6 +1808,7 @@ if display_param_withdet:
 dict_linevis['display_pearson']=display_pearson
 dict_linevis['display_abserr_bshift']=display_abserr_bshift
 dict_linevis['glob_col_source']=glob_col_source
+dict_linevis['display_th_width_ew']=display_th_width_ew
 
 os.system('mkdir -p '+save_dir+'/graphs')
 os.system('mkdir -p '+save_dir+'/graphs/distrib')
@@ -1780,11 +1966,13 @@ def streamlit_scat(mode):
          correl_graph(abslines_plot_restrict,'ener_flux',abslines_ener_restrict,dict_linevis,mode_vals=hid_plot_restrict,mode='observ',
                       conf_thresh=slider_sign,streamlit=True,compute_correl=compute_correl,bigger_text=bigger_text,show_linked=show_linked)]
     
-        scat_width=\
-        [correl_graph(abslines_plot_restrict,'width_HR',abslines_ener_restrict,dict_linevis,mode_vals=hid_plot_restrict,mode='observ',
-                      conf_thresh=slider_sign,streamlit=True,compute_correl=compute_correl,bigger_text=bigger_text,show_linked=show_linked),
-         correl_graph(abslines_plot_restrict,'width_flux',abslines_ener_restrict,dict_linevis,mode_vals=hid_plot_restrict,mode='observ',
-                      conf_thresh=slider_sign,streamlit=True,compute_correl=compute_correl,bigger_text=bigger_text,show_linked=show_linked)]
+        if use_width:
+            
+            scat_width=\
+            [correl_graph(abslines_plot_restrict,'width_HR',abslines_ener_restrict,dict_linevis,mode_vals=hid_plot_restrict,mode='observ',
+                          conf_thresh=slider_sign,streamlit=True,compute_correl=compute_correl,bigger_text=bigger_text,show_linked=show_linked),
+             correl_graph(abslines_plot_restrict,'width_flux',abslines_ener_restrict,dict_linevis,mode_vals=hid_plot_restrict,mode='observ',
+                          conf_thresh=slider_sign,streamlit=True,compute_correl=compute_correl,bigger_text=bigger_text,show_linked=show_linked)]
         
         if use_eqwratio:
          scat_eqwratio=\
@@ -1907,35 +2095,36 @@ if display_scat_inclin:
 #Not used right now
 display_general_infos=False
 
-if display_general_infos:
+#outdated
+# if display_general_infos:
     
-    #for all lines
-    n_sources_restrict=mask_obj.sum()
-    n_sources_withdet=(mask_obj & mask_obj_withdet).sum()
-    n_sources_nodet=(mask_obj & ~mask_obj_withdet).sum()
+#     #for all lines
+#     n_sources_restrict=mask_obj.sum()
+#     n_sources_withdet=(mask_obj & mask_obj_withdet).sum()
+#     n_sources_nodet=(mask_obj & ~mask_obj_withdet).sum()
     
-    #number of individual detections for all lines
-    n_detections=(ravel_ragged(global_displayed_sign[mask_obj])>0).sum()
-    n_detections_sign=(ravel_ragged(global_displayed_sign[mask_obj])>slider_sign).sum()
+#     #number of individual detections for all lines
+#     n_detections=(ravel_ragged(global_displayed_sign[mask_obj])>0).sum()
+#     n_detections_sign=(ravel_ragged(global_displayed_sign[mask_obj])>slider_sign).sum()
     
-    #sources with detections for individual lines
-    n_sources_withdet_perline=[]
-    #number of inidividual detections for individual lines
-    n_detections_perline=[]
-    for i in range_absline:
-        n_sources_withdet_perline+=\
-            [np.array([(global_displayed_sign[mask_obj].T[i][j]>0).any() for j in range(n_sources_restrict)]).sum()]
-        n_detections_perline+=[[(ravel_ragged(global_displayed_sign[mask_obj].T[i])>0).sum(),
-                               (ravel_ragged(global_displayed_sign[mask_obj].T[i])>slider_sign).sum()]]
+#     #sources with detections for individual lines
+#     n_sources_withdet_perline=[]
+#     #number of inidividual detections for individual lines
+#     n_detections_perline=[]
+#     for i in range_absline:
+#         n_sources_withdet_perline+=\
+#             [np.array([(global_displayed_sign[mask_obj].T[i][j]>0).any() for j in range(n_sources_restrict)]).sum()]
+#         n_detections_perline+=[[(ravel_ragged(global_displayed_sign[mask_obj].T[i])>0).sum(),
+#                                (ravel_ragged(global_displayed_sign[mask_obj].T[i])>slider_sign).sum()]]
         
-    n_detections_perline=np.array(n_detections_perline).T
+#     n_detections_perline=np.array(n_detections_perline).T
     
-    st.write('number of sources in the current sample:'+str(n_sources_restrict))
-    st.write('number of sources with detections in the current sample:'+str(n_sources_withdet))
-    st.write('number of sources with no detection:'+str(n_sources_nodet))
-    st.write('number of individual detections:'+str(n_detections))
-    st.write('number of individual significant detections:'+str(n_detections_sign))
-    for i in range_absline:
-        st.write('number of sources with '+str(lines_std_names[i+3])+' detections:'+str(n_sources_withdet_perline[i]))
-        st.write('number of individual'+str(lines_std_names[i+3])+' detections:'+str(n_detections_perline[0][i]))
-        st.write('number of individual significant'+str(lines_std_names[i+3])+' detections:'+str(n_detections_perline[1][i]))
+#     st.write('number of sources in the current sample:'+str(n_sources_restrict))
+#     st.write('number of sources with detections in the current sample:'+str(n_sources_withdet))
+#     st.write('number of sources with no detection:'+str(n_sources_nodet))
+#     st.write('number of individual detections:'+str(n_detections))
+#     st.write('number of individual significant detections:'+str(n_detections_sign))
+#     for i in range_absline:
+#         st.write('number of sources with '+str(lines_std_names[i+3])+' detections:'+str(n_sources_withdet_perline[i]))
+#         st.write('number of individual'+str(lines_std_names[i+3])+' detections:'+str(n_detections_perline[0][i]))
+#         st.write('number of individual significant'+str(lines_std_names[i+3])+' detections:'+str(n_detections_perline[1][i]))

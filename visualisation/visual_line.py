@@ -90,9 +90,6 @@ ap.add_argument("-line_search_e",nargs=1,help='min, max and step of the line ene
 ap.add_argument("-line_search_norm",nargs=1,help='min, max and nsteps (for one sign)  of the line norm search (which operates in log scale)',
                 default='0.01 10 500',type=str)
 
-ap.add_argument("-mode",nargs=1,help='change between online and local',
-                default='local',type=str)
-
 '''VISUALISATION'''
 
 args=ap.parse_args()
@@ -117,9 +114,11 @@ Notes:
 cameras=args.cameras
 expmodes=args.expmodes
 prefix=args.prefix
-local=args.local
 outdir=args.outdir
-online=args.mode=='online'
+
+#rough way of testing if online or not
+online='parrama' not in os.getcwd()
+
 
 line_cont_range=np.array(args.line_cont_range.split(' ')).astype(float)
 line_cont_ig=args.line_cont_ig
@@ -206,7 +205,7 @@ norm_par_space=np.concatenate((-np.logspace(np.log10(line_search_norm[1]),np.log
                                 np.logspace(np.log10(line_search_norm[0]),np.log10(line_search_norm[1]),int(line_search_norm[2]/2))))
 norm_nsteps=len(norm_par_space)
 
-if local:
+if not online:
     if not multi_obj:
         
         #assuming the last top directory is the object name
@@ -242,7 +241,7 @@ if local:
 'Distance and Mass determination'
 
 #wrapped in a function to be cachable in streamlit
-if local:
+if not online:
     catal_blackcat,catal_watchdog,catal_blackcat_obj,catal_watchdog_obj,catal_maxi_df,catal_maxi_simbad=load_catalogs()
 
 telescope_list=('XMM','Chandra','NICER','Suzaku','Swift')
@@ -274,6 +273,18 @@ else:
 
     update_dump=st.sidebar.button('Update dump')
 
+if not online:
+    update_online=st.sidebar.button('Update online version')
+
+if update_online:
+    
+    #updating script
+    path_online=__file__.replace('visual_line','visual_line_online')
+    os.system('cp '+__file__+' '+path_online)
+    
+    #updating dumps to one level above the script
+    os.system('cp -r ./glob_batch/dumps/ '+path_online[:path_online.rfind('/')]+'/../')
+    
 if update_dump or not os.path.isfile(dump_path):
     
     with st.spinner(text='Updating dump file...' if update_dump else\

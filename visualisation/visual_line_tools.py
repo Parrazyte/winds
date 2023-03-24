@@ -162,9 +162,12 @@ sources_det_dic=['GRS1915+105','GRS 1915+105','GROJ1655-40','H1743-322','4U1630-
 
 rxte_lc_path='/media/parrama/6f58c7c3-ba85-45e6-b8b8-a8f0d564ec15/Observ/BHLMXB/RXTE/RXTE_lc_dict.pickle'
 
-with open(rxte_lc_path,'rb') as rxte_lc_file:
-    dict_lc_rxte=pickle.load(rxte_lc_file)
-
+if os.path.exists(rxte_lc_path):
+    with open(rxte_lc_path,'rb') as rxte_lc_file:
+        dict_lc_rxte=pickle.load(rxte_lc_file)
+else:
+    dict_lc_rxte=None
+    
 #current number of informations in abslines_infos
 n_infos=9
 

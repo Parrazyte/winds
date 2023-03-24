@@ -2707,12 +2707,12 @@ def correl_graph(data_perinfo,infos,data_ener,dict_linevis,mode='intrinsic',mode
                             color_mask_linked=[elem==label_dict[color_label] for elem in color_arr[s][(linked_mask[s].astype(bool))]]
 
 
-                            #checking if there is at least one upper limit:
-                            #(a bit convoluted but we cannot concatenate 0 len arrays so we add a placeholder that'll never get recognized instead)
-                            no_ul_displayed=np.sum([elem==label_dict[color_label] for elem in\
-                                                (np.concatenate((color_arr_ul_x if len(color_arr_ul_x)>0 and color_arr_ul_x!='black' else ['temp'],\
-                                                                 color_arr_ul_y if len(color_arr_ul_y)>0 and color_arr_ul_y!='black' else ['temp']))\
-                                                 if (ratio_mode or mode=='eqwratio') else color_arr_ul)])==0
+                            # #checking if there is at least one upper limit:
+                            # #(a bit convoluted but we cannot concatenate 0 len arrays so we add a placeholder that'll never get recognized instead)
+                            # no_ul_displayed=np.sum([elem==label_dict[color_label] for elem in\
+                            #                     (np.concatenate((color_arr_ul_x if len(color_arr_ul_x)>0 and color_arr_ul_x!='black' else ['temp'],\
+                            #                                      color_arr_ul_y if len(color_arr_ul_y)>0 and color_arr_ul_y!='black' else ['temp']))\
+                            #                      if (ratio_mode or mode=='eqwratio') else color_arr_ul)])==0
                                 
                         #same idea but here since the color is an RGB tuple we need to convert the element before the comparison
                         elif color_scatter=='Source':
@@ -2721,10 +2721,12 @@ def correl_graph(data_perinfo,infos,data_ener,dict_linevis,mode='intrinsic',mode
         
                             #checking if there is at least one upper limit:
                             #(a bit convoluted but we cannot concatenate 0 len arrays so we add a placeholder that'll never get recognized instead)
-                            no_ul_displayed=np.sum([tuple(elem)==label_dict[color_label] for elem in\
-                                                (np.concatenate((color_arr_ul_x if len(color_arr_ul_x)>0 and color_arr_ul_x!='black' else ['temp'],\
-                                                                 color_arr_ul_y if len(color_arr_ul_y)>0 and color_arr_ul_y!='black' else ['temp']))\
-                                                 if (ratio_mode or mode=='eqwratio') else color_arr_ul)])==0
+                                
+                        col_concat=(color_arr_ul_x.tolist() if len(color_arr_ul_x)>0 and color_arr_ul_x!='black' else ['temp']+\
+                                         color_arr_ul_y.tolist() if len(color_arr_ul_y)>0 and color_arr_ul_y!='black' else ['temp'])\
+                                             if (ratio_mode or mode=='eqwratio') else color_arr_ul
+                                                 
+                        no_ul_displayed=np.sum([tuple(elem)==label_dict[color_label] for elem in col_concat])==0
                                 
                         #not displaying color/labels that are not actually in the plot
                         if np.sum(color_mask)==0 and np.sum(color_mask_linked)==0 and (not show_ul_eqw or no_ul_displayed):

@@ -1834,8 +1834,9 @@ n_obj_r=sum(mask_obj)
 #creating an array for the intime observations
 mask_intime_plot=np.array([(Time(date_list[mask_obj][i_obj_r].astype(str))>=Time(slider_date[0])) & (Time(date_list[mask_obj][i_obj_r].astype(str))<=Time(slider_date[1])) for i_obj_r in range(n_obj_r)],dtype=object)
 
+
 #and an date order 
-order_intime_plot_restrict=np.array([np.array([Time(elem) for elem in date_list[mask_obj][i_obj_r][mask_intime_plot[i_obj_r]]]).argsort() for i_obj_r in range(n_obj_r)],dtype=object)
+order_intime_plot_restrict=np.array([np.array([Time(elem) for elem in date_list[mask_obj][i_obj_r][mask_intime_plot[i_obj_r].astype(bool)]]).argsort() for i_obj_r in range(n_obj_r)],dtype=object)
 
 #creating  4 dimensionnal dataframes for the observ and line informations
 
@@ -1849,7 +1850,7 @@ line_rows=np.array(lines_std_names[3:9])[mask_lines]
     
 for i_obj_r in range(n_obj_r):
     
-    n_obs_r=sum(mask_intime_plot[i_obj_r])
+    n_obs_r=sum(mask_intime_plot[i_obj_r].astype(bool))
     
     #recreating an individual non ragged array (similar to abslines_perobj) in construction for each object
     hid_plot_indiv=np.array([[subelem for subelem in elem] for elem in hid_plot_restrict.transpose(2,0,1)[i_obj_r]],dtype=float)
@@ -1857,9 +1858,11 @@ for i_obj_r in range(n_obj_r):
     line_plot_indiv=np.array([[[subsubelem for subsubelem in subelem] for subelem in elem] for elem in abs_plot_tr[i_obj_r]],dtype=float)
     
     #applying the intime mask on each observation and sorting by date
-    hid_plot_indiv=hid_plot_indiv.transpose(2,0,1)[mask_intime_plot[i_obj_r]][order_intime_plot_restrict[i_obj_r]].transpose(1,2,0)
 
-    line_plot_indiv=line_plot_indiv.transpose(3,0,1,2)[mask_intime_plot[i_obj_r]][order_intime_plot_restrict[i_obj_r]].transpose(2,3,0,1)
+    hid_plot_indiv=hid_plot_indiv.transpose(2,0,1)[mask_intime_plot[i_obj_r].astype(bool)][order_intime_plot_restrict[i_obj_r].astype(int)].transpose(1,2,0)
+
+        
+    line_plot_indiv=line_plot_indiv.transpose(3,0,1,2)[mask_intime_plot[i_obj_r].astype(bool)][order_intime_plot_restrict[i_obj_r].astype(int)].transpose(2,3,0,1)
     
     ###
     # splitting information to take off 1 dimension and only take specific information    
@@ -1875,14 +1878,14 @@ for i_obj_r in range(n_obj_r):
     line_plot_indiv=np.array([line_plot_indiv[elem[0]][elem[1]] for elem in used_indexes])
     
     #creating the row indexes (row: object, subrow: observation)    
-    observ_list_indiv=observ_list[mask_obj][i_obj_r][mask_intime_plot[i_obj_r]].tolist()
+    observ_list_indiv=observ_list[mask_obj][i_obj_r][mask_intime_plot[i_obj_r].astype(bool)].tolist()
     
     observ_list_indiv=[elem.replace('_Imaging_auto','').replace('_Timing_auto','').replace('_heg_-1','').replace('_heg_1','') for elem
                        in observ_list_indiv]
     
     iter_rows=[[obj_list[mask_obj][i_obj_r]],
                observ_list_indiv,
-               date_list[mask_obj][i_obj_r][mask_intime_plot[i_obj_r]][order_intime_plot_restrict[i_obj_r]].tolist()]
+               date_list[mask_obj][i_obj_r][mask_intime_plot[i_obj_r].astype(bool)][order_intime_plot_restrict[i_obj_r].astype(int)].tolist()]
     
     
     #creating the iter index manually because we have two clumns (observ and time) not being dimensions of one another
@@ -2048,7 +2051,7 @@ with st.sidebar.expander('Parameter analysis'):
     plot_trend=st.checkbox('Display linear trend lines in the scatter plots',value=False)
     
     st.header('Upper limits')
-    show_scatter_ul=st.checkbox('Display upper limits in EW plots',value=True if display_single else False)
+    show_scatter_ul=st.checkbox('Display upper limits in EW plots',value=False)
     lock_lims_det=not(st.checkbox('Include upper limits in graph bounds computations',value=True))
         
 

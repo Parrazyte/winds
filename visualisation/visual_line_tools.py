@@ -1801,12 +1801,17 @@ def correl_graph(data_perinfo,infos,data_ener,dict_linevis,mode='intrinsic',mode
                             
             plt.xticks(rotation=70)
 
+
         date_list_repeat=np.array([date_list for repeater in (i if type(i)==range else [i])]) if not ratio_mode else date_list
         
         if streamlit:
-            mask_intime=(Time(ravel_ragged(date_list_repeat))>=slider_date[0]) & (Time(ravel_ragged(date_list_repeat))<=slider_date[1])
-        
-            mask_intime_norepeat=(Time(ravel_ragged(date_list))>=slider_date[0]) & (Time(ravel_ragged(date_list))<=slider_date[1])
+            try:
+                mask_intime=(Time(ravel_ragged(date_list_repeat))>=slider_date[0]) & (Time(ravel_ragged(date_list_repeat))<=slider_date[1])
+                
+                mask_intime_norepeat=(Time(ravel_ragged(date_list))>=slider_date[0]) & (Time(ravel_ragged(date_list))<=slider_date[1])
+            except:
+                breakpoint()
+                
         else:
             mask_intime=True
         
@@ -2609,20 +2614,28 @@ def correl_graph(data_perinfo,infos,data_ener,dict_linevis,mode='intrinsic',mode
         
         #### adding cropping on the EW ratio X axis to fix unknown issue
         
-        if ratio_mode:
-            if width_mode:
-                if min(ravel_ragged(x_data))>0.28 and max(ravel_ragged(x_data))<3.5:
-                    ax_scat.set_xlim(0.28,3.5)
-            else:
-                if min(ravel_ragged(x_data))>0.28:
-                    ax_scat.set_xlim(0.28,ax_scat.get_xlim()[1])
+        #complicated restriction to take off all the elements of x_data no matter their dimension if they are empty arrays
+        x_data_use=[elem for elem in x_data if len(np.array(np.shape(elem)).nonzero()[0])==np.ndim(elem)]
 
+        if ratio_mode and len(x_data)>0:          
+            
+            if len(x_data_use)!=0:
+                if width_mode:
+                    if min(ravel_ragged(x_data_use))>0.28 and max(ravel_ragged(x_data_use))<3.5:
+                        ax_scat.set_xlim(0.28,3.5)
+                else:
+                    if min(ravel_ragged(x_data_use))>0.28:
+                        ax_scat.set_xlim(0.28,ax_scat.get_xlim()[1])
+                    
         #### Color replacements in the scatter to match the colormap
         if color_scatter!='None':
             
             for s,elem_errbar in enumerate(errbar_list):
                 #replacing indiviudally the colors for each point but the line
-                for elem_children in elem_errbar.get_children()[1:]:
+                                    
+                #here the empty element is '' so we use a type comparison
+                
+                for elem_children in ([] if type(elem_errbar)==str else elem_errbar.get_children()[1:]):
                     
                     if type(elem_children)==mpl.collections.LineCollection:
                         elem_children.set_colors(color_arr[s][~(linked_mask[s].astype(bool))])
@@ -2644,7 +2657,9 @@ def correl_graph(data_perinfo,infos,data_ener,dict_linevis,mode='intrinsic',mode
                         
             for s,elem_errbar_linked in enumerate(errbar_list_linked):
                 #replacing indiviudally the colors for each point but the line
-                for elem_children in elem_errbar_linked.get_children()[1:]:
+                
+                
+                for elem_children in ([] if type(elem_errbar_linked)==str else elem_errbar_linked.get_children()[1:]):
                     
                     elem_children.set_colors(color_arr[s][(linked_mask[s].astype(bool))])
                 
@@ -2713,9 +2728,6 @@ def correl_graph(data_perinfo,infos,data_ener,dict_linevis,mode='intrinsic',mode
         
                         #checking if there is at least one upper limit:
                         #(a bit convoluted but we cannot concatenate 0 len arrays so we add a placeholder that'll never get recognized instead)
-                                
-                        st.text(color_arr_ul_x.tolist() if len(color_arr_ul_x)>0 and color_arr_ul_x!='black' else ['temp'])
-                        st.text(color_arr_ul_y.tolist() if len(color_arr_ul_y)>0 and color_arr_ul_y!='black' else ['temp'])
                         
                         col_concat=(color_arr_ul_x.tolist() if len(color_arr_ul_x)>0 and color_arr_ul_x!='black' else ['temp']+\
                                          color_arr_ul_y.tolist() if len(color_arr_ul_y)>0 and color_arr_ul_y!='black' else ['temp'])\
@@ -2875,10 +2887,13 @@ def correl_graph(data_perinfo,infos,data_ener,dict_linevis,mode='intrinsic',mode
             scat_legend=plt.legend(fontsize=10,title=legend_title)
             plt.setp(scat_legend.get_title(),fontsize='small')
                 
-        plt.tight_layout()
-        
-
-        
+        if len(x_data_use)>0:
+            plt.tight_layout()      
+        else:
+            #preventing log scales for graphs with no values, which crashes them
+            plt.xscale('linear')
+            plt.yscale('linear')
+            
         if save:
             if indiv:
                 suffix_str='_'+lines_std_names[3+i]

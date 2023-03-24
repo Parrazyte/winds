@@ -684,7 +684,7 @@ with st.sidebar.expander('Monitoring'):
             
     st.button('Save current MAXI curves',on_click=save_lc,key='save_lc_key')
     
-compute_only_withdet=st.sidebar.checkbox('Skip parameter analysis when no detection remain with the current constraints',value=False)
+compute_only_withdet=st.sidebar.checkbox('Skip parameter analysis when no detection remain with the current constraints',value=True)
 
 mpl.rcParams.update({'font.size': 10})
 
@@ -2069,6 +2069,10 @@ if display_param_withdet:
     
     mask_obj=(np.array([elem in sources_det_dic for elem in obj_list])) & (mask_obj_base)
 
+    if sum(mask_obj)==0:
+        st.warning('No detections for current object/date selection. Cannot compute parameter analysis.')
+        st.stop()
+        
     #recreating restricted ploting arrays witht the current streamlit object and lines selections    
     abslines_plot_restrict=deepcopy(abslines_plot)
     for i_info in range(len(abslines_plot_restrict)):

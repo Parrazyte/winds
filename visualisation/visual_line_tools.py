@@ -53,6 +53,9 @@ from ast import literal_eval
 
 '''Astro'''
 
+#adding the top directory to the path to avoid issues when importing fitting_tools
+sys.path.append('/app/winds/spectral_analysis/')
+
 #custom script with some lines and fit utilities and variables
 from fitting_tools import lines_std,c_light,lines_std_names,lines_e_dict,ravel_ragged,ang2kev
 

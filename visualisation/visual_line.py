@@ -253,9 +253,7 @@ choice_telescope=st.sidebar.multiselect('Telescopes', ['XMM','Chandra']+([] if o
 if online:
     ignore_full=True
 else:
-    radio_ignore_full=st.sidebar.radio('Include problematic data (_full) folders',('No','Yes'))
-    
-    ignore_full=radio_ignore_full=='No'
+    radio_ignore_full=st.sidebar.radio('Include problematic data (_full) folders',('No','Yes'))=='No'
 
 if not online:
     os.system('mkdir -p glob_batch/dumps/')

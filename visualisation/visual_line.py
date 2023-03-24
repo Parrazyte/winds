@@ -128,7 +128,11 @@ line_search_norm=np.array(args.line_search_norm.split(' ')).astype(float)
 
 multi_obj=args.multi_obj
 
-st.set_page_config(page_icon=":hole:",layout='wide')
+#don't know where the bug comes from tbf
+try:
+    st.set_page_config(page_icon=":hole:",layout='wide')
+except:
+    pass
                    
 #readjusting the variables in lists
 if cameras=='all':

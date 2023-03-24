@@ -263,7 +263,7 @@ join_telescope_str.sort()
 join_telescope_str='_'.join(join_telescope_str.tolist())
 
 if online:
-    dump_path='./../dumps/dump_'+join_telescope_str+'_'+('no' if radio_ignore_full else '')+'full.pkl'
+    dump_path='/app/winds/dumps/dump_'+join_telescope_str+'_'+('no' if radio_ignore_full else '')+'full.pkl'
     
     update_dump=False
 else:

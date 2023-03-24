@@ -251,7 +251,7 @@ st.sidebar.header('Sample selection')
 choice_telescope=st.sidebar.multiselect('Telescopes', ['XMM','Chandra']+([] if online else ['NICER','Suzaku','Swift']),default=('XMM','Chandra'))
 
 if online:
-    ignore_full=True
+    radio_ignore_full=True
 else:
     radio_ignore_full=st.sidebar.radio('Include problematic data (_full) folders',('No','Yes'))=='No'
 

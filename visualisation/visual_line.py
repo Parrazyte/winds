@@ -101,14 +101,14 @@ from fitting_tools import lines_std,lines_std_names,ravel_ragged,range_absline
 sys.path.append('/app/winds/spectral_analysis/')
 
 '''
-Notes:
--Only works for the auto observations (due to prefix naming) for now
+# Notes:
+# -Only works for the auto observations (due to prefix naming) for now
 
--For now we fix the masses of all the objets at 10M_sol
+# -For now we fix the masses of all the objets at 10M_sol
 
--Due to the way the number of steps is computed, we explore one less value for the positive side of the normalisation
+# -Due to the way the number of steps is computed, we explore one less value for the positive side of the normalisation
 
--The norm_stepval argument is for a fixed flux band, and the value is scaled in the computation depending on the line energy step
+# -The norm_stepval argument is for a fixed flux band, and the value is scaled in the computation depending on the line energy step
 '''
 
 cameras=args.cameras
@@ -282,6 +282,18 @@ if update_online:
     path_online=__file__.replace('visual_line','visual_line_online')
     os.system('cp '+__file__+' '+path_online)
     
+    #opening the online file and replacing ''' by ### due to the magic disabler not working currently
+    
+    with open(path_online,'r') as online_file:
+        online_lines=online_file.readlines()
+
+    for i in range(len(online_lines)):
+        online_lines[i]=online_lines[i].replace("'''",'###')
+    
+    with open(path_online,'w') as online_file:
+        online_file.writelines(online_lines)
+        
+    
     #updating dumps to one level above the script
     os.system('cp -r ./glob_batch/dumps/ '+path_online[:path_online.rfind('/')]+'/../')
     
@@ -454,12 +466,12 @@ catal_maxi_simbad=dump_dict['catal_maxi_simbad']
 dict_lc_rxte=dump_dict['dict_lc_rxte']
 
 '''
-in the abslines_infos_perline form, the order is:
-    -each habsorption line
-    -the number of sources
-    -the number of obs for each source
-    -the info (5 rows, EW/bshift/delchi/sign)
-    -it's uncertainty (3 rows, main value/neg uncert/pos uncert,useless for the delchi and sign)
+# in the abslines_infos_perline form, the order is:
+#     -each habsorption line
+#     -the number of sources
+#     -the number of obs for each source
+#     -the info (5 rows, EW/bshift/delchi/sign)
+#     -it's uncertainty (3 rows, main value/neg uncert/pos uncert,useless for the delchi and sign)
 '''
 
 #checking if the obsid identifiers of every index is in the bad flag list or if there's just no file
@@ -606,7 +618,7 @@ save_format=st.sidebar.radio('Graph format:',('pdf','svg','png'))
 
 def save_hld():
     '''
-    Saves the current graph in a svg (i.e. with clickable points) format.
+    # Saves the current graph in a svg (i.e. with clickable points) format.
     '''
 
     fig_hid.savefig(save_dir+'/'+save_str_prefix+'HLD_cam_'+args.cameras+'_'+\
@@ -664,7 +676,7 @@ with st.sidebar.expander('Monitoring'):
     def save_lc():
         
         '''
-        Saves the current maxi_graph in a svg (i.e. with clickable points) format.
+        # Saves the current maxi_graph in a svg (i.e. with clickable points) format.
         '''
         if display_single:
             fig_lc_monit.savefig(save_dir+'/'+'LC_'+choice_source[0]+'_'+str(round(time.time()))+'.'+save_format,bbox_inches='tight')
@@ -930,7 +942,7 @@ for i_obj,abslines_obj in enumerate(abslines_infos_perobj[mask_obj]):
         i_obj_glob=i_obj
         
     '''
-    The shape of each abslines_obj is (uncert,info,line,obs)
+    # The shape of each abslines_obj is (uncert,info,line,obs)
     '''
     
     #defining the hid positions of each point
@@ -1265,7 +1277,7 @@ for i_obj_base,abslines_obj_base in enumerate(abslines_infos_perobj[mask_obj_bas
         i_obj_glob=i_obj_base
     
     '''
-    The shape of each abslines_obj is (uncert,info,line,obs)
+    # The shape of each abslines_obj is (uncert,info,line,obs)
     '''
         
     #we use non-detection-masked arrays for non detection to plot them even while restricting the colors to a part of the sample 
@@ -1613,9 +1625,9 @@ if radio_info_cmap=='Source' or display_edgesource:
                                   ncol=n_col_leg_source,bbox_to_anchor=(0.475,-0.02*n_lines()),handler_map={tuple: HandlerTuple(ndivide=None,pad=1.)})
         
         '''
-        maintaining a constant marker size in the legend (but only for markers)
-        note: here we cannot use directly legend_handles because they don't consider the second part of the legend tuples
-        We thus use the findobj method to search in all elements of the legend
+        # maintaining a constant marker size in the legend (but only for markers)
+        # note: here we cannot use directly legend_handles because they don't consider the second part of the legend tuples
+        # We thus use the findobj method to search in all elements of the legend
         '''
         for elem_legend in  hid_legend.findobj():
             
@@ -1788,7 +1800,7 @@ def produce_df(data,rows, columns, row_names=None, column_names=None,row_index=N
     return pd.DataFrame(data,index=row_index_build, columns=col_index_build)
 
 '''
-SOURCE TABLE
+#SOURCE TABLE
 '''
     
 source_df_arr=np.array([obj_list,dist_obj_list,mass_obj_list,incl_plot.T[0],incl_plot.T[1],incl_plot.T[2],
@@ -1813,7 +1825,7 @@ with tab_source_df:
         
         
 '''
-OBS TABLE
+#OBS & LINE TABLES
 '''
 
 #n_obj_restricted
@@ -1850,8 +1862,8 @@ for i_obj_r in range(n_obj_r):
     line_plot_indiv=line_plot_indiv.transpose(3,0,1,2)[mask_intime_plot[i_obj_r]][order_intime_plot_restrict[i_obj_r]].transpose(2,3,0,1)
     
     '''
-    splitting information to take off 1 dimension and only take specific information    
-    EW, bshift, width, flux, sign, upper
+    # splitting information to take off 1 dimension and only take specific information    
+    # EW, bshift, width, flux, sign, upper
     '''
     used_indexes=[[0,0],[0,1],[0,2],
                   [1,0],[1,1],[1,2],
@@ -2090,7 +2102,7 @@ os.system('mkdir -p '+save_dir+'/graphs/hid')
 os.system('mkdir -p '+save_dir+'/graphs/inclin')
 
 '''
-AUTOFIT LINES
+# AUTOFIT LINES
 '''
 
 '''Distributions'''

@@ -45,7 +45,7 @@ from ast import literal_eval
 # import time
 
 import dill
-'''Astro'''
+###Astro###
 
 #Catalogs and manipulation
 from astroquery.vizier import Vizier
@@ -62,7 +62,7 @@ from visual_line_tools import load_catalogs,dist_mass,obj_values,abslines_values
 
 ap = argparse.ArgumentParser(description='Script to display lines in XMM Spectra.\n)')
 
-'''GENERAL OPTIONS'''
+###GENERAL OPTIONS###
 
 
 ap.add_argument("-cameras",nargs=1,help='Cameras to use for the spectral analysis',default='all',type=str)
@@ -70,16 +70,16 @@ ap.add_argument("-expmodes",nargs=1,help='restrict the analysis to a single type
 ap.add_argument("-prefix",nargs=1,help='restrict analysis to a specific prefix',default='auto',type=str)
 ap.add_argument("-outdir",nargs=1,help="name of output directory for line plots",default="lineplots_opt",type=str)
 
-'''DIRECTORY SPECIFICS'''
+###DIRECTORY SPECIFICS###
 
 ap.add_argument("-local",nargs=1,help='launch analysis in the current directory instead',default=True,type=bool)
 
-'''MODES'''
+###MODES###
 
 ap.add_argument('-multi_obj',nargs=1,help='compute the hid for multiple obj directories inside the current directory',
                 default=True)
 
-'''SPECTRUM PARAMETERS'''
+###SPECTRUM PARAMETERS###
 
 
 ap.add_argument("-line_cont_range",nargs=1,help='min and max energies of the line continuum broand band fit',default='4 10',type=str)
@@ -90,7 +90,7 @@ ap.add_argument("-line_search_e",nargs=1,help='min, max and step of the line ene
 ap.add_argument("-line_search_norm",nargs=1,help='min, max and nsteps (for one sign)  of the line norm search (which operates in log scale)',
                 default='0.01 10 500',type=str)
 
-'''VISUALISATION'''
+###VISUALISATION###
 
 args=ap.parse_args()
 
@@ -100,16 +100,16 @@ from fitting_tools import lines_std,lines_std_names,ravel_ragged,range_absline
 #adding the top directory to the path to avoid issues when importing fitting_tools
 sys.path.append('/app/winds/spectral_analysis/')
 
-'''
-Notes:
--Only works for the auto observations (due to prefix naming) for now
+###
+# Notes:
+# -Only works for the auto observations (due to prefix naming) for now
 
--For now we fix the masses of all the objets at 10M_sol
+# -For now we fix the masses of all the objets at 10M_sol
 
--Due to the way the number of steps is computed, we explore one less value for the positive side of the normalisation
+# -Due to the way the number of steps is computed, we explore one less value for the positive side of the normalisation
 
--The norm_stepval argument is for a fixed flux band, and the value is scaled in the computation depending on the line energy step
-'''
+# -The norm_stepval argument is for a fixed flux band, and the value is scaled in the computation depending on the line energy step
+###
 
 cameras=args.cameras
 expmodes=args.expmodes
@@ -182,7 +182,7 @@ def convert_df(df):
         
 #     return launched_expos,completed_expos
 
-'''initialisation'''
+###initialisation###
 
 #global normalisations values for the points
 norm_s_lin=5
@@ -234,9 +234,9 @@ if not online:
         
         aborted_exposid=[elem for elem in exposid_list if not elem+'_recap.pdf' in lineplots_files]
 
-'''''''''''''''''''''''''''''''''''''''
-''''''Hardness-Luminosity Diagrams''''''
-'''''''''''''''''''''''''''''''''''''''
+#######################################
+######Hardness-Luminosity Diagrams######
+#######################################
 
 'Distance and Mass determination'
 
@@ -281,6 +281,18 @@ if update_online:
     #updating script
     path_online=__file__.replace('visual_line','visual_line_online')
     os.system('cp '+__file__+' '+path_online)
+    
+    #opening the online file and replacing ### by ### due to the magic disabler not working currently
+    
+    with open(path_online,'r') as online_file:
+        online_lines=online_file.readlines()
+
+    for i in range(len(online_lines)):
+        online_lines[i]=online_lines[i].replace("###",'###')
+    
+    with open(path_online,'w') as online_file:
+        online_file.writelines(online_lines)
+        
     
     #updating dumps to one level above the script
     os.system('cp -r ./glob_batch/dumps/ '+path_online[:path_online.rfind('/')]+'/../')
@@ -453,14 +465,14 @@ catal_maxi_df=dump_dict['catal_maxi_df']
 catal_maxi_simbad=dump_dict['catal_maxi_simbad']
 dict_lc_rxte=dump_dict['dict_lc_rxte']
 
-'''
-in the abslines_infos_perline form, the order is:
-    -each habsorption line
-    -the number of sources
-    -the number of obs for each source
-    -the info (5 rows, EW/bshift/delchi/sign)
-    -it's uncertainty (3 rows, main value/neg uncert/pos uncert,useless for the delchi and sign)
-'''
+###
+# in the abslines_infos_perline form, the order is:
+#     -each habsorption line
+#     -the number of sources
+#     -the number of obs for each source
+#     -the info (5 rows, EW/bshift/delchi/sign)
+#     -it's uncertainty (3 rows, main value/neg uncert/pos uncert,useless for the delchi and sign)
+###
 
 #checking if the obsid identifiers of every index is in the bad flag list or if there's just no file
 if len(observ_list.ravel())==0:
@@ -474,7 +486,7 @@ if multi_obj:
 else:
     save_str_prefix=obj_list[0]+'_'
 
-'''Page creation'''
+###Page creation###
 #### Streamlit page creation
 
 line_display_str=np.array([r'FeXXV Ka (6.70 keV)',r'FeXXVI  Ka (6.97 keV)','NiXXVII Ka (7.80 keV)',
@@ -605,9 +617,9 @@ if display_single:
 save_format=st.sidebar.radio('Graph format:',('pdf','svg','png'))
 
 def save_hld():
-    '''
-    Saves the current graph in a svg (i.e. with clickable points) format.
-    '''
+    ###
+    # Saves the current graph in a svg (i.e. with clickable points) format.
+    ###
 
     fig_hid.savefig(save_dir+'/'+save_str_prefix+'HLD_cam_'+args.cameras+'_'+\
                 args.line_search_e.replace(' ','_')+'_'+args.line_search_norm.replace(' ','_')+'curr_'+str(round(time.time()))+'.'+save_format,bbox_inches='tight')
@@ -663,9 +675,9 @@ with st.sidebar.expander('Monitoring'):
     
     def save_lc():
         
-        '''
-        Saves the current maxi_graph in a svg (i.e. with clickable points) format.
-        '''
+        ###
+        # Saves the current maxi_graph in a svg (i.e. with clickable points) format.
+        ###
         if display_single:
             fig_lc_monit.savefig(save_dir+'/'+'LC_'+choice_source[0]+'_'+str(round(time.time()))+'.'+save_format,bbox_inches='tight')
             fig_hr_monit.savefig(save_dir+'/'+'HR_'+choice_source[0]+'_'+str(round(time.time()))+'.'+save_format,bbox_inches='tight')
@@ -683,7 +695,7 @@ else:
 ax_hid.clear()
 
 
-'''HID GRAPH'''
+###HID GRAPH###
 
 #log x scale for an easier comparison with Ponti diagrams
 ax_hid.set_xscale('log')
@@ -691,7 +703,7 @@ ax_hid.set_xlabel('Hardness Ratio ([6-10]/[3-6] keV bands)')
 ax_hid.set_ylabel(r'Luminosity in the [3-10] keV band in (L/L$_{Edd}$) units')
 ax_hid.set_yscale('log')
 
-'''Dichotomy'''
+###Dichotomy###
 
 #fetching the line indexes when plotting EW ratio as colormap
 eqw_ratio_ids=np.argwhere([elem in selectbox_ratioeqw for elem in line_display_str]).T[0]
@@ -929,9 +941,9 @@ for i_obj,abslines_obj in enumerate(abslines_infos_perobj[mask_obj]):
     else:
         i_obj_glob=i_obj
         
-    '''
-    The shape of each abslines_obj is (uncert,info,line,obs)
-    '''
+    ###
+    # The shape of each abslines_obj is (uncert,info,line,obs)
+    ###
     
     #defining the hid positions of each point
     x_hid=flux_list[mask_obj][i_obj].T[2][0]/flux_list[mask_obj][i_obj].T[1][0]
@@ -1264,9 +1276,9 @@ for i_obj_base,abslines_obj_base in enumerate(abslines_infos_perobj[mask_obj_bas
     else:
         i_obj_glob=i_obj_base
     
-    '''
-    The shape of each abslines_obj is (uncert,info,line,obs)
-    '''
+    ###
+    # The shape of each abslines_obj is (uncert,info,line,obs)
+    ###
         
     #we use non-detection-masked arrays for non detection to plot them even while restricting the colors to a part of the sample 
     x_hid_base=flux_list[mask_obj_base][i_obj_base].T[2][0]/flux_list[mask_obj_base][i_obj_base].T[1][0]
@@ -1545,9 +1557,9 @@ if display_dicho:
     # ax_hid.set_ylim(1e-2,ax_hid.get_ylim()[1])
     
     
-''''''''''''''''''
+##################
 #### legends
-''''''''''''''''''
+##################
 
 
 
@@ -1612,11 +1624,11 @@ if radio_info_cmap=='Source' or display_edgesource:
         hid_legend=fig_hid.legend(elem_leg_source,labels_leg_source,loc='lower center',
                                   ncol=n_col_leg_source,bbox_to_anchor=(0.475,-0.02*n_lines()),handler_map={tuple: HandlerTuple(ndivide=None,pad=1.)})
         
-        '''
-        maintaining a constant marker size in the legend (but only for markers)
-        note: here we cannot use directly legend_handles because they don't consider the second part of the legend tuples
-        We thus use the findobj method to search in all elements of the legend
-        '''
+        ###
+        # maintaining a constant marker size in the legend (but only for markers)
+        # note: here we cannot use directly legend_handles because they don't consider the second part of the legend tuples
+        # We thus use the findobj method to search in all elements of the legend
+        ###
         for elem_legend in  hid_legend.findobj():
             
             #### find a way to change the size of this
@@ -1761,9 +1773,9 @@ dict_linevis['display_nonsign']=display_nonsign
 dict_linevis['save_dir']=save_dir
 dict_linevis['save_str_prefix']= save_str_prefix
 
-'''''''''''''''''''''
+#####################
 ####Creating and plotting the dataframes
-'''''''''''''''''''''
+#####################
 
 def produce_df(data,rows, columns, row_names=None, column_names=None,row_index=None,col_index=None):
 
@@ -1787,9 +1799,9 @@ def produce_df(data,rows, columns, row_names=None, column_names=None,row_index=N
         
     return pd.DataFrame(data,index=row_index_build, columns=col_index_build)
 
-'''
-SOURCE TABLE
-'''
+###
+#SOURCE TABLE
+###
     
 source_df_arr=np.array([obj_list,dist_obj_list,mass_obj_list,incl_plot.T[0],incl_plot.T[1],incl_plot.T[2],
                        [sum(elem=='XMM') for elem in instru_list],[sum(elem=='Chandra') for elem in instru_list]]).astype(str).T
@@ -1812,9 +1824,9 @@ with tab_source_df:
         )
         
         
-'''
-OBS TABLE
-'''
+###
+#OBS & LINE TABLES
+###
 
 #n_obj_restricted
 n_obj_r=sum(mask_obj)
@@ -1849,10 +1861,10 @@ for i_obj_r in range(n_obj_r):
 
     line_plot_indiv=line_plot_indiv.transpose(3,0,1,2)[mask_intime_plot[i_obj_r]][order_intime_plot_restrict[i_obj_r]].transpose(2,3,0,1)
     
-    '''
-    splitting information to take off 1 dimension and only take specific information    
-    EW, bshift, width, flux, sign, upper
-    '''
+    ###
+    # splitting information to take off 1 dimension and only take specific information    
+    # EW, bshift, width, flux, sign, upper
+    ###
     used_indexes=[[0,0],[0,1],[0,2],
                   [1,0],[1,1],[1,2],
                   [7,0],[7,1],[7,2],
@@ -1937,9 +1949,9 @@ with tab_source_df:
         )
         
 
-'''''''''''''''''''''
+#####################
  ####Monitoring
-'''''''''''''''''''''
+#####################
 
 with tab_monitoring:
     if plot_lc_monit:
@@ -1976,9 +1988,9 @@ with tab_monitoring:
     if ((plot_lc_monit and fig_lc_monit is None) or (plot_hr_monit and fig_hr_monit is None)) and display_single:
         st.warning('No match in MAXI/RXTE source list found.')
         
-'''''''''''''''''''''
+#####################
    #### Parameter analysis
-'''''''''''''''''''''
+#####################
 
 with st.sidebar.expander('Parameter analysis'):
     
@@ -2089,11 +2101,11 @@ os.system('mkdir -p '+save_dir+'/graphs/intrinsic')
 os.system('mkdir -p '+save_dir+'/graphs/hid')
 os.system('mkdir -p '+save_dir+'/graphs/inclin')
 
-'''
-AUTOFIT LINES
-'''
+###
+# AUTOFIT LINES
+###
 
-'''Distributions'''
+###Distributions###
 
 def streamlit_distrib():
     distrib_eqw=distrib_graph(abslines_plot_restrict,'eqw',dict_linevis,conf_thresh=slider_sign,streamlit=True,bigger_text=bigger_text,split=split_distrib)
@@ -2159,9 +2171,9 @@ def streamlit_distrib():
                 with col_list['width']:
                     st.pyplot(distrib_width)
                 
-'''1-1 Correlations'''
+###1-1 Correlations###
 
-'''Intrinsic line parameters'''
+###Intrinsic line parameters###
 
 def streamlit_scat(mode):
     

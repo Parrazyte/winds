@@ -50,9 +50,6 @@ import dill
 #Catalogs and manipulation
 from astroquery.vizier import Vizier
 
-#custom script with some lines and fit utilities and variables
-from fitting_tools import lines_std,lines_std_names,ravel_ragged,range_absline
-
 #visualisation functions
 from visual_line_tools import load_catalogs,dist_mass,obj_values,abslines_values,values_manip,distrib_graph,correl_graph,incl_dic,\
     n_infos, plot_lightcurve, telescope_colors, sources_det_dic, dippers_list
@@ -99,6 +96,12 @@ ap.add_argument("-mode",nargs=1,help='change between online and local',
 '''VISUALISATION'''
 
 args=ap.parse_args()
+
+#custom script with some lines and fit utilities and variables
+from fitting_tools import lines_std,lines_std_names,ravel_ragged,range_absline
+
+#adding the top directory to the path to avoid issues when importing fitting_tools
+sys.path.append('/app/winds/spectral_analysis/')
 
 '''
 Notes:

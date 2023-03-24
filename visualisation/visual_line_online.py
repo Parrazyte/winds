@@ -273,7 +273,9 @@ else:
 
 if not online:
     update_online=st.sidebar.button('Update online version')
-
+else:
+    update_online=False
+    
 if update_online:
     
     #updating script

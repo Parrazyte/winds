@@ -286,6 +286,10 @@ if update_online:
     os.system('cp -r ./glob_batch/dumps/ '+path_online[:path_online.rfind('/')]+'/../')
     
 if update_dump or not os.path.isfile(dump_path):
+    st.text(dump_path)
+    
+    st.text(str(os.path.isfile(dump_path)))
+    
     
     with st.spinner(text='Updating dump file...' if update_dump else\
                     'Using new configuration. Creating dump file...'):
@@ -302,7 +306,7 @@ if update_dump or not os.path.isfile(dump_path):
         lineval_files=[elem for elem_telescope in choice_telescope for elem in lineval_files if elem_telescope+'/' in elem]
         abslines_files=[elem for elem_telescope in choice_telescope for elem in abslines_files if elem_telescope+'/' in elem]
         
-        if ignore_full:
+        if radio_ignore_full:
             lineval_files=[elem for elem in lineval_files if '_full' not in elem]
             abslines_files=[elem for elem in abslines_files if '_full' not in elem]
             

@@ -149,7 +149,7 @@ ap.add_argument("-prefix",nargs=1,help='restrict analysis to a specific prefix',
 
 ####output directory
 ap.add_argument("-outdir",nargs=1,help="name of output directory for line plots",
-                default="lineplots_opt",type=str)
+                default="lineplots_opt_paper_2",type=str)
 
 #overwrite
 ap.add_argument('-overwrite',nargs=1,
@@ -193,7 +193,7 @@ ap.add_argument("-h_update",nargs=1,help='update the bg, rmf and arf file names 
 ap.add_argument('-restrict',nargs=1,help='restrict the computation to a number of predefined exposures',default=True,type=bool)
 #in this mode, the line detection function isn't wrapped in a try, and the summary isn't updasted
 
-observ_restrict=['660_heg_-1_grp_opt.pha','660_heg_1_grp_opt.pha']
+observ_restrict=['660_heg_-1_grp_opt.pha','660_heg_1_grp_opt.pha','13717_heg_-1_grp_opt.pha','13717_heg_1_grp_opt.pha']
 
 ''' 
 Chandra:
@@ -2660,11 +2660,11 @@ def line_detect(epoch_id):
             #rescaling with errorbars (which are not taken into account by normal rescaling)
 
             plot_ratio_y_up=np.array([(plot_ratio_autofit_noabs[i_grp][1][0]+plot_ratio_autofit_noabs[i_grp][1][1])[plot_ratio_xind_rel[i_grp]] 
-                                      for i_grp in range(AllData.nGroups)])
+                                      for i_grp in range(AllData.nGroups)],dtype=object)
 
                 
             plot_ratio_y_dn=np.array([(plot_ratio_autofit_noabs[i_grp][1][0]-plot_ratio_autofit_noabs[i_grp][1][1])[plot_ratio_xind_rel[i_grp]]
-                                      for i_grp in range(AllData.nGroups)])
+                                      for i_grp in range(AllData.nGroups)],dtype=object)
             axe.set_ylim(0.95*np.min(ravel_ragged(plot_ratio_y_dn)),1.05*np.max(ravel_ragged(plot_ratio_y_up)))
             
             #linestyles
@@ -2766,7 +2766,6 @@ def line_detect(epoch_id):
             
             #coltour_chi2map(fig_paper,ax_paper[3],chi_dict_postauto,combined='nolegend',ax_bar=ax_colorbar,norm=(251.5,12.6))          
 
-            
             coltour_chi2map(fig_paper,ax_paper[3],chi_dict_postauto,combined='nolegend',ax_bar=ax_colorbar)          
             
             ax_paper[3].set_xlim(line_cont_range)
@@ -2775,6 +2774,8 @@ def line_detect(epoch_id):
             plot_std_ener(ax_paper[2],plot_em=True)
             plot_std_ener(ax_paper[3],plot_em=True)
             
+        breakpoint()
+        
         fig_paper=plt.figure(figsize=(14.5,22))
         
         paper_plot(fig_paper,chi_dict_init,chi_dict_autofit)
@@ -2786,6 +2787,9 @@ def line_detect(epoch_id):
         plt.close(fig_paper)
         
         model_load(data_autofit_noabs)
+        
+        #we don't update the fitcomps here because it would require taking off the abslines from the includedlists
+        #and we don't want that for the significance computation
         
         '''
         Absorption lines statistical significance assessment
@@ -2823,8 +2827,7 @@ def line_detect(epoch_id):
         #updating it in the fitmod
         fitlines.logfile=curr_logfile
         fitlines.logfile_write=curr_logfile_write
-        fitlines.update_fitcomps()
-        
+            
         Xset.logChatter=2
         
         '''

@@ -73,7 +73,7 @@
 !     line optical depths                                               
       real(8), dimension(:,:), allocatable ::  tau0
 !     energy bins                                                       
-      real(8) epi(ncn) 
+      real(8) epi(ncn),plop
       real(8) epim(ncn) 
 !      continuum lum                                                    
       real(8), dimension(:,:), allocatable ::  zrems, zremso
@@ -108,7 +108,6 @@
       real(8), dimension(:,:), allocatable ::  zrtmpcol
       real(8), dimension(:,:), allocatable ::  zrtmpc
       real(8), dimension(:,:), allocatable ::  zrtmph
-      real plop
 !              
 !     local variables                                                   
 !     state variables                                                   
@@ -976,7 +975,7 @@
       deallocate(zrtmpc)
       deallocate(zrtmph)
 !
-      return 
+      return
       end                                           
 
       end module xstar_mod

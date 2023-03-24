@@ -1858,8 +1858,11 @@ class fitmod:
             if comp is None:
                 continue
             
-            comp.xcompnames=[AllModels(1).componentNames[i] for i in range(i_comp-len(comp.xcompnames)+1,i_comp+1)]                
-
+            try:
+                comp.xcompnames=[AllModels(1).componentNames[i] for i in range(i_comp-len(comp.xcompnames)+1,i_comp+1)]                
+            except:
+                raise ValueError
+                
             comp.xcomps=[getattr(AllModels(1),comp.xcompnames[i]) for i in range(len(comp.xcompnames))]
             
             #xspec numbering here so needs to be shifted
@@ -4132,10 +4135,10 @@ def comb_chi2map(fig_comb,chi_dict,title='',comb_label=''):
         
     #rescaling with errorbars (which are not taken into account by normal rescaling)
     plot_ratio_y_up=max(ravel_ragged(np.array([(plot_ratio_values[i_grp][1][0]+plot_ratio_values[i_grp][1][1])
-                         for i_grp in range(AllData.nGroups)])))
+                         for i_grp in range(AllData.nGroups)],dtype=object),mode=object))
     
     plot_ratio_y_dn=min(ravel_ragged(np.array([(plot_ratio_values[i_grp][1][0]-plot_ratio_values[i_grp][1][1])
-                         for i_grp in range(AllData.nGroups)])))
+                         for i_grp in range(AllData.nGroups)],dtype=object),mode=object))
     
     ax_comb[0].set_ylim(0.95*np.min(plot_ratio_y_dn),1.05*np.max(plot_ratio_y_up))
     

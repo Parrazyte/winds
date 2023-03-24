@@ -65,10 +65,12 @@ def validate_inputs(a, b, c, d):
     return True
 
 
-def perturb_values(x, y, dx, dy, Nperturb=10000):
+def perturb_values(x, y, dx, dy,xlim=None,ylim=None, Nperturb=10000):
     """
     For input points (x, y) with errors (dx, dy) return Nperturb sets of
     values draw from Gaussian distributions centered at x+-dx and y+-dy.
+    
+    ####EDIT: ylim added, will change the perturbation from gaussian to uniform in the interval
     """
 
     if y is not None:
@@ -86,8 +88,9 @@ def perturb_values(x, y, dx, dy, Nperturb=10000):
     if _np.ndim(dx)==2:
         #drawing two independant samples with gaussian shape on each side (or None if there is no uncertainty)
         #Note : we take the absolute values of the uncertainties to make sure they are valid scale parameters
-
-        xp_disjointed=_np.array([[(-1)**i*abs(rng.normal(loc=0,scale=abs(dx[i][j]),size=(Nperturb))) if dx[i][j]!=0 else None\
+        
+        xp_disjointed=_np.array([[((-1)**(j+1)*abs(rng.normal(loc=0,scale=abs(dx[i][j]),size=(Nperturb))) if (xlim is None or xlim[i]==0) else\
+                                   rng.uniform(low=x[i],high=x[i]+dx[i][1],size=Nperturb)) if dx[i][j]!=0  else None\
                                   for i in range(len(dx))] for j in [0,1]],dtype=object)
             
         #different transpositions depending on if the array ends up with Nones or not
@@ -114,7 +117,8 @@ def perturb_values(x, y, dx, dy, Nperturb=10000):
         if _np.ndim(dy)==2:
             #drawing two independant samples with gaussian shape on each side (or None if there is no uncertainty)
             #Note : we take the absolute values of the uncertainties to make sure they are valid scale parameters
-            yp_disjointed=_np.array([[(-1)**i*abs(rng.normal(loc=0,scale=abs(dy[i][j]),size=(Nperturb))) if dy[i][j]!=0 else None\
+            yp_disjointed=_np.array([[(((-1)**(j+1)*abs(rng.normal(loc=0,scale=abs(dy[i][j]),size=(Nperturb)))) if (ylim is None or ylim[i]==0) else\
+                                       rng.uniform(low=y[i],high=y[i]+dy[i][1],size=Nperturb)) if dy[i][j]!=0  else None\
                                       for i in range(len(dy))] for j in [0,1]],dtype=object)
             
             #different transpositions depending on if the array ends up with Nones or not
@@ -130,6 +134,7 @@ def perturb_values(x, y, dx, dy, Nperturb=10000):
                 elem[0] if elem[0] is not None else elem[1] for elem in yp_disjointed])
     
             yp=yp.T+y
+                
         else:
             yp = rng.normal(loc=y,
                             scale=dy,
@@ -270,8 +275,9 @@ def pymccorrelation(x, y,
     percentiles: list of percentiles to compute from final distribution
     return_dist: if True, return the full distribution of the correlation
         coefficient and its and p-value
-    """
 
+    Edit: upper limits with a boundary are treated as uniform distributions within that boundary
+    """
     # do some checks on input array lengths and ensure the necessary data
     # is provided
     if Nperturb is not None and dx is None and dy is None:
@@ -290,11 +296,13 @@ def pymccorrelation(x, y,
 
     # censoring is only implemented for kendall's tau, return an error
     # if censored data is provided
-    if coeff != 'kendallt' and \
-       ((xlim is not None or ylim is not None) or
-        (_np.all(xlim == 0) and _np.all(ylim == 0))):
-        raise ValueError('Censored data provided, but ' + coeff + ' does not \
-support censored data.')
+    
+    #### EDIT: this test is taken off
+#     if coeff != 'kendallt' and \
+#        ((xlim is not None or ylim is not None) or
+#         (_np.all(xlim == 0) and _np.all(ylim == 0))):
+#         raise ValueError('Censored data provided, but ' + coeff + ' does not \
+# support censored data.')
 
     Nvalues = len(x)
 
@@ -305,13 +313,13 @@ support censored data.')
         _warnings.warn("No bootstrapping or perturbation applied. Returning \
 normal " + coeff + " output.")
         if coeff == 'spearmanr':
-            return compute_corr(x, y, coeff=coeff)
+            return compute_corr(x, y, ylim=ylim, coeff=coeff)
         elif coeff == 'kendallt':
             # pass along the xlim/ylim arrays, and the wrapper will handle
             # the presence of censored data
             return compute_corr(x, y, xlim=xlim, ylim=ylim, coeff=coeff)
         elif coeff == 'pearsonr':
-            return compute_corr(x, y, coeff=coeff)
+            return compute_corr(x, y, ylim=ylim, coeff=coeff)
 
     # if perturbing points, and we have censored data, set up an index
 
@@ -339,7 +347,8 @@ normal " + coeff + " output.")
             if xlim is not None:
                 xlimb = xlim[members[i, :]]
             else:
-                xlimb = xlim
+                xlimb = xlim()
+                
             if ylim is not None:
                 ylimb = ylim[members[i, :]]
             else:
@@ -349,10 +358,11 @@ normal " + coeff + " output.")
                 # perform 1 perturbation on top of the bootstrapping
                 xp = x.copy()
                 yp = y.copy()
+                    
                 xp[do_per], yp[do_per] = perturb_values(x[members[i, :]][do_per],
                                                         y[members[i, :]][do_per],
                                                         dx[members[i, :]][do_per],
-                                                        dy[members[i, :]][do_per],
+                                                        dy[members[i, :]][do_per],ylim=ylim,
                                                         Nperturb=1)
 
             coeffs[i], pvals[i] = compute_corr(xp, yp,
@@ -390,7 +400,7 @@ normal " + coeff + " output.")
         xp[:, do_per], yp[:, do_per],fake_bcenters = perturb_values(x[do_per],
                                                       y[do_per],
                                                       dx[do_per],
-                                                      dy[do_per],
+                                                      dy[do_per],ylim=ylim,
                                                       Nperturb=Nperturb)
         # loop over each perturbed copy and compute the correlation
         # coefficient

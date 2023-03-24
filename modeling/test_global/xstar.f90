@@ -325,6 +325,7 @@
       do mm=1,ncn2 
         zremsz(mm)=0. 
         enddo 
+        
       cfrac=0. 
       emult=0.75 
       taumax=5. 

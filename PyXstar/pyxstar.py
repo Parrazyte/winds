@@ -17,6 +17,72 @@ def main():
 if __name__ == '__main__':
     main()
 
+par = {
+"cfrac":        1.0,        #"covering fraction"
+"temperature":  1.0,        #"temperature (/10**4K)"
+"lcpres":       0,          #"constant pressure switch (1=yes, 0=no)"
+"pressure":     0.03,       #"pressure (dyne/cm**2)"
+"density":      1.e+20,     #"density (cm**-3)"
+"spectrum":     "pow",      #"spectrum type?"
+"spectrum_file":"spct.dat", #"spectrum file?"
+"spectun":      0,          #"spectrum units? (0=energy, 1=photons)"
+"trad":        -1.0,        #"radiation temperature or alpha?"
+"rlrad38":      1.e-6,      #"luminosity (/10**38 erg/s)"
+"column":       1.e+15,     #"column density (cm**-2)"
+"rlogxi":       1.0,        #"log(ionization parameter) (erg cm/s)"
+"habund":       1.0,        #"hydrogen abundance"
+"heabund":      1.0,        #"helium abundance"
+"liabund":      0.0,        #"lithium abundance"
+"beabund":      0.0,        #"beryllium abundance"
+"babund":       0.0,        #"boron abundance"
+"cabund":       1.0,        #"carbon abundance"
+"nabund":       1.0,        #"nitrogen abundance"
+"oabund":       1.0,        #"oxygen abundance"  
+"fabund":       0.0,        #"fluorine abundance"
+"neabund":      1.0,        #"neon abundance"
+"naabund":      0.0,        #"sodium abundance"
+"mgabund":      1.0,        #"magnesium abundance"
+"alabund":      1.0,        #"aluminum abundance"
+"siabund":      1.0,        #"silicon abundance"
+"pabund":       0.0,        #"phosphorus abundance"
+"sabund":       1.0,        #"sulfur abundance"
+"clabund":      0.0,        #"chlorine abundance"
+"arabund":      1.0,        #"argon abundance"
+"kabund":       0.0,        #"potassium abundance"
+"caabund":      1.0,        #"calcium abundance"
+"scabund":      0.0,        #"scandium abundance"
+"tiabund":      0.0,        #"titanium abundance"
+"vabund":       0.0,        #"vanadium abundance"
+"crabund":      0.0,        #"chromium abundance"
+"mnabund":      0.0,        #"manganese abundance"
+"feabund":      1.0,        #"iron abundance"
+"coabund":      0.0,        #"cobalt abundance"
+"niabund":      1.0,        #"nickel abundance"
+"cuabund":      0.0,        #"copper abundance"
+"znabund":      0.0,        #"zinc abundance"
+"modelname":"XSTAR_Default",#"model name"
+}
+
+# Input hpar dictionary. Do not modify values unless you know what you are doing.
+
+hpar = {
+"nsteps":     3,     #"number of steps"
+"niter":      0,     #"number of iterations"
+"lwrite":     0,     #"write switch (1=yes, 0=no)"
+"lprint":     0,     #"print switch (1=yes, 0=no)"
+"lstep":      0,     #"step size choice switch"
+"emult":      0.5,   #"Courant multiplier"
+"taumax":     5.0,   #"tau max for courant step"
+"xeemin":     0.1,   #"minimum electron fraction"
+"critf":      1.e-7, #"critical ion abundance"
+"vturbi":     1.0,   #"turbulent velocity (km/s)"
+"radexp":     0.,    #"density distribution power law index"
+"ncn2":       9999,  #"number of continuum bins"
+"loopcontrol":0,     #"loop control (0=standalone)"
+"npass":      1,     #"number of passes"
+"mode":       "ql"   #"mode"
+}
+
 def LoadFiles(file1='./xout_abund1.fits',file2='./xout_lines1.fits',\
         file3='./xout_rrc1.fits', file4='./xout_spect1.fits'):
     global hdu1, hdu2, hdu3, hdu4
@@ -156,7 +222,7 @@ def Heating(source):
     for i in range(len(s_short)):
         if source == s_short[i]:
             return hdu1[3].data[0][s_long[i]]
-    print('*** PyXstar: source ',item,' not listed.')
+    # print('*** PyXstar: source ',item,' not listed.')
     return -1  
 
 def Cooling(source):
@@ -173,7 +239,7 @@ def Cooling(source):
     for i in range(len(s_short)):
         if source == s_short[i]:
             return hdu1[4].data[0][s_long[i]]
-    print('*** PyXstar: source ',item,' not listed.')
+    # print('*** PyXstar: source ',item,' not listed.')
     return -1  
 
 class ContSpectra:

@@ -7,26 +7,40 @@ Created on Sat Apr  2 17:33:19 2022
 """
 
 #general imports
+import os,sys
+import glob
+
+import argparse
 import warnings
 
 
 import numpy as np
 import pandas as pd
+from decimal import Decimal
 
-
+import streamlit as st
 #matplotlib imports
 
 import matplotlib as mpl
 import matplotlib.pyplot as plt
+
 import matplotlib.colors as colors
-from matplotlib.ticker import MaxNLocator
+from matplotlib.lines import Line2D
+from matplotlib.ticker import Locator,MaxNLocator,AutoMinorLocator
 import matplotlib.dates as mdates
 
-import dill
+#pickle for the rxte lightcurve dictionnary
+import pickle
 
+from astropy.io import fits
 from astropy.time import Time
 from astroquery.simbad import Simbad
 
+from copy import deepcopy
+
+#needed to fetch the links to the lightcurves for MAXI data
+import requests
+from bs4 import BeautifulSoup
 
 #correlation values and uncertainties with MC distribution from the uncertainties
 from custom_pymccorrelation import pymccorrelation
@@ -34,21 +48,16 @@ from custom_pymccorrelation import pymccorrelation
 #Note : as of the writing of this code, the standard pymccorrelation doesn't accept differing +/- uncertainties, so I tweaked their 
 #'perturb values' function
 
+from ast import literal_eval
 # import time
 
-'''Custom'''
-
-from pathlib import Path
-import sys
-
-
-#adding the top directory to the path to avoid issues when importing fitting_tools
-sys.path.append(str(Path(__file__).resolve().parent.parent))
+'''Astro'''
 
 #custom script with some lines and fit utilities and variables
-from fitting_tools import lines_std,lines_std_names,ravel_ragged
+from fitting_tools import lines_std,c_light,lines_std_names,lines_e_dict,ravel_ragged,ang2kev
 
-
+#Catalogs and manipulation
+from astroquery.vizier import Vizier
 
 telescope_colors={'XMM':'red',
                   'Chandra':'blue',
@@ -63,6 +72,7 @@ telescope_colors={'XMM':'red',
 #to make sur the overlap result with the inclination constraints is not 0
 incl_dic={
         '1H1659-487':[57.5,20.5,20.5],
+        'GX339-4':[57.5,20.5,20.5],
         #grs with both ortographs to swap colors sometimes
         'GRS1915+105':[60,5,5],
         'GRS 1915+105':[60,5,5],
@@ -79,7 +89,7 @@ incl_dic={
          #mixed both reflection measurements here
         'EXO1846-031':[56.5,16.5,16.5],
         '4U1957+115':[13,0,0.001],
-        'MAXIJ1348-630':[28,3,3],
+        'MAXIJ1348-630':[28,3,44],
         'XTEJ1752-223':[49,49,0],
         'MAXIJ1659-152':[70,10,10],
         'GS1354-64':[70,0,0.001],
@@ -89,16 +99,16 @@ incl_dic={
         'SwiftJ1357.2-0933':[80,0,10],
         'XTEJ1652-453':[32,32,0],
         'MAXIJ1803-298':[70,0,20],
-        'SAXJ1819.3-2525':[72,4,4],
-        'GS2023+338':[67,1,3],
+        'V4641Sgr':[72,4,4],
+        'V404Cyg':[67,1,3],
         'XTEJ1550-564':[75,4,4],
         'MAXIJ1305-704':[72,8,5],
         'AT2019wey':[30,30,0],
         '4U1543-475':[21,2,2],
         'GRS1739-278':[33,0,0.001],
         'XTEJ1118+480':[72,2,2],
-        'GRS1716-249':[50,10,10]
-        
+        'GRS1716-249':[50,10,10],
+        'MAXIJ0637-430':[64,6,6]
          }
 
 dippers_list=['4U1543-475',
@@ -140,26 +150,30 @@ mass_dic={
     'MAXIJ1305-704':[8.9,1.,1.6],
     '4U1543-475':[8.4,1,1],
     'XTEJ1118+480':[7.55,0.65,0.65],
+    # 'IGRJ17451-3022':[1.5,0,0],
     #NS:
-    'XTEJ1701-462':1.4
+    'XTEJ1701-462':[1.4,0,0]
     }
 
 sources_det_dic=['GRS1915+105','GRS 1915+105','GROJ1655-40','H1743-322','4U1630-47','IGRJ17451-3022']
 
-with open('/app/winds/visualisation/visual_line_vars.pkl','rb') as dump_file:
-    dump_dict=dill.load(dump_file)
+
+rxte_lc_path='/media/parrama/6f58c7c3-ba85-45e6-b8b8-a8f0d564ec15/Observ/BHLMXB/RXTE/RXTE_lc_dict.pickle'
+
+if os.path.exists(rxte_lc_path):
+    with open(rxte_lc_path,'rb') as rxte_lc_file:
+        dict_lc_rxte=pickle.load(rxte_lc_file)
+else:
+    dict_lc_rxte=None
     
-dict_lc_rxte=dump_dict['dict_lc_rxte']
-
-
 #current number of informations in abslines_infos
-n_infos=7
+n_infos=9
 
-info_str=['equivalent widths','blueshifts','energies','line flux']
+info_str=['equivalent widths','velocity shifts','energies','line flux','time','width']
 
 info_hid_str=['Hardness Ratio','Flux','Time']
 
-axis_str=['Line equivalent width (eV)','Line blueshift (km/s)','Line energy (keV)',r'line flux (erg/s/cm$^{-2}$)',None,r'Line width (keV)']
+axis_str=['Line EW (eV)','Line velocity shift (km/s)','Line energy (keV)',r'line flux (erg/s/cm$^{-2}$)',None,r'Line FWHM (km/s)']
 
 axis_hid_str=['Hardness Ratio ([6-10]/[3-6] keV bands)',r'Luminosity in the [3-10] keV band in (L/L$_{Edd}$) units']
 
@@ -176,14 +190,22 @@ ratio_vals={'Ka':0.545
     
             }
 
-ratio_choices_str={'25': lines_std[lines_std_names[6]]+' over '+lines_std[lines_std_names[3]],
-                   '26': lines_std[lines_std_names[7]]+' over '+lines_std[lines_std_names[4]],
-                   'Ka': lines_std[lines_std_names[4]]+' over '+lines_std[lines_std_names[4]],
-                   'Kb': lines_std[lines_std_names[7]]+' over '+lines_std[lines_std_names[6]]}
+ratio_choices_str={'25': lines_std[lines_std_names[6]]+' / '+lines_std[lines_std_names[3]],
+                   '26': lines_std[lines_std_names[7]]+' / '+lines_std[lines_std_names[4]],
+                   'Ka': lines_std[lines_std_names[4]]+' / '+lines_std[lines_std_names[3]],
+                   'Kb': lines_std[lines_std_names[7]]+' / '+lines_std[lines_std_names[6]]}
 
 #minimum nH value to consider for the colormaps
 min_nh=5e-1
 
+
+def forceAspect(ax,aspect=1):
+    
+    '''Forces an aspect ratio of 1 in matplotlib axes'''
+    
+    # lims=(abs(ax.get_xlim()[1]-ax.get_xlim()[0]),abs(ax.get_ylim()[1]-ax.get_ylim()[0]))
+    # ax.set_aspect(2)
+    
 
 def silent_Simbad_query(source_name):
 
@@ -203,6 +225,50 @@ def silent_Simbad_query(source_name):
         
     return result
     
+@st.cache_data
+def load_catalogs():
+    
+    '''
+    Load various catalogs to use for the visualisation script
+    '''
+    
+    print('\nLoading BH catalogs...')
+    #for the distance measurements, we import two black hole catalogs
+    Vizier.ROW_LIMIT=-1
+    ctl_watchdog=Vizier.get_catalogs('watchdog')[1]
+    ctl_blackcat=pd.read_html('https://www.astro.puc.cl/BlackCAT/transients.php')[0]
+    
+    print('\nBH catalogs loading complete.')
+    ctl_watchdog_obj=np.array(ctl_watchdog['Name'])
+    ctl_watchdog_obj=np.array([elem.replace(' ','') for elem in ctl_watchdog_obj])
+    
+    ctl_blackcat_obj=ctl_blackcat['Name (Counterpart)'].to_numpy()
+    ctl_blackcat_obj=np.array([elem.replace(' ','') for elem in ctl_blackcat_obj])
+
+    print('\nLoading MAXI source list...')
+    
+    '''Snippet adapted from https://stackoverflow.com/questions/65042243/adding-href-to-panda-read-html-df'''
+        
+    maxi_url = "http://maxi.riken.jp/top/slist.html"
+    maxi_r = requests.get(maxi_url)
+    
+    maxi_html_table = BeautifulSoup(maxi_r.text,features='lxml').find('table')
+    maxi_r.close()
+        
+    ctl_maxi_df = pd.read_html(str(maxi_html_table), header=0)[0] 
+    
+    #we create the request for the Simbad names of all MAXI sources here 
+    #so that it is done only once per script launch as it takes some time to run
+    
+    ctl_maxi_df['standard'] = [link.get('href').replace('..',maxi_url[:maxi_url.find('/top')]).replace('.html','_g_lc_1day_all.dat')\
+                           for link in [elem for elem in maxi_html_table.find_all('a') if 'star_data' in elem.get('href')]]
+    
+    ctl_maxi_simbad=silent_Simbad_query(ctl_maxi_df['source name'])
+
+    print('\nMAXI loading complete.')
+    
+    return ctl_blackcat,ctl_watchdog,ctl_blackcat_obj,ctl_watchdog_obj,ctl_maxi_df,ctl_maxi_simbad
+
 def fetch_maxi_lightcurve(ctl_maxi_df,ctl_maxi_simbad,name):
     
     '''
@@ -280,13 +346,13 @@ def plot_lightcurve(dict_linevis,ctl_maxi_df,ctl_maxi_simbad,name,dict_rxte=dict
     #main axis definitions
     ax_lc.set_xlabel('Time')
     if mode=='full':
-        ax_lc.set_title(name[0]+' broad band lightcurve')
+        ax_lc.set_title(name[0]+' broad band monitoring')
         
         maxi_y_str='MAXI '+maxi_lc_df.columns[1] if maxi_lc_df is not None else ''
         rxte_y_str='RXTE '+rxte_lc_df.columns[1]+'/25' if rxte_lc_df is not None else ''
         ax_lc.set_ylabel(maxi_y_str+('/' if maxi_lc_df is not None and rxte_lc_df is not None else '')+rxte_y_str)
     elif mode=='HR':
-        ax_lc.set_title(name[0]+' HR ratio evolution')
+        ax_lc.set_title(name[0]+' Hardness Ratio monitoring')
         ax_lc.set_ylabel('MAXI counts HR in [4-10]/[2-4] bands')
         
         maxi_y_str='MAXI counts HR in [4-10]/[2-4] keV' if maxi_lc_df is not None else ''
@@ -336,7 +402,7 @@ def plot_lightcurve(dict_linevis,ctl_maxi_df,ctl_maxi_simbad,name,dict_rxte=dict
             
             ax_lc.set_yscale('log')
             
-            ax_lc.set_ylim(0.05,5)
+            ax_lc.set_ylim(0.1,4)
             
             #plotting the full lightcurve
             rxte_hr_errbar=ax_lc.errorbar(num_rxte_dates,rxte_hr,xerr=0.5,yerr=rxte_hr_err,
@@ -371,14 +437,14 @@ def plot_lightcurve(dict_linevis,ctl_maxi_df,ctl_maxi_simbad,name,dict_rxte=dict
             maxi_hr_err=(maxi_lc_df[maxi_lc_df.columns[6]]/maxi_lc_df[maxi_lc_df.columns[5]]+maxi_lc_df[maxi_lc_df.columns[4]]/maxi_lc_df[maxi_lc_df.columns[3]])*maxi_hr
             ax_lc.set_yscale('log')
             
-            ax_lc.set_ylim(0.05,5)
+            ax_lc.set_ylim(0.3,2)
             
             #plotting the full lightcurve
             maxi_hr_errbar=ax_lc.errorbar(num_maxi_dates,maxi_hr,xerr=0.5,yerr=maxi_hr_err,
                         linestyle='',color='black',marker='',elinewidth=0.5,label='MAXI HR')
     
             #adapting the transparency to hide the noisy elements
-            maxi_hr_alpha_val=1/(20*abs(maxi_hr_err)*2)/abs(maxi_hr)
+            maxi_hr_alpha_val=1/(20*abs(maxi_hr_err/maxi_hr)**2)
             maxi_hr_alpha=[min(1,elem) for elem in maxi_hr_alpha_val]
             
             #replacing indiviudally the alpha values for each point but the line
@@ -396,8 +462,8 @@ def plot_lightcurve(dict_linevis,ctl_maxi_df,ctl_maxi_simbad,name,dict_rxte=dict
         #creating a second y axis with common x axis
         ax_lc_ew=ax_lc.twinx()
         ax_lc_ew.set_yscale('log')
-        ax_lc_ew.set_ylabel('EW (eV)')
-        ax_lc_ew.set_ylim(5,100)
+        ax_lc_ew.set_ylabel('absorption line EW (eV)')
+        ax_lc_ew.set_ylim(2,100)
         
         #plotting the detection and upper limits following what we do for the scatter graphs
     
@@ -490,7 +556,574 @@ def plot_lightcurve(dict_linevis,ctl_maxi_df,ctl_maxi_simbad,name,dict_rxte=dict
     
     return fig_lc
 
-def distrib_graph(data_perinfo,info,dict_linevis,data_ener=None,conf_thresh=0.99,indiv=False,save=False,close=False,streamlit=False,bigger_text=False):
+# @st.cache_data
+def dist_mass(dict_linevis):
+    
+    ctl_blackcat=dict_linevis['ctl_blackcat']
+    ctl_blackcat_obj=dict_linevis['ctl_blackcat_obj']
+    ctl_watchdog=dict_linevis['ctl_watchdog']
+    ctl_watchdog_obj=dict_linevis['ctl_watchdog_obj']
+    names=dict_linevis['obj_list']
+    
+    d_obj=np.array([None]*len(names))
+    m_obj=np.array([None]*len(names))
+    
+    for i in range(len(names)):
+        d_obj[i]='nan'
+
+        if names[i] in dist_dic:
+            #putting manual/updated distance values first
+            d_obj[i]=dist_dic[names[i]][0]
+
+        else:
+            
+            obj_row=None
+            #searching for the distances corresponding to the object namess in the first (most recently updated) catalog
+            for elem in ctl_blackcat_obj:
+                if names[i] in elem:
+                    obj_row=np.argwhere(ctl_blackcat_obj==elem)[0][0]
+                    break                    
+            
+            if obj_row is not None:
+                d_obj[i]=ctl_blackcat.iloc[obj_row]['d [kpc]']
+                
+            #formatting : using only the main values + we do not want to use this catalog's results if they are simply upper/lower limits
+            d_obj[i]=str(d_obj[i])
+            d_obj[i]=d_obj[i].split('/')[-1].split('±')[0].split('~')[-1].split('∼')[-1]
+            
+            if '≥' in d_obj[i] or '>' in d_obj[i] or '<' in d_obj[i] or '≤' in d_obj[i]:
+                d_obj[i]='nan'
+                
+            if '-' in d_obj[i]:
+                if '+' in d_obj[i]:
+                    #taking the mean value if it's an uncertainty
+                    d_obj[i]=float(d_obj[i].split('+')[0].split('-')[0])
+                else:
+                    #taking the mean if it's an interval
+                    d_obj[i]=(float(d_obj[i].split('-')[0])+float(d_obj[i].split('-')[-1]))/2
+            
+            
+            #searching in the second catalog if nothing was found in the first one
+            if d_obj[i]=='nan':
+                if len(np.argwhere(ctl_watchdog_obj==names[i]))!=0:
+                    
+                    #watchdog assigns by default 5+-3 kpc to sources with no distance estimate so we need to check for that
+                    #(there is no source with an actual 5kpc distance)
+                    if float(ctl_watchdog[np.argwhere(ctl_watchdog_obj==names[i])[0][0]]['Dist1'])!=5:
+                        d_obj[i]=float(ctl_watchdog[np.argwhere(ctl_watchdog_obj==names[i])[0][0]]['Dist1'])
+                        
+            if d_obj[i]=='nan':
+                #giving a default value of 8kpc to the objects for which we do not have good distance measurements
+                d_obj[i]=8
+
+            else:
+                d_obj[i]=float(d_obj[i])
+        
+        #fixing the source mass at 10 solar Masses since we have very few reliable estimates of the BH masses anyway
+        #except for NS whose masses are in a dictionnary
+        if names[i] in mass_dic:
+            m_obj[i]=mass_dic[names[i]][0]
+        else:
+            m_obj[i]=8
+    
+    return d_obj,m_obj
+  
+#@st.cache_data
+def obj_values(file_paths,E_factors,dict_linevis):
+    
+    '''
+    Extracts the stored data from each value line_values file. 
+    Merges all the files with the same object name
+    
+    the visual_line option give more information but requires a higher position in the directory structure
+    '''
+    
+    obj_list=dict_linevis['obj_list']
+    cameras=dict_linevis['cameras']
+    expmodes=dict_linevis['expmodes']
+    multi_obj=dict_linevis['multi_obj']
+    visual_line=dict_linevis['visual_line']
+    
+    obs_list=np.array([None]*len(obj_list))
+    lval_list=np.array([None]*len(obj_list))
+    f_list=np.array([None]*len(obj_list))
+    
+    date_list=np.array([None]*len(obj_list))
+    instru_list=np.array([None]*len(obj_list))
+    exptime_list=np.array([None]*len(obj_list))
+    # ind_links=np.array([None]*len(obj_list))
+    
+    for i in range(len(obj_list)):
+        
+        #matching the line paths corresponding to each object
+        if visual_line:    
+            curr_obj_paths=[elem for elem in file_paths if '/'+obj_list[i]+'/' in elem]
+        else:
+            curr_obj_paths=file_paths
+            
+        curr_E_factor=E_factors[i]
+        
+        store_lines=[]
+        
+        for elem_path in curr_obj_paths:
+            
+            #opening the values file
+            with open(elem_path) as store_file:
+                    
+                store_lines_single=store_file.readlines()[1:]
+
+                #only keeping the lines with selected cameras and exposures
+                #for NICER observation, there's no camera to check so we pass directly
+                
+                if len(store_lines_single[0].split('\t')[0].split('_')):
+                    store_lines+=store_lines_single
+                else:
+                    store_lines_single=[elem for elem in store_lines_single if elem.split('\t')[0].split('_')[1] in cameras]
+                
+                    #checking if it's an XMM file and selecting exposures if so
+                    if 'NICER' not in elem_path and store_lines_single[0].split('\t')[0].split('_')[1] in ['pn','mos1','mos2']:    
+                        store_lines+=[elem for elem in store_lines_single if elem.split('\t')[0].split('_')[3] in expmodes]
+       
+        store_lines=ravel_ragged(np.array(store_lines))
+        
+            
+        #and storing the observation ids and values 
+        curr_obs_list=np.array([None]*len(store_lines))
+        curr_lval_list=np.array([None]*len(store_lines))
+        curr_f_list=np.array([None]*len(store_lines))
+        
+        for l,line in enumerate(store_lines):
+
+            curr_line=line.split('\t')
+                
+            curr_obs_list[l]=curr_line[0]
+            #converting the lines into something usable
+            curr_lval_list[l]=[literal_eval(elem.replace(',','').replace(' ',',')) if elem!='' else [] for elem in curr_line[1:]]
+                
+            #separing the flux values for easier plotting
+            curr_f_list[l]=np.array(curr_lval_list[l][-1])*curr_E_factor
+            
+            #taking them off from the values lists
+            curr_lval_list[l]=curr_lval_list[l][:-1]
+        
+        #creating indexes links
+        obs_list[i]=curr_obs_list
+        lval_list[i]=curr_lval_list
+        f_list[i]=np.array([elem for elem in curr_f_list])
+
+        curr_date_list=np.array([None]*len(obs_list[i]))
+        curr_instru_list=np.array([None]*len(obs_list[i]))
+        curr_exptime_list=np.array([None]*len(obs_list[i]))
+        #fetching spectrum informations
+        
+        if visual_line:
+            
+            for i_obs,obs in enumerate(obs_list[i]):
+                
+                if len(obs.split('_'))<=1:
+                    
+                    if 'source' in obs.split('_')[0]:
+                        #this means a Swift observation
+                        lineval_path=[elem for elem in curr_obj_paths if 'Swift' in elem][0]
+                        
+                        filepath='/'.join(lineval_path.split('/')[:-2])+'/'+obs+'_grp_opt.pi'
+                        curr_instru_list[i_obs]='Swift'
+                        
+                    else:  
+                        #this means a NICER observation
+                        #we take the directory structure from the according file in curr_obj_paths
+                        lineval_path=[elem for elem in curr_obj_paths if 'NICER' in elem][0]
+                        
+                        filepath='/'.join(lineval_path.split('/')[:-2])+'/'+obs+'_sp_grp_opt.pha'
+                        curr_instru_list[i_obs]='NICER'
+    
+                else:
+                    
+                    if obs.split('_')[1] in ['pn','mos1','mos2']:
+                        
+                        #we take the directory structure from the according file in curr_obj_paths
+                        lineval_path=[elem for elem in curr_obj_paths if 'XMM' in elem][0]
+                        filepath='/'.join(lineval_path.split('/')[:-2])+'/'+obs+'_sp_src_grp_20.ds'
+                        curr_instru_list[i_obs]='XMM'
+                        
+                    elif obs.split('_')[1]=='heg':
+                        
+                        #we take the directory structure from the according file in curr_obj_paths
+                        lineval_path=[elem for elem in curr_obj_paths if 'Chandra' in elem][0]
+                        filepath='/'.join(lineval_path.split('/')[:-2])+'/'+obs+'_grp_opt.pha'
+                        curr_instru_list[i_obs]='Chandra'
+                        
+                    elif obs.split('_')[1] in ['0','1']:
+                        
+                        #we take the directory structure from the according file in curr_obj_paths
+                        lineval_path=[elem for elem in curr_obj_paths if 'Suzaku' in elem][0]
+                        filepath='/'.join(lineval_path.split('/')[:-2])+'/'+obs+'_sp_grp_opt.pha'
+                        curr_instru_list[i_obs]='Suzaku'
+                        
+                    #failsafe if the file is an XMM spectrum a _full folder instead
+                    if not os.path.isfile(filepath):
+                        
+                        filepath='/'.join(lineval_path.split('/')[:-3])+'_full/'+lineval_path.split('/')[-3]+'/'+obs+'_sp_src_grp_20.ds'
+                        
+                        if not os.path.isfile(filepath):
+                            #should not happen
+                            breakpoint()
+
+                with fits.open(filepath) as hdul:
+                    
+                    curr_exptime_list[i_obs]=hdul[1].header['EXPOSURE']
+                    try:
+                        curr_date_list[i_obs]=hdul[0].header['DATE-OBS']
+                    except:
+                        try:
+                            curr_date_list[i_obs]=hdul[1].header['DATE-OBS']
+                        except:
+                            curr_date_list[i_obs]=Time(hdul[1].header['MJDSTART'],format='mjd').isot
+
+        date_list[i]=curr_date_list
+        instru_list[i]=curr_instru_list
+        exptime_list[i]=curr_exptime_list
+        # ind_links[i]=os.path.join(os.getcwd(),obj_dir)+'/'+np.array(obs_list[i])+'_recap.pdf'
+    
+    if multi_obj:
+        f_list=np.array([elem for elem in f_list],dtype=object)
+    else:
+         f_list=np.array([elem for elem in f_list])
+    
+    return obs_list,lval_list,f_list,date_list,instru_list,exptime_list
+
+#@st.cache_data
+def abslines_values(file_paths,dict_linevis):
+
+    '''
+    Extracts the stored data from each value autofit_values file
+    '''
+
+    obj_list=dict_linevis['obj_list']
+    cameras=dict_linevis['cameras']
+    expmodes=dict_linevis['expmodes']
+    visual_line=dict_linevis['visual_line']
+    
+    abslines_inf=np.array([None]*len(obj_list))
+    autofit_inf=np.array([None]*len(obj_list))
+
+    for i in range(len(obj_list)):
+            
+        #matching the line paths corresponding to each object
+        if visual_line:    
+            curr_obj_paths=[elem for elem in file_paths if '/'+obj_list[i]+'/' in elem]
+        else:
+            curr_obj_paths=file_paths
+        
+        store_lines=[]
+
+        for elem_path in curr_obj_paths:
+            
+            #opening the values file
+            with open(elem_path) as store_file:
+                
+                store_lines_single=store_file.readlines()[1:]
+                
+                #only keeping the lines with selected cameras and exposures
+                #for NICER observation, there's no camera to check so we pass directly
+                if len(store_lines_single[0].split('\t')[0].split('_')):
+                    store_lines+=store_lines_single
+                else:
+                    store_lines_single=[elem for elem in store_lines_single if elem.split('\t')[0].split('_')[1] in cameras]
+                    
+                    #checking if it's an XMM file and selecting exposures if so
+                    if 'NICER' not in elem_path and store_lines_single[0].split('\t')[0].split('_')[1] in ['pn','mos1','mos2']:    
+                        store_lines+=[elem for elem in store_lines_single if elem.split('\t')[0].split('_')[3] in expmodes]
+
+        
+        store_lines=ravel_ragged(np.array(store_lines))
+        
+        #and storing the absline values and fit parameters
+        curr_abslines_infos=np.array([None]*len(store_lines))
+        curr_autofit_infos=np.array([None]*len(store_lines))
+        
+        for l,line in enumerate(store_lines):
+            
+            curr_line=line[:-1]
+            curr_line=curr_line.split('\t')
+
+            #converting the lines into something usable
+            curr_abslines_infos[l]=np.array([None]*len(curr_line[1:-2]))
+            curr_autofit_infos[l]=np.array([None,None])
+            
+            for  m in range(len(curr_line[1:-2])):
+
+
+                elem_array=np.array(literal_eval(curr_line[m+1].replace(',','').replace(' ',',')))\
+                    if curr_line[m+1]!='' else None
+                
+                #inverting the sign of the blueshift values                    
+                if m==1:
+
+                    #note: o is the line number, p is the uncertaintiy
+                    for o in range(elem_array.shape[0]):
+                        
+                        if elem_array[o][0] is not None:
+                            #to avoid negative uncertainties we swap the positive and negative uncertainties and 
+                            elem_array[o]=elem_array[o][[0,2,1]]
+
+                            elem_array[o][0]*=-1
+                
+                curr_abslines_infos[l][m]=elem_array
+                    
+                # except:
+                #     
+                    
+                #     #covering the detections before I fixed the error of not converting the array to a list
+                #     
+                #     curr_abslines_infos[l][m]=np.array(literal_eval(','.join(curr_line[m+1].split())))\
+                #         if curr_line[m+1]!='' else None
+
+            #separing the flux values for easier plotting
+            for m in [0,1]:
+                curr_autofit_infos[l][m]=np.array(literal_eval(curr_line[-2+m].replace(',','').replace(' ',',')))\
+                    if curr_line[-2+m]!='' else None
+                
+        abslines_inf[i]=curr_abslines_infos
+        autofit_inf[i]=curr_autofit_infos
+        
+    return abslines_inf,autofit_inf
+
+
+#@st.cache_data
+def values_manip(abslines_inf,dict_linevis,autofit_inf):
+    
+    range_absline=dict_linevis['range_absline']
+    n_infos=dict_linevis['n_infos']
+    obj_list=dict_linevis['obj_list']
+    multi_obj=dict_linevis['multi_obj']
+    flux_list=dict_linevis['flux_list']
+    
+    #so we can translate these per lines instead
+    abslines_inf_line=np.array([None]*len(range_absline))
+    
+    if len([elem for elem in abslines_inf if elem is not None])>0:
+        for i_line in range(6):
+            arr_part_line=np.array([None]*len(abslines_inf))
+            for i_obj in range(len(abslines_inf)):
+
+                arr_part_obs=np.array([None]*len(abslines_inf[i_obj]))
+                    
+                for i_obs in range(len(abslines_inf[i_obj])):
+                    #testing if the line detection was skipped
+                    if np.array(abslines_inf[i_obj][i_obs])[1] is not None:
+                        
+                        #here to have an easier time using the data, we add nan uncertainties to the significance in order to keep 
+                        #regular shaped arrays that we can tranpose at will
+                        array_obs=np.array([elem if len(np.shape(elem))==2\
+                                            else np.array([[elem[i],None,None] for i in range(len(elem))]).astype(float)\
+                                                for elem in abslines_inf[i_obj][i_obs]])
+                        
+                        arr_part_obs[i_obs]=np.transpose(array_obs,axes=[1,0,2])[i_line]
+                        
+                    else:
+                        arr_part_obs[i_obs]=np.repeat(np.nan,repeats=n_infos*3).reshape((n_infos,3))
+                        
+                arr_part_line[i_obj]=np.array([elem for elem in arr_part_obs])
+            abslines_inf_line[i_line]=np.array([elem for elem in arr_part_line],dtype=object)
+        
+        abslines_inf_line=np.array([elem for elem in abslines_inf_line])
+    
+    abslines_inf_obj=np.array([None]*len(obj_list))
+    
+    for i_obj in range(len(obj_list)):
+        try:
+            abslines_inf_obj[i_obj]=np.transpose(np.array([elem for elem in abslines_inf_line.T[i_obj]]),axes=(3,2,0,1))
+        except:
+            breakpoint()
+            print('should not happen')
+    if multi_obj:
+    
+        abslines_plt=np.array([None]*n_infos)
+        for i_info in range(len(abslines_plt)):
+        
+            arr_part_uncert=np.array([None]*3)
+            for i_uncert in range(len(arr_part_uncert)):
+            
+                arr_part_line=np.array([None]*len(range_absline))
+                for i_line in range(len(arr_part_line)):
+    
+                    arr_part_obj=np.array([None]*len(abslines_inf))
+                    for i_obj in range(len(arr_part_obj)):
+                    
+                        arr_part_obs=np.array([None]*len(abslines_inf[i_obj]))
+                        for i_obs in range(len(arr_part_obs)):
+                        
+                            arr_part_obs[i_obs]=abslines_inf_line[i_line][i_obj][i_obs][i_info][i_uncert]
+                            
+                        arr_part_obj[i_obj]=arr_part_obs
+                
+                    arr_part_line[i_line]=arr_part_obj
+                
+                arr_part_uncert[i_uncert]=np.array([elem for elem in arr_part_line])
+                
+            abslines_plt[i_info]=arr_part_uncert
+    
+    else:
+    
+        if len([elem for elem in abslines_inf_line if elem is not None])>0:
+            abslines_plt=np.transpose(abslines_inf_line,[3,4,0,1,2])
+        else:
+            sys.exit()
+    
+    '''
+    in the plt form, the new order is:
+        -the info (5 rows, eqw/bshift/delchi/sign/flux)
+        -it's uncertainty (3 rows, main value/neg uncert/pos uncert,useless for the delchi and sign)
+        -each absorption line
+        -the number of sources
+        -the number of obs for each source
+    '''
+
+    #### Energy
+    #creating the energy distribution from the blueshifts        
+    abslines_e=deepcopy(abslines_plt[1])
+    
+    for i_line in range_absline:
+        for i_obj in range(len(abslines_e[0][i_line])):
+            for i_obs in range(len(abslines_e[0][i_line][i_obj])):
+                
+                conv_line_e=lines_e_dict[lines_std_names[3+i_line]][0]
+                
+                #replacing the bshift value by the energy
+                abslines_e[0][i_line][i_obj][i_obs]=None if abslines_plt[1][0][i_line][i_obj][i_obs]==None else\
+                                                        conv_line_e*(1+abslines_plt[1][0][i_line][i_obj][i_obs]/c_light)
+                    
+                #same with the uncertainties 
+                abslines_e[1][i_line][i_obj][i_obs]=\
+                    None if abslines_plt[1][1][i_line][i_obj][i_obs]==None else\
+                    abslines_plt[1][1][i_line][i_obj][i_obs] if type(abslines_plt[1][1][i_line][i_obj][i_obs])==str else\
+                    abslines_e[0][i_line][i_obj][i_obs]-conv_line_e*\
+                    (1+(abslines_plt[1][0][i_line][i_obj][i_obs]-abslines_plt[1][1][i_line][i_obj][i_obs])/c_light)
+                    
+                abslines_e[2][i_line][i_obj][i_obs]=\
+                    None if abslines_plt[1][2][i_line][i_obj][i_obs]==None else\
+                        abslines_plt[1][1][i_line][i_obj][i_obs] if type(abslines_plt[1][2][i_line][i_obj][i_obs])==str else\
+                    conv_line_e*(1+(abslines_plt[1][0][i_line][i_obj][i_obs]+abslines_plt[1][2][i_line][i_obj][i_obs])/c_light)-\
+                    abslines_e[0][i_line][i_obj][i_obs]
+            
+    #### Flux
+    #creating a flux values variable with the same shape than the others
+    if multi_obj:
+
+        flux_plt=np.array([None]*3)
+        for i_uncert in range(len(flux_plt)):
+            
+            arr_part_band=np.array([None]*5)
+            for i_band in range(len(arr_part_band)):
+                
+                arr_part_obj=np.array([None]*len(abslines_inf))
+                for i_obj in range(len(arr_part_obj)):
+                    
+                    arr_part_obs=np.array([None]*len(abslines_inf[i_obj]))
+                    for i_obs in range(len(arr_part_obs)):
+
+                        arr_part_obs[i_obs]=flux_list[i_obj][i_obs][i_uncert][i_band]
+                         
+                    #avoiding negative uncertainties (shouldn't happen)
+                    if i_uncert!=0:
+                        arr_part_obs=arr_part_obs.clip(0)
+                        
+                    arr_part_obj[i_obj]=arr_part_obs
+                    
+                arr_part_band[i_band]=arr_part_obj
+            
+            flux_plt[i_uncert]=arr_part_band
+    else:
+    
+        flux_plt=flux_list.transpose(2,3,0,1)
+    
+        #avoiding negative uncertainties
+        flux_plt[1:]=flux_plt[1:].clip(0)
+        
+    #We then use uncertainty composition for the HID
+
+    hid_plt_vals=flux_plt[0][2]/flux_plt[0][1]
+    hid_errors=np.array([((flux_plt[i][2]/flux_plt[0][2])**2+(flux_plt[i][1]/flux_plt[0][1])**2)**(1/2)*hid_plt_vals for i in [1,2]])
+    
+    #capping the error lower limits proportions at 1
+    for i_obj in range(len(hid_errors[0])):
+        hid_errors[0][i_obj]=hid_errors[0][i_obj].clip(0,1)
+    
+    hid_plt=np.array([[hid_plt_vals,hid_errors[0],hid_errors[1]],[flux_plt[i][4] for i in range(3)]])
+
+    # previous formula without uncertainties:
+    #     hid_plt=np.array([flux_plt[0][2]/flux_plt[0][1],flux_plt[0][4]])
+
+    #computing an array of the object inclinations
+    incl_plt=np.array([[np.nan,np.nan,np.nan] if elem not in incl_dic else incl_dic[elem] for elem in obj_list])
+
+    #computing an array of the line widths from the autofit computations
+    
+    #### fit parameters
+    
+    width_plt=np.array([[[None]*len(autofit_inf)]*6]*3)
+    nh_plt=np.array([[None]*len(autofit_inf)]*3)
+    for i_uncert in range(3):
+        for i_line in range(6):
+            for i_obj in range(len(autofit_inf)):
+                width_part_obj=np.zeros(len(autofit_inf[i_obj]))
+                nh_part_obj=np.repeat(min_nh,len(autofit_inf[i_obj]))
+                for i_obs in range(len(autofit_inf[i_obj])):
+                    
+                    #empty values for when there was no autofit performed
+                    if autofit_inf[i_obj][i_obs][0] is None:
+                        width_part_obj[i_obs]=np.nan
+                        nh_part_obj[i_obs]=np.nan
+                        continue
+                    
+                    #note: the last index at 0 here is the datagroup. always use the data from the first datagroup
+                    mask_sigma=[lines_std_names[3+i_line] in elem and 'Sigma' in elem for elem in autofit_inf[i_obj][i_obs][1][0]]
+                    mask_nh=['phabs.nH' in elem for elem in autofit_inf[i_obj][i_obs][1][0]]
+
+                        
+                    #insuring there is no problem by putting nans where there is no line
+                    if sum(mask_sigma)==0:
+                        width_part_obj[i_obs]=np.nan
+                    else:                  
+                        
+                        '''
+                        If the width is compatible with 0 at 3 sigma (confirmed by checking the width value in absline_plot),
+                        we put 0 as main value and lower uncertainty and use the 90% upper limit 
+                        Else we use the standard value multiplied by the fwhm/1 sigma conversion factor (2.3548)
+                        '''
+                        
+                        #here we fetch the correct line by applying the mask. The 0 after is there to avoid a len 1 nested array
+                        width_vals=autofit_inf[i_obj][i_obs][0][0][mask_sigma][0].astype(float)[i_uncert]\
+                                              /lines_e_dict[lines_std_names[3+i_line]][0]*c_light*2.3548
+                                                  
+                        #index 7 is the width
+                        if abslines_plt[7][0][i_line][i_obj][i_obs]==0:
+                            if i_uncert in [0,1]:
+                                #0 for the main value and the lower limit
+                                width_part_obj[i_obs]=0
+                            else:
+                                #the upper limit is thus the sum of the 1sigma main value and the upper error 
+                                #if the value is unconstrained and thus frozen, we put the upper limit at 0
+                                #to act as if the point didn't exist
+                                if autofit_inf[i_obj][i_obs][0][0][mask_sigma][0].astype(float)[2]==0:
+                                    width_part_obj[i_obs]=0
+                                else:
+                                    #the numerical factor transforms the 1 sigma width into a FWHM
+                                    width_part_obj[i_obs]=autofit_inf[i_obj][i_obs][0][0][mask_sigma][0].astype(float)[[0,2]].sum()\
+                                                      /lines_e_dict[lines_std_names[3+i_line]][0]*c_light*2.3548
+                        else:
+                            width_part_obj[i_obs]=width_vals
+                        
+                    if sum(mask_nh)!=0:
+                        nh_part_obj[i_obs]=autofit_inf[i_obj][i_obs][0][0][mask_nh][0].astype(float)[i_uncert]
+                        
+                width_plt[i_uncert][i_line][i_obj]=width_part_obj
+                nh_plt[i_uncert][i_obj]=nh_part_obj
+                
+    return abslines_inf_line,abslines_inf_obj,abslines_plt,abslines_e,flux_plt,hid_plt,incl_plt,width_plt,nh_plt
+
+def distrib_graph(data_perinfo,info,dict_linevis,data_ener=None,conf_thresh=0.99,indiv=False,save=False,close=False,streamlit=False,bigger_text=False,split=None):
     
     '''
     repartition diagram from all the observations in the current pool (i.e. all objects/obs/lines).
@@ -509,12 +1142,27 @@ def distrib_graph(data_perinfo,info,dict_linevis,data_ener=None,conf_thresh=0.99
     n_infos=dict_linevis['n_infos']
     range_absline=dict_linevis['range_absline']
     mask_lines=dict_linevis['mask_lines']
+    list_id_lines=np.array(range_absline)[mask_lines]
     bins_bshift=dict_linevis['bins_bshift']
     bins_ener=dict_linevis['bins_ener']
+    mask_obj=dict_linevis['mask_obj']
+    
+    
     if streamlit:
         display_nonsign=dict_linevis['display_nonsign']
+        scale_log_eqw=dict_linevis['scale_log_eqw']
+        obj_disp_list=dict_linevis['obj_list'][mask_obj]
+        instru_list=dict_linevis['instru_list'][mask_obj]
+        date_list=dict_linevis['date_list'][mask_obj]
+        width_plot_restrict=dict_linevis['width_plot_restrict']
+        glob_col_source=dict_linevis['glob_col_source']
+        cmap_color_det=dict_linevis['cmap_color_det']
     else:
         display_nonsign=True
+        scale_log_eqw=False
+        glob_col_source=False
+        cmap_color_det=mpl.cm.plasma
+        
         
     save_dir=dict_linevis['save_dir']
     save_str_prefix=dict_linevis['save_str_prefix']
@@ -522,14 +1170,25 @@ def distrib_graph(data_perinfo,info,dict_linevis,data_ener=None,conf_thresh=0.99
     args_line_search_e=dict_linevis['args_line_search_e']
     args_line_search_norm=dict_linevis['args_line_search_norm']
 
-    ind_info=np.argwhere([elem in info for elem in ['eqw','bshift','ener','lineflux']])[0][0]
+    #range of the existing lines for loops
+    range_line=range(len(list_id_lines))
     
-    data_plot=data_perinfo[ind_info] if ind_info!=2 else data_ener
-    
-    if 'ratio' in info:
-        ratio_mode=True
+    line_mode=info=='lines'
+    if not line_mode:
+        ind_info=np.argwhere([elem in info for elem in ['eqw','bshift','ener','lineflux','time','width']])[0][0]
     else:
-        ratio_mode=False
+        #we don't care here
+        ind_info=0
+        
+    split_off=split=='Off'
+    split_source=split=='Source'
+    split_instru=split=='Instrument'
+    
+    #main data array
+    data_plot=data_perinfo[ind_info] if ind_info not in [2,4,5] else data_ener if ind_info==2\
+            else date_list if ind_info==4 else width_plot_restrict
+
+    ratio_mode='ratio' in info
     
     if indiv:
         graph_range=range_absline
@@ -542,10 +1201,13 @@ def distrib_graph(data_perinfo,info,dict_linevis,data_ener=None,conf_thresh=0.99
             graph_range=[range_absline]
 
     #computing the range of the eqw bins from the global graph to get the same scale for all individual graphs)
-
-    bins_eqw=np.geomspace(1,max(100,(max(ravel_ragged(data_perinfo[0][0]))//5+1)*5),20)
     
-    bins_eqwratio=np.geomspace(0.5,5,20)
+    if scale_log_eqw:
+        bins_eqw=np.geomspace(1,max(100,(max(ravel_ragged(data_perinfo[0][0]))//5+1)*5),20)
+    else:
+        bins_eqw=np.linspace(5,max(100,(max(ravel_ragged(data_perinfo[0][0]))//5+1)*5),20)
+        
+    bins_eqwratio=np.linspace(0.2,4,20)
     
     if n_infos>=5:
         if len(ravel_ragged(data_perinfo[3][0])[ravel_ragged(data_perinfo[4][0])>0])>0 and len(ravel_ragged(data_perinfo[3][0]).nonzero()[0])!=0:
@@ -557,22 +1219,27 @@ def distrib_graph(data_perinfo,info,dict_linevis,data_ener=None,conf_thresh=0.99
     else:
         bins_flux=None
 
+    #for now
+    bins_time=None
+    
+    #linear bin widths between 0 (where most widths value lie) and 0.05 which is the hard limit
+    bins_width=np.linspace(0,5500,12)
+
     #sorting the bins in an array depending on the info asked
-    bins_info=[bins_eqw,bins_bshift,bins_ener,bins_flux]
+    bins_info=[bins_eqw,bins_bshift,bins_ener,bins_flux,bins_time,bins_width]
     
     bins_ratio=[bins_eqwratio]
     
-    #and fetching the current one    
-    hist_bins=bins_info[ind_info] if not ratio_mode else bins_ratio[ind_info]
+    #and fetching the current one (or custom bins for other modes)
+    hist_bins=bins_info[ind_info] if not ratio_mode else bins_ratio[ind_info] if not line_mode else range(graph_range)
     
     #fetching the global boolean array for the graph size definition
     bool_det_glob=ravel_ragged(data_perinfo[4][0]).astype(float)
-
+        
     #the "and" keyword doesn't work for arrays so we use & instead (which requires parenthesis)
     bool_det_glob=(bool_det_glob!=0.) & (~np.isnan(bool_det_glob))
     
     #computing the maximal height of the graphs (in order to keep the same y axis scaling on all the individual lines graphs)
-
     max_height=max((np.histogram(ravel_ragged(data_plot[0])[bool_det_glob],bins=bins_info[ind_info]))[0])
        
     for i in graph_range:
@@ -582,7 +1249,7 @@ def distrib_graph(data_perinfo,info,dict_linevis,data_ener=None,conf_thresh=0.99
             #we fetch the index list corresponding to the info string at the end of the info provided
             ratio_indexes_x=ratio_choices[info[-2:]]
             
-        fig_hist,ax_hist=plt.subplots(1,1,figsize=(6,6) if bigger_text else (10,8))
+        fig_hist,ax_hist=plt.subplots(1,1,figsize=(6,4) if not split_off else (6,6) if bigger_text else (10,8))
         
         if not bigger_text:
             if indiv:
@@ -594,22 +1261,103 @@ def distrib_graph(data_perinfo,info,dict_linevis,data_ener=None,conf_thresh=0.99
                     fig_hist.suptitle('Repartition of the '+info_str[ind_info]+
                                   (' in currently selected lines and sources' if streamlit else ' absorption lines'))
             
-        ax_hist.set_xlabel(axis_str[ind_info])
-        
-        #using a log x axis if the 
-        ax_hist.set_ylabel(r'Detection')
-        ax_hist.set_ylim([0,max_height+0.25])
-        
-        if ind_info in [0,3]:
-            ax_hist.set_xscale('log')
-        #these boolean arrays distinguish non detections (i.e. 0/nan significance) and statistically significant detections from the others
 
+        #using a log x axis if the 
+        ax_hist.set_ylabel(r'Detections')
+        ax_hist.set_xlabel('' if line_mode else (ratio_choices_str[info[-2:]]+' ' if ratio_mode else '')+
+                           axis_str[ind_info].replace(' (eV)',('' if ratio_mode else ' (eV)'))+
+                           (' ratio' if ratio_mode else ''))
+        
+        if split_off:
+            ax_hist.set_ylim([0,max_height+0.25])
+            
+        if ind_info in [0,3]:            
+            if ind_info==3 or scale_log_eqw:
+                ax_hist.set_xscale('log')
+                
+        #these boolean arrays distinguish non detections (i.e. 0/nan significance) and statistically significant detections from the others
         bool_sign=ravel_ragged(data_perinfo[4][0][i]).astype(float)
+
+        #single variable for more advanced bar plots with splitting
+        bool_signdet=(bool_sign>=conf_thresh) & (~np.isnan(bool_sign))
+        
+        #split variables for old computations with significance or not
         bool_det=(bool_sign!=0.) & (~np.isnan(bool_sign))
         bool_sign=bool_sign[bool_det]>=conf_thresh
         
+        if info=='width':
+            
+            #creating a mask for widths that are not compatible with 0 at 3 sigma\
+            #(different from the scatter here as we don't want the 0 values)
+            bool_sign_width=ravel_ragged(data_perinfo[7][0][i]).astype(float)!=0
+            
+            bool_sign=bool_sign & bool_sign_width[bool_det]
+            
+        if not split_off:
+            
+            if split_source:
+                #source by source version
+                sign_det_split=np.array([ravel_ragged(data_perinfo[4][0][i].T[j]) for j in range(len(obj_disp_list))],
+                                        dtype=object)
+        
+                #unused for now        
+                # #creating the bool det and bool sign masks
+                # bool_det_split=np.array([(elem!=0.) & (~np.isnan(elem)) for elem in sign_det_split])
+                
+                #note: here we don't link bool sign to bool det because we won't bother plotting non significant lines
+                bool_sign_split=np.array([(elem>=conf_thresh) & (~np.isnan(elem)) for elem in sign_det_split],
+                                         dtype=object)
+                        
+                if info=='width':
+                    
+                    #creating a mask for widths that are not compatible with 0 at 3 sigma\
+                    #(different from the scatter here as we don't want the 0 values)
+                    bool_sign_width_split=np.array([ravel_ragged(data_perinfo[7][0][i].T[j]).astype(float)!=0\
+                                                    for j in range(len(obj_disp_list))],dtype=object)
+                        
+
+                    bool_sign_split=np.array([elem & elem2 for elem,elem2 in zip(bool_sign_split, bool_sign_width_split)],dtype=object)
+
+                    
+            if split_instru:
+                
+                instru_list_repeat=np.array([instru_list for repeater in (i if type(i)==range else [i])])
+                
+                instru_unique=np.unique(ravel_ragged(instru_list))
+
+                #here we re split bool_sign with values depending on the instrument to restrict it
+                bool_sign_split=[(bool_signdet) & (ravel_ragged(instru_list_repeat)==instru_unique[i_instru])\
+                                  for i_instru in range(len(instru_unique))]
+            
+                
+        #### creating the hist variables
+        if line_mode:
+            
+            #computing the number of element for each line
+            line_indiv_size=len(ravel_ragged(data_perinfo[4][0][0]))
+            
+            bool_sign_line=[]
+            for id_line,line in enumerate(list_id_lines):
+                bool_sign_line+=[(bool_signdet) & (ravel_ragged(np.repeat(False,line_indiv_size*id_line)).tolist()+\
+                                                   ravel_ragged(np.repeat(True,line_indiv_size)).tolist()+\
+                                                   ravel_ragged(np.repeat(False,line_indiv_size*(len(list_id_lines)-(id_line+1))).tolist()))]
+            
+            #here we create a 2D array with the number of lines detected per source and per line
+            hist_data_splitsource=np.array([[sum((data_perinfo[4][0][i_line][i_obj]>=conf_thresh) & (~np.isnan(data_perinfo[4][0][i_line][i_obj].astype(float))))\
+                                          for i_line in range_line] for i_obj in range(len(obj_disp_list))])
+            
+            #suming on the sources give the global per line number of detection    
+            hist_data=hist_data_splitsource.sum(axis=0)
+            
+            if split_source:
+                hist_data_split=hist_data_splitsource
+                
+            if split_instru:
+                hist_data_split=[[np.sum((bool_sign_line[i_line]) & (bool_sign_split[i_instru]))\
+                                  for i_line in range_line] for i_instru in range(len(instru_unique))]
+                
         #this time data_plot is an array
-        if ratio_mode:
+        elif ratio_mode:
             
             #we need to create restricted bool sign and bool det here, with only the index of each line
             sign_ratio_arr=np.array([ravel_ragged(data_perinfo[4][0][ratio_indexes_x[i]]).astype(float) for i in [0,1]])
@@ -617,33 +1365,148 @@ def distrib_graph(data_perinfo,info,dict_linevis,data_ener=None,conf_thresh=0.99
             #here we create different mask variables to keep the standard bool_det/sign for the other axis if needed
             bool_det_ratio=(sign_ratio_arr[0]!=0.) & (~np.isnan(sign_ratio_arr[0])) & (sign_ratio_arr[1]!=0.) & (~np.isnan(sign_ratio_arr[1]))
             
-            #same problem with bitwise comparison here
+            #this doesn't work with bitwise comparison
             bool_sign_ratio=bool_det_ratio[sign_ratio_arr.T.min(1)>=conf_thresh]
-            
-            
+                        
             #before using them to create the data ratio
             hist_data=np.array(
                   [ravel_ragged(data_plot[0][ratio_indexes_x[0]])[bool_det_ratio][bool_sign_ratio]/\
                    ravel_ragged(data_plot[0][ratio_indexes_x[1]])[bool_det_ratio][bool_sign_ratio],
                    ravel_ragged(data_plot[0][ratio_indexes_x[0]])[bool_det_ratio][~bool_sign_ratio]/\
-                   ravel_ragged(data_plot[0][ratio_indexes_x[1]])[bool_det_ratio][~bool_sign_ratio]],dtype=object)
+               ravel_ragged(data_plot[0][ratio_indexes_x[1]])[bool_det_ratio][~bool_sign_ratio]],dtype=object)
+                
+            if not split_off:
+                
+                if split_source:
+                    #source by source version
+                    
+                    sign_det_ratio_split=[[ravel_ragged(data_perinfo[4][0][ratio_indexes_x[i]].T[j]).astype(float) for j in range(len(obj_disp_list))] for i in range(2)]
+                    
+                    #creating the bool det and bool sign masks
+                    # bool_det_split=np.array([(elem_num!=0.) & (~np.isnan(elem_num)) & (elem_denom!=0.) & (~np.isnan(elem_denom))\
+                    #                              for elem_num,elem_denom in zip([elem for elem in sign_det_ratio_split])])
+                        
+                    bool_sign_split=np.array([(elem_num>=conf_thresh) & (~np.isnan(elem_num)) & (elem_denom>=conf_thresh) & (~np.isnan(elem_denom))\
+                                                 for elem_num,elem_denom in zip(sign_det_ratio_split[0],sign_det_ratio_split[1])],dtype=object)
+                
+                    #computing the data array for the ratio (here we don't need to transpose because we select a single line with ratio_indexes_x
+                    hist_data_split=np.array(
+                          [ravel_ragged(data_plot[0][ratio_indexes_x[0]][i_obj])[bool_sign_split[i_obj]]/\
+                           ravel_ragged(data_plot[0][ratio_indexes_x[1]][i_obj])[bool_sign_split[i_obj]]\
+                               for i_obj in range(len(obj_disp_list))],dtype=object)
+                
+
+
                     
         else:
             hist_data=[ravel_ragged(data_plot[0][i])[bool_det][bool_sign],ravel_ragged(data_plot[0][i])[bool_det][~bool_sign]]
-        
+
+            if not split_off:
+
+                #### should be changed to use the same method as split_instru
+                if split_source:
+                    #here we need to add a transposition
+                    hist_data_split=np.array([ravel_ragged(data_plot[0][i].T[i_obj])[bool_sign_split[i_obj]] for i_obj in range(len(obj_disp_list))],dtype=object)
+                elif split_instru:                    
+                    #no need for transposition here
+                    hist_data_split=np.array([ravel_ragged(data_plot[0][i])[bool_sign_split[i_line]] for i_line in range(len(instru_unique))],dtype=object)
+
+                #adjusting the length to avoid a size 1 array which would cause issue
+                if len(hist_data_split)==1:
+                    hist_data_split=hist_data_split[0]
+                    
+                        
         hist_cols=['blue','grey']
         hist_labels=['detections above '+str(conf_thresh*100)+'% treshold','detections below '+str(conf_thresh*100)+'% treshold']
+                    
+        #### histogram plotting and colors
         
         if display_nonsign:
             ax_hist.hist(hist_data,stacked=True,color=hist_cols,label=hist_labels,bins=hist_bins)
         else:
-            ax_hist.hist(hist_data[0],color=hist_cols[0],label=hist_labels[0],bins=hist_bins)
+            if not split_off:
+                
+                #indexes of obj_list with significant detections
+                id_obj_withdet=np.argwhere(np.array([sum(elem)>0 for elem in bool_sign_split])!=0).T[0]
+
+                if glob_col_source:
+                    n_obj_withdet=sum(mask_obj)
+                else:
+                    #number of sources with detections
+                    n_obj_withdet=len(id_obj_withdet)
+                                
+                #color mapping accordingly for source split
+                norm_colors_obj=mpl.colors.Normalize(vmin=0,vmax=n_obj_withdet-1)
+                colors_func_obj=mpl.cm.ScalarMappable(norm=norm_colors_obj,cmap=cmap_color_det)
+                
+                if line_mode:
+                    
+                    if split_source:
+                                
+                        #creating the range of bars (we don't use histograms here because our counting is made arbitrarily on a given axis)
+                        #recreate_5cmap
+                        # for i_obj_det in range(n_obj_withdet-1):
+                            
+                        for i_obj_det in range(n_obj_withdet):
+                                
+                            i_obj=i_obj_det
+                            
+                            #only for custom modifications to recreate the 5cmap
+                            # i_obj=id_obj_withdet[i_obj_det]
+                            
+                            #using a range in the list_id_lines allow to resize the graph when taking off lines
+                            ax_hist.bar(np.array(range(len(list_id_lines)))-1/4+i_obj_det/(4/3*n_obj_withdet),hist_data_split[i_obj],
+                                         width=1/(4/3*n_obj_withdet),
+                             color=colors_func_obj.to_rgba(i_obj_det),label=obj_disp_list[i_obj] if i_obj in id_obj_withdet else '')
+                                                                                                                                                                                                                            
+                        #changing the tick and tick names to the actual line names
+                        ax_hist.set_xticks(np.array(range(len(list_id_lines))))
+                        ax_hist.set_xticklabels([lines_std[lines_std_names[i_line+3]] for i_line in list_id_lines],rotation='60')
+                    
+                    elif split_instru:
+                        #creating the range of bars (we don't use histograms here because our counting is made arbitrarily on a given axis
+                        #using a range in the list_id_lines allow to resize the graph when taking off lines
+                        [ax_hist.bar(np.array(range(len(list_id_lines)))-1/4+i_instru/(4/3*len(instru_unique)),hist_data_split[i_instru],
+                                     width=1/(4/3*len(instru_unique)),
+                         color=telescope_colors[instru_unique[i_instru]],label=instru_unique[i_instru]) for i_instru in range(len(instru_unique))]
+                                                                                                                                                                                                                            
+                        #changing the tick and tick names to the actual line names
+                        ax_hist.set_xticks(np.array(range(len(list_id_lines))))
+                        ax_hist.set_xticklabels([lines_std[lines_std_names[i_line+3]] for i_line in list_id_lines],rotation='60')
+                        
+                else:
+                    
+                    if split_source:
+                            
+                        #skipping displaying bars for objects with no detection
+                        source_withdet_mask=[sum(elem)>0 for elem in bool_sign_split]
+                        
+                        #resticting histogram plotting to sources with detection to havoid plotting many useless empty source hists
+                        ax_hist.hist(hist_data_split[source_withdet_mask],
+                                     color=np.array([colors_func_obj.to_rgba(i_obj_det) for i_obj_det in range(n_obj_withdet)])[(source_withdet_mask if glob_col_source else np.repeat(True,n_obj_withdet))],
+                                     label=obj_disp_list[source_withdet_mask],bins=hist_bins,rwidth=0.8,align='left',stacked=True)
+
+                    elif split_instru:
+                            
+                        ax_hist.hist(hist_data_split,color=[telescope_colors[instru_unique[i_instru]] for i_instru in range(len(instru_unique))],
+                                      label=instru_unique,bins=hist_bins,rwidth=0.8,align='left')
+
+                        #if we want combined (not stacked) + transparent                        
+                        # t=[ax_hist.hist(hist_data_split[i_instru],color=telescope_colors[instru_unique[i_instru]],
+                        #              label=instru_unique[i_instru],bins=hist_bins,rwidth=0.8,align='left',alpha=0.5) for i_instru in range(len(instru_unique))]
+                        
+                    #adding minor x ticks only (we don't want minor y ticks because they don't make sense for distributions)
+                    ax_hist.xaxis.set_minor_locator(AutoMinorLocator())
+                        
+            else:
+                ax_hist.hist(hist_data[0],color=hist_cols[0],label=hist_labels[0],bins=hist_bins)
             
         #forcing only integer ticks on the y axis
         ax_hist.yaxis.set_major_locator(MaxNLocator(integer=True))
-
-        if not bigger_text:
-            plt.legend()
+        
+        if not bigger_text or not split_off:
+            plt.legend(fontsize=10)
+            
         plt.tight_layout()
         if save:
             if indiv:
@@ -672,7 +1535,8 @@ def correl_graph(data_perinfo,infos,data_ener,dict_linevis,mode='intrinsic',mode
             -bshift
             -ener
             -eqwratio+25/26/Ka/Kb : ratio between the two 25/26/Ka/Kb lines. Always uses the highest line (in energy) as numerator
-            -width
+            -width Note: adding a number directly after the width is necessary to plot eqwratio vs width as line for which
+                            the width is plotted needs to be specified
             -nH
             
         observ:
@@ -730,13 +1594,22 @@ def correl_graph(data_perinfo,infos,data_ener,dict_linevis,mode='intrinsic',mode
         scale_log_eqw=dict_linevis['scale_log_eqw']
         plot_trend=dict_linevis['plot_trend']
         lock_lims_det=dict_linevis['lock_lims_det']
-        
+        display_pearson=dict_linevis['display_pearson']
+        display_abserr_bshift=dict_linevis['display_abserr_bshift']
+        glob_col_source=dict_linevis['glob_col_source']
+        display_th_width_ew=dict_linevis['display_th_width_ew']
+        cmap_color_det=dict_linevis['cmap_color_det']
     else:
         display_nonsign=True
         scale_log_hr=True
         scale_log_eqw=True
         plot_trend=False
         lock_lims_det=False
+        display_pearson=False
+        display_abserr_bshift=False
+        glob_col_source=False
+        display_th_width_ew=False
+        cmap_color_det=mpl.cm.plasma
         
     mask_obj=dict_linevis['mask_obj']
     abslines_ener=dict_linevis['abslines_ener']
@@ -804,7 +1677,15 @@ def correl_graph(data_perinfo,infos,data_ener,dict_linevis,mode='intrinsic',mode
         
     #not showing upper limit for the width plot as there's no point currently
     if 'width' in infos:
+        width_mode=True
         show_ul_eqw=False
+        if ratio_mode:
+            #if comparing width with the eqwratio, the line number for the width has to be specified for the width and is 
+            #retrieved (and -1 to compare to an index)
+            width_line_id=int(infos[infos.find('width')+5])-1
+
+    else:
+        width_mode=False
         
     #failsafe to prevent wrong colorings for intrinsic plots
     if (ratio_mode or mode=='eqwratio') and color_scatter=='width':
@@ -853,6 +1734,11 @@ def correl_graph(data_perinfo,infos,data_ener,dict_linevis,mode='intrinsic',mode
         figsize_val=(6,6)
         fig_scat,ax_scat=plt.subplots(1,1,figsize=figsize_val if bigger_text else (11,10.5))
         
+        if 'width' in infos_split[1]:
+            ax_scat.set_ylim(0,5500)
+        elif 'width' in infos_split[0]:
+            ax_scat.set_xlim(0,5500)
+            
         if not bigger_text:
             if indiv:
                 fig_scat.suptitle(info_str[ind_infos[0]]+' - '+(info_str[ind_infos[1]] if mode=='intrinsic' else\
@@ -866,8 +1752,9 @@ def correl_graph(data_perinfo,infos,data_ener,dict_linevis,mode='intrinsic',mode
             
         if mode!='eqwratio':
 
-            ax_scat.set_xlabel('Time' if time_mode else (axis_str[ind_infos[0]]+' '+(infos_split[0][-2:]+' ratio')) if ratio_mode else\
-                               axis_str[ind_infos[0]])
+            ax_scat.set_xlabel('Time' if time_mode else (ratio_choices_str[infos_split[0][-2:]]+' ' if ratio_mode else '')+
+            (axis_str[ind_infos[0]].replace(' (eV)',('' if ratio_mode else ' (eV)'))+' '+(infos_split[0][-2:]+' ratio'))\
+                if ratio_mode else axis_str[ind_infos[0]])
 
         else:
             ax_scat.set_xlabel(infos_split[0]+' '+axis_str[ind_infos[0]])
@@ -876,15 +1763,8 @@ def correl_graph(data_perinfo,infos,data_ener,dict_linevis,mode='intrinsic',mode
         #putting a logarithmic y scale if it shows equivalent widths or one of the hid parameters
         if mode!='source' and ((mode=='observ' and scale_log_hr and not time_mode) or ((ind_infos[0 if time_mode else 1] in [0,3] or mode=='eqwratio') and scale_log_eqw)):
                             
-            ax_scat.set_yscale('log')
-
-        #logarithmic scale by default for eqw ratios
-        if ratio_mode:
-            if time_mode:
-                ax_scat.set_yscale('log')
-            else:
-                ax_scat.set_xscale('log')
-        
+            ax_scat.set_yscale('log')                
+                
         #putting a logarithmic x scale if it shows equivalent widths
         if ind_infos[0] in [0,3] and scale_log_eqw and not time_mode:
             ax_scat.set_xscale('log')
@@ -932,6 +1812,7 @@ def correl_graph(data_perinfo,infos,data_ener,dict_linevis,mode='intrinsic',mode
             
         #the boolean masks for detections and significance are more complex when using ratios instead of the standard data since 
         #two lines need to be checked
+                    
         if mode=='eqwratio' or ratio_mode:
                                 
             #we can use the data constructs used for the eqw ratio mode to create the ratios in ratio_mode
@@ -941,12 +1822,22 @@ def correl_graph(data_perinfo,infos,data_ener,dict_linevis,mode='intrinsic',mode
             #in eqw ratio mode we need to make sure than both lines are defined for each point so we must combine the mask of both lines
             bool_sign_x=ravel_ragged(data_perinfo[4][0][ind_ratio[0]]).astype(float)
             bool_sign_y=ravel_ragged(data_perinfo[4][0][ind_ratio[1]]).astype(float)
-            
+
+            #adding a width mask to ensure we don't show elements with no width
+            if width_mode:
+                bool_sign_ratio_width=ravel_ragged(width_plot_restrict[2][width_line_id]).astype(float)!=0 
+            else:
+                bool_sign_ratio_width=True
+                
             bool_det_ratio=(bool_sign_x!=0.) & (~np.isnan(bool_sign_x)) & (bool_sign_y!=0.) & (~np.isnan(bool_sign_y)) & mask_intime_norepeat
             
             #for whatever reason we can't use the bitwise comparison so we compute the minimum significance of the two lines before testing for a single arr
             bool_sign_ratio=np.array([bool_sign_x[bool_det_ratio],bool_sign_y[bool_det_ratio]]).T.min(1)>=conf_thresh
             
+            #applying the width mask (or just a True out of width mode)
+            bool_sign_ratio=bool_sign_ratio & (True if bool_sign_ratio_width is True else bool_sign_ratio_width[bool_det_ratio])
+
+                
             #masks for upper limits (needs at least one axis to have detection and significance)
             bool_nondetsign_x=np.array(((bool_sign_x<=conf_thresh).tolist() or (np.isnan(bool_sign_x).tolist()))) &\
                               (np.array((bool_sign_y>=conf_thresh).tolist()) & np.array((~np.isnan(bool_sign_y)).tolist())) & mask_intime_norepeat
@@ -1009,6 +1900,13 @@ def correl_graph(data_perinfo,infos,data_ener,dict_linevis,mode='intrinsic',mode
             #restricted significant mask, to be used in conjunction with bool_det
             bool_sign=bool_sign[bool_det]>=conf_thresh
             
+            if width_mode:
+                
+                #creating a mask for widths that are not compatible with 0 at 3 sigma (for which this width value is pegged to 0)
+                bool_sign_width=ravel_ragged(width_plot_restrict[2][i]).astype(float)!=0
+                
+                bool_sign=bool_sign & bool_sign_width[bool_det]
+                
             if time_mode:
 
                 x_data=np.array([mdates.date2num(ravel_ragged(date_list_repeat))[bool_det][bool_sign],mdates.date2num(ravel_ragged(date_list_repeat))[bool_det][~bool_sign]],
@@ -1038,9 +1936,16 @@ def correl_graph(data_perinfo,infos,data_ener,dict_linevis,mode='intrinsic',mode
         else:
               
             if mode=='intrinsic':
-
-                y_data=np.array([ravel_ragged(data_plot[1][0][i])[bool_det][bool_sign],ravel_ragged(data_plot[1][0][i])[bool_det][~bool_sign]],
-                            dtype=object)
+                
+                if width_mode and ratio_mode:
+                    #the width needs to be changed to a single line here
+                        y_data=np.array([ravel_ragged(data_plot[1][0][width_line_id])[bool_det_ratio][bool_sign_ratio],
+                                         ravel_ragged(data_plot[1][0][width_line_id])[bool_det_ratio][~bool_sign_ratio]],
+                                    dtype=object)
+                    
+                else:
+                    y_data=np.array([ravel_ragged(data_plot[1][0][i])[bool_det][bool_sign],ravel_ragged(data_plot[1][0][i])[bool_det][~bool_sign]],
+                                dtype=object)
 
             elif mode=='observ' and not time_mode:
                 
@@ -1053,9 +1958,11 @@ def correl_graph(data_perinfo,infos,data_ener,dict_linevis,mode='intrinsic',mode
                     y_data=np.array([ravel_ragged(y_data_repeat[ratio_indexes_x[0]])[bool_det_ratio][bool_sign_ratio],
                                      ravel_ragged(y_data_repeat[ratio_indexes_x[0]])[bool_det_ratio][~bool_sign_ratio]],dtype=object)
                 else:
+
                     y_data=np.array([ravel_ragged(y_data_repeat)[bool_det][bool_sign],ravel_ragged(y_data_repeat)[bool_det][~bool_sign]],
                                     dtype=object)
-                    
+
+                        
             elif mode=='source':
                 y_data_repeat=np.array([data_plot[1][i_obj][0] for repeater in (i if type(i)==range else [i])\
                                         for i_obj in range(n_obj) for i_obs in range(len(data_plot[0][0][repeater][i_obj]))\
@@ -1257,6 +2164,11 @@ def correl_graph(data_perinfo,infos,data_ener,dict_linevis,mode='intrinsic',mode
                                     ravel_ragged(data_plot[0][0][ratio_indexes_x[1]])[bool_det_ratio][elem_sign_mask])**2)**(1/2)*
                                    x_data[i_sign] for i in [1,2]] for i_sign,elem_sign_mask in enumerate([bool_sign_ratio,~bool_sign_ratio])],dtype=object)
                     
+                if width_mode:
+                    y_error=np.array([[elem if type(elem)!=str else linked_uncer(ind_val,j,ind_infos[0])\
+                                       for ind_val,elem in enumerate(ravel_ragged(data_plot[1][j][width_line_id]))] for j in [1,2]])
+                
+                    
         #defining the errors and shifting the linked values accordingly for blueshifts
         #here we do not need the linked_ind shenanigans because this is not called during streamlit (and so all the lines are there)
         
@@ -1334,8 +2246,12 @@ def correl_graph(data_perinfo,infos,data_ener,dict_linevis,mode='intrinsic',mode
             
         
         if mode=='intrinsic':
-            y_error=[np.array([y_error[0][bool_det][bool_sign],y_error[1][bool_det][bool_sign]]).astype(float),
-                      np.array([y_error[0][bool_det][~bool_sign],y_error[1][bool_det][~bool_sign]]).astype(float)]
+            if width_mode and ratio_mode:
+                y_error=[np.array([y_error[0][bool_det_ratio][bool_sign_ratio],y_error[1][bool_det_ratio][bool_sign_ratio]]).astype(float),
+                          np.array([y_error[0][bool_det_ratio][~bool_sign_ratio],y_error[1][bool_det_ratio][~bool_sign_ratio]]).astype(float)]
+            else:
+                y_error=[np.array([y_error[0][bool_det][bool_sign],y_error[1][bool_det][bool_sign]]).astype(float),
+                          np.array([y_error[0][bool_det][~bool_sign],y_error[1][bool_det][~bool_sign]]).astype(float)]
         
         #no need to do anything for y error in hid mode since it's already set to None
         
@@ -1343,36 +2259,92 @@ def correl_graph(data_perinfo,infos,data_ener,dict_linevis,mode='intrinsic',mode
         
         data_link_cols=['dodgerblue','silver'] if show_linked else data_cols
         
-        data_labels=np.array(['detections above '+str(conf_thresh*100)+'% treshold','detections below '+str(conf_thresh*100)+'% treshold'])
-
+        # data_labels=np.array(['detections above '+str(conf_thresh*100)+'% treshold','detections below '+str(conf_thresh*100)+'% treshold'])
+        data_labels=['','']
         #### plots
                 
         #plotting the unlinked and linked results with a different set of colors to highlight the differences
         #note : we don't use markers here since we cannot map their color
 
+        if width_mode:
+            #note: we only do this for significant unlinked detections
+            uplims_mask=y_data[0].astype(float)[~(linked_mask[0].astype(bool))]==0
+        else:
+            uplims_mask=None
+            
         errbar_list=['' if len(x_data[s])==0 else ax_scat.errorbar(x_data[s].astype(float)[~(linked_mask[s].astype(bool))],
                                                       y_data[s].astype(float)[~(linked_mask[s].astype(bool))],
                           xerr=None if x_error is None else [elem[~(linked_mask[s].astype(bool))] for elem in x_error[s]],
                           yerr=[elem[~(linked_mask[s].astype(bool))] for elem in y_error[s]],linewidth=1,
                           c=data_cols[s],label=data_labels[s] if color_scatter=='None' else '',linestyle='',
+                          uplims=uplims_mask,
                           marker='D' if color_scatter=='None' else None,alpha=1,zorder=1)\
          for s in ([0,1] if display_nonsign else [0])]
 
            
+        #note:deprecated
         errbar_list_linked=['' if len(x_data[s])==0 else ax_scat.errorbar(x_data[s].astype(float)[linked_mask[s].astype(bool)],
                                                         y_data[s].astype(float)[linked_mask[s].astype(bool)],
                           xerr=None if x_error is None else [elem[linked_mask[s].astype(bool)] for elem in x_error[s]],
                           yerr=[elem[linked_mask[s].astype(bool)] for elem in y_error[s]],linewidth=1,
                           color=data_link_cols[s],label='linked '+data_labels[s]  if color_scatter=='None' else '',linestyle='',
-                          marker='D' if color_scatter=='None' else None,alpha=0.6 if show_linked else 1.0,zorder=1000)\
+                          marker='D' if color_scatter=='None' else None,
+                          uplims=False,
+                          alpha=0.6 if show_linked else 1.0,zorder=1000)\
          for s in ([0,1] if display_nonsign else [0])]        
             
+                
         #locking the graph if asked to to avoid things going haywire with upper limits
-        if lock_lims_det:
+        if lock_lims_det or not show_ul_eqw:
             ax_scat.set_xlim(ax_scat.get_xlim())
             ax_scat.set_ylim(ax_scat.get_ylim())
+        
+        #### adding the absolute blueshift uncertainties for Chandra in the blueshift graphs
+        
+        #adding a line at 0 blueshift
+        if infos_split[0]=='bshift':
+            ax_scat.axvline(x=0,ymin=0,ymax=1,color='grey',linestyle='--')
+        
+        #(-speed_abs_err[0],speed_abs_err[1],color='grey',label='Absolute error region',alpha=0.3)
+        
+        if display_abserr_bshift and infos_split[0]=='bshift':
+            
+            #deprecated
+            # #computing a middle vertical position at which to put the errorbar
+            # y_pos=ax_scat.get_ylim()
+            # if ax_scat.get_yscale()=='linear':
+            #     y_pos_err=y_pos[0]+(y_pos[1]-y_pos[0])*0.01
+            # else:
+            #     y_pos_err=10**(np.log10(y_pos[0])+(np.log10(y_pos[1])-np.log10(y_pos[0]))*0.01)
                 
-        #### coloring
+            #specific display if a single line is remaining in the current selection
+            if len([elem for elem in mask_lines if elem])==1:
+                
+                #fetching the id of the line
+                line_id=np.argwhere(np.array(mask_lines))[0][0]
+                
+                #its energy
+                line_e=lines_e_dict[lines_std_names[3+line_id]][0]
+                
+                #computing the (non symmetrical in energy space) blueshift error with 0.006 absolute eror
+                speed_abs_err=np.array([line_e-ang2kev(ang2kev(line_e)+0.006),ang2kev(ang2kev(line_e)-0.006)-line_e])*c_light/line_e
+                
+                ax_scat.axvspan(-speed_abs_err[0],speed_abs_err[1],color='grey',label='Absolute error region',alpha=0.3)
+            
+            else:
+                
+                #taking FeKavi as default for an example
+                line_id=1
+                
+                #its energy
+                line_e=lines_e_dict[lines_std_names[3+line_id]][0]
+                
+                #computing the (non symmetrical in energy space) blueshift error with 0.006 absolute eror
+                speed_abs_err=np.array([line_e-ang2kev(ang2kev(line_e)+0.006),ang2kev(ang2kev(line_e)-0.006)-line_e])*c_light/line_e
+                
+                ax_scat.axvspan(-speed_abs_err[0],speed_abs_err[1],color='grey',label='FeKavi Absolute error',alpha=0.3)
+                
+        #### Color definition
         
         #for the colors, we use the same logic than to create y_data with observation/source level parameters here
         
@@ -1556,11 +2528,14 @@ def correl_graph(data_perinfo,infos,data_ener,dict_linevis,mode='intrinsic',mode
                     
                 
             #we extract the number of objects with detection from the array of sources
-            disp_objects=np.unique(ravel_ragged(color_data_tot))
+            if glob_col_source:
+                disp_objects=obj_disp_list                
+            else:
+                disp_objects=np.unique(ravel_ragged(color_data_tot))
             
             #and compute a color mapping accordingly
-            norm_colors_obj=mpl.colors.Normalize(vmin=0,vmax=len(disp_objects))
-            colors_func_obj=mpl.cm.ScalarMappable(norm=norm_colors_obj,cmap=mpl.cm.hsv_r)
+            norm_colors_obj=mpl.colors.Normalize(vmin=0,vmax=len(disp_objects)-1)
+            colors_func_obj=mpl.cm.ScalarMappable(norm=norm_colors_obj,cmap=cmap_color_det)
         
             color_arr=np.array([colors_func_obj.to_rgba(np.argwhere(disp_objects==elem)[0][0]) for s in ([0,1] if display_nonsign else [0]) for elem in color_data[s]])
                 
@@ -1594,7 +2569,7 @@ def correl_graph(data_perinfo,infos,data_ener,dict_linevis,mode='intrinsic',mode
                                  xuplims=lims_bool[0]==1,xlolims=lims_bool[0]==-1,uplims=lims_bool[1]==1,lolims=lims_bool[1]==-1,
                                  color=col_single,linestyle='',marker='.' if color_scatter=='None' else None,
                                  label=label if i_err==0 else '',alpha=alpha_ul if color_scatter=='None' else 1)
-            
+                    
         ####plotting upper limits
         if show_ul_eqw and ('eqw' in infos or mode=='eqwratio'):
             
@@ -1612,12 +2587,12 @@ def correl_graph(data_perinfo,infos,data_ener,dict_linevis,mode='intrinsic',mode
                 
                 if time_mode:
                     #uplims here, the upper limits display has the same construction no matter if in ratio mode or not
-                    plot_ul_err([0,1],x_data_ul,y_data_ul,[None]*len(x_data_ul),y_data_ul*0.05,color_arr_ul)
+                    plot_ul_err([0,1],x_data_ul,y_data_ul,[None]*len(x_data_ul),y_data_ul*0.05,color_arr_ul_x if ratio_mode else color_arr_ul)
                 
                 else:
                     
                     #xuplims here, the upper limits display has the same construction no matter if in ratio mode or not
-                    plot_ul_err([1,0],x_data_ul,y_data_ul,x_data_ul*0.05,y_error_ul.T,color_arr_ul)
+                    plot_ul_err([1,0],x_data_ul,y_data_ul,x_data_ul*0.05,y_error_ul.T,color_arr_ul_x if ratio_mode else color_arr_ul)
                 
                 #adding the lower limits in ratio mode
                 if ratio_mode:
@@ -1628,15 +2603,43 @@ def correl_graph(data_perinfo,infos,data_ener,dict_linevis,mode='intrinsic',mode
                     else:
                         #lolims here
                         plot_ul_err([-1,0],x_data_ll,y_data_ll,x_data_ll*0.05,y_error_ll.T,color_arr_ul_y)
-                        
+
+        
+        #### adding cropping on the EW ratio X axis to fix unknown issue
+        
+        if ratio_mode:
+            if width_mode:
+                if min(ravel_ragged(x_data))>0.28 and max(ravel_ragged(x_data))<3.5:
+                    ax_scat.set_xlim(0.28,3.5)
+            else:
+                if min(ravel_ragged(x_data))>0.28:
+                    ax_scat.set_xlim(0.28,ax_scat.get_xlim()[1])
+
+        #### Color replacements in the scatter to match the colormap
         if color_scatter!='None':
             
             for s,elem_errbar in enumerate(errbar_list):
                 #replacing indiviudally the colors for each point but the line
                 for elem_children in elem_errbar.get_children()[1:]:
-
-                    elem_children.set_colors(color_arr[s][~(linked_mask[s].astype(bool))])
                     
+                    if type(elem_children)==mpl.collections.LineCollection:
+                        elem_children.set_colors(color_arr[s][~(linked_mask[s].astype(bool))])
+                    else:
+                        elem_children.set_visible(False)
+                        
+                        #this case is restricted to the upper limits in width mode
+                        x_ul=x_data[0].astype(float)[~(linked_mask[0].astype(bool))][uplims_mask]
+                        
+                        #using the max values (in yerr) as the upper limits so in y
+                        y_ul=yerr_ul=np.array([elem[~(linked_mask[s].astype(bool))][uplims_mask] for elem in y_error[0]])[1]
+                        
+                        xerr_ul=None if x_error is None else np.array([elem[~(linked_mask[s].astype(bool))][uplims_mask] for elem in x_error[0]]).T
+                        yerr_ul=y_ul*0.05
+                        
+                        col_ul=color_arr[0][~(linked_mask[0])][uplims_mask]
+                        plot_ul_err([0,1],x_ul,y_ul,xerr_ul,yerr_ul,col_ul,label='')
+                        
+                        
             for s,elem_errbar_linked in enumerate(errbar_list_linked):
                 #replacing indiviudally the colors for each point but the line
                 for elem_children in elem_errbar_linked.get_children()[1:]:
@@ -1725,20 +2728,29 @@ def correl_graph(data_perinfo,infos,data_ener,dict_linevis,mode='intrinsic',mode
                         if np.sum(color_mask)==0 and np.sum(color_mask_linked)==0 and (not show_ul_eqw or no_ul_displayed):
                             continue
                         
-                        ax_scat.scatter(x_data[s].astype(float)[~(linked_mask[s].astype(bool))][color_mask],
-                                                              y_data[s].astype(float)[~(linked_mask[s].astype(bool))][color_mask],
-                                  color=label_dict[color_label],label=color_label,marker='D',alpha=1,zorder=1)
+                        #needs to be split to avoid indexation problem when calling color_mask behind
+                        if uplims_mask is None:
+                            ax_scat.scatter(
+                                x_data[s].astype(float)[~(linked_mask[s].astype(bool))][color_mask],
+                                y_data[s].astype(float)[~(linked_mask[s].astype(bool))][color_mask],
+                                      color=label_dict[color_label],label=color_label,marker='D',alpha=1,zorder=1)
+                        else:
+                            ax_scat.scatter(
+                                x_data[s].astype(float)[~(linked_mask[s].astype(bool))][~uplims_mask][np.array(color_mask)[~uplims_mask]],
+                                y_data[s].astype(float)[~(linked_mask[s].astype(bool))][~uplims_mask][np.array(color_mask)[~uplims_mask]],
+                                      color=label_dict[color_label],label=color_label,marker='D',alpha=1,zorder=1)
+                        
                         
                         #No label for the second plot to avoid repetitions
                         ax_scat.scatter(x_data[s].astype(float)[(linked_mask[s].astype(bool))][color_mask_linked],
                                                               y_data[s].astype(float)[(linked_mask[s].astype(bool))][color_mask_linked],
                                   color=label_dict[color_label],
                         label='',marker='D',alpha=1,zorder=1)
-            
-                ax_scat.legend()
-            
+                        
         # ax_scat.set_xlim(mdates.date2num(['2012-01-01']),mdates.date2num(['2012-10-01']))
                         
+        #### Correlation values
+        
         #computing the statistical coefficients for the significant portion of the sample (we don't care about the links here)
         if compute_correl and mode!='source' and len(x_data[0])>1 and not time_mode:
             
@@ -1746,34 +2758,42 @@ def correl_graph(data_perinfo,infos,data_ener,dict_linevis,mode='intrinsic',mode
             #the significant and unsignificant data, so we create regular versions manually
             x_error_sign_T=np.array([elem for elem in x_error[0]]).T
             y_error_sign_T=np.array([elem for elem in y_error[0]]).T
-            
-
-            
+                        
             r_pearson=np.array(pymccorrelation(x_data[0].astype(float),y_data[0].astype(float),dx=x_error_sign_T/1.65,
-                                      dy= y_error_sign_T/1.65,
+                                      dy=y_error_sign_T/1.65,ylim=uplims_mask,
                                       Nperturb=1000,coeff='pearsonr',percentiles=(50,5,95)))
 
-                
+
+            
             #switching back to uncertainties from quantile values
             r_pearson=np.array([[r_pearson[ind_c][0],r_pearson[ind_c][0]-r_pearson[ind_c][1],r_pearson[ind_c][2]-r_pearson[ind_c][0]]\
-                                for ind_c in [0,1]])
-    
+                                for ind_c in [0,1]])                
+                
             r_spearman=np.array(pymccorrelation(x_data[0].astype(float),y_data[0].astype(float),dx=x_error_sign_T/1.65,
-                                      dy= y_error_sign_T/1.65,
+                                      dy= y_error_sign_T/1.65,ylim=uplims_mask,
                                       Nperturb=1000,coeff='spearmanr',percentiles=(50,5,95)))
         
             #switching back to uncertainties from quantile values
             r_spearman=np.array([[r_spearman[ind_c][0],r_spearman[ind_c][0]-r_spearman[ind_c][1],r_spearman[ind_c][2]-r_spearman[ind_c][0]]\
                                 for ind_c in [0,1]])
+
+            #no need to put uncertainties now
+            # str_pearson=r'$r_{Pearson}='+str(round(r_pearson[0][0],2))+'_{-'+str(round(r_pearson[0][1],2))+'}^{+'\
+            #                         +str(round(r_pearson[0][2],2))+'}$ '+'| $p='+'%.1e' % Decimal(r_pearson[1][0 ])\
+            #                         +'_{-'+'%.1e' % Decimal(r_pearson[1][1])+'}^{+'+'%.1e' % Decimal(r_pearson[1][2])+'}$\n'
             
-            ax_scat.set_title(r'Pearson: '+
-                              '$r='+str(round(r_pearson[0][0],3))+'_{-'+str(round(r_pearson[0][1],3))+'}^{+'+str(round(r_pearson[0][2],3))+'}$ '+
-                              '$p='+str(round(r_pearson[1][0],3))+'_{-'+str(round(r_pearson[1][1],3))+'}^{+'+str(round(r_pearson[1][2],3))+'}$\n'+
-                              'Spearman: '+
-                              '$r='+str(round(r_spearman[0][0],3))+'_{-'+str(round(r_spearman[0][1],3))+'}^{+'+str(round(r_spearman[0][2],3))+
-                              '}$ '+
-                              '$p='+str(round(r_spearman[1][0],3))+'_{-'+str(round(r_spearman[1][1],3))+'}^{+'+str(round(r_spearman[1][2],3))+
-                              '}$ ')
+            # str_spearman=r'$r_{Spearman}='+str(round(r_spearman[0][0],2))+'_{-'+str(round(r_spearman[0][1],2))\
+            #                           +'}^{+'+str(round(r_spearman[0][2],2))+'}$ '+'| $p='+'%.1e' % Decimal(r_spearman[1][0])\
+            #                           +'_{-'+'%.1e' % Decimal(r_spearman[1][1])+'}^{+'+'%.1e' % Decimal(r_spearman[1][2])+'}$ '
+                        
+            str_pearson=r'$r_{Pearson}='+str(round(r_pearson[0][0],2))+'\;|\; $p='+'%.1e' % Decimal(r_pearson[1][0 ])+'$\n'
+            
+            str_spearman=r'$r_S \,='+str(round(r_spearman[0][0],2))+'$\n$p_S='+'%.1e' % Decimal(r_spearman[1][0])+'$'
+            
+            legend_title=(str_pearson if display_pearson else'')+str_spearman
+        
+        else:
+            legend_title=None
             
         #adjusting the axis sizes for eqwratio mode to get the same scale
         if mode=='eqwratio':
@@ -1802,9 +2822,60 @@ def correl_graph(data_perinfo,infos,data_ener,dict_linevis,mode='intrinsic',mode
                               color=data_cols[1],linestyle='--',label='linear trend line for all detections')
             except:
                 pass
+            
+        #resizing for a square graph shape
+        forceAspect(ax_scat,aspect=1)
         
-        if show_linked:
-            plt.legend()
+        
+        #### theoretical line drawing for eqw_width
+        if infos=='eqw_width' and display_th_width_ew:
+            
+            line_id=np.argwhere(np.array(mask_lines))[0][0]
+            if line_id==0:
+                files=glob.glob('/home/parrama/Documents/Work/PhD/docs/atom/Fe25*_*.dat')
+            elif line_id==1:
+                files=glob.glob('/home/parrama/Documents/Work/PhD/docs/atom/Fe26*_*.dat')
+                
+            nh_values=np.array([elem.split('/')[-1].replace('.dat','').split('_')[1] for elem in files]).astype(float)
+            
+            nh_order=nh_values.argsort()
+            
+            nh_values.sort()
+            
+            ls_curve=['solid','dotted','dashed','dashdot',(0, (3, 5, 1, 5, 1, 5))]
+            
+            colors_curve=['black','black','black','black','black']
+
+            for id_curve,nh_curve_path in enumerate(np.array(files)[nh_order]):
+                nh_array=np.array(pd.read_csv(nh_curve_path,sep='      ',engine='python',header=None)).T
+                
+                plt.plot(nh_array[0],nh_array[1],label=r'$N_i= $'+str(nh_values[id_curve])+' cm'+r'$^{-2}$',
+                         color=colors_curve[id_curve],
+                         alpha=0.5,ls=ls_curve[id_curve%len(ls_curve)])
+                
+        #logarithmic scale by default for eqw ratios
+        if ratio_mode:
+        
+            if time_mode:
+                ax_scat.set_yscale('log')
+                ax_scat.yaxis.set_major_formatter(mpl.ticker.FormatStrFormatter('%.1f'))
+                ax_scat.set_yticks(np.arange(0.3,0.8,0.2).tolist()+[1,3,5])
+                
+                ax_scat.get_yaxis().set_major_formatter(mpl.ticker.ScalarFormatter())
+                
+            else:
+                ax_scat.set_xscale('log')
+                ax_scat.xaxis.set_major_formatter(mpl.ticker.FormatStrFormatter('%.1f'))
+                ax_scat.set_xticks(np.arange(0.3,0.8,0.2).tolist()+[1,3,5])
+                
+                ax_scat.get_xaxis().set_major_formatter(mpl.ticker.ScalarFormatter())
+                                    
+        #### legend display
+        if show_linked or compute_correl or color_scatter not in ['Time','HR','width','nH',None]:       
+            
+            scat_legend=plt.legend(fontsize=10,title=legend_title)
+            plt.setp(scat_legend.get_title(),fontsize='small')
+                
         plt.tight_layout()
         
 

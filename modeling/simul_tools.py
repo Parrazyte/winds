@@ -14,56 +14,284 @@ import numpy as np
 import pexpect
 import time
 
-from xspec import AllModels,AllData,Fit,Spectrum,Model,Plot,Xset,FakeitSettings,AllChains,Chain
+from tqdm import tqdm
 
-from xstarsub_dummy import ener,ispecg,ispecgg,ispcg2,x116n5
+from xspec import AllModels,AllData,Model,FakeitSettings,Plot
 
-#adding some libraries 
-os.environ['LD_LIBRARY_PATH']+=os.pathsep+'/home/parrama/Soft/Heasoft/heasoft-6.29/x86_64-pc-linux-gnu-libc2.31/lib'
+import pyxstar as px
+
+# #adding some libraries 
+# os.environ['LD_LIBRARY_PATH']+=os.pathsep+'/home/parrama/Soft/Heasoft/heasoft-6.31.1/x86_64-pc-linux-gnu-libc2.31/lib'
 
 h_cgs = 6.624e-27
 eV2erg = 1.6e-12
 erg2eV = 1.0/eV2erg
 Ryd2eV = 13.5864
 
+def file_edit(path,line_id,line_data,header):
+    
+    '''
+    Edits (or create) the file given in the path and replaces/add the line(s) where the line_id str/LIST is with
+    the line-content str/LIST.
+    
+    line_id should be included in line_content.
+    
+    Header is the first line of the file, with usually different informations.
+    '''
+    
+    lines=[]
+    if type(line_id)==str or type(line_id)==np.str_:
+        line_identifier=[line_id]
+    else:
+        line_identifier=line_id
+        
+    if type(line_data)==str or type(line_data)==np.str_:
+        line_content=[line_data]
+    else:
+        line_content=line_data
+        
+    if os.path.isfile(path):
+        with open(path) as file:
+            lines=file.readlines()
+            
+            #loop for all the lines to add
+            for single_identifier,single_content in zip(line_identifier,line_content):
+                line_exists=False
+                if not single_content.endswith('\n'):
+                    single_content+='\n'
+                #loop for all the lines in the file
+                for l,single_line in enumerate(lines):
+                    if single_identifier in single_line:
+                        lines[l]=single_content
+                        line_exists=True
+                if line_exists==False:
+                    lines+=[single_content]
+            
+    else:
+        #adding everything
+        lines=line_content
 
-def update_xstar_fortran_libs(path='./'):
-    '''
-    Fetches the xstar libraries in the current heasoft version and recreates the f2py libraries from them
-    included: ener,ispecg,ispecgg,ispcg2
-    
-    '''
-    
-    
-    
-def xstar_wind(ep, p_mhd, mu, angle,dict_solution, ncn2=63599, chatter=0):
+    with open(path,'w+') as file:
+        if lines[0]==header:
+            file.writelines(lines)
+        else:
+            file.writelines([header]+lines)
+            
+def xstar_wind(ep, p_mhd, mu, angle,dict_solution,stop_d, SED_path, xlum, h_over_r=0.1, rad_res=0.115, ncn2=63599, chatter=0):
     
     
     '''
-    Python wrapper for the xstar computation
+    Python wrapper for the xstar computation of a single solution
     
-    dict_solution is a dictionnary with all the arguments of a JED-SAD solution
-    
-    need to run f2py -c -m xstar xstarsub_versionum.f90 to get the xstar library (which doesn't work right now for some reason)
+    Required parameters:
+        ep,p_mhd,mu and angle are the main WED parameters of the solution
+        
+        dict_solution is a dictionnary with all the arguments of a JED-SAD solution
 
-    eventual calls to fortran with arrays as arguments will need to use inverted arrays:
-        the indexation is not the same as in python so using order='F' when creating arrays is important
+        stop_d is a single (or list of) stop distances in units of Rg
     
-    the fourth line of the xstar subroutine includes the param file variables, so the param file should be in the same folder
+        SED is the path of the incident spectra (suitable for xstar input)
+        Note: The normalization doesn't matter
+
+        xlum is the bolometric luminosity of the spectrum in units of 1e38ergs/s
+        Used internally by xstar to renormalize the given SED
+        
+        #### Note: should be updated with the speed of the material and potential significant absorption?
+        
+
+    Secondary options:
     
-    xstar also uses atdb.fits & coheat.dat
+        h_over_r is the aspect ratio of the disk
+        
+        rad_res is the radial revolution
+        ####weird use, should be converted to a variable which is used in a more straightforward manner
+        ####+ why is there a distance jump between the boxes, are they not directly adjacent? 
     
+        chatter gives out the number of infos displayed during the computation
+    
+    
+    
+    Notes on the python conversion:
+        -since array numbers starts at 0, we use "index" box numbers (starting at 0) and adapt all of the consequences,
+        but still print the correct box number (+1)
+
+    ####SHOULD BE UPDATED TO ADD THE JED SAD N(R) DEPENDANCY
     '''
     
     '''
     #### Physical constants
     '''
     
-    def xstar_function(epi,ncn2,lpri,lunlog,xlum,enlum,zremsz,xpx,xpxcol,zeta,nbox,r_or_f,nbox_restart,vobsx,vturb_x):
+    def shift_tr_spectra(bshift,path):
         
         '''
-        wrapper around the xstar function itself. Since it's too reliant on 
+        shifts the current transmitted spectra from the xstar output files and stores it (in a xstar-accepted manner)
+        in the "path" file
         '''
+        
+        #loading the continuum spectrum of the previous box
+        prev_box_sp=px.ContSpectra()
+        
+        eptmp=prev_box_sp.energy()
+        zrtmp=prev_box_sp.transmitted()
+
+        eptmp_shifted = eptmp*bshift
+        
+        #multiplying the spectrum is not useful unless it's relativistic but just in case
+        zrtmp_shifted = zrtmp*bshift
+
+        #should not need to remap the spectrum since it will be done internally by xstar            
+
+        shifted_input_arr=np.array([eptmp_shifted,zrtmp_shifted]).T
+        
+        #!**Writing the shifted spectra in a file as it is input for next box 
+        np.savetxt(path,shifted_input_arr,header=str(len(eptmp)),delimiter='  ')
+            
+    def write_xstar_infos(nbox,vobsx,path):
+        
+        '''
+        loads the main elements and details with abundances form the current xstar output in a file
+        
+        the file_edit function uses the box number + step number as line identifier
+        
+        jkp is the variable name of the step number
+        
+        '''
+        
+        # file_header='#nbox(1) jkp(2) rad_start(3) rad_end(4) '+\
+        #  'delta_r(5) xpxcol/xpx(6) zeta_start(7) zeta_end(8) zeta_avg(9) xpx(10) vobsx(11) xpxcol(12) temp_box(13) O8(14) O7(15) '+\
+        #  'Ne10(16) Ne9(17) Na11(18) Na10(19) Mg12(20) Mg11(21) Al13(22) Al12(23) Si14(24) Si13(25) S16(26) S15(27) Ar18(28) Ar17(29)'+\
+        #  'Ca20(30) Ca19(31) Fe26(32) Fe25(33) Nh_O8(34) Nh_O7(35) Nh_Ne10(36) Nh_Ne9(37) Nh_Na11(38) Nh_Na10(39) Nh_Mg12(40)'+\
+        #  'Nh_Mg11(41) Nh_Al13(42) Nh_Al12(43) Nh_Si14(44) Nh_Si13(45) Nh_S16(46) Nh_S15(47) Nh_Ar18(48) Nh_Ar17(49) Nh_Ca20(50) '+\
+        #  'Nh_Ca19(51) Nh_Fe26(52) Nh_Fe25(53)\n'
+
+        file_header='#nbox(1)\tjkp(2)\trad(3)\t'+\
+        'delta_r(4)\txpxcol/xpx(5)\tzeta(6)\txpx(7)\tvobsx(8)\txpxcol(9)\ttemp_box(10)\tO8(11)\tO7(12)\t'+\
+        'Ne10(13)\tNe9(14)\tNa11(15)\tNa10(16)\tMg12(17)\tMg11(18)\tAl13(19)\tAl12(20)\tSi14(21)\tSi13(22)\t'+\
+        'S16(23)\tS15(24)\tAr18(25)\tAr17(26)\tCa20(27)\tCa19(28)\tFe26(29)\tFe25(30)\tNh_O8(31)\tNh_O7(32)\t'+\
+        'Nh_Ne10(33)\tNh_Ne9(34)\tNh_Na11(35)\tNh_Na10(36)\tNh_Mg12(37)\tNh_Mg11(38)\tNh_Al13(39)\tNh_Al12(40)\t'+\
+        'Nh_Si14(41)\tNh_Si13(42)\tNh_S16(43)\tNh_S15(44)\tNh_Ar18(45)\tNh_Ar17(46)\tNh_Ca20(47)\t'+\
+        'Nh_Ca19(48)\tNh_Fe26(49)\tNh_Fe25(50)\n'
+
+        #not really necessary ATM        
+        # file_header_main='#nbox(1)\tjkp(2)\tr(3)\tdelta_r(4)\txpxcol/xpx(5)\tzeta(6)\txpx(7)\tvobsx(8)\txpxcol(9)\t'+\
+        #                  'temp_box(10)\nO8(11)\tO7(12)\tNe10(13)\tNe9(14)\tNa11(15)\tNa10(16)\tMg12(17)\tMg11(18)\t'+\
+        #                  'Al13(19)\tAl12(20)\tSi14(21)\tSi13(22)\tS16(23)\tS15(24)\tAr18(25)\tAr17(26)\tCa20(27)\t'+\
+        #                  'Ca19(28)\tFe26(29)\tFe25(30)\n'
+         
+        n_steps=len(px.Abundances('o_iii'))
+
+        for i_step in range(n_steps):
+            
+            plasma_pars=px.PlasmaParameters()
+            
+            ####Q: rad star, rad_end, rad_pos ????
+            
+            ####Q: same question for zeta_end etc.
+            
+            ####Q: should I use x_e for xpx and n_p for xpxcol ?
+            
+            #main infos
+            
+            main_infos=[nbox,n_steps+1,
+                        plasma_pars.radius[i_step],plasma_pars.delta_r[i_step],plasma_pars.n_p[i_step]/plasma_pars.x_e[i_step],
+                        plasma_pars.ion_parameter[i_step],plasma_pars.x_e[i_step],vobsx,plasma_pars.n_p[i_step],
+                        plasma_pars.temperature[i_step]*1e4]
+             
+            #detailed abundances 
+
+            ion_infos=[px.Abundances('O8')[0],
+                       px.Abundances('O7')[0],
+                       px.Abundances('Ne10')[0],
+                       px.Abundances('Ne9')[0],
+                       px.Abundances('Na11')[0],
+                       px.Abundances('Na10')[0],
+                       px.Abundances('Mg12')[0],
+                       px.Abundances('Mg11')[0],
+                       px.Abundances('Al13')[0],
+                       px.Abundances('Al12')[0],
+                       px.Abundances('Si14')[0],
+                       px.Abundances('Si13')[0],
+                       px.Abundances('S16')[0],
+                       px.Abundances('S15')[0],
+                       px.Abundances('Ar18')[0],
+                       px.Abundances('Ar17')[0],
+                       px.Abundances('Ca20')[0],
+                       px.Abundances('Ca19')[0],
+                       px.Abundances('Fe26')[0],
+                       px.Abundances('Fe25')[0]]
+            
+            #detailed column densities for the second file
+            
+            col_infos=[px.Columns('O8')[0],
+                       px.Columns('O7')[0],
+                       px.Columns('Ne10')[0],
+                       px.Columns('Ne9')[0],
+                       px.Columns('Na11')[0],
+                       px.Columns('Na10')[0],
+                       px.Columns('Mg12')[0],
+                       px.Columns('Mg11')[0],
+                       px.Columns('Al13')[0],
+                       px.Columns('Al12')[0],
+                       px.Columns('Si14')[0],
+                       px.Columns('Si13')[0],
+                       px.Columns('S16')[0],
+                       px.Columns('S15')[0],
+                       px.Columns('Ar18')[0],
+                       px.Columns('Ar17')[0],
+                       px.Columns('Ca20')[0],
+                       px.Columns('Ca19')[0],
+                       px.Columns('Fe26')[0],
+                       px.Columns('Fe25')[0]]
+            
+            file_edit(path=path,line_id='\t'.join(main_infos[:2]),line_data='\t'.join(main_infos+ion_infos+col_infos),header=file_header)
+        
+        
+    def xstar_function(spectrum_file,lum,t_guess,n,nh,xi,nbox,vturb_x):
+        
+        '''
+        wrapper around the xstar function itself with explicit calls to the parameters we're changing
+        
+        lum -> rlrad38
+        
+        xpx is the density (density)
+
+        -xpxcol is the column density (column)
+        
+        -zeta is the xi parameter (rlogxi)
+        
+        -nbox, final_box,nbox_restart are yours, vobx is a sudep parameter that is not an argument but  
+        
+         vturb_x is vturb_i
+        
+        -niter>nlimd
+        
+        npass=number of computations (going outwards then inwards) to converge
+        should always stay odd if increased to remain the one taken outwards
+        '''
+        
+        #copying the parameter dictionnaries to avoid issues if overwriting the defaults
+        xpar=px.par.copy()
+        xhpar=px.hpar.copy()
+        
+
+        #changing the parameters varying for the xstar solution
+        xhpar['ncn2']=ncn2
+        
+        #changing the parameters varying from the function
+        
+        xhpar['spectrum']='file'
+        xhpar['spectrum_file']=spectrum_file
+        xhpar['rlrad38']=xlum
+        xpar['temperature']=t_guess
+        xpar['density']=n
+        xpar['column']=nh
+        xpar['rloxi']=xi
+        
+        xhpar['vturbi']=vturb_x
+        
+        px.run_xstar(xpar,xhpar)
+        
     #! light speed in Km/s unit
     c_Km = 2.99792e5 
     #! light speed in cm/s unit
@@ -82,12 +310,7 @@ def xstar_wind(ep, p_mhd, mu, angle,dict_solution, ncn2=63599, chatter=0):
         lpri=1
     else:
         lpri=0
-        
-    lunlog=6 
-    
-    #! in units of 1.0e38 erg/s !* computed by integrating over HighSoft_keV.dat and multiplied by D^2
-    #!*4*Pi multiplication comes as xstar assumes spherical cloud.
-    xlum = 0.0786*4.0*3.14 
+     
     
     #! Accretion rate in Eddington units
     mdot_obs = 0.111 
@@ -126,46 +349,24 @@ def xstar_wind(ep, p_mhd, mu, angle,dict_solution, ncn2=63599, chatter=0):
     
     #one of the intrinsic xstar parameters (listed in the param file), the maximal number of points in the grids
     #used here to give the maximal size of the arrays
-    ncn=99999
     
-    nbox_stop=np.zeros(10,int)
+    #ncn=99999
     
-    eptmp,zrtmp,zremsz=np.zeros((ncn,3))
-    
-    eptmp_shifted,zrtmp_shifted=np.zeros((ncn,2))
+    nbox_stop=np.zeros(len(stop_d),int)
     
     #no need to create epi,xlum and enlum because they are outputs or defined elsewhere
     
-    xpxcoll,xpxl,zetal,vobsl,vrel,del_E=np.zeros((1000,6))
+    xpxcoll,xpxl,zetal,vobsl,vrel,del_E=np.zeros((len(stop_d),6))
     
-    logxi_last,vobs_last,robyRg_last,stop_d,vrel_last,del_E_final,del_E_bs=np.zeros((10,7))
-
-    vobs_start,robyRg_start,Rsph_cgs_start,density_cgs_start,logxi_start=np.zeros((1000,5))
-    
-    vobs_mid,robyRg_mid,Rsph_cgs_mid,density_cgs_mid,logxi_mid=np.zeros((1000,5))
-    
-    vobs_stop,robyRg_stop,Rsph_cgs_stop,density_cgs_stop,logxi_stop,NhOfBox=np.zeros((1000,6))
+    logxi_last,vobs_last,robyRg_last,stop_d,vrel_last,del_E_final,del_E_bs=np.zeros((len(stop_d),7))
 
     xpxl_last,xpxcoll_last,zetal_last,vobsl_last=np.zeros((10,4))
-    
-    Rsph_cgs_last=np.zeros(10)
     
     vturb_in=np.zeros(1000)
     
     logxi_input=np.zeros(1000)
-    
-    #### building the stop distances
-    
-    #!last stop_distance
-    stop_dl = 1.0e6
-    
-    stop_d[0] = 1.0e5
-    i=0
-    
-    while stop_d[i]<=stop_dl:
-        stop_d[i+1]=stop_d[i]*10
-    
-    stop_d_index=i
+        
+    Rsph_cgs_last=np.zeros(len(stop_d))
     
     #!The ionizing luminosity only is used as xlum to normalize the spectra
     L_xi_Source = xlum*1.0e38 
@@ -189,11 +390,10 @@ def xstar_wind(ep, p_mhd, mu, angle,dict_solution, ncn2=63599, chatter=0):
         
 
     #### opening and reseting the files (this should be done on the fly to avoid issues)
-    #445
-    filobj_mhd=open("./MhdSol_new_cold_low_mag_ep"+str(ep)+"p"+str(p_mhd)+"mu"+str(mu)+"_angle_"+str(angle)+".dat")
     
+    stop_dl=stop_d[-1]
     #446
-    fileobj_box_details=open("./box_details_stop_dist"+str(stop_dl)+".log")
+    fileobj_box_details=open("./box_details_stop_dist"+str(stop_d)+".log")
     
     #447
     fileobj_box_ascii=open("./box_Ascii_stop_dist_for_xstar"+str(stop_dl)+".dat")
@@ -255,8 +455,8 @@ def xstar_wind(ep, p_mhd, mu, angle,dict_solution, ncn2=63599, chatter=0):
                               +',ro/Rg_1st='+str(robyRg_1st)+'\n')
     
     #!* Fixing the parameters' values for stop distance
-
-    for i in range(stop_d_index):
+    
+    for i in range(len(stop_d)):
 
         # ! This is ro/Rg.. Position of streamline
         ro_by_Rg = stop_d[i] 
@@ -283,20 +483,26 @@ def xstar_wind(ep, p_mhd, mu, angle,dict_solution, ncn2=63599, chatter=0):
 
 
     #!* Building the boxes based on Delr
-    rad_res= 0.115
     delr_by_r= rad_res
     Rsph_cgs_end= Rsph_cgs_1st
-    nbox = 1
-    i = 1
+    nbox = 0
+    i = 0
     
-    #while(vobs_end>=vobs_last(stop_d_index))    
-    while Rsph_cgs_end<Rsph_cgs_last[stop_d_index]:
+    #### This is very ugly and should be changed to the proper number of boxes, computed before this loop
+    
+    vobs_start,robyRg_start,Rsph_cgs_start,density_cgs_start,logxi_start=np.zeros((1000,5))
+    
+    vobs_mid,robyRg_mid,Rsph_cgs_mid,density_cgs_mid,logxi_mid=np.zeros((1000,5))
+    
+    vobs_stop,robyRg_stop,Rsph_cgs_stop,density_cgs_stop,logxi_stop,NhOfBox=np.zeros((1000,6))
+    
+    while Rsph_cgs_end<Rsph_cgs_last[len(stop_d)-1]:
 
 
         Rsph_cgs_stop[nbox]= Rsph_cgs_end*((2.0+delr_by_r)/(2.0-delr_by_r))
 
         if Rsph_cgs_last[i]<Rsph_cgs_stop[nbox]:
-            delr_by_r = 2.0*(Rsph_cgs_last[i]-Rsph_cgs_stop(nbox-1))/(Rsph_cgs_last[i]+Rsph_cgs_stop(nbox-1))
+            delr_by_r = 2.0*(Rsph_cgs_last[i]-Rsph_cgs_stop[nbox-1])/(Rsph_cgs_last[i]+Rsph_cgs_stop[nbox-1])
         
         
         Rsph_cgs_start[nbox]= Rsph_cgs_end
@@ -368,7 +574,7 @@ def xstar_wind(ep, p_mhd, mu, angle,dict_solution, ncn2=63599, chatter=0):
             fileobj_box_details.write('last box information\n')
             fileobj_box_details.write('stop_dist='+str(stop_d[i])+'\n')
         
-        fileobj_box_details.write('Box no. is='+str(nbox)+'\n')
+        fileobj_box_details.write('Box no. is='+str(nbox+1)+'\n')
         fileobj_box_details.write('robyRg_start='+str(robyRg_start[nbox])+'\nvobs_start in km/s='+str(vobs_start[nbox])
                                  +'\nRsph_start in cm='+str(Rsph_cgs_start[nbox])+'\nlognH_start (in /cc)='
                                  +str(np.log10(density_cgs_start[nbox]))+"\nlogxi_start="+str(logxi_start[nbox])+'\n')
@@ -415,11 +621,11 @@ def xstar_wind(ep, p_mhd, mu, angle,dict_solution, ncn2=63599, chatter=0):
         
         if chatter>=10:
             print(str(nbox)+','+str(Rsph_cgs_last[i])+','+str(Rsph_cgs_stop[nbox])+','
-                 +str(delr_by_r)+','+str(Rsph_cgs_last[stop_d_index]))
+                 +str(delr_by_r)+','+str(Rsph_cgs_last[-1]))
         
         #!* Readjust the loop parameters
         
-        if delr_by_r!=rad_res and i!=stop_d_index:
+        if delr_by_r!=rad_res and i!=len(stop_d)-1:
             print('I am after delr is changed'+str(delr_by_r))
             
             #!* maintaining the regular box no.
@@ -433,18 +639,15 @@ def xstar_wind(ep, p_mhd, mu, angle,dict_solution, ncn2=63599, chatter=0):
 
     #!*write(*,*)Rsph_cgs_end-Rsph_cgs_last(stop_d_index)
     
-    nbox_index = nbox_stop[stop_d_index]
+    nbox_index = nbox_stop[len(stop_d)-1]
 
-    for i in range(stop_d_index):
+    for i in range(len(stop_d)):
         fileobj_box_details.write('stop_d(i)='+str(stop_d[i])+'\n')
         print("stop_d(i)="+stop_d[i])
         fileobj_box_details.write('nbox_stop='+str(nbox_stop[i])+'\n')
         print("nbox_stop="+nbox_stop[i])
 
     print("No. of boxes required="+str(nbox_index))
-    
-    #445
-    filobj_mhd.close()
     
     #446
     fileobj_box_details.close()
@@ -466,15 +669,12 @@ def xstar_wind(ep, p_mhd, mu, angle,dict_solution, ncn2=63599, chatter=0):
     # input and "box_Ascii_stop_dist" for actual physical variables.
     # !********************************************************************
 
-    epi=ener(ncn2) 
-      
-    #no need to initialize the elements of zremsz at zero since its created as so
-
     #211
     with open('./box_Ascii_stop_dist_for_xstar'+str(stop_dl)+'.dat') as fileobj_box_ascii_stop_dist:
         box_stop_dist_list=fileobj_box_ascii_stop_dist.readlines()
     
     #! xpx, xpxcol are given in log value. zeta is logxi. vobs in Km/s
+
     for nbox in range(nbox_index):
         xpxl[nbox],xpxcoll[nbox],zetal[nbox],vobsl[nbox]=np.array(box_stop_dist_list[nbox].replace('\n','').split(',')).astype(float)
     
@@ -482,13 +682,13 @@ def xstar_wind(ep, p_mhd, mu, angle,dict_solution, ncn2=63599, chatter=0):
     with open('./last_box_Ascii_stop_dist_for_xstar'+str(stop_dl)+'.dat') as fileobj_box_ascii_stop_dist_last:
         box_stop_dist_list_last=fileobj_box_ascii_stop_dist_last.readlines()
     
-    for i in range(stop_d_index):
+    for i in range(len(stop_d)):
         xpxl_last[i],xpxcoll_last[i],zetal_last[i],vobsl_last[i]=\
             np.array(box_stop_dist_list_last[i].replace('\n','').split(',')).astype(float)
             
     nbox_restart= 1 
     c_n = 1
-    r_or_f= 0
+    final_box= False
 
     #!* This file is to write different variables estimated from xstar.
     
@@ -499,9 +699,18 @@ def xstar_wind(ep, p_mhd, mu, angle,dict_solution, ncn2=63599, chatter=0):
     #681
     with open('./xstar_output_details.dat') as fileobj_xstar_output:
         fileobj_xstar_output.write('#starting_calculation_from_nbox=',str(nbox_restart)+'\n')
-        
+    
+    '''
+    t is the temperature of the plasma. Starts at the default value of 400, but will be updated starting on the second box
+    with the temperature of the previous box as a "guess"
+    '''
+    
+    tp=400
+    
+    ####main loop
+    
     #!nbox_restart should be changed to 1 for fresh calculation
-    for nbox in range(nbox_restart,nbox_index):
+    for nbox in tqdm(range(nbox_restart,nbox_index)):
         
         #adding the variable as a condition for a skip later
         pass_writing=False
@@ -524,144 +733,33 @@ def xstar_wind(ep, p_mhd, mu, angle,dict_solution, ncn2=63599, chatter=0):
 
         if nbox<2:
             
-            #! Read incident spectra
-            #111
-            with open('incident_xstar_HS.dat') as fileobj_incident_spectra:
-                incident_spectra_lines=fileobj_incident_spectra.readlines()
-            
-            Nengrid=int(incident_spectra_lines[0])
-            
-            #! eptmp, zrtmp becomes the input spectra.
-            for i in range(Nengrid):
-                eptmp[i],zrtmp[i]=incident_spectra_lines[i+1]
-            
-            #! ispecg transfers the incident spectra zrtmp to zremsz in epi(ncn2) grid
-            zremsz=ispecg(eptmp,zrtmp,Nengrid,epi,ncn2,xlum,lpri)
+            # Nengrid=int(incident_spectra_lines[0])            
 
-            #! Normalize the spectrum
-            #### still don't understand the lun11 here
-            zremsz=ispecgg(xlum,epi,ncn2,zremsz,lpri,lunlog) 
-
-            with open('./Incident_spectra.dat') as fileobj_inc_spectra:
-                for i in range(ncn2):    
-                    fileobj_inc_spectra.write(str(epi[i])+','+str(zremsz[i])+'\n')
-                    
-
-            #! calculate photon numbers
-            enlum=ispcg2(zremsz,epi,ncn2,lpri,lunlog)            
-
-            for i in range(1,ncn2):
-                epi[i] = epi[i]*del_E[nbox]
-                zremsz[i] = zremsz[i]*del_E[nbox]
-                #!*zremsz[i] = zremsz(i)*1.00000
+            xstar_input_SED=SED_path
 
         else:
-
-            #!* This portion is to compute the spectra if computation is stopped somewhere in between
-
-            if nbox==nbox_restart and nbox>1:
                 
-                with open('./shifted_input'+str(nbox)+'.dat') as fileobj_shifted_box:
-                    shifted_box_lines=fileobj_shifted_box.readlines()
-
-                for i in range(ncn2):
-                    epi[i],zremsz[i]=np.array(shifted_box_lines[i].split(',')[2:]).astype(float)
-                
-                pass_writing=True
-                
-                pass
+            #reloading the iteration from the previous xstar run
+            px.LoadFiles()
             
-            if pass_writing:
-                pass
+            #loading the temperature of the previous box
+            plasma_par=px.PlasmaParameters()
             
-            #! Read output spectra from previous box, file named as varying_spectra.dat
-
-            with open('./varying_spectra.dat') as fileobj_varying_spectra:
-                varying_spectra_lines=fileobj_varying_spectra.readlines()
-                
-            for i in range(ncn2):
-                eptmp[i],zrtmp[i]=np.array(varying_spectra_lines[i].split(',')).astype(float)
-                
-                    
-                if r_or_f == 0:
-                    #! for the final box if r_or_f == 1
-
-                    eptmp_shifted[i] = eptmp[i]*del_E[nbox]
-                    zrtmp_shifted[i] = zrtmp[i]*del_E[nbox]
-                    #!*zrtmp_shifted(i) = zrtmp(i)*1.00000
-
-                else:
-                    #! for the final box
-
-                    eptmp_shifted[i] = eptmp[i]*del_E_final[c_n]
-                    zrtmp_shifted[i] = zrtmp[i]*del_E_final[c_n]
-                    #!*zrtmp_shifted[i] = zrtmp[i]*1.00000
-
-            #!* Mapping to epi grid after doppler shifting
-
-            #l is an index to avoid searching through the whole energy grid at each point. Since we're increasing the energy, 
-            #for each subsequent point we only need to search to increasing parts of the grid
+            #retrieving the plasma temperature of the last step
+            tp=plasma_par.temperature[-1]
             
-            l = 0
-                
-            for i in range(ncn2):
-                
-                for j in range(l,ncn2):
-                    
-                    if epi[i]>=eptmp_shifted[j] and epi[i]<eptmp_shifted[j+1]:
-
-                        zrtmp[i] = zrtmp_shifted[j]+((zrtmp_shifted[j+1]-zrtmp_shifted[j])\
-                                                     /(eptmp_shifted[j+1]-eptmp_shifted[j]))*(epi[i]-eptmp_shifted[j])
-
-                        l = j
-
-                        break
-
-                #adding an l=i condition to skip this in the case of the test above
-                if l!=j and (epi[i]<eptmp_shifted[0] or epi[i]>eptmp_shifted[ncn2]):
-
-                    zrtmp[i] = 0
-
-                #!* zremsz becomes the incident spectrum for the next box
-                zremsz[i] = zrtmp[i] 
-
-
-        #skipped if the computation has stopped in the middle
-        
-        if not pass_writing:
             #!**Writing the shifted spectra in a file as it is input for next box 
-    
-            if r_or_f == 0:
-                filename_shifted_input='./shifted_input'+str(nbox)+'.dat'
-            else:
-                filename_shifted_input='./shifted_input_final'+str(c_n)+'.dat'
+            filename_shifted_input='./shifted_input'+str(nbox)+'.dat'
             
-            with open(filename_shifted_input) as fileobj_shifted_input:
-                fileobj_shifted_input.write('#energy(eV)  transmitted(1.0e38erg/s/erg)')
-                for i in range(ncn2):            
-                    fileobj_shifted_input.write(str(epi[i])+','+str(zremsz[i]))
-
-        
-        # !***************************************************
-        # !  Calling xstar to calculate spectra
-
-        
-
-        #!* This portion is to put the physical parameters of the box correctly
-
-        if r_or_f==0:
-           xpx = 10.0**(xpxl[nbox])
-           xpxcol = 10.0**(xpxcoll[nbox])
-           zeta = zetal[nbox]
-           vobsx = vobsl[nbox]
-           vturb_x = vturb_in[nbox]
-        else:
-           xpx = 10.0**(xpxl_last[c_n])
-           xpxcol = 10.0**(xpxcoll_last[c_n])
-           zeta = zetal_last[c_n]
-           vobsx = vobsl_last[c_n]
-           vturb_x = vobsl[nbox_stop[c_n]]-vobsl_last[c_n]
-
+            #shifting the spectra and storing it in the xstar input file nae
+            shift_tr_spectra(del_E[nbox],filename_shifted_input)
+            
+        xpx = 10.0**(xpxl[nbox])
+        xpxcol = 10.0**(xpxcoll[nbox])
+        zeta = zetal[nbox]
+        vobsx = vobsl[nbox]
+        vturb_x = vturb_in[nbox]
+           
         '''
         The lines of sight considered should already be compton thin, the whole line of sight has to be compton thick and this is 
         checked directly from jonathan's solution
@@ -670,17 +768,22 @@ def xstar_wind(ep, p_mhd, mu, angle,dict_solution, ncn2=63599, chatter=0):
         
         if (xpxcol>1.5e24):
             print('Thomson depth of the cloud becomes unity')
-            
+ 
             break
 
-        zremsz=x116n5(epi,ncn2,lpri,lunlog,xlum,enlum,xpx,xpxcol,zeta,nbox,r_or_f,nbox_restart,vobsx,vturb_x)
+        xstar_function(filename_shifted_input,xpx,xpxcol,tp,zeta,nbox,final_box,nbox_restart,vobsx,vturb_x)
+        
+        
+        #writing the infos
+        px.LoadFiles()
+        write_xstar_infos(nbox,vobsx,'xstar_output_details.dat')
         
         ####!* Computing spectra and blueshift for the final box depending on stop_dist.
 
-        if r_or_f !=1 and nbox==nbox_stop[c_n]:
+        if nbox==nbox_stop[c_n]:
             
             #!regular or final, 1 indicate final
-            r_or_f= 1 
+            final_box=True
 
             vrel_last[c_n] = vobsl_last[c_n]-vobsl[nbox]
 
@@ -692,65 +795,20 @@ def xstar_wind(ep, p_mhd, mu, angle,dict_solution, ncn2=63599, chatter=0):
             #we can't continue the loop because we are now computing the final box, which is not a standard "n+1" box
             #instead here we repeat the commands that should be run again
             
-            #! Read output the new spectra from previous box which xstar has modified, file named as varying_spectra.dat
+            #! Read output the new spectra from the box
 
-            with open('./varying_spectra.dat') as fileobj_varying_spectra:
-                varying_spectra_lines=fileobj_varying_spectra.readlines()
-                
-            for i in range(ncn2):
-                eptmp[i],zrtmp[i]=np.array(varying_spectra_lines[i].split(',')).astype(float)
-                
-                if r_or_f == 0:
-                    #! for the final box if r_or_f == 1
-
-                    eptmp_shifted[i] = eptmp[i]*del_E[nbox]
-                    zrtmp_shifted[i] = zrtmp[i]*del_E[nbox]
-                    #!*zrtmp_shifted(i) = zrtmp(i)*1.00000
-
-                else:
-                    #! for the final box
-
-                    eptmp_shifted[i] = eptmp[i]*del_E_final[c_n]
-                    zrtmp_shifted[i] = zrtmp[i]*del_E_final[c_n]
-                    #!*zrtmp_shifted[i] = zrtmp[i]*1.00000 
-
-            #!* Mapping to epi grid after doppler shifting
-
-            #l is an index to avoid searching through the whole energy grid at each point. Since we're increasing the energy, 
-            #for each subsequent point we only need to search to increasing parts of the grid
+            px.LoadFiles()
             
-            l = 0
-                
-            for i in range(ncn2):
-                
-                for j in range(l,ncn2):
-                    
-                    if epi[i]>=eptmp_shifted[j] and epi[i]<eptmp_shifted[j+1]:
-
-                        zrtmp[i] = zrtmp_shifted[j]+((zrtmp_shifted[j+1]-zrtmp_shifted[j])\
-                                                     /(eptmp_shifted[j+1]-eptmp_shifted[j]))*(epi[i]-eptmp_shifted[j])
-
-                        l = j
-
-                        break
-
-                #adding an l=i condition to skip this in the case of the test above
-                if l!=j and (epi[i]<eptmp_shifted[0] or epi[i]>eptmp_shifted[ncn2]):
-
-                    zrtmp[i] = 0
-
-                #!* zremsz becomes the incident spectrum for the next box
-                zremsz[i] = zrtmp[i] 
-
-
-            #no need for tests on the final box and restart since we know we're at the final box here
+            #loading the temperature of the previous box
+            plasma_par=px.PlasmaParameters()
+            
+            #retrieving the plasma temperature of the last step
+            tp=plasma_par.temperature[-1]
             
             filename_shifted_input='./shifted_input_final'+str(c_n)+'.dat'
-                
-            with open(filename_shifted_input) as fileobj_shifted_input:
-                fileobj_shifted_input.write('#energy(eV)  transmitted(1.0e38erg/s/erg)')
-                for i in range(ncn2):            
-                    fileobj_shifted_input.write(str(epi[i])+','+str(zremsz[i]))
+            
+            #shifting the spectra in a different file name
+            shift_tr_spectra(del_E_final[c_n],filename_shifted_input)
     
             xpx = 10.0**(xpxl_last[c_n])
             xpxcol = 10.0**(xpxcoll_last[c_n])
@@ -758,77 +816,38 @@ def xstar_wind(ep, p_mhd, mu, angle,dict_solution, ncn2=63599, chatter=0):
             vobsx = vobsl_last[c_n]
             vturb_x = vobsl[nbox_stop[c_n]]-vobsl_last[c_n]
     
-            '''
-            The lines of sight considered should already be compton thin, the whole line of sight has to be compton thick and this is 
-            checked directly from jonathan's solution
-            The following test is just a sanity check
-            '''
             
             if (xpxcol>1.5e24):
                 print('Thomson depth of the cloud becomes unity')
                 
                 break
     
-            zremsz=x116n5(epi,ncn2,lpri,lunlog,xlum,enlum,xpx,xpxcol,zeta,nbox,r_or_f,nbox_restart,vobsx,vturb_x)
+            xstar_function(filename_shifted_input,xpx,xpxcol,tp,zeta,nbox,final_box,nbox_restart,vobsx,vturb_x)
         
-        #! Blueshift for the final box
-        del_E_bs[c_n] = np.sqrt((1+vobsl_last[c_n]/c_Km)/(1-vobsl_last[c_n]/c_Km))
-
-        with open('./output_spectra_final'+str(nbox)+'.dat') as fileobj_final_output_spectra:
-
-            final_output_spectra_lines=fileobj_final_output_spectra.readlines()
-        
-        for ll in range(ncn2):
-
-            #note: keeping only columns 0 and 2 (out of 5 columns) as these are the one we're interested in here
-            eptmp[ll],zrtmp[ll]=np.array(final_output_spectra_lines[ll+1].split(',')).astype(float)[0,2]
-            eptmp[ll] = eptmp[ll]*del_E_bs[c_n]
-            zrtmp[ll] = zrtmp[ll]*del_E_bs[c_n]
-            #!*zrtmp[ll] = zrtmp[ll]*1.00000
+            px.LoadFiles()
+            filename_shifted_input='./Final_blueshifted'+str(stop_d[c_n])+'.dat'
             
-        with open('./Final_blueshifted'+str(stop_d[c_n])+'.dat') as fileobj_final_blueshift:
-
-
-            fileobj_final_blueshift.write('#energy(eV)  transmitted(1.0e38erg/s/erg)\n')
-
-            for ll in range(ncn2):
-                fileobj_final_blueshift.write(str(eptmp[ll])+','+str(zrtmp[ll]))
-
-
-        r_or_f= 0
-
-        c_n= c_n+1
-        
-        #! if loop for the last box calculation is completed
-
+            shift_tr_spectra(del_E_bs[c_n],filename_shifted_input)   
     
-def freeze(model=None,modclass=AllModels,unfreeze=False,parlist=None):
+            final_box= 0
     
-    '''
-    freezes/unfreezes an entire model or a part of it 
-    if no model is given in argument, freezes the first existing models
-    (parlist must be the list of the parameter numbers)
-    '''
-    if model is not None:
-        xspec_mod=model
-    else:
-        xspec_mod=modclass(1)
-    
-    if parlist is None:
-        for par_index in range(1,xspec_mod.nParameters+1):
-            xspec_mod(par_index).frozen=int(not(unfreeze))
+            c_n= c_n+1
             
-    else:
-        for par_index in parlist:
-            xspec_mod(par_index).frozen=int(not(unfreeze))
+            #writing the infos with the final iteration
+            write_xstar_infos(nbox,vobsx,'xstar_final_output_details.dat')
+            
+            #! if loop for the last box calculation is completed
 
-def nuLnu_to_xstar(path,M_BH,display=False):
+def nuLnu_to_xstar(path,renorm=False,Edd_ratio=1,M_BH=8,display=False):
     
     '''
     Converts a nuLnu spectral distribution file to something suitable as an xstar input
     if display is set to True, displays information on the spectral distribution
     
     adapted from Sudeb's script. 
+    
+    NOTE: currently we don't renormalize the spectrum to actual luminosity by default since it's not needed anymore:
+          at this since xstar now renormalizes internally
     '''
     
     sed=np.loadtxt(path)
@@ -853,9 +872,13 @@ def nuLnu_to_xstar(path,M_BH,display=False):
         if (1.0e3<E_eV[i]<1.0e5):
             L_keV = L_keV+((Lnu_per_erg[i+1]+Lnu_per_erg[i])/2.0)*(E_eV[i+1]-E_eV[i])*eV2erg
     
-    norm_factor = 0.13*L_Edd/L_keV #Normalization factor is calculated to match the L_keV to 0.13 L_Edd
+    if renorm:
+        #Normalization factor is calculated to reach the desired Eddington ratio for a given mass
+        norm_factor = Edd_ratio*L_Edd/L_keV  
+    else:
+        norm_factor=1
     
-    with open('incident_xstar_55334.dat','w+') as f1:
+    with open(path.replace(path[path.rfind('.'):],'_xstar'+path[path.rfind('.'):]),'w+') as f1:
     
         f1.write("%d\n" % (np.size(sed[:,0])))
         
@@ -928,6 +951,26 @@ def xstar_to_table(path,outname=None):
     if outname is not None:
         os.system('mv '+filedir+filename+'.fits '+filedir+outname)
     
+def freeze(model=None,modclass=AllModels,unfreeze=False,parlist=None):
+    
+    '''
+    freezes/unfreezes an entire model or a part of it 
+    if no model is given in argument, freezes the first existing models
+    (parlist must be the list of the parameter numbers)
+    '''
+    if model is not None:
+        xspec_mod=model
+    else:
+        xspec_mod=modclass(1)
+    
+    if parlist is None:
+        for par_index in range(1,xspec_mod.nParameters+1):
+            xspec_mod(par_index).frozen=int(not(unfreeze))
+            
+    else:
+        for par_index in parlist:
+            xspec_mod(par_index).frozen=int(not(unfreeze))
+
 def create_fake_xstar(table,rmf,arf,exposure,nofile=True,reset=True):
     
     if reset:
@@ -947,7 +990,21 @@ def create_fake_xstar(table,rmf,arf,exposure,nofile=True,reset=True):
     AllData.fakeit(settings=fakeset,applyStats=True,noWrite=False)
     
     
+def model_to_nuLnu(path):
     
+    #store the current model's nuLnu in a file through
     
+    curr_xaxis=Plot.xAxis
     
+    Plot.xAxis="Hz"
+    
+    Plot('eeuf')
+    
+    x_arr=Plot.x()
+    
+    y_arr=Plot.y()
+    
+    save_arr=np.array([x_arr,y_arr]).T
+    
+    np.savetxt(path,save_arr,header='nu (Hz) Lnu (erg/s/Hz)',delimiter=' ')
     

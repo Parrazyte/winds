@@ -22,7 +22,7 @@ import numpy as np
 from fitting_tools import range_absline
 
 #visualisation functions
-from visual_line_tools import n_infos, obj_values,abslines_values
+from visual_line_tools import n_infos, obj_values,abslines_values,values_manip,load_catalogs,dist_mass
 
 
 ap = argparse.ArgumentParser(description='Script to display lines in XMM Spectra.\n)')
@@ -142,15 +142,21 @@ ignore_full=True
 
 #### file search
 
+catal_blackcat,catal_watchdog,catal_blackcat_obj,catal_watchdog_obj,catal_maxi_df,catal_maxi_simbad=load_catalogs()
+
+telescope_list=('XMM','Chandra','NICER','Suzaku','Swift')
+
+choice_telescope=('XMM','Chandra')
+
 #### current directory set to BHLMXB
 os.chdir('/media/parrama/6f58c7c3-ba85-45e6-b8b8-a8f0d564ec15/Observ/BHLMXB')
 
 all_files=glob.glob('**',recursive=True)
 lineval_id='line_values_'+args.line_search_e.replace(' ','_')+'_'+args.line_search_norm.replace(' ','_')+'.txt'
-lineval_files=[elem for elem in all_files if outdir+'/' in elem and lineval_id in elem and ('/Sample/' in elem or 'XTEJ1701-462/' in elem)]
+lineval_files=[elem for elem in all_files if outdir+'/' in elem and lineval_id in elem and '/Sample/' in elem]
 
 abslines_id='autofit_values_'+args.line_search_e.replace(' ','_')+'_'+args.line_search_norm.replace(' ','_')+'.txt'
-abslines_files=[elem for elem in all_files if outdir+'/' in elem and abslines_id in elem and ('/Sample/' in elem or 'XTEJ1701-462/' in elem)]
+abslines_files=[elem for elem in all_files if outdir+'/' in elem and abslines_id in elem and '/Sample/' in elem]
 
 #telescope selection
 lineval_files=[elem for elem_telescope in choice_telescope for elem in lineval_files if elem_telescope+'/' in elem]
@@ -168,10 +174,10 @@ obj_list=np.unique(np.array([elem.split('/')[-4] for elem in lineval_files]))
 
 #creating the dictionnary for all of the arguments to pass to the visualisation functions
 dict_linevis={
-    'ctl_blackcat':None,
-    'ctl_blackcat_obj':None,
-    'ctl_watchdog':None,
-    'ctl_watchdog_obj':None,
+    'ctl_blackcat':catal_blackcat,
+    'ctl_blackcat_obj':catal_blackcat_obj,
+    'ctl_watchdog':catal_watchdog,
+    'ctl_watchdog_obj':catal_watchdog_obj,
     'lineval_files':lineval_files,
     'obj_list':obj_list,
     'cameras':cameras,
@@ -187,8 +193,14 @@ dict_linevis={
 
 #### main arrays computation
 
-#useless L_Edd unit factor because we don't need it here
-Edd_factor=np.repeat(1,len(obj_list))
+#getting the single parameters
+dist_obj_list,mass_obj_list=dist_mass(dict_linevis)
+
+#distance factor for the flux conversion later on
+dist_factor=4*np.pi*(dist_obj_list*1e3*3.086e18)**2
+
+#L_Edd unit factor
+Edd_factor=dist_factor/(1.26e38*mass_obj_list)
 
 #Reading the results files
 observ_list,lineval_list,flux_list,date_list,instru_list,exptime_list=obj_values(lineval_files,Edd_factor,dict_linevis)
@@ -198,9 +210,13 @@ dict_linevis['flux_list']=flux_list
 #the values here are for each observation
 abslines_infos,autofit_infos=abslines_values(abslines_files,dict_linevis)
 
+abslines_infos_perline,abslines_infos_perobj,abslines_plot,abslines_ener,flux_plot,hid_plot,incl_plot,width_plot,nh_plot=values_manip(abslines_infos,dict_linevis,autofit_infos)
+
 #### creating the lines to be written
 line_list=[]
     
+det_line_list=[]
+
 for i_obj,obj in enumerate(obj_list):
     
     #fetching the order of the exposures for the current obj
@@ -227,6 +243,25 @@ for i_obj,obj in enumerate(obj_list):
         #writing the exposure
         line_list+=['&'+str(round(exptime_list[i_obj][i_exp]/1e3,2))+'']
         
+        #flag for adding blueshift lines for when there is at least a Ka detection
+        if (abslines_infos[i_obj][i_exp][4][:2]>=0.997).any():
+            det_obs=True
+            det_line_list+=[obj]
+            det_line_list+=['&'+date_list[i_obj][i_exp].split('T')[0]+'']
+            det_line_list+=['&'+observ_string+'']
+            
+            #and the HR
+            det_line_list+=['&$'+str(round(hid_plot[0][0][i_obj][i_exp],3))+'_{-'+str(round(hid_plot[0][1][i_obj][i_exp],3))+'}^{+'+str(round(hid_plot[0][2][i_obj][i_exp],3))+'}$']
+            
+            eddratio_list=[round(hid_plot[1][i_incert][i_obj][i_exp]*1e2,1) for i_incert in range(3)]
+            
+            #adding the flux
+            det_line_list+=['&$'+str(eddratio_list[0])+('' if eddratio_list[1]==0 else '_{-'+str(eddratio_list[1])+'}')+('' if eddratio_list[2]==0 else '^{+'+str(eddratio_list[2])+'}')+'$']
+            
+
+        else:
+            det_obs=False
+            
         #writing the line EW/upper limit values
         for i_line in range(6):
             
@@ -243,21 +278,50 @@ for i_obj,obj in enumerate(obj_list):
                 else:
                     line_list+=['&$\leq'+str(round(abslines_infos[i_obj][i_exp][5][i_line]))+'$']
             
+                #blueshift line if there is a detection for the Ka complex
+                if i_line<2 and det_obs:
+                    det_line_list+=['&/&/&/']
+                   
+                    
             else:
                 #displaying the line EW with associated uncertainties
                 line_EW_vals=[round(abslines_infos[i_obj][i_exp][0][i_line][i_incer]) for i_incer in range(3)]
 
+                line_bshift_vals=[round(round(abslines_infos[i_obj][i_exp][1][i_line][i_incer],-2)) for i_incer in range(3)]
+                
+                line_width_vals=['/' if np.isnan(elem) else round(round(elem,-2)) for elem in [width_plot[i_incer][i_line][i_obj][i_exp] for i_incer in range(3)]]
+                
                 #displaying a \pm if its relevant 
                 if line_EW_vals[1]==line_EW_vals[2]:
-                    line_list+=['&$\\textbf{'+str(line_EW_vals[0])+'}\pm'+str(line_EW_vals[1])+'$']
+                    EW_str=['&$\\textbf{'+str(line_EW_vals[0])+'}\pm'+str(line_EW_vals[1])+'$']
                 else:
-                    line_list+=['&\\textbf{'+str(line_EW_vals[0])+'}$_{-'+str(line_EW_vals[1])+'}^{+'+str(line_EW_vals[2])+'}$']
+                    EW_str=['&\\textbf{'+str(line_EW_vals[0])+'}$_{-'+str(line_EW_vals[1])+'}^{+'+str(line_EW_vals[2])+'}$']
+                
+                line_list+=EW_str
+                        
+                #adding line infos for the line det table if there is a detection for the Ka complex
+                if i_line<2 and det_obs:
+                    
+                    #EW
+                    det_line_list+=EW_str
+                    
+                    #bshift
+                    det_line_list+=['&\\textbf{'+str(line_bshift_vals[0])+'}$_{-'+str(line_bshift_vals[1])+'}^{+'+str(line_bshift_vals[2])+'}$']
+                           
+                    #width
+                    det_line_list+=['&/' if len(np.nonzero([line_width_vals])[0])==0 else '&\\textbf{'+str(line_width_vals[0])+'}$'+('' if line_width_vals[1]==0 else '_{-'+str(line_width_vals[1])+'}')+('' if line_width_vals[2]==0 else '^{+'+str(line_width_vals[2])+'}')+'$']
         
         #adding the end of the line
         #we add one more \ because writing the string takes one off for some reason
         line_list+=['\T \B \\\ ']
         line_list+=['\n']
         
+        if det_obs:
+            #adding the end of the line
+            #we add one more \ because writing the string takes one off for some reason
+            det_line_list+=['\T \B \\\ ']
+            det_line_list+=['\n']
+            
         #adding sources separations
         if ind_exp==len(date_list[i_obj])-1:
             line_list+=['\hline\n']
@@ -268,3 +332,6 @@ os.system('mkdir -p glob_batch')
 #writing the list in a file
 with open('glob_batch/obs_table_'+outdir+'.txt','w+') as file:
     file.writelines(line_list)
+    
+with open('glob_batch/det_table_'+outdir+'.txt','w+') as file:
+    file.writelines(det_line_list)

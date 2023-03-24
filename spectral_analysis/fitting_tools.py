@@ -22,7 +22,7 @@ def_ftest_threshold=0.01
 
 def_ftest_leeway=0.02
 
-def ravel_ragged(array):
+def ravel_ragged(array,mode=None):
     
     '''ravels a 2/3d array/list even with ragged nested sequences'''
 
@@ -36,9 +36,9 @@ def ravel_ragged(array):
 
     #testing if the array is 3d
     if type(array[0][0]) in [np.ndarray,list]:
-        return np.array([array[i][j][k] for i in range(len(array)) for j in range(len(array[i])) for k in range(len(array[i][j]))])
+        return np.array([array[i][j][k] for i in range(len(array)) for j in range(len(array[i])) for k in range(len(array[i][j]))],dtype=mode)
     else:
-        return np.array([array[i][j] for i in range(len(array)) for j in range(len(array[i]))])
+        return np.array([array[i][j] for i in range(len(array)) for j in range(len(array[i]))],dtype=mode)
     
 ####Line informations
 '''Line informations'''

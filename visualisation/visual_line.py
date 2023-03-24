@@ -93,6 +93,9 @@ ap.add_argument("-line_search_e",nargs=1,help='min, max and step of the line ene
 ap.add_argument("-line_search_norm",nargs=1,help='min, max and nsteps (for one sign)  of the line norm search (which operates in log scale)',
                 default='0.01 10 500',type=str)
 
+ap.add_argument("-mode",nargs=1,help='change between online and local',
+                default='local',type=str)
+
 '''VISUALISATION'''
 
 args=ap.parse_args()
@@ -113,6 +116,7 @@ expmodes=args.expmodes
 prefix=args.prefix
 local=args.local
 outdir=args.outdir
+online=args.mode=='online'
 
 line_cont_range=np.array(args.line_cont_range.split(' ')).astype(float)
 line_cont_ig=args.line_cont_ig
@@ -121,6 +125,8 @@ line_search_norm=np.array(args.line_search_norm.split(' ')).astype(float)
 
 multi_obj=args.multi_obj
 
+st.set_page_config(page_icon=":hole:",layout='wide')
+                   
 #readjusting the variables in lists
 if cameras=='all':
     cameras=['pn','mos1','mos2','heg']
@@ -148,6 +154,11 @@ else:
     
 def getoverlap(a, b):
     return max(0, min(a[1], b[1]) - max(a[0], b[0]))
+
+def convert_df(df):
+    # IMPORTANT: Cache the conversion to prevent computation on every rerun
+    return df.to_csv().encode('utf-8')
+
     
 # @st.cache
 # def folder_state(folderpath='./'):
@@ -174,7 +185,7 @@ norm_s_pow=1.15
 # #for the current directory:
 # started_expos,done_expos=folder_state()
  
-#bad spectra manually taken off
+# #bad spectra manually taken off
 bad_flags=[]
 
 
@@ -188,33 +199,34 @@ norm_par_space=np.concatenate((-np.logspace(np.log10(line_search_norm[1]),np.log
                                 np.logspace(np.log10(line_search_norm[0]),np.log10(line_search_norm[1]),int(line_search_norm[2]/2))))
 norm_nsteps=len(norm_par_space)
 
-if not multi_obj:
+if local:
+    if not multi_obj:
+        
+        #assuming the last top directory is the object name
+        obj_name=os.getcwd().split('/')[-2]
     
-    #assuming the last top directory is the object name
-    obj_name=os.getcwd().split('/')[-2]
-
-    #listing the exposure ids in the bigbatch directory
-    bigbatch_files=glob.glob('**')
+        #listing the exposure ids in the bigbatch directory
+        bigbatch_files=glob.glob('**')
+        
+        #tacking off 'spectrum' allows to disregard the failed combined lightcurve computations of some obsids as unique exposures compared to their 
+        #spectra
+        exposid_list=np.unique(['_'.join(elem.split('_')[:4]).replace('rate','').replace('.ds','')+'_auto' for elem in bigbatch_files\
+                      if '/' not in elem and 'spectrum' not in elem and elem[:10].isdigit() and True in ['_'+elemcam+'_' in elem for elemcam in cameras]])
+        #fetching the summary files for the data reduction steps
+        with open('glob_summary_extract_reg.log') as sumfile:
+            glob_summary_reg=sumfile.readlines()[1:]
+        with open('glob_summary_extract_sp.log') as sumfile:
+            glob_summary_sp=sumfile.readlines()[1:]
     
-    #tacking off 'spectrum' allows to disregard the failed combined lightcurve computations of some obsids as unique exposures compared to their 
-    #spectra
-    exposid_list=np.unique(['_'.join(elem.split('_')[:4]).replace('rate','').replace('.ds','')+'_auto' for elem in bigbatch_files\
-                  if '/' not in elem and 'spectrum' not in elem and elem[:10].isdigit() and True in ['_'+elemcam+'_' in elem for elemcam in cameras]])
-    #fetching the summary files for the data reduction steps
-    with open('glob_summary_extract_reg.log') as sumfile:
-        glob_summary_reg=sumfile.readlines()[1:]
-    with open('glob_summary_extract_sp.log') as sumfile:
-        glob_summary_sp=sumfile.readlines()[1:]
-
-    #loading the diagnostic messages after the analysis has been done
-    if os.path.isfile(os.path.join(outdir,'summary_line_det.log')):
-        with open(os.path.join(outdir,'summary_line_det.log')) as sumfile:
-            glob_summary_linedet=sumfile.readlines()[1:]
-    
-    #creating summary files for the rest of the exposures
-    lineplots_files=[elem.split('/')[1] for elem in glob.glob(outdir+'/*',recursive=True)]
-    
-    aborted_exposid=[elem for elem in exposid_list if not elem+'_recap.pdf' in lineplots_files]
+        #loading the diagnostic messages after the analysis has been done
+        if os.path.isfile(os.path.join(outdir,'summary_line_det.log')):
+            with open(os.path.join(outdir,'summary_line_det.log')) as sumfile:
+                glob_summary_linedet=sumfile.readlines()[1:]
+        
+        #creating summary files for the rest of the exposures
+        lineplots_files=[elem.split('/')[1] for elem in glob.glob(outdir+'/*',recursive=True)]
+        
+        aborted_exposid=[elem for elem in exposid_list if not elem+'_recap.pdf' in lineplots_files]
 
 '''''''''''''''''''''''''''''''''''''''
 ''''''Hardness-Luminosity Diagrams''''''
@@ -222,121 +234,202 @@ if not multi_obj:
 
 'Distance and Mass determination'
 
-#wrapped in a function to be cached in streamlit
-
-catal_blackcat,catal_watchdog,catal_blackcat_obj,catal_watchdog_obj,catal_maxi_df,catal_maxi_simbad=load_catalogs()
+#wrapped in a function to be cachable in streamlit
+if local:
+    catal_blackcat,catal_watchdog,catal_blackcat_obj,catal_watchdog_obj,catal_maxi_df,catal_maxi_simbad=load_catalogs()
 
 telescope_list=('XMM','Chandra','NICER','Suzaku','Swift')
 
 st.sidebar.header('Sample selection')
 #We put the telescope option before anything else to filter which file will be used
-choice_telescope=st.sidebar.multiselect('Telescopes', ('XMM','Chandra','NICER','Suzaku','Swift'),default=('XMM','Chandra'))
+choice_telescope=st.sidebar.multiselect('Telescopes', ['XMM','Chandra']+([] if online else ['NICER','Suzaku','Swift']),default=('XMM','Chandra'))
 
-radio_ignore_full=st.sidebar.radio('Include problematic data (_full) folders',('No','Yes'))
-
-ignore_full=radio_ignore_full=='No'
-
-#### file search
-
-all_files=glob.glob('**',recursive=True)
-lineval_id='line_values_'+args.line_search_e.replace(' ','_')+'_'+args.line_search_norm.replace(' ','_')+'.txt'
-lineval_files=[elem for elem in all_files if outdir+'/' in elem and lineval_id in elem and ('/Sample/' in elem or 'XTEJ1701-462/' in elem)]
-
-abslines_id='autofit_values_'+args.line_search_e.replace(' ','_')+'_'+args.line_search_norm.replace(' ','_')+'.txt'
-abslines_files=[elem for elem in all_files if outdir+'/' in elem and abslines_id in elem and ('/Sample/' in elem or 'XTEJ1701-462/' in elem)]
-
-#telescope selection
-lineval_files=[elem for elem_telescope in choice_telescope for elem in lineval_files if elem_telescope+'/' in elem]
-abslines_files=[elem for elem_telescope in choice_telescope for elem in abslines_files if elem_telescope+'/' in elem]
-
-if ignore_full:
-    lineval_files=[elem for elem in lineval_files if '_full' not in elem]
-    abslines_files=[elem for elem in abslines_files if '_full' not in elem]
-    
-if multi_obj:
-    obj_list=np.unique(np.array([elem.split('/')[-4] for elem in lineval_files]))
+if online:
+    ignore_full=True
 else:
-    obj_list=np.array([obj_name])
+    radio_ignore_full=st.sidebar.radio('Include problematic data (_full) folders',('No','Yes'))
     
-#note: there's no need to order anymore since the file values are attributed for each object of object list in the visual_line functions
+    ignore_full=radio_ignore_full=='No'
 
-#creating the dictionnary for all of the arguments to pass to the visualisation functions
-dict_linevis={
-    'ctl_blackcat':catal_blackcat,
-    'ctl_blackcat_obj':catal_blackcat_obj,
-    'ctl_watchdog':catal_watchdog,
-    'ctl_watchdog_obj':catal_watchdog_obj,
-    'lineval_files':lineval_files,
-    'obj_list':obj_list,
-    'cameras':cameras,
-    'expmodes':expmodes,
-    'multi_obj':multi_obj,
-    'range_absline':range_absline,
-    'n_infos':n_infos,
-    'args_cam':args.cameras,
-    'args_line_search_e':args.line_search_e,
-    'args_line_search_norm':args.line_search_norm,
-    'visual_line':True
-    }
+if not online:
+    os.system('mkdir -p glob_batch/dumps/')
 
-#### main arrays computation
+join_telescope_str=np.array(choice_telescope)
+join_telescope_str.sort()
+join_telescope_str='_'.join(join_telescope_str.tolist())
 
-#getting the single parameters
-dist_obj_list,mass_obj_list=dist_mass(dict_linevis)
-
-#distance factor for the flux conversion later on
-dist_factor=4*np.pi*(dist_obj_list*1e3*3.086e18)**2
-
-#L_Edd unit factor
-Edd_factor=dist_factor/(1.26e38*mass_obj_list)
-
-#Reading the results files
-observ_list,lineval_list,flux_list,date_list,instru_list,exptime_list=obj_values(lineval_files,Edd_factor,dict_linevis)
-
-dict_linevis['flux_list']=flux_list
-
-#the values here are for each observation
-abslines_infos,autofit_infos=abslines_values(abslines_files,dict_linevis)
-
-#getting all the variations we need
-abslines_infos_perline,abslines_infos_perobj,abslines_plot,abslines_ener,flux_plot,hid_plot,incl_plot,width_plot,nh_plot=values_manip(abslines_infos,dict_linevis,autofit_infos)
-
-
-dump_session=st.sidebar.checkbox('dump session',value=False)
-
-dump_dict={}
-if dump_session:
+if online:
+    dump_path='./../dumps/dump_'+join_telescope_str+'_'+('no' if radio_ignore_full else '')+'full.pkl'
     
-    from visual_line_tools import dict_lc_rxte
+    update_dump=False
+else:
+    dump_path='./glob_batch/dumps/dump_'+join_telescope_str+'_'+('no' if radio_ignore_full else '')+'full.pkl'
+
+    update_dump=st.sidebar.button('Update dump')
+
+if update_dump or not os.path.isfile(dump_path):
+    
+    with st.spinner(text='Updating dump file...' if update_dump else\
+                    'Using new configuration. Creating dump file...'):
+        #### file search
         
-    dump_dict['instru_list']=instru_list
-    dump_dict['telescope_list']=telescope_list
-    dump_dict['choice_telescope']=choice_telescope
-    dump_dict['dist_obj_list']=dist_obj_list
-    dump_dict['mass_obj_list']=mass_obj_list
-    dump_dict['line_search_e']=line_search_e
-    dump_dict['multi_obj']=multi_obj
-    dump_dict['observ_list']=observ_list
-    dump_dict['bad_flags']=bad_flags
-    dump_dict['obj_list']=obj_list
-    dump_dict['date_list']=date_list
-    dump_dict['abslines_plot']=abslines_plot
-    dump_dict['hid_plot']=hid_plot
-    dump_dict['flux_plot']=flux_plot
-    dump_dict['nh_plot']=nh_plot
-    dump_dict['incl_plot']=incl_plot
-    dump_dict['abslines_infos_perobj']=abslines_infos_perobj
-    dump_dict['flux_list']=flux_list
-    dump_dict['abslines_ener']=abslines_ener
-    dump_dict['width_plot']=width_plot
-    dump_dict['dict_linevis']=dict_linevis
-    dump_dict['catal_maxi_df']=catal_maxi_df
-    dump_dict['catal_maxi_simbad']=catal_maxi_simbad
-    dump_dict['dict_lc_rxte']=dict_lc_rxte
-    
-    with open('/home/parrama/Documents/Work/PhD/Scripts/Python/visualisation/visual_line_vars.pkl','wb') as dump_file:
-        dill.dump(dump_dict,file=dump_file)
+        all_files=glob.glob('**',recursive=True)
+        lineval_id='line_values_'+args.line_search_e.replace(' ','_')+'_'+args.line_search_norm.replace(' ','_')+'.txt'
+        lineval_files=[elem for elem in all_files if outdir+'/' in elem and lineval_id in elem and ('/Sample/' in elem or 'XTEJ1701-462/' in elem)]
+        
+        abslines_id='autofit_values_'+args.line_search_e.replace(' ','_')+'_'+args.line_search_norm.replace(' ','_')+'.txt'
+        abslines_files=[elem for elem in all_files if outdir+'/' in elem and abslines_id in elem and ('/Sample/' in elem or 'XTEJ1701-462/' in elem)]
+        
+        #telescope selection
+        lineval_files=[elem for elem_telescope in choice_telescope for elem in lineval_files if elem_telescope+'/' in elem]
+        abslines_files=[elem for elem_telescope in choice_telescope for elem in abslines_files if elem_telescope+'/' in elem]
+        
+        if ignore_full:
+            lineval_files=[elem for elem in lineval_files if '_full' not in elem]
+            abslines_files=[elem for elem in abslines_files if '_full' not in elem]
+            
+        if multi_obj:
+            obj_list=np.unique(np.array([elem.split('/')[-4] for elem in lineval_files]))
+        else:
+            obj_list=np.array([obj_name])
+            
+        #note: there's no need to order anymore since the file values are attributed for each object of object list in the visual_line functions
+        
+        #creating the dictionnary for all of the arguments to pass to the visualisation functions
+        dict_linevis={
+            'ctl_blackcat':catal_blackcat,
+            'ctl_blackcat_obj':catal_blackcat_obj,
+            'ctl_watchdog':catal_watchdog,
+            'ctl_watchdog_obj':catal_watchdog_obj,
+            'lineval_files':lineval_files,
+            'obj_list':obj_list,
+            'cameras':cameras,
+            'expmodes':expmodes,
+            'multi_obj':multi_obj,
+            'range_absline':range_absline,
+            'n_infos':n_infos,
+            'args_cam':args.cameras,
+            'args_line_search_e':args.line_search_e,
+            'args_line_search_norm':args.line_search_norm,
+            'visual_line':True
+            }
+        
+        #### main arrays computation
+        
+        #getting the single parameters
+        dist_obj_list,mass_obj_list=dist_mass(dict_linevis)
+        
+        #distance factor for the flux conversion later on
+        dist_factor=4*np.pi*(dist_obj_list*1e3*3.086e18)**2
+        
+        #L_Edd unit factor
+        Edd_factor=dist_factor/(1.26e38*mass_obj_list)
+        
+        #Reading the results files
+        observ_list,lineval_list,flux_list,date_list,instru_list,exptime_list=obj_values(lineval_files,Edd_factor,dict_linevis)
+        
+        dict_linevis['flux_list']=flux_list
+        
+        #the values here are for each observation
+        abslines_infos,autofit_infos=abslines_values(abslines_files,dict_linevis)
+        
+        #getting all the variations we need
+        abslines_infos_perline,abslines_infos_perobj,abslines_plot,abslines_ener,flux_plot,hid_plot,incl_plot,width_plot,nh_plot=values_manip(abslines_infos,dict_linevis,autofit_infos)
 
+        ####(deprecated) deleting bad flags        
+        # #taking of the bad files points from the HiD
+        # if multi_obj:
+            
+        #     #in multi object mode, we loop one more time for each object   
+        #     for i in range(len(observ_list)):     
+                
+        #         bad_index=[]
+        #         #check if the obsid identifiers of every index is in the bad flag list
+        #         for j in range(len(observ_list[i])):
+        #             if np.any(observ_list[i][j] in bad_flags):
+        #                 bad_index+=[j]
+                        
+        #         #and delete the resulting indexes from the arrays
+        #         observ_list[i]=np.delete(observ_list[i],bad_index)
+        #         lineval_list[i]=np.delete(lineval_list[i],bad_index,axis=0)
+        #         flux_list[i]=np.delete(flux_list[i],bad_index,axis=0)
+        #         # links_list[i]=np.delete(links_list[i],bad_index)
+        
+        # #same process for a single object
+        # else:
+        #     bad_index=[]
+        
+        #     #checking if the observ list isn't empty before trying to delete anything
+        #     if len(observ_list)!=0:
+        #         for j in range(len(observ_list[0])):
+        #             if np.any(observ_list[0][j] in bad_flags):
+        #                 bad_index+=[j]
+                        
+        #         #and delete the resulting indexes from the arrays
+        #         observ_list[0]=np.delete(observ_list[0],bad_index)
+        #         lineval_list[0]=np.delete(lineval_list[0],bad_index,axis=0)
+        #         flux_list[0]=np.delete(flux_list[0],bad_index,axis=0)
+        #         # links_list[0]=np.delete(links_list[0],bad_index)
+        
+        dump_dict={}
+        
+        from visual_line_tools import dict_lc_rxte
+            
+        dump_dict['instru_list']=instru_list
+        dump_dict['telescope_list']=telescope_list
+        dump_dict['choice_telescope']=choice_telescope
+        dump_dict['dist_obj_list']=dist_obj_list
+        dump_dict['mass_obj_list']=mass_obj_list
+        dump_dict['line_search_e']=line_search_e
+        dump_dict['multi_obj']=multi_obj
+        dump_dict['observ_list']=observ_list
+        dump_dict['bad_flags']=bad_flags
+        dump_dict['obj_list']=obj_list
+        dump_dict['date_list']=date_list
+        dump_dict['abslines_plot']=abslines_plot
+        dump_dict['hid_plot']=hid_plot
+        dump_dict['flux_plot']=flux_plot
+        dump_dict['nh_plot']=nh_plot
+        dump_dict['incl_plot']=incl_plot
+        dump_dict['abslines_infos_perobj']=abslines_infos_perobj
+        dump_dict['flux_list']=flux_list
+        dump_dict['abslines_ener']=abslines_ener
+        dump_dict['width_plot']=width_plot
+        dump_dict['dict_linevis']=dict_linevis
+        dump_dict['catal_maxi_df']=catal_maxi_df
+        dump_dict['catal_maxi_simbad']=catal_maxi_simbad
+        dump_dict['dict_lc_rxte']=dict_lc_rxte
+        
+        with open(dump_path,'wb') as dump_file:
+            dill.dump(dump_dict,file=dump_file)
+
+with open(dump_path,'rb') as dump_file:
+    dump_dict=dill.load(dump_file)
+    
+instru_list=dump_dict['instru_list']
+telescope_list=dump_dict['telescope_list']
+choice_telescope=dump_dict['choice_telescope']
+dist_obj_list=dump_dict['dist_obj_list']
+mass_obj_list=dump_dict['mass_obj_list']
+line_search_e=dump_dict['line_search_e']
+multi_obj=dump_dict['multi_obj']
+observ_list=dump_dict['observ_list']
+bad_flags=dump_dict['bad_flags']
+obj_list=dump_dict['obj_list']
+date_list=dump_dict['date_list']
+abslines_plot=dump_dict['abslines_plot']
+hid_plot=dump_dict['hid_plot']
+flux_plot=dump_dict['flux_plot']
+nh_plot=dump_dict['nh_plot']
+incl_plot=dump_dict['incl_plot']
+abslines_infos_perobj=dump_dict['abslines_infos_perobj']
+flux_list=dump_dict['flux_list']
+abslines_ener=dump_dict['abslines_ener']
+width_plot=dump_dict['width_plot']
+dict_linevis=dump_dict['dict_linevis']
+catal_maxi_df=dump_dict['catal_maxi_df']
+catal_maxi_simbad=dump_dict['catal_maxi_simbad']
+dict_lc_rxte=dump_dict['dict_lc_rxte']
 
 '''
 in the abslines_infos_perline form, the order is:
@@ -346,41 +439,6 @@ in the abslines_infos_perline form, the order is:
     -the info (5 rows, EW/bshift/delchi/sign)
     -it's uncertainty (3 rows, main value/neg uncert/pos uncert,useless for the delchi and sign)
 '''
-
-flag_noexp=0
-#taking of the bad files points from the HiD
-if multi_obj:
-    
-    #in multi object mode, we loop one more time for each object   
-    for i in range(len(observ_list)):     
-        
-        bad_index=[]
-        #check if the obsid identifiers of every index is in the bad flag list
-        for j in range(len(observ_list[i])):
-            if np.any(observ_list[i][j] in bad_flags):
-                bad_index+=[j]
-                
-        #and delete the resulting indexes from the arrays
-        observ_list[i]=np.delete(observ_list[i],bad_index)
-        lineval_list[i]=np.delete(lineval_list[i],bad_index,axis=0)
-        flux_list[i]=np.delete(flux_list[i],bad_index,axis=0)
-        # links_list[i]=np.delete(links_list[i],bad_index)
-
-#same process for a single object
-else:
-    bad_index=[]
-
-    #checking if the observ list isn't empty before trying to delete anything
-    if len(observ_list)!=0:
-        for j in range(len(observ_list[0])):
-            if np.any(observ_list[0][j] in bad_flags):
-                bad_index+=[j]
-                
-        #and delete the resulting indexes from the arrays
-        observ_list[0]=np.delete(observ_list[0],bad_index)
-        lineval_list[0]=np.delete(lineval_list[0],bad_index,axis=0)
-        flux_list[0]=np.delete(flux_list[0],bad_index,axis=0)
-        # links_list[0]=np.delete(links_list[0],bad_index)
 
 #checking if the obsid identifiers of every index is in the bad flag list or if there's just no file
 if len(observ_list.ravel())==0:
@@ -442,6 +500,8 @@ with st.sidebar.expander('Inclination'):
     
     display_incl_inside=st.checkbox('Display ULs differently for sources with uncertainties not strictly compatible with the current limits',value=False)
     
+    dash_noincl=st.checkbox('Display ULs differently for sources with no inclination information',value=False)
+    
     radio_dipper=st.radio('Dipping sources restriction',('Off','Add dippers','Restrict to dippers','Restrict to non-dippers'))
     
     
@@ -460,7 +520,7 @@ with st.sidebar.expander('Inclination'):
     
 restrict_time=st.sidebar.checkbox('Restrict time interval',value=True)
         
-display_source_table=st.sidebar.checkbox('Display source parameters table',value=False)
+slider_sign=st.sidebar.slider('Detection significance treshold',min_value=0.9,max_value=1.,step=1e-3,value=0.997,format="%.3f")
 
 ####Streamlit HID options
 st.sidebar.header('HID options')
@@ -470,7 +530,7 @@ st.sidebar.header('HID options')
 #     #full true mask
 #     mask_lines=np.array(line_display_str!='')
             
-slider_sign=st.sidebar.slider('Detection significance treshold',min_value=0.9,max_value=1.,step=1e-3,value=0.997,format="%.3f")
+
 
 display_nonsign=st.sidebar.checkbox('Show detections below significance threshold',value=False)
 
@@ -479,7 +539,7 @@ if display_nonsign:
 else:
     restrict_threshold=True
         
-radio_info_cmap=st.sidebar.radio('HID colormap',('Source','Blueshift','Delchi','EW ratio','Inclination','Time','Instrument','nH'))
+radio_info_cmap=st.sidebar.radio('HID colormap',('Source','Velocity shift','Delchi','EW ratio','Inclination','Time','Instrument','nH'),index=0)
 
 if radio_info_cmap!='Source':
     display_edgesource=st.sidebar.checkbox('Color code sources in marker edges',value=False)
@@ -562,7 +622,7 @@ if alpha_abs:
 else:
     alpha_abs=1
     
-with st.sidebar.expander('Lightcurves'):
+with st.sidebar.expander('Monitoring'):
     
     plot_lc_monit=st.checkbox('Plot monitoring lightcurve',value=False)
     plot_hr_monit=st.checkbox('Plot monitoring HR',value=False)
@@ -615,7 +675,7 @@ ax_hid.set_yscale('log')
 eqw_ratio_ids=np.argwhere([elem in selectbox_ratioeqw for elem in line_display_str]).T[0]
 
 #string of the colormap legend for the informations
-radio_info_label=['Blueshift', r'$\Delta\chi^2$', 'Equivalent width ratio']
+radio_info_label=['Velocity shift', r'$\Delta\chi^2$', 'Equivalent width ratio']
 
 #masking for restriction to single objects
 if display_single or display_multi:
@@ -629,6 +689,9 @@ mask_inclin=[include_noinclin if elem not in incl_dic else getoverlap((incl_dic[
 #creating the mask for highlighting objects whose inclination limits go beyond the inclination restrictions if asked to
 bool_incl_inside=np.array([False if elem not in incl_dic else round(getoverlap((incl_dic[elem][0]-incl_dic[elem][1],
             incl_dic[elem][0]+incl_dic[elem][2]),slider_inclin),3)==incl_dic[elem][1]+incl_dic[elem][2] for elem in obj_list])
+
+bool_noincl=np.array([True if elem not in incl_dic else False for elem in obj_list])
+    
     
 if incl_inside:
     mask_inclin=bool_incl_inside
@@ -709,8 +772,8 @@ nh_plot_restrict=deepcopy(nh_plot)
 nh_plot_restrict=nh_plot_restrict.T[mask_obj].T
 
 #defining the dataset that will be used in the plots for the colormap limits
-if radio_info_cmap in ['Blueshift','Delchi']:
-    radio_cmap_i=1 if radio_info_cmap=='Blueshift' else 2
+if radio_info_cmap in ['Velocity shift','Delchi']:
+    radio_cmap_i=1 if radio_info_cmap=='Velocity shift' else 2
 else:
     radio_cmap_i=0
     
@@ -765,9 +828,9 @@ else:
 #adapting the plotted data in regular array for each object in order to help
 #global masks to take off elements we don't want in the comparison
 
-global_mask_intime=(Time(ravel_ragged(global_plotted_datetime))>=Time(slider_date[0])) &\
-    (Time(ravel_ragged(global_plotted_datetime))<=Time(slider_date[1]))
-
+    global_mask_intime=(Time(ravel_ragged(global_plotted_datetime))>=Time(slider_date[0])) &\
+        (Time(ravel_ragged(global_plotted_datetime))<=Time(slider_date[1]))
+    
 global_mask_intime_norepeat=(Time(ravel_ragged(date_list[mask_obj]))>=Time(slider_date[0])) &\
     (Time(ravel_ragged(date_list[mask_obj]))<=Time(slider_date[1]))
 
@@ -851,7 +914,7 @@ for i_obj,abslines_obj in enumerate(abslines_infos_perobj[mask_obj]):
     #defining the hid positions of each point
     x_hid=flux_list[mask_obj][i_obj].T[2][0]/flux_list[mask_obj][i_obj].T[1][0]
     y_hid=flux_list[mask_obj][i_obj].T[4][0]
-            
+    
     #defining the masks and shapes of the markers for the rest
 
     #defining the mask for the time interval restriction
@@ -1072,14 +1135,17 @@ for i_obj,abslines_obj in enumerate(abslines_infos_perobj[mask_obj]):
         if radio_cmap_i==1 or radio_info_cmap=='EW ratio':
 
             cmap_min_sign=1 if min(plotted_colors_var)==0 else min(plotted_colors_var)/abs(min(plotted_colors_var))
+            
+            cmap_max_sign=1 if min(plotted_colors_var)==0 else max(plotted_colors_var)/abs(max(plotted_colors_var))
 
-            #round numbers for the blueshift                
-            if radio_info_cmap=='Blueshift':
-                bshift_step=500
+            #round numbers for the Velocity shift                
+            if radio_info_cmap=='Velocity shift':
+                bshift_step=250 if choice_telescope==['Chandra'] else 500
                 
-                #the -1 and +2 are here to ensure we see the extremal ticks
-                cmap_norm_ticks=np.arange((cmap_min_sign//bshift_step-1)*bshift_step,((max(plotted_colors_var)//bshift_step)+3)*bshift_step,
-                                          1000)
+                #the +1 are here to ensure we see the extremal ticks
+                
+                cmap_norm_ticks=np.arange(((min(plotted_colors_var)//bshift_step)+1)*bshift_step,((max(plotted_colors_var)//bshift_step)+1)*bshift_step,
+                                          2*bshift_step)
                 elem_scatter.set_clim(vmin=min(cmap_norm_ticks),vmax=max(cmap_norm_ticks))
                 
             else:
@@ -1099,7 +1165,7 @@ for i_obj,abslines_obj in enumerate(abslines_infos_perobj[mask_obj]):
                 # cmap_norm_ticks.sort()
                 pass
             
-            if radio_info_cmap!='Blueshift':
+            if radio_info_cmap!='Velocity shift':
                 #maintaining the sign with the square norm
                 cmap_norm_ticks=cmap_norm_ticks**(1/gamma_colors)           
 
@@ -1110,7 +1176,7 @@ for i_obj,abslines_obj in enumerate(abslines_infos_perobj[mask_obj]):
             
         else:
             cmap_norm_ticks=None
-        
+                    
         #only creating the colorbar if there is information to display
         if is_colored_scat or radio_info_cmap in ['Inclination','Time','nH'] :
             
@@ -1130,8 +1196,9 @@ for i_obj,abslines_obj in enumerate(abslines_infos_perobj[mask_obj]):
                 cb=plt.colorbar(elem_scatter_forcol,cax=ax_cb,ticks=mdates.AutoDateLocator(),format=date_format)    
             else:
                 cb=plt.colorbar(elem_scatter_forcol,cax=ax_cb,extend='min' if radio_info_cmap=='nH' else None)
-                cb.set_ticks(cmap_norm_ticks)
-            
+                if cmap_norm_ticks is not None:
+                    cb.set_ticks(cmap_norm_ticks)
+                
         # cb.ax.minorticks_off()
         
             if radio_cmap_i==1:
@@ -1147,10 +1214,10 @@ for i_obj,abslines_obj in enumerate(abslines_infos_perobj[mask_obj]):
                 cb.set_label(r'nH ($10^{22}$ cm$^{-1}$)',labelpad=10)
             else:
                 if restrict_threshold:
-                    cb.set_label(('maximal ' if radio_info_cmap!='EW ratio' else '')+radio_info_label[radio_cmap_i-1].lower()+
+                    cb.set_label((('minimal ' if radio_cmap_i==1 else 'maximal ') if radio_info_cmap!='EW ratio' else '')+(radio_info_label[radio_cmap_i-1].lower() if radio_info_cmap!='Delchi' else radio_info_label[radio_cmap_i-1])+
                                  ' in significant detections\n for each observation'+cb_add_str,labelpad=10)
                 else:
-                    cb.set_label(('maximal ' if radio_info_cmap!='EW ratio' else '')+radio_info_label[radio_cmap_i-1].lower()+
+                    cb.set_label((('minimal ' if radio_cmap_i==1 else 'maximal ') if radio_info_cmap!='EW ratio' else '')+(radio_info_label[radio_cmap_i-1].lower() if radio_info_cmap!='Delchi' else radio_info_label[radio_cmap_i-1])+
                                  ' in all detections\n for each observation'+cb_add_str,labelpad=10)
                     
 label_obj_plotted=np.repeat(False,len(abslines_infos_perobj[mask_obj]))
@@ -1283,7 +1350,7 @@ for i_obj_base,abslines_obj_base in enumerate(abslines_infos_perobj[mask_obj_bas
                            color='none',edgecolor=edgec_scat,s=norm_s_lin*obj_size_ul[mask_nondet_ul]**norm_s_pow,
                            label='' if not display_obj_zerodet else (obj_list[mask_obj][i_obj_base] if not label_obj_plotted[i_obj_base] and\
                                (radio_info_cmap=='Source' or display_edgesource) else ''),zorder=500,alpha=1.0,
-                               cmap=cmap_info if radio_info_cmap in ['Inclination','Time'] else None,ls='--' if display_incl_inside and not bool_incl_inside[mask_obj_base][i_obj_base] else 'solid')
+                               cmap=cmap_info if radio_info_cmap in ['Inclination','Time'] else None,ls='--' if (display_incl_inside and not bool_incl_inside[mask_obj_base][i_obj_base] or dash_noincl and bool_noincl[mask_obj_base][i_obj_base]) else 'solid')
                 
             scatter_nondet+=[elem_scatter_nondet]
             
@@ -1419,8 +1486,6 @@ for i_obj_base,abslines_obj_base in enumerate(abslines_infos_perobj[mask_obj_bas
            id_obj_nondet+=1
         else:
             id_obj_det+=1
-
-# breakpoint()
 
 #### Displaying arrow evolution if needed and if there are points
 if display_single and display_evol_single and sum(global_mask_intime_norepeat)>1:
@@ -1630,30 +1695,20 @@ if radio_info_cmap=='Instrument':
 # fig_hid_html = mpld3.fig_to_html(fig_hid)
 # components.html(fig_hid_html, height=1000)
 
-st.pyplot(fig_hid)
+tab_hid, tab_monitoring, tab_param,tab_source_df= st.tabs(["HID", "Monitoring", "Parameter analysis","Tables"])
 
-'''
-SOURCE TABLE
-'''
+with tab_hid:
+    st.pyplot(fig_hid)
 
-if display_source_table:
-    
-    df_source_arr=np.array([obj_list,dist_obj_list,mass_obj_list,incl_plot.T[0],incl_plot.T[1],incl_plot.T[2],
-                           [sum(elem=='XMM') for elem in instru_list],[sum(elem=='Chandra') for elem in instru_list]]).astype(str).T
-    
-    df_source=pd.DataFrame(df_source_arr,columns=['source','distance (kpc)','mass (M_sun)','inclination (°)','incl err -','incl err +',
-                                                  'XMM exposures','Chandra exposures'])
-    
-    st.dataframe(df_source)
-    
     
 #### Transposing the tables into plot arrays
 
 flag_noabsline=False
 
 #bin values for all the histograms below
-#for the blueshift and energies the range is locked so we can use a global binning for all the diagrams
-bins_bshift=np.linspace(-1e4,5e3,num=31,endpoint=True)
+#for the Velocity shift and energies the range is locked so we can use a global binning for all the diagrams
+bins_bshift=np.linspace(-2e3,3e3,num=26,endpoint=True)
+# bins_bshift=np.linspace(-1e4,5e3,num=31,endpoint=True)
 bins_ener=np.arange(6.,9.,2*line_search_e[2])
 
 #creating restricted ploting arrays witht the current streamlit object and lines selections
@@ -1685,40 +1740,219 @@ dict_linevis['save_dir']=save_dir
 dict_linevis['save_str_prefix']= save_str_prefix
 
 '''''''''''''''''''''
+####Creating and plotting the dataframes
+'''''''''''''''''''''
+
+def produce_df(data,rows, columns, row_names=None, column_names=None,row_index=None,col_index=None):
+
+    """
+    rows is a list of lists that will be used to build a MultiIndex
+    columns is a list of lists that will be used to build a MultiIndex
+    
+    Note:
+    replaces row_index and col_index by the values provided instead of building them if asked so
+    """
+    
+    if row_index is None:
+        row_index_build = pd.MultiIndex.from_product(rows, names=row_names)
+    else:
+        row_index_build=row_index
+        
+    if col_index is None:
+        col_index_build = pd.MultiIndex.from_product(columns, names=column_names)
+    else:
+        col_index_build=col_index
+        
+    return pd.DataFrame(data,index=row_index_build, columns=col_index_build)
+
+'''
+SOURCE TABLE
+'''
+    
+source_df_arr=np.array([obj_list,dist_obj_list,mass_obj_list,incl_plot.T[0],incl_plot.T[1],incl_plot.T[2],
+                       [sum(elem=='XMM') for elem in instru_list],[sum(elem=='Chandra') for elem in instru_list]]).astype(str).T
+
+source_df=pd.DataFrame(source_df_arr,columns=['source','distance (kpc)','mass (M_sun)','inclination (°)','incl err -','incl err +',
+                                              'XMM exposures','Chandra exposures'])
+with tab_source_df:
+    
+    with st.expander('Source parameters'):
+        
+        st.dataframe(source_df)
+    
+        csv_source = convert_df(source_df)
+    
+        st.download_button(
+            label="Download as CSV",
+            data=csv_source,
+            file_name='source_table.csv',
+            mime='text/csv',
+        )
+        
+        
+'''
+OBS TABLE
+'''
+
+#n_obj_restricted
+n_obj_r=sum(mask_obj)
+
+#creating an array for the intime observations
+mask_intime_plot=np.array([(Time(date_list[mask_obj][i_obj_r].astype(str))>=Time(slider_date[0])) & (Time(date_list[mask_obj][i_obj_r].astype(str))<=Time(slider_date[1])) for i_obj_r in range(n_obj_r)],dtype=object)
+
+#and an date order 
+order_intime_plot_restrict=np.array([np.array([Time(elem) for elem in date_list[mask_obj][i_obj_r][mask_intime_plot[i_obj_r]]]).argsort() for i_obj_r in range(n_obj_r)],dtype=object)
+
+#creating  4 dimensionnal dataframes for the observ and line informations
+
+observ_df_list=[]
+
+line_df_list=[]
+
+abs_plot_tr=np.array([[subelem for subelem in elem] for elem in abslines_plot_restrict]).transpose(3,2,0,1)
+
+line_rows=np.array(lines_std_names[3:9])[mask_lines]
+    
+for i_obj_r in range(n_obj_r):
+    
+    n_obs_r=sum(mask_intime_plot[i_obj_r])
+    
+    #recreating an individual non ragged array (similar to abslines_perobj) in construction for each object
+    hid_plot_indiv=np.array([[subelem for subelem in elem] for elem in hid_plot_restrict.transpose(2,0,1)[i_obj_r]],dtype=float)
+    
+    line_plot_indiv=np.array([[[subsubelem for subsubelem in subelem] for subelem in elem] for elem in abs_plot_tr[i_obj_r]],dtype=float)
+    
+    #applying the intime mask on each observation and sorting by date
+    hid_plot_indiv=hid_plot_indiv.transpose(2,0,1)[mask_intime_plot[i_obj_r]][order_intime_plot_restrict[i_obj_r]].transpose(1,2,0)
+
+    line_plot_indiv=line_plot_indiv.transpose(3,0,1,2)[mask_intime_plot[i_obj_r]][order_intime_plot_restrict[i_obj_r]].transpose(2,3,0,1)
+    
+    '''
+    splitting information to take off 1 dimension and only take specific information    
+    EW, bshift, width, flux, sign, upper
+    '''
+    used_indexes=[[0,0],[0,1],[0,2],
+                  [1,0],[1,1],[1,2],
+                  [7,0],[7,1],[7,2],
+                  [3,0],[3,1],[3,2],
+                  [4,0],
+                  [5,0]]
+                  
+    line_plot_indiv=np.array([line_plot_indiv[elem[0]][elem[1]] for elem in used_indexes])
+    
+    #creating the row indexes (row: object, subrow: observation)    
+    observ_list_indiv=observ_list[mask_obj][i_obj_r][mask_intime_plot[i_obj_r]].tolist()
+    
+    observ_list_indiv=[elem.replace('_Imaging_auto','').replace('_Timing_auto','').replace('_heg_-1','').replace('_heg_1','') for elem
+                       in observ_list_indiv]
+    
+    iter_rows=[[obj_list[mask_obj][i_obj_r]],
+               observ_list_indiv,
+               date_list[mask_obj][i_obj_r][mask_intime_plot[i_obj_r]][order_intime_plot_restrict[i_obj_r]].tolist()]
+    
+    
+    #creating the iter index manually because we have two clumns (observ and time) not being dimensions of one another
+    row_index_arr_obs=np.array([[iter_rows[0][0],iter_rows[1][i_obs_r],iter_rows[2][i_obs_r]] for i_obs_r in range(n_obs_r)]).T
+    
+    row_index_arr_line=np.array([[iter_rows[0][0],iter_rows[1][i_obs_r],iter_rows[2][i_obs_r],line_rows[i_line_r]]\
+                                for i_obs_r in range(n_obs_r) for i_line_r in range(sum(mask_lines))]).T
+    
+    row_index_obs=pd.MultiIndex.from_arrays(row_index_arr_obs,names=['Source','obsid','date'])
+    
+    row_index_line=pd.MultiIndex.from_arrays(row_index_arr_line,names=['Source','obsid','date','line'])
+    
+    #you can use the standard way for columns for the observ df
+    iter_columns=[['HR [6-10]/[3-10]','Lx/LEdd'],['main','err-','err+']]
+    
+    #but not for the line df
+    column_index_arr_line=np.array([['EW','main'],['EW','err-'],['EW','err+'],
+                          ['blueshift','main'],['blueshift','err-'],['blueshift','err+'],
+                          ['width','main'],['width','err-'],['width','err+'],
+                          ['line flux','main'],['line flux','err-'],['line flux','err+'],
+                          ['sign','main'],['EW UL','main']]).T
+                          
+    column_index_line=pd.MultiIndex.from_arrays(column_index_arr_line,names=['measure','value'])
+    
+    #creating both dataframes, with a reshape in 2 dimensions (one for the lines and one for the columns)
+    observ_df_list+=[produce_df(hid_plot_indiv.transpose(2,0,1).reshape(n_obs_r,6),iter_rows,iter_columns,row_names=['Source','obsid','date'],
+                            column_names=['measure','value'],row_index=row_index_obs)]
+
+    line_df_list+=[produce_df(line_plot_indiv.transpose(1,2,0).reshape(n_obs_r*sum(mask_lines),14),None,None,row_names=None,
+                            column_names=None,row_index=row_index_line,col_index=column_index_line)]
+    
+    
+observ_df=pd.concat(observ_df_list)
+    
+line_df=pd.concat(line_df_list)
+
+        
+with tab_source_df:
+    
+    with st.expander('Observation parameters'):
+        
+        st.dataframe(observ_df,use_container_width=True)
+    
+        csv_observ= convert_df(observ_df)
+    
+        st.download_button(
+            label="Download as CSV",
+            data=csv_observ,
+            file_name='observ_table.csv',
+            mime='text/csv',
+        )
+        
+    with st.expander('Line parameters'):
+        
+        st.dataframe(line_df,use_container_width=True)
+    
+        csv_observ= convert_df(line_df)
+    
+        st.download_button(
+            label="Download as CSV",
+            data=csv_observ,
+            file_name='line_table.csv',
+            mime='text/csv',
+        )
+        
+
+'''''''''''''''''''''
  ####Monitoring
 '''''''''''''''''''''
-if plot_lc_monit:
-    
-    if not display_single:
-        st.text('Lightcurve monitoring plots are restricted to single source mode.')
-        
-    else:
-        fig_lc_monit=plot_lightcurve(dict_linevis,catal_maxi_df,catal_maxi_simbad,choice_source,display_hid_interval=monit_highlight_hid,
-                                         superpose_ew=plot_maxi_ew)
-    
-        #wrapper to avoid streamlit trying to plot a None when resetting while loading
-        if fig_lc_monit is not None:
-            st.pyplot(fig_lc_monit)
 
-if plot_hr_monit:
+with tab_monitoring:
+    if plot_lc_monit:
+        
+        if not display_single:
+            st.info('Lightcurve monitoring plots are restricted to single source mode.')
+            
+        else:
+            with st.spinner('Building lightcurve...'):
+                fig_lc_monit=plot_lightcurve(dict_linevis,catal_maxi_df,catal_maxi_simbad,choice_source,display_hid_interval=monit_highlight_hid,
+                                                 superpose_ew=plot_maxi_ew)
+            
+                #wrapper to avoid streamlit trying to plot a None when resetting while loading
+                if fig_lc_monit is not None:
+                    st.pyplot(fig_lc_monit)
     
-    if not display_single:
-        st.text('HR monitoring plots are restricted to single source mode.')
+    if plot_hr_monit:
         
-    else:
-        
-        fig_hr_monit=plot_lightcurve(dict_linevis,catal_maxi_df,catal_maxi_simbad,choice_source,mode='HR',display_hid_interval=monit_highlight_hid,
-                                         superpose_ew=plot_maxi_ew)
-        # fig_maxi_lc_html = mpld3.fig_to_html(fig_maxi_lc)
-        # components.html(fig_maxi_lc_html,height=500,width=1000)
-        
-        #wrapper to avoid streamlit trying to plot a None when resetting while loading
-        if fig_hr_monit is not None:
-            st.pyplot(fig_hr_monit)
-
-
-if ((plot_lc_monit and fig_lc_monit is None) or (plot_hr_monit and fig_hr_monit is None)) and display_single:
-    st.text('No match in MAXI/RXTE source list found.')
+        if not display_single:
+            st.info('HR monitoring plots are restricted to single source mode.')
+            
+        else:
+            with st.spinner('Building HR evolution...'):
+                fig_hr_monit=plot_lightcurve(dict_linevis,catal_maxi_df,catal_maxi_simbad,choice_source,mode='HR',display_hid_interval=monit_highlight_hid,
+                                                 superpose_ew=plot_maxi_ew)
+                # fig_maxi_lc_html = mpld3.fig_to_html(fig_maxi_lc)
+                # components.html(fig_maxi_lc_html,height=500,width=1000)
+                
+                #wrapper to avoid streamlit trying to plot a None when resetting while loading
+                if fig_hr_monit is not None:
+                    st.pyplot(fig_hr_monit)
+    
+    
+    if ((plot_lc_monit and fig_lc_monit is None) or (plot_hr_monit and fig_hr_monit is None)) and display_single:
+        st.warning('No match in MAXI/RXTE source list found.')
         
 '''''''''''''''''''''
    #### Parameter analysis
@@ -1726,7 +1960,14 @@ if ((plot_lc_monit and fig_lc_monit is None) or (plot_hr_monit and fig_hr_monit 
 
 with st.sidebar.expander('Parameter analysis'):
     
-    display_param_withdet=st.checkbox('Restrict parameter analysis to sources with significant detections',value=False)
+    display_param_withdet=st.checkbox('Restrict parameter analysis to sources with significant detections',value=True)
+    
+    display_param=st.multiselect('Additional parameters',
+                                 ('EW ratio (Line)','width (Line)','Line flux (Line)','Time (Observation)',
+                                  'Line EW comparison'),default=None)
+    
+    glob_col_source=st.checkbox('Normalize source colors over the entire sample',value=True)
+    
     st.header('Distributions')
     display_distrib=st.checkbox('Plot distributions',value=False)
     use_distrib_lines=st.checkbox('Show line by line distribution',value=True)
@@ -1736,30 +1977,40 @@ with st.sidebar.expander('Parameter analysis'):
             split_distrib='Off'
             
     st.header('Correlations')
-    display_scat_intr=st.checkbox('Correlations between intrinsic parameters',value=False)
-    display_scat_hid=st.checkbox('Correlations with observation parameters',value=False)
-    display_scat_inclin=st.checkbox('Correlations with source parameters',value=False)
-    display_scat_eqwcomp=st.checkbox('Plot EW vs EW correlations',value=False)
+    
+    display_types=st.multiselect('Main parameters',('Line','Observation','Source'),default=None)
+    
+    display_scat_intr='Line' in display_types
+    display_scat_hid='Observation' in display_types
+    display_scat_inclin='Source' in display_types
+    
+    display_scat_eqwcomp='Line EW comparison' in display_param
     if display_scat_eqwcomp:        
         eqwratio_comp=st.multiselect('Lines to compare', [elem for elem in lines_std_names[3:9] if 'abs' in elem],default=lines_std_names[3:5])
-    use_eqwratio=st.checkbox('Add EW ratios as an intrinsic parameter',value=False)
-    if use_eqwratio:
-        eqwratio_type=st.selectbox('Ratio to use',['FeKa26/FeKa25 (Ka)','FeKb26/FeKb25 (Kb)','FeKb25/FeKa25 (25)','FeKb26/FeKa26 (26)'])\
-            .split(' ')[1].replace('(','').replace(')','')
-            
-    use_width=st.checkbox('Add width as an intrinsic parameter',value=False)
-    display_th_width_ew=st.checkbox('Display theoretical individual width vs EW evolution',value=False)
+        
     
-    use_time=st.checkbox('Plot time evolution of intrinsic parameters',value=False)
-    use_lineflux=st.checkbox('Add lineflux as an intrinsic parameter')
+    use_eqwratio='EW ratio (Line)' in display_param
+    if use_eqwratio:
+        eqwratio_strs=np.array(['Fe XXVI Ka/Fe XXV Ka','FeXXVI Kb/Fe XXV Kb','FeXXV Kb/Fe XXV Ka','FeXXVI Kb/Fe XXVI Ka'])
+        eqwratio_type_str=st.selectbox('Ratio to use',eqwratio_strs)
+        eqwratio_type=str(np.array(['Ka','Kb','25','26'])[eqwratio_strs==eqwratio_type_str][0])
+        
+    use_width='width (Line)' in display_param
+    if use_width:
+        display_th_width_ew=st.checkbox('Display theoretical individual width vs EW evolution',value=False)
+    else:
+        display_th_width_ew=False
+        
+    use_time='Time (Observation)' in display_param
+    use_lineflux='Line flux (Line)' in display_param
+    
     compute_correl=st.checkbox('Compute Pearson/Spearman for the scatter plots',value=True)
     display_pearson=st.checkbox('Display Pearson rank',value=False)
     st.header('Visualisation')
     radio_color_scatter=st.radio('Scatter plot color options:',('None','Source','Instrument','Time','HR','width','nH'),index=1)
-    glob_col_source=st.checkbox('Normalize source colors over the entire sample',value=True)
     scale_log_eqw=st.checkbox('Use a log scale for the equivalent width and line fluxes')
     scale_log_hr=st.checkbox('Use a log scale for the HID parameters',value=True)
-    display_abserr_bshift=st.checkbox('Display absolute blueshift errors for Chandra',value=True)
+    display_abserr_bshift=st.checkbox('Display absolute Velocity shift errors for Chandra',value=True)
     plot_trend=st.checkbox('Display linear trend lines in the scatter plots',value=False)
     
     st.header('Upper limits')
@@ -1771,9 +2022,9 @@ if compute_only_withdet:
     
     if sum(global_mask_intime_norepeat)==0 or sum(global_sign_mask)==0:
         if sum(global_mask_intime_norepeat)==0:
-            st.text('No point left in selected dates interval. Cannot compute parameter analysis.')
+            st.warning('No point left in selected dates interval. Cannot compute parameter analysis.')
         elif sum(global_sign_mask)==0:
-            st.text('There are no detections for current object/date selection. Cannot compute parameter analysis.')
+            st.warning('No detections for current object/date selection. Cannot compute parameter analysis.')
         st.stop()
         
 #overwriting the objet mask with sources with detection for parameter analysis if asked to
@@ -1841,49 +2092,50 @@ def streamlit_distrib():
     if use_distrib_lines:
         distrib_lines=distrib_graph(abslines_plot_restrict,'lines',dict_linevis,conf_thresh=slider_sign,streamlit=True,bigger_text=bigger_text,split=split_distrib)
         
-    with st.expander('Distribution graphs'):
-        
-        col_list={'eqw':None,'bshift':None,'ener':None}
-        
-        if use_eqwratio:
-            col_list['eqwratio']=None
-        if n_infos>=5 and use_lineflux:
-            col_list['lineflux']=None
-
-        if use_distrib_lines:
-            col_list['lines']=None
+    with tab_param:
+        with st.expander('Distribution graphs'):
             
-        if use_width:
-            col_list['width']=None
+            col_list={'eqw':None,'bshift':None,'ener':None}
             
-        st_cols=st.columns(len(col_list))
-        
-        for i_col,col_name in enumerate(list(col_list.keys())):
-            col_list[col_name]=st_cols[i_col]
-            
-        with col_list['eqw']:
-            st.pyplot(distrib_eqw)
-
-        with col_list['bshift']:
-            st.pyplot(distrib_bshift)
-        with col_list['ener']:
-            st.pyplot(distrib_ener)
+            if use_eqwratio:
+                col_list['eqwratio']=None
+            if n_infos>=5 and use_lineflux:
+                col_list['lineflux']=None
+    
+            if use_distrib_lines:
+                col_list['lines']=None
                 
-        if use_eqwratio:
-            with col_list['eqwratio']:
-                st.pyplot(distrib_eqwratio)
-        
-        if use_lineflux and n_infos>=5:
-            with col_list['lineflux']:
-                st.pyplot(distrib_lineflux)
-        
-        if use_distrib_lines:
-            with col_list['lines']:
-                st.pyplot(distrib_lines)
+            if use_width:
+                col_list['width']=None
                 
-        if use_width:
-            with col_list['width']:
-                st.pyplot(distrib_width)
+            st_cols=st.columns(len(col_list))
+            
+            for i_col,col_name in enumerate(list(col_list.keys())):
+                col_list[col_name]=st_cols[i_col]
+                
+            with col_list['eqw']:
+                st.pyplot(distrib_eqw)
+    
+            with col_list['bshift']:
+                st.pyplot(distrib_bshift)
+            with col_list['ener']:
+                st.pyplot(distrib_ener)
+                    
+            if use_eqwratio:
+                with col_list['eqwratio']:
+                    st.pyplot(distrib_eqwratio)
+            
+            if use_lineflux and n_infos>=5:
+                with col_list['lineflux']:
+                    st.pyplot(distrib_lineflux)
+            
+            if use_distrib_lines:
+                with col_list['lines']:
+                    st.pyplot(distrib_lines)
+                    
+            if use_width:
+                with col_list['width']:
+                    st.pyplot(distrib_width)
                 
 '''1-1 Correlations'''
 
@@ -2007,45 +2259,46 @@ def streamlit_scat(mode):
                                         mode='source',conf_thresh=slider_sign,streamlit=True,compute_correl=compute_correl,bigger_text=bigger_text,
                                         show_linked=show_linked)]
     
-    with st.expander('Correlation graphs for '+mode+' parameters'):
-
-        col_list={'eqw':None,'bshift':None,'ener':None}
-        
-        if use_width:
-            col_list['width']=None
-        
-        #defining columns for each data type
-        if use_eqwratio and (mode=='observ' or use_width):
-            col_list['eqwratio']=None
-        if n_infos>=5 and use_lineflux:
-            col_list['lineflux']=None
-        st_cols=st.columns(len(col_list))
-        
-        for i_col,col_name in enumerate(list(col_list.keys())):
-            col_list[col_name]=st_cols[i_col]
-        
-        with col_list['eqw']:
-            [st.pyplot(elem) for elem in scat_eqw]
-                        
-        if mode!='eqwratio' or use_time:
-
-            with col_list['bshift']:
-                [st.pyplot(elem) for elem in scat_bshift]
-
-        if mode!='eqwratio':
-            with col_list['ener']:
-                [st.pyplot(elem) for elem in scat_ener]
+    with tab_param:
+        with st.expander('Correlation graphs for '+('line' if mode=='intrinsic' else mode)+' parameters'):
+    
+            col_list={'eqw':None,'bshift':None,'ener':None}
+            
+            if use_width:
+                col_list['width']=None
+            
+            #defining columns for each data type
             if use_eqwratio and (mode=='observ' or use_width):
-                with col_list['eqwratio']:
-                    [st.pyplot(elem) for elem in scat_eqwratio]
+                col_list['eqwratio']=None
+            if n_infos>=5 and use_lineflux:
+                col_list['lineflux']=None
+            st_cols=st.columns(len(col_list))
+            
+            for i_col,col_name in enumerate(list(col_list.keys())):
+                col_list[col_name]=st_cols[i_col]
+            
+            with col_list['eqw']:
+                [st.pyplot(elem) for elem in scat_eqw]
+                            
+            if mode!='eqwratio' or use_time:
+    
+                with col_list['bshift']:
+                    [st.pyplot(elem) for elem in scat_bshift]
+    
+            if mode!='eqwratio':
+                with col_list['ener']:
+                    [st.pyplot(elem) for elem in scat_ener]
+                if use_eqwratio and (mode=='observ' or use_width):
+                    with col_list['eqwratio']:
+                        [st.pyplot(elem) for elem in scat_eqwratio]
+                        
+            if use_lineflux and n_infos>=5:
+                with col_list['lineflux']:
+                    [st.pyplot(elem) for elem in scat_lineflux]
                     
-        if use_lineflux and n_infos>=5:
-            with col_list['lineflux']:
-                [st.pyplot(elem) for elem in scat_lineflux]
-                
-        if use_width:
-            with col_list['width']:
-                [st.pyplot(elem) for elem in scat_width]
+            if use_width:
+                with col_list['width']:
+                    [st.pyplot(elem) for elem in scat_width]
             
 mpl.rcParams.update({'font.size': 14})
 
@@ -2070,9 +2323,9 @@ if display_distrib:
     
     if sum(global_mask_intime_norepeat)==0 or sum(global_sign_mask)==0:
         if sum(global_mask_intime_norepeat)==0:
-            st.text('No point left in selected dates interval. Cannot compute distributions.')
+            st.warning('No point left in selected dates interval. Cannot compute distributions.')
         else:
-            st.text('No significant detection left with current source selection. Cannot compute distributions.')
+            st.warning('No significant detection left with current source selection. Cannot compute distributions.')
     else:
         streamlit_distrib()
     

@@ -3,9 +3,13 @@
     -added halfnormal distributions combinations with each part of dx and dy if they are size 2
        (and changing the tests so that we can use the function)
     
+    -added "pegged" upper limit contributions with a boundary to a physical limit. 
+    In this case the uncertainty are considered as an uniform distribution instead
+    #### IN PROGRESS
+    
     for spearman:
     -added barycenter estimation of each percentile from the perturbation in order to be able to draw the lines
-    -added an argument to plot the lines with the ucnertainties over a graph
+    -added an argument to plot the lines with the uncertainties over a graph
 '''
 
 """

@@ -77,14 +77,15 @@ def file_edit(path,line_id,line_data,header):
         else:
             file.writelines([header]+lines)
             
-def xstar_wind(ep, p_mhd, mu, angle,dict_solution,stop_d, SED_path, xlum, h_over_r=0.1, rad_res=0.115, ncn2=63599, chatter=0):
+
+def xstar_wind(ep, p_mhd, mu,dict_solution,stop_d_input, SED_path, xlum,outdir="xsol",nbox_restart=1,h_over_r=0.1, ro_init=1e3,rad_res=0.115, nbins=9999, chatter=0):
     
     
     '''
     Python wrapper for the xstar computation of a single solution
     
     Required parameters:
-        ep,p_mhd,mu and angle are the main WED parameters of the solution
+        ep,p_mhd,mu are the main WED parameters of the solution (angle is inside of the dict_solution)
         
         dict_solution is a dictionnary with all the arguments of a JED-SAD solution
 
@@ -103,10 +104,14 @@ def xstar_wind(ep, p_mhd, mu, angle,dict_solution,stop_d, SED_path, xlum, h_over
     
         h_over_r is the aspect ratio of the disk
         
+        ro_init gives the initial value of ro_by_rg
+        
         rad_res is the radial revolution
         ####weird use, should be converted to a variable which is used in a more straightforward manner
         ####+ why is there a distance jump between the boxes, are they not directly adjacent? 
     
+        nbins gives the number of continuum bins used for the computation
+        
         chatter gives out the number of infos displayed during the computation
     
     
@@ -132,8 +137,8 @@ def xstar_wind(ep, p_mhd, mu, angle,dict_solution,stop_d, SED_path, xlum, h_over
         #loading the continuum spectrum of the previous box
         prev_box_sp=px.ContSpectra()
         
-        eptmp=prev_box_sp.energy()
-        zrtmp=prev_box_sp.transmitted()
+        eptmp=np.array(prev_box_sp.energy)
+        zrtmp=np.array(prev_box_sp.transmitted)
 
         eptmp_shifted = eptmp*bshift
         
@@ -193,60 +198,63 @@ def xstar_wind(ep, p_mhd, mu, angle,dict_solution,stop_d, SED_path, xlum, h_over
             
             #main infos
             
-            main_infos=[nbox,n_steps+1,
+            main_infos=np.array([nbox,i_step+1,
                         plasma_pars.radius[i_step],plasma_pars.delta_r[i_step],plasma_pars.n_p[i_step]/plasma_pars.x_e[i_step],
                         plasma_pars.ion_parameter[i_step],plasma_pars.x_e[i_step],vobsx,plasma_pars.n_p[i_step],
-                        plasma_pars.temperature[i_step]*1e4]
-             
+                        plasma_pars.temperature[i_step]*1e4]).astype(str).tolist()
+            
+            #detail for clarity
+            main_infos[0]=str(int(float(main_infos[0])))
+            main_infos[1]=str(int(float(main_infos[1])))
+            
             #detailed abundances 
 
-            ion_infos=[px.Abundances('O8')[0],
-                       px.Abundances('O7')[0],
-                       px.Abundances('Ne10')[0],
-                       px.Abundances('Ne9')[0],
-                       px.Abundances('Na11')[0],
-                       px.Abundances('Na10')[0],
-                       px.Abundances('Mg12')[0],
-                       px.Abundances('Mg11')[0],
-                       px.Abundances('Al13')[0],
-                       px.Abundances('Al12')[0],
-                       px.Abundances('Si14')[0],
-                       px.Abundances('Si13')[0],
-                       px.Abundances('S16')[0],
-                       px.Abundances('S15')[0],
-                       px.Abundances('Ar18')[0],
-                       px.Abundances('Ar17')[0],
-                       px.Abundances('Ca20')[0],
-                       px.Abundances('Ca19')[0],
-                       px.Abundances('Fe26')[0],
-                       px.Abundances('Fe25')[0]]
+            ion_infos=np.array([px.Abundances('o_viii')[0],
+                       px.Abundances('o_vii')[0],
+                       px.Abundances('ne_x')[0],
+                       px.Abundances('ne_ix')[0],
+                       px.Abundances('na_xi')[0],
+                       px.Abundances('na_x')[0],
+                       px.Abundances('mg_xii')[0],
+                       px.Abundances('mg_xi')[0],
+                       px.Abundances('al_xiii')[0],
+                       px.Abundances('al_xii')[0],
+                       px.Abundances('si_xiv')[0],
+                       px.Abundances('si_xiii')[0],
+                       px.Abundances('s_xvi')[0],
+                       px.Abundances('s_xv')[0],
+                       px.Abundances('ar_xviii')[0],
+                       px.Abundances('ar_xvii')[0],
+                       px.Abundances('ca_xx')[0],
+                       px.Abundances('ca_xix')[0],
+                       px.Abundances('fe_xxvi')[0],
+                       px.Abundances('fe_xxv')[0]]).astype(str).tolist()
             
             #detailed column densities for the second file
             
-            col_infos=[px.Columns('O8')[0],
-                       px.Columns('O7')[0],
-                       px.Columns('Ne10')[0],
-                       px.Columns('Ne9')[0],
-                       px.Columns('Na11')[0],
-                       px.Columns('Na10')[0],
-                       px.Columns('Mg12')[0],
-                       px.Columns('Mg11')[0],
-                       px.Columns('Al13')[0],
-                       px.Columns('Al12')[0],
-                       px.Columns('Si14')[0],
-                       px.Columns('Si13')[0],
-                       px.Columns('S16')[0],
-                       px.Columns('S15')[0],
-                       px.Columns('Ar18')[0],
-                       px.Columns('Ar17')[0],
-                       px.Columns('Ca20')[0],
-                       px.Columns('Ca19')[0],
-                       px.Columns('Fe26')[0],
-                       px.Columns('Fe25')[0]]
+            col_infos=np.array([px.Columns('o_viii'),
+                       px.Columns('o_vii'),
+                       px.Columns('ne_x'),
+                       px.Columns('ne_ix'),
+                       px.Columns('na_xi'),
+                       px.Columns('na_x'),
+                       px.Columns('mg_xii'),
+                       px.Columns('mg_xi'),
+                       px.Columns('al_xiii'),
+                       px.Columns('al_xii'),
+                       px.Columns('si_xiv'),
+                       px.Columns('si_xiii'),
+                       px.Columns('s_xvi'),
+                       px.Columns('s_xv'),
+                       px.Columns('ar_xviii'),
+                       px.Columns('ar_xvii'),
+                       px.Columns('ca_xx'),
+                       px.Columns('ca_xix'),
+                       px.Columns('fe_xxvi'),
+                       px.Columns('fe_xxv')]).astype(str).tolist()
             
             file_edit(path=path,line_id='\t'.join(main_infos[:2]),line_data='\t'.join(main_infos+ion_infos+col_infos),header=file_header)
-        
-        
+         
     def xstar_function(spectrum_file,lum,t_guess,n,nh,xi,nbox,vturb_x):
         
         '''
@@ -304,6 +312,12 @@ def xstar_wind(ep, p_mhd, mu, angle,dict_solution,stop_d, SED_path, xlum, h_over
     Km2m = 1000.0
     m2cm = 100.0
     
+    #making sure the stop variable is an iterable
+    if type(stop_d_input) not in [list, np.ndarray]:
+        stop_d=[stop_d_input]
+    else:
+        stop_d=stop_d_input
+    
     
     #chatter value, 0 for not print, 1 for printing
     if chatter>=10:
@@ -352,15 +366,13 @@ def xstar_wind(ep, p_mhd, mu, angle,dict_solution,stop_d, SED_path, xlum, h_over
     
     #ncn=99999
     
-    nbox_stop=np.zeros(len(stop_d),int)
+    nbox_stop=np.zeros(len(stop_d),dtype=int)
     
     #no need to create epi,xlum and enlum because they are outputs or defined elsewhere
     
-    xpxcoll,xpxl,zetal,vobsl,vrel,del_E=np.zeros((len(stop_d),6))
-    
-    logxi_last,vobs_last,robyRg_last,stop_d,vrel_last,del_E_final,del_E_bs=np.zeros((len(stop_d),7))
+    logxi_last,vobs_last,robyRg_last,vrel_last,del_E_final,del_E_bs=np.zeros((len(stop_d),6)).T
 
-    xpxl_last,xpxcoll_last,zetal_last,vobsl_last=np.zeros((10,4))
+    xpxl_last,xpxcoll_last,zetal_last,vobsl_last=np.zeros((10,4)).T
     
     vturb_in=np.zeros(1000)
     
@@ -392,23 +404,26 @@ def xstar_wind(ep, p_mhd, mu, angle,dict_solution,stop_d, SED_path, xlum, h_over
     #### opening and reseting the files (this should be done on the fly to avoid issues)
     
     stop_dl=stop_d[-1]
+    
+    os.system('mkdir -p '+outdir)
+    
     #446
-    fileobj_box_details=open("./box_details_stop_dist"+str(stop_d)+".log")
+    fileobj_box_details=open('./'+outdir+"/box_details_stop_dist_%.1e"%stop_dl+".log",'w+')
     
     #447
-    fileobj_box_ascii=open("./box_Ascii_stop_dist_for_xstar"+str(stop_dl)+".dat")
+    fileobj_box_ascii_xstar=open('./'+outdir+"/box_Ascii_stop_dist_for_xstar_%.1e"%stop_dl+".dat",'w+')
     
     #448
-    fileobj_box_ascii_last=open("last_box_Ascii_for_xstar"+str(stop_dl)+".dat")
+    fileobj_box_ascii_xstar_last=open('./'+outdir+"/last_box_Ascii_for_xstar_%.1e"%stop_dl+".dat",'w+')
     
     #449
-    fileobj_box_ascii_stop_dis=open("./box_Ascii_stop_dist"+str(stop_dl)+".dat")
+    fileobj_box_ascii_stop_dis=open('./'+outdir+"/box_Ascii_stop_dist_%.1e"%stop_dl+".dat",'w+')
     
     fileobj_box_ascii_stop_dis.write('#Rsph_cgs_mid(nbox) log10(density_cgs_mid(nbox)) log10(NhOfBox(nbox)) logxi_mid(nbox) '+
                                      ' vobs_mid(nbox)\n')
     
     #450
-    fileobj_box_ascii_last=open("last_box_Ascii"+str(stop_dl)+".dat")
+    fileobj_box_ascii_last=open('./'+outdir+"/last_box_Ascii_%.1e"%stop_dl+".dat",'w+')
         
     '''
     !* This following 'while' loop is used to find the first suitable value of 
@@ -416,7 +431,7 @@ def xstar_wind(ep, p_mhd, mu, angle,dict_solution,stop_d, SED_path, xlum, h_over
     !* Above than that, absorption does not contribute much 
     '''
     
-    ro_by_Rg = 6.0
+    ro_by_Rg = ro_init
     DelFactorRo = 1.0001
     
     while ro_by_Rg <= 1.1e7 :
@@ -431,7 +446,7 @@ def xstar_wind(ep, p_mhd, mu, angle,dict_solution,stop_d, SED_path, xlum, h_over
 
         vel_r_cgs = c_cgs*func_vel_r*((rcyl_SI/Rg_SI)**(-0.5)) 
         vel_z_cgs = c_cgs*func_vel_z*((rcyl_SI/Rg_SI)**(-0.5))
-        vel_obs_cgs = ((vel_r_cgs*np.cos(func_angle*PI/180.0))+(vel_z_cgs*np.sin(func_angle*PI/180.0)))
+        vel_obs_cgs = ((vel_r_cgs*np.cos(func_angle*np.pi/180.0))+(vel_z_cgs*np.sin(func_angle*np.pi/180.0)))
 
         logxi = np.log10(L_xi_Source/(density_cgs*m2cm*Rsph_SI*m2cm*Rsph_SI))
         
@@ -450,7 +465,7 @@ def xstar_wind(ep, p_mhd, mu, angle,dict_solution,stop_d, SED_path, xlum, h_over
     vobs_1st = vel_obs_cgs/(Km2m*m2cm)
     logxi_1st = logxi
     robyRg_1st = ro_by_Rg
-
+    
     fileobj_box_details.write('Rsph_cgs_1st='+str(Rsph_cgs_1st)+',logxi_1st='+str(logxi_1st)+',vobs_1st='+str(vobs_1st)
                               +',ro/Rg_1st='+str(robyRg_1st)+'\n')
     
@@ -468,7 +483,7 @@ def xstar_wind(ep, p_mhd, mu, angle,dict_solution,stop_d, SED_path, xlum, h_over
         
         vel_r_cgs = c_cgs*func_vel_r*((rcyl_SI/Rg_SI)**(-0.5)) 
         vel_z_cgs = c_cgs*func_vel_z*((rcyl_SI/Rg_SI)**(-0.5))
-        vel_obs_cgs = ((vel_r_cgs*np.cos(func_angle*PI/180.0))+(vel_z_cgs*np.sin(func_angle*PI/180.0)))
+        vel_obs_cgs = ((vel_r_cgs*np.cos(func_angle*np.pi/180.0))+(vel_z_cgs*np.sin(func_angle*np.pi/180.0)))
         
         logxi = np.log10(L_xi_Source/(density_cgs*m2cm*Rsph_SI*m2cm*Rsph_SI))
         
@@ -485,116 +500,115 @@ def xstar_wind(ep, p_mhd, mu, angle,dict_solution,stop_d, SED_path, xlum, h_over
     #!* Building the boxes based on Delr
     delr_by_r= rad_res
     Rsph_cgs_end= Rsph_cgs_1st
-    nbox = 0
+    i_box = 0
     i = 0
     
     #### This is very ugly and should be changed to the proper number of boxes, computed before this loop
-    
-    vobs_start,robyRg_start,Rsph_cgs_start,density_cgs_start,logxi_start=np.zeros((1000,5))
-    
-    vobs_mid,robyRg_mid,Rsph_cgs_mid,density_cgs_mid,logxi_mid=np.zeros((1000,5))
-    
-    vobs_stop,robyRg_stop,Rsph_cgs_stop,density_cgs_stop,logxi_stop,NhOfBox=np.zeros((1000,6))
+    vobs_start,robyRg_start,Rsph_cgs_start,density_cgs_start,logxi_start=np.zeros((1000,5)).T
+    vobs_mid,robyRg_mid,Rsph_cgs_mid,density_cgs_mid,logxi_mid=np.zeros((1000,5)).T
+    vobs_stop,robyRg_stop,Rsph_cgs_stop,density_cgs_stop,logxi_stop,NhOfBox=np.zeros((1000,6)).T
     
     while Rsph_cgs_end<Rsph_cgs_last[len(stop_d)-1]:
 
+        Rsph_cgs_stop[i_box]= Rsph_cgs_end*((2.0+delr_by_r)/(2.0-delr_by_r))
 
-        Rsph_cgs_stop[nbox]= Rsph_cgs_end*((2.0+delr_by_r)/(2.0-delr_by_r))
-
-        if Rsph_cgs_last[i]<Rsph_cgs_stop[nbox]:
-            delr_by_r = 2.0*(Rsph_cgs_last[i]-Rsph_cgs_stop[nbox-1])/(Rsph_cgs_last[i]+Rsph_cgs_stop[nbox-1])
+        if Rsph_cgs_last[i]<Rsph_cgs_stop[i_box]:
+            delr_by_r = 2.0*(Rsph_cgs_last[i]-Rsph_cgs_stop[i_box-1])/(Rsph_cgs_last[i]+Rsph_cgs_stop[i_box-1])
         
         
-        Rsph_cgs_start[nbox]= Rsph_cgs_end
-        Rsph_SI= Rsph_cgs_start[nbox]/m2cm
+        Rsph_cgs_start[i_box]= Rsph_cgs_end
+        Rsph_SI= Rsph_cgs_start[i_box]/m2cm
         rcyl_SI = Rsph_SI/(np.sqrt(1.0+(func_zbyr*func_zbyr)))
-        robyRg_start[nbox] = rcyl_SI/(Rg_SI*func_rcyl_by_ro)
+        robyRg_start[i_box] = rcyl_SI/(Rg_SI*func_rcyl_by_ro)
         
-        density_cgs_start[nbox] = (mdot_Mhd/(sigma_thomson_cgs*Rg_cgs))*func_density_MHD*((rcyl_SI/Rg_SI)**(p_mhd-1.5))
+        density_cgs_start[i_box] = (mdot_Mhd/(sigma_thomson_cgs*Rg_cgs))*func_density_MHD*((rcyl_SI/Rg_SI)**(p_mhd-1.5))
         
         vel_r_cgs = c_cgs*func_vel_r*((rcyl_SI/Rg_SI)**(-0.5)) 
         vel_z_cgs = c_cgs*func_vel_z*((rcyl_SI/Rg_SI)**(-0.5))
-        vel_obs_cgs = ((vel_r_cgs*np.cos(func_angle*PI/180.0))+(vel_z_cgs*np.sin(func_angle*PI/180.0)))
+        vel_obs_cgs = ((vel_r_cgs*np.cos(func_angle*np.pi/180.0))+(vel_z_cgs*np.sin(func_angle*np.pi/180.0)))
         
-        vobs_start[nbox] = vel_obs_cgs/(Km2m*m2cm)
+        vobs_start[i_box] = vel_obs_cgs/(Km2m*m2cm)
         
-        logxi_start[nbox] = np.log10(L_xi_Source/(density_cgs_start[nbox]*m2cm*Rsph_SI*m2cm*Rsph_SI))
+        logxi_start[i_box] = np.log10(L_xi_Source/(density_cgs_start[i_box]*m2cm*Rsph_SI*m2cm*Rsph_SI))
         
         #!* Recording quantities for the end point of the box*/
         
-        Rsph_cgs_stop[nbox]= Rsph_cgs_start[nbox]*((2.0+delr_by_r)/(2.0-delr_by_r))
+        Rsph_cgs_stop[i_box]= Rsph_cgs_start[i_box]*((2.0+delr_by_r)/(2.0-delr_by_r))
         
         #!*The above expression comes from R(i+1)-R[i]=(delr_by_r)*((R[i]+R(i+1))/2.0) 
         
-        Rsph_SI= (Rsph_cgs_stop[nbox]/m2cm)
+        Rsph_SI= (Rsph_cgs_stop[i_box]/m2cm)
         rcyl_SI = Rsph_SI/np.sqrt(1.0+(func_zbyr*func_zbyr))
         
-        robyRg_stop[nbox] = rcyl_SI/(Rg_SI*func_rcyl_by_ro)
+        robyRg_stop[i_box] = rcyl_SI/(Rg_SI*func_rcyl_by_ro)
         
-        density_cgs_stop[nbox] = (mdot_Mhd/(sigma_thomson_cgs*Rg_cgs))*func_density_MHD*((rcyl_SI/Rg_SI)**(p_mhd-1.5))
+        density_cgs_stop[i_box] = (mdot_Mhd/(sigma_thomson_cgs*Rg_cgs))*func_density_MHD*((rcyl_SI/Rg_SI)**(p_mhd-1.5))
         
         vel_r_cgs = c_cgs*func_vel_r*((rcyl_SI/Rg_SI)**(-0.5)) 
         vel_z_cgs = c_cgs*func_vel_z*((rcyl_SI/Rg_SI)**(-0.5))
-        vel_obs_cgs = ((vel_r_cgs*np.cos(func_angle*PI/180.0))+(vel_z_cgs*np.sin(func_angle*PI/180.0)))
+        vel_obs_cgs = ((vel_r_cgs*np.cos(func_angle*np.pi/180.0))+(vel_z_cgs*np.sin(func_angle*np.pi/180.0)))
         
-        vobs_stop[nbox] = vel_obs_cgs/(Km2m*m2cm)
+        vobs_stop[i_box] = vel_obs_cgs/(Km2m*m2cm)
         
-        logxi_stop[nbox] = np.log10(L_xi_Source/(density_cgs_stop[nbox]*Rsph_cgs_stop[nbox]*Rsph_cgs_stop[nbox]))
+        logxi_stop[i_box] = np.log10(L_xi_Source/(density_cgs_stop[i_box]*Rsph_cgs_stop[i_box]*Rsph_cgs_stop[i_box]))
         
         #!* Recording quantities for the mid point of the box
         
-        Rsph_cgs_mid[nbox]= (Rsph_cgs_start[nbox]+Rsph_cgs_stop[nbox])/2.0
+        Rsph_cgs_mid[i_box]= (Rsph_cgs_start[i_box]+Rsph_cgs_stop[i_box])/2.0
         
-        Rsph_SI= (Rsph_cgs_mid[nbox]/m2cm)
+        Rsph_SI= (Rsph_cgs_mid[i_box]/m2cm)
         rcyl_SI = Rsph_SI/np.sqrt(1.0+(func_zbyr*func_zbyr))
         
-        robyRg_mid[nbox] = rcyl_SI/(Rg_SI*func_rcyl_by_ro)
+        robyRg_mid[i_box] = rcyl_SI/(Rg_SI*func_rcyl_by_ro)
         
-        density_cgs_mid[nbox] = (mdot_Mhd/(sigma_thomson_cgs*Rg_cgs))*func_density_MHD*((rcyl_SI/Rg_SI)**(p_mhd-1.5))
+        density_cgs_mid[i_box] = (mdot_Mhd/(sigma_thomson_cgs*Rg_cgs))*func_density_MHD*((rcyl_SI/Rg_SI)**(p_mhd-1.5))
         
         vel_r_cgs = c_cgs*func_vel_r*((rcyl_SI/Rg_SI)**(-0.5)) 
         vel_z_cgs = c_cgs*func_vel_z*((rcyl_SI/Rg_SI)**(-0.5))
-        vel_obs_cgs = ((vel_r_cgs*np.cos(func_angle*PI/180.0))+(vel_z_cgs*np.sin(func_angle*PI/180.0)))
+        vel_obs_cgs = ((vel_r_cgs*np.cos(func_angle*np.pi/180.0))+(vel_z_cgs*np.sin(func_angle*np.pi/180.0)))
         
-        vobs_mid[nbox] = vel_obs_cgs/(Km2m*m2cm)
+        vobs_mid[i_box] = vel_obs_cgs/(Km2m*m2cm)
         
-        logxi_mid[nbox] = np.log10(L_xi_Source/(density_cgs_mid[nbox]*Rsph_cgs_mid[nbox]*Rsph_cgs_mid[nbox]))
+        logxi_mid[i_box] = np.log10(L_xi_Source/(density_cgs_mid[i_box]*Rsph_cgs_mid[i_box]*Rsph_cgs_mid[i_box]))
         
-        logxi_input[nbox] = np.log10(L_xi_Source/(density_cgs_mid[nbox]*Rsph_cgs_start[nbox]*Rsph_cgs_start[nbox]))
+        logxi_input[i_box] = np.log10(L_xi_Source/(density_cgs_mid[i_box]*Rsph_cgs_start[i_box]*Rsph_cgs_start[i_box]))
         
         #!* Calculate Nh for the box
         
-        NhOfBox[nbox] = density_cgs_mid[nbox]*(Rsph_cgs_stop[nbox]-Rsph_cgs_start[nbox])
+        NhOfBox[i_box] = density_cgs_mid[i_box]*(Rsph_cgs_stop[i_box]-Rsph_cgs_start[i_box])
         
         #!* Print the quantities in the log checking
         
         #! This step is for storing data for the last box
         if delr_by_r!=rad_res: 
-            nbox_stop[i] = nbox-1
+            
+            #adding a +1 here to switch from an i_box to the actual box number
+            nbox_stop[i] = i_box+1-1
+            
             fileobj_box_details.write('last box information\n')
             fileobj_box_details.write('stop_dist='+str(stop_d[i])+'\n')
         
-        fileobj_box_details.write('Box no. is='+str(nbox+1)+'\n')
-        fileobj_box_details.write('robyRg_start='+str(robyRg_start[nbox])+'\nvobs_start in km/s='+str(vobs_start[nbox])
-                                 +'\nRsph_start in cm='+str(Rsph_cgs_start[nbox])+'\nlognH_start (in /cc)='
-                                 +str(np.log10(density_cgs_start[nbox]))+"\nlogxi_start="+str(logxi_start[nbox])+'\n')
+        fileobj_box_details.write('Box no. is='+str(i_box+1)+'\n')
+        fileobj_box_details.write('robyRg_start='+str(robyRg_start[i_box])+'\nvobs_start in km/s='+str(vobs_start[i_box])
+                                 +'\nRsph_start in cm='+str(Rsph_cgs_start[i_box])+'\nlognH_start (in /cc)='
+                                 +str(np.log10(density_cgs_start[i_box]))+"\nlogxi_start="+str(logxi_start[i_box])+'\n')
         
         # !* log(4*Pi) is subtracted to print the correct logxi.
         # !* We have multiplied xlum i.e. luminosity by 4*Pi to make the estimation of flux correctly.
         # !* xi value also we are providing from ASCII file to xstar wrong to estimate the distance correctly.
          
-        fileobj_box_details.write('robyRg_mid='+str(robyRg_mid[nbox])+'\nvobs_mid in km/s='+str(vobs_mid[nbox])+
-                                  '\nRsph_mid in cm='+str(Rsph_cgs_mid[nbox])+'\nlognH_mid (in /cc)='
-                                  +str(np.log10(density_cgs_mid[nbox]))+'\nlogxi_mid='+str(logxi_mid[nbox])+'\n')
+        fileobj_box_details.write('robyRg_mid='+str(robyRg_mid[i_box])+'\nvobs_mid in km/s='+str(vobs_mid[i_box])+
+                                  '\nRsph_mid in cm='+str(Rsph_cgs_mid[i_box])+'\nlognH_mid (in /cc)='
+                                  +str(np.log10(density_cgs_mid[i_box]))+'\nlogxi_mid='+str(logxi_mid[i_box])+'\n')
                                                    
-        fileobj_box_details.write('robyRg_stop='+str(robyRg_stop[nbox])+'\nvobs_stop in km/s='+str(vobs_stop[nbox])+
-                                  '\nRsph_stop in cm='+str(Rsph_cgs_stop[nbox])+'\nlognH_stop (in /cc)='
-                                  +str(np.log10(density_cgs_stop[nbox]))+'\nlogxi_stop='+str(logxi_stop[nbox])+'\n')
+        fileobj_box_details.write('robyRg_stop='+str(robyRg_stop[i_box])+'\nvobs_stop in km/s='+str(vobs_stop[i_box])+
+                                  '\nRsph_stop in cm='+str(Rsph_cgs_stop[i_box])+'\nlognH_stop (in /cc)='
+                                  +str(np.log10(density_cgs_stop[i_box]))+'\nlogxi_stop='+str(logxi_stop[i_box])+'\n')
         
         fileobj_box_details.write('Parameters to go to xstar are:\n')
-        fileobj_box_details.write('Gas slab of lognH='+str(np.log10(density_cgs_mid[nbox]))+'\nlogNH='+str(np.log10(NhOfBox[nbox]))
-                                  +'\nof logxi='+str(logxi_mid[nbox])+'\nis travelling at a velocity of vobs in Km/s='
-                                  +str(vobs_mid[nbox])+'\n')
+        fileobj_box_details.write('Gas slab of lognH='+str(np.log10(density_cgs_mid[i_box]))+'\nlogNH='+str(np.log10(NhOfBox[i_box]))
+                                  +'\nof logxi='+str(logxi_mid[i_box])+'\nis travelling at a velocity of vobs in Km/s='
+                                  +str(vobs_mid[i_box])+'\n')
         
         # !* xi value we are providing from ASCII file to xstar wrong to estimate the distance correctly.
         # !* It is wrong because luminosity is calculated wrongly by multiplying 4.0*Pi 
@@ -603,24 +617,24 @@ def xstar_wind(ep, p_mhd, mu, angle,dict_solution,stop_d, SED_path, xlum, h_over
         if (delr_by_r==rad_res):
             #!* calculated suitably fron density_mid and Rsph_start
             #!* logxi_mid is changed to logxi_input
-            fileobj_box_ascii.write(str(np.log10(density_cgs_mid[nbox]))+','+str(np.log10(NhOfBox[nbox]))+','
-                                   +str(logxi_input[nbox])+','+str(vobs_mid[nbox])+'\n')
+            fileobj_box_ascii_xstar.write(str(np.log10(density_cgs_mid[i_box]))+','+str(np.log10(NhOfBox[i_box]))+','
+                                   +str(logxi_input[i_box])+','+str(vobs_mid[i_box])+'\n')
         else:
             #!* calculated suitably fron density_mid and Rsph_start
             #!* logxi_mid is changed to logxi_input
-            fileobj_box_ascii_last.write(str(np.log10(density_cgs_mid[nbox]))+','+str(np.log10(NhOfBox[nbox]))+','
-                                   +str(logxi_input[nbox])+','+str(vobs_mid[nbox])+'\n')
+            fileobj_box_ascii_xstar_last.write(str(np.log10(density_cgs_mid[i_box]))+','+str(np.log10(NhOfBox[i_box]))+','
+                                   +str(logxi_input[i_box])+','+str(vobs_mid[i_box])+'\n')
         
         #!* This loop is to prepare the ASCII file where xi value is the actual physical value
         
         if delr_by_r==rad_res:
-            fileobj_box_ascii_stop_dis.write(str(Rsph_cgs_mid[nbox])+','+str(np.log10(density_cgs_mid[nbox]))+','+str(np.log10(NhOfBox[nbox]))+','+str(logxi_mid[nbox])+','+str(vobs_mid[nbox]))
+            fileobj_box_ascii_stop_dis.write(str(Rsph_cgs_mid[i_box])+','+str(np.log10(density_cgs_mid[i_box]))+','+str(np.log10(NhOfBox[i_box]))+','+str(logxi_mid[i_box])+','+str(vobs_mid[i_box])+'\n')
         else:
-            fileobj_box_ascii_last.write(str(Rsph_cgs_mid[nbox])+','+str(np.log10(density_cgs_mid[nbox]))+','+str(np.log10(NhOfBox[nbox]))+','+str(logxi_mid[nbox])+','+str(vobs_mid[nbox]))
+            fileobj_box_ascii_last.write(str(Rsph_cgs_mid[i_box])+','+str(np.log10(density_cgs_mid[i_box]))+','+str(np.log10(NhOfBox[i_box]))+','+str(logxi_mid[i_box])+','+str(vobs_mid[i_box])+'\n')
 
         
         if chatter>=10:
-            print(str(nbox)+','+str(Rsph_cgs_last[i])+','+str(Rsph_cgs_stop[nbox])+','
+            print(str(i_box+1)+','+str(Rsph_cgs_last[i])+','+str(Rsph_cgs_stop[i_box])+','
                  +str(delr_by_r)+','+str(Rsph_cgs_last[-1]))
         
         #!* Readjust the loop parameters
@@ -629,13 +643,13 @@ def xstar_wind(ep, p_mhd, mu, angle,dict_solution,stop_d, SED_path, xlum, h_over
             print('I am after delr is changed'+str(delr_by_r))
             
             #!* maintaining the regular box no.
-            nbox= nbox-1 
+            i_box= i_box-1 
             i= i+1
             delr_by_r = rad_res
         
-        Rsph_cgs_end = Rsph_cgs_stop[nbox]
+        Rsph_cgs_end = Rsph_cgs_stop[i_box]
         
-        nbox = nbox + 1
+        i_box = i_box + 1
 
     #!*write(*,*)Rsph_cgs_end-Rsph_cgs_last(stop_d_index)
     
@@ -643,9 +657,9 @@ def xstar_wind(ep, p_mhd, mu, angle,dict_solution,stop_d, SED_path, xlum, h_over
 
     for i in range(len(stop_d)):
         fileobj_box_details.write('stop_d(i)='+str(stop_d[i])+'\n')
-        print("stop_d(i)="+stop_d[i])
+        print("stop_d(i)="+str(stop_d[i]))
         fileobj_box_details.write('nbox_stop='+str(nbox_stop[i])+'\n')
-        print("nbox_stop="+nbox_stop[i])
+        print("nbox_stop="+str(nbox_stop[i]))
 
     print("No. of boxes required="+str(nbox_index))
     
@@ -653,10 +667,10 @@ def xstar_wind(ep, p_mhd, mu, angle,dict_solution,stop_d, SED_path, xlum, h_over
     fileobj_box_details.close()
     
     #447
-    fileobj_box_ascii.close()
+    fileobj_box_ascii_xstar.close()
     
     #448
-    fileobj_box_ascii_last.close()
+    fileobj_box_ascii_xstar_last.close()
     
     #449
     fileobj_box_ascii_stop_dis.close()
@@ -670,35 +684,36 @@ def xstar_wind(ep, p_mhd, mu, angle,dict_solution,stop_d, SED_path, xlum, h_over
     # !********************************************************************
 
     #211
-    with open('./box_Ascii_stop_dist_for_xstar'+str(stop_dl)+'.dat') as fileobj_box_ascii_stop_dist:
+    with open('./'+outdir+'/box_Ascii_stop_dist_for_xstar_%.1e'%stop_dl+'.dat','r') as fileobj_box_ascii_stop_dist:
         box_stop_dist_list=fileobj_box_ascii_stop_dist.readlines()
     
     #! xpx, xpxcol are given in log value. zeta is logxi. vobs in Km/s
+    
+    xpxcoll,xpxl,zetal,vobsl,vrel,del_E=np.zeros((nbox_index,6)).T
 
-    for nbox in range(nbox_index):
-        xpxl[nbox],xpxcoll[nbox],zetal[nbox],vobsl[nbox]=np.array(box_stop_dist_list[nbox].replace('\n','').split(',')).astype(float)
+    for i_box in range(nbox_index):
+        xpxl[i_box],xpxcoll[i_box],zetal[i_box],vobsl[i_box]=np.array(box_stop_dist_list[i_box].replace('\n','').split(',')).astype(float)
     
     #212
-    with open('./last_box_Ascii_stop_dist_for_xstar'+str(stop_dl)+'.dat') as fileobj_box_ascii_stop_dist_last:
+    with open('./'+outdir+'/last_box_Ascii_for_xstar_%.1e'%stop_dl+'.dat','r') as fileobj_box_ascii_stop_dist_last:
         box_stop_dist_list_last=fileobj_box_ascii_stop_dist_last.readlines()
     
     for i in range(len(stop_d)):
         xpxl_last[i],xpxcoll_last[i],zetal_last[i],vobsl_last[i]=\
             np.array(box_stop_dist_list_last[i].replace('\n','').split(',')).astype(float)
-            
-    nbox_restart= 1 
-    c_n = 1
+
+    c_n = 0
     final_box= False
 
     #!* This file is to write different variables estimated from xstar.
     
     #678
-    with open('./temp_ion_fraction_details.dat') as fileobj_ion_fraction:
+    with open('./'+outdir+'/temp_ion_fraction_details.dat','w+') as fileobj_ion_fraction:
         fileobj_ion_fraction.write('#starting_calculation_from_nbox='+str(nbox_restart)+'\n')
 
     #681
-    with open('./xstar_output_details.dat') as fileobj_xstar_output:
-        fileobj_xstar_output.write('#starting_calculation_from_nbox=',str(nbox_restart)+'\n')
+    with open('./'+outdir+'/xstar_output_details.dat','w+') as fileobj_xstar_output:
+        fileobj_xstar_output.write('#starting_calculation_from_nbox='+str(nbox_restart)+'\n')
     
     '''
     t is the temperature of the plasma. Starts at the default value of 400, but will be updated starting on the second box
@@ -710,32 +725,31 @@ def xstar_wind(ep, p_mhd, mu, angle,dict_solution,stop_d, SED_path, xlum, h_over
     ####main loop
     
     #!nbox_restart should be changed to 1 for fresh calculation
-    for nbox in tqdm(range(nbox_restart,nbox_index)):
-        
-        #adding the variable as a condition for a skip later
-        pass_writing=False
-
-        print('nbox ='+str(nbox))
+    
+    #using i_box because it's an index here, not the actual box number (shifted by 1)
+    for i_box in tqdm(range(nbox_restart-1,nbox_index)):
+    
+        print('nbox ='+str(i_box+1))
         
         #! Doppler shifting of spectra depending on relative velocity
 
-        if nbox>1:
-            vrel[nbox] = vobsl[nbox]-vobsl[nbox-1]
-            vturb_in[nbox] = vobsl[nbox-1]-vobsl[nbox]
+        if i_box>1:
+            vrel[i_box] = vobsl[i_box]-vobsl[i_box-1]
+            vturb_in[i_box] = vobsl[i_box-1]-vobsl[i_box]
         else:
-            vrel[nbox] = vobsl[nbox]
-            vturb_in[nbox] = vobsl[nbox]
+            vrel[i_box] = vobsl[i_box]
+            vturb_in[i_box] = vobsl[i_box]
         
-        del_E[nbox]= np.sqrt((1-vrel[nbox]/c_Km)/(1+vrel[nbox]/c_Km))
-        #!del_E(nbox) = 1.00
+        del_E[i_box]= np.sqrt((1-vrel[i_box]/c_Km)/(1+vrel[i_box]/c_Km))
+        #!del_E(i_box) = 1.00
 
         #! Reading input spectra from file: Initial spectra/output from last box 
 
-        if nbox<2:
+        if i_box<2:
             
             # Nengrid=int(incident_spectra_lines[0])            
 
-            xstar_input_SED=SED_path
+            xstar_input=SED_path
 
         else:
                 
@@ -749,16 +763,16 @@ def xstar_wind(ep, p_mhd, mu, angle,dict_solution,stop_d, SED_path, xlum, h_over
             tp=plasma_par.temperature[-1]
             
             #!**Writing the shifted spectra in a file as it is input for next box 
-            filename_shifted_input='./shifted_input'+str(nbox)+'.dat'
+            xstar_input='./'+outdir+'/shifted_input'+str(i_box+1)+'.dat'
             
             #shifting the spectra and storing it in the xstar input file nae
-            shift_tr_spectra(del_E[nbox],filename_shifted_input)
+            shift_tr_spectra(del_E[i_box],xstar_input)
             
-        xpx = 10.0**(xpxl[nbox])
-        xpxcol = 10.0**(xpxcoll[nbox])
-        zeta = zetal[nbox]
-        vobsx = vobsl[nbox]
-        vturb_x = vturb_in[nbox]
+        xpx = 10.0**(xpxl[i_box])
+        xpxcol = 10.0**(xpxcoll[i_box])
+        zeta = zetal[i_box]
+        vobsx = vobsl[i_box]
+        vturb_x = vturb_in[i_box]
            
         '''
         The lines of sight considered should already be compton thin, the whole line of sight has to be compton thick and this is 
@@ -771,21 +785,23 @@ def xstar_wind(ep, p_mhd, mu, angle,dict_solution,stop_d, SED_path, xlum, h_over
  
             break
 
-        xstar_function(filename_shifted_input,xpx,xpxcol,tp,zeta,nbox,final_box,nbox_restart,vobsx,vturb_x)
+        #### main xstar call
+        
+        xstar_function(xstar_input,xlum,tp,xpx,xpxcol,zeta,i_box+1,vturb_x)
         
         
         #writing the infos
         px.LoadFiles()
-        write_xstar_infos(nbox,vobsx,'xstar_output_details.dat')
+        write_xstar_infos(i_box+1,vobsx,'xstar_output_details.dat')
         
         ####!* Computing spectra and blueshift for the final box depending on stop_dist.
 
-        if nbox==nbox_stop[c_n]:
+        if i_box+1==nbox_stop[c_n]:
             
             #!regular or final, 1 indicate final
             final_box=True
 
-            vrel_last[c_n] = vobsl_last[c_n]-vobsl[nbox]
+            vrel_last[c_n] = vobsl_last[c_n]-vobsl[i_box]
 
             del_E_final[c_n] = np.sqrt((1-vrel_last[c_n]/c_Km)/(1+vrel_last[c_n]/c_Km))
             
@@ -805,10 +821,10 @@ def xstar_wind(ep, p_mhd, mu, angle,dict_solution,stop_d, SED_path, xlum, h_over
             #retrieving the plasma temperature of the last step
             tp=plasma_par.temperature[-1]
             
-            filename_shifted_input='./shifted_input_final'+str(c_n)+'.dat'
+            xstar_input='./'+outdir+'/shifted_input_final'+str(c_n)+'.dat'
             
             #shifting the spectra in a different file name
-            shift_tr_spectra(del_E_final[c_n],filename_shifted_input)
+            shift_tr_spectra(del_E_final[c_n],xstar_input)
     
             xpx = 10.0**(xpxl_last[c_n])
             xpxcol = 10.0**(xpxcoll_last[c_n])
@@ -822,19 +838,19 @@ def xstar_wind(ep, p_mhd, mu, angle,dict_solution,stop_d, SED_path, xlum, h_over
                 
                 break
     
-            xstar_function(filename_shifted_input,xpx,xpxcol,tp,zeta,nbox,final_box,nbox_restart,vobsx,vturb_x)
+            xstar_function(xstar_input,xlum,xpx,xpxcol,tp,zeta,i_box+1,vturb_x)
         
             px.LoadFiles()
-            filename_shifted_input='./Final_blueshifted'+str(stop_d[c_n])+'.dat'
+            xstar_input='./'+outdir+'/Final_blueshifted'+str(stop_d[c_n])+'.dat'
             
-            shift_tr_spectra(del_E_bs[c_n],filename_shifted_input)   
+            shift_tr_spectra(del_E_bs[c_n],xstar_input)   
     
             final_box= 0
     
             c_n= c_n+1
             
             #writing the infos with the final iteration
-            write_xstar_infos(nbox,vobsx,'xstar_final_output_details.dat')
+            write_xstar_infos(i_box+1,vobsx,'xstar_final_output_details.dat')
             
             #! if loop for the last box calculation is completed
 

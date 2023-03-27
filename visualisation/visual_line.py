@@ -256,18 +256,18 @@ else:
     radio_ignore_full=st.sidebar.radio('Include problematic data (_full) folders',('No','Yes'))=='No'
 
 if not online:
-    os.system('mkdir -p glob_batch/dumps/')
+    os.system('mkdir -p glob_batch/visual_line_dumps/')
 
 join_telescope_str=np.array(choice_telescope)
 join_telescope_str.sort()
 join_telescope_str='_'.join(join_telescope_str.tolist())
 
 if online:
-    dump_path='/app/winds/dumps/dump_'+join_telescope_str+'_'+('no' if radio_ignore_full else '')+'full.pkl'
+    dump_path='/app/winds/visualisation/visual_line_dumps/dump_'+join_telescope_str+'_'+('no' if radio_ignore_full else '')+'full.pkl'
     
     update_dump=False
 else:
-    dump_path='./glob_batch/dumps/dump_'+join_telescope_str+'_'+('no' if radio_ignore_full else '')+'full.pkl'
+    dump_path='./glob_batch/visual_line_dumps/dump_'+join_telescope_str+'_'+('no' if radio_ignore_full else '')+'full.pkl'
 
     update_dump=st.sidebar.button('Update dump')
 
@@ -295,13 +295,9 @@ if update_online:
         
     
     #updating dumps to one level above the script
-    os.system('cp -r ./glob_batch/dumps/ '+path_online[:path_online.rfind('/')]+'/../')
-    
+    os.system('cp -r ./glob_batch/visual_line_dumps/ '+path_online[:path_online.rfind('/')]+'/')
+
 if update_dump or not os.path.isfile(dump_path):
-    st.text(dump_path)
-    
-    st.text(str(os.path.isfile(dump_path)))
-    
     
     with st.spinner(text='Updating dump file...' if update_dump else\
                     'Using new configuration. Creating dump file...'):
@@ -434,9 +430,9 @@ if update_dump or not os.path.isfile(dump_path):
         dump_dict['catal_maxi_simbad']=catal_maxi_simbad
         dump_dict['dict_lc_rxte']=dict_lc_rxte
         
-        with open(dump_path,'wb') as dump_file:
+        with open(dump_path,'wb+') as dump_file:
             dill.dump(dump_dict,file=dump_file)
-
+   
 with open(dump_path,'rb') as dump_file:
     dump_dict=dill.load(dump_file)
     
@@ -2381,44 +2377,3 @@ if display_scat_hid:
 
 if display_scat_inclin:
     streamlit_scat('source')
-    
-# display_general_infos=st.sidebar.checkbox('Display general informations (only with all lines)',value=False)
-
-#number of individual line detections
-
-#Not used right now
-display_general_infos=False
-
-#outdated
-# if display_general_infos:
-    
-#     #for all lines
-#     n_sources_restrict=mask_obj.sum()
-#     n_sources_withdet=(mask_obj & mask_obj_withdet).sum()
-#     n_sources_nodet=(mask_obj & ~mask_obj_withdet).sum()
-    
-#     #number of individual detections for all lines
-#     n_detections=(ravel_ragged(global_displayed_sign[mask_obj])>0).sum()
-#     n_detections_sign=(ravel_ragged(global_displayed_sign[mask_obj])>slider_sign).sum()
-    
-#     #sources with detections for individual lines
-#     n_sources_withdet_perline=[]
-#     #number of inidividual detections for individual lines
-#     n_detections_perline=[]
-#     for i in range_absline:
-#         n_sources_withdet_perline+=\
-#             [np.array([(global_displayed_sign[mask_obj].T[i][j]>0).any() for j in range(n_sources_restrict)]).sum()]
-#         n_detections_perline+=[[(ravel_ragged(global_displayed_sign[mask_obj].T[i])>0).sum(),
-#                                (ravel_ragged(global_displayed_sign[mask_obj].T[i])>slider_sign).sum()]]
-        
-#     n_detections_perline=np.array(n_detections_perline).T
-    
-#     st.write('number of sources in the current sample:'+str(n_sources_restrict))
-#     st.write('number of sources with detections in the current sample:'+str(n_sources_withdet))
-#     st.write('number of sources with no detection:'+str(n_sources_nodet))
-#     st.write('number of individual detections:'+str(n_detections))
-#     st.write('number of individual significant detections:'+str(n_detections_sign))
-#     for i in range_absline:
-#         st.write('number of sources with '+str(lines_std_names[i+3])+' detections:'+str(n_sources_withdet_perline[i]))
-#         st.write('number of individual'+str(lines_std_names[i+3])+' detections:'+str(n_detections_perline[0][i]))
-#         st.write('number of individual significant'+str(lines_std_names[i+3])+' detections:'+str(n_detections_perline[1][i]))

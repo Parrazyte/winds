@@ -4012,13 +4012,21 @@ def coltour_chi2map(fig,axe,chi_dict,title='',combined=False,ax_bar=None,norm=No
     #this allows to superpose the image to a log scale (imshow scals with pixels so it doesn't work)
     img=axe.pcolormesh(line_search_e_space,norm_par_space,chi_map.T,norm=cm_norm,cmap=cm_bipolar.reversed())
     
-    if combined==False:
-        colorbar=plt.colorbar(img,ax=axe,spacing='proportional',ticks=cm_ticks)
-        colorbar.ax.set_yticklabels(cm_ticklabels)
-        
-    else:
-        colorbar=plt.colorbar(img,cax=ax_bar,spacing='proportional',ticks=cm_ticks)
-        colorbar.ax.set_yticklabels(cm_ticklabels)
+    if ax_bar!=None:
+
+        if ax_bar=='bottom':
+            try:
+                colorbar=plt.colorbar(img,location='bottom',orientation='horizontal',spacing='proportional',ticks=cm_ticks)
+                colorbar.ax.set_yticklabels(cm_ticklabels)
+            except:
+                breakpoint()
+                print("aa")
+        elif combined==False:
+            colorbar=plt.colorbar(img,ax=axe,spacing='proportional',ticks=cm_ticks)
+            colorbar.ax.set_yticklabels(cm_ticklabels)  
+        else:
+            colorbar=plt.colorbar(img,cax=ax_bar,spacing='proportional',ticks=cm_ticks)
+            colorbar.ax.set_yticklabels(cm_ticklabels)
         
     if bigline_flag==1:
         colorbar.set_label(r'$\sqrt{\Delta\chi^2}$ with separated scales\nfor emission and absorption')

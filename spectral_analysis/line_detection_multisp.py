@@ -2733,7 +2733,7 @@ def line_detect(epoch_id):
     
             #gridspec creates a grid of spaces for subplots. We use 4 rows for the 4 plots
             #Second column is there to keep space for the colorbar. Hspace=0. sticks the plots together
-            gs_paper=GridSpec(4,2,figure=fig_paper,width_ratios=[98,2],hspace=0.)
+            gs_paper=GridSpec(4,2,figure=fig_paper,width_ratios=[100,0],hspace=0.)
             
             #first plot is the data with additive components
             ax_paper[0]=plt.subplot(gs_paper[0,0])
@@ -2753,7 +2753,7 @@ def line_detect(epoch_id):
             #second plot is the first blind search coltour
             ax_paper[1]=plt.subplot(gs_paper[1,0],sharex=ax_paper[0])
             ax_colorbar=plt.subplot(gs_paper[1,1])
-            coltour_chi2map(fig_paper,ax_paper[1],chi_dict_init,combined='paper',ax_bar=ax_colorbar)          
+            # coltour_chi2map(fig_paper,ax_paper[1],chi_dict_init,combined='paper',ax_bar=ax_colorbar)          
             ax_paper[1].set_xlim(line_cont_range)
             
             ax_paper[2]=plt.subplot(gs_paper[2,0],sharex=ax_paper[0])
@@ -2764,17 +2764,15 @@ def line_detect(epoch_id):
             ax_paper[3]=plt.subplot(gs_paper[3,0],sharex=ax_paper[0])
             ax_colorbar=plt.subplot(gs_paper[3,1])
             
-            #coltour_chi2map(fig_paper,ax_paper[3],chi_dict_postauto,combined='nolegend',ax_bar=ax_colorbar,norm=(251.5,12.6))          
+            coltour_chi2map(fig_paper,ax_paper[3],chi_dict_postauto,combined='nolegend',ax_bar='bottom',norm=(251.5,12.6))          
 
-            coltour_chi2map(fig_paper,ax_paper[3],chi_dict_postauto,combined='nolegend',ax_bar=ax_colorbar)          
+            # coltour_chi2map(fig_paper,ax_paper[3],chi_dict_postauto,combined='nolegend',ax_bar=ax_colorbar)          
             
             ax_paper[3].set_xlim(line_cont_range)
             
             plot_std_ener(ax_paper[1],plot_em=True)
             plot_std_ener(ax_paper[2],plot_em=True)
             plot_std_ener(ax_paper[3],plot_em=True)
-            
-        breakpoint()
         
         fig_paper=plt.figure(figsize=(14.5,22))
         
@@ -2785,6 +2783,8 @@ def line_detect(epoch_id):
         plt.savefig(outdir+'/'+epoch_observ[0]+'_paper_plot_'+args.line_search_e.replace(' ','_')+'_'+args.line_search_norm.replace(' ','_')+'.pdf')
                 
         plt.close(fig_paper)
+        
+        breakpoint()
         
         model_load(data_autofit_noabs)
         

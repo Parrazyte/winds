@@ -288,8 +288,13 @@ if update_online:
         online_lines=online_file.readlines()
 
     for i in range(len(online_lines)):
-        online_lines[i]=online_lines[i].replace("###",'###')
-    
+        
+        #trick to avoid replacing the markdown where we don't want to
+        #the last replace is to override this specific line (the following one) which gets fucked by the rest
+        #=#.replace(".markdown('''",'.markdown('''').replace("'''",''''').replace("###",'###').replace("'''","###").replace('#','#')
+        
+        pass
+            
     with open(path_online,'w') as online_file:
         online_file.writelines(online_lines)
         
@@ -1745,7 +1750,7 @@ with tab_about:
     
     with st.expander('I want an overview of the science behind this'):
         st.header('Outbursts')
-        st.markdown(###
+        st.markdown('''
         X-Ray Binaries are binary systems emitting mostly in the X-ray band, composed of a compact object (Neutron Star or Black Hole) and a companion star.  
         The subgroup we are focusing on here is restricted to **Black Holes** orbiting with a "low mass" star (generally in the main sequence), for which accretion happens through Robe Loche overflow and an **accretion disk**. 
         Most of these sources have a very specific behavior: they spend the bigger part of their lifes undetected, at low luminosity (in "quiescence"), 
@@ -1753,7 +1758,7 @@ with tab_about:
         During these outbursts, the sources brightens by several orders of magnitudes, up to a significant percentage of their Eddington luminosity $L_{Edd}$, which is the "theoretical" upper limit of standard accreting regimes.  
         
         The source also goes to a specific pattern of spectral evolution, switching from a powerlaw dominated Spectral Energy Distribution (SED) in soft X-rays (the so-called **"hard"** state) during the initial brightening, to the **"soft"** state, similarly bright but dominated by the thermal emission of the accretion disk (most likely extending to the Innermost Stable Circular Orbit of the Black Hole). After some time spent during the soft state (and occasional back and forth in some instances), the source invariably becomes fainter, transits back to the hard state if necessary, then returns to quiescence.
-        ###)
+        ''')
         
         col_fig1, col_fig2= st.columns(2)
         with col_fig1:
@@ -1761,7 +1766,7 @@ with tab_about:
         with col_fig2:
             st.image(dump_path[:dump_path.rfind('/')]+'/xray_states.png',caption="Example of the differences between spectral shapes for the soft (red) and hard (blue) state of Cygnus X-1. From Done et al. 2007")
             
-        st.markdown(###
+        st.markdown('''
         Beyond this direct spectral dichotomy, a wealth of other features have been linked to the outburst evolution:  
             -a radio component associated to **jets** is only detected during the hard state  
             -specific **Quasi-Periodic Oscillations** (QPOs) can be detected in the timing features of the spectra, with different types in different spectral states, and can be linked to a wealth of geometrical and physicla behaviors  
@@ -1771,7 +1776,7 @@ with tab_about:
             -...
         
         As of now, the reason for the typical spectral evolution of outbursts, as well as the cause of most of the features that appear during it, remains unknown.
-        ###)
+        ''')
         
         col_winds, col_figwinds= st.columns(2)
         
@@ -1779,7 +1784,7 @@ with tab_about:
             
             st.header('Winds')
             
-            st.markdown(###
+            st.markdown('''
             Another features seen in outbursts is the appearance of **narrow, blueshifted absorption lines** in X-ray spectra, primarily from the very strong Ka and Kb lines of FeXXV and FeXXVI at 7-8keV.
             They are interpreted as the signature of dense material outflowing from the accretion disk of the Black Hole, and are expected to expell amounts of matter comparable to the accretion rate.
             Since the first observations 25 ago, a wealth of absorption profiles have been observed in BHLMXBS.
@@ -1790,33 +1795,33 @@ with tab_about:
             The **JED-SAD model** is a complete accretion-ejection framework for magnetically threaded disks, developed at the University of Grenoble-Alpes (France). Beyond very promising results for fitting all
             parts of the outburst of Black Hole XRBs, this model has been shown to produce winds, through both theoretical solutions and simulations. The results of this study will be compared to synthetic spectral signatures computed from self-similar JED-SAD solutions in the future, in order to access the evolution of the outflow, and to further constrain the nature and physical conditions of the disk during these observations.
             
-            ###)
+            ''')
             
             st.header('This work')
-            st.markdown(###
+            st.markdown('''
                         The science community and our own modeling efforts would benefit from a global and up-to-date view of the current wind signatures in BHLMXBs. However, while detailed works have been performed on the vast majority of individual detections, there are very few larger studies for several outbursts and sources. With the goal of providing a complete view of all currently known X-ray wind signatures, we first focus on the most historically studied and constraining observations, using the XMM-Newton and Chandra-HETG instruments.  
                         
                         We identify BHLMXB candidates through the BlackCAT and WATCHDOG catalogs, for a total of 79 sources. After extracting and pre-selecting all available spectra of these sources with high-enough quality to allow the detection of line, we end up with 242 spectra in 42 sources. We refer readers to the main paper for details on the line detection procedure.
                         
                         Beyond interactive displays of our results through HID and scatter plots, we provide direct access to the results table, restricted according to user demands. We also provide a monitoring display tool, which combines RXTE and up-to-date MAXI lightcurves and HR ratio evolutions of all single sources in the sample.
-                        ###)
+                        ''')
         
         with col_figwinds:
             st.image(dump_path[:dump_path.rfind('/')]+'/linedet_example.png',caption='Steps of the fitting procedure for a standard 4U130-47 Chandra spectra. First panel: 4-10 spectrum after the first continuum fit. Second panel: ∆χ2 map of the line blind search, restricted to positive (i.e. improvements) regions. Standard confidence intervals are highlighted with different line styles, and the colormap with the ∆χ2 improvements of emission and absorption lines. Third panel: Ratio plot of the best fit model once absorption lines are added. Fourth panel: Remaining residuals seen through a second blind search.')
             
-        st.markdown(###
+        st.markdown('''
                     See [Parra et al. 2023](https://www.youtube.com/watch?v=dQw4w9WgXcQ) for detailed references to the points discussed above, and [Diaz Trigo et al. 2016](https://doi.org/10.1002/asna.201612315) or [Ponti et al. 2016](https://doi.org/10.1002/asna.201612339) for reviews on winds.  
                     
                     Figure references:  
                         [Petrucci et al. 2021](https://doi.org/10.1051/0004-6361/202039524)  
                         [Done et al. 2007]((https://doi.org/10.1007/s00159-007-0006-1))  
-                    ###)
+                    ''')
                 
     with st.expander('I want to know how to use this tool'):
         
         st.header('General information')
         
-        st.markdown(###
+        st.markdown('''
                     Streamlit is a python library for web applications. 
                     Its interactivity is achieved by storing the status of the multiple widgets and re-running **the entire script** every time a modification is performed, allowing to recompute/redisplay/... all necessary outputs depending on the changes made to the widgets. 
                     
@@ -1828,11 +1833,11 @@ with tab_about:
                     
                     **This means that all subsequent widgets are reset to their default values whenever adding or removing an instrument.**
 
-                    ###)
+                    ''')
                     
         st.header('Data selection')
 
-        st.markdown(###
+        st.markdown('''
                     
                    The following options restrict the data used in **all** of the displays.
                    
@@ -1873,11 +1878,11 @@ with tab_about:
                   
                   The MC tests were done with 1000 computations, which means that using 1. as a significance threshold only restricts to detections above 0.999.
                    
-                    ###)
+                  ''')
                     
         st.header('Hardness Intensity Diagram (HID)')
         
-        st.markdown(###
+        st.markdown('''
                     
                    The HID displays the observations in a Hardness/Intensity (in this case Luminosity) diagram, using the standard bands of X-ray measurements. In the default options, detections above the threshold are marked by a full circle, with a size scaling with the Equivalent Width (EW, or depth relative to the continuum) of the line. This does **NOT** necessarily means higher significance. The default options also shows EW upper limits (ULs) with empty hexagons, using two different symbols to aid visually distinguish between the many sources of the sample. In the case of upper limits, **smaller** hexagons means that the observation guarantees no detection **above** this EW value (at a 3 sigma confidence level). In other words, the smaller the hexagon, the more constraining the observation.
                    
@@ -1890,7 +1895,7 @@ with tab_about:
                    
                    Various visualisation options allow to zoom on the current set of points in the graph, change coloring options and display errorbars (instead of upper limits).
                    
-                    ###)
+                   ''')
                     
                     
         

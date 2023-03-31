@@ -288,8 +288,13 @@ if update_online:
         online_lines=online_file.readlines()
 
     for i in range(len(online_lines)):
-        online_lines[i]=online_lines[i].replace("'''",'###')
-    
+        
+        #trick to avoid replacing the markdown where we don't want to
+        #the last replace is to override this specific line (the following one) which gets fucked by the rest, the pass allows a line to remain in the if
+        online_lines[i]=online_lines[i].replace(".markdown('''",'.markdown(@@@').replace("#'''",'@@@').replace("'''",'###').replace("@@@","'''").replace('online_lines[i]','#')
+        
+        pass
+            
     with open(path_online,'w') as online_file:
         online_file.writelines(online_lines)
         
@@ -1753,7 +1758,7 @@ with tab_about:
         During these outbursts, the sources brightens by several orders of magnitudes, up to a significant percentage of their Eddington luminosity $L_{Edd}$, which is the "theoretical" upper limit of standard accreting regimes.  
         
         The source also goes to a specific pattern of spectral evolution, switching from a powerlaw dominated Spectral Energy Distribution (SED) in soft X-rays (the so-called **"hard"** state) during the initial brightening, to the **"soft"** state, similarly bright but dominated by the thermal emission of the accretion disk (most likely extending to the Innermost Stable Circular Orbit of the Black Hole). After some time spent during the soft state (and occasional back and forth in some instances), the source invariably becomes fainter, transits back to the hard state if necessary, then returns to quiescence.
-        ''')
+        #''')
         
         col_fig1, col_fig2= st.columns(2)
         with col_fig1:
@@ -1771,7 +1776,7 @@ with tab_about:
             -...
         
         As of now, the reason for the typical spectral evolution of outbursts, as well as the cause of most of the features that appear during it, remains unknown.
-        ''')
+        #''')
         
         col_winds, col_figwinds= st.columns(2)
         
@@ -1790,7 +1795,7 @@ with tab_about:
             The **JED-SAD model** is a complete accretion-ejection framework for magnetically threaded disks, developed at the University of Grenoble-Alpes (France). Beyond very promising results for fitting all
             parts of the outburst of Black Hole XRBs, this model has been shown to produce winds, through both theoretical solutions and simulations. The results of this study will be compared to synthetic spectral signatures computed from self-similar JED-SAD solutions in the future, in order to access the evolution of the outflow, and to further constrain the nature and physical conditions of the disk during these observations.
             
-            ''')
+            #''')
             
             st.header('This work')
             st.markdown('''
@@ -1799,7 +1804,7 @@ with tab_about:
                         We identify BHLMXB candidates through the BlackCAT and WATCHDOG catalogs, for a total of 79 sources. After extracting and pre-selecting all available spectra of these sources with high-enough quality to allow the detection of line, we end up with 242 spectra in 42 sources. We refer readers to the main paper for details on the line detection procedure.
                         
                         Beyond interactive displays of our results through HID and scatter plots, we provide direct access to the results table, restricted according to user demands. We also provide a monitoring display tool, which combines RXTE and up-to-date MAXI lightcurves and HR ratio evolutions of all single sources in the sample.
-                        ''')
+                        #''')
         
         with col_figwinds:
             st.image(dump_path[:dump_path.rfind('/')]+'/linedet_example.png',caption='Steps of the fitting procedure for a standard 4U130-47 Chandra spectra. First panel: 4-10 spectrum after the first continuum fit. Second panel: ∆χ2 map of the line blind search, restricted to positive (i.e. improvements) regions. Standard confidence intervals are highlighted with different line styles, and the colormap with the ∆χ2 improvements of emission and absorption lines. Third panel: Ratio plot of the best fit model once absorption lines are added. Fourth panel: Remaining residuals seen through a second blind search.')
@@ -1810,7 +1815,7 @@ with tab_about:
                     Figure references:  
                         [Petrucci et al. 2021](https://doi.org/10.1051/0004-6361/202039524)  
                         [Done et al. 2007]((https://doi.org/10.1007/s00159-007-0006-1))  
-                    ''')
+                    #''')
                 
     with st.expander('I want to know how to use this tool'):
         
@@ -1828,7 +1833,7 @@ with tab_about:
                     
                     **This means that all subsequent widgets are reset to their default values whenever adding or removing an instrument.**
 
-                    ''')
+                    #''')
                     
         st.header('Data selection')
 
@@ -1873,7 +1878,7 @@ with tab_about:
                   
                   The MC tests were done with 1000 computations, which means that using 1. as a significance threshold only restricts to detections above 0.999.
                    
-                    ''')
+                  #''')
                     
         st.header('Hardness Intensity Diagram (HID)')
         
@@ -1890,7 +1895,7 @@ with tab_about:
                    
                    Various visualisation options allow to zoom on the current set of points in the graph, change coloring options and display errorbars (instead of upper limits).
                    
-                    ''')
+                   #''')
                     
                     
         

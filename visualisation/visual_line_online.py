@@ -238,7 +238,7 @@ if not online:
 ######Hardness-Luminosity Diagrams######
 #######################################
 
-'Distance and Mass determination'
+#Distance and Mass determination
 
 #wrapped in a function to be cachable in streamlit
 if not online:
@@ -610,17 +610,19 @@ else:
 if display_single:
     display_evol_single=st.sidebar.checkbox('Highlight time evolution in the HID',value=False)
                
-save_format=st.sidebar.radio('Graph format:',('pdf','svg','png'))
-
-def save_hld():
-    ###
-    # Saves the current graph in a svg (i.e. with clickable points) format.
-    ###
-
-    fig_hid.savefig(save_dir+'/'+save_str_prefix+'HLD_cam_'+args.cameras+'_'+\
-                args.line_search_e.replace(' ','_')+'_'+args.line_search_norm.replace(' ','_')+'curr_'+str(round(time.time()))+'.'+save_format,bbox_inches='tight')
-        
-st.sidebar.button('Save current HID view',on_click=save_hld)
+    
+if not online:
+    save_format=st.sidebar.radio('Graph format:',('pdf','svg','png'))
+    
+    def save_hld():
+        ###
+        # Saves the current graph in a svg (i.e. with clickable points) format.
+        ###
+    
+        fig_hid.savefig(save_dir+'/'+save_str_prefix+'HLD_cam_'+args.cameras+'_'+\
+                    args.line_search_e.replace(' ','_')+'_'+args.line_search_norm.replace(' ','_')+'curr_'+str(round(time.time()))+'.'+save_format,bbox_inches='tight')
+            
+    st.sidebar.button('Save current HID view',on_click=save_hld)
 
         
 with st.sidebar.expander('Visualisation'):
@@ -1725,12 +1727,179 @@ if radio_info_cmap=='Instrument':
 # fig_hid_html = mpld3.fig_to_html(fig_hid)
 # components.html(fig_hid_html, height=1000)
 
-tab_hid, tab_monitoring, tab_param,tab_source_df= st.tabs(["HID", "Monitoring", "Parameter analysis","Tables"])
+tab_hid, tab_monitoring, tab_param,tab_source_df,tab_about= st.tabs(["HID", "Monitoring", "Parameter analysis","Tables","About"])
 
 with tab_hid:
-    st.pyplot(fig_hid)
-
     
+    #preventing some bugs when updating too many parameters at once
+    try:
+        st.pyplot(fig_hid)
+    except:
+        st.experimental_rerun()
+        
+#### About tab
+with tab_about:
+    st.markdown('**visual_line** is a visualisation and download tool for iron-band X-ray absorption lines signatures in Black Hole Low-Mass X-ray Binaries (BHLMXBs).')
+    st.markdown('It is made to complement and give access to the results of [Parra et al. 2023](https://www.youtube.com/watch?v=dQw4w9WgXcQ), and more generally, to give an overview of the sampling and X-ray evolution of the outbursts of this category of sources.')
+    st.markdown('Please contact me at [maxime.parra@univ-grenoble-alpes.fr](mailto:maxime.parra@univ-grenoble-alpes.fr) for questions, to report bugs or request features.')
+    
+    with st.expander('I want an overview of the science behind this'):
+        st.header('Outbursts')
+        st.markdown(###
+        X-Ray Binaries are binary systems emitting mostly in the X-ray band, composed of a compact object (Neutron Star or Black Hole) and a companion star.  
+        The subgroup we are focusing on here is restricted to **Black Holes** orbiting with a "low mass" star (generally in the main sequence), for which accretion happens through Robe Loche overflow and an **accretion disk**. 
+        Most of these sources have a very specific behavior: they spend the bigger part of their lifes undetected, at low luminosity (in "quiescence"), 
+        but undergo regular **outbursts** on the timescale of a few months.
+        During these outbursts, the sources brightens by several orders of magnitudes, up to a significant percentage of their Eddington luminosity $L_{Edd}$, which is the "theoretical" upper limit of standard accreting regimes.  
+        
+        The source also goes to a specific pattern of spectral evolution, switching from a powerlaw dominated Spectral Energy Distribution (SED) in soft X-rays (the so-called **"hard"** state) during the initial brightening, to the **"soft"** state, similarly bright but dominated by the thermal emission of the accretion disk (most likely extending to the Innermost Stable Circular Orbit of the Black Hole). After some time spent during the soft state (and occasional back and forth in some instances), the source invariably becomes fainter, transits back to the hard state if necessary, then returns to quiescence.
+        ###)
+        
+        col_fig1, col_fig2= st.columns(2)
+        with col_fig1:
+            st.image(dump_path[:dump_path.rfind('/')]+'/outburst.png',caption='Example of the evolution of GX 339-4 in a Hardness/Luminosity Diagram during its 2019 outburst. the MJD dates of each observation highlight the direction of the evolution, and colors different spectral states (independant from the right picture). From Petrucci et al. 21')
+        with col_fig2:
+            st.image(dump_path[:dump_path.rfind('/')]+'/xray_states.png',caption="Example of the differences between spectral shapes for the soft (red) and hard (blue) state of Cygnus X-1. From Done et al. 2007")
+            
+        st.markdown(###
+        Beyond this direct spectral dichotomy, a wealth of other features have been linked to the outburst evolution:  
+            -a radio component associated to **jets** is only detected during the hard state  
+            -specific **Quasi-Periodic Oscillations** (QPOs) can be detected in the timing features of the spectra, with different types in different spectral states, and can be linked to a wealth of geometrical and physicla behaviors  
+            -**Dipping** episodes can be observed in the lightcurve of high-inclined sources in specific portions of the outburst. (Note: this is a different behavior than eclipses).  
+            -Some sources exhibit strong **reflection** components during a part of the outburst, interpreted as internal illumination of the disk by the **hot corona** believed to be the source of the hard state powerlaw component.   
+            -Other sources exhibit strongly relativistic **iron-line emission** features, which can be fitted to get constraints on the spin of the BH.  
+            -...
+        
+        As of now, the reason for the typical spectral evolution of outbursts, as well as the cause of most of the features that appear during it, remains unknown.
+        ###)
+        
+        col_winds, col_figwinds= st.columns(2)
+        
+        with col_winds:
+            
+            st.header('Winds')
+            
+            st.markdown(###
+            Another features seen in outbursts is the appearance of **narrow, blueshifted absorption lines** in X-ray spectra, primarily from the very strong Ka and Kb lines of FeXXV and FeXXVI at 7-8keV.
+            They are interpreted as the signature of dense material outflowing from the accretion disk of the Black Hole, and are expected to expell amounts of matter comparable to the accretion rate.
+            Since the first observations 25 ago, a wealth of absorption profiles have been observed in BHLMXBS.
+            Wind signatures in **X-rays** have been traditionally found only in the soft states of high-inclined sources, but recent detections in hard states or for low-inclined sources challenge this assumption.
+            
+            One of the most critical matters about winds is their physical origin. In X-ray Binaries, two launching mechanisms are favored, using either **thermal** or **magnetic** processes. Modeling efforts are recent and only few observations have been successfully recreated by either until now, but this has shown the limit of current instruments. Indeed, it appears impossible to directly distinguish the wind launch mechanisms by simply using the absorption signatures, even for the best quality observations of the current generation instruments. Thus, until data from the new instruments, such as XRISM, becomes available, hope lies in the constraints on the physical parameters of the model creating the winds, or a more complete model to data comparison. 
+            
+            The **JED-SAD model** is a complete accretion-ejection framework for magnetically threaded disks, developed at the University of Grenoble-Alpes (France). Beyond very promising results for fitting all
+            parts of the outburst of Black Hole XRBs, this model has been shown to produce winds, through both theoretical solutions and simulations. The results of this study will be compared to synthetic spectral signatures computed from self-similar JED-SAD solutions in the future, in order to access the evolution of the outflow, and to further constrain the nature and physical conditions of the disk during these observations.
+            
+            ###)
+            
+            st.header('This work')
+            st.markdown(###
+                        The science community and our own modeling efforts would benefit from a global and up-to-date view of the current wind signatures in BHLMXBs. However, while detailed works have been performed on the vast majority of individual detections, there are very few larger studies for several outbursts and sources. With the goal of providing a complete view of all currently known X-ray wind signatures, we first focus on the most historically studied and constraining observations, using the XMM-Newton and Chandra-HETG instruments.  
+                        
+                        We identify BHLMXB candidates through the BlackCAT and WATCHDOG catalogs, for a total of 79 sources. After extracting and pre-selecting all available spectra of these sources with high-enough quality to allow the detection of line, we end up with 242 spectra in 42 sources. We refer readers to the main paper for details on the line detection procedure.
+                        
+                        Beyond interactive displays of our results through HID and scatter plots, we provide direct access to the results table, restricted according to user demands. We also provide a monitoring display tool, which combines RXTE and up-to-date MAXI lightcurves and HR ratio evolutions of all single sources in the sample.
+                        ###)
+        
+        with col_figwinds:
+            st.image(dump_path[:dump_path.rfind('/')]+'/linedet_example.png',caption='Steps of the fitting procedure for a standard 4U130-47 Chandra spectra. First panel: 4-10 spectrum after the first continuum fit. Second panel: ∆χ2 map of the line blind search, restricted to positive (i.e. improvements) regions. Standard confidence intervals are highlighted with different line styles, and the colormap with the ∆χ2 improvements of emission and absorption lines. Third panel: Ratio plot of the best fit model once absorption lines are added. Fourth panel: Remaining residuals seen through a second blind search.')
+            
+        st.markdown(###
+                    See [Parra et al. 2023](https://www.youtube.com/watch?v=dQw4w9WgXcQ) for detailed references to the points discussed above, and [Diaz Trigo et al. 2016](https://doi.org/10.1002/asna.201612315) or [Ponti et al. 2016](https://doi.org/10.1002/asna.201612339) for reviews on winds.  
+                    
+                    Figure references:  
+                        [Petrucci et al. 2021](https://doi.org/10.1051/0004-6361/202039524)  
+                        [Done et al. 2007]((https://doi.org/10.1007/s00159-007-0006-1))  
+                    ###)
+                
+    with st.expander('I want to know how to use this tool'):
+        
+        st.header('General information')
+        
+        st.markdown(###
+                    Streamlit is a python library for web applications. 
+                    Its interactivity is achieved by storing the status of the multiple widgets and re-running **the entire script** every time a modification is performed, allowing to recompute/redisplay/... all necessary outputs depending on the changes made to the widgets. 
+                    
+                    **The monitoring and parameter analysis plots take time to compute**, as the first one fetches data from the MAXI website in real time, and the second computes perturbative estimates of the correlation coefficient for each plot. As such, they are deactivated by default.  
+                    
+                    It is worth noting that the current version of this tool has trouble performing too many actions in a short time. This is partially covered through internal failsafes, but if you modify several options at once and something crashes, or displays in a non-standard way, either resettoing an option (which reruns the script internally) or restarting the tool (either by pressing R or going in the top-right menu and clicking on Rerun) can fix the issue.
+                    
+                    Moreover, to avoid too much issues for data management, the data is split between each combination of instrument, and the creation of subsequent widget depends on this data.
+                    
+                    **This means that all subsequent widgets are reset to their default values whenever adding or removing an instrument.**
+
+                    ###)
+                    
+        st.header('Data selection')
+
+        st.markdown(###
+                    
+                   The following options restrict the data used in **all** of the displays.
+                   
+                   **Telescopes**  
+                   
+                   This is rather straightforward. Remember the statement above. This resets everything else.
+                   
+                   **Sources**  
+                   
+                   The Main source display option conditions several elements further down the line:
+                       
+                  -In Multi-Object mode, a checkbox allows to pre-restrict the choice of sources with the 5 main objects with significant detections in the paper. This is a manual restriction, which is not affected by the choice of lines or significance threshold.
+                  
+                  -The display of all monitoring plots is restricted to the **single object** mode. 
+                  
+                  
+                  **Inclination**  
+                  
+                  The inclination restrictions is based on the results on the informations in Table 1 of the paper, which can be shown in the "Source parameters" table in the "Tables" tab. Since not all inclination measurements are created equal, the inclination measurement primarily includes dynamical estimates if any, then jet estimates, and finally reflection measurements.
+                  
+                  -Dipping measurements are considered independantly, which means that a source with "only" dipping reports and no explicit inclination constraints will be ignored if the checkbox for including Sources with no information is not checked.
+                  
+                  -The second checkbox allows to disregard sources with uncertainties extending past the currently selected inclination range. Incompatible inclination measurements are considered similarly as a bigger interval.
+                  
+                  -The third option dashes the upper limit (hexagon) displays of sources incompatible with previous constrain.
+                  
+                  -The fourth option dashes all sources with no inclination measurements (including dippers with no proper inclination constraints).
+                  
+                  -The dipper option choice overrides the primary inclination constrain and checkboxes
+                  
+                  **Date** 
+                  
+                  The time interval restriction is deported on the main page for more precise changes but is also a main selection widget affecting all the following elements. Currently, the duration of the observation is not considered.
+                  
+                  **Significance**
+                  
+                  The detection significance uses the final MC significance (see the paper for details) of each line. All existing lines must have been added to the models, which means they were at least 99\% significant with the f-test during the automatic fitting procedure. This can still mean very poor MC significance in case of bad data or degenerate components. 
+                  
+                  The MC tests were done with 1000 computations, which means that using 1. as a significance threshold only restricts to detections above 0.999.
+                   
+                    ###)
+                    
+        st.header('Hardness Intensity Diagram (HID)')
+        
+        st.markdown(###
+                    
+                   The HID displays the observations in a Hardness/Intensity (in this case Luminosity) diagram, using the standard bands of X-ray measurements. In the default options, detections above the threshold are marked by a full circle, with a size scaling with the Equivalent Width (EW, or depth relative to the continuum) of the line. This does **NOT** necessarily means higher significance. The default options also shows EW upper limits (ULs) with empty hexagons, using two different symbols to aid visually distinguish between the many sources of the sample. In the case of upper limits, **smaller** hexagons means that the observation guarantees no detection **above** this EW value (at a 3 sigma confidence level). In other words, the smaller the hexagon, the more constraining the observation.
+                   
+                   The main visualisation options allow to display several line or observation parameters as a colormap or color code for the exposures.
+                   The "source" option is the only one with 2 different colormaps, a jet for the sources with detections (the same one used in the parameter analysis), and a viridis for the non-detections. We advise restricting the number of sources for easier identification of individual detections.
+                   
+                   For all line parameters (currently velocity shift and delchi), the value displayed is the most extremal among the significant lines in this observation.
+                   
+                   If the upper limit option is selected, the user can choice a range of lines, from which the biggest upper limit will be displayed.
+                   
+                   Various visualisation options allow to zoom on the current set of points in the graph, change coloring options and display errorbars (instead of upper limits).
+                   
+                    ###)
+                    
+                    
+        
+        st.header('Monitoring')
+        
+        st.header('Parameter Analysis')
+        
+        st.header('Data display and download (tables)')
+
 #### Transposing the tables into plot arrays
 
 flag_noabsline=False
@@ -2043,8 +2212,10 @@ with st.sidebar.expander('Parameter analysis'):
     radio_color_scatter=st.radio('Scatter plot color options:',('None','Source','Instrument','Time','HR','width','nH'),index=1)
     scale_log_eqw=st.checkbox('Use a log scale for the equivalent width and line fluxes')
     scale_log_hr=st.checkbox('Use a log scale for the HID parameters',value=True)
-    display_abserr_bshift=st.checkbox('Display absolute Velocity shift errors for Chandra',value=True)
-    plot_trend=st.checkbox('Display linear trend lines in the scatter plots',value=False)
+    display_abserr_bshift=st.checkbox('Display mean and std of Chandra velocity shift distribution',value=True)
+    
+    #plot_trend=st.checkbox('Display linear trend lines in the scatter plots',value=False)
+    plot_trend=False
     
     st.header('Upper limits')
     show_scatter_ul=st.checkbox('Display upper limits in EW plots',value=False)

@@ -14,6 +14,8 @@ import threading
 import numpy as np
 import time
 
+from general_tools import file_edit
+
 #astro imports
 from astropy.io import fits
 
@@ -28,6 +30,13 @@ list of possible actions :
 
 1. process_obsdir: run the nicerl2 script to process an obsid folder
 
+fs. extract_all_spectral: runs the nicerl3-spect script to compute spectral products of an obsid folder (aka s,b,r at the same time)
+
+g. group_spectra: group spectra using the optimized Kastra et al. binning
+
+m.merge: merge all spectral products in the subdirectories to a bigbatch directory
+
+DEPRECATED 
 2. select_detector: removes specific detectors from the event file (not tested)
 
 s. extract_spectrum: extract a pha spectrum from a process obsid folder using  Xselect
@@ -36,9 +45,7 @@ b. extract_background: extract a bg spectrum from a process obsid folder using a
 
 r. extract_response: extract a response from a processed obsid folder
 
-g. group_spectra: group spectra using the optimized Kastra et al. binning
-
-m.merge: merge all spectral products in the subdirectories to a bigbatch directory 
+ 
 
 """
 
@@ -50,11 +57,11 @@ ap = argparse.ArgumentParser(description='Script to reduce NICER files.\n)')
 ap.add_argument("-dir", "--startdir", nargs='?', help="starting directory. Current by default", default='./', type=str)
 ap.add_argument("-l","--local",nargs=1,help='Launch actions directly in the current directory instead',
                 default=False,type=bool)
-ap.add_argument('-catch','--catch_errors',help='Catch errors while running the data reduction and continue',default=True,type=bool)
+ap.add_argument('-catch','--catch_errors',help='Catch errors while running the data reduction and continue',default=False,type=bool)
 
 #global choices
 ap.add_argument("-a","--action",nargs='?',help='Give which action(s) to proceed,separated by comas.'+
-                '\n1.evt_build\n2.filter_evt\n3.extract_reg...',default='1,s,r,g,m',type=str)
+                '\n1.evt_build\n2.filter_evt\n3.extract_reg...',default='1,fs,g,m',type=str)
 ap.add_argument("-over",nargs=1,help='overwrite computed tasks (i.e. with products in the batch, or merge directory\
                 if "m" is in the actions) in a folder',default=True,type=bool)
 
@@ -65,9 +72,15 @@ ap.add_argument('-folder_cont',nargs=1,help='skip all but the last 2 directories
 #note : we keep the previous 2 directories because bug or breaks can start actions on a directory following the initially stopped one
 
 #action specific overwrite
-ap.add_argument('-baddet','--bad_detectors',help='List detectors to exclude from the data reduction',default='-14,-34,-54',type=str)
-ap.add_argument('-bg',"--bgmodel",help='Give the background model to use for the data reduction',default='3c50',type=str)
+ap.add_argument('-bg',"--bgmodel",help='Give the background model to use for the data reduction',default='scorpeon_script',type=str)
+ap.add_argument('-bg_lang',"--bg_language",help='Gives the language output for the script generated to load spectral data into either PyXspec or Xspec',
+                default='python',type=str)
+
 ap.add_argument('-gtype',"--grouptype",help='Give the group type to use in regroup_spectrum',default='opt',type=str)
+
+#deprecated
+ap.add_argument('-baddet','--bad_detectors',help='List detectors to exclude from the data reduction',default='-14,-34,-54',type=str)
+
     
 ap.add_argument('-heasoft_init_alias',help="name of the heasoft initialisation script alias",default="heainit",type=str)
 ap.add_argument('-caldbinit_init_alias',help="name of the caldbinit initialisation script alias",default="caldbinit",type=str)
@@ -82,6 +95,8 @@ folder_cont=args.folder_cont
 overwrite_glob=args.over
 catch_errors=args.catch_errors
 bgmodel=args.bgmodel
+bglanguage=args.bg_language
+
 grouptype=args.grouptype
 bad_detectors=args.bad_detectors
 heasoft_init_alias=args.heasoft_init_alias
@@ -94,6 +109,7 @@ alias_3C50=args.alias_3C50
 
 #we insure each action will wait for the completion of the previous one by using threads
 process_obsdir_done=threading.Event()
+extract_all_spectral_done=threading.Event()
 extract_spectrum_done=threading.Event()
 extract_response_done=threading.Event()
 extract_background_done=threading.Event()
@@ -113,54 +129,6 @@ def set_var(spawn):
 def _remove_control_chars(message):
     ansi_escape =re.compile(r'(\x9B|\x1B\[)[0-?]*[ -\/]*[@-~]')
     return ansi_escape.sub('', message)
-
-def file_edit(path,line_id,line_data,header):
-    
-    '''
-    Edits (or create) the file given in the path and replaces/add the line(s) where the line_id str/LIST is with the line-content str/LIST.
-    line_id should be included in line_content.
-    Header is the first line of the file, with usually different informations.
-    '''
-    
-    lines=[]
-    if type(line_id)==str or type(line_id)==np.str_:
-        line_identifier=[line_id]
-    else:
-        line_identifier=line_id
-        
-    if type(line_data)==str or type(line_data)==np.str_:
-        line_content=[line_data]
-    else:
-        line_content=line_data
-        
-    if os.path.isfile(path):
-        with open(path) as file:
-            lines=file.readlines()
-            
-            #loop for all the lines to add
-            for single_identifier,single_content in zip(line_identifier,line_content):
-                line_exists=False
-                if not single_content.endswith('\n'):
-                    single_content+='\n'
-                #loop for all the lines in the file
-                for l,single_line in enumerate(lines):
-                    if single_identifier in single_line:
-                        lines[l]=single_content
-                        line_exists=True
-                if line_exists==False:
-                    lines+=[single_content]
-            
-    else:
-        #adding everything
-        lines=line_content
-    
-    time.sleep(1)
-    
-    with open(path,'w+') as file:
-        if lines[0]==header:
-            file.writelines(lines)
-        else:
-            file.writelines([header]+lines)
 
 def process_obsdir(directory,overwrite=True):
     
@@ -192,7 +160,8 @@ def process_obsdir(directory,overwrite=True):
         #raising an error to stop the process if the command has crashed for some reason
         if process_state==0:
             raise ValueError
-            
+
+####THIS IS DEPRECATED            
 def select_detector(directory,detectors='-14,-34,-54'):
     
     '''
@@ -240,9 +209,83 @@ def select_detector(directory,detectors='-14,-34,-54'):
         bashproc.sendline('exit')
         select_detector_done.set()
         
+def extract_all_spectral(directory,bkgmodel='scorpeon_script',language='python',overwrite=True):
+    
+    '''
+    Wrapper for nicerl3-spect, extracts spectra, creates bkg and rmfs
+    
+    We follow the steps highlighted in https://heasarc.gsfc.nasa.gov/docs/nicer/analysis_threads/nicerl3-spect/
+
+    Processes a directory using the nicerl3-spect script
+    
+    bgmodel options:
+        -scorpeon_script: uses scorpeon in script mode to create a variable xspec-compatible bg model
+        
+        -scorpeon_file: uses scorpeon in file mode to produce a static background file
+        
+        -3c50: 3c50 model of Remillar et al., fetches data from the alias_3C50 argument
+        
+        -sw: Space weather model
+        
+    specific option for scorpeon_script:
+        
+        -language: if set to python, the generated scripts are made for Pyxspec instead of standard xspec
+        
+    Note: can produce no output without error if no gti in the event file
+    '''
+    
+    bashproc=pexpect.spawn("/bin/bash",encoding='utf-8')
+    
+    print('\n\n\nCreating spectral products...')
+    
+    set_var(bashproc)
+        
+    if os.path.isfile(directory+'/extract_all_spectral.log'):
+        os.system('rm '+directory+'/extract_all_spectral.log')
+        
+    with StdoutTee(directory+'/extract_all_spectral.log',mode="a",buff=1,file_filters=[_remove_control_chars]),\
+        StderrTee(directory+'/extract_all_spectral.log',buff=1,file_filters=[_remove_control_chars]):
+
+        bashproc.logfile_read=sys.stdout
+        
+        bkg_outlang_str=''
+        
+        if 'scorpeon' in bkgmodel:
+            bkgmodel_str=bkgmodel.split('_')[0]
+            bkgmodel_mode=bkgmodel.split('_')[1]
+            
+            #specific option for script mode
+            if bkgmodel_mode=='script':
+                if language=='python':
+                    bkg_outlang_str='outlang=PYTHON'
+                else:
+                    print('NICER_datared_error: only python is implemented for the language output of scorpeon in script mode')
+            
+        else:
+            bkgmodel_str=bkgmodel
+            bkgmodel_mode='file'
+            
+                    
+
+        bashproc.sendline('nicerl3-spect indir='+directory+' bkgmodeltype='+bkgmodel_str+' bkgformat='+bkgmodel_mode+' '+bkg_outlang_str+
+                          ' clobber='+('YES' if overwrite else 'FALSE'))
+        
+        process_state=bashproc.expect(['terminating with status','DONE'],timeout=None)
+        
+        #exiting the bashproc
+        bashproc.sendline('exit')
+        extract_all_spectral_done.set()
+        
+        #raising an error to stop the process if the command has crashed for some reason
+        if process_state==0:
+            raise ValueError
+        
 def extract_spectrum(directory):
     
     '''
+    
+    DEPRECATED
+    
     Extracts spectra using xselect commands
     
     We follow the steps highlighted in https://heasarc.gsfc.nasa.gov/docs/nicer/analysis_threads/spectrum-creation/
@@ -314,6 +357,9 @@ def extract_spectrum(directory):
 def extract_background(directory,model):
     
     '''
+    
+    DEPRECATED
+    
     Extracts NICER background using associated commands and models
     
     model:
@@ -373,6 +419,9 @@ def extract_background(directory,model):
 def extract_response(directory):
     
     '''
+    
+    DEPRECATED
+    
     Extracts NICER rmf and arf using associated heasoft commands
     
     The source position is taken from the header of the spectrum fits file
@@ -433,6 +482,8 @@ def regroup_spectrum(directory,group='opt'):
     
     mode:
         -opt: follows the Kastra and al. 2016 binning
+        
+    Currently only accepts input from extract_all_spectral
     
     '''
         
@@ -458,14 +509,43 @@ def regroup_spectrum(directory,group='opt'):
         
         bashproc.sendline('cd '+directory)
                     
-        bashproc.sendline('ftgrouppha infile='+directory+'_sp.pha outfile='+directory+'_sp_grp_'+group+'.pha grouptype='+group+
-                           ' respfile='+directory+'.rmf')
+        allfiles=glob.glob(directory+'/xti/**',recursive=True)
+        
+        #fetching the path of the spectrum and rmf file
+        spfile=[elem for elem in allfiles if '_sr.pha' in elem]
+        
+        if len(spfile)>1:
+            print('NICER_datared_error: Several output spectra detected')
+            raise ValueError
+        elif len(spfile)==0:
+            print('NICER_datared_error: No spectral file detected')
+            raise ValueError
+        else:
+            spfile=spfile[0]
+                
+        #storing the full observation ID for later
+        file_id=spfile.split('/')[-1][2:].replace('_sr.pha','')
+        file_dir=spfile[:spfile.rfind('/')]
+        
+        copyfile_suffixes=['_sr.pha','_bg.rmf','_bg.py','_sk.arf','.arf','.rmf']
+        copyfile_list=['ni'+file_id+elem for elem in copyfile_suffixes]
+        
+        #copying the spectral products into the main directory 
+        for elem_file in copyfile_list:
+            os.system('cp '+os.path.join(file_dir,elem_file)+' '+os.path.join(directory,elem_file)) 
+        
+        print('ftgrouppha infile=./'+os.path.join(directory,'ni'+file_id+'_sr.pha')+' outfile=./'+directory+'/'+directory+'_sp_grp_'+group+'.pha grouptype='+group+
+                           ' respfile=./'+os.path.join(directory,'ni'+file_id+'.rmf'))
+
+        bashproc.sendline('ftgrouppha infile=ni'+file_id+'_sr.pha outfile='+directory+'_sp_grp_'+group+'.pha '+
+                          'grouptype='+group+' respfile=ni'+file_id+'.rmf')
         
         while not os.path.isfile(os.path.join(currdir,directory,directory+'_sp_grp_'+group+'.pha')):
+            
             time.sleep(1)
             
         bashproc.sendline('echo done')
-        bashproc.expect('done')
+        bashproc.expect('done')        
         
         bashproc.sendline('exit')
         regroup_spectrum_done.set()
@@ -488,7 +568,7 @@ def batch_mover(directory):
     
     bashproc.sendline('cd '+directory)
     bashproc.sendline('cp -v '+directory+'* ../bigbatch')
-    
+    bashproc.sendline('cp -v ni'+directory+'* ../bigbatch')
     #reasonable waiting time to make sure files can be copied
     time.sleep(2)
     
@@ -575,9 +655,15 @@ if not local:
                         if curr_action=='2':
                             select_detector(dirname,detectors=bad_detectors)
                             select_detector_done.wait()
+                            
+                        if curr_action=='fs':
+                            extract_all_spectral(dirname,bkgmodel=bgmodel,language=bglanguage,overwrite=overwrite_glob)
+                            extract_all_spectral_done.wait()
+                            
                         if curr_action=='s':
                             extract_spectrum(dirname)
                             extract_spectrum_done.wait()
+                            
                         if curr_action=='b':
                             extract_background(dirname,model=bgmodel)
                             extract_background_done.wait()
@@ -610,6 +696,11 @@ if not local:
                     if curr_action=='2':
                         select_detector(dirname,detectors=bad_detectors)
                         select_detector_done.wait()
+                        
+                    if curr_action=='fs':
+                        extract_all_spectral(dirname,bkgmodel=bgmodel,language=bglanguage,overwrite=overwrite_glob)
+                        extract_all_spectral_done.wait()
+                            
                     if curr_action=='s':
                         extract_spectrum(dirname)
                         extract_spectrum_done.wait()

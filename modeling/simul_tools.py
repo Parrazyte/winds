@@ -14,6 +14,11 @@ import numpy as np
 import pexpect
 import time
 
+
+#trapezoid integration
+from scipy.integrate import trapezoid
+from general_tools import file_edit
+
 from tqdm import tqdm
 
 from xspec import AllModels,AllData,Model,FakeitSettings,Plot
@@ -28,57 +33,7 @@ eV2erg = 1.6e-12
 erg2eV = 1.0/eV2erg
 Ryd2eV = 13.5864
 
-def file_edit(path,line_id,line_data,header):
-    
-    '''
-    Edits (or create) the file given in the path and replaces/add the line(s) where the line_id str/LIST is with
-    the line-content str/LIST.
-    
-    line_id should be included in line_content.
-    
-    Header is the first line of the file, with usually different informations.
-    '''
-    
-    lines=[]
-    if type(line_id)==str or type(line_id)==np.str_:
-        line_identifier=[line_id]
-    else:
-        line_identifier=line_id
-        
-    if type(line_data)==str or type(line_data)==np.str_:
-        line_content=[line_data]
-    else:
-        line_content=line_data
-        
-    if os.path.isfile(path):
-        with open(path) as file:
-            lines=file.readlines()
-            
-            #loop for all the lines to add
-            for single_identifier,single_content in zip(line_identifier,line_content):
-                line_exists=False
-                if not single_content.endswith('\n'):
-                    single_content+='\n'
-                #loop for all the lines in the file
-                for l,single_line in enumerate(lines):
-                    if single_identifier in single_line:
-                        lines[l]=single_content
-                        line_exists=True
-                if line_exists==False:
-                    lines+=[single_content]
-            
-    else:
-        #adding everything
-        lines=line_content
-
-    with open(path,'w+') as file:
-        if lines[0]==header:
-            file.writelines(lines)
-        else:
-            file.writelines([header]+lines)
-            
-
-def xstar_wind(ep, p_mhd, mu,dict_solution,stop_d_input, SED_path, xlum,outdir="xsol",nbox_restart=1,h_over_r=0.1, ro_init=1e3,rad_res=0.115, nbins=9999, chatter=0):
+def xstar_wind(dict_solution,p_mhd,stop_d_input, SED_path, xlum,outdir="xsol9",nbox_restart=1,h_over_r=0.1, ro_init=1e3,rad_res=0.115, v_resol=100, chatter=0):
     
     
     '''
@@ -97,6 +52,8 @@ def xstar_wind(ep, p_mhd, mu,dict_solution,stop_d_input, SED_path, xlum,outdir="
         xlum is the bolometric luminosity of the spectrum in units of 1e38ergs/s
         Used internally by xstar to renormalize the given SED
         
+        The luminosity value is manually updated after each computation to consider the decrease due to absorption
+        
         #### Note: should be updated with the speed of the material and potential significant absorption?
         
 
@@ -110,7 +67,10 @@ def xstar_wind(ep, p_mhd, mu,dict_solution,stop_d_input, SED_path, xlum,outdir="
         ####weird use, should be converted to a variable which is used in a more straightforward manner
         ####+ why is there a distance jump between the boxes, are they not directly adjacent? 
     
-        nbins gives the number of continuum bins used for the computation
+        vsol gives the desired radial resolution desired, converted into a number of continuum bins used for the computation
+             the computing time inversely scales with vsol
+             
+             100km/s gives 38678 bins
         
         chatter gives out the number of infos displayed during the computation
     
@@ -132,6 +92,12 @@ def xstar_wind(ep, p_mhd, mu,dict_solution,stop_d_input, SED_path, xlum,outdir="
         '''
         shifts the current transmitted spectra from the xstar output files and stores it (in a xstar-accepted manner)
         in the "path" file
+        
+        Also returns the updated luminosity value by computing the ratio of the initial and current xstar spectra,
+        and multiplies it by the initial xlum value
+        
+        Works with easy integration of the xstar file because the unit is ergs/s/cm²/erg, aka ergs*cst after integration
+        Works independantly of the normalisation of the spectra   
         '''
         
         #loading the continuum spectrum of the previous box
@@ -150,7 +116,15 @@ def xstar_wind(ep, p_mhd, mu,dict_solution,stop_d_input, SED_path, xlum,outdir="
         shifted_input_arr=np.array([eptmp_shifted,zrtmp_shifted]).T
         
         #!**Writing the shifted spectra in a file as it is input for next box 
-        np.savetxt(path,shifted_input_arr,header=str(len(eptmp)),delimiter='  ')
+        np.savetxt(path,shifted_input_arr,header=str(len(eptmp)),delimiter='  ',comments='')
+        
+        #the xstar output files has x axis in units of eV and y axis in units of 1e38erg/s/erg
+        #so we need to integrate and the x axis must be renormalized to ergs (so with the conversion factor below)
+        
+        xlum_output=trapezoid(zrtmp_shifted,x=eptmp_shifted*1.6021773E-12)
+        
+        return xlum_output
+    
             
     def write_xstar_infos(nbox,vobsx,path):
         
@@ -190,14 +164,7 @@ def xstar_wind(ep, p_mhd, mu,dict_solution,stop_d_input, SED_path, xlum,outdir="
             
             plasma_pars=px.PlasmaParameters()
             
-            ####Q: rad star, rad_end, rad_pos ????
-            
-            ####Q: same question for zeta_end etc.
-            
-            ####Q: should I use x_e for xpx and n_p for xpxcol ?
-            
             #main infos
-            
             main_infos=np.array([nbox,i_step+1,
                         plasma_pars.radius[i_step],plasma_pars.delta_r[i_step],plasma_pars.n_p[i_step]/plasma_pars.x_e[i_step],
                         plasma_pars.ion_parameter[i_step],plasma_pars.x_e[i_step],vobsx,plasma_pars.n_p[i_step],
@@ -255,12 +222,17 @@ def xstar_wind(ep, p_mhd, mu,dict_solution,stop_d_input, SED_path, xlum,outdir="
             
             file_edit(path=path,line_id='\t'.join(main_infos[:2]),line_data='\t'.join(main_infos+ion_infos+col_infos),header=file_header)
          
-    def xstar_function(spectrum_file,lum,t_guess,n,nh,xi,nbox,vturb_x):
+    def xstar_func(spectrum_file,lum,t_guess,n,nh,xi,vturb_x,nbox,nbox_final,nsteps=1,niter=100,lcpres=0,path_logpars=None):
         
         '''
-        wrapper around the xstar function itself with explicit calls to the parameters we're changing
+        wrapper around the xstar function itself with explicit calls to the parameters routinely being changed in the computation
+        
+        if path_logpars is not None, saves the list of modifiable parameters into a file
         
         lum -> rlrad38
+
+        
+        -lcpres determines if the pressure is constant. In this case t stays constant. Should be kept at 0
         
         xpx is the density (density)
 
@@ -274,8 +246,20 @@ def xstar_wind(ep, p_mhd, mu,dict_solution,stop_d_input, SED_path, xlum,outdir="
         
         -niter>nlimd
         
+        hpars
+        
+        -nsteps: number of (radial?) decompositions of the box. Currently bugged in the standalone version so should be kept at 1 and only make the
+                 number of boxes vary
+        
+        -niter: determines the number of iterations to find the thermal equilibrium.
+                Needs to be changed because the default PyXstar value is 0 (no equilibrium iteration found)
+                Default value at 100 (max value) to get the most attemps at finding the equilibrium
+        
+        
         npass=number of computations (going outwards then inwards) to converge
         should always stay odd if increased to remain the one taken outwards
+        
+        
         '''
         
         #copying the parameter dictionnaries to avoid issues if overwriting the defaults
@@ -284,20 +268,37 @@ def xstar_wind(ep, p_mhd, mu,dict_solution,stop_d_input, SED_path, xlum,outdir="
         
 
         #changing the parameters varying for the xstar solution
-        xhpar['ncn2']=ncn2
+        xhpar['ncn2']=nbins
         
         #changing the parameters varying from the function
-        
-        xhpar['spectrum']='file'
-        xhpar['spectrum_file']=spectrum_file
-        xhpar['rlrad38']=xlum
+        xpar['spectrum']='file'
+        xpar['spectrum_file']=spectrum_file
+        xpar['rlrad38']=lum
         xpar['temperature']=t_guess
         xpar['density']=n
         xpar['column']=nh
-        xpar['rloxi']=xi
+        xpar['rlogxi']=xi
+        
+        #making sure this remains at 0 if the default values get played with
+        xpar['lcpres']=0
+        
+        #secondary parameters
+        xhpar['nsteps']=nsteps
+        
+        #and putting this to hopefully not 0
+        xhpar['niter']=niter
         
         xhpar['vturbi']=vturb_x
         
+        if path_logpars is not None:
+            parlog_str='\t'.join([str(nbox),str(nbox_final),spectrum_file,'%.3e'%lum,'%.3e'%t_guess,'%.3e'%n,'%.3e'%nh,'%.3e'%xi,'%.3e'%vturb_x+'\n'])
+            
+            parlog_header=['#v_resol= '+str(v_resol)+' km/s | nbins= '+str(nbins)+'\n',
+                           '#nsteps= '+str(nsteps)+'\tniter= '+str(niter)+'\n',
+                           '#(1)nbox\t(2)nbox_final\t(3)spectrum\t(4)lum\t(5)t_guess\t(6)n\t(7)nh\t(8)logxi\t(9)vturb_x\n']
+            
+            file_edit(path_logpars,'\t'.join([str(nbox),str(nbox_final),spectrum_file]),parlog_str,parlog_header)
+
         px.run_xstar(xpar,xhpar)
         
     #! light speed in Km/s unit
@@ -324,8 +325,19 @@ def xstar_wind(ep, p_mhd, mu,dict_solution,stop_d_input, SED_path, xlum,outdir="
         lpri=1
     else:
         lpri=0
-     
     
+    '''
+    computing the number of bins to be used from the desired radial resolution
+    see xstar manual p.34 for the formula (here we use log version instead of a very small power to avoid losing precision with numerical computations)
+    delta_E/E is delta_V/c
+    (note: mistake in the formula, its 0.49999 instead of 0.49)
+    '''
+    
+    nbins=int(np.ceil(np.log(4*10**5)/np.log(1+v_resol/299792.458)))
+    
+    if chatter>=1:
+        print('Number of bins for selected velocity resolution: '+str(nbins)+'\n')
+        
     #! Accretion rate in Eddington units
     mdot_obs = 0.111 
     
@@ -345,6 +357,8 @@ def xstar_wind(ep, p_mhd, mu,dict_solution,stop_d_input, SED_path, xlum,outdir="
     Rg_SI = 0.5*Rs_SI
     Rg_cgs = Rg_SI*m2cm
 
+
+    #Self-similar functions f1-f10
     func_zbyr=dict_solution['func_zbyr']
     func_rcyl_by_ro=dict_solution['func_rcyl_by_ro']
     func_angle=dict_solution['func_angle']
@@ -370,9 +384,7 @@ def xstar_wind(ep, p_mhd, mu,dict_solution,stop_d_input, SED_path, xlum,outdir="
     
     #no need to create epi,xlum and enlum because they are outputs or defined elsewhere
     
-    logxi_last,vobs_last,robyRg_last,vrel_last,del_E_final,del_E_bs=np.zeros((len(stop_d),6)).T
-
-    xpxl_last,xpxcoll_last,zetal_last,vobsl_last=np.zeros((10,4)).T
+    logxi_last,vobs_last,robyRg_last,vrel_last,del_E_final,del_E_bs,xpxl_last,xpxcoll_last,zetal_last,vobsl_last=np.zeros((10,len(stop_d),))
     
     vturb_in=np.zeros(1000)
     
@@ -404,8 +416,12 @@ def xstar_wind(ep, p_mhd, mu,dict_solution,stop_d_input, SED_path, xlum,outdir="
     #### opening and reseting the files (this should be done on the fly to avoid issues)
     
     stop_dl=stop_d[-1]
-    
+        
     os.system('mkdir -p '+outdir)
+    
+    #copying the xstar input file inside the directory
+    
+    os.system('cp '+SED_path+' '+outdir+'/')
     
     #446
     fileobj_box_details=open('./'+outdir+"/box_details_stop_dist_%.1e"%stop_dl+".log",'w+')
@@ -492,7 +508,6 @@ def xstar_wind(ep, p_mhd, mu,dict_solution,stop_d_input, SED_path, xlum,outdir="
         logxi_last[i]= logxi
         robyRg_last[i]= ro_by_Rg
 
-        #shouldn't this be outside the loop if it just mark the last parameters ?
         fileobj_box_details.write('Rsph_cgs_last='+str(Rsph_cgs_last[i])+',logxi_last='+str(logxi_last[i])
                                +',vobs_last='+str(vobs_last[i])+",ro/Rg_last="+str(robyRg_last[i])+'\n')
 
@@ -504,9 +519,9 @@ def xstar_wind(ep, p_mhd, mu,dict_solution,stop_d_input, SED_path, xlum,outdir="
     i = 0
     
     #### This is very ugly and should be changed to the proper number of boxes, computed before this loop
-    vobs_start,robyRg_start,Rsph_cgs_start,density_cgs_start,logxi_start=np.zeros((1000,5)).T
-    vobs_mid,robyRg_mid,Rsph_cgs_mid,density_cgs_mid,logxi_mid=np.zeros((1000,5)).T
-    vobs_stop,robyRg_stop,Rsph_cgs_stop,density_cgs_stop,logxi_stop,NhOfBox=np.zeros((1000,6)).T
+    vobs_start,robyRg_start,Rsph_cgs_start,density_cgs_start,logxi_start=np.zeros((5,1000))
+    vobs_mid,robyRg_mid,Rsph_cgs_mid,density_cgs_mid,logxi_mid=np.zeros((5,1000))
+    vobs_stop,robyRg_stop,Rsph_cgs_stop,density_cgs_stop,logxi_stop,NhOfBox=np.zeros((6,1000))
     
     while Rsph_cgs_end<Rsph_cgs_last[len(stop_d)-1]:
 
@@ -584,11 +599,12 @@ def xstar_wind(ep, p_mhd, mu,dict_solution,stop_d_input, SED_path, xlum,outdir="
             
             #adding a +1 here to switch from an i_box to the actual box number
             nbox_stop[i] = i_box+1-1
-            
-            fileobj_box_details.write('last box information\n')
+            fileobj_box_details.write('\n-----------------------------\n')
+            fileobj_box_details.write('\nLast box information\n')
             fileobj_box_details.write('stop_dist='+str(stop_d[i])+'\n')
         
-        fileobj_box_details.write('Box no. is='+str(i_box+1)+'\n')
+        fileobj_box_details.write('\n-----------------------------\n')
+        fileobj_box_details.write('Box n°'+str(i_box+1)+'\n')
         fileobj_box_details.write('robyRg_start='+str(robyRg_start[i_box])+'\nvobs_start in km/s='+str(vobs_start[i_box])
                                  +'\nRsph_start in cm='+str(Rsph_cgs_start[i_box])+'\nlognH_start (in /cc)='
                                  +str(np.log10(density_cgs_start[i_box]))+"\nlogxi_start="+str(logxi_start[i_box])+'\n')
@@ -617,25 +633,25 @@ def xstar_wind(ep, p_mhd, mu,dict_solution,stop_d_input, SED_path, xlum,outdir="
         if (delr_by_r==rad_res):
             #!* calculated suitably fron density_mid and Rsph_start
             #!* logxi_mid is changed to logxi_input
-            fileobj_box_ascii_xstar.write(str(np.log10(density_cgs_mid[i_box]))+','+str(np.log10(NhOfBox[i_box]))+','
-                                   +str(logxi_input[i_box])+','+str(vobs_mid[i_box])+'\n')
+            fileobj_box_ascii_xstar.write(str(np.log10(density_cgs_mid[i_box]))+'\t'+str(np.log10(NhOfBox[i_box]))+'\t'
+                                   +str(logxi_input[i_box])+'\t'+str(vobs_mid[i_box])+'\n')
         else:
             #!* calculated suitably fron density_mid and Rsph_start
             #!* logxi_mid is changed to logxi_input
-            fileobj_box_ascii_xstar_last.write(str(np.log10(density_cgs_mid[i_box]))+','+str(np.log10(NhOfBox[i_box]))+','
-                                   +str(logxi_input[i_box])+','+str(vobs_mid[i_box])+'\n')
+            fileobj_box_ascii_xstar_last.write(str(np.log10(density_cgs_mid[i_box]))+'\t'+str(np.log10(NhOfBox[i_box]))+'\t'
+                                   +str(logxi_input[i_box])+'\t'+str(vobs_mid[i_box])+'\n')
         
         #!* This loop is to prepare the ASCII file where xi value is the actual physical value
         
         if delr_by_r==rad_res:
-            fileobj_box_ascii_stop_dis.write(str(Rsph_cgs_mid[i_box])+','+str(np.log10(density_cgs_mid[i_box]))+','+str(np.log10(NhOfBox[i_box]))+','+str(logxi_mid[i_box])+','+str(vobs_mid[i_box])+'\n')
+            fileobj_box_ascii_stop_dis.write(str(Rsph_cgs_mid[i_box])+'\t'+str(np.log10(density_cgs_mid[i_box]))+'\t'+str(np.log10(NhOfBox[i_box]))+'\t'+str(logxi_mid[i_box])+'\t'+str(vobs_mid[i_box])+'\n')
         else:
-            fileobj_box_ascii_last.write(str(Rsph_cgs_mid[i_box])+','+str(np.log10(density_cgs_mid[i_box]))+','+str(np.log10(NhOfBox[i_box]))+','+str(logxi_mid[i_box])+','+str(vobs_mid[i_box])+'\n')
+            fileobj_box_ascii_last.write(str(Rsph_cgs_mid[i_box])+'\t'+str(np.log10(density_cgs_mid[i_box]))+'\t'+str(np.log10(NhOfBox[i_box]))+'\t'+str(logxi_mid[i_box])+'\t'+str(vobs_mid[i_box])+'\n')
 
         
         if chatter>=10:
-            print(str(i_box+1)+','+str(Rsph_cgs_last[i])+','+str(Rsph_cgs_stop[i_box])+','
-                 +str(delr_by_r)+','+str(Rsph_cgs_last[-1]))
+            print(str(i_box+1)+'\t'+str(Rsph_cgs_last[i])+'\t'+str(Rsph_cgs_stop[i_box])+'\t'
+                 +str(delr_by_r)+'\t'+str(Rsph_cgs_last[-1]))
         
         #!* Readjust the loop parameters
         
@@ -689,10 +705,10 @@ def xstar_wind(ep, p_mhd, mu,dict_solution,stop_d_input, SED_path, xlum,outdir="
     
     #! xpx, xpxcol are given in log value. zeta is logxi. vobs in Km/s
     
-    xpxcoll,xpxl,zetal,vobsl,vrel,del_E=np.zeros((nbox_index,6)).T
+    xpxcoll,xpxl,zetal,vobsl,vrel,del_E=np.zeros((6,nbox_index))
 
     for i_box in range(nbox_index):
-        xpxl[i_box],xpxcoll[i_box],zetal[i_box],vobsl[i_box]=np.array(box_stop_dist_list[i_box].replace('\n','').split(',')).astype(float)
+        xpxl[i_box],xpxcoll[i_box],zetal[i_box],vobsl[i_box]=np.array(box_stop_dist_list[i_box].replace('\n','').split('\t')).astype(float)
     
     #212
     with open('./'+outdir+'/last_box_Ascii_for_xstar_%.1e'%stop_dl+'.dat','r') as fileobj_box_ascii_stop_dist_last:
@@ -700,20 +716,17 @@ def xstar_wind(ep, p_mhd, mu,dict_solution,stop_d_input, SED_path, xlum,outdir="
     
     for i in range(len(stop_d)):
         xpxl_last[i],xpxcoll_last[i],zetal_last[i],vobsl_last[i]=\
-            np.array(box_stop_dist_list_last[i].replace('\n','').split(',')).astype(float)
-
-    c_n = 0
-    final_box= False
+            np.array(box_stop_dist_list_last[i].replace('\n','').split('\t')).astype(float)
 
     #!* This file is to write different variables estimated from xstar.
     
-    #678
-    with open('./'+outdir+'/temp_ion_fraction_details.dat','w+') as fileobj_ion_fraction:
-        fileobj_ion_fraction.write('#starting_calculation_from_nbox='+str(nbox_restart)+'\n')
+    # #678
+    # with open('./'+outdir+'/temp_ion_fraction_details.dat','w+') as fileobj_ion_fraction:
+    #     fileobj_ion_fraction.write('#starting_calculation_from_nbox='+str(nbox_restart)+'\n')
 
-    #681
-    with open('./'+outdir+'/xstar_output_details.dat','w+') as fileobj_xstar_output:
-        fileobj_xstar_output.write('#starting_calculation_from_nbox='+str(nbox_restart)+'\n')
+    # #681
+    # with open('./'+outdir+'/xstar_output_details.dat','w+') as fileobj_xstar_output:
+    #     fileobj_xstar_output.write('#starting_calculation_from_nbox='+str(nbox_restart)+'\n')
     
     '''
     t is the temperature of the plasma. Starts at the default value of 400, but will be updated starting on the second box
@@ -722,18 +735,27 @@ def xstar_wind(ep, p_mhd, mu,dict_solution,stop_d_input, SED_path, xlum,outdir="
     
     tp=400
     
+    #current index of the list of "final" boxes for which we compute a final spectrum
+    i_box_final = 0
+    
+    
+    #effective luminosity value which will be modified
+    xlum_eff=xlum
+    
+    #defining the path for the file where we log the evolution of the xstar parameters
+    #note: no outdir here because this is done inside the xstar_func function so in outdir already
+    path_log_xpars='./xstar_pars.log'
+    
     ####main loop
     
     #!nbox_restart should be changed to 1 for fresh calculation
     
     #using i_box because it's an index here, not the actual box number (shifted by 1)
     for i_box in tqdm(range(nbox_restart-1,nbox_index)):
-    
-        print('nbox ='+str(i_box+1))
         
         #! Doppler shifting of spectra depending on relative velocity
 
-        if i_box>1:
+        if i_box>0:
             vrel[i_box] = vobsl[i_box]-vobsl[i_box-1]
             vturb_in[i_box] = vobsl[i_box-1]-vobsl[i_box]
         else:
@@ -745,7 +767,7 @@ def xstar_wind(ep, p_mhd, mu,dict_solution,stop_d_input, SED_path, xlum,outdir="
 
         #! Reading input spectra from file: Initial spectra/output from last box 
 
-        if i_box<2:
+        if i_box<1:
             
             # Nengrid=int(incident_spectra_lines[0])            
 
@@ -754,7 +776,8 @@ def xstar_wind(ep, p_mhd, mu,dict_solution,stop_d_input, SED_path, xlum,outdir="
         else:
                 
             #reloading the iteration from the previous xstar run
-            px.LoadFiles()
+            px.LoadFiles(file1='./'+outdir+'/xout_abund1.fits',file2='./'+outdir+'/xout_lines1.fits',
+                         file3='./'+outdir+'/xout_rrc1.fits',file4='./'+outdir+'/xout_spect1.fits')
             
             #loading the temperature of the previous box
             plasma_par=px.PlasmaParameters()
@@ -762,18 +785,20 @@ def xstar_wind(ep, p_mhd, mu,dict_solution,stop_d_input, SED_path, xlum,outdir="
             #retrieving the plasma temperature of the last step
             tp=plasma_par.temperature[-1]
             
-            #!**Writing the shifted spectra in a file as it is input for next box 
-            xstar_input='./'+outdir+'/shifted_input'+str(i_box+1)+'.dat'
+            xstar_input='./shifted_input'+str(i_box+1)+'.dat'
             
-            #shifting the spectra and storing it in the xstar input file nae
-            shift_tr_spectra(del_E[i_box],xstar_input)
+            #!**Writing the shifted spectra in a file as it is input for next box 
+            xstar_input_save='./'+outdir+'/shifted_input'+str(i_box+1)+'.dat'
+            
+            #shifting the spectra and storing it in the xstar input file name
+            xlum_eff=shift_tr_spectra(del_E[i_box],xstar_input_save)
             
         xpx = 10.0**(xpxl[i_box])
         xpxcol = 10.0**(xpxcoll[i_box])
         zeta = zetal[i_box]
         vobsx = vobsl[i_box]
         vturb_x = vturb_in[i_box]
-           
+        
         '''
         The lines of sight considered should already be compton thin, the whole line of sight has to be compton thick and this is 
         checked directly from jonathan's solution
@@ -787,33 +812,46 @@ def xstar_wind(ep, p_mhd, mu,dict_solution,stop_d_input, SED_path, xlum,outdir="
 
         #### main xstar call
         
-        xstar_function(xstar_input,xlum,tp,xpx,xpxcol,zeta,i_box+1,vturb_x)
+        currdir=os.getcwd()
+        os.chdir(outdir)
+        os.system('rm -f xout_*.fits')
         
+        xstar_func(xstar_input,xlum_eff,tp,xpx,xpxcol,zeta,vturb_x,nbox=i_box+1,nbox_final=i_box_final,path_logpars=path_log_xpars)
+        
+        os.chdir(currdir)
+        
+        if i_box>0:
+            #moving and renaming the log file
+            os.system('mv ./'+outdir+'/xout_step.log'+' ./'+outdir+'/xout_step_box_'+str(i_box+1)+'.log')
+            
+        ####SDKFJSDKLDFJSKJLF where does this log file go ?
         
         #writing the infos
-        px.LoadFiles()
-        write_xstar_infos(i_box+1,vobsx,'xstar_output_details.dat')
+        px.LoadFiles(file1='./'+outdir+'/xout_abund1.fits',file2='./'+outdir+'/xout_lines1.fits',
+                     file3='./'+outdir+'/xout_rrc1.fits',file4='./'+outdir+'/xout_spect1.fits')
+        
+        write_xstar_infos(i_box+1,vobsx,'./'+outdir+'/xstar_output_details.dat')
         
         ####!* Computing spectra and blueshift for the final box depending on stop_dist.
 
-        if i_box+1==nbox_stop[c_n]:
-            
-            #!regular or final, 1 indicate final
-            final_box=True
+        if i_box+1==nbox_stop[i_box_final]:
 
-            vrel_last[c_n] = vobsl_last[c_n]-vobsl[i_box]
+            vrel_last[i_box_final] = vobsl_last[i_box_final]-vobsl[i_box]
 
-            del_E_final[c_n] = np.sqrt((1-vrel_last[c_n]/c_Km)/(1+vrel_last[c_n]/c_Km))
+            #blueshifts for the final box
+            del_E_final[i_box_final] = np.sqrt((1-vrel_last[i_box_final]/c_Km)/(1+vrel_last[i_box_final]/c_Km))
             
-            #!del_E_final[c_n] = 1.00
+            del_E_bs[i_box_final] = np.sqrt((1+vobsl_last[i_box_final]/c_Km)/(1-vobsl_last[i_box_final]/c_Km))
+     
+            #!del_E_final[i_box_final] = 1.00
             
             #here in the fortran code we go back to the beginning of the code (where opening ./varying_spectra.dat)
             #we can't continue the loop because we are now computing the final box, which is not a standard "n+1" box
             #instead here we repeat the commands that should be run again
             
             #! Read output the new spectra from the box
-
-            px.LoadFiles()
+            px.LoadFiles(file1='./'+outdir+'/xout_abund1.fits',file2='./'+outdir+'/xout_lines1.fits',
+                         file3='./'+outdir+'/xout_rrc1.fits',file4='./'+outdir+'/xout_spect1.fits')
             
             #loading the temperature of the previous box
             plasma_par=px.PlasmaParameters()
@@ -821,16 +859,18 @@ def xstar_wind(ep, p_mhd, mu,dict_solution,stop_d_input, SED_path, xlum,outdir="
             #retrieving the plasma temperature of the last step
             tp=plasma_par.temperature[-1]
             
-            xstar_input='./'+outdir+'/shifted_input_final'+str(c_n)+'.dat'
+            xstar_input_save='./'+outdir+'/shifted_input_final_'+str(i_box_final+1)+'.dat'
+            
+            xstar_input='./shifted_input_final_'+str(i_box_final+1)+'.dat'
             
             #shifting the spectra in a different file name
-            shift_tr_spectra(del_E_final[c_n],xstar_input)
+            xlum_final=shift_tr_spectra(del_E_final[i_box_final],xstar_input_save)
     
-            xpx = 10.0**(xpxl_last[c_n])
-            xpxcol = 10.0**(xpxcoll_last[c_n])
-            zeta = zetal_last[c_n]
-            vobsx = vobsl_last[c_n]
-            vturb_x = vobsl[nbox_stop[c_n]]-vobsl_last[c_n]
+            xpx = 10.0**(xpxl_last[i_box_final])
+            xpxcol = 10.0**(xpxcoll_last[i_box_final])
+            zeta = zetal_last[i_box_final]
+            vobsx = vobsl_last[i_box_final]
+            vturb_x = vobsl[nbox_stop[i_box_final]-1]-vobsl_last[i_box_final]
     
             
             if (xpxcol>1.5e24):
@@ -838,21 +878,35 @@ def xstar_wind(ep, p_mhd, mu,dict_solution,stop_d_input, SED_path, xlum,outdir="
                 
                 break
     
-            xstar_function(xstar_input,xlum,xpx,xpxcol,tp,zeta,i_box+1,vturb_x)
-        
-            px.LoadFiles()
-            xstar_input='./'+outdir+'/Final_blueshifted'+str(stop_d[c_n])+'.dat'
+            currdir=os.getcwd()
+            os.chdir(outdir)
+            os.system('rm -f xout_*.fits')
             
-            shift_tr_spectra(del_E_bs[c_n],xstar_input)   
+            #using xlum_final here to avoid overwriting xlum_eff if using more than a single stop distance
+            xstar_func(xstar_input,xlum_final,tp,xpx,xpxcol,zeta,vturb_x,nbox=i_box+1,nbox_final=i_box_final+1,path_logpars=path_log_xpars)
+            
+            os.chdir(currdir)
+            
+            #moving and renaming the log file
+            os.system('mv '+outdir+'/xout_step.log'+' '+outdir+'/xout_step_final_'+str(i_box_final+1)+'.log')
+            
+            px.LoadFiles(file1='./'+outdir+'/xout_abund1.fits',file2='./'+outdir+'/xout_lines1.fits',
+                         file3='./'+outdir+'/xout_rrc1.fits',file4='./'+outdir+'/xout_spect1.fits')
+            
+            xstar_input='./'+outdir+'/final_blueshifted_%.1e'%stop_d[i_box_final]+'.dat'
+            
+            
+            xlum_eff=shift_tr_spectra(del_E_bs[i_box_final],xstar_input)   
     
-            final_box= 0
-    
-            c_n= c_n+1
+            #switching to the next final box to be computed    
+            i_box_final= i_box_final+1
             
             #writing the infos with the final iteration
-            write_xstar_infos(i_box+1,vobsx,'xstar_final_output_details.dat')
+            write_xstar_infos(i_box+1,vobsx,'./'+outdir+'/xstar_output_details_final.dat')
             
-            #! if loop for the last box calculation is completed
+            #removing the standard xstar output to gain space
+            os.system('rm -f '+outdir+'/xout_*.fits')
+            
 
 def nuLnu_to_xstar(path,renorm=False,Edd_ratio=1,M_BH=8,display=False):
     
@@ -918,21 +972,30 @@ def nuLnu_to_xstar(path,renorm=False,Edd_ratio=1,M_BH=8,display=False):
         print(L, L_keV, L_Ryd)
         print(L_keV/L_Edd)
 
-def xstar_to_table(path,outname=None):
+def xstar_to_table(path,outpath='xspecmod.fits',modname=None):
     
     '''
     Converts an xstar output spectra to a model table usable by xspec (atable)
     adapted from pop's script
+    
+    if modname is None, uses the file name in outpath as model name
     '''
 
     currdir=os.getcwd()
     
     filedir='' if '/' not in path else path[:path.rfind('/')]
-
+    
+    outdir='' if '/' not in outpath else outpath[:outpath.rfind('/')]
+    outfile=outpath[outpath.rfind('/')+1:]
+    
+    
+    outprefix=outfile[:outfile.rfind('.')]
+    
     file=path[path.rfind('/')+1:]
     
     filedir=path.replace(file,'')
-    filename=path[:path.rfind('.')]
+    
+    #filename=path[:path.rfind('.')]
     
     tmp=np.genfromtxt(path,skip_header=1)
     enemin=tmp[:,0]*1e-3 #keV
@@ -946,26 +1009,32 @@ def xstar_to_table(path,outname=None):
     spec=fluxsub/(enemeansub*1.6e-9) #ph/s/erg/cm2
     spec=spec*(enemaxsub-eneminsub)*1.6e-9 #ph/s/cm2
     
-    ascii.write([eneminsub[0:l-1],enemaxsub[0:l-1],spec[0:l-1]],filedir+'tmp.txt',overwrite=True)
+    ascii.write([eneminsub[0:l-1],enemaxsub[0:l-1],spec[0:l-1]],outprefix+'_tmp.txt',overwrite=True)
     
-    os.system("sed '/col0/d' "+filedir+"tmp.txt > "+filename+".txt")
-    
+    os.system("sed '/col0/d' "+outprefix+"_tmp.txt > "+outprefix+".txt")
+        
     #spawning a bash process to produce the table from the txt modified SED
     heaproc=pexpect.spawn('/bin/bash',encoding='utf-8')
     heaproc.logfile=sys.stdout
     heaproc.sendline('heainit')
     heaproc.sendline('cd '+currdir)
     
-    heaproc.sendline('ftflx2tab '+filename+'.txt '+filename+' '+filename+'.fits clobber = yes')
+    #here, outfile is the name of the model
+    heaproc.sendline('ftflx2tab '+outprefix+'.txt '+outprefix+' '+outfile+' clobber = yes')
     
     #waiting for the file to be created before closing the bashproc
-    while not os.path.isfile(filename+'.fits'):
+    while not os.path.isfile(os.path.join(currdir,filedir,outfile)):
         time.sleep(1)
         
+    #removing the temp product file
+    heaproc.sendline('rm '+outprefix+'_tmp.txt')
+    heaproc.sendline('rm '+outprefix+'.txt')
     heaproc.sendline('exit')
     
-    if outname is not None:
-        os.system('mv '+filedir+filename+'.fits '+filedir+outname)
+    if outdir!='':
+        os.system('mv '+os.path.join(currdir,filedir,outfile)+' '+outpath)
+        
+
     
 def freeze(model=None,modclass=AllModels,unfreeze=False,parlist=None):
     
@@ -987,7 +1056,7 @@ def freeze(model=None,modclass=AllModels,unfreeze=False,parlist=None):
         for par_index in parlist:
             xspec_mod(par_index).frozen=int(not(unfreeze))
 
-def create_fake_xstar(table,rmf,arf,exposure,nofile=True,reset=True):
+def create_fake_xstar(table,rmf,arf,exposure,nofile=True,reset=True,prefix=""):
     
     if reset:
         AllModels.clear()
@@ -1003,7 +1072,7 @@ def create_fake_xstar(table,rmf,arf,exposure,nofile=True,reset=True):
     fakeset=FakeitSettings(response=rmf,arf=arf,exposure=exposure)
     
     #launching the fakeit
-    AllData.fakeit(settings=fakeset,applyStats=True,noWrite=False)
+    AllData.fakeit(settings=fakeset,applyStats=True,noWrite=nofile,filePrefix=prefix)
     
     
 def model_to_nuLnu(path):
@@ -1022,5 +1091,5 @@ def model_to_nuLnu(path):
     
     save_arr=np.array([x_arr,y_arr]).T
     
-    np.savetxt(path,save_arr,header='nu (Hz) Lnu (erg/s/Hz)',delimiter=' ')
+    np.savetxt(path,save_arr,header='nu(Hz) Lnu(erg/s/Hz)',delimiter=' ')
     

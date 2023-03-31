@@ -1,0 +1,952 @@
+Rsph_cgs_1st=2022073162.6847036,logxi_1st=5.9964257054899415,vobs_1st=1591.5245757262694,ro/Rg_1st=1000.0
+Rsph_cgs_last=202207316268.47037,logxi_last=4.796425705489941,vobs_last=159.15245757262696,ro/Rg_last=100000.0
+
+-----------------------------
+Box n°1
+robyRg_start=1000.0000000000001
+vobs_start in km/s=1591.5245757262694
+Rsph_start in cm=2022073162.6847036
+lognH_start (in /cc)=13.391980564131236
+logxi_start=5.9964257054899415
+robyRg_mid=1061.0079575596822
+vobs_mid in km/s=1545.090878498767
+Rsph_mid in cm=2145435716.3763437
+lognH_mid (in /cc)=13.355974466560198
+logxi_mid=5.98099452081664
+robyRg_stop=1122.0159151193636
+vobs_stop in km/s=1502.4977857046474
+Rsph_stop in cm=2268798270.0679836
+lognH_stop (in /cc)=13.321981940094288
+logxi_stop=5.966426295188392
+Parameters to go to xstar are:
+Gas slab of lognH=13.355974466560198
+logNH=21.748187813225393
+of logxi=5.98099452081664
+is travelling at a velocity of vobs in Km/s=1545.090878498767
+
+-----------------------------
+Box n°2
+robyRg_start=1122.0159151193636
+vobs_start in km/s=1502.4977857046474
+Rsph_start in cm=2268798270.0679836
+lognH_start (in /cc)=13.321981940094288
+logxi_start=5.966426295188392
+robyRg_mid=1190.4678144502534
+vobs_mid in km/s=1458.6614992089992
+Rsph_mid in cm=2407213018.6397705
+lognH_mid (in /cc)=13.28597584252325
+logxi_mid=5.95099511051509
+robyRg_stop=1258.9197137811432
+vobs_stop in km/s=1418.450981202845
+Rsph_stop in cm=2545627767.211558
+lognH_stop (in /cc)=13.251983316057338
+logxi_stop=5.936426884886842
+Parameters to go to xstar are:
+Gas slab of lognH=13.28597584252325
+logNH=21.728188206357693
+of logxi=5.95099511051509
+is travelling at a velocity of vobs in Km/s=1458.6614992089992
+
+-----------------------------
+Box n°3
+robyRg_start=1258.9197137811432
+vobs_start in km/s=1418.450981202845
+Rsph_start in cm=2545627767.211558
+lognH_start (in /cc)=13.251983316057338
+logxi_start=5.936426884886842
+robyRg_mid=1335.7238342505502
+vobs_mid in km/s=1377.0668113334161
+Rsph_mid in cm=2700931317.9963484
+lognH_mid (in /cc)=13.2159772184863
+logxi_mid=5.920995700213541
+robyRg_stop=1412.5279547199568
+vobs_stop in km/s=1339.1055915145437
+Rsph_stop in cm=2856234868.7811384
+lognH_stop (in /cc)=13.181984692020388
+logxi_stop=5.906427474585293
+Parameters to go to xstar are:
+Gas slab of lognH=13.2159772184863
+logNH=21.708188599489993
+of logxi=5.920995700213541
+is travelling at a velocity of vobs in Km/s=1377.0668113334161
+
+-----------------------------
+Box n°4
+robyRg_start=1412.5279547199568
+vobs_start in km/s=1339.1055915145437
+Rsph_start in cm=2856234868.7811384
+lognH_start (in /cc)=13.181984692020388
+logxi_start=5.906427474585293
+robyRg_mid=1498.7034002333758
+vobs_mid in km/s=1300.0363716354432
+Rsph_mid in cm=3030487924.436221
+lognH_mid (in /cc)=13.145978594449351
+logxi_mid=5.890996289911991
+robyRg_stop=1584.8788457467952
+vobs_stop in km/s=1264.1986286370507
+Rsph_stop in cm=3204740980.0913043
+lognH_stop (in /cc)=13.11198606798344
+logxi_stop=5.8764280642837425
+Parameters to go to xstar are:
+Gas slab of lognH=13.145978594449351
+logNH=21.688188992622294
+of logxi=5.890996289911991
+is travelling at a velocity of vobs in Km/s=1300.0363716354432
+
+-----------------------------
+Box n°5
+robyRg_start=1584.8788457467952
+vobs_start in km/s=1264.1986286370507
+Rsph_start in cm=3204740980.0913043
+lognH_start (in /cc)=13.11198606798344
+logxi_start=5.8764280642837425
+robyRg_mid=1681.5690671053533
+vobs_mid in km/s=1227.3148649472764
+Rsph_mid in cm=3400255681.794488
+lognH_mid (in /cc)=13.075979970412401
+logxi_mid=5.860996879610441
+robyRg_stop=1778.2592884639112
+vobs_stop in km/s=1193.4818156051604
+Rsph_stop in cm=3595770383.497671
+lognH_stop (in /cc)=13.04198744394649
+logxi_stop=5.846428653982193
+Parameters to go to xstar are:
+Gas slab of lognH=13.075979970412401
+logNH=21.668189385754594
+of logxi=5.860996879610441
+is travelling at a velocity of vobs in Km/s=1227.3148649472764
+
+-----------------------------
+Box n°6
+robyRg_start=1778.2592884639112
+vobs_start in km/s=1193.4818156051604
+Rsph_start in cm=3595770383.497671
+lognH_start (in /cc)=13.04198744394649
+logxi_start=5.846428653982193
+robyRg_mid=1886.7472556646273
+vobs_mid in km/s=1158.6612579351347
+Rsph_mid in cm=3815140990.4484577
+lognH_mid (in /cc)=13.005981346375453
+logxi_mid=5.830997469308891
+robyRg_stop=1995.2352228653438
+vobs_stop in km/s=1126.7207635843215
+Rsph_stop in cm=4034511597.3992443
+lognH_stop (in /cc)=12.97198881990954
+logxi_stop=5.816429243680643
+Parameters to go to xstar are:
+Gas slab of lognH=13.005981346375453
+logNH=21.64818977888689
+of logxi=5.830997469308891
+is travelling at a velocity of vobs in Km/s=1158.6612579351347
+
+-----------------------------
+Box n°7
+robyRg_start=1995.2352228653438
+vobs_start in km/s=1126.7207635843215
+Rsph_start in cm=4034511597.3992443
+lognH_start (in /cc)=12.97198881990954
+logxi_start=5.816429243680643
+robyRg_mid=2116.9604486634944
+vobs_mid in km/s=1093.8480002012368
+Rsph_mid in cm=4280648909.7074213
+lognH_mid (in /cc)=12.935982722338503
+logxi_mid=5.800998059007341
+robyRg_stop=2238.6856744616457
+vobs_stop in km/s=1063.6941949956156
+Rsph_stop in cm=4526786222.015598
+lognH_stop (in /cc)=12.90199019587259
+logxi_stop=5.786429833379094
+Parameters to go to xstar are:
+Gas slab of lognH=12.935982722338503
+logNH=21.628190172019192
+of logxi=5.800998059007341
+is travelling at a velocity of vobs in Km/s=1093.8480002012368
+
+-----------------------------
+Box n°8
+robyRg_start=2238.6856744616457
+vobs_start in km/s=1063.6941949956156
+Rsph_start in cm=4526786222.015598
+lognH_start (in /cc)=12.90199019587259
+logxi_start=5.786429833379094
+robyRg_mid=2375.2633150786696
+vobs_mid in km/s=1032.6602700745764
+Rsph_mid in cm=4802956203.730078
+lognH_mid (in /cc)=12.865984098301553
+logxi_mid=5.770998648705792
+robyRg_stop=2511.840955695693
+vobs_stop in km/s=1004.1932100976104
+Rsph_stop in cm=5079126185.444558
+lognH_stop (in /cc)=12.831991571835642
+logxi_stop=5.756430423077544
+Parameters to go to xstar are:
+Gas slab of lognH=12.865984098301553
+logNH=21.608190565151492
+of logxi=5.770998648705792
+is travelling at a velocity of vobs in Km/s=1032.6602700745764
+
+-----------------------------
+Box n°9
+robyRg_start=2511.840955695693
+vobs_start in km/s=1004.1932100976104
+Rsph_start in cm=5079126185.444558
+lognH_start (in /cc)=12.831991571835642
+logxi_start=5.756430423077544
+robyRg_mid=2665.083242117447
+vobs_mid in km/s=974.8952625907001
+Rsph_mid in cm=5388993300.206429
+lognH_mid (in /cc)=12.795985474264604
+logxi_mid=5.7409992384042425
+robyRg_stop=2818.3255285391997
+vobs_stop in km/s=948.020594594201
+Rsph_stop in cm=5698860414.968298
+lognH_stop (in /cc)=12.761992947798692
+logxi_stop=5.726431012775994
+Parameters to go to xstar are:
+Gas slab of lognH=12.795985474264604
+logNH=21.588190958283793
+of logxi=5.7409992384042425
+is travelling at a velocity of vobs in Km/s=974.8952625907001
+
+-----------------------------
+Box n°10
+robyRg_start=2818.3255285391997
+vobs_start in km/s=948.020594594201
+Rsph_start in cm=5698860414.968298
+lognH_start (in /cc)=12.761992947798692
+logxi_start=5.726431012775994
+robyRg_mid=2990.2658127736872
+vobs_mid in km/s=920.3615173005088
+Rsph_mid in cm=6046536249.303234
+lognH_mid (in /cc)=12.725986850227654
+logxi_mid=5.710999828102692
+robyRg_stop=3162.2060970081743
+vobs_stop in km/s=894.9901659735201
+Rsph_stop in cm=6394212083.638171
+lognH_stop (in /cc)=12.691994323761742
+logxi_stop=5.696431602474444
+Parameters to go to xstar are:
+Gas slab of lognH=12.725986850227654
+logNH=21.568191351416093
+of logxi=5.710999828102692
+is travelling at a velocity of vobs in Km/s=920.3615173005088
+
+-----------------------------
+Box n°11
+robyRg_start=3162.2060970081743
+vobs_start in km/s=894.9901659735201
+Rsph_start in cm=6394212083.638171
+lognH_start (in /cc)=12.691994323761742
+logxi_start=5.696431602474444
+robyRg_mid=3355.125832369416
+vobs_mid in km/s=868.8782836801273
+Rsph_mid in cm=6784309903.064373
+lognH_mid (in /cc)=12.655988226190706
+logxi_mid=5.681000417801143
+robyRg_stop=3548.045567730658
+vobs_stop in km/s=844.9261564113799
+Rsph_stop in cm=7174407722.490576
+lognH_stop (in /cc)=12.621995699724794
+logxi_stop=5.666432192172895
+Parameters to go to xstar are:
+Gas slab of lognH=12.655988226190706
+logNH=21.548191744548394
+of logxi=5.681000417801143
+is travelling at a velocity of vobs in Km/s=868.8782836801273
+
+-----------------------------
+Box n°12
+robyRg_start=3548.045567730658
+vobs_start in km/s=844.9261564113799
+Rsph_start in cm=7174407722.490576
+lognH_start (in /cc)=12.621995699724794
+logxi_start=5.666432192172895
+robyRg_mid=3764.5045811465875
+vobs_mid in km/s=820.2749220385147
+Rsph_mid in cm=7612103684.340134
+lognH_mid (in /cc)=12.585989602153756
+logxi_mid=5.651001007499593
+robyRg_stop=3980.9635945625164
+vobs_stop in km/s=797.6626301938936
+Rsph_stop in cm=8049799646.1896925
+lognH_stop (in /cc)=12.551997075687844
+logxi_stop=5.636432781871345
+Parameters to go to xstar are:
+Gas slab of lognH=12.585989602153756
+logNH=21.528192137680694
+of logxi=5.651001007499593
+is travelling at a velocity of vobs in Km/s=820.2749220385147
+
+-----------------------------
+Box n°13
+robyRg_start=3980.9635945625164
+vobs_start in km/s=797.6626301938936
+Rsph_start in cm=8049799646.1896925
+lognH_start (in /cc)=12.551997075687844
+logxi_start=5.636432781871345
+robyRg_mid=4223.834052586226
+vobs_mid in km/s=774.3903379371345
+Rsph_mid in cm=8540901481.368376
+lognH_mid (in /cc)=12.515990978116806
+logxi_mid=5.621001597198044
+robyRg_stop=4466.704510609934
+vobs_stop in km/s=753.0429337283455
+Rsph_stop in cm=9032003316.547058
+lognH_stop (in /cc)=12.481998451650895
+logxi_stop=5.606433371569795
+Parameters to go to xstar are:
+Gas slab of lognH=12.515990978116806
+logNH=21.508192530812995
+of logxi=5.621001597198044
+is travelling at a velocity of vobs in Km/s=774.3903379371345
+
+-----------------------------
+Box n°14
+robyRg_start=4466.704510609934
+vobs_start in km/s=753.0429337283455
+Rsph_start in cm=9032003316.547058
+lognH_start (in /cc)=12.481998451650895
+logxi_start=5.606433371569795
+robyRg_mid=4739.209029824863
+vobs_mid in km/s=731.0724482470921
+Rsph_mid in cm=9583027391.561867
+lognH_mid (in /cc)=12.445992354079857
+logxi_mid=5.591002186896493
+robyRg_stop=5011.713549039794
+vobs_stop in km/s=710.9191763193802
+Rsph_stop in cm=10134051466.576675
+lognH_stop (in /cc)=12.411999827613945
+logxi_stop=5.576433961268245
+Parameters to go to xstar are:
+Gas slab of lognH=12.445992354079857
+logNH=21.488192923945295
+of logxi=5.591002186896493
+is travelling at a velocity of vobs in Km/s=731.0724482470921
+
+-----------------------------
+Box n°15
+robyRg_start=5011.713549039794
+vobs_start in km/s=710.9191763193802
+Rsph_start in cm=10134051466.576675
+lognH_start (in /cc)=12.411999827613945
+logxi_start=5.576433961268245
+robyRg_mid=5317.467956540896
+vobs_mid in km/s=690.1776770739946
+Rsph_mid in cm=10752309248.357216
+lognH_mid (in /cc)=12.375993730042907
+logxi_mid=5.561002776594943
+robyRg_stop=5623.222364041998
+vobs_stop in km/s=671.1517399895655
+Rsph_stop in cm=11370567030.137756
+lognH_stop (in /cc)=12.342001203576995
+logxi_stop=5.546434550966696
+Parameters to go to xstar are:
+Gas slab of lognH=12.375993730042907
+logNH=21.468193317077596
+of logxi=5.561002776594943
+is travelling at a velocity of vobs in Km/s=690.1776770739946
+
+-----------------------------
+Box n°16
+robyRg_start=5623.222364041998
+vobs_start in km/s=671.1517399895655
+Rsph_start in cm=11370567030.137756
+lognH_start (in /cc)=12.342001203576995
+logxi_start=5.546434550966696
+robyRg_mid=5966.283675376125
+vobs_mid in km/s=651.5704798797959
+Rsph_mid in cm=12064262100.941917
+lognH_mid (in /cc)=12.305995106005959
+logxi_mid=5.531003366293394
+robyRg_stop=6309.344986710253
+vobs_stop in km/s=633.6088167196368
+Rsph_stop in cm=12757957171.746078
+lognH_stop (in /cc)=12.272002579540047
+logxi_stop=5.516435140665146
+Parameters to go to xstar are:
+Gas slab of lognH=12.305995106005959
+logNH=21.448193710209896
+of logxi=5.531003366293394
+is travelling at a velocity of vobs in Km/s=651.5704798797959
+
+-----------------------------
+Box n°17
+robyRg_start=6309.344986710253
+vobs_start in km/s=633.6088167196368
+Rsph_start in cm=12757957171.746078
+lognH_start (in /cc)=12.272002579540047
+logxi_start=5.516435140665146
+robyRg_mid=6694.265237888863
+vobs_mid in km/s=615.1228942243401
+Rsph_mid in cm=13536294081.428202
+lognH_mid (in /cc)=12.235996481969009
+logxi_mid=5.501003955991845
+robyRg_stop=7079.185489067474
+vobs_stop in km/s=598.1659715746243
+Rsph_stop in cm=14314630991.110325
+lognH_stop (in /cc)=12.202003955503097
+logxi_stop=5.486435730363596
+Parameters to go to xstar are:
+Gas slab of lognH=12.235996481969009
+logNH=21.428194103342197
+of logxi=5.501003955991845
+is travelling at a velocity of vobs in Km/s=615.1228942243401
+
+-----------------------------
+Box n°18
+robyRg_start=7079.185489067474
+vobs_start in km/s=598.1659715746243
+Rsph_start in cm=14314630991.110325
+lognH_start (in /cc)=12.202003955503097
+logxi_start=5.486435730363596
+robyRg_mid=7511.072136941618
+vobs_mid in km/s=580.7141156375484
+Rsph_mid in cm=15187937391.09849
+lognH_mid (in /cc)=12.165997857932059
+logxi_mid=5.4710045456902945
+robyRg_stop=7942.958784815762
+vobs_stop in km/s=564.7057302678558
+Rsph_stop in cm=16061243791.086655
+lognH_stop (in /cc)=12.132005331466148
+logxi_stop=5.456436320062046
+Parameters to go to xstar are:
+Gas slab of lognH=12.165997857932059
+logNH=21.408194496474493
+of logxi=5.4710045456902945
+is travelling at a velocity of vobs in Km/s=580.7141156375484
+
+-----------------------------
+Box n°19
+robyRg_start=7942.958784815762
+vobs_start in km/s=564.7057302678558
+Rsph_start in cm=16061243791.086655
+lognH_start (in /cc)=12.132005331466148
+logxi_start=5.456436320062046
+robyRg_mid=8427.542477258103
+vobs_mid in km/s=548.2300972164921
+Rsph_mid in cm=17041107470.648972
+lognH_mid (in /cc)=12.09599923389511
+logxi_mid=5.441005135388744
+robyRg_stop=8912.126169700445
+vobs_stop in km/s=533.1171897958235
+Rsph_stop in cm=18020971150.21129
+lognH_stop (in /cc)=12.062006707429198
+logxi_stop=5.426436909760497
+Parameters to go to xstar are:
+Gas slab of lognH=12.09599923389511
+logNH=21.388194889606794
+of logxi=5.441005135388744
+is travelling at a velocity of vobs in Km/s=548.2300972164921
+
+-----------------------------
+Box n°20
+robyRg_start=8912.126169700445
+vobs_start in km/s=533.1171897958235
+Rsph_start in cm=18020971150.21129
+lognH_start (in /cc)=12.062006707429198
+logxi_start=5.426436909760497
+robyRg_mid=9455.83678482806
+vobs_mid in km/s=517.5631716202263
+Rsph_mid in cm=19120393793.32763
+lognH_mid (in /cc)=12.02600060985816
+logxi_mid=5.411005725087195
+robyRg_stop=9999.547399955673
+vobs_stop in km/s=503.2956508533844
+Rsph_stop in cm=20219816436.44397
+lognH_stop (in /cc)=11.99200808339225
+logxi_stop=5.396437499458947
+Parameters to go to xstar are:
+Gas slab of lognH=12.02600060985816
+logNH=21.368195282739094
+of logxi=5.411005725087195
+is travelling at a velocity of vobs in Km/s=517.5631716202263
+
+-----------------------------
+Box n°21
+robyRg_start=9999.547399955673
+vobs_start in km/s=503.2956508533844
+Rsph_start in cm=20219816436.44397
+lognH_start (in /cc)=11.99200808339225
+logxi_start=5.396437499458947
+robyRg_mid=10609.599363348194
+vobs_mid in km/s=488.61169420949767
+Rsph_mid in cm=21453386139.4631
+lognH_mid (in /cc)=11.956001985821212
+logxi_mid=5.381006314785645
+robyRg_stop=11219.651326740717
+vobs_stop in km/s=475.14227081093475
+Rsph_stop in cm=22686955842.48223
+lognH_stop (in /cc)=11.9220094593553
+logxi_stop=5.3664380891573975
+Parameters to go to xstar are:
+Gas slab of lognH=11.956001985821212
+logNH=21.348195675871395
+of logxi=5.381006314785645
+is travelling at a velocity of vobs in Km/s=488.61169420949767
+
+-----------------------------
+Box n°22
+robyRg_start=11219.651326740717
+vobs_start in km/s=475.14227081093475
+Rsph_start in cm=22686955842.48223
+lognH_start (in /cc)=11.9220094593553
+logxi_start=5.3664380891573975
+robyRg_mid=11904.139338716943
+vobs_mid in km/s=461.27970614852325
+Rsph_mid in cm=24071040681.678764
+lognH_mid (in /cc)=11.886003361784262
+logxi_mid=5.3510069044840955
+robyRg_stop=12588.627350693168
+vobs_stop in km/s=448.56373610337084
+Rsph_stop in cm=25455125520.875294
+lognH_stop (in /cc)=11.85201083531835
+logxi_stop=5.336438678855847
+Parameters to go to xstar are:
+Gas slab of lognH=11.886003361784262
+logNH=21.328196069003695
+of logxi=5.3510069044840955
+is travelling at a velocity of vobs in Km/s=461.27970614852325
+
+-----------------------------
+Box n°23
+robyRg_start=12588.627350693168
+vobs_start in km/s=448.56373610337084
+Rsph_start in cm=25455125520.875294
+lognH_start (in /cc)=11.85201083531835
+logxi_start=5.336438678855847
+robyRg_mid=13356.633793838906
+vobs_mid in km/s=435.4766163522
+Rsph_mid in cm=27008090738.329227
+lognH_mid (in /cc)=11.816004737747313
+logxi_mid=5.321007494182545
+robyRg_stop=14124.640236984646
+vobs_stop in km/s=423.47195294497027
+Rsph_stop in cm=28561055955.78316
+lognH_stop (in /cc)=11.782012211281401
+logxi_stop=5.306439268554298
+Parameters to go to xstar are:
+Gas slab of lognH=11.816004737747313
+logNH=21.308196462135996
+of logxi=5.321007494182545
+is travelling at a velocity of vobs in Km/s=435.4766163522
+
+-----------------------------
+Box n°24
+robyRg_start=14124.640236984646
+vobs_start in km/s=423.47195294497027
+Rsph_start in cm=28561055955.78316
+lognH_start (in /cc)=11.782012211281401
+logxi_start=5.306439268554298
+robyRg_mid=14986.35568910838
+vobs_mid in km/s=411.11690122457014
+Rsph_mid in cm=30303507645.39328
+lognH_mid (in /cc)=11.746006113710363
+logxi_mid=5.291008083880996
+robyRg_stop=15848.071141232112
+vobs_stop in km/s=399.7837553450845
+Rsph_stop in cm=32045959335.003395
+lognH_stop (in /cc)=11.712013587244451
+logxi_stop=5.276439858252748
+Parameters to go to xstar are:
+Gas slab of lognH=11.746006113710363
+logNH=21.288196855268296
+of logxi=5.291008083880996
+is travelling at a velocity of vobs in Km/s=411.11690122457014
+
+-----------------------------
+Box n°25
+robyRg_start=15848.071141232112
+vobs_start in km/s=399.7837553450845
+Rsph_start in cm=32045959335.003395
+lognH_start (in /cc)=11.712013587244451
+logxi_start=5.276439858252748
+robyRg_mid=16814.92959281922
+vobs_mid in km/s=388.11982119333186
+Rsph_mid in cm=34001017862.07257
+lognH_mid (in /cc)=11.676007489673413
+logxi_mid=5.261008673579446
+robyRg_stop=17781.788044406327
+vobs_stop in km/s=377.4206294568647
+Rsph_stop in cm=35956076389.14175
+lognH_stop (in /cc)=11.642014963207501
+logxi_stop=5.246440447951199
+Parameters to go to xstar are:
+Gas slab of lognH=11.676007489673413
+logNH=21.268197248400597
+of logxi=5.261008673579446
+is travelling at a velocity of vobs in Km/s=388.11982119333186
+
+-----------------------------
+Box n°26
+robyRg_start=17781.788044406327
+vobs_start in km/s=377.4206294568647
+Rsph_start in cm=35956076389.14175
+lognH_start (in /cc)=11.642014963207501
+logxi_start=5.246440447951199
+robyRg_mid=18866.618614754723
+vobs_mid in km/s=366.40915310085796
+Rsph_mid in cm=38149683171.50318
+lognH_mid (in /cc)=11.606008865636465
+logxi_mid=5.231009263277897
+robyRg_stop=19951.449185103123
+vobs_stop in km/s=356.30845334538265
+Rsph_stop in cm=40343289953.86462
+lognH_stop (in /cc)=11.572016339170553
+logxi_stop=5.216441037649648
+Parameters to go to xstar are:
+Gas slab of lognH=11.606008865636465
+logNH=21.248197641532897
+of logxi=5.231009263277897
+is travelling at a velocity of vobs in Km/s=366.40915310085796
+
+-----------------------------
+Box n°27
+robyRg_start=19951.449185103123
+vobs_start in km/s=356.30845334538265
+Rsph_start in cm=40343289953.86462
+lognH_start (in /cc)=11.572016339170553
+logxi_start=5.216441037649648
+robyRg_mid=21168.64635024204
+vobs_mid in km/s=345.91293756474244
+Rsph_mid in cm=42804551675.18793
+lognH_mid (in /cc)=11.536010241599515
+logxi_mid=5.201009852976346
+robyRg_stop=22385.843515380962
+vobs_stop in km/s=336.37725131261925
+Rsph_stop in cm=45265813396.51124
+lognH_stop (in /cc)=11.502017715133602
+logxi_stop=5.186441627348099
+Parameters to go to xstar are:
+Gas slab of lognH=11.536010241599515
+logNH=21.228198034665198
+of logxi=5.201009852976346
+is travelling at a velocity of vobs in Km/s=345.91293756474244
+
+-----------------------------
+Box n°28
+robyRg_start=22385.843515380962
+vobs_start in km/s=336.37725131261925
+Rsph_start in cm=45265813396.51124
+lognH_start (in /cc)=11.502017715133602
+logxi_start=5.186441627348099
+robyRg_mid=23751.558106505003
+vobs_mid in km/s=326.5632404705046
+Rsph_mid in cm=48027388219.11008
+lognH_mid (in /cc)=11.466011617562566
+logxi_mid=5.171010442674797
+robyRg_stop=25117.272697629043
+vobs_stop in km/s=317.56096196503364
+Rsph_stop in cm=50788963041.70891
+lognH_stop (in /cc)=11.432019091096654
+logxi_stop=5.156442217046549
+Parameters to go to xstar are:
+Gas slab of lognH=11.466011617562566
+logNH=21.208198427797498
+of logxi=5.171010442674797
+is travelling at a velocity of vobs in Km/s=326.5632404705046
+
+-----------------------------
+Box n°29
+robyRg_start=25117.272697629043
+vobs_start in km/s=317.56096196503364
+Rsph_start in cm=50788963041.70891
+lognH_start (in /cc)=11.432019091096654
+logxi_start=5.156442217046549
+robyRg_mid=26649.62620438095
+vobs_mid in km/s=308.2959278059288
+Rsph_mid in cm=53887493943.45773
+lognH_mid (in /cc)=11.396012993525616
+logxi_mid=5.141011032373247
+robyRg_stop=28181.979711132855
+vobs_stop in km/s=299.7972192549821
+Rsph_stop in cm=56986024845.20656
+lognH_stop (in /cc)=11.362020467059704
+logxi_stop=5.126442806744999
+Parameters to go to xstar are:
+Gas slab of lognH=11.396012993525616
+logNH=21.1881988209298
+of logxi=5.141011032373247
+is travelling at a velocity of vobs in Km/s=308.2959278059288
+
+-----------------------------
+Box n°30
+robyRg_start=28181.979711132855
+vobs_start in km/s=299.7972192549821
+Rsph_start in cm=56986024845.20656
+lognH_start (in /cc)=11.362020467059704
+logxi_start=5.126442806745
+robyRg_mid=29901.30473329746
+vobs_mid in km/s=291.05045309073336
+Rsph_mid in cm=60462625830.45789
+lognH_mid (in /cc)=11.326014369488666
+logxi_mid=5.111011622071698
+robyRg_stop=31620.62975546207
+vobs_stop in km/s=283.0271457702545
+Rsph_stop in cm=63939226815.70923
+lognH_stop (in /cc)=11.292021843022756
+logxi_stop=5.0964433964434495
+Parameters to go to xstar are:
+Gas slab of lognH=11.326014369488666
+logNH=21.1681992140621
+of logxi=5.111011622071698
+is travelling at a velocity of vobs in Km/s=291.05045309073336
+
+-----------------------------
+Box n°31
+robyRg_start=31620.62975546207
+vobs_start in km/s=283.0271457702545
+Rsph_start in cm=63939226815.70923
+lognH_start (in /cc)=11.292021843022756
+logxi_start=5.0964433964434495
+robyRg_mid=33549.73979359371
+vobs_mid in km/s=274.76965669700974
+Rsph_mid in cm=67840028451.680885
+lognH_mid (in /cc)=11.256015745451718
+logxi_mid=5.0810122117701475
+robyRg_stop=35478.849831725354
+vobs_stop in km/s=267.19515758659156
+Rsph_stop in cm=71740830087.65254
+lognH_stop (in /cc)=11.222023218985806
+logxi_stop=5.066443986141899
+Parameters to go to xstar are:
+Gas slab of lognH=11.256015745451718
+logNH=21.148199607194396
+of logxi=5.0810122117701475
+is travelling at a velocity of vobs in Km/s=274.76965669700974
+
+-----------------------------
+Box n°32
+robyRg_start=35478.849831725354
+vobs_start in km/s=267.19515758659156
+Rsph_start in cm=71740830087.65254
+lognH_start (in /cc)=11.222023218985806
+logxi_start=5.066443986141899
+robyRg_mid=37643.34199652558
+vobs_mid in km/s=259.3995763952871
+Rsph_mid in cm=76117591604.9364
+lognH_mid (in /cc)=11.186017121414768
+logxi_mid=5.051012801468598
+robyRg_stop=39807.8341613258
+vobs_stop in km/s=252.24878003637338
+Rsph_stop in cm=80494353122.22025
+lognH_stop (in /cc)=11.152024594948855
+logxi_stop=5.03644457584035
+Parameters to go to xstar are:
+Gas slab of lognH=11.186017121414768
+logNH=21.128200000326697
+of logxi=5.051012801468598
+is travelling at a velocity of vobs in Km/s=259.3995763952871
+
+-----------------------------
+Box n°33
+robyRg_start=39807.8341613258
+vobs_start in km/s=252.24878003637338
+Rsph_start in cm=80494353122.22025
+lognH_start (in /cc)=11.152024594948855
+logxi_start=5.03644457584035
+robyRg_mid=42236.428818382825
+vobs_mid in km/s=244.88926849828053
+Rsph_mid in cm=85405149201.29471
+lognH_mid (in /cc)=11.11601849737782
+logxi_mid=5.021013391167048
+robyRg_stop=44665.02347543983
+vobs_stop in km/s=238.1384737828487
+Rsph_stop in cm=90315945280.36916
+lognH_stop (in /cc)=11.082025970911907
+logxi_stop=5.0064451655388
+Parameters to go to xstar are:
+Gas slab of lognH=11.11601849737782
+logNH=21.108200393458997
+of logxi=5.021013391167048
+is travelling at a velocity of vobs in Km/s=244.88926849828053
+
+-----------------------------
+Box n°34
+robyRg_start=44665.02347543983
+vobs_start in km/s=238.1384737828487
+Rsph_start in cm=90315945280.36916
+lognH_start (in /cc)=11.082025970911907
+logxi_start=5.0064451655388
+robyRg_mid=47389.94533203166
+vobs_mid in km/s=231.19063900951116
+Rsph_mid in cm=95825936636.99646
+lognH_mid (in /cc)=11.04601987334087
+logxi_mid=4.991013980865499
+robyRg_stop=50114.86718862349
+vobs_stop in km/s=224.81747062343433
+Rsph_stop in cm=101335927993.62376
+lognH_stop (in /cc)=11.012027346874957
+logxi_stop=4.9764457552372505
+Parameters to go to xstar are:
+Gas slab of lognH=11.04601987334087
+logNH=21.088200786591297
+of logxi=4.991013980865499
+is travelling at a velocity of vobs in Km/s=231.19063900951116
+
+-----------------------------
+Box n°35
+robyRg_start=50114.86718862349
+vobs_start in km/s=224.81747062343433
+Rsph_start in cm=101335927993.62376
+lognH_start (in /cc)=11.012027346874957
+logxi_start=4.9764457552372505
+robyRg_mid=53172.27287917611
+vobs_mid in km/s=218.25828421714363
+Rsph_mid in cm=107518225987.92973
+lognH_mid (in /cc)=10.976021249303919
+logxi_mid=4.961014570563949
+robyRg_stop=56229.67856972874
+vobs_stop in km/s=212.241618477858
+Rsph_stop in cm=113700523982.2357
+lognH_stop (in /cc)=10.942028722838009
+logxi_stop=4.946446344935701
+Parameters to go to xstar are:
+Gas slab of lognH=10.976021249303919
+logNH=21.068201179723598
+of logxi=4.961014570563949
+is travelling at a velocity of vobs in Km/s=218.25828421714363
+
+-----------------------------
+Box n°36
+robyRg_start=56229.67856972874
+vobs_start in km/s=212.241618477858
+Rsph_start in cm=113700523982.2357
+lognH_start (in /cc)=10.942028722838009
+logxi_start=4.946446344935701
+robyRg_mid=59660.136413505315
+vobs_mid in km/s=206.04934020469426
+Rsph_mid in cm=120637160723.85751
+lognH_mid (in /cc)=10.90602262526697
+logxi_mid=4.931015160262399
+robyRg_stop=63090.59425728188
+vobs_stop in km/s=200.36923504736342
+Rsph_stop in cm=127573797465.47934
+lognH_stop (in /cc)=10.872030098801059
+logxi_stop=4.916446934634151
+Parameters to go to xstar are:
+Gas slab of lognH=10.90602262526697
+logNH=21.0482015728559
+of logxi=4.931015160262399
+is travelling at a velocity of vobs in Km/s=206.04934020469426
+
+-----------------------------
+Box n°37
+robyRg_start=63090.59425728188
+vobs_start in km/s=200.36923504736342
+Rsph_start in cm=127573797465.47934
+lognH_start (in /cc)=10.872030098801059
+logxi_start=4.916446934634151
+robyRg_mid=66939.62255414523
+vobs_mid in km/s=194.52334077981823
+Rsph_mid in cm=135356814286.98074
+lognH_mid (in /cc)=10.83602400123002
+logxi_mid=4.901015749960849
+robyRg_stop=70788.65085100858
+vobs_stop in km/s=189.1609696599349
+Rsph_stop in cm=143139831108.48215
+lognH_stop (in /cc)=10.802031474764108
+logxi_stop=4.886447524332601
+Parameters to go to xstar are:
+Gas slab of lognH=10.83602400123002
+logNH=21.0282019659882
+of logxi=4.901015749960849
+is travelling at a velocity of vobs in Km/s=194.52334077981823
+
+-----------------------------
+Box n°38
+robyRg_start=70788.65085100858
+vobs_start in km/s=189.1609696599349
+Rsph_start in cm=143139831108.48215
+lognH_start (in /cc)=10.802031474764108
+logxi_start=4.886447524332601
+robyRg_mid=75107.32185783406
+vobs_mid in km/s=183.64208335028303
+Rsph_mid in cm=151872499849.84845
+lognH_mid (in /cc)=10.766025377193072
+logxi_mid=4.8710163396593
+robyRg_stop=79425.99286465952
+vobs_stop in km/s=178.57967284363122
+Rsph_stop in cm=160605168591.21475
+lognH_stop (in /cc)=10.73203285072716
+logxi_stop=4.856448114031052
+Parameters to go to xstar are:
+Gas slab of lognH=10.766025377193072
+logNH=21.0082023591205
+of logxi=4.8710163396593
+is travelling at a velocity of vobs in Km/s=183.64208335028303
+
+-----------------------------
+Box n°39
+robyRg_start=79425.99286465952
+vobs_start in km/s=178.57967284363122
+Rsph_start in cm=160605168591.21475
+lognH_start (in /cc)=10.73203285072716
+logxi_start=4.856448114031052
+robyRg_mid=84271.61046648225
+vobs_mid in km/s=173.36950230258032
+Rsph_mid in cm=170403361900.4931
+lognH_mid (in /cc)=10.696026753156122
+logxi_mid=4.84101692935775
+robyRg_stop=89117.22806830499
+vobs_stop in km/s=168.5902731957339
+Rsph_stop in cm=180201555209.77148
+lognH_stop (in /cc)=10.66203422669021
+logxi_stop=4.826448703729502
+Parameters to go to xstar are:
+Gas slab of lognH=10.696026753156122
+logNH=20.9882027522528
+of logxi=4.84101692935775
+is travelling at a velocity of vobs in Km/s=173.36950230258032
+
+-----------------------------
+Box n°40
+robyRg_start=89117.22806830499
+vobs_start in km/s=168.5902731957339
+Rsph_start in cm=180201555209.77148
+lognH_start (in /cc)=10.66203422669021
+logxi_start=4.826448703729502
+robyRg_mid=94554.08813613262
+vobs_mid in km/s=163.67154946349103
+Rsph_mid in cm=191195284042.19788
+lognH_mid (in /cc)=10.626028129119174
+logxi_mid=4.8110175190562
+robyRg_stop=99990.94820396024
+vobs_stop in km/s=159.15966113959567
+Rsph_stop in cm=202189012874.62427
+lognH_stop (in /cc)=10.592035602653262
+logxi_stop=4.796449293427952
+Parameters to go to xstar are:
+Gas slab of lognH=10.626028129119174
+logNH=20.9682031453851
+of logxi=4.8110175190562
+is travelling at a velocity of vobs in Km/s=163.67154946349103
+
+-----------------------------
+
+Last box information
+stop_dist=100000.0
+
+-----------------------------
+Box n°41
+robyRg_start=99990.94820396024
+vobs_start in km/s=159.15966113959567
+Rsph_start in cm=202189012874.62427
+lognH_start (in /cc)=10.592035602653262
+logxi_start=4.796449293427952
+robyRg_mid=99995.47410198011
+vobs_mid in km/s=159.15605923384598
+Rsph_mid in cm=202198164571.5473
+lognH_mid (in /cc)=10.592008082769475
+logxi_mid=4.796437499192043
+robyRg_stop=100000.0
+vobs_stop in km/s=159.15245757262696
+Rsph_stop in cm=202207316268.47037
+lognH_stop (in /cc)=10.591980564131237
+logxi_stop=4.796425705489941
+Parameters to go to xstar are:
+Gas slab of lognH=10.592008082769475
+logNH=17.854539707580557
+of logxi=4.796437499192043
+is travelling at a velocity of vobs in Km/s=159.15605923384598
+stop_d(i)=100000.0
+nbox_stop=40

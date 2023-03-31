@@ -2316,40 +2316,16 @@ def correl_graph(data_perinfo,infos,data_ener,dict_linevis,mode='intrinsic',mode
         
         if display_abserr_bshift and infos_split[0]=='bshift':
             
-            #deprecated
-            # #computing a middle vertical position at which to put the errorbar
-            # y_pos=ax_scat.get_ylim()
-            # if ax_scat.get_yscale()=='linear':
-            #     y_pos_err=y_pos[0]+(y_pos[1]-y_pos[0])*0.01
-            # else:
-            #     y_pos_err=10**(np.log10(y_pos[0])+(np.log10(y_pos[1])-np.log10(y_pos[0]))*0.01)
-                
-            #specific display if a single line is remaining in the current selection
-            if len([elem for elem in mask_lines if elem])==1:
-                
-                #fetching the id of the line
-                line_id=np.argwhere(np.array(mask_lines))[0][0]
-                
-                #its energy
-                line_e=lines_e_dict[lines_std_names[3+line_id]][0]
-                
-                #computing the (non symmetrical in energy space) blueshift error with 0.006 absolute eror
-                speed_abs_err=np.array([line_e-ang2kev(ang2kev(line_e)+0.006),ang2kev(ang2kev(line_e)-0.006)-line_e])*c_light/line_e
-                
-                ax_scat.axvspan(-speed_abs_err[0],speed_abs_err[1],color='grey',label='Absolute error region',alpha=0.3)
+            #plotting the distribution mean and std (without the GRS exposures)
             
-            else:
-                
-                #taking FeKavi as default for an example
-                line_id=1
-                
-                #its energy
-                line_e=lines_e_dict[lines_std_names[3+line_id]][0]
-                
-                #computing the (non symmetrical in energy space) blueshift error with 0.006 absolute eror
-                speed_abs_err=np.array([line_e-ang2kev(ang2kev(line_e)+0.006),ang2kev(ang2kev(line_e)-0.006)-line_e])*c_light/line_e
-                
-                ax_scat.axvspan(-speed_abs_err[0],speed_abs_err[1],color='grey',label='FeKavi Absolute error',alpha=0.3)
+            v_mean=-200
+            v_sigma=360
+            
+            #mean
+            ax_scat.axvline(x=v_mean,ymin=0,ymax=1,color='brown',linestyle='--',label=r'$\overline{v}$')
+            
+            #span for the std
+            ax_scat.axvspan(v_mean-v_sigma,v_mean+v_sigma,color='brown',label=r'$\sigma_v$',alpha=0.1)
                 
         #### Color definition
         
@@ -2762,6 +2738,10 @@ def correl_graph(data_perinfo,infos,data_ener,dict_linevis,mode='intrinsic',mode
                         
         #### Correlation values
         
+        #giving default values to pearson and spearman to avoid issues when rerunning streamlit rapidly
+        r_pearson=np.zeros(4).reshape(2,2)
+        r_spearman=np.zeros(4).reshape(2,2)
+        
         #computing the statistical coefficients for the significant portion of the sample (we don't care about the links here)
         if compute_correl and mode!='source' and len(x_data[0])>1 and not time_mode:
             
@@ -2797,7 +2777,7 @@ def correl_graph(data_perinfo,infos,data_ener,dict_linevis,mode='intrinsic',mode
             #                           +'}^{+'+str(round(r_spearman[0][2],2))+'}$ '+'| $p='+'%.1e' % Decimal(r_spearman[1][0])\
             #                           +'_{-'+'%.1e' % Decimal(r_spearman[1][1])+'}^{+'+'%.1e' % Decimal(r_spearman[1][2])+'}$ '
                         
-            str_pearson=r'$r_{Pearson}='+str(round(r_pearson[0][0],2))+'\;|\; $p='+'%.1e' % Decimal(r_pearson[1][0 ])+'$\n'
+            str_pearson=r'$r_{Pearson}=$'+str(round(r_pearson[0][0],2))+'$\;|\; $p='+'%.1e' % Decimal(r_pearson[1][0 ])+'$\n'
             
             str_spearman=r'$r_S \,='+str(round(r_spearman[0][0],2))+'$\n$p_S='+'%.1e' % Decimal(r_spearman[1][0])+'$'
             
@@ -2894,6 +2874,11 @@ def correl_graph(data_perinfo,infos,data_ener,dict_linevis,mode='intrinsic',mode
             plt.xscale('linear')
             plt.yscale('linear')
             
+        #### custom things for the paper
+        
+        # #specific limits for the width graphs
+        # ax_scat.set_xlim(0,90)
+        
         if save:
             if indiv:
                 suffix_str='_'+lines_std_names[3+i]

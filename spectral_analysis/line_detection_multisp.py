@@ -102,7 +102,7 @@ from PyPDF2 import PdfFileMerger
 from scipy.integrate import trapezoid
 
 '''Astro'''
-#general astro imports
+#general astro importss
 from astropy.io import fits
 from astropy.time import Time
 from xspec import AllModels,AllData,Fit,Spectrum,Model,Plot,Xset,FakeitSettings,AllChains,Chain
@@ -118,6 +118,7 @@ from fitting_tools import c_light,lines_std_names,lines_e_dict,ravel_ragged,n_ab
 #importing some graph tools from the streamlit script
 from visual_line_tools import load_catalogs,dist_mass,obj_values,abslines_values,values_manip,distrib_graph,correl_graph,n_infos,incl_dic
                                 
+from general_tools import file_edit
 
 # #importing the pileup evaluation function
 # from XMM_datared import pileup_val
@@ -464,52 +465,6 @@ def interval_extract(list):
             yield [range_start, previous_number]
             range_start = previous_number = number
     yield [range_start, previous_number]
-    
-def file_edit(path,line_id,line_data,header):
-    
-    '''
-    Edits (or create) the file given in the path and replaces/add the line(s) where the line_id str/LIST is with the line-content str/LIST.
-    line_id should be included in line_content.
-    Header is the first line of the file, with usually different informations.
-    '''
-    
-    lines=[]
-    if type(line_id)==str or type(line_id)==np.str_:
-        line_identifier=[line_id]
-    else:
-        line_identifier=line_id
-        
-    if type(line_data)==str or type(line_data)==np.str_:
-        line_content=[line_data]
-    else:
-        line_content=line_data
-        
-    if os.path.isfile(path):
-        with open(path) as file:
-            lines=file.readlines()
-            
-            #loop for all the lines to add
-            for single_identifier,single_content in zip(line_identifier,line_content):
-                line_exists=False
-                if not single_content.endswith('\n'):
-                    single_content+='\n'
-                #loop for all the lines in the file
-                for l,single_line in enumerate(lines):
-                    if single_identifier in single_line:
-                        lines[l]=single_content
-                        line_exists=True
-                if line_exists==False:
-                    lines+=[single_content]
-            
-    else:
-        #adding everything
-        lines=line_content
-
-    with open(path,'w+') as file:
-        if lines[0]==header:
-            file.writelines(lines)
-        else:
-            file.writelines([header]+lines)
 
 def pileup_val(pileup_line):
     
@@ -2773,6 +2728,10 @@ def line_detect(epoch_id):
             plot_std_ener(ax_paper[1],plot_em=True)
             plot_std_ener(ax_paper[2],plot_em=True)
             plot_std_ener(ax_paper[3],plot_em=True)
+        
+        dill.dump_session('./test_dump.pkl')
+        
+        breakpoint()
         
         fig_paper=plt.figure(figsize=(14.5,22))
         

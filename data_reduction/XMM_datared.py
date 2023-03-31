@@ -113,6 +113,8 @@ from rasterio.features import rasterize
 #shape merging
 from scipy.ndimage import binary_dilation
 
+from general_tools import file_edit
+
 #to visualise the alphashape :
 # from descartes import PolygonPatch
 
@@ -274,54 +276,6 @@ extract_lc_done=threading.Event()
 def _remove_control_chars(message):
     ansi_escape =re.compile(r'(\x9B|\x1B\[)[0-?]*[ -\/]*[@-~]')
     return ansi_escape.sub('', message)
-
-def file_edit(path,line_id,line_data,header):
-    
-    '''
-    Edits (or create) the file given in the path and replaces/add the line(s) where the line_id str/LIST is with the line-content str/LIST.
-    line_id should be included in line_content.
-    Header is the first line of the file, with usually different informations.
-    '''
-    
-    lines=[]
-    if type(line_id)==str or type(line_id)==np.str_:
-        line_identifier=[line_id]
-    else:
-        line_identifier=line_id
-        
-    if type(line_data)==str or type(line_data)==np.str_:
-        line_content=[line_data]
-    else:
-        line_content=line_data
-        
-    if os.path.isfile(path):
-        with open(path) as file:
-            lines=file.readlines()
-            
-            #loop for all the lines to add
-            for single_identifier,single_content in zip(line_identifier,line_content):
-                line_exists=False
-                if not single_content.endswith('\n'):
-                    single_content+='\n'
-                #loop for all the lines in the file
-                for l,single_line in enumerate(lines):
-                    if single_identifier in single_line:
-                        lines[l]=single_content
-                        line_exists=True
-                if line_exists==False:
-                    lines+=[single_content]
-            
-    else:
-        #adding everything
-        lines=line_content
-    
-    time.sleep(1)
-    
-    with open(path,'w+') as file:
-        if lines[0]==header:
-            file.writelines(lines)
-        else:
-            file.writelines([header]+lines)
             
 def pileup_val(pileup_line):
     

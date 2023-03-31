@@ -18,7 +18,7 @@ dict_sol={}
 test_list=[3.836508e-01,  1.278251e+00, 2.100000e+01,  1.369094e+00,  4.065250e-01,  1.455833e-01,  1.048574e+00,  1.503721e-01,  3.953974e-01,
            -5.069130e-01,  4.084034e-01,  1.393493e+00,  1.278200e-02]
 
-os.chdir('xsol')
+os.chdir('/home/parrama/Documents/Work/PhD/Scripts/Python/modeling/test_xstar')
 
 dict_sol['func_zbyr']=test_list[0]
 dict_sol['func_rcyl_by_ro']=test_list[1]
@@ -34,8 +34,10 @@ dict_sol['func_B_z']=test_list[10]
 dict_sol['func_Tdyn']=test_list[11]
 dict_sol['func_Tmhd']=test_list[12]
 
-stop_d=1e5
+stop_d=5e5
 
-SED='./incident_xstar_HS.dat'
+SED=os.path.join('incident_xstar_HS.dat')
 
-xstar_wind(ep, p, mu, dict_sol, stop_d, SED, 1)
+SED=os.path.join('test_xstar.dat')
+
+xstar_wind(dict_sol,p, stop_d, SED, 3,outdir='test500',v_resol=250,chatter=1)

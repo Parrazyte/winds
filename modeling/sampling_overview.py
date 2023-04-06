@@ -19,10 +19,10 @@ import streamlit as st
 import matplotlib.pyplot as plt
 
 #don't know where the bug comes from tbf
-try:
-    st.set_page_config(layout='wide')
-except:
-    pass
+# try:
+#     st.set_page_config(page_icon=":hole:",layout='wide')
+# except:
+#     pass
 
 c_l=299792.458
 
@@ -482,13 +482,13 @@ with tab_time:
     
     def_val=3
     
-    n_rout=st.number_input(r'number of values for $R_{end}$:',value=def_val,step=1,min_value=1)
+    n_rout=st.number_input(r'number of values for $r_{out}$:',value=def_val,step=1,min_value=1)
     
     st.markdown('''Note: Additional $R_{end}$ values are considered differently, as if adding 1 box to the computing time.''')
     st.markdown('''This works only if using the biggest $R_{end}$ in the box options''')
     
     
-    n_rin=st.number_input(r'number of values for $R_{start}$:',value=def_val,step=1,min_value=1)
+    n_rin=st.number_input(r'number of values for $r_{in}$:',value=def_val,step=1,min_value=1)
     
     n_p=st.number_input(r'number of values for $p$ (ejection index):',value=def_val,step=1,min_value=1)
     

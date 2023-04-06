@@ -352,7 +352,7 @@ with tab_sampling:
             time.sleep(3)
             st.pyplot(fig_dbox)
         except:
-            st.experimental_rerun()
+            st.stop()
             
     with col_2:
         fig_rdr,ax_rdr=plt.subplots(1)
@@ -366,7 +366,7 @@ with tab_sampling:
         try:
             st.pyplot(fig_rdr)
         except:
-            st.experimental_rerun()
+            st.stop()
     
     
         
@@ -390,7 +390,7 @@ with tab_sampling:
         try:
             st.pyplot(fig_density)
         except:
-            st.experimental_rerun()
+            st.stop()
         
         fig_density,ax_density=plt.subplots(1)
         
@@ -404,7 +404,7 @@ with tab_sampling:
         try:
             st.pyplot(fig_density)
         except:
-            st.experimental_rerun()
+            st.stop()
     
     with col_fig2:
         fig_logxi,ax_logxi=plt.subplots(1)
@@ -421,7 +421,7 @@ with tab_sampling:
         try:
             st.pyplot(fig_logxi)
         except:
-            st.experimental_rerun()
+            st.stop()
         
         fig_logxi,ax_logxi=plt.subplots(1)
         
@@ -435,7 +435,7 @@ with tab_sampling:
         try:
             st.pyplot(fig_logxi)
         except:
-            st.experimental_rerun()
+            st.stop()
             
     with col_fig3:
         fig_vel_obs,ax_vel_obs=plt.subplots(1)
@@ -453,7 +453,7 @@ with tab_sampling:
         try:
             st.pyplot(fig_vel_obs)
         except:
-            st.experimental_rerun()
+            st.stop()
         
         fig_vturb,ax_vturb=plt.subplots(1)
         
@@ -469,7 +469,7 @@ with tab_sampling:
         try:
             st.pyplot(fig_vturb)
         except:
-            st.experimental_rerun()
+            st.stop()
            
 
 nbins_test=15475

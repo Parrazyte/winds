@@ -18,15 +18,21 @@ import numpy as np
 import streamlit as st
 import matplotlib.pyplot as plt
 
+#don't know where the bug comes from tbf
+try:
+    st.set_page_config(layout='wide')
+except:
+    pass
+
 c_l=299792.458
 
 with st.sidebar:
     st.header('Sampling')
     
-    dr_r=st.number_input(r'$\Delta r/r$',value=2.3e-1,format='%.3e')
+    dr_r=st.number_input(r'$\Delta r/r$',value=5e-2,format='%.3e')
     
     
-    val_oversampling=st.number_input(r'Resolution oversampling factor',value=10,format='%.3e')
+    val_oversampling=st.number_input(r'Resolution oversampling factor',value=3,format='%.3e')
     
     
     val_ener=st.number_input(r'Energy at which to take the $\delta E/E$ (keV)',value=7,format='%.3e') 
@@ -39,7 +45,7 @@ with st.sidebar:
         dv_v=val_resol*1e-3/ang2kev(val_ener)
     
     else:
-        de=st.number_input(r'microcalorimeter resolution $\delta E$ (meV)',value=3,format='%.3e')
+        de=st.number_input(r'microcalorimeter resolution $\delta E$ (meV)',value=6,format='%.3e')
         
         dv_v=de*1e-3/val_ener
     

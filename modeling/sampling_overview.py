@@ -17,6 +17,7 @@ def ang2kev(x):
 import numpy as np
 import streamlit as st
 import matplotlib.pyplot as plt
+import time
 
 #don't know where the bug comes from tbf
 # try:
@@ -348,6 +349,7 @@ with tab_sampling:
         plt.errorbar(Rsph_cgs_mid/Rg_cgs,range(1,nbox+1),xerr=np.array((Rsph_cgs_mid-Rsph_cgs_start,Rsph_cgs_stop-Rsph_cgs_mid))/Rg_cgs,ls='')
         plt.legend()
         try:
+            time.sleep(3)
             st.pyplot(fig_dbox)
         except:
             st.experimental_rerun()

@@ -10,6 +10,24 @@ import numpy as np
 
 import os
 
+def ravel_ragged(array,mode=None):
+    
+    '''ravels a 2/3d array/list even with ragged nested sequences'''
+
+    #leaving if the array is 0d
+    
+    if type(array) not in [np.ndarray,list] or len(array)==0:
+        return array
+    #or 1d
+    if type(array[0]) not in [np.ndarray,list]:
+        return array
+
+    #testing if the array is 3d
+    if type(array[0][0]) in [np.ndarray,list]:
+        return np.array([array[i][j][k] for i in range(len(array)) for j in range(len(array[i])) for k in range(len(array[i][j]))],dtype=mode)
+    else:
+        return np.array([array[i][j] for i in range(len(array)) for j in range(len(array[i]))],dtype=mode)
+        
 def file_edit(path,line_id,line_data,header):
     
     '''

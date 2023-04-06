@@ -12,6 +12,10 @@ import os
 ep=0.1
 p=0.1
 mu=0.067
+
+####This should be changed
+mdot=0.111
+
 angle=25
 dict_sol={}
 
@@ -40,4 +44,4 @@ SED=os.path.join('incident_xstar_HS.dat')
 
 SED=os.path.join('test_xstar.dat')
 
-xstar_wind(dict_sol,p, stop_d, SED, 3,outdir='test500',v_resol=250,chatter=1)
+xstar_wind(dict_sol,p,mdot, stop_d, SED, 3,outdir='test500',v_resol=250,chatter=1)

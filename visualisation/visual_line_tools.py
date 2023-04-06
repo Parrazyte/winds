@@ -57,7 +57,9 @@ from ast import literal_eval
 sys.path.append('/app/winds/spectral_analysis/')
 
 #custom script with some lines and fit utilities and variables
-from fitting_tools import lines_std,c_light,lines_std_names,lines_e_dict,ravel_ragged,ang2kev
+from fitting_tools import lines_std,c_light,lines_std_names,lines_e_dict,ang2kev
+
+from general_tools import ravel_ragged
 
 #Catalogs and manipulation
 from astroquery.vizier import Vizier

@@ -10,8 +10,10 @@ import matplotlib.pyplot as plt
 
 from xspec import AllModels,AllData,Fit,Spectrum,Model,Plot,Xset,AllChains,Chain
 
-from fitting_tools import sign_delchis_table,ravel_ragged,lines_std,lines_e_dict,lines_w_dict,lines_broad_w_dict,\
+from fitting_tools import sign_delchis_table,lines_std,lines_e_dict,lines_w_dict,lines_broad_w_dict,\
         link_groups,lines_std_names,def_ftest_threshold,def_ftest_leeway,ang2kev
+
+from general_tools import ravel_ragged
 
 from contextlib import redirect_stdout
 import subprocess

@@ -14,7 +14,10 @@ import threading
 import numpy as np
 import time
 
-from general_tools import file_edit
+import matplotlib.pyplot as plt
+
+from astropy.time import Time
+from general_tools import file_edit,ravel_ragged
 
 #astro imports
 from astropy.io import fits
@@ -31,6 +34,8 @@ list of possible actions :
 1. process_obsdir: run the nicerl2 script to process an obsid folder
 
 fs. extract_all_spectral: runs the nicerl3-spect script to compute spectral products of an obsid folder (aka s,b,r at the same time)
+
+l. extract_lightcurve: runs a set of nicerl3-lc scripts to compute a range of lightcurve and HR evolutions
 
 g. group_spectra: group spectra using the optimized Kastra et al. binning
 
@@ -61,7 +66,7 @@ ap.add_argument('-catch','--catch_errors',help='Catch errors while running the d
 
 #global choices
 ap.add_argument("-a","--action",nargs='?',help='Give which action(s) to proceed,separated by comas.'+
-                '\n1.evt_build\n2.filter_evt\n3.extract_reg...',default='1,fs,g,m',type=str)
+                '\n1.evt_build\n2.filter_evt\n3.extract_reg...',default='l',type=str)
 ap.add_argument("-over",nargs=1,help='overwrite computed tasks (i.e. with products in the batch, or merge directory\
                 if "m" is in the actions) in a folder',default=True,type=bool)
 
@@ -72,6 +77,14 @@ ap.add_argument('-folder_cont',nargs=1,help='skip all but the last 2 directories
 #note : we keep the previous 2 directories because bug or breaks can start actions on a directory following the initially stopped one
 
 #action specific overwrite
+
+#lightcurve
+ap.add_argument('-lc_bin',nargs=1,help='Gives the binning of all lightcurces/HR evolutions (in s)',default=60,type=str)
+ap.add_argument('-lc_bands_str',nargs=1,help='Gives the list of bands to create lightcurves from',default='3-15',type=str)
+ap.add_argument('-hr_bands_str',nargs=1,help='Gives the list of bands to create hrsfrom',default='6-10/3-6',type=str)
+
+
+#spectra
 ap.add_argument('-bg',"--bgmodel",help='Give the background model to use for the data reduction',default='scorpeon_script',type=str)
 ap.add_argument('-bg_lang',"--bg_language",help='Gives the language output for the script generated to load spectral data into either PyXspec or Xspec',
                 default='python',type=str)
@@ -97,6 +110,10 @@ catch_errors=args.catch_errors
 bgmodel=args.bgmodel
 bglanguage=args.bg_language
 
+lc_bin=args.lc_bin
+lc_bands_str=args.lc_bands_str
+hr_bands_str=args.hr_bands_str
+
 grouptype=args.grouptype
 bad_detectors=args.bad_detectors
 heasoft_init_alias=args.heasoft_init_alias
@@ -116,6 +133,7 @@ extract_background_done=threading.Event()
 regroup_spectrum_done=threading.Event()
 batch_mover_done=threading.Event()
 select_detector_done=threading.Event()
+extract_lc_done=threading.Event()
 
 def set_var(spawn):
     
@@ -209,6 +227,7 @@ def select_detector(directory,detectors='-14,-34,-54'):
         bashproc.sendline('exit')
         select_detector_done.set()
         
+#### extract_all_spectral
 def extract_all_spectral(directory,bkgmodel='scorpeon_script',language='python',overwrite=True):
     
     '''
@@ -280,6 +299,134 @@ def extract_all_spectral(directory,bkgmodel='scorpeon_script',language='python',
         if process_state==0:
             raise ValueError
         
+#### extract_lc
+def extract_lc(directory,binning=60,bands='3-15',HR='6-10/3-6',overwrite=True):
+    
+    '''
+    Wrapper for nicerl3-lc, with added matplotlib plotting of requested lightcurves and HRs
+        
+    We follow the steps highlighted in https://heasarc.gsfc.nasa.gov/docs/nicer/analysis_threads/nicerl3-lc/
+
+    Processes a directory using the nicerl3-lc script for every band asked, then creates plots for every lc/HR requested
+    
+    options:
+        -binning: binning of the LC in seconds
+        
+        -bands: bands for each lightcurve to be created. The numbers should be in keV, separated by "-", and different lightcurves by ","
+                ex: to create two lightcurves for, the 1-3 and 4-12 band, use '1-3,4-12'
+                
+        -hr: bands to be used for the HR plot creation. A single plot is possible for now. Creates its own lightcurve bands if necessary
+        
+        -overwrite: overwrite products or not
+s
+        
+    Note: can produce no output without error if no gti in the event file
+    '''
+    
+    bashproc=pexpect.spawn("/bin/bash",encoding='utf-8')
+    
+    print('\n\n\nCreating lightcurves products...')
+    
+    #defining the number of lightcurves to create
+    
+    #decomposing for each band asked
+    lc_bands=bands.split(',')+([] if HR is None else ravel_ragged([elem.split('/') for elem in HR.split(',')]).tolist())
+    
+    lc_bands=np.unique(lc_bands)
+    
+    #storing the ids for the HR bands
+    id_band_num_HR=np.argwhere(HR.split('/')[0]==lc_bands)[0][0]
+    id_band_den_HR=np.argwhere(HR.split('/')[1]==lc_bands)[0][0]
+    
+    set_var(bashproc)
+        
+    if os.path.isfile(directory+'/extract_lc.log'):
+        os.system('rm '+directory+'/extract_lc.log')
+        
+    with StdoutTee(directory+'/extract_lc.log',mode="a",buff=1,file_filters=[_remove_control_chars]),\
+        StderrTee(directory+'/extract_lc.log',buff=1,file_filters=[_remove_control_chars]):
+
+        bashproc.logfile_read=sys.stdout
+        
+        
+        time_zero_arr=np.array([None]*len(lc_bands))
+        
+        data_lc_arr=np.array([None]*len(lc_bands))
+        
+        #storing the 
+        for i_lc,indiv_band in enumerate(lc_bands):       
+                    
+            old_files_lc=[elem for elem in glob.glob(directory+'/xti/**/*',recursive=True) if elem.endswith('.lc')]
+            
+            for elem_file in old_files_lc:
+                os.remove(elem_file)
+            
+            pi_band='-'.join((np.array(indiv_band.split('-')).astype(int)*100).astype(str).tolist())
+
+            bashproc.sendline('nicerl3-lc '+directory+' pirange='+pi_band+' timebin='+str(binning)+' '+
+                              ' clobber='+('YES' if overwrite else 'FALSE'))
+            
+            process_state=bashproc.expect(['terminating with status','DONE'],timeout=None)
+            
+            file_lc=[elem for elem in glob.glob(directory+'/xti/**/*',recursive=True) if elem.endswith('.lc')][0]
+            
+            #storing the data of the lc
+            with fits.open(file_lc) as fits_lc:
+                data_lc_arr[i_lc]=fits_lc[1].data
+                
+                time_zero=Time(fits_lc[1].header['MJDREFI']+(fits_lc[1].header['TIMEZERO']-fits_lc[1].header['LEAPINIT'])/86400,format='mjd')
+                
+                time_zero_arr[i_lc]=str(time_zero.to_datetime())
+            
+                #saving the lc in a different 
+                fits_lc.writeto(file_lc.replace('.lc',indiv_band+'_bin_'+str(binning)+'.lc'),overwrite=True)
+                
+            #and plotting it
+            fig_lc,ax_lc=plt.subplots(1,figsize=(10,8))
+
+            plt.errorbar(data_lc_arr[i_lc]['TIME'],data_lc_arr[i_lc]['RATE'],xerr=float(binning),yerr=data_lc_arr[i_lc]['ERROR'],ls='')
+                
+            plt.suptitle('NICER lightcurve for observation '+directory+' in the '+indiv_band+' keV band')
+            
+            plt.xlabel('Time (s) after '+time_zero_arr[i_lc])
+            plt.ylabel('RATE (counts/s)')
+            
+            plt.tight_layout()
+            plt.savefig('./'+directory+'/'+directory+'_lc_'+indiv_band+'_bin_'+str(binning)+'.png')
+            plt.close()
+                
+        if time_zero_arr[id_band_num_HR]!=time_zero_arr[id_band_den_HR]:
+            print('NICER_datared error: both lightcurve for the HR have different zero values')            
+            raise ValueError
+        
+        #creating the HR plot
+        fig_hr,ax_hr=plt.subplots(1,figsize=(10,8))
+        
+        hr_vals=data_lc_arr[id_band_num_HR]['RATE']/data_lc_arr[id_band_den_HR]['RATE']
+        
+        hr_err=hr_vals*(((data_lc_arr[id_band_num_HR]['ERROR']/data_lc_arr[id_band_num_HR]['RATE'])**2+
+                        (data_lc_arr[id_band_den_HR]['ERROR']/data_lc_arr[id_band_den_HR]['RATE'])**2)**(1/2))
+        
+        plt.errorbar(data_lc_arr[id_band_num_HR]['TIME'],hr_vals,xerr=binning,yerr=hr_err,ls='')
+        
+        plt.suptitle('NICER HR evolution for observation '+directory+' in the '+HR+' keV band')
+        
+        plt.xlabel('Time (s) after '+time_zero_arr[id_band_num_HR])
+        plt.ylabel('RATE (counts/s)')
+        
+        plt.tight_layout()
+        plt.savefig('./'+directory+'/'+directory+'_hr_'+indiv_band+'_bin_'+str(binning)+'.png')
+        plt.close()
+        
+        #exiting the bashproc
+        bashproc.sendline('exit')            
+            
+        extract_lc_done.set()
+        
+        #raising an error to stop the process if the command has crashed for some reason
+        if process_state==0:
+            raise ValueError
+            
 def extract_spectrum(directory):
     
     '''
@@ -660,6 +807,10 @@ if not local:
                             extract_all_spectral(dirname,bkgmodel=bgmodel,language=bglanguage,overwrite=overwrite_glob)
                             extract_all_spectral_done.wait()
                             
+                        if curr_action=='l':
+                            extract_lc(dirname,binning=lc_bin,bands=lc_bands_str,HR=hr_bands_str,overwrite=overwrite_glob)
+                            extract_lc_done.wait()
+
                         if curr_action=='s':
                             extract_spectrum(dirname)
                             extract_spectrum_done.wait()
@@ -696,7 +847,11 @@ if not local:
                     if curr_action=='2':
                         select_detector(dirname,detectors=bad_detectors)
                         select_detector_done.wait()
-                        
+                    
+                    if curr_action=='l':
+                        extract_lc(dirname,binning=lc_bin,bands=lc_bands_str,HR=hr_bands_str,overwrite=overwrite_glob)
+                        extract_lc_done.wait()
+                            
                     if curr_action=='fs':
                         extract_all_spectral(dirname,bkgmodel=bgmodel,language=bglanguage,overwrite=overwrite_glob)
                         extract_all_spectral_done.wait()

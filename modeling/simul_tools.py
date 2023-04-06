@@ -33,14 +33,14 @@ eV2erg = 1.6e-12
 erg2eV = 1.0/eV2erg
 Ryd2eV = 13.5864
 
-def xstar_wind(dict_solution,p_mhd,stop_d_input, SED_path, xlum,outdir="xsol9",nbox_restart=1,h_over_r=0.1, ro_init=1e3,rad_res=0.115, v_resol=100, chatter=0):
+def xstar_wind(dict_solution,p_mhd,mdot_obs,stop_d_input, SED_path, xlum,outdir="xsol",nbox_restart=1,h_over_r=0.1, ro_init=1e3,rad_res=0.115, v_resol=100, m_BH=8,chatter=0):
     
     
     '''
     Python wrapper for the xstar computation of a single solution
     
     Required parameters:
-        ep,p_mhd,mu are the main WED parameters of the solution (angle is inside of the dict_solution)
+        p_mhd and mdot_obs are the main parameters outside of the JED-SAD solution
         
         dict_solution is a dictionnary with all the arguments of a JED-SAD solution
 
@@ -81,6 +81,8 @@ def xstar_wind(dict_solution,p_mhd,stop_d_input, SED_path, xlum,outdir="xsol9",n
         but still print the correct box number (+1)
 
     ####SHOULD BE UPDATED TO ADD THE JED SAD N(R) DEPENDANCY
+    
+    ####SHOULD BE UPDATED TO CONSIDER THE LOGXI DEPENDANCY WHEN L CHANGES
     '''
     
     '''
@@ -337,9 +339,6 @@ def xstar_wind(dict_solution,p_mhd,stop_d_input, SED_path, xlum,outdir="xsol9",n
     
     if chatter>=1:
         print('Number of bins for selected velocity resolution: '+str(nbins)+'\n')
-        
-    #! Accretion rate in Eddington units
-    mdot_obs = 0.111 
     
     # ! From formula (rg/2.0*r_in), Equation (12) of Chakravorty et al. 2016. Here r_in is 6.0*r_g. eta_rad is assumed to be 1.0.
     eta_s = (1.0/12.0)
@@ -348,10 +347,9 @@ def xstar_wind(dict_solution,p_mhd,stop_d_input, SED_path, xlum,outdir="xsol9",n
     
     #!* This value is used to match Keigo's normalization
     #!mdot_norm=4.7130834*2.48e15 
-    
-    logMbh = 1.00
-    Mass_SI = (10.0**logMbh)*Msol_SI
-    Rs_SI = 2.0*G_SI*Mass_SI/(c_SI*c_SI)
+
+    m_BH_SI = m_BH*Msol_SI
+    Rs_SI = 2.0*G_SI*m_BH_SI/(c_SI*c_SI)
     
     #!* Gravitational radius
     Rg_SI = 0.5*Rs_SI
@@ -476,6 +474,8 @@ def xstar_wind(dict_solution,p_mhd,stop_d_input, SED_path, xlum,outdir="xsol9",n
             #! A distance command : Step increase in the anchoring radius of the magnetic streamline
             ro_by_Rg = ro_by_Rg*DelFactorRo 
 
+    breakpoint()
+    
     #!* After getting the starting value of ro_by_Rg from the above 'while' loop, fixing the values for 1st box.
     Rsph_cgs_1st = Rsph_SI*m2cm
     vobs_1st = vel_obs_cgs/(Km2m*m2cm)
@@ -516,7 +516,7 @@ def xstar_wind(dict_solution,p_mhd,stop_d_input, SED_path, xlum,outdir="xsol9",n
     delr_by_r= rad_res
     Rsph_cgs_end= Rsph_cgs_1st
     i_box = 0
-    i = 0
+    i_last_box=0
     
     #### This is very ugly and should be changed to the proper number of boxes, computed before this loop
     vobs_start,robyRg_start,Rsph_cgs_start,density_cgs_start,logxi_start=np.zeros((5,1000))
@@ -527,10 +527,10 @@ def xstar_wind(dict_solution,p_mhd,stop_d_input, SED_path, xlum,outdir="xsol9",n
 
         Rsph_cgs_stop[i_box]= Rsph_cgs_end*((2.0+delr_by_r)/(2.0-delr_by_r))
 
-        if Rsph_cgs_last[i]<Rsph_cgs_stop[i_box]:
-            delr_by_r = 2.0*(Rsph_cgs_last[i]-Rsph_cgs_stop[i_box-1])/(Rsph_cgs_last[i]+Rsph_cgs_stop[i_box-1])
-        
-        
+        if Rsph_cgs_last[i_last_box]<Rsph_cgs_stop[i_box]:
+            delr_by_r = 2.0*(Rsph_cgs_last[i_last_box]-Rsph_cgs_stop[i_box-1])/(Rsph_cgs_last[i_last_box]+Rsph_cgs_stop[i_box-1])
+            ####SHOULD BE CHECKED FOR SEVERAL LAST BOXES
+            
         Rsph_cgs_start[i_box]= Rsph_cgs_end
         Rsph_SI= Rsph_cgs_start[i_box]/m2cm
         rcyl_SI = Rsph_SI/(np.sqrt(1.0+(func_zbyr*func_zbyr)))
@@ -540,6 +540,8 @@ def xstar_wind(dict_solution,p_mhd,stop_d_input, SED_path, xlum,outdir="xsol9",n
         
         vel_r_cgs = c_cgs*func_vel_r*((rcyl_SI/Rg_SI)**(-0.5)) 
         vel_z_cgs = c_cgs*func_vel_z*((rcyl_SI/Rg_SI)**(-0.5))
+        
+        #this should be updated to switch to delta v over v (and then we get r_cyl)
         vel_obs_cgs = ((vel_r_cgs*np.cos(func_angle*np.pi/180.0))+(vel_z_cgs*np.sin(func_angle*np.pi/180.0)))
         
         vobs_start[i_box] = vel_obs_cgs/(Km2m*m2cm)
@@ -587,7 +589,6 @@ def xstar_wind(dict_solution,p_mhd,stop_d_input, SED_path, xlum,outdir="xsol9",n
         logxi_mid[i_box] = np.log10(L_xi_Source/(density_cgs_mid[i_box]*Rsph_cgs_mid[i_box]*Rsph_cgs_mid[i_box]))
         
         logxi_input[i_box] = np.log10(L_xi_Source/(density_cgs_mid[i_box]*Rsph_cgs_start[i_box]*Rsph_cgs_start[i_box]))
-        
         #!* Calculate Nh for the box
         
         NhOfBox[i_box] = density_cgs_mid[i_box]*(Rsph_cgs_stop[i_box]-Rsph_cgs_start[i_box])
@@ -655,17 +656,35 @@ def xstar_wind(dict_solution,p_mhd,stop_d_input, SED_path, xlum,outdir="xsol9",n
         
         #!* Readjust the loop parameters
         
-        if delr_by_r!=rad_res and i!=len(stop_d)-1:
+        if delr_by_r!=rad_res and i_last_box!=len(stop_d)-1:
             print('I am after delr is changed'+str(delr_by_r))
             
             #!* maintaining the regular box no.
             i_box= i_box-1 
-            i= i+1
+            i_last_box= i_last_box+1
             delr_by_r = rad_res
         
         Rsph_cgs_end = Rsph_cgs_stop[i_box]
         
         i_box = i_box + 1
+        
+    #### This is very ugly and should be changed to the proper number of boxes, computed before this loop
+    vobs_start=vobs_start[:i_box]
+    robyRg_start=robyRg_start[:i_box]
+    Rsph_cgs_start=Rsph_cgs_start[:i_box]
+    density_cgs_start=density_cgs_start[:i_box]
+    logxi_start=logxi_start[:i_box]
+    vobs_mid=vobs_mid[:i_box]
+    robyRg_mid=robyRg_mid[:i_box]
+    Rsph_cgs_mid=Rsph_cgs_mid[:i_box]
+    density_cgs_mid=density_cgs_mid[:i_box]
+    logxi_mid=logxi_mid[:i_box]
+    vobs_stop=vobs_stop[:i_box]
+    robyRg_stop=robyRg_stop[:i_box]
+    Rsph_cgs_stop=Rsph_cgs_stop[:i_box]
+    density_cgs_stop=density_cgs_stop[:i_box]
+    logxi_stop=logxi_stop[:i_box]
+    NhOfBox=NhOfBox[:i_box]
 
     #!*write(*,*)Rsph_cgs_end-Rsph_cgs_last(stop_d_index)
     
@@ -795,7 +814,10 @@ def xstar_wind(dict_solution,p_mhd,stop_d_input, SED_path, xlum,outdir="xsol9",n
             
         xpx = 10.0**(xpxl[i_box])
         xpxcol = 10.0**(xpxcoll[i_box])
-        zeta = zetal[i_box]
+        
+        #correcting the ionization parameter for the evolution in luminosity
+        zeta = zetal[i_box]*(xlum_eff/xlum)
+        
         vobsx = vobsl[i_box]
         vturb_x = vturb_in[i_box]
         
@@ -868,7 +890,9 @@ def xstar_wind(dict_solution,p_mhd,stop_d_input, SED_path, xlum,outdir="xsol9",n
     
             xpx = 10.0**(xpxl_last[i_box_final])
             xpxcol = 10.0**(xpxcoll_last[i_box_final])
-            zeta = zetal_last[i_box_final]
+            
+            zeta = zetal_last[i_box_final]*(xlum_final/xlum)
+            
             vobsx = vobsl_last[i_box_final]
             vturb_x = vobsl[nbox_stop[i_box_final]-1]-vobsl_last[i_box_final]
     

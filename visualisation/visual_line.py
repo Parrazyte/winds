@@ -94,12 +94,14 @@ ap.add_argument("-line_search_norm",nargs=1,help='min, max and nsteps (for one s
 
 args=ap.parse_args()
 
-#custom script with some lines and fit utilities and variables
-from fitting_tools import lines_std,lines_std_names,ravel_ragged,range_absline
-
 #adding the top directory to the path to avoid issues when importing fitting_tools
 sys.path.append('/app/winds/spectral_analysis/')
+sys.path.append('/app/winds/general/')
 
+#custom script with some lines and fit utilities and variables
+from fitting_tools import lines_std,lines_std_names,range_absline
+
+from general_tools import ravel_ragged
 '''
 # Notes:
 # -Only works for the auto observations (due to prefix naming) for now

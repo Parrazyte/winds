@@ -11,8 +11,7 @@ Spectral analysis:
 
 Visualisation:
 
--Streamlit-based interactive visualisation tool for the result of the line detection
--More specific tools
+-Streamlit-based interactive visualisation tool for the result of the line detection & More specific tools
 
 Simulations:
 

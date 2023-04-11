@@ -110,7 +110,7 @@ from xspec import AllModels,AllData,Fit,Spectrum,Model,Plot,Xset,FakeitSettings,
 #custom script with a few shorter xspec commands
 from xspec_config_multisp import allmodel_data,model_load,addcomp,Pset,Pnull,rescale,reset,Plot_screen,store_plot,freeze,allfreeze,unfreeze,\
                          calc_error,delcomp,fitmod,fitcomp,calc_fit,plot_line_comps,\
-                         xcolors_grp,comb_chi2map,plot_std_ener,coltour_chi2map,xPlot
+                         xcolors_grp,comb_chi2map,plot_std_ener,coltour_chi2map,xPlot,xscorpeon
 
 #custom script with a some lines and fit utilities and variables
 from fitting_tools import c_light,lines_std_names,lines_e_dict,ravel_ragged,n_absline,range_absline,model_list
@@ -1539,6 +1539,7 @@ def line_detect(epoch_id):
         '''
         
         AllModels.clear()
+        xscorpeon.load()
         
         print('\nComputing line continuum fit...')
         AllData.notice('all')
@@ -1573,7 +1574,7 @@ def line_detect(epoch_id):
         #     chi2_cont=0
         
         # AllModels.clear()
-
+        # xscorpeon.load()
         #not used currently        
         # #with the broken powerlaw continuum
         # fitcont_high_bkn=fitmod(comp_cont_bkn,curr_logfile)
@@ -1805,7 +1806,7 @@ def line_detect(epoch_id):
         #     chi2_cont=0
         
         # AllModels.clear()
-        
+        # xscorpeon.load()
         # #with the broken powerlaw continuum
         # fitcont_broad_bkn=fitmod(comp_cont_bkn,curr_logfile)
         
@@ -1843,6 +1844,7 @@ def line_detect(epoch_id):
         
         print('\nComputing HID broad fit...')
         AllModels.clear()
+        xscorpeon.load()
         AllData.notice('all')
         AllData.ignore('**-'+str(hid_cont_range[0])+' '+str(hid_cont_range[1])+'-**')
         AllData.ignore('bad')
@@ -1870,7 +1872,7 @@ def line_detect(epoch_id):
         #     chi2_cont=0
         
         # AllModels.clear()
-        
+        # xscorpeon.load()
         # #with the broken powerlaw continuum
         # fitcont_hid_bkn=fitmod(comp_cont_bkn,curr_logfile)
         
@@ -1898,6 +1900,7 @@ def line_detect(epoch_id):
 
     
     AllModels.clear()
+    xscorpeon.load()
     
     result_broad_fit=broad_fit()
     
@@ -1948,9 +1951,10 @@ def line_detect(epoch_id):
 
         #reseting the model 
         AllModels.clear()
+        xscorpeon.load()
         
         #reloading the broad band model
-        model_load(data_cont)
+        data_cont.load()
 
         plot_ratio_values=store_plot('ratio')
         
@@ -2703,12 +2707,12 @@ def line_detect(epoch_id):
             Plot.add=True
             
             #reloading the pre-autofit continuum for display
-            model_load(data_mod_high)
+            data_mod_high.load()
             
             xPlot('ldata',axes_input=ax_paper[0])
         
             #loading the no abs autofit
-            model_load(data_autofit_noabs)
+            data_autofit_noabs.load()
             
             Plot.add=prev_plot_add
             
@@ -2749,7 +2753,7 @@ def line_detect(epoch_id):
                 
         plt.close(fig_paper)
         
-        model_load(data_autofit_noabs)
+        data_autofit_noabs.load()
         
         #we don't update the fitcomps here because it would require taking off the abslines from the includedlists
         #and we don't want that for the significance computation
@@ -2865,7 +2869,7 @@ def line_detect(epoch_id):
                 for f_ind in range(nfakes):
                     
                     #reloading the high energy continuum
-                    mod_fake=model_load(data_autofit_noabs)
+                    mod_fake=data_autofit_noabs.load()
                     
                     #Freezing it to ensure the fakeit doesn't make the parameters vary, and loading them from a steppar
                     for i_grp in range(1,AllData.nGroups+1):
@@ -2995,7 +2999,7 @@ def line_detect(epoch_id):
         '''
         
         #reloading the autofit model with no absorption to compute the upper limits
-        model_load(data_autofit_noabs)
+        data_autofit_noabs.load()
         
         #freezing the model to avoid it being affected by the missing absorption lines
         #note : it would be better to let it free when no absorption lines are there but we keep the same procedure for 

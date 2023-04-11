@@ -3879,13 +3879,9 @@ class plot_save:
                 self.background=None
                 
             #and the model
-            #testing if there is a model loaded while hiding the error
-            with redirect_stdout(None):
-                try:
-                    AllModels(1)
-                    self.ismod=True
-                except:
-                    self.ismod=False
+            #testing if there is a model loadded
+            self.ismod=len(AllModels.sources)>0
+
             if self.ismod:
                 self.model=np.array([None]*AllData.nGroups)
                 for i_grp in range(1,AllData.nGroups+1):
@@ -3929,13 +3925,28 @@ class plot_save:
                 self.addcomps[i_grp-1]=group_addcomps
                 
             #storing the addcomp names for labeling during the plots
-            ####Here we assume the same addcomp names for all groups
+            #### Here we assume the same addcomp names for all groups
             self.addcompnames=[]
-            for elemcomp in AllModels(1).componentNames:
+            
+            list_models=list(AllModels.sources.values())
+            #adding default model component names if there is a default model
+            if '' in list_models:
                 
-                #restricting to additive components
-                if elemcomp.split('_')[0] not in xspec_multmods:
-                    self.addcompnames+=[elemcomp]    
+                #there are addcomps for the default models only if it has more than one additive components
+                #we thus need to compare the total number of addcomps with the other model addcomps
+                if len(self.addcomps[0])>(2 if 'nxb' in list_models else 0) + (2 if 'sky' in list_models else 0):
+                    for elemcomp in AllModels(1).componentNames:
+                        
+                        #restricting to additive components
+                        if elemcomp.split('_')[0] not in xspec_multmods:
+                            self.addcompnames+=[elemcomp]    
+                    
+            #adding NICER background component Names
+            if 'nxb' in list_models:
+                self.addcompnames+=AllModels(1,'nxb').componentNames
+                
+            if 'sky' in list_models:
+                self.addcompnames+=AllModels(1,'sky').componentNames
         else:
             self.addcomps=None
             self.addcompnames=[]
@@ -4474,10 +4485,12 @@ def xPlot(types,axes_input=None,plot_saves_input=None,plot_arg=None,includedlist
         #plotting the components after locking axis limits to avoid huge rescaling
         if 'data' in plot_type and curr_save.add and curr_save.ismod:
             
-            #assigning colors to the components
+            #assigning colors to the components (here we assumen the colormap used is not cyclic)
             norm_colors_addcomp=mpl.colors.Normalize(vmin=0,vmax=len(curr_save.addcomps[id_grp]))
             
             colors_addcomp=mpl.cm.ScalarMappable(norm=norm_colors_addcomp,cmap=mpl.cm.plasma)
+            
+            ls_types=['dotted','dashed','dashdot']
         
             #using fitcomp labels if possible            
             if includedlist is not None:
@@ -4487,8 +4500,9 @@ def xPlot(types,axes_input=None,plot_saves_input=None,plot_arg=None,includedlist
                 
             for id_grp in range(curr_save.nGroups):
                 for i_comp in range(len(curr_save.addcomps[id_grp])):
+
                     curr_ax.plot(curr_save.x[0],curr_save.addcomps[id_grp][i_comp],color=colors_addcomp.to_rgba(i_comp),
-                                 label=label_comps[i_comp],linestyle=':',linewidth=1)
+                                 label=label_comps[i_comp],linestyle=ls_types[i_comp%3],linewidth=1)
                 
         #ratio line
         if 'ratio' in plot_type:

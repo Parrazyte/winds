@@ -15,6 +15,8 @@ import numpy as np
 import time
 
 import matplotlib.pyplot as plt
+plt.ioff()
+
 
 from astropy.time import Time
 from general_tools import file_edit,ravel_ragged
@@ -66,7 +68,7 @@ ap.add_argument('-catch','--catch_errors',help='Catch errors while running the d
 
 #global choices
 ap.add_argument("-a","--action",nargs='?',help='Give which action(s) to proceed,separated by comas.'+
-                '\n1.evt_build\n2.filter_evt\n3.extract_reg...',default='l',type=str)
+                '\n1.evt_build\n2.filter_evt\n3.extract_reg...',default='1,l,fs,g,m',type=str)
 ap.add_argument("-over",nargs=1,help='overwrite computed tasks (i.e. with products in the batch, or merge directory\
                 if "m" is in the actions) in a folder',default=True,type=bool)
 
@@ -289,15 +291,70 @@ def extract_all_spectral(directory,bkgmodel='scorpeon_script',language='python',
         bashproc.sendline('nicerl3-spect indir='+directory+' bkgmodeltype='+bkgmodel_str+' bkgformat='+bkgmodel_mode+' '+bkg_outlang_str+
                           ' clobber='+('YES' if overwrite else 'FALSE'))
         
-        process_state=bashproc.expect(['terminating with status','DONE'],timeout=None)
+        process_state=bashproc.expect(['Task will exit with status','DONE'],timeout=None)
+        
+        #raising an error to stop the process if the command has crashed for some reason
+        if process_state==0:
+            with open(directory+'/extract_lc.log') as file:
+                lines=file.readlines()
+            
+            return lines[-1].replace('\n','')
+            
+        allfiles=glob.glob(directory+'/xti/**',recursive=True)
+        
+        #fetching the path of the spectrum and rmf file (out of pre-compiled products
+        spfile=[elem for elem in allfiles if '_sr.pha' in elem and '/products/' not in elem]
+        
+        if len(spfile)>1:
+            print('NICER_datared_error: Several output spectra detected')
+            raise ValueError
+        elif len(spfile)==0:
+            print('NICER_datared_error: No spectral file detected')
+            raise ValueError
+        else:
+            spfile=spfile[0]
+                
+        #storing the full observation ID for later
+        file_id=spfile.split('/')[-1][2:].replace('_sr.pha','')
+        file_dir=spfile[:spfile.rfind('/')]
+        file_suffix=file_id.split(directory)[-1]
+        
+        copyfile_suffixes=['_sr.pha','_bg.rmf','_bg.py','_sk.arf','.arf','.rmf']
+        copyfile_list=['ni'+file_id+elem for elem in copyfile_suffixes]
+        
+        #copying the spectral products into the main directory 
+        for elem_file in copyfile_list:
+            os.system('cp '+os.path.join(file_dir,elem_file)+' '+os.path.join(directory,elem_file)) 
+            
+        #renaming all the spectral products
+        prod_files=glob.glob(directory+'/ni'+directory+'**',recursive=False)
+        
+        for elem in prod_files:
+            os.system('mv '+elem+' '+elem.replace('ni','').replace(file_suffix,''))
+                        
+        #updating the file names in the bg load file
+        with open(directory+'/'+directory+'_bg.py') as old_bgload_file:
+            old_bgload_lines=old_bgload_file.readlines()
+        
+        #removing the file
+        os.remove(directory+'/'+directory+'_bg.py')
+        
+        #and rewritting one with updated variables
+        with open(directory+'/'+directory+'_bg.py','w+') as new_bgload_file:
+            for line in old_bgload_lines:
+                if line.startswith('nicer_srcrmf'):
+                    new_bgload_file.writelines('nicer_srcrmf="'+directory+'.rmf"\n')
+                elif line.startswith('nicer_skyarf'):
+                    new_bgload_file.writelines('nicer_skyarf="'+directory+'_sk.arf"\n')
+                elif line.startswith('nicer_diagrmf'):
+                    new_bgload_file.writelines('nicer_diagrmf="'+directory+'_bg.rmf"\n')
+                else:
+                    new_bgload_file.writelines(line)
         
         #exiting the bashproc
         bashproc.sendline('exit')
         extract_all_spectral_done.set()
         
-        #raising an error to stop the process if the command has crashed for some reason
-        if process_state==0:
-            raise ValueError
         
 #### extract_lc
 def extract_lc(directory,binning=60,bands='3-15',HR='6-10/3-6',overwrite=True):
@@ -366,7 +423,14 @@ s
             bashproc.sendline('nicerl3-lc '+directory+' pirange='+pi_band+' timebin='+str(binning)+' '+
                               ' clobber='+('YES' if overwrite else 'FALSE'))
             
-            process_state=bashproc.expect(['terminating with status','DONE'],timeout=None)
+            process_state=bashproc.expect(['Task aborting due','DONE'],timeout=None)
+            
+            #raising an error to stop the process if the command has crashed for some reason
+            if process_state==0:
+                with open(directory+'/extract_lc.log') as file:
+                    lines=file.readlines()
+                
+                return lines[-1].replace('\n','')
             
             file_lc=[elem for elem in glob.glob(directory+'/xti/**/*',recursive=True) if elem.endswith('.lc')][0]
             
@@ -653,47 +717,28 @@ def regroup_spectrum(directory,group='opt'):
         StderrTee(directory+'/regroup_spectrum.log',buff=1,file_filters=[_remove_control_chars]):
 
         bashproc.logfile_read=sys.stdout
-        
-        bashproc.sendline('cd '+directory)
-                    
-        allfiles=glob.glob(directory+'/xti/**',recursive=True)
-        
-        #fetching the path of the spectrum and rmf file
-        spfile=[elem for elem in allfiles if '_sr.pha' in elem]
-        
-        if len(spfile)>1:
-            print('NICER_datared_error: Several output spectra detected')
-            raise ValueError
-        elif len(spfile)==0:
-            print('NICER_datared_error: No spectral file detected')
-            raise ValueError
-        else:
-            spfile=spfile[0]
-                
-        #storing the full observation ID for later
-        file_id=spfile.split('/')[-1][2:].replace('_sr.pha','')
-        file_dir=spfile[:spfile.rfind('/')]
-        
-        copyfile_suffixes=['_sr.pha','_bg.rmf','_bg.py','_sk.arf','.arf','.rmf']
-        copyfile_list=['ni'+file_id+elem for elem in copyfile_suffixes]
-        
-        #copying the spectral products into the main directory 
-        for elem_file in copyfile_list:
-            os.system('cp '+os.path.join(file_dir,elem_file)+' '+os.path.join(directory,elem_file)) 
-        
-        print('ftgrouppha infile=./'+os.path.join(directory,'ni'+file_id+'_sr.pha')+' outfile=./'+directory+'/'+directory+'_sp_grp_'+group+'.pha grouptype='+group+
-                           ' respfile=./'+os.path.join(directory,'ni'+file_id+'.rmf'))
 
-        bashproc.sendline('ftgrouppha infile=ni'+file_id+'_sr.pha outfile='+directory+'_sp_grp_'+group+'.pha '+
-                          'grouptype='+group+' respfile=ni'+file_id+'.rmf')
+        #print for saving in the log file
+        print('ftgrouppha infile='+directory+'/'+directory+'_sr.pha'+' outfile='+directory+'/'+directory+'_sp_grp_'+group+
+        '.pha grouptype='+group+' respfile='+directory+'/'+directory+'.rmf')
+
+        bashproc.sendline('ftgrouppha infile='+directory+'/'+directory+'_sr.pha'+' outfile='+directory+'/'+directory+'_sp_grp_'+group+
+        '.pha grouptype='+group+' respfile='+directory+'/'+directory+'.rmf')
         
-        while not os.path.isfile(os.path.join(currdir,directory,directory+'_sp_grp_'+group+'.pha')):
+        while not os.path.isfile(os.path.join(currdir,directory+'/'+directory+'_sp_grp_'+group+'.pha')):
             
             time.sleep(1)
-            
+        
         bashproc.sendline('echo done')
         bashproc.expect('done')        
         
+        #updating the grouped file header with the correct file names
+        with fits.open(directory+'/'+directory+'_sp_grp_'+group+'.pha',mode='update') as hdul:
+            hdul[1].header['RESPFILE']=directory+'.rmf'
+            hdul[1].header['ANCRFILE']=directory+'.arf'
+            #saving changes
+            hdul.flush()
+            
         bashproc.sendline('exit')
         regroup_spectrum_done.set()
 
@@ -714,12 +759,11 @@ def batch_mover(directory):
     bashproc.sendline('mkdir -p bigbatch')
     
     bashproc.sendline('cd '+directory)
-    bashproc.sendline('cp -v '+directory+'* ../bigbatch')
-    bashproc.sendline('cp -v ni'+directory+'* ../bigbatch')
+    
+    bashproc.sendline('cp --verbose '+directory+'* ../bigbatch'+' >batch_mover.log')
+    
     #reasonable waiting time to make sure files can be copied
     time.sleep(2)
-    
-    bashproc.expect('->')
     
     bashproc.sendline('exit')
     batch_mover_done.set()
@@ -795,6 +839,7 @@ if not local:
                 try:
                 #for loop to be able to use different orders if needed
                     for curr_action in action_list:
+                        output_err=None
                         folder_state='Running '+curr_action
                         if curr_action=='1':
                             process_obsdir(dirname,overwrite=overwrite_glob)
@@ -808,7 +853,9 @@ if not local:
                             extract_all_spectral_done.wait()
                             
                         if curr_action=='l':
-                            extract_lc(dirname,binning=lc_bin,bands=lc_bands_str,HR=hr_bands_str,overwrite=overwrite_glob)
+                            output_err=extract_lc(dirname,binning=lc_bin,bands=lc_bands_str,HR=hr_bands_str,overwrite=overwrite_glob)
+                            if type(output_err)==str:
+                                raise ValueError
                             extract_lc_done.wait()
 
                         if curr_action=='s':
@@ -835,7 +882,7 @@ if not local:
                     #signaling unknown errors if they happened
                     if 'Running' in folder_state:
                         print('\nError while '+folder_state)
-                        folder_state=folder_state.replace('Running','Aborted at')
+                        folder_state=folder_state.replace('Running','Aborted at')+('' if output_err is None else ' --> '+output_err)
                     os.chdir(startdir)
             else:
                 #for loop to be able to use different orders if needed

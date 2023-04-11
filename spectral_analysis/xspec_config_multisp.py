@@ -162,19 +162,67 @@ Model modification and utility commands.
 Most of these are created because once a model is unloaded in PyXspec, everything but the component/parameter names is lost
 '''
 
-def allmodel_data(modclass=AllModels):
+
+class allmodel_data:
     
     '''
-    stores the information of all the current models in an array of model_data classes
+    class for storing the information of all the current models (customs, and each group)
+    
+    stores scorpeon nicer bkg model differently
     '''
 
-    mod_data_arr=np.array([None]*AllData.nGroups)
-    
-    for i_grp in range(AllData.nGroups):
+    def __init__(self,modclass=AllModels):
         
-        mod_data_arr[i_grp]=model_data(AllModels(i_grp+1))
+        mod_list=['default' if elem=='' else elem for elem in modclass.sources.values() if elem not in ['nxb','sky']]
         
-    return mod_data_arr
+        mod_keys=[elem for elem in modclass.sources.keys() if elem not in [98,99]]
+        
+        self.mod_list=mod_list
+        self.mod_keys=mod_keys
+        #storing standard models
+        for elem_mod in self.mod_list:
+
+            mod_data_arr=np.array([None]*max(1,AllData.nGroups))
+            
+            for i_grp in range(max(1,AllData.nGroups)):
+                
+                #testing if the model exists for this group
+                try:
+                    AllModels(i_grp+1,modName='' if elem_mod=='default' else elem_mod)
+                except:
+                    continue
+                
+                #saving the model if it exsits
+                mod_data_arr[i_grp]=model_data(AllModels(i_grp+1,modName='' if elem_mod=='default' else elem_mod))
+
+            setattr(self,'default' if elem_mod=='' else elem_mod,mod_data_arr)
+            
+        #testing if there is a nicer bkg model loaded
+        if 'nxb' in modclass.sources.values() and 'sky' in modclass.sources.values():
+            
+            self.scorpeon=scorpeon_data()
+            
+    def load(self):
+                                
+        for elem_mod,elem_key in zip(self.mod_list,self.mod_keys):
+            model_load(getattr(self,elem_mod),mod_name='' if elem_mod=='default' else elem_mod,mod_number=elem_key)
+
+        xchatter=Xset.chatter
+        xlogchatter=Xset.logChatter
+        
+        #doing this silently to avoid surcharching the screen and log files        
+        Xset.chatter=0
+        Xset.logChatter=0
+        
+        if 'scorpeon' in dir(self):
+            xscorpeon.load(scorpeon_save=self.scorpeon)
+
+        Xset.chatter=xchatter
+        Xset.logChatter=xlogchatter
+        
+mod_sky=None
+mod_nxb=None
+
 
 class model_data:
     
@@ -220,7 +268,112 @@ class model_data:
                 self.links[id_par]=getattr(getattr(self,elem_comp),elem_par).link.replace('= p','')
                 self.frozen[id_par]=getattr(getattr(self,elem_comp),elem_par).frozen
                 id_par+=1
+
+class scorpeon_manager:
+    
+    '''
+    Global class to manage scorpeon model backgrounds in xspec. A single instance of this is created, called xscorpeon
+    '''
+    
+    def __init__(self):
+        self.bgload_paths=None
+        
+    def load(self,bgload_paths=None,scorpeon_save=None):
+        
+        '''
+        reloads the nicer bg model(s) from the stored path(s), and scorpeon save(s) if any
+        
+        can be called without bgload_paths after the first load to reset/reload bg models with or without a bg
+        datagroups with no models should be left as empty in the bgload_paths array
+        
+        as of now, loads up to a single model per datagroup
+        '''
+        
+        #updating the bgload paths if an argument if prodivded
+        if bgload_paths is not None:
+            #converting the input into an array like for easier manipulation
+            if type(bgload_paths) not in [list,np.ndarray,tuple]:
+                self.bgload_paths=[bgload_paths]
+            else:
+                self.bgload_paths=bgload_paths
+        
+        if self.bgload_paths is not None:
+            #making sure the file actually exists
+            assert np.array([elem is None or os.path.isfile(str(elem)) for elem in self.bgload_paths]).all(), 'One or more scorpeon load file path does not exist'
+            
+            #loading all of the models
+            for i_bg,bg_path in enumerate(self.bgload_paths):
+    
+                if bg_path is not None:
+                    nicer_bkgspect=i_bg+1
+                    exec(open(bg_path).read())
+        
+        #loading all of the saves
+        if scorpeon_save is not None:
+            scorpeon_save.load()
+
+class scorpeon_data:
+            
+    def __init__(self,modclass=AllModels):
+        
+        self.nxb_save_list=[]
+        self.sky_save_list=[]
+        
+        for i_grp in range(AllData.nGroups):
+            
+            try:
+                self.nxb_save_list+=[scorpeon_group_save(modclass(i_grp+1,modName='nxb'))]
+            except:
+                self.nxb_save_list+=[None]
+            
+            try:
+                self.sky_save_list+=[scorpeon_group_save(modclass(i_grp+1,modName='sky'))]
+            except:
+                self.sky_save_list+=[None]
                 
+    def load(self):
+        
+        for i_grp in range(len(self.nxb_save_list)):
+            
+            nxb_save=self.nxb_save_list[i_grp]
+            sky_save=self.sky_save_list[i_grp]
+            
+            if nxb_save is not None:
+                mod_nxb=AllModels(i_grp+1,modName='nxb')
+                
+                for i_par in range(mod_nxb.nParameters):
+
+                    mod_nxb(i_par+1).values=nxb_save.values[i_par]                        
+
+                    mod_nxb(i_par+1).link=nxb_save.link[i_par]
+
+                    mod_nxb(i_par+1).frozen=nxb_save.frozen[i_par]
+
+            if sky_save is not None:
+                mod_sky=AllModels(i_grp+1,modName='sky')
+                
+                for i_par in range(mod_sky.nParameters):
+                    
+                    mod_sky(i_par+1).values=sky_save.values[i_par]                       
+                    mod_sky(i_par+1).link=sky_save.link[i_par]
+                    mod_sky(i_par+1).frozen=sky_save.frozen[i_par]
+                    
+class scorpeon_group_save:
+    
+    '''
+    simple scorpeon save for a single datagroup
+    '''
+    
+    def __init__(self,model):
+        
+        self.values=[model(i_par+1).values for i_par in range(model.nParameters)]
+    
+        self.link=[model(i_par+1).link.replace('= p','') for i_par in range(model.nParameters)]
+            
+        self.frozen=[model(i_par+1).frozen for i_par in range(model.nParameters)]
+            
+xscorpeon=scorpeon_manager()
+
 class component_data:
     
     '''
@@ -255,11 +408,23 @@ def par_degroup(parnumber):
     
     return i_grp,id_par
     
-def model_load(model_saves,gap_par=None,in_add=False):
+def reset():
+    
+    '''Clears everything and gets back to standard fitting and abundance parameters'''
+    
+    AllChains.clear()
+    AllData.clear()
+    AllModels.clear()
+    Xset.abund='wilm'
+    Fit.nIterations=1000
+
+def model_load(model_saves,mod_name='',mod_number=1,gap_par=None,in_add=False,modclass=AllModels):
 
     '''
     loads a mod_data class into the active xspec model class or all model_data into all the current data groups
-    if model_save is a list, loads all model_saves into the models  of the AllModels() data class
+    if model_save is a list, loads all model_saves into the model data groups of the AllModels() data class
+    
+    can be used to lad custom models through model_name and mod_number. The default values update the "standard" xspec model
     
     gap par introduces a gap in the parameter loading. Used for loading with new expressions including new components 
     in the middle of the model.
@@ -292,16 +457,19 @@ def model_load(model_saves,gap_par=None,in_add=False):
         first_save=model_saves
         
     #creating a model with the new model expression
-    Model(first_save.expression)
+    modclass+=(first_save.expression,mod_name,mod_number)
 
         
-    #untying all the models at first to avoid interval problems with links to data groups that are not loaded yet
-    for i_grp in range(len(model_saves_arr)):
-        AllModels(i_grp+1).untie()
+    # 
+    # for i_grp in range(len(model_saves_arr)):
+    #     AllModels(i_grp+1,mod_name,mod_number).untie()
         
     for i_grp,save_grp in enumerate(model_saves_arr):
         
-        xspec_mod_grp=AllModels(i_grp+1)
+        xspec_mod_grp=AllModels(i_grp+1,mod_name)
+        
+        #untying all the models at first to avoid interval problems with links to data groups that are not loaded yet
+        xspec_mod_grp.untie()
         
         #creating a dictionnary of all the parameters values to load them in a single command
         parload_grp={}
@@ -327,7 +495,7 @@ def model_load(model_saves,gap_par=None,in_add=False):
     #we load directly all the values dictionnaries before the rest to avoid problems with links if the intervals don't follow
     for i_grp,save_grp in enumerate(model_saves_arr):
         
-        xspec_mod_grp=AllModels(i_grp+1)
+        xspec_mod_grp=AllModels(i_grp+1,mod_name)
         
         #loading links and freeze states
         for i_par in range(1,xspec_mod_grp.nParameters+1):
@@ -380,20 +548,22 @@ def model_load(model_saves,gap_par=None,in_add=False):
     
     #if the load happens during addcomp, we don't show the new models since it will be done at the end of the addcomp anyway
     if not in_add:
-        #showing the current model
+        #showing the current models
         AllModels.show()
         
         #and the fit
         Fit.show()
     
     if multi_groups:
-        return np.array([AllModels(i+1) for i in range(AllData.nGroups)])
+        return np.array([AllModels(i+1,mod_name) for i in range(AllData.nGroups)])
     else:
-        return AllModels(1)
+        return AllModels(1,mod_name)
     
 def editmod(new_expression,model=None,modclass=AllModels,pointers=None):
     
     '''
+    DEPRECATED, should be updated (also with new allmodel_data() format) if used, to specify which model to change
+    
     Changes the expression of a model. the pointers string gives the component equivalence in case of ambiguity
     
     if a specific model is provided, uspdates this one. Else, updates all models in the AllModels class 
@@ -410,7 +580,7 @@ def editmod(new_expression,model=None,modclass=AllModels,pointers=None):
     else:
         xspec_mod=modclass(1)
     
-    model_saves=allmodel_data()
+    model_saves=allmodel_data().default
     model_saves[0].expression=new_expression
     
     
@@ -477,7 +647,7 @@ def numbered_expression(expression=None):
 def addcomp(compname,position='last',endmult=None,return_pos=False,modclass=AllModels,included_list=None,values=None,links=None,frozen=None):
     
     '''
-    changes a model to add a new component, by saving the old model parameters and thn loading a new model with the new 
+    changes the default model to add a new component, by saving the old model parameters and thn loading a new model with the new 
     component
     
     for multiple data groups, does not unlink the parameters of the added components
@@ -644,7 +814,7 @@ def addcomp(compname,position='last',endmult=None,return_pos=False,modclass=AllM
 
     if is_model:
         #saving the current models
-        model_saves=allmodel_data()
+        model_saves=allmodel_data().default
         
         #getting the xspec expression of the current model as well as the list of components
         num_expr=numbered_expression()
@@ -763,8 +933,13 @@ def addcomp(compname,position='last',endmult=None,return_pos=False,modclass=AllM
             try:
                 xspec_model=Model(new_expr)
             except:
+                
+                '''
+                Here to help debugging because there'll be issues with weird namings at some point
+                '''
                 print(new_expr)
                 breakpoint()
+                print(new_expr)
                 
             gap_end=xspec_model.nParameters
             added_comps_numbers=np.arange(old_ncomps+1,len(AllModels(1).componentNames)+1).astype(int)
@@ -1018,7 +1193,7 @@ def delcomp(compname,modclass=AllModels,give_ndel=False):
     
     first_mod=modclass(1)
     
-    model_saves=allmodel_data()
+    model_saves=allmodel_data().default
     
     #deleting the space to avoid problems
     old_exp=model_saves[0].expression.replace(' ','')
@@ -2090,7 +2265,7 @@ class fitmod:
                     if Fit.statistic>pre_unfreeze_fit:
                         self.print_xlog('\nlog:Unfreezing '+added_comp.compname+' component worsens the fit.'+\
                                         '\n Restoring previous iteration for next component.')
-                        model_load(pre_unfreeze_mod)
+                        pre_unfreeze_mod.load()
                         
                     #we can stop the loop after the continuum unfreezing iteration
                     if added_comp in self.cont_complist:
@@ -2284,7 +2459,7 @@ class fitmod:
             
             if ftest_val<ftest_threshold/100 and ftest_val>0:
                 self.print_xlog('\nlog:Very significant component detected. Skipping deletion test.')
-                model_load(new_bestmod)
+                new_bestmod.load()
                 
                 #updating the includedlist
                 self.includedlist=prev_includedlist
@@ -2335,7 +2510,7 @@ class fitmod:
                 #note: the fitcomp parameters are not deleted
                 
                 self.print_xlog('\nlog:Component '+component.compname+' is still significant.')
-                model_load(new_bestmod)
+                new_bestmod.load()
                 
                 #updating the includedlist
                 self.includedlist=prev_includedlist
@@ -2420,7 +2595,7 @@ class fitmod:
                 n_unlinked+=1
             else:
                 self.print_xlog('\nlog:Freeing blueshift of component '+comp_unlink.compname+' is not significant. Reverting to linked model.')
-                model_load(new_bestmod)
+                new_bestmod.load()
                 
                 #deleting the d.o.f.
                 comp_unlink.unlocked_pars=comp_unlink.unlocked_pars[:-1]
@@ -2532,7 +2707,7 @@ class fitmod:
                 
                 #re-instating the initial fitmod iteration with the other line included and the corresponding model
                 self.includedlist=curr_includedlist
-                model_load(curr_mod)
+                curr_mod.load()
 
                 #and updating the fitcomps
                 self.update_fitcomps()
@@ -2681,8 +2856,6 @@ class fitmod:
             #new fit + error computation to get everything working for the MC (since freezing parameters will have broken the fit)
             calc_fit(logfile=self.logfile if chain else None)               
                     
-            test=allmodel_data()
-            
             #note: we need to test again for pegging parameters as this can keep the MC chain from working
             par_peg_ids+=calc_error(self.logfile,param='1-'+str(AllModels(1).nParameters*AllData.nGroups),freeze_pegged=freeze_final_pegged,indiv=True)
                         
@@ -2928,7 +3101,7 @@ class fitmod:
             abslines_delchi[i_line]=Fit.statistic-base_chi
             
             #reloading the model
-            model_load(mod_data_init)
+            mod_data_init.load()
             
             '''
             Computing the individual flux of each absline
@@ -2975,7 +3148,7 @@ class fitmod:
 
                 
             #reloading the model
-            model_load(mod_data_init)
+            mod_data_init.load()
             self.update_fitcomps()
                 
         #recreating a valid fit for the error computation
@@ -3092,7 +3265,7 @@ class fitmod:
         Reloads the model save and updates itself to be ready for use
         '''
         
-        model_load(self.save)
+        self.save.load()
         
         self.update_fitcomps()
         
@@ -3274,7 +3447,7 @@ class fitcomp:
                 if self.fitted_mod is None:
                     self.print_xlog('\nlog:No fit loaded, cannot load previous fit iteration.')
                 else:
-                    model_load(self.fitted_mod)
+                    self.fitted_mod.load()
 
             return new_included_list
     
@@ -3312,8 +3485,11 @@ class fitcomp:
             #resetting the model instead of loading if the model was previously empty
             if self.old_mod_npars==0:
                 AllModels.clear()
+                
+                #reloading the NICER bg if any
+                xscorpeon.load()
             else:
-                model_load(self.init_model)
+                self.init_model.load()
 
             self.reset_attributes()            
     
@@ -3496,7 +3672,7 @@ class fitcomp:
             for vshift in  bshift_space:
                             
                 #restoring the initial model
-                model_load(curr_model)
+                curr_model.load()
                 
                 #deleting the component if needed and the model is not in a no-abs line version
                 if self.included and not pre_delete:
@@ -3558,7 +3734,7 @@ class fitcomp:
         Xset.logChatter=prev_logChatter
         
         #reloading the previous model iteration
-        model_load(curr_model)
+        curr_model.load()
             
         return max(distrib_eqw)*1e3
 
@@ -3650,15 +3826,6 @@ def rescale(auto=False,autoxspec=False,xmin=None,xmax=None,ymin=None,ymax=None,r
 
         Plot.add=Plot_add_state
 
-def reset():
-    
-    '''Clears everything and gets back to standard fitting and abundance parameters'''
-    
-    AllChains.clear()
-    AllData.clear()
-    AllModels.clear()
-    Xset.abund='wilm'
-    Fit.nIterations=1000
     
 class plot_save:
     

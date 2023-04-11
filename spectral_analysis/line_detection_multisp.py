@@ -108,7 +108,7 @@ from astropy.time import Time
 from xspec import AllModels,AllData,Fit,Spectrum,Model,Plot,Xset,FakeitSettings,AllChains,Chain
 
 #custom script with a few shorter xspec commands
-from xspec_config_multisp import allmodel_data,model_data,model_load,addcomp,editmod,Pset,Pnull,rescale,reset,Plot_screen,store_plot,freeze,allfreeze,unfreeze,\
+from xspec_config_multisp import allmodel_data,model_load,addcomp,Pset,Pnull,rescale,reset,Plot_screen,store_plot,freeze,allfreeze,unfreeze,\
                          calc_error,delcomp,fitmod,fitcomp,calc_fit,plot_line_comps,\
                          xcolors_grp,comb_chi2map,plot_std_ener,coltour_chi2map,xPlot
 
@@ -139,8 +139,8 @@ ap = argparse.ArgumentParser(description='Script to detect lines in XMM Spectra.
 
 '''GENERAL OPTIONS'''
 
-ap.add_argument('-satellite',nargs=1,help='telescope to fetch spectra from',default='Chandra',type=str)
-ap.add_argument("-cameras",nargs=1,help='Cameras to use for spectral analysis',default='hetg',type=str)
+ap.add_argument('-satellite',nargs=1,help='telescope to fetch spectra from',default='NICER',type=str)
+ap.add_argument("-cameras",nargs=1,help='Cameras to use for spectral analysis',default='def',type=str)
 ap.add_argument("-expmodes",nargs=1,help='restrict the analysis to a single type of exposure',default='all',type=str)
 ap.add_argument("-grouping",nargs=1,help='specfile grouping for XMM spectra in [5,10,20] cts/bin',default='opt',type=str)
 
@@ -150,7 +150,7 @@ ap.add_argument("-prefix",nargs=1,help='restrict analysis to a specific prefix',
 
 ####output directory
 ap.add_argument("-outdir",nargs=1,help="name of output directory for line plots",
-                default="lineplots_opt_paper_2",type=str)
+                default="lineplots_opt",type=str)
 
 #overwrite
 ap.add_argument('-overwrite',nargs=1,
@@ -178,7 +178,7 @@ ap.add_argument('-pre_reduced_NICER',nargs=1,help='change NICER data format to p
 
 #### Models and abslines lock
 ap.add_argument('-cont_model',nargs=1,help='model list to use for the autofit computation',default='cont',type=str)
-ap.add_argument('-autofit_model',nargs=1,help='model list to use for the autofit computation',default='lines_resolved',type=str)
+ap.add_argument('-autofit_model',nargs=1,help='model list to use for the autofit computation',default='lines_narrow',type=str)
 ap.add_argument('-no_abslines',nargs=1,help='turn off absorption lines addition in the fit (still allows for UL computations)',
                 default=False,type=str)
 
@@ -191,7 +191,7 @@ ap.add_argument("-h_update",nargs=1,help='update the bg, rmf and arf file names 
 
 '''####ANALYSIS RESTRICTION'''
 
-ap.add_argument('-restrict',nargs=1,help='restrict the computation to a number of predefined exposures',default=True,type=bool)
+ap.add_argument('-restrict',nargs=1,help='restrict the computation to a number of predefined exposures',default=False,type=bool)
 #in this mode, the line detection function isn't wrapped in a try, and the summary isn't updasted
 
 observ_restrict=['660_heg_-1_grp_opt.pha','660_heg_1_grp_opt.pha','13717_heg_-1_grp_opt.pha','13717_heg_1_grp_opt.pha']
@@ -596,7 +596,10 @@ if sat in ['XMM','NICER','Suzaku','Swift']:
             
         e_sat_high_init=10.
     else:
-        e_sat_high_init=10.
+        if sat=='NICER':
+            e_sat_high_init=15.
+        else:
+            e_sat_high_init=10.
         
 elif sat=='Chandra':
     e_sat_low=1.5
@@ -1234,6 +1237,15 @@ def line_detect(epoch_id):
                 hdul[1].header['ANCRFILE']=elem_sp.split('_sp')[0]+'.arf'
                 #saving changes
                 hdul.flush()
+                
+    if h_update and sat=='NICER':
+        for i_sp,elem_sp in enumerate(epoch_files):
+            with fits.open(elem_sp,mode='update') as hdul:
+                hdul[1].header['RESPFILE']=elem_sp.split('_sp')[0]+'.rmf'
+                hdul[1].header['ANCRFILE']=elem_sp.split('_sp')[0]+'.arf'
+                #saving changes
+                hdul.flush()
+                
     
     '''Setting up a log file and testing the properties of each spectra'''
     
@@ -1421,19 +1433,14 @@ def line_detect(epoch_id):
         
     elif sat=='NICER':
         
-        #loading the spectrum and the response
+        #the grouped spectrum loads the rmf and the arf right away
+        curr_sp=Spectrum(epoch_files[0])
         
-        # if pre_reduced_NICER:
-        #     curr_sp=Spectrum(epoch_files[0])
-        
-        # else:
-        curr_sp=Spectrum(epoch_files[0],backFile=epoch_observ[0]+'_bkg.pi',respFile=epoch_observ[0]+'.rmf',arfFile=epoch_observ[0]+'.arf')
-        try:
-                curr_sp.background=epoch_observ[0]+'_bkg.pi'
-        except:
-            pass
-        curr_sp.response=epoch_observ[0]+'.rmf'
-        curr_sp.response.arf=epoch_observ[0]+'.arf'
+        if NICER_bkg=='scorpeon_mod':
+            #this is the number of the datagroup for which the script will be applied
+            nicer_bkgspect=1
+            exec(open(epoch_files.split('_')[0]+'_bg.py').read())
+            
         
     elif sat=='Suzaku':
         
@@ -2729,9 +2736,8 @@ def line_detect(epoch_id):
             plot_std_ener(ax_paper[2],plot_em=True)
             plot_std_ener(ax_paper[3],plot_em=True)
         
-        dill.dump_session('./test_dump.pkl')
-        
-        breakpoint()
+        #this is for the 4U graphs
+        #dill.dump_session('./test_dump.pkl')
         
         fig_paper=plt.figure(figsize=(14.5,22))
         
@@ -2742,8 +2748,6 @@ def line_detect(epoch_id):
         plt.savefig(outdir+'/'+epoch_observ[0]+'_paper_plot_'+args.line_search_e.replace(' ','_')+'_'+args.line_search_norm.replace(' ','_')+'.pdf')
                 
         plt.close(fig_paper)
-        
-        breakpoint()
         
         model_load(data_autofit_noabs)
         

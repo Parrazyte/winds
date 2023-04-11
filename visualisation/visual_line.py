@@ -95,6 +95,11 @@ ap.add_argument("-line_search_norm",nargs=1,help='min, max and nsteps (for one s
 args=ap.parse_args()
 
 #adding the top directory to the path to avoid issues when importing fitting_tools
+
+#local
+sys.path.append('/home/parrama/Documents/Work/PhD/Scripts/Python/general/')
+
+#online
 sys.path.append('/app/winds/spectral_analysis/')
 sys.path.append('/app/winds/general/')
 
@@ -648,14 +653,20 @@ with st.sidebar.expander('Visualisation'):
     
     global_colors=st.checkbox('Normalise colors/colormaps over the entire sample',value=False)
         
-    paper_look=st.checkbox('Paper look',value=True)
+    if not online:
+        paper_look=st.checkbox('Paper look',value=True)
+        
+        bigger_text=st.checkbox('Bigger text size',value=True)
+        
+        square_mode=st.checkbox('Square mode',value=True)
     
-    bigger_text=st.checkbox('Bigger text size',value=True)
-    
-    square_mode=st.checkbox('Square mode',value=True)
-
-    show_linked=st.checkbox('Distinguish linked detections',value=False)
-    
+        show_linked=st.checkbox('Distinguish linked detections',value=False)
+    else:
+        paper_look=True
+        bigger_text=True
+        square_mode=True
+        show_linked=False
+        
 if alpha_abs:
     alpha_abs=0.5
 else:
@@ -1845,7 +1856,7 @@ with tab_about:
                    
                    **Telescopes**  
                    
-                   This is rather straightforward. Remember the statement above. This resets everything else.
+                   This is rather straightforward. Remember the statement above: changing this resets everything else.
                    
                    **Sources**  
                    
@@ -1898,10 +1909,27 @@ with tab_about:
                    Various visualisation options allow to zoom on the current set of points in the graph, change coloring options and display errorbars (instead of upper limits).
                    
                    #''')
-                    
-                    
         
         st.header('Monitoring')
+        
+        st.markdown('''
+                    
+                   Whenever the sample selection is restricted to single sources, long-term lightcurves and HR evolution can be displayed using both
+                   RXTE-ASM and MAXI data with a 1-day binning.  
+                   
+                   RXTE data is taken from a local copy of the definitive products available at http://xte.mit.edu/ASM_lc.html. Lightcurves use the sum 
+                   of the intensity in all bands ([1.5 − 12] keV), corrected by a factor of 25 to match (visually) MAXI values, and HR values are built 
+                   as the ratio of bands C and B+A, i.e. [5.5 − 12]/[1.5 − 5]. MAXI data is loaded on the fly from the official website at 
+                   http://maxi.riken.jp/top/slist.html, in order to use the latest dataset available. 
+                   
+                   MAXI lightcurves use the full [2 − 20] keV band and HR built from the [4 − 10]/[2 − 4] bands. A transparency factor proportional to 
+                   the quality of the data (estimated from the ratio of the HR value to its uncertainty) is applied to both HRs to aid visibility, and 
+                   the dates of exposures from the instruments used in the sample are highlighted. The date restriction selected in the sample selection 
+                   can be both highlighted and used to zoom the lightcurve display, and EW values and upper limits can be displayed on a secondary axis 
+                   at the date of each exposure.
+                   
+                   #''')
+                   
         
         st.header('Parameter Analysis')
         

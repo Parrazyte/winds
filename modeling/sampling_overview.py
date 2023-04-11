@@ -202,14 +202,22 @@ def func_logxi(x):
 def func_vel_obs(x):
     return (c_cgs*vel_r*((x)**(-0.5))*np.cos(angle*np.pi/180.0))+(c_cgs*vel_z*((x)**(-0.5))*np.sin(angle*np.pi/180.0))
     
+def func_nh_int(x,x0=300):
+    return (mdot_mhd/(sigma_thomson_cgs*Rg_cgs))*rho_mhd/(p_mhd-0.5)*(x**(p_mhd-0.5)-x0**(p_mhd-0.5))*Rg_cgs
+
 #defining the constant to get back to cylindric radius computations in which are made all of the MHD value computations
 cyl_cst=(np.sqrt(1.0+(z_A*z_A)))
 
 #defining a specific fonction which inverts the dr computation
 def func_max_dr(x_start,vmax):
     
-    #note: vmax should be in cgs, x_start in R_g
-                      
+    '''
+    computes the maximal dr for a given radius and velocity which would end up with bulk velocity (hence why we use only vel_r and vel_z)
+    delta of vmax
+    
+    note: vmax should be in cgs, x_start in R_g
+    '''
+                  
     rad_angle=angle*np.pi/180
     
     x_end=1/((x_start)**(-1/2)-vmax/(c_cgs*(vel_r*np.cos(rad_angle)+vel_z*np.sin(rad_angle))))**2
@@ -221,23 +229,11 @@ nbox_v=0
 
 while Rsph_cgs_end<Rsph_cgs_last:
 
-        
-    max_dr_res=0
-        
-    if i_box>0:
-        #in Rg units
-        prev_rcyl_mid=(Rsph_cgs_mid[i_box-1])/(Rg_cgs*cyl_cst)
+    #computing the dr/r of the velocity threshold used. We now use end_box-start_box instead of the midpoint of different boxes
+    max_dr_res=func_max_dr(Rsph_cgs_end/(Rg_cgs*cyl_cst),vturb_max*1e5)
     
-        #note: also perturbates the second box because the Rstop-rmid of the previous box is also much bigger 
-        #should affect directly Rmid if we change the computation of the first box
-        
-        max_dr_res=func_max_dr(prev_rcyl_mid,vturb_max*1e5)
-        
-        dr_factor=min((2.0+delr_by_r)/(2.0-delr_by_r),max_dr_res)
-        
-    else:
-        #!*The expression below comes from R(i+1)-R[i]=(delr_by_r)*((R[i]+R(i+1))/2.0)
-        dr_factor=(2.0+delr_by_r)/(2.0-delr_by_r)
+    #and ensuring we're sampling well enough
+    dr_factor=min((2.0+delr_by_r)/(2.0-delr_by_r),max_dr_res)
 
     #last box flag
     if Rsph_cgs_last<Rsph_cgs_stop[i_box-1]*dr_factor:
@@ -349,7 +345,6 @@ with tab_sampling:
         plt.errorbar(Rsph_cgs_mid/Rg_cgs,range(1,nbox+1),xerr=np.array((Rsph_cgs_mid-Rsph_cgs_start,Rsph_cgs_stop-Rsph_cgs_mid))/Rg_cgs,ls='')
         plt.legend()
         try:
-            time.sleep(3)
             st.pyplot(fig_dbox)
         except:
             st.stop()
@@ -363,6 +358,7 @@ with tab_sampling:
         plt.ylabel(r'$\Delta r/r$')
         plt.xscale('log')
         plt.errorbar(Rsph_cgs_mid/Rg_cgs,(Rsph_cgs_stop-Rsph_cgs_start)/(Rsph_cgs_mid),xerr=np.array((Rsph_cgs_mid-Rsph_cgs_start,Rsph_cgs_stop-Rsph_cgs_mid))/Rg_cgs,ls='')
+        
         try:
             st.pyplot(fig_rdr)
         except:
@@ -370,10 +366,48 @@ with tab_sampling:
     
     
         
-    #### Plotting the density
+    #### Plotting the quantities
     
-    col_fig1, col_fig2,col_fig3= st.columns(3)
+    col_fig0,col_fig1, col_fig2,col_fig3= st.columns(4)
     
+    with col_fig0:
+        fig_dens_thresh,ax_dens_thresh=plt.subplots(1)
+        
+        nh_thresh=-np.log(1/1.105)/sigma_thomson_cgs
+        
+        plt.suptitle(r'Evolution of the column density at $R_{start} '+'\n'+r'nh$_{\Delta log(\xi)=0.1}=%.2e'%nh_thresh+'$')
+        
+        plt.xlabel(r'start of the wind (Rg)')
+        plt.ylabel(r'$nh$ (cgs)')
+        plt.yscale('log')
+        plt.xscale('log')
+        
+        plt.axvline(x=Rsph_cgs_1st/Rg_cgs,ls='--',color='grey',label=r'$R_{sph}$ at 1st anch. radius')
+        
+        plt.axhline(y=nh_thresh,ls=':',color='red',label=r'nh$_{\Delta log(\xi)=0.1}$')
+        # plt.axvline(x=Rsph_cgs_stop[-1]/Rg_cgs,ls='-.',color='grey',label=r'$R_{sph}$ at last anch. radius')
+        
+        plt.plot(np.logspace(1,np.log10(Rsph_cgs_start[0]/Rg_cgs)),func_nh_int(Rsph_cgs_start[0],np.logspace(1,np.log10(Rsph_cgs_start[0]/Rg_cgs))))
+        plt.legend()
+        try:
+            st.pyplot(fig_dens_thresh)
+        except:
+            st.stop()
+                    
+        fig_dens_thresh,ax_dens_thresh=plt.subplots(1)
+
+        plt.suptitle('Evolution of the column density of the boxes')
+        
+        plt.xlabel(r'$n_{box}$')
+        plt.ylabel(r'$nh_{box}$ (cgs)')
+        plt.yscale('log')
+        plt.errorbar(range(1,nbox+1),NhOfBox,xerr=0.5,ls='')
+        plt.legend()
+        try:
+            st.pyplot(fig_dens_thresh)
+        except:
+            st.stop()
+            
     with col_fig1:
         fig_density,ax_density=plt.subplots(1)
         
@@ -440,7 +474,7 @@ with tab_sampling:
     with col_fig3:
         fig_vel_obs,ax_vel_obs=plt.subplots(1)
         
-        plt.suptitle('Evolution of the velocity of the solution')
+        plt.suptitle('Evolution of the bulk velocity of the solution')
         
         plt.xlabel('R (Rg)')
         plt.ylabel(r'$v_{obs}$ (km/s)')
@@ -457,12 +491,12 @@ with tab_sampling:
         
         fig_vturb,ax_vturb=plt.subplots(1)
         
-        plt.suptitle(r'Evolution of the turbulent velocity of the boxes')
+        plt.suptitle(r'Evolution of $\Delta v_{bulk}$ of the boxes')
         
         plt.xlabel(r'$n_{box}$')
         plt.ylabel(r'$v_{turb}$ (km/s)')
         plt.yscale('log')
-        plt.errorbar(range(1,nbox+1),[vobs_mid[0].tolist()]+(vobs_mid[:-1]-vobs_mid[1:]).tolist(),xerr=0.5,ls='')
+        plt.errorbar(range(1,nbox+1),(vobs_start-vobs_stop),xerr=0.5,ls='')
         plt.axhline(y=vturb_max,ls='--',color='red',label=r'maximum allowed with current resolution')
         plt.legend()
         
@@ -470,7 +504,7 @@ with tab_sampling:
             st.pyplot(fig_vturb)
         except:
             st.stop()
-           
+        
 
 nbins_test=15475
 nbox_test=39
@@ -484,23 +518,23 @@ with tab_time:
     
     def_val=3
     
-    n_rout=st.number_input(r'number of values for $r_{out}$:',value=def_val,step=1,min_value=1)
+    n_rout=st.number_input(r'number of values for $R_{end}$',value=def_val,step=1,min_value=1)
     
     st.markdown('''Note: Additional $R_{end}$ values are considered differently, as if adding 1 box to the computing time.''')
     st.markdown('''This works only if using the biggest $R_{end}$ in the box options''')
     
     
-    n_rin=st.number_input(r'number of values for $r_{in}$:',value=def_val,step=1,min_value=1)
+    n_rin=st.number_input(r'number of values for $R_{start}$',value=def_val,step=1,min_value=1)
     
-    n_p=st.number_input(r'number of values for $p$ (ejection index):',value=def_val,step=1,min_value=1)
+    n_p=st.number_input(r'number of values for $p$ (ejection index)',value=def_val,step=1,min_value=1)
     
-    n_mu=st.number_input(r'number of values for $\mu$ (magnetization):',value=def_val,step=1,min_value=1)
+    n_mu=st.number_input(r'number of values for $\mu$ (magnetization)',value=def_val,step=1,min_value=1)
     
-    n_angle=st.number_input(r'number of values for $\theta$ (angle):',value=def_val,step=1,min_value=1)
+    n_angle=st.number_input(r'number of values for $\theta$ (angle)',value=def_val,step=1,min_value=1)
     
-    n_SED=st.number_input(r'number of SEDs:',value=def_val,step=1,min_value=1)
+    n_SED=st.number_input(r'number of SEDs',value=def_val,step=1,min_value=1)
     
-    n_lum=st.number_input(r'number of luminosities/mdot/SEDs normalization:',value=def_val,step=1,min_value=1)
+    n_lum=st.number_input(r'number of luminosities/mdot/SEDs normalization',value=def_val,step=1,min_value=1)
     
     st.header('Solution computing time evolution')
     

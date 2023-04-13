@@ -113,12 +113,12 @@ from xspec_config_multisp import allmodel_data,model_load,addcomp,Pset,Pnull,res
                          xcolors_grp,comb_chi2map,plot_std_ener,coltour_chi2map,xPlot,xscorpeon
 
 #custom script with a some lines and fit utilities and variables
-from fitting_tools import c_light,lines_std_names,lines_e_dict,ravel_ragged,n_absline,range_absline,model_list
+from fitting_tools import c_light,lines_std_names,lines_e_dict,n_absline,range_absline,model_list
 
 #importing some graph tools from the streamlit script
 from visual_line_tools import load_catalogs,dist_mass,obj_values,abslines_values,values_manip,distrib_graph,correl_graph,n_infos,incl_dic
                                 
-from general_tools import file_edit
+from general_tools import file_edit,ravel_ragged
 
 # #importing the pileup evaluation function
 # from XMM_datared import pileup_val
@@ -173,6 +173,8 @@ ap.add_argument('-launch_cpd',nargs=1,help='launch cpd /xs window to be able to 
 
 ap.add_argument('-xspec_window',nargs=1,help='xspec window id (auto tries to pick it automatically)',default='auto',type=str)
 #note: bash command to see window ids: wmctrl -l
+
+ap.add_argument('-NICER_bkg',nargs=1,help='NICER background type',default='scorpeon_mod',type=str)
 
 ap.add_argument('-pre_reduced_NICER',nargs=1,help='change NICER data format to pre-reduced obsids',default=False,type=bool)
 
@@ -286,7 +288,7 @@ ap.add_argument('-fit_lowSNR',nargs=1,help='fit the continuum of low quality dat
 ap.add_argument('-counts_min_HID',nargs=1,help='minimum counts for HID fitting in broad band',default=200,type=float)
 
 ap.add_argument('-skip_started',nargs=1,help='skip all exposures listed in the local summary_line_det file',
-                default=False,type=bool)
+                default=True,type=bool)
 #note : will skip exposures for which the exposure didn't compute or with errors
 
 ap.add_argument('-skip_complete',nargs=1,help='skip completed exposures listed in the local summary_line_det file',
@@ -425,6 +427,7 @@ pdf_only=args.pdf_only
 glob_summary_save_line_infos=args.line_infos_pdf
 restrict_order=args.restrict_order
 no_abslines=args.no_abslines
+NICER_bkg=args.NICER_bkg
 
 outdir=args.outdir
 pileup_lim=args.pileup_lim
@@ -1066,7 +1069,18 @@ def pdf_summary(epoch_observ,fit_ok=False,summary_epoch=None):
     '''extraction images'''
 
     #### XMM Data reduction display
-    
+    if sat=='NICER':
+        for i_obs,elem_observ in enumerate(epoch_observ):
+            pdf.add_page()
+            pdf.set_font('helvetica', 'B', 16)
+            pdf.cell(1,10,'Lightcurves for obsid '+elem_observ,align='C',center=True)
+            pdf.ln(10)
+            pdf.image(elem_observ+'_lc_3-6_bin_60.png',x=2,y=50,w=90)
+            pdf.image(elem_observ+'_lc_6-10_bin_60.png',x=100,y=50,w=90)
+            pdf.image(elem_observ+'_lc_3-15_bin_60.png',x=200,y=50,w=90)
+            pdf.cell(1,10,'HR evolution for obsid '+elem_observ,align='C',center=True)
+            pdf.image(elem_observ+'_lc_3-15_bin_60.png',x=100,y=150,w=90)
+                        
     if sat=='XMM':
         for i_obs,elem_observ in enumerate(epoch_observ):
             if is_sp[i_obs]:
@@ -1434,14 +1448,15 @@ def line_detect(epoch_id):
     elif sat=='NICER':
         
         #the grouped spectrum loads the rmf and the arf right away
-        curr_sp=Spectrum(epoch_files[0])
+        AllData('1:1 '+epoch_files[0])
         
         if NICER_bkg=='scorpeon_mod':
             #this is the number of the datagroup for which the script will be applied
             nicer_bkgspect=1
-            exec(open(epoch_files.split('_')[0]+'_bg.py').read())
             
-        
+            #loading the background and storing the bg python path in xscorpeon
+            xscorpeon.load(epoch_files[0].replace('_sp_grp_opt.pha','_bg.py'))
+            
     elif sat=='Suzaku':
         
         AllData('1:1 '+epoch_files[0]+' 2:2 '+epoch_files[1])
@@ -1484,14 +1499,20 @@ def line_detect(epoch_id):
     indiv_counts=[]
     
     for i_grp in range(1,AllData.nGroups+1):
-        indiv_counts+=[round(AllData(i_grp).rate[2]*AllData(i_grp).exposure)]
+        
+        #for NICER we subtract the rate from the background which at this point is the entire model ([3])
+        if sat=='NICER':
+            indiv_counts+=[round((AllData(i_grp).rate[0]-AllData(i_grp).rate[3])*AllData(i_grp).exposure)]
+        else:
+            indiv_counts+=[round(AllData(i_grp).rate[0]*AllData(i_grp).exposure)]
+
         glob_counts+=indiv_counts[-1]
     if glob_counts<counts_min:
         flag_lowSNR_line=True
         if not fit_lowSNR:
-            print('\nInsufficient counts ('+str(round(glob_counts))+' < '+str(round(counts_min))+
+            print('\nInsufficient net counts ('+str(round(glob_counts))+' < '+str(round(counts_min))+
                   ') in line detection range.')
-            return fill_result('Insufficient counts ('+str(round(glob_counts))+' < '+str(round(counts_min))+\
+            return fill_result('Insufficient net counts ('+str(round(glob_counts))+' < '+str(round(counts_min))+\
                                ') in line detection range.')
     else:
         flag_lowSNR_line=False
@@ -2730,9 +2751,9 @@ def line_detect(epoch_id):
             ax_paper[3]=plt.subplot(gs_paper[3,0],sharex=ax_paper[0])
             ax_colorbar=plt.subplot(gs_paper[3,1])
             
-            coltour_chi2map(fig_paper,ax_paper[3],chi_dict_postauto,combined='nolegend',ax_bar='bottom',norm=(251.5,12.6))          
+            # coltour_chi2map(fig_paper,ax_paper[3],chi_dict_postauto,combined='nolegend',ax_bar='bottom',norm=(251.5,12.6))          
 
-            # coltour_chi2map(fig_paper,ax_paper[3],chi_dict_postauto,combined='nolegend',ax_bar=ax_colorbar)          
+            coltour_chi2map(fig_paper,ax_paper[3],chi_dict_postauto,combined='nolegend',ax_bar=ax_colorbar)          
             
             ax_paper[3].set_xlim(line_cont_range)
             

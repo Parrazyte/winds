@@ -415,6 +415,10 @@ def reset():
     AllChains.clear()
     AllData.clear()
     AllModels.clear()
+    
+    #reseting the xscorpeon bg paths
+    xscorpeon.bgload_paths=None
+    
     Xset.abund='wilm'
     Fit.nIterations=1000
 
@@ -918,7 +922,7 @@ def addcomp(compname,position='last',endmult=None,return_pos=False,modclass=AllM
             except:
                 print(new_expr)
                 breakpoint()
-                
+                print(new_expr)
             added_ncomps=len(xspec_model.componentNames)-old_ncomps
             shifted_xcomp_start=xspec_model.componentNames[xcomp_start_n+added_ncomps]
             
@@ -1458,13 +1462,15 @@ def parse_xlog(log_lines,goal='lastmodel',no_display=False,replace_frozen=False,
     (useful to avoid breaking the MC chain/EW when the fit is insensitive to some parameters)
     Also freezes parameter frozen implicitely (delta at negative values) during the fit
 
-    In orer to find the last model, we:
+    In orer to find the last models, we:
         -explore in reverse order the given xspec log lines
-        -catch the last occurence of a line beginning by 'Model' (which is only used for displaying models)
-        -crop the lines to this first occurence to the next blank line (indicates the end of the model display)
+        -catch the last occurence of the models
+        -crop the lines and split by model and group
         -select only the lines with variation (i.e. '+/-' at the end of the line) to avoid frozen and linked parameters
         -parse them for the value and replace the corresponding parameter number with the new values
         
+    Note: it is assumed that the current models start with a default (no name) model
+    
     To find the last errors, we parse the log lines for the last errors for each component.
     If there was a new model fit, we only parse the lines after the last improved fit 
     (to avoid fetching errors from previous fits if some errors didn't compute in the last fit)
@@ -1476,10 +1482,29 @@ def parse_xlog(log_lines,goal='lastmodel',no_display=False,replace_frozen=False,
     
     par_peg=[]
     #searching the last 'Model' line
+    
+    #note: this can also apply to few other displays
+    model_start_line='========================================================================\n'
+    
     for i_startline in range(len(log_lines)):
-        if log_lines[::-1][i_startline].startswith('Model'):
-            found_model=True
-            break
+        if model_start_line in log_lines[::-1][i_startline]:
+            
+            #we add other conditions to make sure its the start of a model display
+            if 'Model' in log_lines[::-1][i_startline-1]:
+                '''
+                and the first model display
+                for this we find the first line with Source numbe, and if its not 1, we keep searching
+                '''
+                i_line_source=i_startline-1
+                while 'Source No.:' not in log_lines[::-1][i_line_source]:
+                    i_line_source-=1
+                
+                #testing if its effectively the first model
+                if 'Source No.: 1   Active/' in log_lines[::-1][i_line_source]:
+                    found_model=True
+                    break
+                else:
+                    continue
     
     #Exiting if we didn't find anything
     if not found_model:
@@ -1492,7 +1517,8 @@ def parse_xlog(log_lines,goal='lastmodel',no_display=False,replace_frozen=False,
             return 0
         log_lines_lastfit=log_lines
     else:
-        log_lines_lastfit=log_lines[len(log_lines)-(i_startline-1):]
+        #note:here we stop at line "above' the detected i_start to catch the first model call
+        log_lines_lastfit=log_lines[len(log_lines)-(i_startline+1):]
     
     if goal=='lasterrors':
         error_pars=np.zeros((AllModels(1).nParameters*AllData.nGroups,2))
@@ -1560,89 +1586,126 @@ def parse_xlog(log_lines,goal='lastmodel',no_display=False,replace_frozen=False,
         #reshaping the error results array to get in correct shape for each data group
         error_pars=error_pars.reshape(AllData.nGroups,AllModels(1).nParameters,2)
     
-    #searching the end of the model
-    found_model_end=False
-    for i_endline in range(len(log_lines_lastfit)):
-        if log_lines_lastfit[i_endline]=='\n':
-            found_model_end=True
-            break
+    if goal=='lastmodel' and not found_model:
+        print('\nCould not find the end of the model. Stopping model load.')
+        return 0
     
-    #exiting if we didn't find a model end
-    if found_model and found_model_end:
-        
-        #keeping only the model lines
-        model_lines=log_lines_lastfit[:i_endline-1]
+
+    '''
+    In order to consider cases with several models, we split model lines between each detected model and then load them
+    progressively
+    '''   
+
+    #computing the line numbers with model calls to split things evenly
+    model_start_ids=np.argwhere([np.array(log_lines_lastfit)==model_start_line]).T[1]
+    
+    #same thing for model ends
+    model_stop_line='________________________________________________________________________\n'
+    model_stop_ids=np.argwhere([np.array(log_lines_lastfit)==model_stop_line]).T[1]
+    
+    #and storing the lines for each model separately
+    model_lines_split=[]
+    
+    #this will work even if there are other bars after the end of the model calls because the zip will cut the enumeration
+    #at the number of indexes of the model starts
+    for start_id,stop_id in zip(model_start_ids,model_stop_ids):
+        model_lines_split+=[log_lines_lastfit[start_id+1:stop_id]]
+
+    for model_lines in model_lines_split:
         
         #displaying the model
-        print('\nFound new model:')
+        print('\nFound new model:'+model_lines[0].split('Model')[1].split('Source')[0])
         if not no_display:
             for line in model_lines:
                 #printing the lines without adding a line break
                 print(line[:-1])
         
-        #changing the method depending on if there are several data groups
-        if AllData.nGroups>1:
-            for i_grp in range(1,AllData.nGroups+1):
-
-                #fetching the line marking the beginning of the model for this group
-                i_start_grp=[i for i in range(len(model_lines)) if 'Data group: '+str(i_grp)+'\n' in model_lines[i]][0]
-
-                    
-                #the number of model lines from the first data group is n_groups*(n_pars+1) due to the display of each group number
-                if i_grp==1:
-                    n_pars=int((len(model_lines)-i_start_grp)/AllData.nGroups-1)
-    
-                var_lines=[line for line in model_lines[i_start_grp+1:i_start_grp+1+n_pars] if '+/-' in line]
-                
-                for line in var_lines:
-                    ind_line=int(line.split()[0])%n_pars if int(line.split()[0])%n_pars!=0 else n_pars
-                    AllModels(i_grp)(ind_line).values=[float(line.split()[-3])]+\
-                    AllModels(i_grp)(ind_line).values[1:]
-                    
-                    #freezing lines frozen during the fitting operation if the option is selected
-                    if freeze_pegged and line.endswith('+/-  -1.00000     \n'):
-                        AllModels(i_grp)(ind_line).frozen=True
-                        
-                #also replacing frozen values if it is asked
-                if replace_frozen:
-                    frozen_lines=[line for line in model_lines[i_start_grp+1:i_start_grp+1+n_pars] if line.endswith('frozen\n')]
-                    for line in frozen_lines:
-                        ind_line=int(line.split()[0])%n_pars if int(line.split()[0])%n_pars!=0 else n_pars
-                        AllModels(i_grp)(ind_line).values=[float(line.split()[-2])]+\
-                        AllModels(i_grp)(ind_line).values[1:]
-                        
+        #identifying the model name to call it properly later
+        if ':' not in model_lines[0].split('<1>')[0]:
+            model_name=''
         else:
-            #restricting to lines with variation
-            var_lines=[line for line in model_lines if '+/-' in line]
+            model_name=model_lines[0].split(':')[0].split('Model ')[1]
             
-            #replacing each parameter's value by parameter number, replacing the value array and changing the first element
+        #splitting the lines for each group, by first identifying the starts
+        if AllData.nGroups>1:
+            
+            #### THIS HASNT BEEN TESTED YET
+            breakpoint()
+            
+            grp_lines_ids=np.argwhere([np.array(model_lines)==elem for elem in model_lines if 'Data group' in elem]).T[1]
+        else:
+            grp_lines_ids=[0]
+        
+        grp_lines_split=[]
+
+        if AllData.nGroups==1:
+            #single data group doesn't require splitting, but we make sure to get the first line correctly to compute the npars
+            start_line=np.argwhere([np.array(model_lines)==' par  comp\n'])[0][0]
+            grp_lines_split+=[model_lines[start_line+1:]]
+        else:
+            for id_line_id,line_id in enumerate(grp_lines_ids):
+                
+                #the last datagroup ends at the last line
+                if id_line_id==len(grp_lines_ids)-1:
+                    grp_lines_split+=[model_lines[line_id:]]
+                else:
+                    #otherwise we take between the current and next datagroup line
+                    grp_lines_split+=[model_lines[line_id:grp_lines_ids[id_line_id+1]]]
+        
+        #computing the number of parameters for this model
+        test_len_lines=grp_lines_split[0]
+        if '__________________________________' in test_len_lines[-1]:
+            test_len_lines=test_len_lines[:-1]
+        if 'Data group' in test_len_lines[0]:
+            test_len_lines=test_len_lines[1:]
+            
+        npars=len(test_len_lines)
+        
+        #loading each data group
+        for group_lines in grp_lines_split:
+            
+            #fetching the group number
+            if AllData.nGroups==1:
+                i_grp=1
+            else:
+                i_grp=int(group_lines[0].split('Data group: ')[1].replace('\n',''))
+                
+            #fetching the lines with variations
+            var_lines=[line for line in group_lines if '+/-' in line]
+            
             for line in var_lines:
-                AllModels(1)(int(line.split()[0])).values=[float(line.split()[-3])]+AllModels(1)(int(line.split()[0])).values[1:]
+                i_par=int(line.split()[0])%npars if int(line.split()[0])%npars!=0 else npars
+                
+                #note: there can be problems with paramater with very precise bounds from custom models,
+                #so we adapt these bounds if necessary
+                
+                par_values=[AllModels(i_grp,modName=model_name)(i_par).values]
+                
+                if float(line.split()[-3])<par_values[2]:
+                    par_values[2]=float(line.split()[-3])
+                if float(line.split()[-3])>par_values[5]:
+                    par_values[5]=float(line.split()[-3])
+                    
+                AllModels(i_grp,modName=model_name)(i_par).values=[float(line.split()[-3])]+par_values[1:]
+                
                 #freezing lines frozen during the fitting operation if the option is selected
                 if freeze_pegged and line.endswith('+/-  -1.00000     \n'):
-                    AllModels(1)(int(line.split()[0])).frozen=True
-                        
-            
+                    AllModels(i_grp,modName=model_name)(i_par).frozen=True
+                    
             #also replacing frozen values if it is asked
             if replace_frozen:
-                frozen_lines=[line for line in model_lines if line.endswith('frozen\n')]
+                frozen_lines=[line for line in group_lines if line.endswith('frozen\n')]
                 for line in frozen_lines:
-                    AllModels(1)(int(line.split()[0])).values=[float(line.split()[-2])]+AllModels(1)(int(line.split()[0])).values[1:]
-            
-
+                    i_par=int(line.split()[0])%npars if int(line.split()[0])%npars!=0 else npars
+                    AllModels(i_grp,modName=model_name)(i_par).values=float(line.split()[-2])
                         
-    else:
-        
-        if goal=='lastmodel':
-            print('\nCould not find the end of the model. Stopping model load.')
-            return 0
     
-
     if goal=='lasterrors':
         if freeze_pegged:
             return par_peg_grp
         else:
             return error_pars
+        
     else:
         return 1
 
@@ -3943,10 +4006,10 @@ class plot_save:
                     
             #adding NICER background component Names
             if 'nxb' in list_models:
-                self.addcompnames+=AllModels(1,'nxb').componentNames
+                self.addcompnames+=AllModels(1,'sky').componentNames
                 
             if 'sky' in list_models:
-                self.addcompnames+=AllModels(1,'sky').componentNames
+                self.addcompnames+=AllModels(1,'nxb').componentNames
         else:
             self.addcomps=None
             self.addcompnames=[]

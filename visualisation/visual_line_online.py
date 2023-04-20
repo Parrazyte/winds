@@ -1885,9 +1885,9 @@ with tab_about:
         The subgroup we are focusing on here is restricted to **Black Holes** orbiting with a "low mass" star (generally in the main sequence), for which accretion happens through Robe Loche overflow and an **accretion disk**. 
         Most of these sources have a very specific behavior: they spend the bigger part of their lifes undetected, at low luminosity (in "quiescence"), 
         but undergo regular **outbursts** on the timescale of a few months.
-        During these outbursts, the sources brightens by several orders of magnitudes, up to a significant percentage of their Eddington luminosity $L_{Edd}$, which is the "theoretical" upper limit of standard accreting regimes.  
+        During these outbursts, sources brighten by several orders of magnitude, up to a significant percentage of their Eddington luminosity $L_{Edd}$, which is the "theoretical" upper limit of standard accreting regimes.  
         
-        The source also goes to a specific pattern of spectral evolution, switching from a powerlaw dominated Spectral Energy Distribution (SED) in soft X-rays (the so-called **"hard"** state) during the initial brightening, to the **"soft"** state, similarly bright but dominated by the thermal emission of the accretion disk (most likely extending to the Innermost Stable Circular Orbit of the Black Hole). After some time spent during the soft state (and occasional back and forth in some instances), the source invariably becomes fainter, transits back to the hard state if necessary, then returns to quiescence.
+        Meanwhile, these objects follow a specific pattern of spectral evolution, switching from a powerlaw dominated Spectral Energy Distribution (SED) in soft X-rays (the so-called **"hard"** state) during the initial brightening, to the **"soft"** state, similarly bright but dominated by the thermal emission of the accretion disk (most likely extending to the Innermost Stable Circular Orbit of the Black Hole). After some time spent during the soft state (and occasional back and forth in some instances), the source invariably becomes fainter, transits back to the hard state if necessary, then returns to quiescence.
         ''')
         
         col_fig1, col_fig2= st.columns(2)
@@ -2336,6 +2336,8 @@ with tab_monitoring:
                 if fig_hr_monit is not None:
                     st.pyplot(fig_hr_monit)
     
+    if not plot_lc_monit and not plot_hr_monit:
+        st.info('In single source mode, select a monitoring option in the sidebar to plot lightcurves and HR evolutions of the selected object')
     
     if ((plot_lc_monit and fig_lc_monit is None) or (plot_hr_monit and fig_hr_monit is None)) and display_single:
         st.warning('No match in MAXI/RXTE source list found.')
@@ -2734,3 +2736,7 @@ if display_scat_hid:
 
 if display_scat_inclin:
     streamlit_scat('source')
+    
+if not (display_scat_intr or display_scat_eqwcomp or display_scat_hid or display_scat_inclin):
+    with tab_param:
+        st.info('Select parameters to compare or enable distributions to generate plots')

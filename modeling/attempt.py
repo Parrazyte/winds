@@ -24,24 +24,28 @@ test_list=[3.836508e-01,  1.278251e+00, 2.100000e+01,  1.369094e+00,  4.065250e-
 
 os.chdir('/home/parrama/Documents/Work/PhD/Scripts/Python/modeling/test_xstar')
 
-dict_sol['func_zbyr']=test_list[0]
-dict_sol['func_rcyl_by_ro']=test_list[1]
-dict_sol['func_angle']=test_list[2]
+dict_sol['z_A']=test_list[0]
+dict_sol['r_A']=test_list[1]
+dict_sol['angle']=test_list[2]
 dict_sol['func_Rsph_by_ro']=test_list[3]
-dict_sol['func_density_MHD']=test_list[4]
-dict_sol['func_vel_r']=test_list[5]
-dict_sol['func_vel_phi']=test_list[6]
-dict_sol['func_vel_z']=test_list[7]
+
+dict_sol['rho_mhd']=test_list[4]
+
+dict_sol['vel_r']=test_list[5]
+dict_sol['vel_phi']=test_list[6]
+dict_sol['vel_z']=test_list[7]
+
 dict_sol['func_B_r']=test_list[8]
 dict_sol['func_B_phi']=test_list[9]
 dict_sol['func_B_z']=test_list[10]
+
 dict_sol['func_Tdyn']=test_list[11]
 dict_sol['func_Tmhd']=test_list[12]
 
-stop_d=5e5
+stop_d=1e6
 
 SED=os.path.join('incident_xstar_HS.dat')
 
 SED=os.path.join('test_xstar.dat')
 
-xstar_wind(dict_sol,p,mdot, stop_d, SED, 3,outdir='test500',v_resol=250,chatter=1)
+xstar_wind(dict_sol,p,mdot, stop_d, SED, 3,outdir='test_xrism',v_resol=87.5,chatter=1)

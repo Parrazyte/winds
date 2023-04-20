@@ -2485,10 +2485,10 @@ def line_detect(epoch_id):
         
         #taking off potential background components
         
-        if 'nxb' in AllModels.sources:
+        if 'nxb' in list(AllModels.sources.values()):
             plot_autofit_lines=plot_autofit_lines[:-2]
             
-        if 'sky' in AllModels.sources:
+        if 'sky' in list(AllModels.sources.values()):
             plot_autofit_lines=plot_autofit_lines[:-2]
             
         '''

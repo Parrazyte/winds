@@ -46,7 +46,7 @@ with st.sidebar:
         dv_v=val_resol*1e-3/ang2kev(val_ener)
     
     else:
-        de=st.number_input(r'microcalorimeter resolution $\delta E$ (meV)',value=6,format='%.3e')
+        de=st.number_input(r'microcalorimeter resolution $\delta E$ (eV)',value=6,format='%.3e')
         
         dv_v=de*1e-3/val_ener
     
@@ -375,7 +375,7 @@ with tab_sampling:
         
         nh_thresh=-np.log(1/1.105)/sigma_thomson_cgs
         
-        plt.suptitle(r'Evolution of the column density at $R_{start} '+'\n'+r'nh$_{\Delta log(\xi)=0.1}=%.2e'%nh_thresh+'$')
+        plt.suptitle(r'Evolution of the column density at $R_{start}$'+'\n'+r'nh$_{\Delta log(\xi)=0.1}=%.2e'%nh_thresh+'$')
         
         plt.xlabel(r'start of the wind (Rg)')
         plt.ylabel(r'$nh$ (cgs)')

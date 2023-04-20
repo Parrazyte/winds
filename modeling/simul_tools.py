@@ -33,11 +33,14 @@ eV2erg = 1.6e-12
 erg2eV = 1.0/eV2erg
 Ryd2eV = 13.5864
 
-def xstar_wind(dict_solution,p_mhd,mdot_obs,stop_d_input, SED_path, xlum,outdir="xsol",nbox_restart=1,h_over_r=0.1, ro_init=1e3,rad_res=0.115, v_resol=100, m_BH=8,chatter=0):
+def xstar_wind(dict_solution,p_mhd,mdot_obs,stop_d_input, SED_path, xlum,outdir="xsol",nbox_restart=1,h_over_r=0.1, ro_init=0.05,dr_r=0.115, v_resol=85.7, m_BH=8,chatter=0):
     
     
     '''
     Python wrapper for the xstar computation of a single solution
+    
+    The box size is computed dynamically to "satisfy" two criteria, a maximal dr/r and a velocity resolution
+    The velocity resolution should always be taken with a reasonable oversampling factor (at least 1/3) compared to the instrumental resolution
     
     Required parameters:
         p_mhd and mdot_obs are the main parameters outside of the JED-SAD solution
@@ -63,23 +66,22 @@ def xstar_wind(dict_solution,p_mhd,mdot_obs,stop_d_input, SED_path, xlum,outdir=
         
         ro_init gives the initial value of ro_by_rg
         
-        rad_res is the radial revolution
-        ####weird use, should be converted to a variable which is used in a more straightforward manner
-        ####+ why is there a distance jump between the boxes, are they not directly adjacent? 
+        dr_r is the standard radial shift between to boxes, provided it doesn't give a turbulent velocity higher than v_resol
     
-        vsol gives the desired radial resolution desired, converted into a number of continuum bins used for the computation
+        v_resol gives the desired spectral resolution desired AND a threshold of turbulent velocity for the box size
+                        (the spectral resolution is converted into a number of continuum bins used for writing the xstar spectra)
              the computing time inversely scales with vsol
              
-             100km/s gives 38678 bins
-        
+             85.7 gives 45154 bins and corresponds to a microcalorimeter at a deltaE of 6eV (XRISM's resolution) with an oversampling of 3
+                                                                                             
         chatter gives out the number of infos displayed during the computation
     
-    
-    
+
     Notes on the python conversion:
         -since array numbers starts at 0, we use "index" box numbers (starting at 0) and adapt all of the consequences,
         but still print the correct box number (+1)
 
+    
     ####SHOULD BE UPDATED TO ADD THE JED SAD N(R) DEPENDANCY
     
     ####SHOULD BE UPDATED TO CONSIDER THE LOGXI DEPENDANCY WHEN L CHANGES
@@ -343,7 +345,7 @@ def xstar_wind(dict_solution,p_mhd,mdot_obs,stop_d_input, SED_path, xlum,outdir=
     # ! From formula (rg/2.0*r_in), Equation (12) of Chakravorty et al. 2016. Here r_in is 6.0*r_g. eta_rad is assumed to be 1.0.
     eta_s = (1.0/12.0)
     
-    mdot_Mhd = mdot_obs/eta_s
+    mdot_mhd = mdot_obs/eta_s
     
     #!* This value is used to match Keigo's normalization
     #!mdot_norm=4.7130834*2.48e15 
@@ -357,14 +359,23 @@ def xstar_wind(dict_solution,p_mhd,mdot_obs,stop_d_input, SED_path, xlum,outdir=
 
 
     #Self-similar functions f1-f10
-    func_zbyr=dict_solution['func_zbyr']
-    func_rcyl_by_ro=dict_solution['func_rcyl_by_ro']
-    func_angle=dict_solution['func_angle']
+    z_A=dict_solution['z_A']
+    r_A=dict_solution['r_A']
+    
+    #line of sight angle (0 is edge on)
+    angle=dict_solution['angle']
+    
+    
     func_Rsph_by_ro=dict_solution['func_Rsph_by_ro']
-    func_density_MHD=dict_solution['func_density_MHD']
-    func_vel_r=dict_solution['func_vel_r']
-    func_vel_phi=dict_solution['func_vel_phi']
-    func_vel_z=dict_solution['func_vel_z']
+    
+    #mhd density
+    rho_mhd=dict_solution['rho_mhd']
+    
+    #radial, phi and z axis velocity at the alfven point
+    vel_r=dict_solution['vel_r']
+    vel_phi=dict_solution['vel_phi']
+    vel_z=dict_solution['vel_z']
+    
     func_B_r=dict_solution['func_B_r']
     func_B_phi=dict_solution['func_B_phi']
     func_B_z=dict_solution['func_B_z']
@@ -396,14 +407,14 @@ def xstar_wind(dict_solution,p_mhd,mdot_obs,stop_d_input, SED_path, xlum,outdir=
     # !* Reading functions of self-similar solutions
         
     if chatter>=5:
-        print('func_zbyr=',func_zbyr)
-        print('func_rcyl_by_ro=',func_rcyl_by_ro)
-        print('func_angle=',func_angle)
+        print('z_A=',z_A)
+        print('r_A=',r_A)
+        print('angle=',angle)
         print('func_Rsph_by_ro=',func_Rsph_by_ro)
-        print('func_density_MHD=',func_density_MHD)
-        print('func_vel_r=',func_vel_r)
-        print('func_vel_phi=',func_vel_phi)
-        print('func_vel_z=',func_vel_z)
+        print('rho_mhd=',rho_mhd)
+        print('vel_r=',vel_r)
+        print('vel_phi=',vel_phi)
+        print('vel_z=',vel_z)
         print('func_B_r=',func_B_r)
         print('func_B_phi=',func_B_phi)
         print('func_B_z=',func_B_z)
@@ -451,16 +462,16 @@ def xstar_wind(dict_solution,p_mhd,mdot_obs,stop_d_input, SED_path, xlum,outdir=
     while ro_by_Rg <= 1.1e7 :
         
         #!* distance from black hole in cylindrical co-ordinates-the radial distance
-        rcyl_SI = ro_by_Rg*Rg_SI*func_rcyl_by_ro  
+        rcyl_SI = ro_by_Rg*Rg_SI*r_A  
         
         #!* distance from black hole in spherical co-ordinates
-        Rsph_SI = rcyl_SI*(1.0+(func_zbyr*func_zbyr))**(1/2)  
+        Rsph_SI = rcyl_SI*(1.0+(z_A*z_A))**(1/2)  
         
-        density_cgs = (mdot_Mhd/(sigma_thomson_cgs*Rg_cgs))*func_density_MHD*((rcyl_SI/Rg_SI)**(p_mhd-1.5))
+        density_cgs = (mdot_mhd/(sigma_thomson_cgs*Rg_cgs))*rho_mhd*((rcyl_SI/Rg_SI)**(p_mhd-1.5))
 
-        vel_r_cgs = c_cgs*func_vel_r*((rcyl_SI/Rg_SI)**(-0.5)) 
-        vel_z_cgs = c_cgs*func_vel_z*((rcyl_SI/Rg_SI)**(-0.5))
-        vel_obs_cgs = ((vel_r_cgs*np.cos(func_angle*np.pi/180.0))+(vel_z_cgs*np.sin(func_angle*np.pi/180.0)))
+        vel_r_cgs = c_cgs*vel_r*((rcyl_SI/Rg_SI)**(-0.5)) 
+        vel_z_cgs = c_cgs*vel_z*((rcyl_SI/Rg_SI)**(-0.5))
+        vel_obs_cgs = ((vel_r_cgs*np.cos(angle*np.pi/180.0))+(vel_z_cgs*np.sin(angle*np.pi/180.0)))
 
         logxi = np.log10(L_xi_Source/(density_cgs*m2cm*Rsph_SI*m2cm*Rsph_SI))
         
@@ -474,8 +485,6 @@ def xstar_wind(dict_solution,p_mhd,mdot_obs,stop_d_input, SED_path, xlum,outdir=
             #! A distance command : Step increase in the anchoring radius of the magnetic streamline
             ro_by_Rg = ro_by_Rg*DelFactorRo 
 
-    breakpoint()
-    
     #!* After getting the starting value of ro_by_Rg from the above 'while' loop, fixing the values for 1st box.
     Rsph_cgs_1st = Rsph_SI*m2cm
     vobs_1st = vel_obs_cgs/(Km2m*m2cm)
@@ -492,14 +501,14 @@ def xstar_wind(dict_solution,p_mhd,mdot_obs,stop_d_input, SED_path, xlum,outdir=
         # ! This is ro/Rg.. Position of streamline
         ro_by_Rg = stop_d[i] 
         
-        rcyl_SI = ro_by_Rg*Rg_SI*func_rcyl_by_ro
-        Rsph_SI = rcyl_SI*np.sqrt(1.0+(func_zbyr*func_zbyr))
+        rcyl_SI = ro_by_Rg*Rg_SI*r_A
+        Rsph_SI = rcyl_SI*np.sqrt(1.0+(z_A*z_A))
         
-        density_cgs = (mdot_Mhd/(sigma_thomson_cgs*Rg_cgs))*func_density_MHD*((rcyl_SI/Rg_SI)**(p_mhd-1.5))
+        density_cgs = (mdot_mhd/(sigma_thomson_cgs*Rg_cgs))*rho_mhd*((rcyl_SI/Rg_SI)**(p_mhd-1.5))
         
-        vel_r_cgs = c_cgs*func_vel_r*((rcyl_SI/Rg_SI)**(-0.5)) 
-        vel_z_cgs = c_cgs*func_vel_z*((rcyl_SI/Rg_SI)**(-0.5))
-        vel_obs_cgs = ((vel_r_cgs*np.cos(func_angle*np.pi/180.0))+(vel_z_cgs*np.sin(func_angle*np.pi/180.0)))
+        vel_r_cgs = c_cgs*vel_r*((rcyl_SI/Rg_SI)**(-0.5)) 
+        vel_z_cgs = c_cgs*vel_z*((rcyl_SI/Rg_SI)**(-0.5))
+        vel_obs_cgs = ((vel_r_cgs*np.cos(angle*np.pi/180.0))+(vel_z_cgs*np.sin(angle*np.pi/180.0)))
         
         logxi = np.log10(L_xi_Source/(density_cgs*m2cm*Rsph_SI*m2cm*Rsph_SI))
         
@@ -513,82 +522,93 @@ def xstar_wind(dict_solution,p_mhd,mdot_obs,stop_d_input, SED_path, xlum,outdir=
 
 
     #!* Building the boxes based on Delr
-    delr_by_r= rad_res
+    delr_by_r= dr_r
     Rsph_cgs_end= Rsph_cgs_1st
     i_box = 0
     i_last_box=0
     
     #### This is very ugly and should be changed to the proper number of boxes, computed before this loop
-    vobs_start,robyRg_start,Rsph_cgs_start,density_cgs_start,logxi_start=np.zeros((5,1000))
-    vobs_mid,robyRg_mid,Rsph_cgs_mid,density_cgs_mid,logxi_mid=np.zeros((5,1000))
-    vobs_stop,robyRg_stop,Rsph_cgs_stop,density_cgs_stop,logxi_stop,NhOfBox=np.zeros((6,1000))
+    vobs_start,robyRg_start,Rsph_cgs_start,density_cgs_start,logxi_start=np.zeros((5,int(1e5)))
+    vobs_mid,robyRg_mid,Rsph_cgs_mid,density_cgs_mid,logxi_mid=np.zeros((5,int(1e5)))
+    vobs_stop,robyRg_stop,Rsph_cgs_stop,density_cgs_stop,logxi_stop,NhOfBox=np.zeros((6,int(1e5)))
+    logxi_input=np.zeros(int(1e5))
     
+        
+    def func_density(x):
+        return (mdot_mhd/(sigma_thomson_cgs*Rg_cgs))*rho_mhd*(x**(p_mhd-1.5))
+    
+    def func_logxi(x):
+        return np.log10(L_xi_Source/(func_density(x)*(x*Rg_cgs)**2))  
+    
+    def func_vel_obs(x):
+        return (c_cgs*vel_r*((x)**(-0.5))*np.cos(angle*np.pi/180.0))+(c_cgs*vel_z*((x)**(-0.5))*np.sin(angle*np.pi/180.0))
+        
+    def func_nh_int(x,x0=300):
+        return (mdot_mhd/(sigma_thomson_cgs*Rg_cgs))*rho_mhd/(p_mhd-0.5)*(x**(p_mhd-0.5)-x0**(p_mhd-0.5))*Rg_cgs
+
+    #defining the constant to get back to cylindric radius computations in which are made all of the MHD value computations
+    cyl_cst=(np.sqrt(1.0+(z_A*z_A)))
+    
+    #defining a specific fonction which inverts the dr computation
+    def func_max_dr(x_start,vmax):
+        
+        '''
+        computes the maximal dr for a given radius and velocity which would end up with bulk velocity (hence why we use only vel_r and vel_z)
+        delta of vmax
+        
+        note: vmax should be in cgs, x_start in R_g
+        '''
+                      
+        rad_angle=angle*np.pi/180
+        
+        x_end=1/((x_start)**(-1/2)-vmax/(c_cgs*(vel_r*np.cos(rad_angle)+vel_z*np.sin(rad_angle))))**2
+        
+        return x_end/x_start
+               
+    nbox_rad=0
+    nbox_v=0
+
     while Rsph_cgs_end<Rsph_cgs_last[len(stop_d)-1]:
-
-        Rsph_cgs_stop[i_box]= Rsph_cgs_end*((2.0+delr_by_r)/(2.0-delr_by_r))
-
-        if Rsph_cgs_last[i_last_box]<Rsph_cgs_stop[i_box]:
-            delr_by_r = 2.0*(Rsph_cgs_last[i_last_box]-Rsph_cgs_stop[i_box-1])/(Rsph_cgs_last[i_last_box]+Rsph_cgs_stop[i_box-1])
-            ####SHOULD BE CHECKED FOR SEVERAL LAST BOXES
+    
+        #computing the dr/r of the velocity threshold used. We now use end_box-start_box instead of the midpoint of different boxes
+        max_dr_res=func_max_dr(Rsph_cgs_end/(Rg_cgs*cyl_cst),v_resol*1e5)
+        
+        #and ensuring we're sampling well enough
+        dr_factor=min((2.0+delr_by_r)/(2.0-delr_by_r),max_dr_res)
+    
+        #last box flag
+        if Rsph_cgs_last<Rsph_cgs_stop[i_box-1]*dr_factor:
+            dr_factor= Rsph_cgs_last/Rsph_cgs_end
+        
+        if dr_factor==(2.0+delr_by_r)/(2.0-delr_by_r):
+            nbox_rad+=1
+        elif dr_factor==max_dr_res:
+            nbox_v+=1
             
         Rsph_cgs_start[i_box]= Rsph_cgs_end
-        Rsph_SI= Rsph_cgs_start[i_box]/m2cm
-        rcyl_SI = Rsph_SI/(np.sqrt(1.0+(func_zbyr*func_zbyr)))
-        robyRg_start[i_box] = rcyl_SI/(Rg_SI*func_rcyl_by_ro)
-        
-        density_cgs_start[i_box] = (mdot_Mhd/(sigma_thomson_cgs*Rg_cgs))*func_density_MHD*((rcyl_SI/Rg_SI)**(p_mhd-1.5))
-        
-        vel_r_cgs = c_cgs*func_vel_r*((rcyl_SI/Rg_SI)**(-0.5)) 
-        vel_z_cgs = c_cgs*func_vel_z*((rcyl_SI/Rg_SI)**(-0.5))
-        
-        #this should be updated to switch to delta v over v (and then we get r_cyl)
-        vel_obs_cgs = ((vel_r_cgs*np.cos(func_angle*np.pi/180.0))+(vel_z_cgs*np.sin(func_angle*np.pi/180.0)))
-        
-        vobs_start[i_box] = vel_obs_cgs/(Km2m*m2cm)
-        
-        logxi_start[i_box] = np.log10(L_xi_Source/(density_cgs_start[i_box]*m2cm*Rsph_SI*m2cm*Rsph_SI))
+        density_cgs_start[i_box] = func_density(Rsph_cgs_start[i_box]/(Rg_cgs*cyl_cst))
+        logxi_start[i_box] = func_logxi(Rsph_cgs_start[i_box]/(Rg_cgs*cyl_cst))
+        vobs_start[i_box]=func_vel_obs(Rsph_cgs_start[i_box]/(Rg_cgs*cyl_cst))/(Km2m*m2cm)
+        robyRg_start[i_box] =Rsph_cgs_start[i_box]/(cyl_cst*Rg_cgs*r_A)
+    
+        Rsph_cgs_stop[i_box]= Rsph_cgs_end*dr_factor
+        density_cgs_stop[i_box] = func_density(Rsph_cgs_stop[i_box]/(Rg_cgs*cyl_cst))
+        logxi_stop[i_box] = func_logxi(Rsph_cgs_stop[i_box]/(Rg_cgs*cyl_cst))
+        vobs_stop[i_box]=func_vel_obs(Rsph_cgs_stop[i_box]/(Rg_cgs*cyl_cst))/(Km2m*m2cm)
+        robyRg_stop[i_box] = Rsph_cgs_stop[i_box]/(cyl_cst*Rg_cgs*r_A)
+         
+        Rsph_cgs_mid[i_box]= (Rsph_cgs_start[i_box]+Rsph_cgs_stop[i_box])/2.0
+        density_cgs_mid[i_box] = func_density(Rsph_cgs_mid[i_box]/(Rg_cgs*cyl_cst))
+        logxi_mid[i_box] = func_logxi(Rsph_cgs_mid[i_box]/(Rg_cgs*cyl_cst))
+        vobs_mid[i_box]=func_vel_obs(Rsph_cgs_mid[i_box]/(Rg_cgs*cyl_cst))/(Km2m*m2cm)
+        robyRg_mid[i_box] = Rsph_cgs_mid[i_box]/(cyl_cst*Rg_cgs*r_A)
         
         #!* Recording quantities for the end point of the box*/
         
-        Rsph_cgs_stop[i_box]= Rsph_cgs_start[i_box]*((2.0+delr_by_r)/(2.0-delr_by_r))
-        
-        #!*The above expression comes from R(i+1)-R[i]=(delr_by_r)*((R[i]+R(i+1))/2.0) 
-        
-        Rsph_SI= (Rsph_cgs_stop[i_box]/m2cm)
-        rcyl_SI = Rsph_SI/np.sqrt(1.0+(func_zbyr*func_zbyr))
-        
-        robyRg_stop[i_box] = rcyl_SI/(Rg_SI*func_rcyl_by_ro)
-        
-        density_cgs_stop[i_box] = (mdot_Mhd/(sigma_thomson_cgs*Rg_cgs))*func_density_MHD*((rcyl_SI/Rg_SI)**(p_mhd-1.5))
-        
-        vel_r_cgs = c_cgs*func_vel_r*((rcyl_SI/Rg_SI)**(-0.5)) 
-        vel_z_cgs = c_cgs*func_vel_z*((rcyl_SI/Rg_SI)**(-0.5))
-        vel_obs_cgs = ((vel_r_cgs*np.cos(func_angle*np.pi/180.0))+(vel_z_cgs*np.sin(func_angle*np.pi/180.0)))
-        
-        vobs_stop[i_box] = vel_obs_cgs/(Km2m*m2cm)
-        
-        logxi_stop[i_box] = np.log10(L_xi_Source/(density_cgs_stop[i_box]*Rsph_cgs_stop[i_box]*Rsph_cgs_stop[i_box]))
-        
-        #!* Recording quantities for the mid point of the box
-        
-        Rsph_cgs_mid[i_box]= (Rsph_cgs_start[i_box]+Rsph_cgs_stop[i_box])/2.0
-        
-        Rsph_SI= (Rsph_cgs_mid[i_box]/m2cm)
-        rcyl_SI = Rsph_SI/np.sqrt(1.0+(func_zbyr*func_zbyr))
-        
-        robyRg_mid[i_box] = rcyl_SI/(Rg_SI*func_rcyl_by_ro)
-        
-        density_cgs_mid[i_box] = (mdot_Mhd/(sigma_thomson_cgs*Rg_cgs))*func_density_MHD*((rcyl_SI/Rg_SI)**(p_mhd-1.5))
-        
-        vel_r_cgs = c_cgs*func_vel_r*((rcyl_SI/Rg_SI)**(-0.5)) 
-        vel_z_cgs = c_cgs*func_vel_z*((rcyl_SI/Rg_SI)**(-0.5))
-        vel_obs_cgs = ((vel_r_cgs*np.cos(func_angle*np.pi/180.0))+(vel_z_cgs*np.sin(func_angle*np.pi/180.0)))
-        
-        vobs_mid[i_box] = vel_obs_cgs/(Km2m*m2cm)
-        
-        logxi_mid[i_box] = np.log10(L_xi_Source/(density_cgs_mid[i_box]*Rsph_cgs_mid[i_box]*Rsph_cgs_mid[i_box]))
-        
+        #this one is computed as this because this is only used as a starting value for Xstar's logxi computation, BUT also to retrieve the radius.
+        #Thus using R_start allows the box to correctly retrieve Rstart.
         logxi_input[i_box] = np.log10(L_xi_Source/(density_cgs_mid[i_box]*Rsph_cgs_start[i_box]*Rsph_cgs_start[i_box]))
+        
         #!* Calculate Nh for the box
         
         NhOfBox[i_box] = density_cgs_mid[i_box]*(Rsph_cgs_stop[i_box]-Rsph_cgs_start[i_box])
@@ -596,7 +616,7 @@ def xstar_wind(dict_solution,p_mhd,mdot_obs,stop_d_input, SED_path, xlum,outdir=
         #!* Print the quantities in the log checking
         
         #! This step is for storing data for the last box
-        if delr_by_r!=rad_res: 
+        if delr_by_r!=dr_r: 
             
             #adding a +1 here to switch from an i_box to the actual box number
             nbox_stop[i] = i_box+1-1
@@ -631,7 +651,7 @@ def xstar_wind(dict_solution,p_mhd,mdot_obs,stop_d_input, SED_path, xlum,outdir=
         # !* It is wrong because luminosity is calculated wrongly by multiplying 4.0*Pi 
         # !* This loop is to prepare the ASCII file which will be input of xstar
         
-        if (delr_by_r==rad_res):
+        if (delr_by_r==dr_r):
             #!* calculated suitably fron density_mid and Rsph_start
             #!* logxi_mid is changed to logxi_input
             fileobj_box_ascii_xstar.write(str(np.log10(density_cgs_mid[i_box]))+'\t'+str(np.log10(NhOfBox[i_box]))+'\t'
@@ -644,7 +664,7 @@ def xstar_wind(dict_solution,p_mhd,mdot_obs,stop_d_input, SED_path, xlum,outdir=
         
         #!* This loop is to prepare the ASCII file where xi value is the actual physical value
         
-        if delr_by_r==rad_res:
+        if delr_by_r==dr_r:
             fileobj_box_ascii_stop_dis.write(str(Rsph_cgs_mid[i_box])+'\t'+str(np.log10(density_cgs_mid[i_box]))+'\t'+str(np.log10(NhOfBox[i_box]))+'\t'+str(logxi_mid[i_box])+'\t'+str(vobs_mid[i_box])+'\n')
         else:
             fileobj_box_ascii_last.write(str(Rsph_cgs_mid[i_box])+'\t'+str(np.log10(density_cgs_mid[i_box]))+'\t'+str(np.log10(NhOfBox[i_box]))+'\t'+str(logxi_mid[i_box])+'\t'+str(vobs_mid[i_box])+'\n')
@@ -656,13 +676,12 @@ def xstar_wind(dict_solution,p_mhd,mdot_obs,stop_d_input, SED_path, xlum,outdir=
         
         #!* Readjust the loop parameters
         
-        if delr_by_r!=rad_res and i_last_box!=len(stop_d)-1:
-            print('I am after delr is changed'+str(delr_by_r))
-            
+        if delr_by_r!=dr_r and i_last_box!=len(stop_d)-1:
+
             #!* maintaining the regular box no.
             i_box= i_box-1 
             i_last_box= i_last_box+1
-            delr_by_r = rad_res
+            delr_by_r = dr_r
         
         Rsph_cgs_end = Rsph_cgs_stop[i_box]
         
@@ -686,7 +705,6 @@ def xstar_wind(dict_solution,p_mhd,mdot_obs,stop_d_input, SED_path, xlum,outdir=
     logxi_stop=logxi_stop[:i_box]
     NhOfBox=NhOfBox[:i_box]
 
-    #!*write(*,*)Rsph_cgs_end-Rsph_cgs_last(stop_d_index)
     
     nbox_index = nbox_stop[len(stop_d)-1]
 

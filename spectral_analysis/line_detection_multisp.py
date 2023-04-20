@@ -591,6 +591,8 @@ if sat in ['XMM','NICER','Suzaku','Swift']:
     
     if sat=='Suzaku':
         e_sat_low=1.5
+    elif sat=='NICER':
+        e_sat_low=2.5
     else:
         e_sat_low=0.3
     if sat in ['XMM','Suzaku','Swift']:
@@ -600,7 +602,7 @@ if sat in ['XMM','NICER','Suzaku','Swift']:
         e_sat_high_init=10.
     else:
         if sat=='NICER':
-            e_sat_high_init=15.
+            e_sat_high_init=10.
         else:
             e_sat_high_init=10.
         
@@ -1455,7 +1457,8 @@ def line_detect(epoch_id):
             nicer_bkgspect=1
             
             #loading the background and storing the bg python path in xscorpeon
-            xscorpeon.load(epoch_files[0].replace('_sp_grp_opt.pha','_bg.py'))
+            xscorpeon.load(epoch_files[0].replace('_sp_grp_opt.pha','_bg.py'),frozen=True)
+            
             
     elif sat=='Suzaku':
         
@@ -1560,7 +1563,7 @@ def line_detect(epoch_id):
         '''
         
         AllModels.clear()
-        xscorpeon.load()
+        xscorpeon.load(scorpeon_save=data_broad.scorpeon,frozen=True)
         
         print('\nComputing line continuum fit...')
         AllData.notice('all')
@@ -1595,7 +1598,7 @@ def line_detect(epoch_id):
         #     chi2_cont=0
         
         # AllModels.clear()
-        # xscorpeon.load()
+        # xscorpeon.load(scorpeon_save=data_broad.scorpeon,frozen=True)
         #not used currently        
         # #with the broken powerlaw continuum
         # fitcont_high_bkn=fitmod(comp_cont_bkn,curr_logfile)
@@ -1819,6 +1822,12 @@ def line_detect(epoch_id):
         #fitting
         fitcont_broad.global_fit(split_fit=split_fit)
         
+        #unfreezing the scorpeon model by resetting it
+        xscorpeon.load()
+        
+        #refitting
+        fitcont_broad.global_fit(split_fit=False)
+        
         mod_fitcont=allmodel_data()
         
         chi2_cont=Fit.statistic
@@ -1863,9 +1872,14 @@ def line_detect(epoch_id):
         #storing the class
         fitcont_broad.dump(outdir+'/'+epoch_observ[0]+'_fitmod_broadband.pkl')
         
+        #saving the model
+        data_broad=allmodel_data()
         print('\nComputing HID broad fit...')
         AllModels.clear()
-        xscorpeon.load()
+        
+        #reloading the scorpeon save from the broad fit and freezing it to avoid further variations
+        xscorpeon.load(scorpeon_save=data_broad.scorpeon,frozen=True)
+        
         AllData.notice('all')
         AllData.ignore('**-'+str(hid_cont_range[0])+' '+str(hid_cont_range[1])+'-**')
         AllData.ignore('bad')
@@ -1917,18 +1931,18 @@ def line_detect(epoch_id):
         
         spflux_single=hid_fit_infos(fitcont_hid,broad_absval)
         
-        return spflux_single,broad_absval
+        return spflux_single,broad_absval,data_broad
 
     
     AllModels.clear()
-    xscorpeon.load()
+    xscorpeon.load(frozen=True)
     
     result_broad_fit=broad_fit()
     
     if len(result_broad_fit)==1:
         return fill_result(result_broad_fit)
     else:
-        main_spflux,broad_absval=result_broad_fit
+        main_spflux,broad_absval,data_broad=result_broad_fit
     
     result_high_fit=high_fit(broad_absval)
     
@@ -1972,7 +1986,7 @@ def line_detect(epoch_id):
 
         #reseting the model 
         AllModels.clear()
-        xscorpeon.load()
+        xscorpeon.load(scorpeon_save=data_broad.scorpeon,frozen=True)
         
         #reloading the broad band model
         data_cont.load()
@@ -2224,13 +2238,13 @@ def line_detect(epoch_id):
                     'plot_ratio_values':plot_ratio_values,
             }
         
-        color_title=r'color plot of the $\chi^2$ evolution for observ '+epoch_observ[0]+\
+        color_title=r'color plot of the $C-stat$ evolution for observ '+epoch_observ[0]+\
                     '\n with line par '+args.line_search_e+' and norm par'+args.line_search_norm+\
                     ' in continuum units'
-        contour_title=r'contour plot of the $\chi^2$ evolution for for observ '+epoch_observ[0]+\
+        contour_title=r'contour plot of the $C-stat$ evolution for for observ '+epoch_observ[0]+\
                       '\n with line par '+args.line_search_e+' and norm par'+args.line_search_norm+\
                       ' in continuum units'
-        coltour_title=r'contour plot of the $\chi^2$ evolution for ofor observ '+epoch_observ[0]+\
+        coltour_title=r'contour plot of the $C-stat$ evolution for ofor observ '+epoch_observ[0]+\
                       '\n with line par '+args.line_search_e+' and norm par'+args.line_search_norm+\
                       ' in continuum units'
             
@@ -2468,6 +2482,15 @@ def line_detect(epoch_id):
         #same for the line components
         plot_autofit_lines=plot_autofit_comps[2+len(addcomps_cont):]
         
+        
+        #taking off potential background components
+        
+        if 'nxb' in AllModels.sources:
+            plot_autofit_lines=plot_autofit_lines[:-2]
+            
+        if 'sky' in AllModels.sources:
+            plot_autofit_lines=plot_autofit_lines[:-2]
+            
         '''
         #### Testing the overlap of absorption lines with emission lines
         We compare the overlapping area (in count space) of each absorption line to the sum of emission lines
@@ -2547,7 +2570,10 @@ def line_detect(epoch_id):
             
             curr_simpar=AllModels.simpars()
             
-            autofit_drawpars[i_draw]=np.array(curr_simpar).reshape(AllData.nGroups,AllModels(1).nParameters)
+            #we restrict the simpar to the initial model because we don't really care about simulating the variations of the bg
+            #since it's currently frozen
+            autofit_drawpars[i_draw]=np.array(curr_simpar)[:AllData.nGroups*AllModels(1).nParameters]\
+                                     .reshape(AllData.nGroups,AllModels(1).nParameters)
         
         #turning it back into a regular array
         autofit_drawpars=np.array([elem for elem in autofit_drawpars])
@@ -3866,9 +3892,9 @@ def update_graph(val=None):
                 cb=plt.colorbar(scatter_abs[o],cax=ax_cb)
                 
                 if bigpeak_flag==1:
-                    cb.set_label(r'$\sqrt{\Delta\chi^2}$ of the most significant line',labelpad=10)
+                    cb.set_label(r'$\sqrt{\Delta C}$ of the most significant line',labelpad=10)
                 else:
-                    cb.set_label(r'$\Delta\chi^2$ of the most significant line',labelpad=10)
+                    cb.set_label(r'$\Delta C$ of the most significant line',labelpad=10)
 
 
         #scatter plot for the emission lines
@@ -3907,9 +3933,9 @@ def update_graph(val=None):
                 cb=plt.colorbar(scatter_em[o],cax=ax_cb)
                 
                 if bigpeak_flag==1:
-                    cb.set_label(r'$\sqrt{\Delta\chi^2}$ of the most significant line',labelpad=10)
+                    cb.set_label(r'$\sqrt{\Delta C}$ of the most significant line',labelpad=10)
                 else:
-                    cb.set_label(r'$\Delta\chi^2$ of the most significant line',labelpad=10)
+                    cb.set_label(r'$\Delta C$ of the most significant line',labelpad=10)
 
     #setting the limits of the graph
     
@@ -3984,7 +4010,7 @@ if multi_obj:
     
     #defining a small delchi display button to show the save pdf button near
     ax_switch_chi2=plt.axes([0.01, 0.025, 0.05, 0.04])
-    button_switch_chi2=Button(ax_switch_chi2,r'see $\Delta\chi^2$',hovercolor='grey')
+    button_switch_chi2=Button(ax_switch_chi2,r'see $\Delta C$',hovercolor='grey')
     def switch_chi2(event):
         global disp_chi2
         if disp_chi2:
@@ -4533,7 +4559,7 @@ in this form, the new order is:
 bins_bshift=np.concatenate(([-499],np.linspace(1,1e4,num=21,endpoint=True)))
 bins_ener=np.arange(line_search_e[0],line_search_e[1]+line_search_e[2],2*line_search_e[2])
 
-abslines_infos_perline,abslines_infos_perobj,abslines_plot,abslines_ener,flux_plot,hid_plot,incl_plot,width_plot,nh_plot=values_manip(abslines_infos,dict_linevis,autofit_infos)
+abslines_infos_perline,abslines_infos_perobj,abslines_plot,abslines_ener,flux_plot,hid_plot,incl_plot,width_plot,nh_plot,kt_plot=values_manip(abslines_infos,dict_linevis,autofit_infos)
 
 #adding some dictionnary elements
 dict_linevis['mask_lines']=dict_linevis['mask_lines']=np.repeat(True,n_absline)

@@ -278,7 +278,7 @@ class scorpeon_manager:
     def __init__(self):
         self.bgload_paths=None
         
-    def load(self,bgload_paths=None,scorpeon_save=None):
+    def load(self,bgload_paths=None,scorpeon_save=None,frozen=False):
         
         '''
         reloads the nicer bg model(s) from the stored path(s), and scorpeon save(s) if any
@@ -308,9 +308,65 @@ class scorpeon_manager:
                     nicer_bkgspect=i_bg+1
                     exec(open(bg_path).read())
         
+        #freezing parameters if the current data doesn't cover large enough ranges 
+        #(see https://heasarc.gsfc.nasa.gov/docs/nicer/analysis_threads/scorpeon-xspec/)
+        
+        for i_grp in range(AllData.nGroups):
+            
+            #assuming 1 spectrum per group here
+            curr_grp_sp=AllData(i_grp+1)
+            
+            if curr_grp_sp.energies[0][0]>0.5:
+                
+                try:
+                    mod_nxb=AllModels(i_grp+1,modName='nxb')
+                    
+                    #freezing noise_norm
+                    mod_nxb(11).frozen=True
+                except:
+                    pass
+                    
+                try:
+                    mod_sky=AllModels(i_grp+1,modName='sky')
+                    #freezing gal_nh
+                    mod_sky(1).frozen=True
+                    
+                    #freezing lhb_em
+                    mod_sky(8).frozen=True
+        
+                    if curr_grp_sp.energies[0][0]>1.:
+                        #freezing halo_em
+                        mod_sky(6).frozen=True
+                except:
+                    pass
+            
         #loading all of the saves
         if scorpeon_save is not None:
             scorpeon_save.load()
+            
+        #freezing the model if asked to
+        if frozen:
+            
+            for i_grp in range(AllData.nGroups):
+                
+                try:
+                    mod_nxb=AllModels(i_grp+1,modName='nxb')
+                    
+                    for i_par in range(mod_nxb.nParameters):
+        
+                        mod_nxb(i_par+1).frozen=True
+                except:
+                    pass
+                
+                try:
+                    mod_sky=AllModels(i_grp+1,modName='sky')
+                    
+                    for i_par in range(mod_sky.nParameters):
+        
+                        mod_sky(i_par+1).frozen=True
+                except:
+                    pass
+                    
 
 class scorpeon_data:
             
@@ -396,15 +452,15 @@ class parameter_data:
         self.link=xspec_parameter.link.replace('= p','')
         self.frozen=xspec_parameter.frozen     
     
-def par_degroup(parnumber):
+def par_degroup(parnumber,mod_name=''):
     
     '''
     computes the group and parameter index in that group of a given parameter given in all groups
     '''
     
-    i_grp=1+(max(0,parnumber-1)//AllModels(1).nParameters)
+    i_grp=1+(max(0,parnumber-1)//AllModels(1,modName=mod_name).nParameters)
     
-    id_par=1+(max(0,parnumber-1)%AllModels(1).nParameters)
+    id_par=1+(max(0,parnumber-1)%AllModels(1,modName=mod_name).nParameters)
     
     return i_grp,id_par
     
@@ -421,6 +477,8 @@ def reset():
     
     Xset.abund='wilm'
     Fit.nIterations=1000
+    Plot.xAxis='keV'
+    Plot.add=True
 
 def model_load(model_saves,mod_name='',mod_number=1,gap_par=None,in_add=False,modclass=AllModels):
 
@@ -1461,6 +1519,8 @@ def parse_xlog(log_lines,goal='lastmodel',no_display=False,replace_frozen=False,
     and freezes them
     (useful to avoid breaking the MC chain/EW when the fit is insensitive to some parameters)
     Also freezes parameter frozen implicitely (delta at negative values) during the fit
+    
+    When freeze pegged is set to True, infos on parameters FROM THE MAIN MODEL ONLY are returned 
 
     In orer to find the last models, we:
         -explore in reverse order the given xspec log lines
@@ -1570,17 +1630,31 @@ def parse_xlog(log_lines,goal='lastmodel',no_display=False,replace_frozen=False,
                             error_pars[parnum-1][0]=abs(error_pars[parnum-1][0])
         
         if freeze_pegged:
-            par_peg_grp=[]
             
-            for i_par in par_peg:
+            #this is jus
+            par_peg_infos=[]
+            
+            for parameter in par_peg:
                 
-                print('\nPegged parameter ('+str(i_par)+') detected. Freezing it...')
+                print('\nPegged parameter ('+str(parameter)+') detected. Freezing it...')
 
-                par_peg_grp+=[[par_degroup(int(i_par))[0],par_degroup(int(i_par))[1]]]
+                #note: parameter for custom models have the name of the models beforer them in this instance
+                if ':' in parameter:
+                    
+                    par_mod=parameter.split(':')[0]
+                else:
+                    par_mod=''
+                    
+                par_val=parameter.split(':')[-1]
                 
-                AllModels(par_peg_grp[-1][0])(par_peg_grp[-1][1]).frozen=1
+                par_grp,par_number=par_degroup(int(par_val),mod_name=par_mod)
                 
-
+                ####Note: as of now we don't return pegged parameters for custom model to simplify things
+                if par_mod=='':
+                    par_peg_infos+=[[par_grp,par_number,par_mod]]
+                
+                AllModels(par_grp,modName=par_mod)(par_number).frozen=1
+                
             AllModels.show()
             
         #reshaping the error results array to get in correct shape for each data group
@@ -1679,7 +1753,7 @@ def parse_xlog(log_lines,goal='lastmodel',no_display=False,replace_frozen=False,
                 #note: there can be problems with paramater with very precise bounds from custom models,
                 #so we adapt these bounds if necessary
                 
-                par_values=[AllModels(i_grp,modName=model_name)(i_par).values]
+                par_values=AllModels(i_grp,modName=model_name)(i_par).values
                 
                 if float(line.split()[-3])<par_values[2]:
                     par_values[2]=float(line.split()[-3])
@@ -1702,7 +1776,7 @@ def parse_xlog(log_lines,goal='lastmodel',no_display=False,replace_frozen=False,
     
     if goal=='lasterrors':
         if freeze_pegged:
-            return par_peg_grp
+            return par_peg_infos
         else:
             return error_pars
         
@@ -2782,7 +2856,9 @@ class fitmod:
         
         allows to keep track of parameters even after modifying components
         
+        #here we assume custom models are not gonna be modified and thus return a different element for them (None)
         '''
+        
         
         includedcomps=np.array([comp for comp in self.includedlist if comp is not None])
         
@@ -4038,7 +4114,7 @@ def EW_ang2keV(x,e_line):
     return x*(h_keV*3*10**18)/l_line**2
 
 
-def plot_std_ener(ax_ratio,ax_contour=None,plot_em=False):
+def plot_std_ener(ax_ratio,ax_contour=None,plot_em=False,mode='ratio'):
     
     '''
     Plots the current absorption (and emission if asked) standard lines in the current axis
@@ -4054,13 +4130,16 @@ def plot_std_ener(ax_ratio,ax_contour=None,plot_em=False):
 
     for i_line,line in enumerate(lines_names):
         
+        if lines_e_dict[line][0]<ax_ratio.get_xlim()[0] or lines_e_dict[line][0]>ax_ratio.get_xlim()[1]:
+            continue
+            
         #skipping some indexes for now
         if i_line==2 or i_line>8:
             continue
         
         #skipping Nika27:
-            if i_line==5:
-                continue
+        if i_line==5:
+            continue
             
         
         #skipping display if emission lines are not asked
@@ -4073,18 +4152,21 @@ def plot_std_ener(ax_ratio,ax_contour=None,plot_em=False):
         
         #plotting the lines on the two parts of the graphs
         ax_ratio.axvline(x=lines_e_dict[line][0],
-                         ymin=pos_ctr_ratio if em_bool else 0.,ymax=1 if em_bool else pos_ctr_ratio,color='blue' if em_bool else 'red',
-                         linestyle='dashed',linewidth=0.5)
+                         ymin=0 if mode!='ratio' else pos_ctr_ratio if em_bool else 0.,ymax=1 if mode!='ratio' else 1 if em_bool else pos_ctr_ratio,
+                         color='blue' if em_bool else 'brown',
+                         linestyle='dashed',linewidth=1.5)
         if ax_contour is not None:
             ax_contour.axvline(x=lines_e_dict[line][0],ymin=0.5 if em_bool else 0,ymax=1 if em_bool else 0.5,
-                               color='blue' if em_bool else 'red',linestyle='dashed',linewidth=0.5)
+                               color='blue' if em_bool else 'brown',linestyle='dashed',linewidth=0.5)
         
         #small left horizontal shift to help the Nika27 display
         txt_hshift=0.1 if 'Ni' in line else 0
         
-        #but the legend on the top part only
-        ax_ratio.text(x=lines_e_dict[line][0]-txt_hshift,y=0.96 if em_bool else (0.06 if i_line%2==1 else 0.14),s=lines_std[line],
-                      color='blue' if em_bool else 'red',transform=ax_ratio.get_xaxis_transform(),ha='center', va='top')
+        if mode!='noname':
+            
+            #but the legend on the top part only
+            ax_ratio.text(x=lines_e_dict[line][0]-txt_hshift,y=0.96 if em_bool else (0.06 if i_line%2==1 else 0.14),s=lines_std[line],
+                          color='blue' if em_bool else 'brown',transform=ax_ratio.get_xaxis_transform(),ha='center', va='top')
 
 
             
@@ -4113,9 +4195,9 @@ def color_chi2map(fig,axe,chi_map,title='',combined=False,ax_bar=None):
         colorbar=plt.colorbar(img,cax=ax_bar)
     
     if bigline_flag==1:
-        colorbar.set_label(r'$\sqrt{\Delta\chi^2}$')
+        colorbar.set_label(r'$\sqrt{\Delta C}$')
     else:
-        colorbar.set_label(r'$\Delta\chi^2$')
+        colorbar.set_label(r'$\Delta C$')
                 
 def contour_chi2map(fig,axe,chi_dict,title='',combined=False):
     
@@ -4152,7 +4234,7 @@ def contour_chi2map(fig,axe,chi_dict,title='',combined=False):
         
     contours_base=axe.contour(line_search_e_space,norm_par_space,chi_arr.T,levels=[chi_base+0.5],colors='black',
                                   linewidths=0.5,linestyles='dashed')
-    contours_base_labels=[r'base level ($\chi^2$+0.5)']
+    contours_base_labels=[r'base level ($\Delta C=0.5$)']
     
     for l in range(len(contours_base_labels)):
         contours_base.collections[l].set_label(contours_base_labels[l])
@@ -4272,9 +4354,9 @@ def coltour_chi2map(fig,axe,chi_dict,title='',combined=False,ax_bar=None,norm=No
             colorbar.ax.set_yticklabels(cm_ticklabels)
         
     if bigline_flag==1:
-        colorbar.set_label(r'$\sqrt{\Delta\chi^2}$ with separated scales\nfor emission and absorption')
+        colorbar.set_label(r'$\sqrt{\Delta C}$ with separated scales\nfor emission and absorption')
     else:
-        colorbar.set_label(r'$\Delta\chi^2$ with separated scales for emission and absorption')
+        colorbar.set_label(r'$\Delta C$ with separated scales for emission and absorption')
         
     '''CONTOUR PLOT'''
     
@@ -4300,7 +4382,7 @@ def coltour_chi2map(fig,axe,chi_dict,title='',combined=False,ax_bar=None,norm=No
         #not using this
         #contours_var.collections[l].set_label(contours_var_labels[l])
 
-    contours_base_labels=[r'base level ($\chi^2$+0.5)']
+    contours_base_labels=[r'base level ($\Delta C=0.5$)']
     contours_base_ls=['dashed']
     
     contours_base=axe.contour(line_search_e_space,norm_par_space,chi_arr.T,levels=[chi_base+0.5],colors='grey',
@@ -4425,7 +4507,8 @@ def comb_chi2map(fig_comb,chi_dict,title='',comb_label=''):
     
     plot_std_ener(ax_comb[0],ax_comb[1],plot_em=True)
         
-def xPlot(types,axes_input=None,plot_saves_input=None,plot_arg=None,includedlist=None):
+def xPlot(types,axes_input=None,plot_saves_input=None,plot_arg=None,includedlist=None,group_names=None,hide_ticks=True,
+          secondary_x=True,legend_position=None):
     
     '''
     Replot xspec plots using matplotib. Accepts custom types:
@@ -4443,6 +4526,16 @@ def xPlot(types,axes_input=None,plot_saves_input=None,plot_arg=None,includedlist
     if axes is not None, uses the axes as baselines to create the plots. Else, return an array of axes with the plots
     
     if includedlist is not None, replace xspec component names with fitcomp names
+    
+    group_names give str group names to each AllData group instead of a standard naming
+    
+    if group_names is set to "nolabel", doesn't show the groups
+    
+    hide ticks hide axis ticks for multiple plots and subplots
+    
+    secondary_x enables plotting an Angstrom top axis or not
+    
+    legend position forces a specific legend position
     '''
     
     if axes_input is None:
@@ -4458,6 +4551,12 @@ def xPlot(types,axes_input=None,plot_saves_input=None,plot_arg=None,includedlist
     else:
         plot_saves=plot_saves_input
 
+    #getting the group names into a list like
+    if type(group_names) in (list,tuple,np.ndarray):
+        group_names_list=group_names
+    else:
+        group_names_list=[group_names]
+        
     # def plot_init(ax,plot_save):
         
 
@@ -4481,13 +4580,15 @@ def xPlot(types,axes_input=None,plot_saves_input=None,plot_arg=None,includedlist
             if axes_input is None:
                 curr_ax.set_title(curr_save.labels[-1])
             
-            #putting a wavelength copy of the x axis at the top           
-            curr_ax_second=curr_ax.secondary_xaxis('top',functions=(ang2kev,ang2kev))
-            curr_ax_second.set_xlabel('Angstrom')
-            curr_ax_second.minorticks_on()
+            if secondary_x:
+                #putting a wavelength copy of the x axis at the top           
+                curr_ax_second=curr_ax.secondary_xaxis('top',functions=(ang2kev,ang2kev))
+                curr_ax_second.set_xlabel('Angstrom')
+                curr_ax_second.minorticks_on()
             
         #hiding the ticks values for the lower x axis if it's not in the last plot or if we're in a provided subplot
-        if i_ax!=len(types_split)-1 or axes_input is not None:
+        if hide_ticks and (i_ax!=len(types_split)-1 or axes_input is not None):
+            
             plt.setp(curr_ax.get_xticklabels(), visible=False)
             
             # # removing the last major tick label 
@@ -4507,18 +4608,22 @@ def xPlot(types,axes_input=None,plot_saves_input=None,plot_arg=None,includedlist
         if curr_save.yLog:
             curr_ax.set_yscale('log')
         
-    
         for id_grp in range(curr_save.nGroups):
+        
+            
+            grp_name='' if group_names=='nolabel' else\
+                ('group '+str(id_grp+1) if curr_save.nGroups>1 else '') if group_names is None else group_names_list[id_grp]
             
             #plotting each data group
             curr_ax.errorbar(curr_save.x[id_grp],curr_save.y[id_grp],xerr=curr_save.xErr[id_grp],yerr=curr_save.yErr[id_grp],
-                             color=xcolors_grp[id_grp],linestyle='None',elinewidth=0.5,label='data' if id_grp==0 else '')
+                             color=xcolors_grp[id_grp],linestyle='None',elinewidth=0.75,
+                             label='' if group_names=='nolabel' else grp_name)
             
             #plotting models
             if 'ratio' not in plot_type and curr_save.model is not None:
 
                 curr_ax.plot(curr_save.x[id_grp],curr_save.model[id_grp],color=xcolors_grp[id_grp],alpha=0.5,
-                             label='grp '+(str(id_grp) if curr_save.nGroups>1 else '')+' model')
+                             label='' if group_names=='nolabel' else '')
 
                     
             if 'data' in plot_type:
@@ -4528,7 +4633,7 @@ def xPlot(types,axes_input=None,plot_saves_input=None,plot_arg=None,includedlist
                 if curr_save.addbg and sum(curr_save.background[id_grp])!=0:
                     curr_ax.errorbar(curr_save.x[id_grp],curr_save.background[id_grp],xerr=curr_save.xErr[id_grp],
                                      yerr=curr_save.yErr[id_grp],color=xcolors_grp[id_grp],linestyle='None',elinewidth=0.5,
-                                     marker='x',mew=0.5,label='background' if id_grp==0 else '')
+                                     marker='x',mew=0.5,label='' if group_names=='nolabel' else grp_name+' background')
                 
                 #plotting model components
         
@@ -4554,10 +4659,20 @@ def xPlot(types,axes_input=None,plot_saves_input=None,plot_arg=None,includedlist
             colors_addcomp=mpl.cm.ScalarMappable(norm=norm_colors_addcomp,cmap=mpl.cm.plasma)
             
             ls_types=['dotted','dashed','dashdot']
-        
+
+            list_models=list(AllModels.sources.values())
+
             #using fitcomp labels if possible            
             if includedlist is not None:
                 label_comps=[comp.compname for comp in [elem for elem in includedlist if elem is not None and not elem.multipl]]
+                
+                #adding NICER background component Names
+                if 'nxb' in list_models:
+                    label_comps+=AllModels(1,'sky').componentNames
+                    
+                if 'sky' in list_models:
+                    label_comps+=AllModels(1,'nxb').componentNames
+                
             else:
                 label_comps=curr_save.addcompnames
                 
@@ -4574,7 +4689,7 @@ def xPlot(types,axes_input=None,plot_saves_input=None,plot_arg=None,includedlist
             curr_ax.axhline(y=0,xmin=0,xmax=1,color='green')
                 
         #plotting the legend for the first axe    
-        curr_ax.legend()
+        curr_ax.legend(loc=legend_position)
     
     if axes_input is None:
         fig.tight_layout()
@@ -4584,7 +4699,7 @@ def xPlot(types,axes_input=None,plot_saves_input=None,plot_arg=None,includedlist
 
 def Plot_screen(datatype,path,mode='matplotlib',xspec_windid=None,includedlist=None):
     
-    '''Screen a specific xspec plot, either through matplotlib or through direct plotting through xspec's interface'''
+    '''Saves a specific xspec plot, either through matplotlib or through direct plotting through xspec's interface'''
     
     if not path.endswith('.png') or path.endswith('.svg') or path.endswith('.pdf'):
         path_use=path+('.pdf' if mode=='matplotlib' else '.png')

@@ -1072,24 +1072,31 @@ def values_manip(abslines_inf,dict_linevis,autofit_inf):
     
     width_plt=np.array([[[None]*len(autofit_inf)]*6]*3)
     nh_plt=np.array([[None]*len(autofit_inf)]*3)
+    
+    kt_plt=np.array([[None]*len(autofit_inf)]*3)
+    
     for i_uncert in range(3):
         for i_line in range(6):
             for i_obj in range(len(autofit_inf)):
                 width_part_obj=np.zeros(len(autofit_inf[i_obj]))
                 nh_part_obj=np.repeat(min_nh,len(autofit_inf[i_obj]))
+                kt_part_obj=np.repeat(np.nan,len(autofit_inf[i_obj]))
+                
                 for i_obs in range(len(autofit_inf[i_obj])):
                     
                     #empty values for when there was no autofit performed
                     if autofit_inf[i_obj][i_obs][0] is None:
                         width_part_obj[i_obs]=np.nan
                         nh_part_obj[i_obs]=np.nan
+                        kt_part_obj[i_obs]=np.nan
                         continue
                     
                     #note: the last index at 0 here is the datagroup. always use the data from the first datagroup
                     mask_sigma=[lines_std_names[3+i_line] in elem and 'Sigma' in elem for elem in autofit_inf[i_obj][i_obs][1][0]]
                     mask_nh=['phabs.nH' in elem for elem in autofit_inf[i_obj][i_obs][1][0]]
 
-                        
+                    mask_kt=['diskbb.Tin' in elem for elem in autofit_inf[i_obj][i_obs][1][0]]
+                    
                     #insuring there is no problem by putting nans where there is no line
                     if sum(mask_sigma)==0:
                         width_part_obj[i_obs]=np.nan
@@ -1126,10 +1133,14 @@ def values_manip(abslines_inf,dict_linevis,autofit_inf):
                     if sum(mask_nh)!=0:
                         nh_part_obj[i_obs]=autofit_inf[i_obj][i_obs][0][0][mask_nh][0].astype(float)[i_uncert]
                         
+                    if sum(mask_kt)!=0:
+                        kt_part_obj[i_obs]=autofit_inf[i_obj][i_obs][0][0][mask_kt][0].astype(float)[i_uncert]
+                        
                 width_plt[i_uncert][i_line][i_obj]=width_part_obj
                 nh_plt[i_uncert][i_obj]=nh_part_obj
+                kt_plt[i_uncert][i_obj]=kt_part_obj
                 
-    return abslines_inf_line,abslines_inf_obj,abslines_plt,abslines_e,flux_plt,hid_plt,incl_plt,width_plt,nh_plt
+    return abslines_inf_line,abslines_inf_obj,abslines_plt,abslines_e,flux_plt,hid_plt,incl_plt,width_plt,nh_plt,kt_plt
 
 def distrib_graph(data_perinfo,info,dict_linevis,data_ener=None,conf_thresh=0.99,indiv=False,save=False,close=False,streamlit=False,bigger_text=False,split=None):
     
@@ -1760,11 +1771,17 @@ def correl_graph(data_perinfo,infos,data_ener,dict_linevis,mode='intrinsic',mode
             
         if mode!='eqwratio':
 
+            if sum(mask_lines)==1:
+                line_str=lines_std[np.array(lines_std_names)[3:9][mask_lines][0]]
+            else:
+                line_str=''
+                
             ax_scat.set_xlabel('Time' if time_mode else (ratio_choices_str[infos_split[0][-2:]]+' ' if ratio_mode else '')+
             (axis_str[ind_infos[0]].replace(' (eV)',('' if ratio_mode else ' (eV)'))+' '+(infos_split[0][-2:]+' ratio'))\
-                if ratio_mode else axis_str[ind_infos[0]])
+                if ratio_mode else line_str+' '+axis_str[ind_infos[0]])
 
         else:
+            line_str=''
             ax_scat.set_xlabel(infos_split[0]+' '+axis_str[ind_infos[0]])
             ax_scat.set_ylabel(infos_split[1]+' '+axis_str[ind_infos[0]])
             
@@ -1779,7 +1796,7 @@ def correl_graph(data_perinfo,infos,data_ener,dict_linevis,mode='intrinsic',mode
 
         
         if mode=='intrinsic':
-            ax_scat.set_ylabel(axis_str[ind_infos[1]])
+            ax_scat.set_ylabel(line_str+' '+axis_str[ind_infos[1]])
         elif mode=='observ':
             ax_scat.set_ylabel(axis_str[ind_infos[0]] if (time_mode and not ratio_mode) else\
                                axis_str[ind_infos[0]]+' '+(infos_split[0][-2:]+' ratio') if time_mode else\
@@ -2827,6 +2844,9 @@ def correl_graph(data_perinfo,infos,data_ener,dict_linevis,mode='intrinsic',mode
         #### theoretical line drawing for eqw_width
         if infos=='eqw_width' and display_th_width_ew:
             
+            #adding a blank line in the legend for cleaner display                                
+            ax_scat.plot(np.NaN, np.NaN, '-', color='none', label='   ')
+                
             line_id=np.argwhere(np.array(mask_lines))[0][0]
             if line_id==0:
                 files=glob.glob('/home/parrama/Documents/Work/PhD/docs/atom/Fe25*_*.dat')
@@ -2846,7 +2866,7 @@ def correl_graph(data_perinfo,infos,data_ener,dict_linevis,mode='intrinsic',mode
             for id_curve,nh_curve_path in enumerate(np.array(files)[nh_order]):
                 nh_array=np.array(pd.read_csv(nh_curve_path,sep='      ',engine='python',header=None)).T
                 
-                plt.plot(nh_array[0],nh_array[1],label=r'$N_i= $'+str(nh_values[id_curve])+' cm'+r'$^{-2}$',
+                ax_scat.plot(nh_array[0],nh_array[1],label=r'$N_i= $'+str(nh_values[id_curve])+' cm'+r'$^{-2}$',
                          color=colors_curve[id_curve],
                          alpha=0.5,ls=ls_curve[id_curve%len(ls_curve)])
                 
@@ -2870,7 +2890,8 @@ def correl_graph(data_perinfo,infos,data_ener,dict_linevis,mode='intrinsic',mode
         #### legend display
         if show_linked or compute_correl or color_scatter not in ['Time','HR','width','nH',None]:       
             
-            scat_legend=plt.legend(fontsize=10,title=legend_title)
+            scat_legend=plt.legend(fontsize=9 if infos=='eqw_width' and display_th_width_ew else 10,title=legend_title,
+                                   ncol=2 if display_th_width_ew and infos=='eqw_width' else 1)
             plt.setp(scat_legend.get_title(),fontsize='small')
                 
         if len(x_data_use)>0:

@@ -376,7 +376,7 @@ if update_dump or not os.path.isfile(dump_path):
         abslines_infos,autofit_infos=abslines_values(abslines_files,dict_linevis)
         
         #getting all the variations we need
-        abslines_infos_perline,abslines_infos_perobj,abslines_plot,abslines_ener,flux_plot,hid_plot,incl_plot,width_plot,nh_plot=values_manip(abslines_infos,dict_linevis,autofit_infos)
+        abslines_infos_perline,abslines_infos_perobj,abslines_plot,abslines_ener,flux_plot,hid_plot,incl_plot,width_plot,nh_plot,kt_plot=values_manip(abslines_infos,dict_linevis,autofit_infos)
 
         ####(deprecated) deleting bad flags        
         # #taking of the bad files points from the HiD
@@ -432,6 +432,7 @@ if update_dump or not os.path.isfile(dump_path):
         dump_dict['hid_plot']=hid_plot
         dump_dict['flux_plot']=flux_plot
         dump_dict['nh_plot']=nh_plot
+        dump_dict['kt_plot']=kt_plot
         dump_dict['incl_plot']=incl_plot
         dump_dict['abslines_infos_perobj']=abslines_infos_perobj
         dump_dict['flux_list']=flux_list
@@ -462,6 +463,7 @@ date_list=dump_dict['date_list']
 abslines_plot=dump_dict['abslines_plot']
 hid_plot=dump_dict['hid_plot']
 flux_plot=dump_dict['flux_plot']
+kt_plot=dump_dict['kt_plot']
 nh_plot=dump_dict['nh_plot']
 incl_plot=dump_dict['incl_plot']
 abslines_infos_perobj=dump_dict['abslines_infos_perobj']
@@ -499,6 +501,8 @@ else:
 
 line_display_str=np.array([r'FeXXV Ka (6.70 keV)',r'FeXXVI  Ka (6.97 keV)','NiXXVII Ka (7.80 keV)',
                       'FeXXV Kb (7.89 keV)','FeXXVI Kb (8.25 keV)','FeXXVI Kg (8.70 keV)'])
+
+type_1_cm=['Inclination','Time','nH','kT']
 
 if multi_obj:
     radio_single=st.sidebar.radio('Display options:',('All Objects','Multiple Objects','Single Object'))
@@ -581,7 +585,17 @@ if display_nonsign:
 else:
     restrict_threshold=True
         
-radio_info_cmap=st.sidebar.radio('HID colormap',('Source','Velocity shift','Delchi','EW ratio','Inclination','Time','Instrument','nH'),index=0)
+HID_options_str=np.array(['Source','Velocity shift',r'Delta C','EW ratio','Inclination','Time','Instrument','Column density','Disk temperature'])
+radio_info_cmap_str=st.sidebar.radio('HID colormap',HID_options_str,index=0)
+
+radio_info_index=np.argwhere(HID_options_str==radio_info_cmap_str)[0][0]
+                             
+radio_info_cmap=['Source','Velocity shift','Delchi','EW ratio','Inclination','Time','Instrument','nH','kT'][radio_info_index]
+
+####extremal allowed values for kT in the fitting procedure(in keV)
+
+kt_min=0.5
+kt_max=3.
 
 if radio_info_cmap!='Source':
     display_edgesource=st.sidebar.checkbox('Color code sources in marker edges',value=False)
@@ -639,7 +653,7 @@ if not online:
         
 with st.sidebar.expander('Visualisation'):
     
-    display_dicho=st.checkbox('Display the standard thresholds',value=True)
+    display_dicho=st.checkbox('Display favourable zone',value=True)
     
     display_obj_zerodet=st.checkbox('Color sources with no detection',value=True)
     
@@ -821,6 +835,9 @@ incl_cmap_restrict=incl_cmap[mask_obj]
 nh_plot_restrict=deepcopy(nh_plot)
 nh_plot_restrict=nh_plot_restrict.T[mask_obj].T
 
+kt_plot_restrict=deepcopy(kt_plot)
+kt_plot_restrict=kt_plot_restrict.T[mask_obj].T
+
 #defining the dataset that will be used in the plots for the colormap limits
 if radio_info_cmap in ['Velocity shift','Delchi']:
     radio_cmap_i=1 if radio_info_cmap=='Velocity shift' else 2
@@ -828,14 +845,21 @@ else:
     radio_cmap_i=0
     
 #colormap when not splitting detections
-cmap_color_source=mpl.cm.hsv_r
+cmap_color_source=mpl.cm.hsv_r.copy()
+
+cmap_color_source.set_bad(color='grey')
+
 cyclic_cmap=True
 
 #colormaps when splitting detections
-cmap_color_det=mpl.cm.plasma
+cmap_color_det=mpl.cm.plasma.copy()
+cmap_color_det.set_bad(color='grey')
+
 cyclic_cmap_det=False
 
-cmap_color_nondet=mpl.cm.viridis_r
+cmap_color_nondet=mpl.cm.viridis_r.copy()
+cmap_color_nondet.set_bad(color='grey')
+
 cyclic_cmap_nondet=False
 
 #computing the extremal values of the whole sample/plotted sample to get coherent colormap normalisations, and creating the range of object colors
@@ -896,14 +920,16 @@ global_det_data=np.array([subelem for elem in global_plotted_data for subelem in
 global_sign_data=np.array([subelem for elem in global_plotted_data for subelem in elem])[global_sign_mask]
 
 #same for the color-coded infos
-cmap_info=mpl.cm.plasma_r if radio_info_cmap not in ['Time','nH'] else mpl.cm.plasma
+cmap_info=mpl.cm.plasma_r.copy() if radio_info_cmap not in ['Time','nH','kT'] else mpl.cm.plasma.copy()
+
+cmap_info.set_bad(color='grey')
 
 #normalisation of the colormap
 if radio_cmap_i==1 or radio_info_cmap=='EW ratio':
     gamma_colors=1 if radio_cmap_i==1 else 0.5
     cmap_norm_info=colors.PowerNorm(gamma=gamma_colors)
     
-elif radio_info_cmap not in ['Inclination','Time']:
+elif radio_info_cmap not in ['Inclination','Time','kT']:
     cmap_norm_info=colors.LogNorm()
 else:
     #keeping a linear norm for the inclination
@@ -917,8 +943,10 @@ bounds_x=[min(flux_list_ravel.T[2][0]/flux_list_ravel.T[1][0]),max(flux_list_rav
 bounds_y=[min(flux_list_ravel.T[4][0]),max(flux_list_ravel.T[4][0])]
 
 if checkbox_zoom:
-    ax_hid.margins(0.05)   
-else:
+    ax_hid.set_xlim(min(ravel_ragged(hid_plot_restrict[0][0]))*0.9,max(ravel_ragged(hid_plot_restrict[0][0]))*1.1)
+    ax_hid.set_ylim(min(ravel_ragged(hid_plot_restrict[1][0]))*0.8,max(ravel_ragged(hid_plot_restrict[1][0]))*1.3)
+    
+if not checkbox_zoom:
     ax_hid.set_xlim((min(bounds_x[0]*0.9,0.1),max(bounds_x[1]*1.1,2)))
     ax_hid.set_ylim((min(bounds_y[0]*0.9,1e-5),max(bounds_y[1]*1.1,1)))
 
@@ -983,7 +1011,7 @@ for i_obj,abslines_obj in enumerate(abslines_infos_perobj[mask_obj]):
         [np.nan if len(abslines_obj[0][radio_cmap_i][mask_lines].T[i_obs][mask_sign.T[i_obs]])==0 else\
                                    (max(abslines_obj[0][radio_cmap_i][mask_lines].T[i_obs][mask_sign.T[i_obs]])\
                                     if radio_info_cmap!='EW ratio' else\
-                                        0 if abslines_obj[0][radio_cmap_i][eqw_ratio_ids[0]].T[i_obs]==0 else \
+                                        np.nan if abslines_obj[0][radio_cmap_i][eqw_ratio_ids[0]].T[i_obs]==0 else \
                                         abslines_obj[0][radio_cmap_i][eqw_ratio_ids[1]].T[i_obs]/\
                                         abslines_obj[0][radio_cmap_i][eqw_ratio_ids[0]].T[i_obs])\
                                    for i_obs in range(len(abslines_obj[0][radio_cmap_i][mask_lines].T))])
@@ -998,7 +1026,7 @@ for i_obj,abslines_obj in enumerate(abslines_infos_perobj[mask_obj]):
     if radio_info_cmap!='EW ratio':
         obj_val_mask_sign=~np.isnan(obj_size_sign)
     else:
-        obj_val_mask_sign=np.array((~np.isnan(obj_size_sign)).tolist() and (obj_val_cmap_sign!=0).tolist())
+        obj_val_mask_sign=~np.isnan(obj_size_sign)
     
     #creating a display order which is the reverse of the EW size order to make sure we do not hide part the detections
     obj_order_sign=obj_size_sign[obj_val_mask_sign].argsort()[::-1]
@@ -1043,7 +1071,8 @@ for i_obj,abslines_obj in enumerate(abslines_infos_perobj[mask_obj]):
     
     if len(x_hid[obj_val_mask])>0 and display_central_abs:
         ax_hid.scatter(x_hid[obj_val_mask],y_hid[obj_val_mask],marker=marker_abs,color=colors_obj.to_rgba(i_obj_glob)\
-                       if radio_info_cmap=='Source' else 'grey',label='',zorder=1000,edgecolor='black')
+                       if radio_info_cmap=='Source' else 'grey',label='',zorder=1000,edgecolor='black',
+                       plotnonfinite=True)
 
         
     #### detection scatters
@@ -1061,6 +1090,7 @@ for i_obj,abslines_obj in enumerate(abslines_infos_perobj[mask_obj]):
         np.repeat(incl_cmap_restrict[i_obj][cmap_incl_type],len(x_hid[obj_val_mask_sign])) if radio_info_cmap=='Inclination' else\
         color_instru if radio_info_cmap=='Instrument' else\
         nh_plot_restrict[0][i_obj][obj_val_mask_sign][obj_order_sign] if radio_info_cmap=='nH' else\
+        kt_plot_restrict[0][i_obj][obj_val_mask_sign][obj_order_sign] if radio_info_cmap=='kT' else\
         obj_val_cmap_sign[obj_val_mask_sign][obj_order_sign]
             
     
@@ -1082,7 +1112,8 @@ for i_obj,abslines_obj in enumerate(abslines_infos_perobj[mask_obj]):
                        norm=cmap_norm_info,
                            label=obj_list[mask_obj][i_obj] if not label_obj_plotted[i_obj] and\
                                (radio_info_cmap=='Source' or display_edgesource) and len(x_hid[obj_val_mask_sign])>0 else '',
-                           cmap=cmap_info,alpha=alpha_abs)]
+                           cmap=cmap_info,alpha=alpha_abs,
+                           plotnonfinite=True)]
             
         if (radio_info_cmap=='Source' or display_edgesource) and len(x_hid[obj_val_mask_sign])>0:
             label_obj_plotted[i_obj]=True
@@ -1101,7 +1132,8 @@ for i_obj,abslines_obj in enumerate(abslines_infos_perobj[mask_obj]):
                        norm=cmap_norm_info,
                            label=obj_list[mask_obj][i_obj] if not label_obj_plotted[i_obj] and\
                                (radio_info_cmap=='Source' or display_edgesource) and len(x_hid[obj_val_mask_sign])>0 else '',
-                           cmap=cmap_info,alpha=alpha_abs)]
+                           cmap=cmap_info,alpha=alpha_abs,
+                           plotnonfinite=True)]
         
         if (radio_info_cmap=='Source' or display_edgesource) and len(x_hid[obj_val_mask_sign])>0:
             label_obj_plotted[i_obj]=True
@@ -1117,6 +1149,7 @@ for i_obj,abslines_obj in enumerate(abslines_infos_perobj[mask_obj]):
             mdates.date2num(date_list[mask_obj][i_obj][obj_val_mask_nonsign]) if radio_info_cmap=='Time' else\
             np.repeat(incl_cmap_restrict[i_obj][cmap_incl_type],len(x_hid[obj_val_mask_nonsign])) if radio_info_cmap=='Inclination' else\
             nh_plot_restrict[0][i_obj][obj_val_mask_nonsign] if radio_info_cmap=='nH' else\
+            kt_plot_restrict[0][i_obj][obj_val_mask_nonsign] if radio_info_cmap=='kT' else\
                 obj_val_cmap[obj_val_mask_nonsign]
                        
         #adding a failsafe to avoid problems when nothing is displayed
@@ -1133,7 +1166,8 @@ for i_obj,abslines_obj in enumerate(abslines_infos_perobj[mask_obj]):
                        label=obj_list[mask_obj][i_obj] if not label_obj_plotted[i_obj] and\
                                (radio_info_cmap=='Source' or display_edgesource) else '',
                        cmap=cmap_info,
-                       alpha=alpha_abs)]
+                       alpha=alpha_abs,
+                       plotnonfinite=True)]
         if (radio_info_cmap=='Source' or display_edgesource) and len(x_hid[obj_val_mask_nonsign])>0:
             label_obj_plotted[i_obj]=True
     
@@ -1161,11 +1195,14 @@ for i_obj,abslines_obj in enumerate(abslines_infos_perobj[mask_obj]):
             elif radio_info_cmap=='nH':
                 elem_scatter.set_clim(vmin=min(ravel_ragged(nh_plot_restrict[0])[global_mask_intime_norepeat]),
                                       vmax=max(ravel_ragged(nh_plot_restrict[0])[global_mask_intime_norepeat]))
+            elif radio_info_cmap=='kT':
+                
+                elem_scatter.set_clim(vmin=0.5,vmax=3)
                 
             else:
                 
                 #dynamical limits for the rest
-                if global_colors and radio_info_cmap not in ('EW ratio','Inclination','Time','nH'):
+                if global_colors and radio_info_cmap not in ('EW ratio','Inclination','Time','nH','kT'):
                     if display_nonsign:
                         elem_scatter.set_clim(vmin=min(global_det_data),vmax=max(global_det_data))
                     else:
@@ -1228,7 +1265,7 @@ for i_obj,abslines_obj in enumerate(abslines_infos_perobj[mask_obj]):
             cmap_norm_ticks=None
                     
         #only creating the colorbar if there is information to display
-        if is_colored_scat or radio_info_cmap in ['Inclination','Time','nH'] :
+        if is_colored_scat or radio_info_cmap in  type_1_cm:
             
             if radio_info_cmap=='Time':
                 
@@ -1262,6 +1299,8 @@ for i_obj,abslines_obj in enumerate(abslines_infos_perobj[mask_obj]):
                 cb.set_label('Observation date',labelpad=30)
             elif radio_info_cmap=='nH':
                 cb.set_label(r'nH ($10^{22}$ cm$^{-1}$)',labelpad=10)
+            elif radio_info_cmap=='kT':
+                cb.set_label(r'disk temperature (keV)',labelpad=10)
             else:
                 if restrict_threshold:
                     cb.set_label((('minimal ' if radio_cmap_i==1 else 'maximal ') if radio_info_cmap!='EW ratio' else '')+(radio_info_label[radio_cmap_i-1].lower() if radio_info_cmap!='Delchi' else radio_info_label[radio_cmap_i-1])+
@@ -1386,11 +1425,13 @@ for i_obj_base,abslines_obj_base in enumerate(abslines_infos_perobj[mask_obj_bas
                             (colors_nondet.to_rgba(id_obj_nondet) if source_nondet else\
                              colors_det.to_rgba(id_obj_det))) if radio_info_cmap=='Source' and display_obj_zerodet else\
                             cmap_info(norm_cmap_incl(incl_cmap_base[i_obj_base][cmap_incl_type]))\
-                            if (not np.isnan(incl_cmap_base[i_obj_base][cmap_incl_type]) and radio_info_cmap=='Inclination') else\
+                            if radio_info_cmap=='Inclination' else\
                     cmap_info(norm_cmap_time(mdates.date2num(date_list[mask_obj_base][i_obj_base][mask_nondet_ul])))\
                             if radio_info_cmap=='Time' else\
-                        cmap_info(cmap_norm_info(nh_plot.T[mask_obj_base].T[0][i_obj_base][mask_nondet_ul])) if radio_info_cmap=='nH' else\
+                    cmap_info(cmap_norm_info(nh_plot.T[mask_obj_base].T[0][i_obj_base][mask_nondet_ul])) if radio_info_cmap=='nH' else\
+                    cmap_info(cmap_norm_info(kt_plot.T[mask_obj_base].T[0][i_obj_base][mask_nondet_ul])) if (1 and radio_info_cmap=='kT') else\
                             'grey'
+                            
             #adding a failsafe to avoid problems when nothing is displayed
             if len(edgec_scat)==0:
                 edgec_scat=None
@@ -1400,7 +1441,8 @@ for i_obj_base,abslines_obj_base in enumerate(abslines_infos_perobj[mask_obj_bas
                            color='none',edgecolor=edgec_scat,s=norm_s_lin*obj_size_ul[mask_nondet_ul]**norm_s_pow,
                            label='' if not display_obj_zerodet else (obj_list[mask_obj][i_obj_base] if not label_obj_plotted[i_obj_base] and\
                                (radio_info_cmap=='Source' or display_edgesource) else ''),zorder=500,alpha=1.0,
-                               cmap=cmap_info if radio_info_cmap in ['Inclination','Time'] else None,ls='--' if (display_incl_inside and not bool_incl_inside[mask_obj_base][i_obj_base] or dash_noincl and bool_noincl[mask_obj_base][i_obj_base]) else 'solid')
+                               cmap=cmap_info if radio_info_cmap in ['Inclination','Time'] else None,ls='--' if (display_incl_inside and not bool_incl_inside[mask_obj_base][i_obj_base] or dash_noincl and bool_noincl[mask_obj_base][i_obj_base]) else 'solid',
+                               plotnonfinite=True)
                 
             scatter_nondet+=[elem_scatter_nondet]
             
@@ -1415,25 +1457,28 @@ for i_obj_base,abslines_obj_base in enumerate(abslines_infos_perobj[mask_obj_bas
                 c_scat_nondet=np.array([(colors_obj.to_rgba(i_obj_glob) if not split_cmap_source else\
                             (colors_nondet.to_rgba(id_obj_nondet) if source_nondet else\
                              colors_det.to_rgba(id_obj_det)))]) if radio_info_cmap=='Source' and display_obj_zerodet else\
-                            cmap_info(norm_cmap_incl(incl_cmap_base[i_obj_base][cmap_incl_type]))\
-                            if (not np.isnan(incl_cmap_base[i_obj_base][cmap_incl_type]) and radio_info_cmap=='Inclination') else\
+                            np.repeat(incl_cmap_base[i_obj_base][cmap_incl_type],sum(mask_nondet))\
+                            if radio_info_cmap=='Inclination' else\
                     mdates.date2num(date_list[mask_obj_base][i_obj_base][mask_nondet])\
                             if radio_info_cmap=='Time' else\
                             nh_plot.T[mask_obj_base].T[0][i_obj_base][mask_nondet] if radio_info_cmap=='nH' else\
-                            'grey'
-
-            print(i_obj_base,id_obj_nondet,c_scat_nondet,obj_list[mask_obj][i_obj_base])
-            
+                            kt_plot.T[mask_obj_base].T[0][i_obj_base][mask_nondet] if radio_info_cmap=='kT' else\
+                            'grey' 
+                            
             elem_scatter_nondet=ax_hid.scatter(x_hid_base[mask_nondet],y_hid_base[mask_nondet],marker=marker_nondet,
                            c=c_scat_nondet,cmap=cmap_info,norm=cmap_norm_info,
                            label='' if not display_obj_zerodet else (obj_list[mask_obj][i_obj_base] if not label_obj_plotted[i_obj_base] and\
-                               (radio_info_cmap=='Source' or display_edgesource) else ''),zorder=1000,edgecolor='black',alpha=1.)
+                               (radio_info_cmap=='Source' or display_edgesource) else ''),zorder=1000,edgecolor='black',alpha=1.,
+                               plotnonfinite=True)
         
+                #note: the plot non finite allows to plot the nan values passed to the colormap with the color predefined as bad in
+                #the colormap
+            
             if display_hid_error:
                 
                 #in order to get the same clim as with the standard scatter plots, we manually readjust the rgba values of the colors before plotting
                 #the errorbar "empty" and changing its color manually (because as of now matplotlib doesn't like multiple color inputs for errbars)
-                if radio_info_cmap in ['Inclincation','Time']:
+                if radio_info_cmap in type_1_cm:
                     if radio_info_cmap=='Inclination':
                         cmap_norm_info.vmin=0
                         cmap_norm_info.vmax=90
@@ -1446,15 +1491,18 @@ for i_obj_base,abslines_obj_base in enumerate(abslines_infos_perobj[mask_obj_bas
                     elif radio_info_cmap=='nH':
                         cmap_norm_info.vmin=min(ravel_ragged(nh_plot.T[mask_obj_base].T[0])[global_mask_intime_norepeat])
                         cmap_norm_info.vmax=max(ravel_ragged(nh_plot.T[mask_obj_base].T[0])[global_mask_intime_norepeat])
+                    elif radio_info_cmap=='kT':
+                        cmap_norm_info.vmin=kt_min
+                        cmap_norm_info.vmax=kt_max
                         
                     colors_func=mpl.cm.ScalarMappable(norm=cmap_norm_info,cmap=cmap_info)
-                    
-                    c_scat_nondet_rgba_clim=colors_func.to_rgba(c_scat_nondet)
 
+                    c_scat_nondet_rgba_clim=colors_func.to_rgba(c_scat_nondet)
+                    
                 elem_err_nondet=ax_hid.errorbar(x_hid_incert[0][mask_nondet],y_hid_incert[0][mask_nondet],xerr=x_hid_incert[1:].T[mask_nondet].T,yerr=y_hid_incert[1:].T[mask_nondet].T,marker='None',linestyle='None',linewidth=0.5,
-                               c=c_scat_nondet if radio_info_cmap not in ['Inclination','Time','nH'] else None,label='',zorder=1000,alpha=1.)
+                               c=c_scat_nondet if radio_info_cmap not in type_1_cm else None,label='',zorder=1000,alpha=1.)
                 
-                if radio_info_cmap in ['Inclincation','Time','nH']:
+                if radio_info_cmap in type_1_cm:
                     for elem_children in elem_err_nondet.get_children()[1:]:
 
                         elem_children.set_colors(c_scat_nondet_rgba_clim)
@@ -1463,7 +1511,7 @@ for i_obj_base,abslines_obj_base in enumerate(abslines_infos_perobj[mask_obj_bas
             label_obj_plotted[i_obj_base]=True
         
         
-        if radio_info_cmap in ['Inclination','Time','nH']:
+        if radio_info_cmap in type_1_cm:
             
             if radio_info_cmap=='Inclination':
                 elem_scatter_nondet.set_clim(vmin=0,vmax=90)
@@ -1483,6 +1531,9 @@ for i_obj_base,abslines_obj_base in enumerate(abslines_infos_perobj[mask_obj_bas
             elif radio_info_cmap=='nH':
                 elem_scatter_nondet.set_clim(vmin=min(ravel_ragged(nh_plot.T[mask_obj_base].T[0])[global_mask_intime_norepeat]),
                                              vmax=max(ravel_ragged(nh_plot.T[mask_obj_base].T[0])[global_mask_intime_norepeat]))
+            elif radio_info_cmap=='kT':
+                elem_scatter_nondet.set_clim(vmin=kt_min,
+                                             vmax=kt_max)
                 
             if len(elem_scatter_nondet.get_sizes())>0:
                 is_colored_scat_nondet=True
@@ -1530,7 +1581,13 @@ for i_obj_base,abslines_obj_base in enumerate(abslines_infos_perobj[mask_obj_bas
                     
                     cb.set_label(r'nH ($10^{22}$ cm$^{-1}$)')
                     
-        
+                elif radio_info_cmap=='kT':
+                    elem_scatter_empty.set_clim(vmin=kt_min,vmax=kt_max)
+                    
+                    cb=plt.colorbar(elem_scatter_empty,cax=ax_cb)
+                    
+                    cb.set_label(r'disk temperature (keV)')
+                    
         #only adding to the index if there are non detections
         if source_nondet:
            id_obj_nondet+=1
@@ -1567,8 +1624,9 @@ if display_dicho:
     
     #vertical
     ax_hid.axline((0.8,1e-6),(0.8,10),ls='--',color='grey')
+    
 
-    #restricting the graph to the portion inside the threhsolds
+    #restricting the graph to the portion inside the thrsesolds
     # ax_hid.set_xlim(ax_hid.get_xlim()[0],0.8)
     # ax_hid.set_ylim(1e-2,ax_hid.get_ylim()[1])
     
@@ -1897,12 +1955,15 @@ with tab_about:
         
         st.markdown('''
                     
-                   The HID displays the observations in a Hardness/Intensity (in this case Luminosity) diagram, using the standard bands of X-ray measurements. In the default options, detections above the threshold are marked by a full circle, with a size scaling with the Equivalent Width (EW, or depth relative to the continuum) of the line. This does **NOT** necessarily means higher significance. The default options also shows EW upper limits (ULs) with empty hexagons, using two different symbols to aid visually distinguish between the many sources of the sample. In the case of upper limits, **smaller** hexagons means that the observation guarantees no detection **above** this EW value (at a 3 sigma confidence level). In other words, the smaller the hexagon, the more constraining the observation.
+                   The HID displays the observations in a Hardness/Intensity (in this case Luminosity) diagram, using the standard bands of X-ray measurements. In the default options, detections above the threshold are marked by a full circle, with a size scaling with the Equivalent Width (EW, or depth relative to the continuum) of the line. This does **NOT** necessarily means higher significance. 
+                   If displayed, detections below the significance threshold are marker with grey hashed circles.
+                   
+                   The default options also shows EW upper limits (ULs) with empty hexagons, using two different symbols to aid visually distinguish between the many sources of the sample. In the case of upper limits, **smaller** hexagons means that the observation guarantees no detection **above** this EW value (at a 3 sigma confidence level). In other words, the smaller the hexagon, the more constraining the observation.
                    
                    The main visualisation options allow to display several line or observation parameters as a colormap or color code for the exposures.
                    The "source" option is the only one with 2 different colormaps, a jet for the sources with detections (the same one used in the parameter analysis), and a viridis for the non-detections. We advise restricting the number of sources for easier identification of individual detections.
                    
-                   For all line parameters (currently velocity shift and delchi), the value displayed is the most extremal among the significant lines in this observation.
+                   For all line parameters (currently velocity shift and delchi), the value displayed is the most extremal among the significant lines in this observation. Velocity shifts are considere d from the source point of view, which means that positive values are :red[redshifts] and negative values :blue[blueshifts].
                    
                    If the upper limit option is selected, the user can choice a range of lines, from which the biggest upper limit will be displayed.
                    
@@ -1919,22 +1980,51 @@ with tab_about:
                    
                    RXTE data is taken from a local copy of the definitive products available at http://xte.mit.edu/ASM_lc.html. Lightcurves use the sum 
                    of the intensity in all bands ([1.5 − 12] keV), corrected by a factor of 25 to match (visually) MAXI values, and HR values are built 
-                   as the ratio of bands C and B+A, i.e. [5.5 − 12]/[1.5 − 5]. MAXI data is loaded on the fly from the official website at 
+                   as the ratio of bands C and B+A, i.e. [5.5 − 12]/[1.5 − 5] keV. MAXI data is loaded on the fly from the official website at 
                    http://maxi.riken.jp/top/slist.html, in order to use the latest dataset available. 
                    
                    MAXI lightcurves use the full [2 − 20] keV band and HR built from the [4 − 10]/[2 − 4] bands. A transparency factor proportional to 
                    the quality of the data (estimated from the ratio of the HR value to its uncertainty) is applied to both HRs to aid visibility, and 
                    the dates of exposures from the instruments used in the sample are highlighted. The date restriction selected in the sample selection 
                    can be both highlighted and used to zoom the lightcurve display, and EW values and upper limits can be displayed on a secondary axis 
-                   at the date of each exposure.
+                   at the date of each exposure in the sample.
                    
                    #''')
                    
         
         st.header('Parameter Analysis')
         
-        st.header('Data display and download (tables)')
+        st.markdown('''
+                    The distribution and correlation of line parameters can be computed on the fly from the chosen data selection. 
 
+                    Distributions are restricted to the main line parameters, as well as the number of detections for each line, and
+                    can be stacked/split according to sources and instruments. 
+                    
+                    Scatter plots display correlations between various intrinsic parameters, as well as observation-level and source-level
+                    parameters.
+                    
+                    Besides the 3 main parameters (EW, velocity shift and energy), several additional parameters can be added to both the 
+                    distributions and the scatters. 
+                    
+                    In scatter plots, p-values are computed according to the perturbation method discussed in section 4.1.1 of the paper. 
+                    This process is done on the fly, which means that graphs take some time to produce, and the p-values can fluctuate slightly.
+                    
+                    Similarly to the HID, scatter plots can be color-coded according to various informations, and EW upper
+                    limits for currently selected sources can be included in the relevant plots, along with other secondary options.
+                    
+                    By default, parameter analysis is skipped if only upper limits remain, to avoid additional computing time in situations where it's
+                    mostly unneeded. Similarly, restricting the analysis to sources with a detection avoid too much cluttering and better spread in the
+                    colormap used for sources.
+                    ''')
+                    
+        
+        st.header('Data display and download (Tables)')
+
+        st.markdown('''
+                    the complete data of sources, observation and line parameters are displayed according to the current selection made in the sidebar,
+                    and can be downloaded through separate csvs file that can be loaded as multi-dimensional dataframes.
+                    ''')
+                    
 #### Transposing the tables into plot arrays
 
 flag_noabsline=False
@@ -2261,9 +2351,11 @@ if compute_only_withdet:
     
     if sum(global_mask_intime_norepeat)==0 or sum(global_sign_mask)==0:
         if sum(global_mask_intime_norepeat)==0:
-            st.warning('No point left in selected dates interval. Cannot compute parameter analysis.')
+            with tab_param:
+                st.warning('No point left in selected dates interval. Cannot compute parameter analysis.')
         elif sum(global_sign_mask)==0:
-            st.warning('No detections for current object/date selection. Cannot compute parameter analysis.')
+            with tab_param:
+                st.warning('No detections for current object/date selection. Cannot compute parameter analysis.')
         st.stop()
         
 #overwriting the objet mask with sources with detection for parameter analysis if asked to

@@ -2015,7 +2015,7 @@ with tab_about:
                     By default, parameter analysis is skipped if only upper limits remain, to avoid additional computing time in situations where it's
                     mostly unneeded. Similarly, restricting the analysis to sources with a detection avoid too much cluttering and better spread in the
                     colormap used for sources.
-                    ''')
+                    #''')
                     
         
         st.header('Data display and download (Tables)')
@@ -2023,7 +2023,7 @@ with tab_about:
         st.markdown('''
                     the complete data of sources, observation and line parameters are displayed according to the current selection made in the sidebar,
                     and can be downloaded through separate csvs file that can be loaded as multi-dimensional dataframes.
-                    ''')
+                    #''')
                     
 #### Transposing the tables into plot arrays
 

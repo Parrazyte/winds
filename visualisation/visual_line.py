@@ -737,10 +737,25 @@ ax_hid.set_xlabel('Hardness Ratio ([6-10]/[3-6] keV bands)')
 ax_hid.set_ylabel(r'Luminosity in the [3-10] keV band in (L/L$_{Edd}$) units')
 ax_hid.set_yscale('log')
 
+
 '''Dichotomy'''
+
+#some warnings to avoid crashes
+if radio_single !='All Objects' and len(choice_source)<1:
+    st.warning('Please select at least one Source.')
+    st.stop()
+    
+if len(selectbox_abstype)<1:
+    st.warning('Please select at least one line.')
+    st.stop()
 
 #fetching the line indexes when plotting EW ratio as colormap
 eqw_ratio_ids=np.argwhere([elem in selectbox_ratioeqw for elem in line_display_str]).T[0]
+
+if radio_info_cmap=='EW ratio' and len(eqw_ratio_ids)<2:
+    st.warning('Cannot build EW ratio colormap from current line restriction')
+    st.stop()
+
 
 #string of the colormap legend for the informations
 radio_info_label=['Velocity shift', r'$\Delta\chi^2$', 'Equivalent width ratio']

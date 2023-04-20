@@ -502,8 +502,12 @@ else:
 line_display_str=np.array([r'FeXXV Ka (6.70 keV)',r'FeXXVI  Ka (6.97 keV)','NiXXVII Ka (7.80 keV)',
                       'FeXXV Kb (7.89 keV)','FeXXVI Kb (8.25 keV)','FeXXVI Kg (8.70 keV)'])
 
+#parameters independant of the presence of lines
 type_1_cm=['Inclination','Time','nH','kT']
 
+#parameters without actual colorbars
+type_1_colorcode=['Source','Instrument']
+                  
 if multi_obj:
     radio_single=st.sidebar.radio('Display options:',('All Objects','Multiple Objects','Single Object'))
     
@@ -621,7 +625,7 @@ else:
     
 checkbox_zoom=st.sidebar.checkbox('Zoom around the displayed elements',value=False)
             
-display_nondet=st.sidebar.checkbox('Display non detection',value=True)
+display_nondet=st.sidebar.checkbox('Display exposures with no detection',value=True)
 
 if display_nondet:
     with st.sidebar.expander('Upper limits'):
@@ -665,7 +669,7 @@ with st.sidebar.expander('Visualisation'):
     
     split_cmap_source=st.checkbox('Use different colormaps for detections and non-detections',value=True)
     
-    global_colors=st.checkbox('Normalise colors/colormaps over the entire sample',value=False)
+    global_colors=st.checkbox('Normalize colors/colormaps over the entire sample',value=False)
         
     if not online:
         paper_look=st.checkbox('Paper look',value=True)
@@ -879,15 +883,16 @@ if global_colors:
     colors_nondet=mpl.cm.ScalarMappable(norm=norm_colors_nondet,cmap=cmap_color_nondet)
     
     #the date is an observation-level parameter so it needs to be repeated to have the same dimension as the other global variables
-    global_plotted_datetime=np.array([elem for elem in date_list for i in range(sum(mask_lines))],dtype='object')
+    global_plotted_datetime=np.array([elem for elem in date_list for i in range(len(mask_lines))],dtype='object')
+    
+    global_mask_intime=np.repeat(True,len(ravel_ragged(global_plotted_datetime)))
+    
+    global_mask_intime_norepeat=np.repeat(True,len(ravel_ragged(date_list)))
     
 else:
     global_plotted_sign=abslines_plot[4][0][mask_lines].T[mask_obj].ravel()
     global_plotted_data=abslines_plot[radio_cmap_i][0][mask_lines].T[mask_obj].ravel()
     
-    #the date is an observation-level parameter so it needs to be repeated to have the same dimension as the other global variables
-    global_plotted_datetime=np.array([elem for elem in date_list[mask_obj] for i in range(sum(mask_lines))],dtype='object')
-
     #objects colormap
     norm_colors_obj=mpl.colors.Normalize(vmin=0,vmax=max(0,len(abslines_infos_perobj[mask_obj])+(-1 if not cyclic_cmap else 0)))
     colors_obj=mpl.cm.ScalarMappable(norm=norm_colors_obj,cmap=cmap_color_source)
@@ -902,11 +907,14 @@ else:
 #adapting the plotted data in regular array for each object in order to help
 #global masks to take off elements we don't want in the comparison
 
+    #the date is an observation-level parameter so it needs to be repeated to have the same dimension as the other global variables
+    global_plotted_datetime=np.array([elem for elem in date_list[mask_obj] for i in range(sum(mask_lines))],dtype='object')
+    
     global_mask_intime=(Time(ravel_ragged(global_plotted_datetime))>=Time(slider_date[0])) &\
         (Time(ravel_ragged(global_plotted_datetime))<=Time(slider_date[1]))
     
-global_mask_intime_norepeat=(Time(ravel_ragged(date_list[mask_obj]))>=Time(slider_date[0])) &\
-    (Time(ravel_ragged(date_list[mask_obj]))<=Time(slider_date[1]))
+    global_mask_intime_norepeat=(Time(ravel_ragged(date_list[mask_obj]))>=Time(slider_date[0])) &\
+        (Time(ravel_ragged(date_list[mask_obj]))<=Time(slider_date[1]))
 
 #global_nondet_mask=(np.array([subelem for elem in global_plotted_sign for subelem in elem])<=slider_sign) & (global_mask_intime)
 
@@ -951,9 +959,12 @@ if not checkbox_zoom:
     ax_hid.set_ylim((min(bounds_y[0]*0.9,1e-5),max(bounds_y[1]*1.1,1)))
 
 #creating space for the colorbar
-if radio_info_cmap not in ['Source','Instrument']:
+if radio_info_cmap not in type_1_colorcode:
     ax_cb=plt.axes([0.92, 0.105, 0.02, 0.775])
-
+    
+    #giving a default value to the colorbar variable so we can test if a cb has been generated later on
+    cb=None
+    
 #markers
 marker_abs='o'
 marker_nondet='d'
@@ -1011,7 +1022,8 @@ for i_obj,abslines_obj in enumerate(abslines_infos_perobj[mask_obj]):
         [np.nan if len(abslines_obj[0][radio_cmap_i][mask_lines].T[i_obs][mask_sign.T[i_obs]])==0 else\
                                    (max(abslines_obj[0][radio_cmap_i][mask_lines].T[i_obs][mask_sign.T[i_obs]])\
                                     if radio_info_cmap!='EW ratio' else\
-                                        np.nan if abslines_obj[0][radio_cmap_i][eqw_ratio_ids[0]].T[i_obs]==0 else \
+                                        np.nan if abslines_obj[0][radio_cmap_i][eqw_ratio_ids[0]].T[i_obs]<slider_sign or\
+                                            abslines_obj[0][radio_cmap_i][eqw_ratio_ids[1]].T[i_obs]<slider_sign else \
                                         abslines_obj[0][radio_cmap_i][eqw_ratio_ids[1]].T[i_obs]/\
                                         abslines_obj[0][radio_cmap_i][eqw_ratio_ids[0]].T[i_obs])\
                                    for i_obs in range(len(abslines_obj[0][radio_cmap_i][mask_lines].T))])
@@ -1023,10 +1035,8 @@ for i_obj,abslines_obj in enumerate(abslines_infos_perobj[mask_obj]):
                                    for i_obs in range(len(abslines_obj[0][0][mask_lines].T))])
         
     #and we can create the plot mask from it (should be the same wether we take obj_size_sign or the size)
-    if radio_info_cmap!='EW ratio':
-        obj_val_mask_sign=~np.isnan(obj_size_sign)
-    else:
-        obj_val_mask_sign=~np.isnan(obj_size_sign)
+    obj_val_mask_sign=~np.isnan(obj_size_sign)
+
     
     #creating a display order which is the reverse of the EW size order to make sure we do not hide part the detections
     obj_order_sign=obj_size_sign[obj_val_mask_sign].argsort()[::-1]
@@ -1177,7 +1187,7 @@ for i_obj,abslines_obj in enumerate(abslines_infos_perobj[mask_obj]):
         id_obj_det+=1
     
     #resizing all the colors and plotting the colorbar, only done at the last iteration
-    if radio_info_cmap not in ['Source','Instrument'] and i_obj==len(abslines_infos_perobj[mask_obj])-1 and len(plotted_colors_var)>0:
+    if radio_info_cmap not in type_1_colorcode and i_obj==len(abslines_infos_perobj[mask_obj])-1 and len(plotted_colors_var)>0:
         
         is_colored_scat=False
         
@@ -1188,12 +1198,22 @@ for i_obj,abslines_obj in enumerate(abslines_infos_perobj[mask_obj]):
                 elem_scatter.set_clim(vmin=0,vmax=90)
             elif radio_info_cmap=='Time':
 
-                elem_scatter.set_clim(
+                if global_colors:
+                    elem_scatter.set_clim(
+                    vmin=min(mdates.date2num(ravel_ragged(date_list))),
+                    vmax=max(mdates.date2num(ravel_ragged(date_list))))    
+                else:
+                    elem_scatter.set_clim(
                     vmin=max(min(mdates.date2num(ravel_ragged(date_list[mask_obj])[global_mask_intime_norepeat])),mdates.date2num(slider_date[0])),
                     vmax=min(max(mdates.date2num(ravel_ragged(date_list[mask_obj])[global_mask_intime_norepeat])),mdates.date2num(slider_date[1])))          
                 
             elif radio_info_cmap=='nH':
-                elem_scatter.set_clim(vmin=min(ravel_ragged(nh_plot_restrict[0])[global_mask_intime_norepeat]),
+                
+                if global_colors:
+                    elem_scatter.set_clim(vmin=min(ravel_ragged(nh_plot_restrict[0])),
+                                      vmax=max(ravel_ragged(nh_plot_restrict[0])))
+                else:
+                    elem_scatter.set_clim(vmin=min(ravel_ragged(nh_plot_restrict[0])[global_mask_intime_norepeat]),
                                       vmax=max(ravel_ragged(nh_plot_restrict[0])[global_mask_intime_norepeat]))
             elif radio_info_cmap=='kT':
                 
@@ -1210,11 +1230,16 @@ for i_obj,abslines_obj in enumerate(abslines_infos_perobj[mask_obj]):
                 else:
                     elem_scatter.set_clim(vmin=min(plotted_colors_var),vmax=max(plotted_colors_var))
 
+            # breakpoint()
+            
             if len(elem_scatter.get_sizes())>0:
+                
                 is_colored_scat=True
                 
                 #keeping the scatter to create the colorbar from it
                 elem_scatter_forcol=elem_scatter
+                
+                
             # ax_cb.set_axis_off()
             
         #defining the ticks from the currently plotted objects
@@ -1265,7 +1290,7 @@ for i_obj,abslines_obj in enumerate(abslines_infos_perobj[mask_obj]):
             cmap_norm_ticks=None
                     
         #only creating the colorbar if there is information to display
-        if is_colored_scat or radio_info_cmap in  type_1_cm:
+        if is_colored_scat and radio_info_cmap not in type_1_colorcode:
             
             if radio_info_cmap=='Time':
                 
@@ -1298,7 +1323,7 @@ for i_obj,abslines_obj in enumerate(abslines_infos_perobj[mask_obj]):
             elif radio_info_cmap=='Time':
                 cb.set_label('Observation date',labelpad=30)
             elif radio_info_cmap=='nH':
-                cb.set_label(r'nH ($10^{22}$ cm$^{-1}$)',labelpad=10)
+                cb.set_label(r'nH ($10^{22}$ cm$^{-2}$)',labelpad=10)
             elif radio_info_cmap=='kT':
                 cb.set_label(r'disk temperature (keV)',labelpad=10)
             else:
@@ -1386,8 +1411,12 @@ for i_obj_base,abslines_obj_base in enumerate(abslines_infos_perobj[mask_obj_bas
         #note: due to problems with colormapping of the edgecolors we directly compute the color of the edges with a normalisation
         norm_cmap_incl = mpl.colors.Normalize(0,90)
         
-        norm_cmap_time = mpl.colors.Normalize(min(mdates.date2num(ravel_ragged(date_list[mask_obj_base])[global_mask_intime_norepeat])),
-                                              max(mdates.date2num(ravel_ragged(date_list[mask_obj_base])[global_mask_intime_norepeat])))
+        if global_colors:
+            norm_cmap_time = mpl.colors.Normalize(min(mdates.date2num(ravel_ragged(date_list)[global_mask_intime_norepeat])),
+                                                  max(mdates.date2num(ravel_ragged(date_list)[global_mask_intime_norepeat])))
+        else:
+            norm_cmap_time = mpl.colors.Normalize(min(mdates.date2num(ravel_ragged(date_list[mask_obj_base])[global_mask_intime_norepeat])),
+                                                  max(mdates.date2num(ravel_ragged(date_list[mask_obj_base])[global_mask_intime_norepeat])))
         if display_upper:
             
             #we define the upper limit range of points independantly to be able to have a different set of lines used for detection and
@@ -1520,17 +1549,26 @@ for i_obj_base,abslines_obj_base in enumerate(abslines_infos_perobj[mask_obj_bas
                 #     elem_err_nondet.set_clim(vmin=0,vmax=90)
                 
             elif radio_info_cmap=='Time':
-                elem_scatter_nondet.set_clim(
-                    vmin=max(min(mdates.date2num(ravel_ragged(date_list[mask_obj_base])[global_mask_intime_norepeat])),mdates.date2num(slider_date[0])),
-                    vmax=min(max(mdates.date2num(ravel_ragged(date_list[mask_obj_base])[global_mask_intime_norepeat])),mdates.date2num(slider_date[1])))       
+                if global_colors:
+                    elem_scatter_nondet.set_clim(
+                        vmin=min(mdates.date2num(ravel_ragged(date_list))),
+                        vmax=max(mdates.date2num(ravel_ragged(date_list))))  
+                else:
+                    elem_scatter_nondet.set_clim(
+                        vmin=max(min(mdates.date2num(ravel_ragged(date_list[mask_obj_base])[global_mask_intime_norepeat])),mdates.date2num(slider_date[0])),
+                        vmax=min(max(mdates.date2num(ravel_ragged(date_list[mask_obj_base])[global_mask_intime_norepeat])),mdates.date2num(slider_date[1])))       
                 # if display_hid_error:
                 #     elem_err_nondet.set_clim(
                 #     vmin=max(min(mdates.date2num(ravel_ragged(date_list[mask_obj_base][global_mask_intime_norepeat]))),mdates.date2num(slider_date[0])),
                 #     vmax=min(max(mdates.date2num(ravel_ragged(date_list[mask_obj_base][global_mask_intime_norepeat]))),mdates.date2num(slider_date[1])))
                 
             elif radio_info_cmap=='nH':
-                elem_scatter_nondet.set_clim(vmin=min(ravel_ragged(nh_plot.T[mask_obj_base].T[0])[global_mask_intime_norepeat]),
-                                             vmax=max(ravel_ragged(nh_plot.T[mask_obj_base].T[0])[global_mask_intime_norepeat]))
+                if global_colors:
+                    elem_scatter_nondet.set_clim(vmin=min(ravel_ragged(nh_plot[0])),
+                                                 vmax=max(ravel_ragged(nh_plot[0])))
+                else:
+                    elem_scatter_nondet.set_clim(vmin=min(ravel_ragged(nh_plot.T[mask_obj_base].T[0])[global_mask_intime_norepeat]),
+                                                 vmax=max(ravel_ragged(nh_plot.T[mask_obj_base].T[0])[global_mask_intime_norepeat]))
             elif radio_info_cmap=='kT':
                 elem_scatter_nondet.set_clim(vmin=kt_min,
                                              vmax=kt_max)
@@ -1579,7 +1617,7 @@ for i_obj_base,abslines_obj_base in enumerate(abslines_infos_perobj[mask_obj_bas
                                              vmax=max(ravel_ragged(nh_plot.T[mask_obj_base].T[0])[global_mask_intime_norepeat]))
                     cb=plt.colorbar(elem_scatter_empty,cax=ax_cb,extend='min')
                     
-                    cb.set_label(r'nH ($10^{22}$ cm$^{-1}$)')
+                    cb.set_label(r'nH ($10^{22}$ cm$^{-2}$)')
                     
                 elif radio_info_cmap=='kT':
                     elem_scatter_empty.set_clim(vmin=kt_min,vmax=kt_max)
@@ -1593,6 +1631,12 @@ for i_obj_base,abslines_obj_base in enumerate(abslines_infos_perobj[mask_obj_bas
            id_obj_nondet+=1
         else:
             id_obj_det+=1
+            
+#taking of the axes in the colorbar axes if no colorbar was displayed
+
+if radio_info_cmap not in type_1_colorcode and cb is None:
+    ax_cb.axis('off')
+    
 
 #### Displaying arrow evolution if needed and if there are points
 if display_single and display_evol_single and sum(global_mask_intime_norepeat)>1:

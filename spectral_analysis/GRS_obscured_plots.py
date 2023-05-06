@@ -10,7 +10,7 @@ import os
 import numpy as np
 import matplotlib.pyplot as plt
 from xspec import Xset,AllModels,Fit,Plot,AllData
-from xspec_config_multisp import xPlot,reset,plot_std_ener,Pset,reset
+from xspec_config_multisp import xPlot,reset,plot_std_ener,Pset,reset,catch_model_str,Plot_screen
 from matplotlib.gridspec import GridSpec
 
 reset()
@@ -26,9 +26,13 @@ obsids=['22213','23435','24663']
 
 grsdir='/media/parrama/SSD/Observ/BHLMXB/Chandra/Sample/GRS1915+105/bigbatch'
 
-simdir='/media/parrama/SSD/Simu'
+simdir='/media/parrama/SSD/Simu/GRS_slab'
 
 savedir='/home/parrama/Documents/Work/PhD/docs/papers/Wind review/'
+
+with_bshift=True
+
+with_redshift=True
 
 fig=plt.figure(figsize=(15,10))
 
@@ -36,6 +40,12 @@ grid=GridSpec(2,3,figure=fig,hspace=0.,wspace=0.)
 
 Plot.xLog=False
 
+os.chdir(savedir)
+
+Xset.openLog('grs_logs.txt')
+logfile_read=open('grs_logs.txt',mode='r')
+
+                 
 for i_col in range(3):
     
     ax_high=plt.subplot(grid[0,i_col])
@@ -78,11 +88,16 @@ for i_col in range(3):
     
     Xset.restore(files[i_col])
     
+    AllData.ignore('**-4.5 8.-**')
     
     AllModels.clear()
     os.chdir(simdir)
     
-    AllModels+=('constant*phabs(mtable{4u1630_ezdisknthcomp.fits}*mtable{BH_Wind_lowxi.fits}*diskbb)')
+    if with_bshift and with_redshift:
+    
+        AllModels+=('constant*phabs*mtable{BH_Wind_lowxi.fits}*mtable{4u1630_ezdisknthcomp.fits}*diskbb')
+    else:
+        AllModels+=('constant*phabs*mtable{BH_Wind_lowxi.fits}*vashift*mtable{4u1630_ezdisknthcomp.fits}*diskbb')
     # AllModels+=('constant*phabs(gsmooth(mtable{4u1630_ezdisknthcomp.fits}*mtable{BH_Wind_lowxi.fits}*diskbb))')
     
     #setting and freezing the galactic nH
@@ -94,23 +109,39 @@ for i_col in range(3):
     AllModels(1)(1).frozen=True
     # AllModels(1)(1).values=1
 
-    
-    AllModels(1)(3).values=0.01
-    # AllModels(1)(3).frozen=True
+    if with_bshift:
+        
+        if with_redshift:
+            AllModels(1)(8).frozen=False
+            AllModels(1)(8).values=[0,0.001,-0.01,-0.01,0.01,0.01]
+            
+        # if with_redshift:
+        #     AllModels(1)(5).frozen=False
+        #     AllModels(1)(5).values=[0,0.001,-0.01,-0.01,0.01,0.01]
+            
+        else:
+            #unfreezing the vashift of the high xi component
+            AllModels(1).vashift.Velocity.frozen=False
     
     Fit.perform()
     
     #getting errors on everything
-    Fit.error('1-15')
+    Fit.error(' max 100 1-15')
     
     #saving the values of the full model
-    valmod=[AllModels(1)(i).values[0] for i in range(1,11)]
+    #note: here it goes until parameter 10 or 11 with the range not taking the last parameter
+    valmod=[AllModels(1)(i).values for i in range(1,11+(1 if with_bshift and not with_redshift else 0))]
     
-    if os.path.isfile('slabs'+str(i_col)+'.xcm'):
-        os.remove('slabs'+str(i_col)+'.xcm')
+    if os.path.isfile('slabs'+str(i_col)+('_with_bshift' if with_bshift else '')+('_redshift' if with_redshift else '')+'.xcm'):
+        os.remove('slabs'+str(i_col)+('_with_bshift' if with_bshift else '')+('_redshift' if with_redshift else '')+'.xcm')
         
-    Xset.save('slabs'+str(i_col)+'.xcm',info='a')
+    
+    Xset.save('slabs'+str(i_col)+('_with_bshift' if with_bshift else '')+('_redshift' if with_redshift else '')+'.xcm',info='a')
         
+    catch_model_str(logfile_read,savepath='slabs'+str(i_col)+('_with_bshift' if with_bshift else '')+('_redshift' if with_redshift else '')+'.txt')
+    
+    Plot_screen('ldata,ratio,delchi','slabs'+str(i_col)+('_with_bshift' if with_bshift else '')+('_redshift' if with_redshift else '')+'_plot.png')
+
     Fit.show()
     
     AllModels.clear()
@@ -125,41 +156,47 @@ for i_col in range(3):
     xPlot('ldata',axes_input=ax_low,hide_ticks=False,secondary_x=False,group_names='nolabel',
           legend_position='upper right')
     
-    #re-adding the first ionization zone's model
-    AllModels+=('constant*phabs(mtable{4u1630_ezdisknthcomp.fits}*diskbb)')
+    #re-adding the high xi ionization zone's model
     
-    #loading before the break
-    for i_par in range(1,6):
-        AllModels(1)(i_par).values=valmod[i_par-1]
+    if not with_bshift or with_redshift:
+        AllModels+=('constant*phabs*mtable{4u1630_ezdisknthcomp.fits}*diskbb')
+              
+    else:
+        AllModels+=('constant*phabs*vashift*mtable{4u1630_ezdisknthcomp.fits}*diskbb')
+
+    #skipping 3 of the low ionization component
+    pars_cut=valmod[:2]+valmod[5:]
     
-    #and after the break
-    for i_par in range(9,11):
-        AllModels(1)(i_par-3).values=valmod[i_par-1]
-        
+    #loading
+    
+    for i_par in range(1,len(pars_cut)+1):
+        AllModels(1)(i_par).values=pars_cut[i_par-1]
+
+
     Plot('ldata')
     
-    mod_zone_1=Plot.model(1)
+    mod_zone_high=Plot.model(1)
     
     AllModels.clear()
     
-    #re-adding the second zone's model
-    AllModels+=('constant*phabs(mtable{BH_Wind_lowxi.fits}*diskbb)')
+    #re-adding the low xi ionization zone's model
+
+    AllModels+=('constant*phabs*mtable{BH_Wind_lowxi.fits}*diskbb')
+              
+    #skipping the high ionization component
+    pars_cut=valmod[:5]+valmod[-2:]
     
-    #loading before the break
-    for i_par in range(1,3):
-        AllModels(1)(i_par).values=valmod[i_par-1]
+    #loading 
+    for i_par in range(1,len(pars_cut)+1):
+        AllModels(1)(i_par).values=pars_cut[i_par-1]
     
-    #and after the break
-    for i_par in range(6,11):
-        AllModels(1)(i_par-3).values=valmod[i_par-1]
-        
     Plot('ldata')
     
-    mod_zone_2=Plot.model(1)
+    mod_zone_low=Plot.model(1)
     
-    ax_low.plot(Plot.x(1),mod_zone_1,color='royalblue',label=r'high $\xi$ photoionization zone')
+    ax_low.plot(Plot.x(1),mod_zone_high,color='royalblue',label=r'high $\xi$ photoionization zone')
     
-    ax_low.plot(Plot.x(1),mod_zone_2,color='orange',label=r'low $\xi$ photoionization zone')
+    ax_low.plot(Plot.x(1),mod_zone_low,color='orange',label=r'low $\xi$ photoionization zone')
     
     e_lines_low=[6.544,6.586,6.587,6.497,6.506,6.629]
     
@@ -170,7 +207,6 @@ for i_col in range(3):
         
     for elem_e in e_lines_high:
         ax_low.axvline(x=elem_e,ymin=0,ymax=1,color='royalblue',ls='--',lw=0.75)
-    
     
     plt.legend()
     
@@ -201,4 +237,4 @@ plt.tight_layout()
         
 os.chdir(savedir)
 
-plt.savefig('grs_obs.pdf')
+plt.savefig('grs_obs'+('_withbshift' if with_bshift else '')+('_redshift' if with_redshift else '')+'.pdf')

@@ -64,7 +64,7 @@ ap = argparse.ArgumentParser(description='Script to reduce NICER files.\n)')
 ap.add_argument("-dir", "--startdir", nargs='?', help="starting directory. Current by default", default='./', type=str)
 ap.add_argument("-l","--local",nargs=1,help='Launch actions directly in the current directory instead',
                 default=False,type=bool)
-ap.add_argument('-catch','--catch_errors',help='Catch errors while running the data reduction and continue',default=False,type=bool)
+ap.add_argument('-catch','--catch_errors',help='Catch errors while running the data reduction and continue',default=True,type=bool)
 
 #global choices
 ap.add_argument("-a","--action",nargs='?',help='Give which action(s) to proceed,separated by comas.'+
@@ -298,6 +298,7 @@ def extract_all_spectral(directory,bkgmodel='scorpeon_script',language='python',
             with open(directory+'/extract_lc.log') as file:
                 lines=file.readlines()
             
+            extract_all_spectral_done.set()
             return lines[-1].replace('\n','')
             
         allfiles=glob.glob(directory+'/xti/**',recursive=True)
@@ -430,6 +431,7 @@ s
                 with open(directory+'/extract_lc.log') as file:
                     lines=file.readlines()
                 
+                extract_lc_done.set()
                 return lines[-1].replace('\n','')
             
             file_lc=[elem for elem in glob.glob(directory+'/xti/**/*',recursive=True) if elem.endswith('.lc')][0]
@@ -718,6 +720,13 @@ def regroup_spectrum(directory,group='opt'):
 
         bashproc.logfile_read=sys.stdout
 
+        #raising an error to stop the process if the command has crashed for some reason
+        if not os.path.isfile(directory+'/'+directory+'_sr.pha'):
+            regroup_spectrum_done.set()
+            return 'Source spectrum missing'
+            
+        allfiles=glob.glob(directory+'/xti/**',recursive=True)
+        
         #print for saving in the log file
         print('ftgrouppha infile='+directory+'/'+directory+'_sr.pha'+' outfile='+directory+'/'+directory+'_sp_grp_'+group+
         '.pha grouptype='+group+' respfile='+directory+'/'+directory+'.rmf')
@@ -839,8 +848,11 @@ if not local:
                 try:
                 #for loop to be able to use different orders if needed
                     for curr_action in action_list:
+                        
+                        #resetting the error string message
                         output_err=None
                         folder_state='Running '+curr_action
+                        
                         if curr_action=='1':
                             process_obsdir(dirname,overwrite=overwrite_glob)
                             process_obsdir_done.wait()
@@ -849,7 +861,9 @@ if not local:
                             select_detector_done.wait()
                             
                         if curr_action=='fs':
-                            extract_all_spectral(dirname,bkgmodel=bgmodel,language=bglanguage,overwrite=overwrite_glob)
+                            output_err=extract_all_spectral(dirname,bkgmodel=bgmodel,language=bglanguage,overwrite=overwrite_glob)
+                            if type(output_err)==str:
+                                raise ValueError
                             extract_all_spectral_done.wait()
                             
                         if curr_action=='l':
@@ -869,7 +883,9 @@ if not local:
                             extract_response(dirname)
                             extract_response_done.wait()
                         if curr_action=='g':
-                            regroup_spectrum(dirname,group=grouptype)
+                            output_err=regroup_spectrum(dirname,group=grouptype)
+                            if type(output_err)==str:
+                                raise ValueError
                             regroup_spectrum_done.wait()
                         if curr_action=='m':
                             batch_mover(dirname)

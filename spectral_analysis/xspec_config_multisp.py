@@ -157,6 +157,40 @@ def screen_term(screenfile,wind_type='Spyder',kill=False):
             if kill==True:
                 os.system('xkill -id '+terminal_wid)
 
+def catch_model_str(logfile,savepath=None):
+    
+    '''
+    catches the current model's paremeters and fit (AllModels(1).show + Fit.show) from the current logfile
+    
+    If savepath is not None, saves the str to the given path
+    '''
+    
+    #saving the previous chatter state and ensuring the log chatter is correctly set
+    prev_logchatter=Xset.logChatter
+    
+    Xset.logChatter=10
+
+    #flushing the readline to get to the current point
+    logfile.readlines()
+    
+    #Displaying the elements we're interested in once again
+    AllModels.show()
+    Fit.show()
+    
+    #catching them
+    mod_str=logfile.readlines()
+    
+    #and writing them into a txt
+    if savepath is not None:
+        with open(savepath,'w') as mod_str_file:
+            mod_str_file.writelines(mod_str)
+        
+    #switching back to the initial logchatter value
+    Xset.logChatter=prev_logchatter
+    
+    return mod_str
+
+
 '''
 Model modification and utility commands.
 Most of these are created because once a model is unloaded in PyXspec, everything but the component/parameter names is lost
@@ -1535,7 +1569,7 @@ def parse_xlog(log_lines,goal='lastmodel',no_display=False,replace_frozen=False,
     If there was a new model fit, we only parse the lines after the last improved fit 
     (to avoid fetching errors from previous fits if some errors didn't compute in the last fit)
      
-    Note: These methods will need to be updated for more than 1 datagroups
+    Note: These methods will need to be updated for more than 1 model per datagroups
     '''
     
     found_model=False
@@ -3900,7 +3934,7 @@ def Pset(window='/xs',xlog=False,ylog=False):
     if ylog==True:
         Plot.yLog=True
     else:
-        Plot.xLog=False
+        Plot.yLog=False
         
     with redirect_stdout(None):
         Plot.commands=()
@@ -3994,17 +4028,30 @@ class plot_save:
             self.datatype=datastr
             
         #adding the main data
-        self.x=np.array([None]*AllData.nGroups)
-        self.xErr=np.array([None]*AllData.nGroups)
-        self.y=np.array([None]*AllData.nGroups)
-        self.yErr=np.array([None]*AllData.nGroups)
+        self.x=np.array([None]*max(1,AllData.nGroups))
+        self.xErr=np.array([None]*max(1,AllData.nGroups))
+        self.y=np.array([None]*max(1,AllData.nGroups))
+        self.yErr=np.array([None]*max(1,AllData.nGroups))
         
-        for i_grp in range(1,AllData.nGroups+1):
-            self.x[i_grp-1]=np.array(Plot.x(i_grp))
-            self.xErr[i_grp-1]=np.array(Plot.xErr(i_grp))
-            self.y[i_grp-1]=np.array(Plot.y(i_grp))
-            self.yErr[i_grp-1]=np.array(Plot.yErr(i_grp))
-        
+        #some of these may exist or not depending on the plot type
+        for i_grp in range(1,max(1,AllData.nGroups)+1):
+            try:
+                self.x[i_grp-1]=np.array(Plot.x(i_grp))
+            except:
+                pass
+            try:
+                self.xErr[i_grp-1]=np.array(Plot.xErr(i_grp))
+            except:
+                pass
+            try:
+                self.y[i_grp-1]=np.array(Plot.y(i_grp))
+            except:
+                pass
+            try:
+                self.yErr[i_grp-1]=np.array(Plot.yErr(i_grp))
+            except:
+                pass
+            
         #adding elements relevant to the data plot:
             
         if self.datatype=='data':
@@ -4017,26 +4064,28 @@ class plot_save:
             else:
                 self.background=None
                 
-            #and the model
-            #testing if there is a model loadded
-            self.ismod=len(AllModels.sources)>0
-
-            if self.ismod:
-                self.model=np.array([None]*AllData.nGroups)
-                for i_grp in range(1,AllData.nGroups+1):
-                    self.model[i_grp-1]=np.array(Plot.model(i_grp))
-            else:
-                self.model=None
         else:
             self.background=None
-            self.model=None
+
+        #and the model
+        #testing if there is a model loadded
+        self.ismod=len(AllModels.sources)>0
+
+        self.model=np.array([None]*(max(1,AllData.nGroups)))
+        
+        if self.ismod:         
+            for i_grp in range(1,max(1,AllData.nGroups)+1):
+                try:
+                    self.model[i_grp-1]=np.array(Plot.model(i_grp))
+                except:
+                    pass
             
         #adding components if in data mode
-        if self.datatype in ['data'] and self.add and self.ismod:
+        if self.datatype in ['data'] or 'model' in self.datatype and self.add and self.ismod:
                         
-            self.addcomps=np.array([None]*AllData.nGroups)
+            self.addcomps=np.array([None]*(max(1,AllData.nGroups)))
             
-            for i_grp in range(1,AllData.nGroups+1):
+            for i_grp in range(1,max(1,AllData.nGroups)+1):
         
                 print('\nTesting number of additive components in the model...the following error is normal')
                 
@@ -4057,10 +4106,13 @@ class plot_save:
                     try:
                         group_addcomps[i_comp]=np.array(Plot.addComp(addCompNum=i_comp+1,plotGroup=i_grp))
                     except:
-                        #can happen with only one component
-                        Plot('ldata')
-                        group_addcomps[i_comp]=np.array(Plot.model())
-       
+                        if AllData.nGroups>0:
+                            #can happen with only one component
+                            Plot('ldata')
+                            try:
+                                group_addcomps[i_comp]=np.array(Plot.model())
+                            except:
+                                pass
                 self.addcomps[i_grp-1]=group_addcomps
                 
             #storing the addcomp names for labeling during the plots
@@ -4508,7 +4560,7 @@ def comb_chi2map(fig_comb,chi_dict,title='',comb_label=''):
     plot_std_ener(ax_comb[0],ax_comb[1],plot_em=True)
         
 def xPlot(types,axes_input=None,plot_saves_input=None,plot_arg=None,includedlist=None,group_names=None,hide_ticks=True,
-          secondary_x=True,legend_position=None):
+          secondary_x=True,legend_position=None,xlims=None,ylims=None):
     
     '''
     Replot xspec plots using matplotib. Accepts custom types:
@@ -4519,6 +4571,8 @@ def xPlot(types,axes_input=None,plot_saves_input=None,plot_arg=None,includedlist
         -absorb_ratio:      modified ratio plot with absorption lines in the ratio and higlighted + absorption line positions highlighted
         
     plot_arg is an array argument with the values necessary for custom plots. each element should be None if the associated plot doesn't need plot arguments
+    
+    xlims and ylims should be tuples of values
     
     If plot_saves is not None, uses its array elements as inputs to create the plots. 
     Else, creates a range of plot_saves using plot_saver from the asked set of plot types
@@ -4608,20 +4662,26 @@ def xPlot(types,axes_input=None,plot_saves_input=None,plot_arg=None,includedlist
         if curr_save.yLog:
             curr_ax.set_yscale('log')
         
-        for id_grp in range(curr_save.nGroups):
+        #this needs to be performed independantly of how many groups there are
+        if xlims is not None:
+            curr_ax.set_xlim(xlims[0],xlims[1])
+        if ylims is not None:
+            curr_ax.set_ylim(ylims[0],ylims[1])
+        
+        for id_grp in range(max(1,curr_save.nGroups)):
         
             
             grp_name='' if group_names=='nolabel' else\
                 ('group '+str(id_grp+1) if curr_save.nGroups>1 else '') if group_names is None else group_names_list[id_grp]
             
-            #plotting each data group
-            curr_ax.errorbar(curr_save.x[id_grp],curr_save.y[id_grp],xerr=curr_save.xErr[id_grp],yerr=curr_save.yErr[id_grp],
-                             color=xcolors_grp[id_grp],linestyle='None',elinewidth=0.75,
-                             label='' if group_names=='nolabel' else grp_name)
+            if curr_save.y[id_grp] is not None:
+                #plotting each data group
+                curr_ax.errorbar(curr_save.x[id_grp],curr_save.y[id_grp],xerr=curr_save.xErr[id_grp],yerr=curr_save.yErr[id_grp],
+                                 color=xcolors_grp[id_grp],linestyle='None',elinewidth=0.75,
+                                 label='' if group_names=='nolabel' else grp_name)
             
             #plotting models
-            if 'ratio' not in plot_type and curr_save.model is not None:
-
+            if 'ratio' not in plot_type and curr_save.model[id_grp] is not None:
                 curr_ax.plot(curr_save.x[id_grp],curr_save.model[id_grp],color=xcolors_grp[id_grp],alpha=0.5,
                              label='' if group_names=='nolabel' else '')
 
@@ -4634,19 +4694,19 @@ def xPlot(types,axes_input=None,plot_saves_input=None,plot_arg=None,includedlist
                     curr_ax.errorbar(curr_save.x[id_grp],curr_save.background[id_grp],xerr=curr_save.xErr[id_grp],
                                      yerr=curr_save.yErr[id_grp],color=xcolors_grp[id_grp],linestyle='None',elinewidth=0.5,
                                      marker='x',mew=0.5,label='' if group_names=='nolabel' else grp_name+' background')
-                
-                #plotting model components
         
-        #locking the axe limits
-        curr_ax.set_xlim(round(min(ravel_ragged(curr_save.x-curr_save.xErr)),2),round(max(ravel_ragged(curr_save.x+curr_save.xErr)),2))
-        
+        #### locking the axe limits
         '''
         locking the y axis limits requires considering the uncertainties (which are not considered for rescaling) 
         without perturbing the previous limits if they were beyond
         we don't bother doing that for the background
         '''
 
-        curr_ax.set_ylim(min(curr_ax.get_ylim()[0],round(min(ravel_ragged(curr_save.y-curr_save.yErr)),1)),
+        if xlims is None:
+            curr_ax.set_xlim(round(min(ravel_ragged(curr_save.x-curr_save.xErr)),2),round(max(ravel_ragged(curr_save.x+curr_save.xErr)),2))
+
+        if ylims is None:
+            curr_ax.set_ylim(min(curr_ax.get_ylim()[0],round(min(ravel_ragged(curr_save.y-curr_save.yErr)),1)),
                           max(curr_ax.get_ylim()[1],round(max(ravel_ragged(curr_save.y+curr_save.yErr)),1)))
 
             

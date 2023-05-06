@@ -1618,6 +1618,7 @@ def correl_graph(data_perinfo,infos,data_ener,dict_linevis,mode='intrinsic',mode
         glob_col_source=dict_linevis['glob_col_source']
         display_th_width_ew=dict_linevis['display_th_width_ew']
         cmap_color_det=dict_linevis['cmap_color_det']
+        common_observ_bounds=dict_linevis['common_observ_bounds']
     else:
         display_nonsign=True
         scale_log_hr=True
@@ -1629,12 +1630,14 @@ def correl_graph(data_perinfo,infos,data_ener,dict_linevis,mode='intrinsic',mode
         glob_col_source=False
         display_th_width_ew=False
         cmap_color_det=mpl.cm.plasma
+        common_observ_bounds=False
         
+        
+    
     mask_obj=dict_linevis['mask_obj']
     abslines_ener=dict_linevis['abslines_ener']
     abslines_plot=dict_linevis['abslines_plot']
-
-    
+        
     save_dir=dict_linevis['save_dir']
     save_str_prefix=dict_linevis['save_str_prefix']
     args_cam=dict_linevis['args_cam']
@@ -1662,6 +1665,19 @@ def correl_graph(data_perinfo,infos,data_ener,dict_linevis,mode='intrinsic',mode
     
     observ_list=dict_linevis['observ_list'][mask_obj]
     
+    #This considers all the lines
+    mask_obs_sign=np.array([ravel_ragged(abslines_plot[4][0].T[mask_obj].T[i]).astype(float)>conf_thresh\
+                                      for i in range(len(mask_lines))]).any(0)
+        
+    #note: quantities here are already restricted
+    mask_intime_norepeat=(Time(ravel_ragged(date_list))>=slider_date[0]) & (Time(ravel_ragged(date_list))<=slider_date[1])
+
+    mask_sign_restrict=mask_obs_sign & mask_intime_norepeat
+        
+    bounds_hr=[0.9*min(ravel_ragged(hid_plot[0][0])[mask_sign_restrict]-ravel_ragged(hid_plot[0][1])[mask_sign_restrict]),
+                1/0.9*max(ravel_ragged(hid_plot[0][0])[mask_sign_restrict]+ravel_ragged(hid_plot[0][2])[mask_sign_restrict])]
+    bounds_flux=[0.9*min(ravel_ragged(hid_plot[1][0])[mask_sign_restrict]-ravel_ragged(hid_plot[1][1])[mask_sign_restrict]),
+                1/0.9*max(ravel_ragged(hid_plot[1][0])[mask_sign_restrict]+ravel_ragged(hid_plot[1][2])[mask_sign_restrict])]
 
     
     n_obj=len(observ_list)
@@ -1831,7 +1847,6 @@ def correl_graph(data_perinfo,infos,data_ener,dict_linevis,mode='intrinsic',mode
             try:
                 mask_intime=(Time(ravel_ragged(date_list_repeat))>=slider_date[0]) & (Time(ravel_ragged(date_list_repeat))<=slider_date[1])
                 
-                mask_intime_norepeat=(Time(ravel_ragged(date_list))>=slider_date[0]) & (Time(ravel_ragged(date_list))<=slider_date[1])
             except:
                 breakpoint()
                 
@@ -1988,6 +2003,7 @@ def correl_graph(data_perinfo,infos,data_ener,dict_linevis,mode='intrinsic',mode
                     y_data=np.array([ravel_ragged(y_data_repeat[ratio_indexes_x[0]])[bool_det_ratio][bool_sign_ratio],
                                      ravel_ragged(y_data_repeat[ratio_indexes_x[0]])[bool_det_ratio][~bool_sign_ratio]],dtype=object)
                 else:
+                    #this is not implemented currently
 
                     y_data=np.array([ravel_ragged(y_data_repeat)[bool_det][bool_sign],ravel_ragged(y_data_repeat)[bool_det][~bool_sign]],
                                     dtype=object)
@@ -2333,7 +2349,7 @@ def correl_graph(data_perinfo,infos,data_ener,dict_linevis,mode='intrinsic',mode
         
         #adding a line at 0 blueshift
         if infos_split[0]=='bshift':
-            ax_scat.axvline(x=0,ymin=0,ymax=1,color='grey',linestyle='--')
+            ax_scat.axvline(x=0,ymin=0,ymax=1,color='grey',linestyle=':',lw=1.)
         
         #(-speed_abs_err[0],speed_abs_err[1],color='grey',label='Absolute error region',alpha=0.3)
         
@@ -2345,7 +2361,7 @@ def correl_graph(data_perinfo,infos,data_ener,dict_linevis,mode='intrinsic',mode
             v_sigma=360
             
             #mean
-            ax_scat.axvline(x=v_mean,ymin=0,ymax=1,color='brown',linestyle='--',label=r'$\overline{v}$')
+            ax_scat.axvline(x=v_mean,ymin=0,ymax=1,color='brown',linestyle='-',label=r'$\overline{v}$',lw=0.75)
             
             #span for the std
             ax_scat.axvspan(v_mean-v_sigma,v_mean+v_sigma,color='brown',label=r'$\sigma_v$',alpha=0.1)
@@ -2638,6 +2654,33 @@ def correl_graph(data_perinfo,infos,data_ener,dict_linevis,mode='intrinsic',mode
                     
                     if type(elem_children)==mpl.collections.LineCollection:
                         elem_children.set_colors(color_arr[s][~(linked_mask[s].astype(bool))])
+                        
+                        
+                        #### distinguishing the 3 GRS obs
+                        if 'bshift' in infos_split:
+                            
+                            data_bshift=np.array([x_data[s],y_data[s]])[np.array(infos_split)=='bshift'][s]
+                            
+                            ls_dist=np.repeat('-',len(x_data[s]))
+                           
+                            facecol_dist=np.repeat('full',len(x_data[s]))
+                            
+                            ls_dist=ls_dist.astype(object)
+                            
+                            facecol_dist=facecol_dist.tolist()
+                            
+                            bshift_obscured=[948.903977133402, 1356.3406485107535, 2639.060062961778]
+                            
+                            index_bshift_GRS=np.argwhere([elem in bshift_obscured for elem in data_bshift]).T[0]
+
+                            for i_obscured in index_bshift_GRS:
+                                ls_dist[i_obscured]='--'
+                                facecol_dist[i_obscured]='none'
+                            
+                            ls_dist=ls_dist.tolist()
+                            
+                            elem_children.set_linestyles(ls_dist)
+                            
                     else:
                         elem_children.set_visible(False)
                         
@@ -2652,7 +2695,6 @@ def correl_graph(data_perinfo,infos,data_ener,dict_linevis,mode='intrinsic',mode
                         
                         col_ul=color_arr[0][~(linked_mask[0])][uplims_mask]
                         plot_ul_err([0,1],x_ul,y_ul,xerr_ul,yerr_ul,col_ul,label='')
-                        
                         
             for s,elem_errbar_linked in enumerate(errbar_list_linked):
                 #replacing indiviudally the colors for each point but the line
@@ -2740,10 +2782,30 @@ def correl_graph(data_perinfo,infos,data_ener,dict_linevis,mode='intrinsic',mode
                         
                         #needs to be split to avoid indexation problem when calling color_mask behind
                         if uplims_mask is None:
-                            ax_scat.scatter(
-                                x_data[s].astype(float)[~(linked_mask[s].astype(bool))][color_mask],
-                                y_data[s].astype(float)[~(linked_mask[s].astype(bool))][color_mask],
-                                      color=label_dict[color_label],label=color_label,marker='D',alpha=1,zorder=1)
+                            
+                            #adding the marker color change for the obscured obs
+                            if 'bshift' in infos_split:
+                                
+                                data_bshift_GRS=np.array([x_data[s][color_mask],y_data[s][color_mask]])[np.array(infos_split)=='bshift'][s]
+                                
+                                index_bshift_GRS_indiv=np.argwhere([elem in bshift_obscured for elem in data_bshift_GRS]).T[0]
+                                
+                                for id_GRS in range(len(data_bshift_GRS)):
+                                    ax_scat.scatter(
+                                        x_data[s].astype(float)[~(linked_mask[s].astype(bool))][color_mask][id_GRS],
+                                        y_data[s].astype(float)[~(linked_mask[s].astype(bool))][color_mask][id_GRS],
+                                              color=label_dict[color_label] if id_GRS not in index_bshift_GRS_indiv else None,
+                                              facecolor=None if id_GRS not in index_bshift_GRS_indiv else 'none',
+                                              label=color_label if id_GRS==0 else '',
+                                              marker='D',edgecolor=None if id_GRS not in index_bshift_GRS_indiv else label_dict[color_label],
+                                              alpha=1,zorder=1)
+                            
+                            else:
+                                
+                                ax_scat.scatter(
+                                    x_data[s].astype(float)[~(linked_mask[s].astype(bool))][color_mask],
+                                    y_data[s].astype(float)[~(linked_mask[s].astype(bool))][color_mask],
+                                          color=label_dict[color_label],label=color_label,marker='D',alpha=1,zorder=1)
                         else:
                             ax_scat.scatter(
                                 x_data[s].astype(float)[~(linked_mask[s].astype(bool))][~uplims_mask][np.array(color_mask)[~uplims_mask]],
@@ -2887,6 +2949,14 @@ def correl_graph(data_perinfo,infos,data_ener,dict_linevis,mode='intrinsic',mode
                 
                 ax_scat.get_xaxis().set_major_formatter(mpl.ticker.ScalarFormatter())
                                     
+                
+        ####forcing common observ bounds if asked 
+        #computing the common bounds if necessary
+        if common_observ_bounds:
+            if mode=='observ':
+                plt.ylim(bounds_hr if infos_split[1]=='HR' else bounds_flux if infos_split[1]=='flux' else None)
+                    
+            
         #### legend display
         if show_linked or compute_correl or color_scatter not in ['Time','HR','width','nH',None]:       
             

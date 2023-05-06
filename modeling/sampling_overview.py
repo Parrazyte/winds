@@ -538,8 +538,8 @@ with tab_time:
     
     st.header('Solution computing time evolution')
     
-    pl_index_nbins=st.number_input(r'Box computation time powerlaw index for $n_{bins}$',value=1)
-    pl_index_nbox=st.number_input(r'Box computation time powerlaw index for $n_{box}$',value=0.5)
+    pl_index_nbins=st.number_input(r'Box computation time powerlaw index for $n_{bins}$',value=0.5,format='%.1e')
+    pl_index_nbox=st.number_input(r'Box computation time powerlaw index for $n_{box}$',value=1.,format='%.1e')
 
     time_sim=(nbins/nbins_test)**pl_index_nbins*((nbox+n_rout-1)/nbox_test)**pl_index_nbox*time_test
     

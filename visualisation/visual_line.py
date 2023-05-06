@@ -2366,7 +2366,7 @@ with st.sidebar.expander('Parameter analysis'):
             
     st.header('Correlations')
     
-    display_types=st.multiselect('Main parameters',('Line','Observation','Source'),default=None)
+    display_types=st.multiselect('Main parameters',('Line','Observation','Source'),default='Line')
     
     display_scat_intr='Line' in display_types
     display_scat_hid='Observation' in display_types
@@ -2399,6 +2399,8 @@ with st.sidebar.expander('Parameter analysis'):
     scale_log_eqw=st.checkbox('Use a log scale for the equivalent width and line fluxes')
     scale_log_hr=st.checkbox('Use a log scale for the HID parameters',value=True)
     display_abserr_bshift=st.checkbox('Display mean and std of Chandra velocity shift distribution',value=True)
+    
+    common_observ_bounds=st.checkbox('Use common observation parameter bounds for all lines',value=True)
     
     #plot_trend=st.checkbox('Display linear trend lines in the scatter plots',value=False)
     plot_trend=False
@@ -2456,6 +2458,7 @@ dict_linevis['display_pearson']=display_pearson
 dict_linevis['display_abserr_bshift']=display_abserr_bshift
 dict_linevis['glob_col_source']=glob_col_source
 dict_linevis['display_th_width_ew']=display_th_width_ew
+dict_linevis['common_observ_bounds']=common_observ_bounds
 
 os.system('mkdir -p '+save_dir+'/graphs')
 os.system('mkdir -p '+save_dir+'/graphs/distrib')
@@ -2697,7 +2700,6 @@ def streamlit_scat(mode):
                     [st.pyplot(elem) for elem in scat_width]
             
 mpl.rcParams.update({'font.size': 14})
-
 
 #storing arguments to reduce the number of arguments in the scatter plot functions    
 dict_linevis['scale_log_hr']=scale_log_hr

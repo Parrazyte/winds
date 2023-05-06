@@ -19,6 +19,9 @@ If using multi_obj, it is assumed the lineplots directory is outdirf
 
 
 Changelog:
+    
+V 1.1 (04/23):
+    -added multi models to use NICER scorpeon background. Still debugging
 
 V 1.0(10:01:23):
     -strong line modeling implemented with laor
@@ -110,7 +113,7 @@ from xspec import AllModels,AllData,Fit,Spectrum,Model,Plot,Xset,FakeitSettings,
 #custom script with a few shorter xspec commands
 from xspec_config_multisp import allmodel_data,model_load,addcomp,Pset,Pnull,rescale,reset,Plot_screen,store_plot,freeze,allfreeze,unfreeze,\
                          calc_error,delcomp,fitmod,fitcomp,calc_fit,plot_line_comps,\
-                         xcolors_grp,comb_chi2map,plot_std_ener,coltour_chi2map,xPlot,xscorpeon
+                         xcolors_grp,comb_chi2map,plot_std_ener,coltour_chi2map,xPlot,xscorpeon,catch_model_str
 
 #custom script with a some lines and fit utilities and variables
 from fitting_tools import c_light,lines_std_names,lines_e_dict,n_absline,range_absline,model_list
@@ -505,39 +508,6 @@ def folder_state(folderpath='./'):
         
     return launched_expos,completed_expos
 
-def catch_model_str(logfile,savepath=None):
-    
-    '''
-    catches the current model's paremeters and fit (AllModels(1).show + Fit.show) from the current logfile
-    
-    If savepath is not None, saves the str to the given path
-    '''
-    
-    #saving the previous chatter state and ensuring the log chatter is correctly set
-    prev_logchatter=Xset.logChatter
-    
-    Xset.logChatter=10
-
-    #flushing the readline to get to the current point
-    logfile.readlines()
-    
-    #Displaying the elements we're interested in once again
-    AllModels.show()
-    Fit.show()
-    
-    #catching them
-    mod_str=logfile.readlines()
-    
-    #and writing them into a txt
-    if savepath is not None:
-        with open(savepath,'w') as mod_str_file:
-            mod_str_file.writelines(mod_str)
-        
-    #switching back to the initial logchatter value
-    Xset.logChatter=prev_logchatter
-    
-    return mod_str
-
                     
 #for the current directory:
 started_expos,done_expos=folder_state()
@@ -690,7 +660,7 @@ if multi_obj==False:
             xspec_id=xspec_window
             Plot.xLog=True
     else:
-        Pset(window=None,xlog=True,ylog=False)
+        Pset(window=None,xlog=False,ylog=False)
         
     #creating the output directory
     os.system('mkdir -p '+outdir)
@@ -947,6 +917,7 @@ def pdf_summary(epoch_observ,fit_ok=False,summary_epoch=None):
                 return lines_cleaned
             
         def display_fit(fit_type):
+            
             if 'broadband' in fit_type:
                 fit_title='broad band'
                 fit_ener=str(e_sat_low)+'-'+str(e_sat_high)
@@ -966,18 +937,18 @@ def pdf_summary(epoch_observ,fit_ok=False,summary_epoch=None):
                 fit_title+=' zoom'
                 
             image_id=outdir+'/'+epoch_observ[0]+'_screen_xspec_'+fit_type
-
+            
             if os.path.isfile(image_id+'.png'):
                 
                 pdf.set_font('helvetica', 'B', 16)
                 
                 #selecting the image to be plotted
                 image_path=image_id+'.png'
-                pdf.ln(10)
-
-                pdf.cell(1,1,fit_title+' ('+fit_ener+' keV):',align='C',center=True)
+                pdf.ln(5)
                 
-                if fit_type=='broadband':
+                pdf.cell(1,-5,fit_title+' ('+fit_ener+' keV):',align='C',center=True)
+                
+                if fit_type=='broadband' and len(epoch_observ)>1 or sat=='Chandra':
                     #displaying the colors for the upcoming plots in the first fit displayed
                     pdf.cell(1,10,'        '.join([xcolors_grp[i_good_sp]+': '+'_'.join(good_sp[i_good_sp].split('_')[1:3])\
                                                    for i_good_sp in range(len(good_sp))]),align='C',center=True)
@@ -989,8 +960,9 @@ def pdf_summary(epoch_observ,fit_ok=False,summary_epoch=None):
                     #and getting the model lines from the saved file
                     with open(outdir+'/'+epoch_observ[0]+'_mod_'+fit_type+'.txt') as mod_txt:
                         fit_lines=mod_txt.readlines()
-                        pdf.set_font('helvetica', 'B', 8-int(len(disp_multigrp(fit_lines))/10))
-                        pdf.multi_cell(150,5,'\n'*max(0,int(15-2*(len(disp_multigrp(fit_lines))**2/100)))+''.join(disp_multigrp(fit_lines)))
+
+                        pdf.set_font('helvetica', 'B', 8-int(len(disp_multigrp(fit_lines))/15))
+                        pdf.multi_cell(150,2.4,'\n'*max(0,int(15-2*(len(disp_multigrp(fit_lines))**2/100)))+''.join(disp_multigrp(fit_lines)))
                     
                     #in some cases due to the images between some fit displays there's no need to add a page
                     if 'linecont' not in fit_type:
@@ -1004,8 +976,14 @@ def pdf_summary(epoch_observ,fit_ok=False,summary_epoch=None):
                  
         display_fit('broadband_post_auto')
         display_fit('broadhid_post_auto')
+        
+            
+        pdf.set_margins(0.5,0.5,0.5)
+        
         display_fit('autofit')
         display_fit('autofit_zoom')
+        
+        pdf.set_margins(1.,1.,1.)
             
         if os.path.isfile(outdir+'/'+epoch_observ[0]+'_autofit_components_plot_'+args.line_search_e.replace(' ','_')+'_'+\
                           args.line_search_norm.replace(' ','_')+'.png'):
@@ -1028,9 +1006,13 @@ def pdf_summary(epoch_observ,fit_ok=False,summary_epoch=None):
             pdf.write_html(''.join(table_html))
             pdf.add_page()
             
+        pdf.set_margins(0.5,0.5,0.5)
+        
         display_fit('broadband')
         display_fit('broadhid')
         display_fit('broadband_linecont')
+        
+        pdf.set_margins(1.,1.,1.)
         
         if os.path.isfile(outdir+'/'+epoch_observ[0]+'_cont_line_comb_plot_'+args.line_search_e.replace(' ','_')+'_'+\
                           args.line_search_norm.replace(' ','_')+'.png'):

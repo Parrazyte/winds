@@ -33,7 +33,38 @@ eV2erg = 1.6e-12
 erg2eV = 1.0/eV2erg
 Ryd2eV = 13.5864
 
-def xstar_func(spectrum_file,lum,t_guess,n,nh,xi,vturb_x,nbins,nsteps=1,niter=100,lcpres=0,path_logpars=None,dict_box=None):
+def copy_mantis(path,mantis_folder,delete_previous=False):
+
+    '''
+    copies a path into a mantis folder
+
+    if delete_previous is set to True, the path is supposed to be the one of the incident spectrum,
+    and the previous incident spectrum is deleted if it is not a final box incident
+
+    note: the mantis folder should be a relative path after mantis/userid/
+
+    We can't directly write into mantis so we can't file_edit directly into it, instead we straight up replace the logpar file at every box
+
+    all the paths should be relative and will be changed to absolute paths for the conversion
+    '''
+
+    #creating the spawn
+    irods_proc=pexpect.spawn('./bin/bash',encoding='utf-8')
+
+    #needs to be done when running a new terminal
+    irods_proc.sendline('source /applis/site/nix.sh')
+
+    # uploading the file
+    irods_proc.sendline('iput ' + os.path.join(os.getcqd(), path) + ' ' + mantis_folder)
+
+    #deleting the previous box spectrum if not in a final box
+    if delete_previous:
+        i_box=path.split('_')[-1].split('.')[0]
+        previous_box_incident=os.path.join(os.getcwd(),path.replace(path.split('_')[-1],path.split('_')[-1].replace(i_box,str(int(i_box)-1))))
+        irods_proc.sendline('-irm '+previous_box_incident+' '+mantis_folder)
+
+
+def xstar_func(spectrum_file,lum,t_guess,n,nh,xi,vturb_x,nbins,nsteps=1,niter=100,lcpres=0,path_logpars=None,dict_box=None,comput_mode='local',mantis_folder=''):
     
     '''
     wrapper around the xstar function itself with explicit calls to the parameters routinely being changed in the computation
@@ -100,7 +131,7 @@ def xstar_func(spectrum_file,lum,t_guess,n,nh,xi,vturb_x,nbins,nsteps=1,niter=10
     xpar['rlogxi']=xi
     
     #making sure this remains at 0 if the default values get played with
-    xpar['lcpres']=0
+    xpar['lcpres']=lcpres
     
     #secondary parameters
     xhpar['nsteps']=nsteps
@@ -110,19 +141,50 @@ def xstar_func(spectrum_file,lum,t_guess,n,nh,xi,vturb_x,nbins,nsteps=1,niter=10
     
     xhpar['vturbi']=vturb_x
 
+    parlog_header=['#v_resol= '+str(v_resol)+' km/s | nbins= '+str(nbins)+'\n',
+                   '#nsteps= '+str(nsteps)+'\tniter= '+str(niter)+'\n',
+                   '#Remember logxi is shifted to give xstar the correct luminosity input and the density at the half-box radius\n',
+                   '#nbox\tnbox_final\tspectrum\tlum\tt_guess\tn\tnh\tlogxi\tvturb_x\tdr_r\tt_run\n']
+
     if path_logpars is not None:
         parlog_str='\t'.join([str(nbox),str(i_box_final),spectrum_file,'%.3e'%lum,'%.3e'%t_guess,'%.3e'%n,'%.3e'%nh,'%.3e'%xi,'%.3e'%vturb_x,'%.3e'%dr_r_eff_list[nbox-1]])+'\n'
         
-        parlog_header=['#v_resol= '+str(v_resol)+' km/s | nbins= '+str(nbins)+'\n',
-                       '#nsteps= '+str(nsteps)+'\tniter= '+str(niter)+'\n',
-                       '#Remember logxi is shifted to give xstar the correct luminosity input and the density at the half-box radius\n',
-                       '#(1)nbox\t(2)nbox_final\t(3)spectrum\t(4)lum\t(5)t_guess\t(6)n\t(7)nh\t(8)logxi\t(9)vturb_x\t(10)dr_r\n']
+        file_edit(path_logpars,'\t'.join([str(nbox),str(i_box_final),spectrum_file]),parlog_str,parlog_header)
+
+        #first update on mantis before the xstar run
+        if comput_mode=='gricad':
+            copy_mantis(spectrum_file,mantis_folder,delete_sp=True)
+
+
+    px.run_xstar(xpar,xhpar)
+
+    #storing the lines of the xstar log file
+    with open('xout_step.log') as xlog:
+        xlog_lines = xlog.readlines()
+
+    #re-editing the file to add elapsed time
+    if path_logpars is not None:
+
+        xrun_time=str(round(float(xlog_lines[-1].split()[-1])))
+        parlog_str=parlog_str.replace('\n',xrun_time+'\n')
         
         file_edit(path_logpars,'\t'.join([str(nbox),str(i_box_final),spectrum_file]),parlog_str,parlog_header)
 
-    px.run_xstar(xpar,xhpar)
+    #compacting the current xstar log file to a global log file
+    with open('./xout_log_global.log',mode='a') as xlog_global:
+        xlog_global.write('\n\n************************\n BOX:'+str(nbox)+'   FINAL_BOX:'+str(i_box_final)+'\n\n')
+        xlog_global.writelines(xlog_lines)
+
+    #deleting the current log file
+    os.remove('xout_step.log')
+
+    # second update on mantis for the modified logpar and the log file
+    if comput_mode == 'gricad':
+        copy_mantis(path_logpars, mantis_folder)
+        copy_mantis('./xout_log_global.log',mantis_folder)
         
-def xstar_wind(dict_solution,p_mhd,mdot_obs,stop_d_input, SED_path, xlum,outdir="xsol",h_over_r=0.1, ro_init=0.5,dr_r=0.115, v_resol=85.7, m_BH=8,chatter=0,reload=True,mode='local'):
+def xstar_wind(dict_solution,p_mhd,mdot_obs,stop_d_input, SED_path, xlum,outdir="xsol",h_over_r=0.1, ro_init=0.5,dr_r=0.115, v_resol=85.7, m_BH=8,chatter=0,reload=True,
+               comput_mode='local',mantis_folder=''):
     
     
     '''
@@ -1032,17 +1094,15 @@ def xstar_wind(dict_solution,p_mhd,mdot_obs,stop_d_input, SED_path, xlum,outdir=
                        path_logpars=path_log_xpars,dict_box=dict_box)
         
         os.chdir(currdir)
-
-        #moving and renaming the log file
-        os.system('mv ./'+outdir+'/xout_step.log'+' ./'+outdir+'/xout_step_box_'+str(i_box+1)+'.log')
-            
-        ####SDKFJSDKLDFJSKJLF where does this log file go ?
         
         #writing the infos
         px.LoadFiles(file1='./'+outdir+'/xout_abund1.fits',file2='./'+outdir+'/xout_lines1.fits',
                      file3='./'+outdir+'/xout_rrc1.fits',file4='./'+outdir+'/xout_spect1.fits')
         
         write_xstar_infos(i_box+1,vobsx,'./'+outdir+'/xstar_output_details.dat')
+
+        if comput_mode=='gricad':
+            copy_mantis('./'+outdir+'/xstar_output_details.dat',mantis_folder)
         
         ####!* Computing spectra and blueshift for the final box depending on stop_dist.
 
@@ -1103,9 +1163,6 @@ def xstar_wind(dict_solution,p_mhd,mdot_obs,stop_d_input, SED_path, xlum,outdir=
             
             os.chdir(currdir)
             
-            #moving and renaming the log file
-            os.system('mv '+outdir+'/xout_step.log'+' '+outdir+'/xout_step_final_'+str(i_box_final+1)+'.log')
-            
             px.LoadFiles(file1='./'+outdir+'/xout_abund1.fits',file2='./'+outdir+'/xout_lines1.fits',
                          file3='./'+outdir+'/xout_rrc1.fits',file4='./'+outdir+'/xout_spect1.fits')
             
@@ -1119,7 +1176,12 @@ def xstar_wind(dict_solution,p_mhd,mdot_obs,stop_d_input, SED_path, xlum,outdir=
             
             #writing the infos with the final iteration
             write_xstar_infos(i_box+1,vobsx,'./'+outdir+'/xstar_output_details_final.dat')
-            
+
+            if comput_mode == 'gricad':
+
+                copy_mantis(xstar_input,mantis_folder)
+                copy_mantis('./' + outdir + '/xstar_output_details_final.dat', mantis_folder)
+
             #removing the standard xstar output to gain space
             os.system('rm -f '+outdir+'/xout_*.fits')
             

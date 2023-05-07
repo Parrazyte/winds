@@ -1,0 +1,152 @@
+Index: modeling/attempt.py
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.BaseRevisionTextPatchEP
+<+>#!/usr/bin/env python3\n# -*- coding: utf-8 -*-\n\"\"\"\nCreated on Sat Mar 25 13:22:22 2023\n\n@author: parrama\n\"\"\"\n\nfrom simul_tools import xstar_wind\nimport os\n\nep=0.1\np=0.103\nmu=0.067\n\n####This should be changed\nmdot=0.111\n\n\n####rechange p if necessaryn and m to 8\n\ndict_sol={}\n\ntest_list=[3.836508e-01,  1.278251e+00, 2.100000e+01,  1.369094e+00,  4.065250e-01,  1.455833e-01,  1.048574e+00,  1.503721e-01,  3.953974e-01,\n           -5.069130e-01,  4.084034e-01,  1.393493e+00,  1.278200e-02]\n\nos.chdir('/media/parrama/SSD/Simu/MHD/xstar')\n\ndict_sol['z_A']=test_list[0]\ndict_sol['r_A']=test_list[1]\ndict_sol['angle']=test_list[2]\ndict_sol['func_Rsph_by_ro']=test_list[3]\n\ndict_sol['rho_mhd']=test_list[4]\n\ndict_sol['vel_r']=test_list[5]\ndict_sol['vel_phi']=test_list[6]\ndict_sol['vel_z']=test_list[7]\n\ndict_sol['func_B_r']=test_list[8]\ndict_sol['func_B_phi']=test_list[9]\ndict_sol['func_B_z']=test_list[10]\n\ndict_sol['func_Tdyn']=test_list[11]\ndict_sol['func_Tmhd']=test_list[12]\n\n#note: unabsorbed flux in 0.3-10 keV, with all gaussians taken off (extended from the post autofit broadband model)\n#extension made with AllModels.setEnergies(\"extend\",\"low,0.3,100 log\")\nflux_GROJ=3.401e-8\n\ndist_factor=1.22546712210745e+45\n\nlum_GROJ=flux_GROJ*dist_factor/1e38\n\nstop_d=1e6\n\n# SED=os.path.join('incident_xstar_HS.dat')\n\n# SED=os.path.join('test_xstar.dat')\n\nSED_GROJ='5461_cont_deabs_extended_xstar.txt'\n\nxstar_wind(dict_sol,p,mdot, stop_d, SED_GROJ, lum_GROJ,outdir='groj_dr_01_new_test',dr_r=0.1,v_resol=5000,chatter=1,m_BH=5.4)
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+diff --git a/modeling/attempt.py b/modeling/attempt.py
+--- a/modeling/attempt.py	(revision d6c5d43172164e8c03168f533278a86233eef650)
++++ b/modeling/attempt.py	(date 1683462819518)
+@@ -54,10 +54,10 @@
+ 
+ stop_d=1e6
+ 
+-# SED=os.path.join('incident_xstar_HS.dat')
++SED=os.path.join('incident_xstar_HS.dat')
+ 
+ # SED=os.path.join('test_xstar.dat')
+ 
+ SED_GROJ='5461_cont_deabs_extended_xstar.txt'
+ 
+-xstar_wind(dict_sol,p,mdot, stop_d, SED_GROJ, lum_GROJ,outdir='groj_dr_01_new_test',dr_r=0.1,v_resol=5000,chatter=1,m_BH=5.4)
+\ No newline at end of file
++xstar_wind(dict_sol,p,mdot, stop_d, SED, 1,outdir='sudeb_test_incident',dr_r=0.1,v_resol=5000,chatter=1,m_BH=5.4,ro_init=1000)
+\ No newline at end of file
+Index: .idea/Python.iml
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+diff --git a/.idea/Python.iml b/.idea/Python.iml
+new file mode 100644
+--- /dev/null	(date 1683477586620)
++++ b/.idea/Python.iml	(date 1683477586620)
+@@ -0,0 +1,18 @@
++<?xml version="1.0" encoding="UTF-8"?>
++<module type="PYTHON_MODULE" version="4">
++  <component name="NewModuleRootManager">
++    <content url="file://$MODULE_DIR$">
++      <sourceFolder url="file://$MODULE_DIR$/data_reduction" isTestSource="false" />
++      <sourceFolder url="file://$MODULE_DIR$/general" isTestSource="false" />
++      <sourceFolder url="file://$MODULE_DIR$/modeling" isTestSource="false" />
++      <sourceFolder url="file://$MODULE_DIR$/modeling/PyXstar" isTestSource="false" />
++      <sourceFolder url="file://$MODULE_DIR$/spectral_analysis" isTestSource="false" />
++      <sourceFolder url="file://$MODULE_DIR$/visualisation" isTestSource="false" />
++    </content>
++    <content url="file://$USER_HOME$/Soft/Heasoft/heasoft-6.31.1/x86_64-pc-linux-gnu-libc2.31/lib/python">
++      <sourceFolder url="file://$USER_HOME$/Soft/Heasoft/heasoft-6.31.1/x86_64-pc-linux-gnu-libc2.31/lib/python/xspec" isTestSource="false" />
++    </content>
++    <orderEntry type="inheritedJdk" />
++    <orderEntry type="sourceFolder" forTests="false" />
++  </component>
++</module>
+\ No newline at end of file
+Index: .idea/misc.xml
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+diff --git a/.idea/misc.xml b/.idea/misc.xml
+new file mode 100644
+--- /dev/null	(date 1683465285284)
++++ b/.idea/misc.xml	(date 1683465285284)
+@@ -0,0 +1,4 @@
++<?xml version="1.0" encoding="UTF-8"?>
++<project version="4">
++  <component name="ProjectRootManager" version="2" project-jdk-name="Python 3.8 (base)" project-jdk-type="Python SDK" />
++</project>
+\ No newline at end of file
+Index: .idea/inspectionProfiles/profiles_settings.xml
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+diff --git a/.idea/inspectionProfiles/profiles_settings.xml b/.idea/inspectionProfiles/profiles_settings.xml
+new file mode 100644
+--- /dev/null	(date 1683465285292)
++++ b/.idea/inspectionProfiles/profiles_settings.xml	(date 1683465285292)
+@@ -0,0 +1,6 @@
++<component name="InspectionProjectProfileManager">
++  <settings>
++    <option name="USE_PROJECT_PROFILE" value="false" />
++    <version value="1.0" />
++  </settings>
++</component>
+\ No newline at end of file
+Index: README.md
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.BaseRevisionTextPatchEP
+<+># winds\nMain PhD project on BHLMXB wind signatures\n\nDatared:\n\n-Various scripts for data download/arrangement/reduction with X-ray telescopes\n\nSpectral analysis:\n\n-Scripts for line detection, custom pyxspec functions\n\nVisualisation:\n\n-Streamlit-based interactive visualisation tool for the result of the line detection & More specific tools\n\nSimulations:\n\n-fortran xstar custom version from Sudeb's pas work\n-python-based libraries to convert JED-SAD/WED solutiosn to xspec models and then spectra\n
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+diff --git a/README.md b/README.md
+--- a/README.md	(revision d6c5d43172164e8c03168f533278a86233eef650)
++++ b/README.md	(date 1683477649346)
+@@ -15,5 +15,5 @@
+ 
+ Simulations:
+ 
+--fortran xstar custom version from Sudeb's pas work
++-fortran xstar custom version from Sudeb's past work
+ -python-based libraries to convert JED-SAD/WED solutiosn to xspec models and then spectra
+Index: .idea/modules.xml
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+diff --git a/.idea/modules.xml b/.idea/modules.xml
+new file mode 100644
+--- /dev/null	(date 1683465285264)
++++ b/.idea/modules.xml	(date 1683465285264)
+@@ -0,0 +1,8 @@
++<?xml version="1.0" encoding="UTF-8"?>
++<project version="4">
++  <component name="ProjectModuleManager">
++    <modules>
++      <module fileurl="file://$PROJECT_DIR$/.idea/Python.iml" filepath="$PROJECT_DIR$/.idea/Python.iml" />
++    </modules>
++  </component>
++</project>
+\ No newline at end of file
+Index: .idea/.gitignore
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+diff --git a/.idea/.gitignore b/.idea/.gitignore
+new file mode 100644
+--- /dev/null	(date 1683465285408)
++++ b/.idea/.gitignore	(date 1683465285408)
+@@ -0,0 +1,3 @@
++# Default ignored files
++/shelf/
++/workspace.xml
+Index: .idea/vcs.xml
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+diff --git a/.idea/vcs.xml b/.idea/vcs.xml
+new file mode 100644
+--- /dev/null	(date 1683465285304)
++++ b/.idea/vcs.xml	(date 1683465285304)
+@@ -0,0 +1,6 @@
++<?xml version="1.0" encoding="UTF-8"?>
++<project version="4">
++  <component name="VcsDirectoryMappings">
++    <mapping directory="$PROJECT_DIR$" vcs="Git" />
++  </component>
++</project>
+\ No newline at end of file

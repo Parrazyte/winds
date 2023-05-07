@@ -14,8 +14,15 @@ import threading
 import numpy as np
 import time
 
+import matplotlib as mpl
+mpl.use('Qt5Agg')
+
+import matplotlib as mpl
+
 import matplotlib.pyplot as plt
 plt.ioff()
+
+from matplotlib import pyplot as plt
 
 
 from astropy.time import Time
@@ -882,11 +889,13 @@ if not local:
                         if curr_action=='r':
                             extract_response(dirname)
                             extract_response_done.wait()
+
                         if curr_action=='g':
                             output_err=regroup_spectrum(dirname,group=grouptype)
                             if type(output_err)==str:
                                 raise ValueError
                             regroup_spectrum_done.wait()
+
                         if curr_action=='m':
                             batch_mover(dirname)
                             batch_mover_done.wait()
@@ -910,14 +919,24 @@ if not local:
                     if curr_action=='2':
                         select_detector(dirname,detectors=bad_detectors)
                         select_detector_done.wait()
-                    
-                    if curr_action=='l':
-                        extract_lc(dirname,binning=lc_bin,bands=lc_bands_str,HR=hr_bands_str,overwrite=overwrite_glob)
-                        extract_lc_done.wait()
-                            
-                    if curr_action=='fs':
-                        extract_all_spectral(dirname,bkgmodel=bgmodel,language=bglanguage,overwrite=overwrite_glob)
+
+                    if curr_action == 'fs':
+                        output_err = extract_all_spectral(dirname, bkgmodel=bgmodel, language=bglanguage,
+                                                          overwrite=overwrite_glob)
+                        if type(output_err) == str:
+                            folder_state=output_err
+                        else:
+                            pass
                         extract_all_spectral_done.wait()
+
+                    if curr_action == 'l':
+                        output_err = extract_lc(dirname, binning=lc_bin, bands=lc_bands_str, HR=hr_bands_str,
+                                                overwrite=overwrite_glob)
+                        if type(output_err) == str:
+                            folder_state=output_err
+                        else:
+                            pass
+                        extract_lc_done.wait()
                             
                     if curr_action=='s':
                         extract_spectrum(dirname)
@@ -928,9 +947,16 @@ if not local:
                     if curr_action=='r':
                         extract_response(dirname)
                         extract_response_done.wait()
+
                     if curr_action=='g':
-                        regroup_spectrum(dirname,group=grouptype)
+                        output_err=regroup_spectrum(dirname,group=grouptype)
+
+                        if type(output_err) == str:
+                            folder_state=output_err
+                        else:
+                            pass
                         regroup_spectrum_done.wait()
+
                     if curr_action=='m':
                         batch_mover(dirname)
                         batch_mover_done.wait()
@@ -956,20 +982,20 @@ else:
                 process_obsdir(absdir,overwrite=overwrite_glob)
                 process_obsdir_done.wait()
             if curr_action=='2':
-                select_detector(dirname,detectors=bad_detectors)
+                select_detector(absdir,detectors=bad_detectors)
                 select_detector_done.wait()
             if curr_action=='s':
-                extract_spectrum(dirname)
+                extract_spectrum(absdir)
                 extract_spectrum_done.wait()
             if curr_action=='b':
-                extract_background(dirname,model=bgmodel)
+                extract_background(absdir,model=bgmodel)
                 extract_background_done.wait()
             if curr_action=='r':
-                extract_response(dirname)
+                extract_response(absdir)
                 extract_response_done.wait()
             if curr_action=='g':
-                regroup_spectrum(dirname,group=grouptype)
+                regroup_spectrum(absdir,group=grouptype)
                 regroup_spectrum_done.wait()
             if curr_action=='m':
-                batch_mover(dirname)
+                batch_mover(absdir)
                 batch_mover_done.wait()

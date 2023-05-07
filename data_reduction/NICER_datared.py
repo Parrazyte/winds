@@ -73,7 +73,6 @@ ap.add_argument("-l","--local",nargs=1,help='Launch actions directly in the curr
                 default=False,type=bool)
 ap.add_argument('-catch','--catch_errors',help='Catch errors while running the data reduction and continue',default=True,type=bool)
 
-
 #global choices
 ap.add_argument("-a","--action",nargs='?',help='Give which action(s) to proceed,separated by comas.'+
                 '\n1.evt_build\n2.filter_evt\n3.extract_reg...',default='1,l,fs,g,m',type=str)

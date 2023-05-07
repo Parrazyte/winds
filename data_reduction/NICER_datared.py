@@ -956,20 +956,20 @@ else:
                 process_obsdir(absdir,overwrite=overwrite_glob)
                 process_obsdir_done.wait()
             if curr_action=='2':
-                select_detector(dirname,detectors=bad_detectors)
+                select_detector(absdir,detectors=bad_detectors)
                 select_detector_done.wait()
             if curr_action=='s':
-                extract_spectrum(dirname)
+                extract_spectrum(absdir)
                 extract_spectrum_done.wait()
             if curr_action=='b':
-                extract_background(dirname,model=bgmodel)
+                extract_background(absdir,model=bgmodel)
                 extract_background_done.wait()
             if curr_action=='r':
-                extract_response(dirname)
+                extract_response(absdir)
                 extract_response_done.wait()
             if curr_action=='g':
-                regroup_spectrum(dirname,group=grouptype)
+                regroup_spectrum(absdir,group=grouptype)
                 regroup_spectrum_done.wait()
             if curr_action=='m':
-                batch_mover(dirname)
+                batch_mover(absdir)
                 batch_mover_done.wait()

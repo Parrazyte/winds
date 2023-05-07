@@ -79,7 +79,6 @@ ap.add_argument("-a","--action",nargs='?',help='Give which action(s) to proceed,
 ap.add_argument("-over",nargs=1,help='overwrite computed tasks (i.e. with products in the batch, or merge directory\
                 if "m" is in the actions) in a folder',default=True,type=bool)
 
-
 #directory level overwrite (not active in local)
 ap.add_argument('-folder_over',nargs=1,help='relaunch action through folders with completed analysis',default=False,type=bool)
 ap.add_argument('-folder_cont',nargs=1,help='skip all but the last 2 directories in the summary folder file',default=False,type=bool)

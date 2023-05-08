@@ -9,6 +9,7 @@ Created on Sat Mar 25 13:22:22 2023
 from simul_tools import xstar_wind
 import os
 
+#solution parameters
 epsilon=0.1
 p=0.103
 mu=0.067
@@ -54,10 +55,11 @@ lum_GROJ=flux_GROJ*dist_factor/1e38
 
 stop_d=1e6
 
-# SED=os.path.join('incident_xstar_HS.dat')
+SED=os.path.join('incident_xstar_HS.dat')
 
 # SED=os.path.join('test_xstar.dat')
 
-SED_GROJ='5461_cont_deabs_extended_xstar.txt'
+#SED_GROJ='5461_cont_deabs_extended_xstar.txt'
 
-xstar_wind(dict_sol,p,mdot, stop_d, SED_GROJ, lum_GROJ,outdir='groj_dr_01_new_test',dr_r=0.1,v_resol=5000,chatter=1,m_BH=5.4)
+xstar_wind(dict_sol,p,mdot, stop_d, SED, 1,outdir='Sudeb_test_v2',dr_r=0.1,ro_init=1000,
+           v_resol=5000,chatter=1,m_BH=5.4,force_ro_init=True,reload=False)

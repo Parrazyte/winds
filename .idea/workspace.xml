@@ -4,7 +4,13 @@
     <option name="autoReloadType" value="SELECTIVE" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="12a40729-af5d-4a4c-908f-b5a7f28e5c2f" name="Changes" comment="added gricad mode with uploading to a mantis server" />
+    <list default="true" id="12a40729-af5d-4a4c-908f-b5a7f28e5c2f" name="Changes" comment="added gricad mode with uploading to a mantis server">
+      <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/modeling/attempt.py" beforeDir="false" afterPath="$PROJECT_DIR$/modeling/attempt.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/modeling/simul_tools.py" beforeDir="false" afterPath="$PROJECT_DIR$/modeling/simul_tools.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/spectral_analysis/line_detection_multisp.py" beforeDir="false" afterPath="$PROJECT_DIR$/spectral_analysis/line_detection_multisp.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/spectral_analysis/xspec_config_multisp.py" beforeDir="false" afterPath="$PROJECT_DIR$/spectral_analysis/xspec_config_multisp.py" afterDir="false" />
+    </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
     <option name="HIGHLIGHT_NON_ACTIVE_CHANGELIST" value="false" />
@@ -23,6 +29,9 @@
   <component name="MarkdownSettingsMigration">
     <option name="stateVersion" value="1" />
   </component>
+  <component name="ProblemsViewState">
+    <option name="selectedTabId" value="ProjectErrors" />
+  </component>
   <component name="ProjectId" id="2PSzNNPcg9K2cV3k9fnuAMfADqG" />
   <component name="ProjectViewState">
     <option name="hideEmptyMiddlePackages" value="true" />
@@ -31,19 +40,70 @@
   <component name="PropertiesComponent"><![CDATA[{
   "keyToString": {
     "git-widget-placeholder": "main",
-    "last_opened_file_path": "/home/parrama/Soft/Heasoft/heasoft-6.31.1/x86_64-pc-linux-gnu-libc2.31/lib/python",
-    "settings.editor.selected.configurable": "vcs.Git"
+    "last_opened_file_path": "/media/parrama/SSD/Simu/MHD/xstar",
+    "settings.editor.selected.configurable": "preferences.pathVariables"
   }
 }]]></component>
   <component name="PyConsoleOptionsProvider">
     <option name="myPythonConsoleState">
-      <console-settings module-name="Python" is-module-sdk="true">
+      <console-settings custom-start-script="import sys; print('Python %s on %s' % (sys.version, sys.platform))&#10;sys.path.extend([WORKING_DIR_AND_PYTHON_PATHS])&#10;&#10;import os&#10;import numpy as np&#10;import matplotlib.pyplot as plt&#10;import matplotlib as mpl&#10;mpl.use('qtagg')&#10;import matplotlib as mpl&#10;import pandas as pd&#10;from astropy.io import fits&#10;" module-name="Python" is-module-sdk="true" working-directory="./">
         <option name="useSoftWraps" value="true" />
+        <option name="myCustomStartScript" value="import sys; print('Python %s on %s' % (sys.version, sys.platform))&#10;sys.path.extend([WORKING_DIR_AND_PYTHON_PATHS])&#10;&#10;import os&#10;import numpy as np&#10;import matplotlib.pyplot as plt&#10;import matplotlib as mpl&#10;mpl.use('qtagg')&#10;import matplotlib as mpl&#10;import pandas as pd&#10;from astropy.io import fits&#10;" />
         <option name="myUseModuleSdk" value="true" />
         <option name="myModuleName" value="Python" />
+        <option name="myWorkingDirectory" value="./" />
       </console-settings>
     </option>
     <option name="myShowVariablesByDefault" value="false" />
+    <option name="myUseExistingConsole" value="true" />
+  </component>
+  <component name="RunManager" selected="Python.line_detection_multisp">
+    <configuration name="attempt" type="PythonConfigurationType" factoryName="Python" singleton="false" temporary="true" nameIsGenerated="true">
+      <module name="Python" />
+      <option name="INTERPRETER_OPTIONS" value="" />
+      <option name="PARENT_ENVS" value="true" />
+      <option name="SDK_HOME" value="" />
+      <option name="WORKING_DIRECTORY" value="/media/parrama/SSD/Simu/MHD/xstar" />
+      <option name="IS_MODULE_SDK" value="true" />
+      <option name="ADD_CONTENT_ROOTS" value="true" />
+      <option name="ADD_SOURCE_ROOTS" value="true" />
+      <option name="SCRIPT_NAME" value="$PROJECT_DIR$/modeling/attempt.py" />
+      <option name="PARAMETERS" value="" />
+      <option name="SHOW_COMMAND_LINE" value="true" />
+      <option name="EMULATE_TERMINAL" value="false" />
+      <option name="MODULE_MODE" value="false" />
+      <option name="REDIRECT_INPUT" value="false" />
+      <option name="INPUT_FILE" value="" />
+      <method v="2" />
+    </configuration>
+    <configuration name="line_detection_multisp" type="PythonConfigurationType" factoryName="Python" singleton="false" temporary="true" nameIsGenerated="true">
+      <module name="Python" />
+      <option name="INTERPRETER_OPTIONS" value="" />
+      <option name="PARENT_ENVS" value="true" />
+      <option name="SDK_HOME" value="" />
+      <option name="WORKING_DIRECTORY" value="./" />
+      <option name="IS_MODULE_SDK" value="true" />
+      <option name="ADD_CONTENT_ROOTS" value="true" />
+      <option name="ADD_SOURCE_ROOTS" value="true" />
+      <option name="SCRIPT_NAME" value="$PROJECT_DIR$/spectral_analysis/line_detection_multisp.py" />
+      <option name="PARAMETERS" value="" />
+      <option name="SHOW_COMMAND_LINE" value="true" />
+      <option name="EMULATE_TERMINAL" value="false" />
+      <option name="MODULE_MODE" value="false" />
+      <option name="REDIRECT_INPUT" value="false" />
+      <option name="INPUT_FILE" value="" />
+      <method v="2" />
+    </configuration>
+    <list>
+      <item itemvalue="Python.line_detection_multisp" />
+      <item itemvalue="Python.attempt" />
+    </list>
+    <recent_temporary>
+      <list>
+        <item itemvalue="Python.line_detection_multisp" />
+        <item itemvalue="Python.attempt" />
+      </list>
+    </recent_temporary>
   </component>
   <component name="SpellCheckerSettings" RuntimeDictionaries="0" Folders="0" CustomDictionaries="0" DefaultDictionary="application-level" UseSingleDictionary="true" transferred="true" />
   <component name="TaskManager">
@@ -96,7 +156,14 @@
       <option name="project" value="LOCAL" />
       <updated>1683540158238</updated>
     </task>
-    <option name="localTasksCounter" value="7" />
+    <task id="LOCAL-00007" summary="added gricad mode with uploading to a mantis server">
+      <created>1683540311000</created>
+      <option name="number" value="00007" />
+      <option name="presentableId" value="LOCAL-00007" />
+      <option name="project" value="LOCAL" />
+      <updated>1683540311000</updated>
+    </task>
+    <option name="localTasksCounter" value="8" />
     <servers />
   </component>
   <component name="Vcs.Log.Tabs.Properties">

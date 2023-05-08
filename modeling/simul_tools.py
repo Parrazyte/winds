@@ -166,7 +166,7 @@ def xstar_func(spectrum_file,lum,t_guess,n,nh,xi,vturb_x,nbins,nsteps=1,niter=10
     if path_logpars is not None:
 
         xrun_time=str(round(float(xlog_lines[-1].split()[-1])))
-        parlog_str=parlog_str.replace('\n',xrun_time+'\n')
+        parlog_str=parlog_str.replace('\n','\t'+xrun_time+'\n')
         
         file_edit(path_logpars,'\t'.join([str(nbox),str(i_box_final),spectrum_file]),parlog_str,parlog_header)
 
@@ -185,7 +185,7 @@ def xstar_func(spectrum_file,lum,t_guess,n,nh,xi,vturb_x,nbins,nsteps=1,niter=10
         
 def xstar_wind(solution,p_mhd,mdot_obs,stop_d_input, SED_path, xlum,outdir="xsol",
                h_over_r=0.1, ro_init=0.5,dr_r=0.05, v_resol=85.7, m_BH=8,chatter=0,
-               reload=True,comput_mode='local',mantis_folder=''):
+               reload=True,comput_mode='local',mantis_folder='',force_ro_init=False):
     
     
     '''
@@ -547,7 +547,7 @@ def xstar_wind(solution,p_mhd,mdot_obs,stop_d_input, SED_path, xlum,outdir="xsol
     os.system('mkdir -p '+outdir)
     
     #copying the xstar input file inside the directory if we're not already there
-    if outdir is not './':
+    if outdir!='./':
         os.system('cp '+SED_path+' '+outdir)
     
     #446
@@ -607,36 +607,45 @@ def xstar_wind(solution,p_mhd,mdot_obs,stop_d_input, SED_path, xlum,outdir="xsol
     
     ro_by_Rg = ro_init
     DelFactorRo = 1.0001
-    
-    while ro_by_Rg <= 1.1e7 :
-        
-        #!* distance from black hole in cylindrical co-ordinates-the radial distance
-        rcyl_SI = ro_by_Rg*Rg_SI*r_A  
-        
-        #!* distance from black hole in spherical co-ordinates
-        Rsph_SI = rcyl_SI*cyl_cst
-        
-        Rsph_Rg=Rsph_SI/Rg_SI
-        
-        density_cgs = func_density(Rsph_Rg)
 
-        vel_r_cgs = func_vel_r(Rsph_Rg)
-        vel_z_cgs = func_vel_z(Rsph_Rg)
-        
+    if not force_ro_init:
+        while ro_by_Rg <= 1.1e7 :
+
+            #!* distance from black hole in cylindrical co-ordinates-the radial distance
+            rcyl_SI = ro_by_Rg*Rg_SI*r_A
+
+            #!* distance from black hole in spherical co-ordinates
+            Rsph_SI = rcyl_SI*cyl_cst
+
+            Rsph_Rg=Rsph_SI/Rg_SI
+
+            density_cgs = func_density(Rsph_Rg)
+
+            vel_r_cgs = func_vel_r(Rsph_Rg)
+            vel_z_cgs = func_vel_z(Rsph_Rg)
+
+            vel_obs_cgs = func_vel_obs(Rsph_Rg)
+
+            logxi = func_logxi(Rsph_Rg)
+
+            #!* Here we change the location of the first box as logxi is calculated for xstar to provide correct flux from luminosity.
+
+            if logxi <= 6.0:
+                print("starting anchoring radius ro_by_Rg=",ro_by_Rg)
+
+                break
+            else:
+                #! A distance command : Step increase in the anchoring radius of the magnetic streamline
+                ro_by_Rg = ro_by_Rg*DelFactorRo
+
+    else:
+        # building the standard infos
+        rcyl_SI = ro_by_Rg * Rg_SI * r_A
+        Rsph_SI = rcyl_SI * cyl_cst
+        Rsph_Rg = Rsph_SI / Rg_SI
         vel_obs_cgs = func_vel_obs(Rsph_Rg)
-
         logxi = func_logxi(Rsph_Rg)
-        
-        #!* Here we change the location of the first box as logxi is calculated for xstar to provide correct flux from luminosity. 
 
-        if logxi <= 6.0: 
-            print("starting anchoring radius ro_by_Rg=",ro_by_Rg)
-            
-            break
-        else:
-            #! A distance command : Step increase in the anchoring radius of the magnetic streamline
-            ro_by_Rg = ro_by_Rg*DelFactorRo 
-    
     #!* After getting the starting value of ro_by_Rg from the above 'while' loop, fixing the values for 1st box.
     Rsph_cgs_1st = Rsph_SI*m2cm
     vobs_1st = vel_obs_cgs/(Km2m*m2cm)
@@ -884,7 +893,7 @@ def xstar_wind(solution,p_mhd,mdot_obs,stop_d_input, SED_path, xlum,outdir="xsol
         fileobj_box_details.write('nbox_stop='+str(nbox_stop[i])+'\n')
         print("nbox_stop="+str(nbox_stop[i]))
 
-    print("No. of boxes required="+str(nbox_std))
+    print("No. of boxes required="+str(nbox_std)+' + '+str(len(stop_d))+' final')
     
     #446
     fileobj_box_details.close()
@@ -1012,6 +1021,11 @@ def xstar_wind(solution,p_mhd,mdot_obs,stop_d_input, SED_path, xlum,outdir="xsol
     #using i_box because it's an index here, not the actual box number (shifted by 1)
     for i_box in tqdm(range(nbox_restart-1,nbox_std)):
 
+        # resetting the global log file for the first computation
+        if i_box == 0 and i_box_final == 0:
+            if os.path.isfile('./'+outdir+'/xout_log_global.log'):
+                os.remove('./'+outdir+'/xout_log_global.log')
+
         dict_box['nbox']=i_box+1
         
         #! Doppler shifting of spectra depending on relative velocity
@@ -1060,29 +1074,31 @@ def xstar_wind(solution,p_mhd,mdot_obs,stop_d_input, SED_path, xlum,outdir="xsol
         
         #!**Writing the shifted spectra in a file as it is input for next box 
         xstar_input_save='./'+outdir+'/shifted_input'+str(i_box+1)+'.dat'
-                
-        #shifting the spectra and storing it in the xstar input file name
-        xlum_eff=shift_tr_spectra(del_E[i_box],xstar_input_save,origin=SED_path if i_box<1 else 'xstar')
+
+        #not doing this when restarting because there's no need
+        if not (i_box+1==nbox_restart and xstar_input_restart is not None):
+            #shifting the spectra and storing it in the xstar input file name
+            xlum_eff=shift_tr_spectra(del_E[i_box],xstar_input_save,origin=SED_path if i_box<1 else 'xstar')
             
-        xpx = 10.0**(xpxl[i_box])
-        xpxcol = 10.0**(xpxcoll[i_box])
+            xpx = 10.0**(xpxl[i_box])
+            xpxcol = 10.0**(xpxcoll[i_box])
+
+            #correcting the ionization parameter for the evolution in luminosity
+            zeta = zetal[i_box]*(xlum_eff/xlum)
+
+            vobsx = vobsl[i_box]
+            vturb_x = vturb_in[i_box]
         
-        #correcting the ionization parameter for the evolution in luminosity
-        zeta = zetal[i_box]*(xlum_eff/xlum)
-        
-        vobsx = vobsl[i_box]
-        vturb_x = vturb_in[i_box]
-        
-        '''
-        The lines of sight considered should already be compton thin, the whole line of sight has to be compton thick and this is 
-        checked directly from jonathan's solution
-        The following test is just a sanity check
-        '''
-        
-        if (xpxcol>1.5e24):
-            print('Thomson depth of the cloud becomes unity')
- 
-            break
+            '''
+            The lines of sight considered should already be compton thin, the whole line of sight has to be compton thick and this is 
+            checked directly from jonathan's solution
+            The following test is just a sanity check
+            '''
+
+            if (xpxcol>1.5e24):
+                print('Thomson depth of the cloud becomes unity')
+
+                break
 
         #### main xstar call
         

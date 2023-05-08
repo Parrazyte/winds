@@ -2837,10 +2837,10 @@ class fitmod:
             self.update_fitcomps()
                 
             self.print_xlog('\nlog:Fitting the new component by itself...')
-            
+
             #fitting the component only
             line_pendant.fit()
-                
+
             #unfreezing the rest of the components
             for comp in [elem for elem in self.includedlist if elem is not None]:
                 comp.unfreeze()
@@ -3738,9 +3738,14 @@ class fitcomp:
             
         else:
             self.print_xlog('\nlog:Fitting the new component with the whole model...')
+
+        breakpoint()
+
         #Fitting
         calc_fit(logfile=self.logfile)
-        
+
+        breakpoint()
+
         if split_fit:
             #computing errors for the component parameters only
             calc_error(logfile=self.logfile,param=str(self.parlist[0])+'-'+str(self.parlist[-1]),indiv=True)

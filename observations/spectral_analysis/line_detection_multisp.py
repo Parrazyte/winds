@@ -196,10 +196,10 @@ ap.add_argument("-h_update",nargs=1,help='update the bg, rmf and arf file names 
 
 '''####ANALYSIS RESTRICTION'''
 
-ap.add_argument('-restrict',nargs=1,help='restrict the computation to a number of predefined exposures',default=False,type=bool)
+ap.add_argument('-restrict',nargs=1,help='restrict the computation to a number of predefined exposures',default=True,type=bool)
 #in this mode, the line detection function isn't wrapped in a try, and the summary isn't updasted
 
-observ_restrict=['660_heg_-1_grp_opt.pha','660_heg_1_grp_opt.pha','13717_heg_-1_grp_opt.pha','13717_heg_1_grp_opt.pha']
+observ_restrict=['1103010149_sp_grp_opt.pha']
 
 ''' 
 Chandra:
@@ -231,55 +231,7 @@ only one order:
      '6616_heg_-1_grp_opt.pha','6616_heg_1_grp_opt.pha',
      '6617_heg_-1_grp_opt.pha','6617_heg_1_grp_opt.pha']
 
-lim at 8keV due to CC graded:
-    '6618_heg_-1_grp_opt.pha','6618_heg_1_grp_opt.pha'
-    
 
- 
-
-XMM:   
--GRS strong curvature spectra
-    ['0506161201_pn_U002_Timing_auto_sp_src_grp_opt.ds',
-    '0506161101_pn_S001_Timing_auto_sp_src_grp_opt.ds']
-    
--GROJ strong curve
-'0155762601_pn_S001_Timing_auto_sp_src_grp_opt.ds'
-
--4U strong curvature need leeway at 0.02
-'0670671501_pn_U014_Timing_auto_sp_src_grp_opt.ds'
-
--GX339-4 need no abs
--'0605610201_pn_S003_Timing_auto_sp_src_grp_opt.ds'
-
-------------
-old:
-4U spectra where need to test noem 
-'4568_heg_-1_grp_opt.pha','4568_heg_1_grp_opt.pha'
-    '22377_heg_-1_grp_opt.pha','22377_heg_1_grp_opt.pha'
-    '22378_heg_-1_grp_opt.pha','22378_heg_1_grp_opt.pha'
-    '19904_heg_-1_grp_opt.pha','19904_heg_1_grp_opt.pha'
-
-H1743 high obs with weak to no abs embedded in em feature : 
-    '3804_heg_-1_grp_opt.pha','3804_heg_1_grp_opt.pha'
-H1743 low obs to compare with Miller2012:
-    '11048_heg_-1_grp_opt.pha','11048_heg_1_grp_opt.pha'
-
-GRS1915+105
-Hard obs with detection: 
-    '660_heg_-1_grp_opt.pha','660_heg_1_grp_opt.pha'
-obs initially missing from tgcat
-    '16711_heg_-1_grp_opt.pha','16711_heg_1_grp_opt.pha'
-    
-good fast 4U XMM test: 0670673001_pn_U002_Timing_auto_sp_src_grp_20.ds
-
-
-
-
-1H abs off    
-                 # '0605610201_pn_S003_Timing_auto_sp_src_grp_20.ds',
-                 # '0692341401_pn_S003_Imaging_auto_sp_src_grp_20.ds',
-                 # '0204730301_pn_U002_Timing_auto_sp_src_grp_20.ds',
-                 # '0204730201_pn_U002_Timing_auto_sp_src_grp_20.ds']
 '''
 
 ap.add_argument('-SNR_min',nargs=1,help='minimum source Signal to Noise Ratio',default=50,type=float)
@@ -291,11 +243,11 @@ ap.add_argument('-fit_lowSNR',nargs=1,help='fit the continuum of low quality dat
 ap.add_argument('-counts_min_HID',nargs=1,help='minimum counts for HID fitting in broad band',default=200,type=float)
 
 ap.add_argument('-skip_started',nargs=1,help='skip all exposures listed in the local summary_line_det file',
-                default=True,type=bool)
+                default=False,type=bool)
 #note : will skip exposures for which the exposure didn't compute or with errors
 
 ap.add_argument('-skip_complete',nargs=1,help='skip completed exposures listed in the local summary_line_det file',
-                default=True,type=bool)
+                default=False,type=bool)
 
 ap.add_argument('-skip_nongrating',nargs=1,help='skip non grating Chandra obs (used to reprocess with changes in the restrictions)',
                 default=False,type=bool)

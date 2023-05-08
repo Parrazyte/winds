@@ -183,8 +183,9 @@ def xstar_func(spectrum_file,lum,t_guess,n,nh,xi,vturb_x,nbins,nsteps=1,niter=10
         copy_mantis(path_logpars, mantis_folder)
         copy_mantis('./xout_log_global.log',mantis_folder)
         
-def xstar_wind(dict_solution,p_mhd,mdot_obs,stop_d_input, SED_path, xlum,outdir="xsol",h_over_r=0.1, ro_init=0.5,dr_r=0.115, v_resol=85.7, m_BH=8,chatter=0,reload=True,
-               comput_mode='local',mantis_folder=''):
+def xstar_wind(solution,p_mhd,mdot_obs,stop_d_input, SED_path, xlum,outdir="xsol",
+               h_over_r=0.1, ro_init=0.5,dr_r=0.05, v_resol=85.7, m_BH=8,chatter=0,
+               reload=True,comput_mode='local',mantis_folder=''):
     
     
     '''
@@ -196,7 +197,7 @@ def xstar_wind(dict_solution,p_mhd,mdot_obs,stop_d_input, SED_path, xlum,outdir=
     Required parameters:
         p_mhd and mdot_obs are the main parameters outside of the JED-SAD solution
         
-        dict_solution is a dictionnary with all the arguments of a JED-SAD solution
+        solution is either a file path or a dictionnary with all the arguments of a JED-SAD solution
 
         stop_d is a single (or list of) stop distances in units of Rg
     
@@ -470,31 +471,35 @@ def xstar_wind(dict_solution,p_mhd,mdot_obs,stop_d_input, SED_path, xlum,outdir=
     Rg_SI = 0.5*Rs_SI
     Rg_cgs = Rg_SI*m2cm
 
+    if type(solution)==dict:
+        #Self-similar functions f1-f10
+        z_A=solution['z_A']
+        r_A=solution['r_A']
 
-    #Self-similar functions f1-f10
-    z_A=dict_solution['z_A']
-    r_A=dict_solution['r_A']
-    
-    #line of sight angle (0 is edge on)
-    angle=dict_solution['angle']
-    
-    
-    func_Rsph_by_ro=dict_solution['func_Rsph_by_ro']
-    
-    #mhd density
-    rho_mhd=dict_solution['rho_mhd']
-    
-    #radial, phi and z axis velocity at the alfven point
-    vel_r=dict_solution['vel_r']
-    vel_phi=dict_solution['vel_phi']
-    vel_z=dict_solution['vel_z']
-    
-    func_B_r=dict_solution['func_B_r']
-    func_B_phi=dict_solution['func_B_phi']
-    func_B_z=dict_solution['func_B_z']
-    func_Tdyn=dict_solution['func_Tdyn']
-    func_Tmhd=dict_solution['func_Tmhd']
-    
+        #line of sight angle (0 is edge on)
+        angle=solution['angle']
+
+
+        func_Rsph_by_ro=solution['func_Rsph_by_ro']
+
+        #mhd density
+        rho_mhd=solution['rho_mhd']
+
+        #radial, phi and z axis velocity at the alfven point
+        vel_r=solution['vel_r']
+        vel_phi=solution['vel_phi']
+        vel_z=solution['vel_z']
+
+        func_B_r=solution['func_B_r']
+        func_B_phi=solution['func_B_phi']
+        func_B_z=solution['func_B_z']
+        func_Tdyn=solution['func_Tdyn']
+        func_Tmhd=solution['func_Tmhd']
+    else:
+        #loading the solution file instead
+        z_A,r_A,angle,func_Rsph_by_ro,rho_mhd,vel_r,vel_phi,vel_z,func_B_r,func_B_phi,func_B_z,func_Tdyn,func_Tmhd=\
+        np.loadtxt(solution)
+
     #### variable definition
     
     #one of the intrinsic xstar parameters (listed in the param file), the maximal number of points in the grids
@@ -541,9 +546,9 @@ def xstar_wind(dict_solution,p_mhd,mdot_obs,stop_d_input, SED_path, xlum,outdir=
         
     os.system('mkdir -p '+outdir)
     
-    #copying the xstar input file inside the directory
-    
-    os.system('cp '+SED_path+' '+outdir+'/')
+    #copying the xstar input file inside the directory if we're not already there
+    if outdir is not './':
+        os.system('cp '+SED_path+' '+outdir)
     
     #446
     fileobj_box_details=open('./'+outdir+"/box_details_stop_dist_%.1e"%stop_dl+".log",'w+')

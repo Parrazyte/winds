@@ -9,7 +9,7 @@ Created on Sat Mar 25 13:22:22 2023
 from simul_tools import xstar_wind
 import os
 
-ep=0.1
+epsilon=0.1
 p=0.103
 mu=0.067
 

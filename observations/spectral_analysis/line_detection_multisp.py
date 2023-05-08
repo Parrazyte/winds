@@ -196,7 +196,7 @@ ap.add_argument("-h_update",nargs=1,help='update the bg, rmf and arf file names 
 
 '''####ANALYSIS RESTRICTION'''
 
-ap.add_argument('-restrict',nargs=1,help='restrict the computation to a number of predefined exposures',default=True,type=bool)
+ap.add_argument('-restrict',nargs=1,help='restrict the computation to a number of predefined exposures',default=False,type=bool)
 #in this mode, the line detection function isn't wrapped in a try, and the summary isn't updasted
 
 observ_restrict=['1103010149_sp_grp_opt.pha']
@@ -243,7 +243,7 @@ ap.add_argument('-fit_lowSNR',nargs=1,help='fit the continuum of low quality dat
 ap.add_argument('-counts_min_HID',nargs=1,help='minimum counts for HID fitting in broad band',default=200,type=float)
 
 ap.add_argument('-skip_started',nargs=1,help='skip all exposures listed in the local summary_line_det file',
-                default=False,type=bool)
+                default=True,type=bool)
 #note : will skip exposures for which the exposure didn't compute or with errors
 
 ap.add_argument('-skip_complete',nargs=1,help='skip completed exposures listed in the local summary_line_det file',

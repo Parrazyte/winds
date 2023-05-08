@@ -4,13 +4,7 @@
     <option name="autoReloadType" value="SELECTIVE" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="12a40729-af5d-4a4c-908f-b5a7f28e5c2f" name="Changes" comment="added gricad mode with uploading to a mantis server">
-      <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/modeling/attempt.py" beforeDir="false" afterPath="$PROJECT_DIR$/modeling/attempt.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/modeling/simul_tools.py" beforeDir="false" afterPath="$PROJECT_DIR$/modeling/simul_tools.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/spectral_analysis/line_detection_multisp.py" beforeDir="false" afterPath="$PROJECT_DIR$/spectral_analysis/line_detection_multisp.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/spectral_analysis/xspec_config_multisp.py" beforeDir="false" afterPath="$PROJECT_DIR$/spectral_analysis/xspec_config_multisp.py" afterDir="false" />
-    </list>
+    <list default="true" id="12a40729-af5d-4a4c-908f-b5a7f28e5c2f" name="Changes" comment="added gricad mode with uploading to a mantis server" />
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
     <option name="HIGHLIGHT_NON_ACTIVE_CHANGELIST" value="false" />
@@ -39,6 +33,7 @@
   </component>
   <component name="PropertiesComponent"><![CDATA[{
   "keyToString": {
+    "RunOnceActivity.ShowReadmeOnStart": "true",
     "git-widget-placeholder": "main",
     "last_opened_file_path": "/media/parrama/SSD/Simu/MHD/xstar",
     "settings.editor.selected.configurable": "preferences.pathVariables"
@@ -62,6 +57,9 @@
       <module name="Python" />
       <option name="INTERPRETER_OPTIONS" value="" />
       <option name="PARENT_ENVS" value="true" />
+      <envs>
+        <env name="PYTHONUNBUFFERED" value="1" />
+      </envs>
       <option name="SDK_HOME" value="" />
       <option name="WORKING_DIRECTORY" value="/media/parrama/SSD/Simu/MHD/xstar" />
       <option name="IS_MODULE_SDK" value="true" />
@@ -80,6 +78,9 @@
       <module name="Python" />
       <option name="INTERPRETER_OPTIONS" value="" />
       <option name="PARENT_ENVS" value="true" />
+      <envs>
+        <env name="PYTHONUNBUFFERED" value="1" />
+      </envs>
       <option name="SDK_HOME" value="" />
       <option name="WORKING_DIRECTORY" value="./" />
       <option name="IS_MODULE_SDK" value="true" />
@@ -95,8 +96,8 @@
       <method v="2" />
     </configuration>
     <list>
-      <item itemvalue="Python.line_detection_multisp" />
       <item itemvalue="Python.attempt" />
+      <item itemvalue="Python.line_detection_multisp" />
     </list>
     <recent_temporary>
       <list>

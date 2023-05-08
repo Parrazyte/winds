@@ -1987,7 +1987,8 @@ def calc_error(logfile,maxredchi=1e6,param='all',timeout=60,delchi_thresh=0.1,in
         
         #resetting the error variable
         error_pars=np.zeros((AllData.nGroups,AllModels(1).nParameters,2))
-        
+
+
         for error_str in error_strlist:
             
             #creating the process
@@ -1999,7 +2000,15 @@ def calc_error(logfile,maxredchi=1e6,param='all',timeout=60,delchi_thresh=0.1,in
             
             #stopping for 'timeout' seconds
             p_error.join(timeout)
-                        
+
+            '''
+            note: in some cases with a peg or other weird situations, the error run will 
+            get stuck and as such go up tot the whole length while finding the same marginal chi-2
+            that won't get considered in the fit. The issue is that when piped the model changes
+            are not loaded when resetting to it will attempt the same error search over an over until
+            the limit.
+            '''
+
             if p_error.is_alive():
                 
                 #terminating the error if it still didn't end
@@ -2030,8 +2039,8 @@ def calc_error(logfile,maxredchi=1e6,param='all',timeout=60,delchi_thresh=0.1,in
             print('\nParsing the logs to see if a new minimum was found...')            
             
             #searching for the model
-            is_newmodel=parse_xlog(log_lines[-1],goal='lastmodel',no_display=True) 
-                
+            is_newmodel=parse_xlog(log_lines[-1],goal='lastmodel',no_display=True)
+
             if is_newmodel:
                 #recreating a valid fit
                 calc_fit(logfile=logfile,nonew=True)            
@@ -2043,6 +2052,7 @@ def calc_error(logfile,maxredchi=1e6,param='all',timeout=60,delchi_thresh=0.1,in
                 AllModels.show()
                 Fit.show()
                 Xset.chatter=curr_chatter
+
                 if indiv and base_chi-Fit.statistic>delchi_thresh:
                     break
                 else:
@@ -3739,12 +3749,8 @@ class fitcomp:
         else:
             self.print_xlog('\nlog:Fitting the new component with the whole model...')
 
-        breakpoint()
-
         #Fitting
         calc_fit(logfile=self.logfile)
-
-        breakpoint()
 
         if split_fit:
             #computing errors for the component parameters only

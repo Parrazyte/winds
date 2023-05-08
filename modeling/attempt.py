@@ -55,8 +55,8 @@ lum_GROJ=flux_GROJ*dist_factor/1e38
 
 stop_d=1e6
 
-SED=os.path.join('incident_xstar_HS.dat')
-
+#SED=os.path.join('incident_xstar_HS.dat')
+SED='./5461_cont_deabs_fully_extended_xstar.txt'
 # SED=os.path.join('test_xstar.dat')
 
 #SED_GROJ='5461_cont_deabs_extended_xstar.txt'

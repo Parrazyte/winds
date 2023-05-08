@@ -1,0 +1,96 @@
+Index: .idea/workspace.xml
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.BaseRevisionTextPatchEP
+<+><?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<project version=\"4\">\n  <component name=\"AutoImportSettings\">\n    <option name=\"autoReloadType\" value=\"SELECTIVE\" />\n  </component>\n  <component name=\"ChangeListManager\">\n    <list default=\"true\" id=\"12a40729-af5d-4a4c-908f-b5a7f28e5c2f\" name=\"Changes\" comment=\"added gricad mode with uploading to a mantis server\" />\n    <option name=\"SHOW_DIALOG\" value=\"false\" />\n    <option name=\"HIGHLIGHT_CONFLICTS\" value=\"true\" />\n    <option name=\"HIGHLIGHT_NON_ACTIVE_CHANGELIST\" value=\"false\" />\n    <option name=\"LAST_RESOLUTION\" value=\"IGNORE\" />\n  </component>\n  <component name=\"Git.Settings\">\n    <option name=\"RECENT_GIT_ROOT_PATH\" value=\"$PROJECT_DIR$\" />\n  </component>\n  <component name=\"MarkdownSettingsMigration\">\n    <option name=\"stateVersion\" value=\"1\" />\n  </component>\n  <component name=\"ProjectId\" id=\"2PSzNNPcg9K2cV3k9fnuAMfADqG\" />\n  <component name=\"ProjectViewState\">\n    <option name=\"hideEmptyMiddlePackages\" value=\"true\" />\n    <option name=\"showLibraryContents\" value=\"true\" />\n  </component>\n  <component name=\"PropertiesComponent\"><![CDATA[{\n  \"keyToString\": {\n    \"settings.editor.selected.configurable\": \"preferences.lookFeel\"\n  }\n}]]></component>\n  <component name=\"SpellCheckerSettings\" RuntimeDictionaries=\"0\" Folders=\"0\" CustomDictionaries=\"0\" DefaultDictionary=\"application-level\" UseSingleDictionary=\"true\" transferred=\"true\" />\n  <component name=\"TaskManager\">\n    <task active=\"true\" id=\"Default\" summary=\"Default task\">\n      <changelist id=\"12a40729-af5d-4a4c-908f-b5a7f28e5c2f\" name=\"Changes\" comment=\"\" />\n      <created>1683465231296</created>\n      <option name=\"number\" value=\"Default\" />\n      <option name=\"presentableId\" value=\"Default\" />\n      <updated>1683465231296</updated>\n    </task>\n    <task id=\"LOCAL-00001\" summary=\"added gricad mode with uploading to a mantis server\">\n      <created>1683482468664</created>\n      <option name=\"number\" value=\"00001\" />\n      <option name=\"presentableId\" value=\"LOCAL-00001\" />\n      <option name=\"project\" value=\"LOCAL\" />\n      <updated>1683482468664</updated>\n    </task>\n    <task id=\"LOCAL-00002\" summary=\"added gricad mode with uploading to a mantis server\">\n      <created>1683482511963</created>\n      <option name=\"number\" value=\"00002\" />\n      <option name=\"presentableId\" value=\"LOCAL-00002\" />\n      <option name=\"project\" value=\"LOCAL\" />\n      <updated>1683482511963</updated>\n    </task>\n    <option name=\"localTasksCounter\" value=\"3\" />\n    <servers />\n  </component>\n  <component name=\"Vcs.Log.Tabs.Properties\">\n    <option name=\"TAB_STATES\">\n      <map>\n        <entry key=\"MAIN\">\n          <value>\n            <State />\n          </value>\n        </entry>\n      </map>\n    </option>\n  </component>\n  <component name=\"VcsManagerConfiguration\">\n    <MESSAGE value=\"added gricad mode with uploading to a mantis server\" />\n    <option name=\"LAST_COMMIT_MESSAGE\" value=\"added gricad mode with uploading to a mantis server\" />\n  </component>\n</project>
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+diff --git a/.idea/workspace.xml b/.idea/workspace.xml
+--- a/.idea/workspace.xml	(revision 666468557798360e8e59ef78086fc866781c81c7)
++++ b/.idea/workspace.xml	(date 1683539547163)
+@@ -4,11 +4,23 @@
+     <option name="autoReloadType" value="SELECTIVE" />
+   </component>
+   <component name="ChangeListManager">
+-    <list default="true" id="12a40729-af5d-4a4c-908f-b5a7f28e5c2f" name="Changes" comment="added gricad mode with uploading to a mantis server" />
++    <list default="true" id="12a40729-af5d-4a4c-908f-b5a7f28e5c2f" name="Changes" comment="added gricad mode with uploading to a mantis server">
++      <change afterPath="$PROJECT_DIR$/modeling/gricad_tools.py" afterDir="false" />
++      <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
++      <change beforePath="$PROJECT_DIR$/modeling/attempt.py" beforeDir="false" afterPath="$PROJECT_DIR$/modeling/attempt.py" afterDir="false" />
++      <change beforePath="$PROJECT_DIR$/modeling/simul_tools.py" beforeDir="false" afterPath="$PROJECT_DIR$/modeling/simul_tools.py" afterDir="false" />
++    </list>
+     <option name="SHOW_DIALOG" value="false" />
+     <option name="HIGHLIGHT_CONFLICTS" value="true" />
+     <option name="HIGHLIGHT_NON_ACTIVE_CHANGELIST" value="false" />
+     <option name="LAST_RESOLUTION" value="IGNORE" />
++  </component>
++  <component name="FileTemplateManagerImpl">
++    <option name="RECENT_TEMPLATES">
++      <list>
++        <option value="Python Script" />
++      </list>
++    </option>
+   </component>
+   <component name="Git.Settings">
+     <option name="RECENT_GIT_ROOT_PATH" value="$PROJECT_DIR$" />
+@@ -23,9 +35,21 @@
+   </component>
+   <component name="PropertiesComponent"><![CDATA[{
+   "keyToString": {
+-    "settings.editor.selected.configurable": "preferences.lookFeel"
++    "git-widget-placeholder": "main",
++    "last_opened_file_path": "/home/parrama/Soft/Heasoft/heasoft-6.31.1/x86_64-pc-linux-gnu-libc2.31/lib/python",
++    "settings.editor.selected.configurable": "pyconsole"
+   }
+ }]]></component>
++  <component name="PyConsoleOptionsProvider">
++    <option name="myPythonConsoleState">
++      <console-settings module-name="Python" is-module-sdk="true">
++        <option name="useSoftWraps" value="true" />
++        <option name="myUseModuleSdk" value="true" />
++        <option name="myModuleName" value="Python" />
++      </console-settings>
++    </option>
++    <option name="myShowVariablesByDefault" value="false" />
++  </component>
+   <component name="SpellCheckerSettings" RuntimeDictionaries="0" Folders="0" CustomDictionaries="0" DefaultDictionary="application-level" UseSingleDictionary="true" transferred="true" />
+   <component name="TaskManager">
+     <task active="true" id="Default" summary="Default task">
+@@ -49,7 +73,21 @@
+       <option name="project" value="LOCAL" />
+       <updated>1683482511963</updated>
+     </task>
+-    <option name="localTasksCounter" value="3" />
++    <task id="LOCAL-00003" summary="added gricad mode with uploading to a mantis server">
++      <created>1683483033978</created>
++      <option name="number" value="00003" />
++      <option name="presentableId" value="LOCAL-00003" />
++      <option name="project" value="LOCAL" />
++      <updated>1683483033978</updated>
++    </task>
++    <task id="LOCAL-00004" summary="added gricad mode with uploading to a mantis server">
++      <created>1683483088888</created>
++      <option name="number" value="00004" />
++      <option name="presentableId" value="LOCAL-00004" />
++      <option name="project" value="LOCAL" />
++      <updated>1683483088888</updated>
++    </task>
++    <option name="localTasksCounter" value="5" />
+     <servers />
+   </component>
+   <component name="Vcs.Log.Tabs.Properties">
+@@ -57,7 +95,13 @@
+       <map>
+         <entry key="MAIN">
+           <value>
+-            <State />
++            <State>
++              <option name="CUSTOM_BOOLEAN_PROPERTIES">
++                <map>
++                  <entry key="Show.Git.Branches" value="false" />
++                </map>
++              </option>
++            </State>
+           </value>
+         </entry>
+       </map>

@@ -54,10 +54,12 @@ from ast import literal_eval
 '''Astro'''
 
 #local
+#local
 sys.path.append('/home/parrama/Documents/Work/PhD/Scripts/Python/general/')
+sys.path.append('/home/parrama/Documents/Work/PhD/Scripts/Python/observations/spectral_analysis/')
 
 #online
-sys.path.append('/app/winds/spectral_analysis/')
+sys.path.append('/app/winds/observations/spectral_analysis/')
 sys.path.append('/app/winds/general/')
 
 #custom script with some lines and fit utilities and variables

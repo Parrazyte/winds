@@ -3681,7 +3681,6 @@ class fitcomp:
 
                 prev_scorp=scorpeon_data()
 
-
                 AllModels.clear()
                 
                 #reloading the NICER bg if any

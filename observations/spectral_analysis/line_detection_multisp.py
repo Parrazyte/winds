@@ -1877,7 +1877,8 @@ def line_detect(epoch_id):
         return fill_result(result_broad_fit)
     else:
         main_spflux,broad_absval,data_broad=result_broad_fit
-    
+
+
     result_high_fit=high_fit(broad_absval)
     
     #if the function returns an array of length 1, it means it returned an error message

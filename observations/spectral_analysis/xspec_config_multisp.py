@@ -1747,10 +1747,6 @@ def parse_xlog(log_lines,goal='lastmodel',no_display=False,replace_frozen=False,
             
         #splitting the lines for each group, by first identifying the starts
         if AllData.nGroups>1:
-            
-            #### THIS HASNT BEEN TESTED YET
-            breakpoint()
-            
             grp_lines_ids=np.argwhere([np.array(model_lines)==elem for elem in model_lines if 'Data group' in elem]).T[1]
         else:
             grp_lines_ids=[0]

@@ -54,7 +54,6 @@ from ast import literal_eval
 '''Astro'''
 
 #local
-#local
 sys.path.append('/home/parrama/Documents/Work/PhD/Scripts/Python/general/')
 sys.path.append('/home/parrama/Documents/Work/PhD/Scripts/Python/observations/spectral_analysis/')
 

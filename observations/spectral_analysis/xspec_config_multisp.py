@@ -408,19 +408,30 @@ class scorpeon_data:
         
         self.nxb_save_list=[]
         self.sky_save_list=[]
-        
+
+        self.all_frozen=True
+
         for i_grp in range(AllData.nGroups):
             
             try:
                 self.nxb_save_list+=[scorpeon_group_save(modclass(i_grp+1,modName='nxb'))]
+
+                #adding a check for every loaded datagroup model being completely frozen
+                self.all_frozen=self.all_frozen and np.array(self.nxb_save_list[-1].frozen).all()
+
             except:
                 self.nxb_save_list+=[None]
             
             try:
                 self.sky_save_list+=[scorpeon_group_save(modclass(i_grp+1,modName='sky'))]
+
+                #adding a check for every loaded datagroup model being completely frozen
+                self.all_frozen=self.all_frozen and np.array(self.sky_save_list[-1].frozen).all()
+
             except:
                 self.sky_save_list+=[None]
-                
+
+
     def load(self):
         
         for i_grp in range(len(self.nxb_save_list)):
@@ -3667,10 +3678,17 @@ class fitcomp:
             
             #resetting the model instead of loading if the model was previously empty
             if self.old_mod_npars==0:
+
+                prev_scorp=scorpeon_data()
+
+
                 AllModels.clear()
                 
                 #reloading the NICER bg if any
-                xscorpeon.load()
+                # if the scorpeon model is entirely frozen, we assume it is not being frozen and thus
+                # restore the iteration after cleaning the model
+                xscorpeon.load(scorpeon_save=prev_scorp if prev_scorp.all_frozen else None)
+
             else:
                 self.init_model.load()
 

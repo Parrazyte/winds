@@ -1904,7 +1904,7 @@ def line_detect(epoch_id):
     def narrow_line_search(data_cont,suffix):
         
         '''
-        Wrapper for all the line search codeand associated visualisation
+        Wrapper for all the line search code and associated visualisation
         
         Explores the current model in a given range by adding a line of varying normalisation and energy and mapping the associated
         2D delchi map

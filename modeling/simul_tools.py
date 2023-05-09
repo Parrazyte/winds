@@ -31,7 +31,7 @@ import pyxstar as px
 h_cgs = 6.624e-27
 eV2erg = 1.6e-12
 erg2eV = 1.0/eV2erg
-Ryd2eV = 13.5864
+Ryd2eV = 13.605693
 
 def copy_mantis(path,mantis_folder,delete_previous=False):
 
@@ -204,7 +204,7 @@ def xstar_wind(solution,p_mhd,mdot_obs,stop_d_input, SED_path, xlum,outdir="xsol
         SED is the path of the incident spectra (suitable for xstar input)
         Note: The normalization doesn't matter
 
-        xlum is the bolometric luminosity of the spectrum in units of 1e38ergs/s
+        xlum is the bolometric luminosity of the spectrum in units of 1e38ergs/s between 1-1000 Ryd (aka 13.6eV-13.6keV)
         Used internally by xstar to renormalize the given SED
         
         The luminosity value is manually updated after each computation to consider the decrease due to absorption
@@ -293,8 +293,7 @@ def xstar_wind(solution,p_mhd,mdot_obs,stop_d_input, SED_path, xlum,outdir="xsol
         #multiplying the spectrum is not useful unless it's relativistic but just in case
         zrtmp_shifted = zrtmp*bshift
 
-        #should not need to remap the spectrum since it will be done internally by xstar            
-
+        #should not need to remap the spectrum since it will be done internally by xstar
         shifted_input_arr=np.array([eptmp_shifted,zrtmp_shifted]).T
         
         #!**Writing the shifted spectra in a file as it is input for next box 
@@ -302,9 +301,16 @@ def xstar_wind(solution,p_mhd,mdot_obs,stop_d_input, SED_path, xlum,outdir="xsol
 
         
         if origin=='xstar':                    
-            #the xstar output files has x axis in units of eV and y axis in units of 1e38erg/s/erg
-            #so we need to integrate and the x axis must be renormalized to ergs (so with the conversion factor below)
-            xlum_output=trapezoid(zrtmp_shifted,x=eptmp_shifted*1.6021773E-12)
+            '''
+            the xstar output files has x axis in units of eV and y axis in units of 1e38erg/s/erg
+            so we need to integrate and the x axis must be renormalized to ergs (so with the conversion factor below)
+            the renormalization considers 1-1000 Rydbergs only, so we maks to only get this part of the spectrum
+            '''
+
+            energy_mask=(eptmp_shifted/Ryd2eV>1) & (eptmp_shifted/Ryd2eV<1000)
+
+            xlum_output=trapezoid(zrtmp_shifted[energy_mask],x=eptmp_shifted[energy_mask]*1.6021773E-12)
+
         else:
             #for the first spectrum, the file is not normalized, so instead the output is just the xlum times the blueshift
             xlum_output=xlum*del_E[0]

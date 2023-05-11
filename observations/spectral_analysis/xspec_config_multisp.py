@@ -28,10 +28,7 @@ from copy import copy
 import dill
 
 from matplotlib.ticker import Locator
-import matplotlib.colors as colors
 
-#bipolar colormap from a custom library (https://github.com/endolith/bipolar-colormap)
-from bipolar import hotcold
 
 from matplotlib.gridspec import GridSpec
 
@@ -235,6 +232,8 @@ class allmodel_data:
         if 'nxb' in modclass.sources.values() and 'sky' in modclass.sources.values():
             
             self.scorpeon=scorpeon_data()
+        else:
+            self.scorpeon=None
             
     def load(self):
                                 
@@ -3086,6 +3085,7 @@ class fitmod:
             self.print_xlog('\nlog:Creating Markov Chain from the fit...')
             
             try:
+                ####Note: should be replaced by emcee eventually
                 Chain(directory+'/'+observ_id+'_chain_autofit.fits')
             except:
                 breakpoint()
@@ -4190,399 +4190,6 @@ def EW_ang2keV(x,e_line):
     return x*(h_keV*3*10**18)/l_line**2
 
 
-def plot_std_ener(ax_ratio,ax_contour=None,plot_em=False,mode='ratio'):
-    
-    '''
-    Plots the current absorption (and emission if asked) standard lines in the current axis
-    also used in the autofit plots further down
-    '''
-    #since for the first plot the 1. ratio is not necessarily centered, we need to fetch the absolute position of the y=1.0 line
-    #in graph height fraction
-    pos_ctr_ratio=(1-ax_ratio.get_ylim()[0])/(ax_ratio.get_ylim()[1]-ax_ratio.get_ylim()[0])
-    
-    lines_names=np.array(lines_std_names)
-    lines_abs_pos=['abs' in elem for elem in lines_names]
-    lines_em_pos=['em' in elem for elem in lines_names]
-
-    for i_line,line in enumerate(lines_names):
-        
-        if lines_e_dict[line][0]<ax_ratio.get_xlim()[0] or lines_e_dict[line][0]>ax_ratio.get_xlim()[1]:
-            continue
-            
-        #skipping some indexes for now
-        if i_line==2 or i_line>8:
-            continue
-        
-        #skipping Nika27:
-        if i_line==5:
-            continue
-            
-        
-        #skipping display if emission lines are not asked
-        if 'em' in line and not plot_em:
-            continue
-        
-        #booleans for dichotomy in the plot arguments
-        abs_bool='abs' in line
-        em_bool= not abs_bool
-        
-        #plotting the lines on the two parts of the graphs
-        ax_ratio.axvline(x=lines_e_dict[line][0],
-                         ymin=0 if mode!='ratio' else pos_ctr_ratio if em_bool else 0.,ymax=1 if mode!='ratio' else 1 if em_bool else pos_ctr_ratio,
-                         color='blue' if em_bool else 'brown',
-                         linestyle='dashed',linewidth=1.5)
-        if ax_contour is not None:
-            ax_contour.axvline(x=lines_e_dict[line][0],ymin=0.5 if em_bool else 0,ymax=1 if em_bool else 0.5,
-                               color='blue' if em_bool else 'brown',linestyle='dashed',linewidth=0.5)
-        
-        #small left horizontal shift to help the Nika27 display
-        txt_hshift=0.1 if 'Ni' in line else 0
-        
-        if mode!='noname':
-            
-            #but the legend on the top part only
-            ax_ratio.text(x=lines_e_dict[line][0]-txt_hshift,y=0.96 if em_bool else (0.06 if i_line%2==1 else 0.14),s=lines_std[line],
-                          color='blue' if em_bool else 'brown',transform=ax_ratio.get_xaxis_transform(),ha='center', va='top')
-
-
-            
-def color_chi2map(fig,axe,chi_map,title='',combined=False,ax_bar=None):
-    axe.set_ylabel('Line normalisation iteration')
-    axe.set_xlabel('Line energy parameter iteration')
-    
-    if combined==False:
-        axe.set_title(title)
-        
-    
-    if np.max(chi_map)>=1e3:
-        chi_map=chi_map**(1/2)
-        bigline_flag=1
-    else:
-        bigline_flag=0
-        
-    img=axe.imshow(chi_map,interpolation='none',cmap='plasma',aspect='auto')
-    
-    
-    if combined==False:
-        colorbar=plt.colorbar(img,ax=axe)
-        fig.tight_layout()
-        
-    else:
-        colorbar=plt.colorbar(img,cax=ax_bar)
-    
-    if bigline_flag==1:
-        colorbar.set_label(r'$\sqrt{\Delta C}$')
-    else:
-        colorbar.set_label(r'$\Delta C$')
-                
-def contour_chi2map(fig,axe,chi_dict,title='',combined=False):
-    
-    chi_arr=chi_dict['chi_arr']
-    chi_base=chi_dict['chi_base']
-    line_threshold=chi_dict['line_threshold']
-    line_search_e=chi_dict['line_search_e']
-    line_search_e_space=chi_dict['line_search_e_space']
-    line_search_norm=chi_dict['line_search_norm']
-    norm_par_space=chi_dict['norm_par_space']
-    peak_points=chi_dict['peak_points']
-    peak_widths=chi_dict['peak_widths']
-
-    chi_map=np.where(chi_arr>=chi_base,0,chi_base-chi_arr)
-    
-    axe.set_ylabel('Gaussian line normalisation\n in units of local continuum Flux')
-    axe.set_yscale('symlog',linthresh=line_threshold,linscale=0.1)
-    if combined==False:
-        axe.set_xlabel('Energy (keV)')
-    
-    chi_contours=[chi_base-9.21,chi_base-4.61,chi_base-2.3]
-    
-    contours_var=axe.contour(line_search_e_space,norm_par_space,chi_map,levels=chi_contours,cmap='plasma')
-    
-    contours_var_labels=[r'99% conf. with 2 d.o.f.',r'90% conf. with 2 d.o.f.',
-                          r'68% conf. with 2 d.o.f.']
-    
-    #avoiding error if there are no contours to plot
-    for l in range(len(contours_var_labels)):
-        try:
-            contours_var.collections[l].set_label(contours_var_labels[l])
-        except:
-            pass
-        
-    contours_base=axe.contour(line_search_e_space,norm_par_space,chi_arr.T,levels=[chi_base+0.5],colors='black',
-                                  linewidths=0.5,linestyles='dashed')
-    contours_base_labels=[r'base level ($\Delta C=0.5$)']
-    
-    for l in range(len(contours_base_labels)):
-        contours_base.collections[l].set_label(contours_base_labels[l])
-    
-    #for each peak and width, the coordinates need to be translated in real energy and norm coordinates
-    try:
-        for elem_point in enumerate(peak_points):
-    
-            point_coords=[line_search_e_space[elem_point[1][0]],norm_par_space[elem_point[1][1]]]
-
-            segment_coords=[point_coords[0]-line_search_e[2]*peak_widths[elem_point[0]]/2,
-                          point_coords[0]+line_search_e[2]*peak_widths[elem_point[0]]/2],[point_coords[1],point_coords[1]]
-
-            
-            axe.scatter(point_coords[0],point_coords[1],marker='X',color='black',label='peak' if elem_point[0]==0 else None)
-            
-            axe.plot(segment_coords[0],segment_coords[1],color='black',label='max peak structure width' if elem_point[0]==0 else None)
-            
-            #ununsed for now
-            # arrow_coords_left=[point_coords[0]-line_search_e[2]*peak_widths[elem_point[0]]/2,point_coords[1]]
-            # arrow_coords_right=[point_coords[0]+line_search_e[2]*peak_widths[elem_point[0]]/2,point_coords[1]]
-            # arrow_coords_del=[line_search_e[2]*peak_widths[elem_point[0]],0]
-            # axe.arrow(arrow_coords_left[0],arrow_coords_left[1],arrow_coords_del[0],arrow_coords_del[1],shape='full',
-            #           head_width=line_search_e/10,head_length=line_search_e[2]/10,color='black',length_includes_head=True,
-            #           label='max peak structure width' if elem_point[0]==0 else None)
-            # axe.arrow(arrow_coords_right[0],arrow_coords_right[1],-arrow_coords_del[0],arrow_coords_del[1],
-            #           shape='full',head_width=norm_nsteps/100,head_length=line_search_e[2]/10,color='black',fc='black',
-            #           length_includes_head=True)
-    except:
-        pass
-    
-    #using a weird class to get correct tickers on the axes since it doesn't work natively
-    axe.yaxis.set_minor_locator(MinorSymLogLocator(line_search_norm[0]))
-    
-    if combined==False:
-        axe.legend()
-        fig.tight_layout()
-    else:
-        axe.legend(loc='right',bbox_to_anchor=(1.25,0.5))
-                
-def coltour_chi2map(fig,axe,chi_dict,title='',combined=False,ax_bar=None,norm=None):
-
-    chi_arr=chi_dict['chi_arr']
-    chi_base=chi_dict['chi_base']
-    line_threshold=chi_dict['line_threshold']
-    line_search_e=chi_dict['line_search_e']
-    line_search_e_space=chi_dict['line_search_e_space']
-    line_search_norm=chi_dict['line_search_norm']
-    norm_par_space=chi_dict['norm_par_space']
-    peak_points=chi_dict['peak_points']
-    peak_widths=chi_dict['peak_widths']
-
-    chi_map=np.where(chi_arr>=chi_base,0,chi_base-chi_arr)
-
-    axe.set_ylabel('Gaussian line normalisation\n in units of local continuum Flux')
-    axe.set_yscale('symlog',linthresh=line_threshold,linscale=0.1)
-    
-    if combined==False:
-        axe.set_xlabel('Energy (keV)')
-        axe.set_title(title)
-        
-    #hiding the ticks values for the lower x axis if in paper mode
-    if combined=='paper':
-        plt.setp(axe.get_xticklabels(), visible=False)
-            
-    
-    '''COLOR PLOT'''
-    
-    #here we do some more modifications
-    chi_arr_plot=chi_map
-    
-    #swapping the sign of the delchis for the emission and absorption lines in order to display them with both parts of the cmap + using a square root norm for easier visualisation
-    for i in range(len(chi_arr_plot)):
-        chi_arr_plot[i]=np.concatenate((-(chi_arr_plot[i][:int(len(chi_arr_plot[i])/2)])**(1/2),
-                                         (chi_arr_plot[i][int(len(chi_arr_plot[i])/2):])**(1/2)))
-        
-    if np.max(chi_arr_plot)>=1e3:
-        chi_arr_plot=chi_arr_plot**(1/2)
-        bigline_flag=1
-    else:
-        bigline_flag=0
-        if norm is not None:
-            norm_col=np.array(norm)**(1/2)
-        
-    #creating the bipolar cm
-    cm_bipolar=hotcold(neutral=1)
-    
-    #and the non symetric normalisation
-    cm_norm=colors.TwoSlopeNorm(vcenter=0,vmin=chi_arr_plot.min() if norm is None else -norm_col[0],
-                                            vmax=chi_arr_plot.max()  if norm is None else norm_col[1])
-    
-    #create evenly spaced ticks with different scales in top and bottom
-    cm_ticks=np.concatenate((np.linspace(chi_arr_plot.min()  if norm is None else -norm_col[0],0,6,endpoint=True),
-                             np.linspace(0,chi_arr_plot.max()  if norm is None else norm_col[1],6,endpoint=True)))
-    
-    #renaming the ticks to positive values only since the negative side is only for the colormap + re-squaring to get the
-    #right values
-    cm_ticklabels=(cm_ticks**2).round(1).astype(str)
-    
-    #this allows to superpose the image to a log scale (imshow scals with pixels so it doesn't work)
-    img=axe.pcolormesh(line_search_e_space,norm_par_space,chi_map.T,norm=cm_norm,cmap=cm_bipolar.reversed())
-    
-    if ax_bar!=None:
-
-        if ax_bar=='bottom':
-            try:
-                colorbar=plt.colorbar(img,location='bottom',orientation='horizontal',spacing='proportional',ticks=cm_ticks)
-                colorbar.ax.set_yticklabels(cm_ticklabels)
-            except:
-                breakpoint()
-                print("aa")
-        elif combined==False:
-            colorbar=plt.colorbar(img,ax=axe,spacing='proportional',ticks=cm_ticks)
-            colorbar.ax.set_yticklabels(cm_ticklabels)  
-        else:
-            colorbar=plt.colorbar(img,cax=ax_bar,spacing='proportional',ticks=cm_ticks)
-            colorbar.ax.set_yticklabels(cm_ticklabels)
-        
-    if bigline_flag==1:
-        colorbar.set_label(r'$\sqrt{\Delta C}$ with separated scales\nfor emission and absorption')
-    else:
-        colorbar.set_label(r'$\Delta C$ with separated scales for emission and absorption')
-        
-    '''CONTOUR PLOT'''
-    
-    chi_contours=[chi_base-9.21,chi_base-4.61,chi_base-2.3]
-    
-    contours_var_labels=[r'99% conf. with 2 d.o.f.',r'90% conf. with 2 d.o.f.',
-                          r'68% conf. with 2 d.o.f.']
-    contours_var_ls=['solid','dashed','dotted']
-    
-    try:
-        contours_var=axe.contour(line_search_e_space,norm_par_space,chi_arr.T,levels=chi_contours,colors='black',
-                                 linestyles=contours_var_ls,label=contours_var_labels)
-    except:
-        print("tchou")
-        raise ValueError
-        
-    #avoiding error if there are no contours to plot
-    for l in range(len(contours_var.collections)):
-        
-        #there is an issue in the current matplotlib version with contour labels crashing the legend so we use proxies instead        
-        axe.plot([], [], ls=contours_var_ls[l], label=contours_var_labels[l],color='black')
-        
-        #not using this
-        #contours_var.collections[l].set_label(contours_var_labels[l])
-
-    contours_base_labels=[r'base level ($\Delta C=0.5$)']
-    contours_base_ls=['dashed']
-    
-    contours_base=axe.contour(line_search_e_space,norm_par_space,chi_arr.T,levels=[chi_base+0.5],colors='grey',
-                                  linewidths=0.5,linestyles=contours_base_ls)
-
-    for l in range(len(contours_base.collections)):
-        #same workaround here
-        axe.plot([], [], ls=contours_base_ls[l],lw=0.5,label=contours_base_labels[l],color='black')
-
-        #not using this        
-        #contours_base.collections[l].set_label(contours_base_labels[l])
-
-    
-    #for each peak and width, the coordinates need to be translated in real energy and norm coordinates
-    try:
-        for elem_point in enumerate(peak_points):
-    
-            point_coords=[line_search_e_space[elem_point[1][0]],norm_par_space[elem_point[1][1]]]
-
-            segment_coords=[point_coords[0]-line_search_e[2]*peak_widths[elem_point[0]]/2,
-                          point_coords[0]+line_search_e[2]*peak_widths[elem_point[0]]/2],[point_coords[1],point_coords[1]]
-
-            
-            axe.scatter(point_coords[0],point_coords[1],marker='X',color='black',label='peak' if elem_point[0]==0 else None)
-            
-            axe.plot(segment_coords[0],segment_coords[1],color='black',label='max peak structure width' if elem_point[0]==0 else None)
-    except:
-        pass
-
-    #using a weird class to get correct tickers on the axes since it doesn't work natively
-    axe.yaxis.set_minor_locator(MinorSymLogLocator(line_search_norm[0]))
-    
-    if combined==False:
-        fig.tight_layout()
-    else:
-        if combined=='paper':
-            axe.legend(loc='upper left')
-        elif combined=='nolegend':
-            pass
-        else:
-            axe.legend(title='Bottom panel labels',loc='right',bbox_to_anchor=(1.25,1.5))
-
-            
-def comb_chi2map(fig_comb,chi_dict,title='',comb_label=''):
-    
-    line_cont_range=chi_dict['line_cont_range']
-    plot_ratio_values=chi_dict['plot_ratio_values']
-    line_search_e_space=chi_dict['line_search_e_space']
-    ax_comb=np.array([None]*2)
-    fig_comb.suptitle(title)
-    
-    #gridspec creates a grid of spaces for subplots. We use 2 rows for the 2 plots
-    #Second column is there to keep space for the colorbar. Hspace=0. sticks the plots together
-    gs_comb=GridSpec(2,2,figure=fig_comb,width_ratios=[98,2],hspace=0.)
-    
-    #first subplot is the ratio
-    ax_comb[0]=plt.subplot(gs_comb[0,0])
-    ax_comb[0].set_xlabel('Energy (keV)')
-    ax_comb[0].set_ylabel('Fit ratio')
-    ax_comb[0].set_xlim(line_cont_range)
-    #we put the x axis on top to avoid it being hidden by the second subplot2aaa
-    ax_comb[0].xaxis.tick_top()
-    ax_comb[0].xaxis.set_label_position('top')
-    
-    #for now we only expect up to 3 data groups. The colors below are the standard xspec colors, for visual clarity with the xspec screen
-    
-    for i_grp in range(AllData.nGroups):
-            
-        ax_comb[0].errorbar(plot_ratio_values[i_grp][0][0], plot_ratio_values[i_grp][1][0],
-                                xerr=plot_ratio_values[i_grp][0][1],yerr=plot_ratio_values[i_grp][1][1],
-                                color=xcolors_grp[i_grp],ecolor=xcolors_grp[i_grp],linestyle='None',
-                                label=comb_label[i_grp])
-        
-    ax_comb[0].axhline(y=1,xmin=0,xmax=1,color='green')
-    
-    #limiting the plot to the range of the line energy search
-    ax_comb[0].set_xlim(line_search_e_space[0],line_search_e_space[-1])
-
-    #not needed for now            
-    # #selecting the indexes of the points of the plot which are in the line_search_e energy range
-    # plot_ratio_xind_rel=np.array([elem for elem in np.where(plot_ratio_values[0][0][0]>=line_search_e[0])[0]\
-    #                               if elem in np.where(plot_ratio_values[0][0][0]<=line_search_e[1])[0]])
-        
-    #rescaling with errorbars (which are not taken into account by normal rescaling)
-    plot_ratio_y_up=max(ravel_ragged(np.array([(plot_ratio_values[i_grp][1][0]+plot_ratio_values[i_grp][1][1])
-                         for i_grp in range(AllData.nGroups)],dtype=object),mode=object))
-    
-    plot_ratio_y_dn=min(ravel_ragged(np.array([(plot_ratio_values[i_grp][1][0]-plot_ratio_values[i_grp][1][1])
-                         for i_grp in range(AllData.nGroups)],dtype=object),mode=object))
-    
-    ax_comb[0].set_ylim(0.95*np.min(plot_ratio_y_dn),1.05*np.max(plot_ratio_y_up))
-    
-    '''second plot (contour)'''
-    
-    ax_comb[1]=plt.subplot(gs_comb[1,0],sharex=ax_comb[0])
-    ax_colorbar=plt.subplot(gs_comb[1,1])
-    coltour_chi2map(fig_comb,ax_comb[1],chi_dict,combined=True,ax_bar=ax_colorbar)          
-    
-    ax_comb[1].set_xlim(line_cont_range)
-    # #third plot (color), with a separate colorbar plot on the second column of the gridspec
-    # #to avoid reducing the size of the color plot
-    # ax_comb[2]=plt.subplot(gs_comb[2,0])
-    # ax_colorbar=plt.subplot(gs_comb[2,1])
-    # color_plot(fig_comb,ax_comb[2],combined=True,ax_bar=ax_colorbar)
-
-    # #we currently do not map the confidence levels of the 
-    # #adding peak significance to the color plot
-    # if assess_line==True:
-        
-    #     for i_peak in range(len(peak_sign)):
-    #         #restricting the display to absorption lines
-    #         if peak_eqws[i_peak]<0:
-    #             #the text position we input is the horizontal symmetrical compared to the peak's position
-    #             ax_comb[2].annotate((str(round(100*peak_sign[i_peak],len(str(nfakes)))) if peak_sign[i_peak]!=1 else\
-    #                                  '>'+str((1-1/nfakes)*100))+'%',\
-    #                                  xy=(peak_points[i_peak][0],len(norm_par_space)-peak_points[i_peak][1]),
-    #                                  xytext=(peak_points[i_peak][0],peak_points[i_peak][1]),color='white',ha='center',
-    #                                 arrowprops=dict(arrowstyle='->',color='white'))
-
-    
-    '''Plotting the Standard Line energies'''
-    
-    plot_std_ener(ax_comb[0],ax_comb[1],plot_em=True)
-        
 def xPlot(types,axes_input=None,plot_saves_input=None,plot_arg=None,includedlist=None,group_names=None,hide_ticks=True,
           secondary_x=True,legend_position=None,xlims=None,ylims=None):
     
@@ -4730,8 +4337,8 @@ def xPlot(types,axes_input=None,plot_saves_input=None,plot_arg=None,includedlist
             curr_ax.set_xlim(round(min(ravel_ragged(curr_save.x-curr_save.xErr)),2),round(max(ravel_ragged(curr_save.x+curr_save.xErr)),2))
 
         if ylims is None:
-            curr_ax.set_ylim(min(curr_ax.get_ylim()[0],round(min(ravel_ragged(curr_save.y-curr_save.yErr)),1)),
-                          max(curr_ax.get_ylim()[1],round(max(ravel_ragged(curr_save.y+curr_save.yErr)),1)))
+            curr_ax.set_ylim(min(curr_ax.get_ylim()[0],round(min(ravel_ragged(curr_save.y-curr_save.yErr)),4)),
+                          max(curr_ax.get_ylim()[1],round(max(ravel_ragged(curr_save.y+curr_save.yErr)),4)))
 
             
         #plotting the components after locking axis limits to avoid huge rescaling
@@ -4763,9 +4370,13 @@ def xPlot(types,axes_input=None,plot_saves_input=None,plot_arg=None,includedlist
             for id_grp in range(curr_save.nGroups):
                 for i_comp in range(len(curr_save.addcomps[id_grp])):
 
-                    curr_ax.plot(curr_save.x[0],curr_save.addcomps[id_grp][i_comp],color=colors_addcomp.to_rgba(i_comp),
+                    try:
+                        curr_ax.plot(curr_save.x[0],curr_save.addcomps[id_grp][i_comp],color=colors_addcomp.to_rgba(i_comp),
                                  label=label_comps[i_comp],linestyle=ls_types[i_comp%3],linewidth=1)
-                
+                    except:
+                        breakpoint()
+                        print("check if other x work")
+
         #ratio line
         if 'ratio' in plot_type:
             curr_ax.axhline(y=1,xmin=0,xmax=1,color='green')
@@ -4870,70 +4481,4 @@ def store_plot(datatype='data',comps=False):
         return (plot_values,mod_values)
     Plot.add=prev_plot_add_state
     return plot_values
-        
-    
-def plot_line_comps(axe,comp_cont,names_cont,comp_lines,names_lines,combined=False):
-    
-    '''
-    Wrapper for plotting model component contributions
-    '''
-    
-    axe.set_ylabel(r'normalized counts s$^{-1}$ keV$^{-1}$')
-    axe.set_yscale('log')
-    
-    #summing the continuum components to have baseline for the line plotting
-    cont_sum=np.sum(comp_cont[2:],0)
-    
-    #computing the extremal energy bin widths
-    bin_widths=(comp_cont[0][1]-comp_cont[0][0])/2,(comp_cont[0][-1]-comp_cont[0][-2])/2
-    
-    #resizing the x axis range to the line continuum range
-    axe.set_xlim(round(comp_cont[0][0]-bin_widths[0],1),round(comp_cont[0][-1]+bin_widths[1],1))
-    
-    #resizing the y axis range to slightly above the beginning of the continuum and an order of magnitude below the continuum to 
-    #see the emission lines if they are strong
 
-    axe.set_ylim(5e-1*min(cont_sum),1.1*max(cont_sum))
-
-        
-    if combined:
-        axe.xaxis.set_label_position('top') 
-        axe.xaxis.tick_top()
-    else:
-        axe.set_xlabel('Energy (keV')
-        
-    #continuum colormap
-    norm_colors_cont=mpl.colors.Normalize(vmin=1,vmax=len(comp_cont[2:]))
-    
-    colors_cont=mpl.cm.ScalarMappable(norm=norm_colors_cont,cmap=mpl.cm.viridis)
-
-    #plotting the continuum components
-    for i_cont in range(0,len(comp_cont[2:])):
-        axe.plot(comp_cont[0],comp_cont[2+i_cont],label=names_cont[i_cont],color=colors_cont.to_rgba(i_cont+1))
-        
-    #linestyles
-    l_styles=['solid','dotted','dashed','dashdot']
-    
-    #loop for each line
-    for i_line in range(len(comp_lines)):
-        
-        #fetching the position of the line in the standard line array from their component name
-        line_name=names_lines[i_line]
-            
-        #selecting the parts of the curve for which the contribution of the line is significant 
-        #(we put stronger constraints on emission lines to avoid coloring the entirety of the curve)
-        sign_bins=(abs(comp_lines[i_line])>=1e-3*cont_sum) if 'em' in line_name else (abs(comp_lines[i_line])>=1e-2*cont_sum)
-        
-        #plotting the difference with the continuum when the line has a non zero value, with the appropriate color and name
-        axe.plot(comp_cont[0][sign_bins],
-                 cont_sum[sign_bins]+comp_lines[i_line][sign_bins],
-                 label=lines_std[line_name],color='blue' if 'em' in line_name else 'red',alpha=1-0.1*i_line,
-                 linestyle=l_styles[i_line%4])
-        
-        #plotting the strong emission lines by themselves independantly
-        if min(comp_lines[i_line])>=0 and max(comp_lines[i_line])>=5e-1*min(cont_sum):
-            
-            axe.plot(comp_cont[0],comp_lines[i_line],color='blue',
-                     alpha=1-0.1*i_line,linestyle=l_styles[i_line%4])
-        
-        axe.legend()

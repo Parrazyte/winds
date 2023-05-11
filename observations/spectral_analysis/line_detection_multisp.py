@@ -112,8 +112,9 @@ from xspec import AllModels,AllData,Fit,Spectrum,Model,Plot,Xset,FakeitSettings,
 
 #custom script with a few shorter xspec commands
 from xspec_config_multisp import allmodel_data,model_load,addcomp,Pset,Pnull,rescale,reset,Plot_screen,store_plot,freeze,allfreeze,unfreeze,\
-                         calc_error,delcomp,fitmod,fitcomp,calc_fit,plot_line_comps,\
-                         xcolors_grp,comb_chi2map,plot_std_ener,coltour_chi2map,xPlot,xscorpeon,catch_model_str
+                         calc_error,delcomp,fitmod,fitcomp,calc_fit,xcolors_grp,xPlot,xscorpeon,catch_model_str
+
+from linedet_utils import plot_line_comps,plot_line_search,plot_std_ener,coltour_chi2map,narrow_line_search
 
 #custom script with a some lines and fit utilities and variables
 from fitting_tools import c_light,lines_std_names,lines_e_dict,n_absline,range_absline,model_list
@@ -142,8 +143,8 @@ ap = argparse.ArgumentParser(description='Script to detect lines in XMM Spectra.
 
 '''GENERAL OPTIONS'''
 
-ap.add_argument('-satellite',nargs=1,help='telescope to fetch spectra from',default='NICER',type=str)
-ap.add_argument("-cameras",nargs=1,help='Cameras to use for spectral analysis',default='def',type=str)
+ap.add_argument('-satellite',nargs=1,help='telescope to fetch spectra from',default='Chandra',type=str)
+ap.add_argument("-cameras",nargs=1,help='Cameras to use for spectral analysis',default='hetg',type=str)
 ap.add_argument("-expmodes",nargs=1,help='restrict the analysis to a single type of exposure',default='all',type=str)
 ap.add_argument("-grouping",nargs=1,help='specfile grouping for XMM spectra in [5,10,20] cts/bin',default='opt',type=str)
 
@@ -153,7 +154,7 @@ ap.add_argument("-prefix",nargs=1,help='restrict analysis to a specific prefix',
 
 ####output directory
 ap.add_argument("-outdir",nargs=1,help="name of output directory for line plots",
-                default="lineplots_opt",type=str)
+                default="lineplots_opt_dill",type=str)
 
 #overwrite
 ap.add_argument('-overwrite',nargs=1,
@@ -183,7 +184,9 @@ ap.add_argument('-pre_reduced_NICER',nargs=1,help='change NICER data format to p
 
 #### Models and abslines lock
 ap.add_argument('-cont_model',nargs=1,help='model list to use for the autofit computation',default='cont',type=str)
-ap.add_argument('-autofit_model',nargs=1,help='model list to use for the autofit computation',default='lines_narrow',type=str)
+ap.add_argument('-autofit_model',nargs=1,help='model list to use for the autofit computation',default='lines_resolved',type=str)
+#narrow or resolved mainly
+
 ap.add_argument('-no_abslines',nargs=1,help='turn off absorption lines addition in the fit (still allows for UL computations)',
                 default=False,type=str)
 
@@ -196,10 +199,10 @@ ap.add_argument("-h_update",nargs=1,help='update the bg, rmf and arf file names 
 
 '''####ANALYSIS RESTRICTION'''
 
-ap.add_argument('-restrict',nargs=1,help='restrict the computation to a number of predefined exposures',default=False,type=bool)
+ap.add_argument('-restrict',nargs=1,help='restrict the computation to a number of predefined exposures',default=True,type=bool)
 #in this mode, the line detection function isn't wrapped in a try, and the summary isn't updasted
 
-observ_restrict=['1103010149_sp_grp_opt.pha']
+observ_restrict=['13717_heg_-1_grp_opt.pha','13717_heg_1_grp_opt.pha']
 
 ''' 
 Chandra:
@@ -243,7 +246,7 @@ ap.add_argument('-fit_lowSNR',nargs=1,help='fit the continuum of low quality dat
 ap.add_argument('-counts_min_HID',nargs=1,help='minimum counts for HID fitting in broad band',default=200,type=float)
 
 ap.add_argument('-skip_started',nargs=1,help='skip all exposures listed in the local summary_line_det file',
-                default=True,type=bool)
+                default=False,type=bool)
 #note : will skip exposures for which the exposure didn't compute or with errors
 
 ap.add_argument('-skip_complete',nargs=1,help='skip completed exposures listed in the local summary_line_det file',
@@ -309,7 +312,8 @@ ap.add_argument('-restrict_order',nargs=1,help='restrict HETG spectral analysis 
 '''PEAK/MC DETECTION PARAMETERS'''
 
 ap.add_argument('-peak_thresh',nargs=1,help='chi difference threshold for the peak detection',default=9.21,type=float)
-ap.add_argument('-peak_clean',nargs=1,help='try to distinguish a width for every peak',default=False,type=bool)
+
+ap.add_argument('-peak_clean',nargs=1,help='try to distinguish a width for every peak (experimental)',default=False,type=bool)
 
 ap.add_argument('-nfakes',nargs=1,help='number of simulations used. Limits the maximal significance tested to >1-1/nfakes',default=1e3,type=int)
 
@@ -1136,30 +1140,31 @@ def line_detect(epoch_id):
     Fit.statMethod=fitstat
     
     # Fit.weight='churazov'
-    
-    if sat=='Chandra':
-        
-        with fits.open(epoch_files[0]) as hdul:
-            datamode=hdul[1].header['DATAMODE']
-            obsdate=hdul[1].header['DATE-OBS']
-            
-        if datamode=='CC33_GRADED' and int(obsdate.split('-')[0])<=2014:
-            
-            obs_grating=True
-            
-            print('\nOld CC33 obs detected.')
-            if restrict_graded:
-                print('\nRestricting energy range...')
-                e_sat_high=8.
-                hid_cont_range[1]=8.
-                line_cont_range[1]=8.
-                
-                line_search_e_space=np.arange(line_search_e[0],8.+line_search_e[2]/2,line_search_e[2])
-                #this one is here to avoid adding one point if incorrect roundings create problem
-                line_search_e_space=line_search_e_space[line_search_e_space<=8.]
 
-                reset_ener=False
-        
+    ####Note: deprecated
+    # if sat=='Chandra':
+    #
+    #     with fits.open(epoch_files[0]) as hdul:
+    #         datamode=hdul[1].header['DATAMODE']
+    #         obsdate=hdul[1].header['DATE-OBS']
+    #
+    #     if datamode=='CC33_GRADED' and int(obsdate.split('-')[0])<=2014:
+    #
+    #         obs_grating=True
+    #
+    #         print('\nOld CC33 obs detected.')
+    #         if restrict_graded:
+    #             print('\nRestricting energy range...')
+    #             e_sat_high=8.
+    #             hid_cont_range[1]=8.
+    #             line_cont_range[1]=8.
+    #
+    #             line_search_e_space=np.arange(line_search_e[0],8.+line_search_e[2]/2,line_search_e[2])
+    #             #this one is here to avoid adding one point if incorrect roundings create problem
+    #             line_search_e_space=line_search_e_space[line_search_e_space<=8.]
+    #
+    #             reset_ener=False
+
     if reset_ener:
         
         e_sat_high=e_sat_high_init
@@ -1583,29 +1588,8 @@ def line_detect(epoch_id):
         
         #storing the class
         fitcont_high.dump(outdir+'/'+epoch_observ[0]+'_fitmod_broadband_linecont.pkl')
-        
-        '''
-        Computing the local flux for every step of the energy space :
-        This will be used to adapt the line energy to the continuum and avoid searching in wrong norm spaces
-        We store the flux of the continuum for a width of one step of the energy space, around each step value
-        
-        Note : We do this for the first spectrum only even with multi data groups
-        '''
-        
-        flux_base=np.zeros(len(line_search_e_space))
-        
-        #here to avoir filling the display with information we're already storing
-        # with redirect_stdout(open(os.devnull, 'w')):
-         
-        for ind_e,energy in enumerate(line_search_e_space):
-        
-            AllModels.calcFlux(str(energy-line_search_e[2]/2)+" "+str(energy+line_search_e[2]/2))
-            flux_base[ind_e]=AllData(1).flux[0]
-            
-            #this is required because the buffer is different when redirected
-            sys.stdout.flush()
-            
-        return [mod_high_dat,flux_base,fitcont_high]
+
+        return [mod_high_dat,fitcont_high]
         
     def store_fit(mode='broadband',fitmod=None):
         
@@ -1884,11 +1868,8 @@ def line_detect(epoch_id):
     if len(result_high_fit)==1:
         return fill_result(result_high_fit)
     else:
-        data_mod_high,flux_cont,fitmod_cont=result_high_fit
-        
-    #creation of the eqwidth conversion variable
-    eqwidth_conv=np.zeros(len(line_search_e_space))
-    
+        data_mod_high,fitmod_cont=result_high_fit
+
     #re-limiting to the line search energy range
     AllData.notice('all')
     AllData.ignore('bad')
@@ -1900,320 +1881,15 @@ def line_detect(epoch_id):
                 
     print('\nStarting line search...')
 
-    
-    def narrow_line_search(data_cont,suffix):
         
-        '''
-        Wrapper for all the line search code and associated visualisation
-        
-        Explores the current model in a given range by adding a line of varying normalisation and energy and mapping the associated
-        2D delchi map
-        '''
-        
-        curr_plot_bg_state=Plot.background
-        
-        #for the line plots we don't need the background
-        Plot.background=False
-    
-        #defining the chi array for each epoch
-        chi_arr=np.zeros((len(line_search_e_space),norm_nsteps))
+    cont_abspeak,cont_peak_points,cont_peak_widths,cont_peak_delchis,cont_peak_eqws,chi_dict_init=\
+        narrow_line_search(data_mod_high,'cont',line_search_e=line_search_e,line_search_norm=line_search_norm,
+                           e_sat_low=e_sat_low,peak_thresh=peak_thresh,peak_clean=peak_clean,
+                           line_cont_range=line_cont_range,trig_interval=trig_interval,
+                           scorpeon_save=data_broad.scorpeon)
 
-        #reseting the model 
-        AllModels.clear()
-        xscorpeon.load(scorpeon_save=data_broad.scorpeon,frozen=True)
-        
-        #reloading the broad band model
-        data_cont.load()
+    plot_line_search(chi_dict_init, outdir, sat, epoch_observ=epoch_observ)
 
-        plot_ratio_values=store_plot('ratio')
-        
-        chi_base=Fit.statistic
-        
-        #adding the gaussian with constant factors and cflux for variations
-        #since we cannot use negative logspaces in steppar, we use one constant factor for the sign and a second for the value
-        addcomp('constant(constant(cflux(gauss)))')
-        
-        mod_gauss=AllModels(1)
-        
-        #freezing everything but the second constant factor to avoid problems during steppar
-        allfreeze()
-        
-        #since there might be other components with identical names in the model, we retrieve each of the added xspec components
-        #from their position as the last components in the component list:
-        comp_cfactor_1,comp_cfactor_2,comp_gauss_cflux,comp_gauss=[getattr(mod_gauss,mod_gauss.componentNames[-4+i]) for i in range(4)]
-        
-        #unlocking negative constant factors for the first one
-        comp_cfactor_1.factor.values=[1.0, -0.01, -1e6, -1e6, 1e6, 1e6]
-
-        #getting the constant factor index and unfreezing it
-        index_cfactor_2=comp_cfactor_2.factor.index
-        comp_cfactor_2.factor.frozen=0
-        
-        #adjusting the cflux to be sure we cover the entire flux of the gaussian component
-        comp_gauss_cflux.Emin=str(e_sat_low)
-        comp_gauss_cflux.Emax=12.
-    
-        #narrow line locked
-        comp_gauss.Sigma=0
-        comp_gauss.Sigma.frozen=1
-        
-        #tqdm creates a progress bar display:
-        with tqdm(total=len(line_search_e_space)) as pbar:
-            
-            for j,energy in enumerate(line_search_e_space):
-                    
-                #exploring the parameter space for energy
-                comp_gauss.LineE=energy
-                
-                #resetting the second constant factor value
-                comp_cfactor_2.factor=1
-            
-                '''
-                getting the equivalent width conversion for every energy
-                careful: this only gives the eqwidth of the unabsorbed line
-                
-                for that we set the gaussian cflux to the continuum flux at this energy 
-                since norm_par_space is directly in units of local continuum flux it will make it much easier to get all the eqwidths afterwards)
-                '''
-                comp_gauss_cflux.lg10Flux=np.log10(flux_cont[j])
-    
-                #Computing the eqwidth of a component works even with the cflux dependance.
-                AllModels.eqwidth(len(AllModels(1).componentNames))
-                
-                #conversion in eV from keV included since the result is in keV
-                eqwidth_conv[j]=AllData(1).eqwidth[0]*10**3
-                
-                '''
-                exploring the norm parameter space in units of the continuum flux at this energy
-                In order to do that, we add 2 steppar computations (for positive and negative norms) where we vary the constant factor
-                in a similar manner to the norm par space
-                '''
-                
-                #turning off the chatter to avoid spamming the console
-                prev_xchatter=Xset.chatter
-                
-                Xset.chatter=0
-                
-                #first steppar in negative norm space 
-                # -1 in the number of computations because steppar adds 1 
-                comp_cfactor_1.factor=-1
-                Fit.steppar('log '+str(index_cfactor_2)+' '+str(line_search_norm[1])+' '+str(line_search_norm[0])+\
-                            ' '+str(int(line_search_norm[2]/2)-1))
-    
-                negchi_arr=np.array(Fit.stepparResults('statistic'))
-                
-                #second steppar in positive norm space
-                comp_cfactor_1.factor=1
-                Fit.steppar('log '+str(index_cfactor_2)+' '+str(line_search_norm[0])+' '+str(line_search_norm[1])+\
-                            ' '+str(int(line_search_norm[2]/2)-1))
-                    
-                poschi_arr=np.array(Fit.stepparResults('statistic'))
-                
-                #returning the chatter to the previous value
-                Xset.chatter=prev_xchatter
-                
-                chi_arr[j]=np.concatenate((negchi_arr,np.array([chi_base]),poschi_arr))
-    
-                pbar.update(1)
-        
-        #to compute the contour chi, we start from a chi with a fit with a line normalisation of 0
-        chi_contours=[chi_base-9.21,chi_base-4.61,chi_base-2.3]
-        
-        #unused for now
-        # #computing the negative (i.e. improvement) part of the delchi map for the autofit return
-        # chi_arr_impr=np.where(chi_arr>=chi_base,0,abs(chi_base-chi_arr))
-        
-        '''Peak computation'''
-        
-        def peak_search(array_arg):
-            
-            #safeguard in case of extreme peaks dwarfing the other peaks
-            if np.max(array_arg)>=2e2:
-                array=np.where(array_arg>=1,array_arg**(1/2),array_arg)
-            else:
-                array=array_arg
-                
-            #choosing a method
-            peak_finder= findpeaks(method='topology',whitelist='peak',denoise=None)
-            peak_finder.fit(array)
-            peak_result=peak_finder.results['persistence']
-            
-            #cutting the peaks for which the birth level (is zero) to avoid false detections
-            peak_validity=peak_result['score']>0
-            peak_result=np.array(peak_result)
-            peak_result=peak_result[peak_validity]
-            peak_result=peak_result.T[:2].astype(int)[::-1].T
-            
-            #computing the polygon points of the peak regions
-            #since the polygons created from the mask are "inside" the edge of ther polygon, this can cause problems for thin polygons
-            #We thus do one iteration of binary dilation to expand the mask by one pixel.
-            #This is equivalent to having the polygon cover the exterior edges of the pixels.
-            peak_result_points=Mask(binary_dilation(array_arg)).polygons().points
-            
-            return peak_result,peak_result_points
-        
-        #The library is very good at finding peaks but garbage at finding valleys, so we cut what's below
-        #the chi difference limit and swap the valleys into peaks
-        
-        chi_arr_sub_thresh=np.where(chi_arr>=chi_base-peak_thresh,0,abs(chi_base-chi_arr))
-        peak_points_raw,peak_polygons_points=peak_search(chi_arr_sub_thresh)
-        
-        peak_points=[]
-        #limiting to a single peak per energy step by selecting the peak with the lowest chi squared for each energy bin
-        for peak_e in np.unique(peak_points_raw.T[0]):
-            
-            chi_peak=chi_base
-            
-            for peak_norm in peak_points_raw.T[1][peak_points_raw.T[0]==peak_e]:
-                if chi_arr[peak_e][peak_norm]<chi_peak:
-                    chi_peak=chi_arr[peak_e][peak_norm]
-                    maxpeak_pos=[peak_e,peak_norm]
-            peak_points.append(maxpeak_pos)
-            
-        peak_points=np.array(peak_points)
-        
-        if peak_polygons_points!=[]:
-        
-            #making sure the dimension is correct even if a single polygon is detected 
-            if type(peak_polygons_points[0][0])==np.int64:
-                peak_polygons_points=np.array(peak_polygons_points)
-        
-            if len(peak_polygons_points)!=len(peak_points):
-                print('\nThe number of peak and polygons is not identical.')
-                
-                if peak_clean:
-                    print('\nRefining...')
-                    #we refine by progressively deleting the remaining elements of the array until the shape splits
-                    chi_arr_refine=chi_arr_sub_thresh.copy()
-                    chi_refine_values=chi_arr_sub_thresh[chi_arr_sub_thresh.nonzero()]
-                    chi_refine_values.sort()
-                    index_refine=-1
-                    peak_eq_pol=False
-                    peak_points_ref=peak_points.copy()
-                    
-                    #the failure stop condition is when a peak gets deleted, which only happens if the refining was too strict
-                    while not peak_eq_pol and len(peak_points_ref)==len(peak_points):
-                        
-                        index_refine+=1
-        
-                        #refining the chi array
-                        chi_arr_refine=np.where(chi_arr_refine>chi_refine_values[index_refine],chi_arr_refine,0)
-                        
-                        #recomputing the peaks
-                        peak_points_ref,peak_polygons_points_ref=peak_search(chi_arr_refine)
-                        
-                        #testing if the process worked. We use peak_points instead of peak_points_ref to avoid soliving deleting peaks
-                        peak_eq_pol=len(peak_points)==len(peak_polygons_points_ref)
-                
-                    #We only replace the polygons if the refining did work
-                    if len(peak_points_ref)==len(peak_points):
-        
-                        peak_polygons_points=peak_polygons_points_ref
-            
-            #creating a list of the equivalent shapely polygons and peaks
-            peak_polygons=np.array([None]*min(len(peak_points),len(peak_polygons_points)))
-            peak_points_shapely=np.array([None]*min(len(peak_points),len(peak_polygons_points)))
-            
-            for i_poly,elem_poly in enumerate(peak_polygons_points):
-                
-                if i_poly>=len(peak_points):
-                    continue
-                
-                peak_polygons[i_poly]=Polygon(elem_poly)
-                peak_points_shapely[i_poly]=Point(peak_points[i_poly][::-1])
-            
-            #linking each peak to its associated polygon and storing its width
-            peak_widths=np.zeros(len(peak_points))
-            
-            for elem_point in enumerate(peak_points_shapely):
-                for elem_poly in peak_polygons:
-                    if elem_poly.contains(elem_point[1]):
-                        #we substract 1 from the width since the bouding box considers one more pixel as in
-                        peak_widths[elem_point[0]]=elem_poly.bounds[3]-elem_poly.bounds[1]-1
-        else:
-            peak_widths=[]
-            
-        #storing the chi² differences of the peaks
-        peak_delchis=[]
-        peak_eqws=[]
-        if len(peak_points)!=0:
-            for coords in peak_points:
-                peak_delchis.append(chi_base-chi_arr[coords[0]][coords[1]])
-                
-                #since the stored eqwidth is for the continuum flux, multiplying it by norm_par_space and the step size ratio to 0.1
-                #directly gives us all the eqwidths for an energy, since they scale linearly with the norm/cflux 
-                peak_eqws.append(eqwidth_conv[coords[0]]*norm_par_space[coords[1]])
-                
-        if len(peak_points)>0:
-            is_abspeak=((np.array(peak_eqws)<0) & (line_search_e_space[peak_points.T[0]]>=trig_interval[0]) &\
-                        (line_search_e_space[peak_points.T[0]]<=trig_interval[1])).any()
-        else:
-            is_abspeak=False
-        
-        '''''''''''''''''
-        ######PLOTS######
-        '''''''''''''''''
-        
-        #creating some necessary elements
-
-        #line threshold is the threshold for the symlog axis
-        chi_dict_plot={
-                    'chi_arr':chi_arr,
-                    'chi_base':chi_base,
-                    'line_threshold':line_search_norm[0],
-                    'line_search_e':line_search_e,
-                    'line_search_norm':line_search_norm,
-                    'line_search_e_space':line_search_e_space,
-                    'norm_par_space':norm_par_space,
-                    'peak_points':peak_points,
-                    'peak_widths':peak_widths,
-                    'line_cont_range':line_cont_range,
-                    'sat':sat,
-                    'plot_ratio_values':plot_ratio_values,
-            }
-        
-        color_title=r'color plot of the $C-stat$ evolution for observ '+epoch_observ[0]+\
-                    '\n with line par '+args.line_search_e+' and norm par'+args.line_search_norm+\
-                    ' in continuum units'
-        contour_title=r'contour plot of the $C-stat$ evolution for for observ '+epoch_observ[0]+\
-                      '\n with line par '+args.line_search_e+' and norm par'+args.line_search_norm+\
-                      ' in continuum units'
-        coltour_title=r'contour plot of the $C-stat$ evolution for ofor observ '+epoch_observ[0]+\
-                      '\n with line par '+args.line_search_e+' and norm par'+args.line_search_norm+\
-                      ' in continuum units'
-            
-        comb_title=r' Blind search visualisation for observ '+epoch_observ[0]+'\n with line par '+args.line_search_e+\
-                      ' and norm par'+args.line_search_norm+' in continuum units'
-
-        comb_label=[]
-        for i_grp in range(AllData.nGroups):
-            if sat=='Chandra':
-                label_grating=str(-1+2*i_grp)
-            else:
-                label_grating=''
-
-            comb_label+=[('_'.join(epoch_observ[i_grp].split('_')[1:3])) if sat=='XMM' else\
-                                        epoch_observ[0]+' order '+label_grating if sat=='Chandra' else '']
-                
-        #creating the figure                
-        figure_comb=plt.figure(figsize=(15,10))
-        
-        comb_chi2map(figure_comb,chi_dict_plot,title=comb_title,comb_label=comb_label)
-        
-        #saving it and closing it
-        plt.savefig(outdir+'/'+epoch_observ[0]+'_'+suffix+'_line_comb_plot_'+args.line_search_e.replace(' ','_')+'_'+args.line_search_norm.replace(' ','_')+'.png')
-        plt.close(figure_comb)
-        
-        #putting the background plotting to its previous state
-        Plot.background=curr_plot_bg_state
-        
-        if suffix=='cont':
-            return is_abspeak,peak_points,peak_widths,peak_delchis,peak_eqws,chi_dict_plot
-        else:
-            return chi_dict_plot
-        
-    cont_abspeak,cont_peak_points,cont_peak_widths,cont_peak_delchis,cont_peak_eqws,chi_dict_init=narrow_line_search(data_mod_high,'cont')
-    
     '''
     Automatic line fitting
     '''
@@ -2666,9 +2342,15 @@ def line_detect(epoch_id):
         '''
         Autofit residuals assessment
         '''
-    
-        chi_dict_autofit=narrow_line_search(data_autofit,'autofit')
-        
+
+        chi_dict_autofit=narrow_line_search(data_autofit,'autofit',
+                                            line_search_e=line_search_e,line_search_norm=line_search_norm,
+                           e_sat_low=e_sat_low,peak_thresh=peak_thresh,peak_clean=peak_clean,
+                           line_cont_range=line_cont_range,trig_interval=trig_interval,
+                           scorpeon_save=data_broad.scorpeon)
+
+        plot_line_search(chi_dict_autofit,outdir,sat,epoch_observ=epoch_observ)
+
         ####Paper plot
         
         
@@ -2722,6 +2404,14 @@ def line_detect(epoch_id):
             plot_std_ener(ax_paper[3],plot_em=True)
         
         #this is for the 4U graphs
+
+        try:
+            dill.dump_module('./test_dump.pkl')
+        except:
+            breakpoint()
+
+        breakpoint()
+
         #dill.dump_session('./test_dump.pkl')
         
         fig_paper=plt.figure(figsize=(14.5,22))

@@ -3,7 +3,7 @@ import matplotlib as mpl
 import matplotlib.pyplot as plt
 import matplotlib.colors as colors
 import sys
-import tqdm
+from tqdm import tqdm
 
 from matplotlib.gridspec import GridSpec
 
@@ -533,7 +533,7 @@ def plot_std_ener(ax_ratio, ax_contour=None, plot_em=False, mode='ratio',exclude
         if mode != 'noname':
             # but the legend on the top part only
             ax_ratio.text(x=lines_e_dict[line][0] - txt_hshift,
-                          y=0.96 if em_bool else (0.06 if i_line % 2 == 1 else 0.14), s=lines_std[line],
+                          y=0.96 if em_bool else (0.06 if i_line % 2 == 1 else 0.12), s=lines_std[line],
                           color='blue' if em_bool else 'brown', transform=ax_ratio.get_xaxis_transform(), ha='center',
                           va='top')
 
@@ -737,7 +737,7 @@ def coltour_chi2map(fig, axe, chi_dict, title='', combined=False, ax_bar=None, n
     # here we do some more modifications
     chi_arr_plot = chi_map
 
-    # swapping the sign of the delchis for the emission and absorption lines in order to display them with both parts of the cmap + using a square root norm for easier visualisation
+    # swapping the sign of the delchis for the absorption and emission lines in order to display them with both parts of the cmap + using a square root norm for easier visualisation
     for i in range(len(chi_arr_plot)):
         chi_arr_plot[i] = np.concatenate((-(chi_arr_plot[i][:int(len(chi_arr_plot[i]) / 2)]) ** (1 / 2),
                                           (chi_arr_plot[i][int(len(chi_arr_plot[i]) / 2):]) ** (1 / 2)))
@@ -772,7 +772,7 @@ def coltour_chi2map(fig, axe, chi_dict, title='', combined=False, ax_bar=None, n
 
         if ax_bar == 'bottom':
             colorbar = plt.colorbar(img, location='bottom', orientation='horizontal', spacing='proportional',
-                                    ticks=cm_ticks)
+                                    ticks=cm_ticks,aspect=50)
             colorbar.ax.set_xticklabels(cm_ticklabels)
         elif combined == False:
             colorbar = plt.colorbar(img, ax=axe, spacing='proportional', ticks=cm_ticks)
@@ -782,9 +782,9 @@ def coltour_chi2map(fig, axe, chi_dict, title='', combined=False, ax_bar=None, n
             colorbar.ax.set_yticklabels(cm_ticklabels)
 
         if bigline_flag == 1:
-            colorbar.set_label(r'$\sqrt{\Delta C}$ with separated scales\nfor emission and absorption')
+            colorbar.set_label(r'$\sqrt{\Delta C}$ with separated scales\nfor absorption and emission')
         else:
-            colorbar.set_label(r'$\Delta C$ with separated scales for emission and absorption')
+            colorbar.set_label(r'$\Delta C$ with separated scales for absorption and emission')
 
     '''CONTOUR PLOT'''
 
@@ -841,6 +841,11 @@ def coltour_chi2map(fig, axe, chi_dict, title='', combined=False, ax_bar=None, n
 
     # using a weird class to get correct tickers on the axes since it doesn't work natively
     axe.yaxis.set_minor_locator(MinorSymLogLocator(line_search_norm[0]))
+
+    #removing a part of the central ticks to avoid overplotting
+    full_yticks=axe.get_yticks()
+
+    axe.set_yticks(full_yticks[:len(full_yticks)//2-1].tolist()+[0]+full_yticks[len(full_yticks)//2+2:].tolist())
 
     if combined == False:
         fig.tight_layout()

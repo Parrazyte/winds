@@ -1,6 +1,7 @@
 
 import os
 import numpy as np
+import matplotlib as mpl
 from matplotlib.gridspec import GridSpec
 import matplotlib.pyplot as plt
 
@@ -49,6 +50,9 @@ chi_dict_autofit=np.load('/home/parrama/Documents/Work/PhD/docs/papers/Wind revi
 
 addcomps_cont=['diskbb']
 absline_addcomp_position=None
+
+mpl.rcParams.update({'font.size': 14})
+mpl.rcParams.update({'legend.fontsize': 8})
 
 def paper_plot(fig_paper, chi_dict_init, chi_dict_postauto, title=None):
     line_cont_range = chi_dict_init['line_cont_range']
@@ -112,7 +116,7 @@ def paper_plot(fig_paper, chi_dict_init, chi_dict_postauto, title=None):
 
     plt.tight_layout(pad=0)
 
-fig_paper = plt.figure(figsize=(12, 16))
+fig_paper = plt.figure(figsize=(12, 15))
 
 paper_plot(fig_paper, chi_dict_init, chi_dict_autofit)
 

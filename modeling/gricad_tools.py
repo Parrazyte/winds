@@ -5,9 +5,6 @@ import os
 import sys
 from astropy.io import ascii
 
-from simul_tools import xstar_wind
-
-
 import numpy as np
 import pexpect
 import time
@@ -175,12 +172,12 @@ def setup_cigrid(mantis_grid_dir,silenus_grid_dir, mhd_solution_path,param_mode,
     mhd_sol_dir = mhd_solution_path[:mhd_solution_path.rfind('/')]
 
     jdl_path=os.path.join(mhd_sol_dir,'xstar_grid_'+param_mode+'_'+
-                          (mhd_solution_path.split('/')[-1] if param_mode=='all' else n_sol+'.jdl')
+                          (mhd_solution_path.split('/')[-1] if param_mode=='all' else n_sol+'.jdl'))
 
     template='''
             {
-              "name": "'''+'xstar_grid_'+param_mode+'_'+
-                          (mhd_solution_path.split('/')[-1] if param_mode=='all' else n_sol+'''",
+              "name": "'''+'xstar_grid_'+param_mode+'_'+\
+                          (mhd_solution_path.split('/')[-1] if param_mode=='all' else n_sol)+'''",
               "resources": "/core='''+str(cores)+'''",
               "exec_file": "{HOME}/povray/start.bash",
               "exec_directory": "{HOME}/povray",
@@ -212,84 +209,56 @@ def setup_cigrid(mantis_grid_dir,silenus_grid_dir, mhd_solution_path,param_mode,
               }
             }
             '''
-    with open(jdl_path) as file:
 
-    #loop in the SEDs:
-    for i_SED,(elem_SED,elem_mdot,elem_xlum) in enumerate(zip(SED_list,mdot_list,xlum_list)):
+    # with open(jdl_path) as file:
+    #
+    # #loop in the SEDs:
+    # for i_SED,(elem_SED,elem_mdot,elem_xlum) in enumerate(zip(SED_list,mdot_list,xlum_list)):
+    #
+    #     #creating a mantis subdirectory
+    #     mantis_SED_dir=os.path.join(mantis_grid_dir,'SED_'+str(i_SED+1))
+    #
+    #     irods_proc.sendline('imkdir '+mantis_SED_dir)
+    #
+    #     #copying the SED to mantis
+    #     irods_proc.sendline('iput '+elem_SED+' '+mantis_SED_dir)
+    #
+    #     if param_mode=='all':
+    #         #read the global sol file
+    #
+    #         #main parameter loop
+    #         for param_comb,mhd_line in zip(param,mhd_lines):
+    #
+    #             param_comb_dirname="ha"
+    #
+    #             #creating the directory
+    #             irocs_proc.sendline('imkdir '+os.path.join(mantis_SED_dir,param_comb_dirname))
+    #
+    #             #creating a file for the individual solution (will be moved, defaulted to the folder where
+    #             # the mhd solution is)
+    #
+    #             file_indiv=os.path.join(mhd_sol_dir,param_comb)
+    #             with open(file_indiv,'w+') as f_sol:
+    #                 f_sol.write(mhd_line)
+    #
+    #             #creating the directory in mantis
+    #             mantis_sol_dir=os.path.join(mantis_SED_dir,param_comb)
+    #             irods_proc.sendline('imkdir '+mantis_sol_dir)
+    #
+    #             #putting the solution file inside
+    #             irods_proc.sendline('iput '+os.path.join(mantis))
+    #
+    #
+    #
+    #     elif param_mode=='decompose':
+    #         for i_h_r,elem_h_r in enumerate(h_over_r_list):
+    #             for i_p, elem_p in enumerate(p_list):
+    #                 for i_mu, elem_mu in enumerate(mu_list):
+    #                     for i_angle, elem_angle in enumerate(angle_list):
+    #
+    #                         #implement nearest fetch in the solution file and folder decomposition
+    #                         pass
 
-        #creating a mantis subdirectory
-        mantis_SED_dir=os.path.join(mantis_grid_dir,'SED_'+str(i_SED+1))
 
-        irods_proc.sendline('imkdir '+mantis_SED_dir)
-
-        #copying the SED to mantis
-        irods_proc.sendline('iput '+elem_SED+' '+mantis_SED_dir)
-
-        if param_mode=='all':
-            #read the global sol file
-
-            #main parameter loop
-            for param_comb,mhd_line in zip(param,mhd_lines):
-
-                param_comb_dirname="ha"
-
-                #creating the directory
-                irocs_proc.sendline('imkdir '+os.path.join(mantis_SED_dir,param_comb_dirname))
-
-                #creating a file for the individual solution (will be moved, defaulted to the folder where
-                # the mhd solution is)
-
-                file_indiv=os.path.join(mhd_sol_dir,param_comb)
-                with open(file_indiv,'w+') as f_sol:
-                    f_sol.write(mhd_line)
-
-                #creating the directory in mantis
-                mantis_sol_dir=os.path.join(mantis_SED_dir,param_comb)
-                irods_proc.sendline('imkdir '+mantis_sol_dir)
-
-                #putting the solution file inside
-                irods_proc.sendline('iput '+os.path.join(mantis))
-
-
-
-        elif param_mode=='decompose':
-            for i_h_r,elem_h_r in enumerate(h_over_r_list):
-                for i_p, elem_p in enumerate(p_list):
-                    for i_mu, elem_mu in enumerate(mu_list):
-                        for i_angle, elem_angle in enumerate(angle_list):
-
-                            #implement nearest fetch in the solution file and folder decomposition
-                            pass
-
-
-def cigri_wrapper(mantis_dir,SED_mantis_path,solution_mantis_path,p_mhd,mdot_obs,stop_d_input,xlum,outdir,
-                  h_over_r,ro_init, dr_r, v_resol, m_BH):
-
-    '''
-
-    wrapper for cigri grid xstar computations
-
-    Args:
-        mantis_dir: mantis directory, where the file are saved. will be created if necessary
-        Note: the first parameter is used to define grid process names so it must be different for each process, hence why we put the directory, which are different for every solution
-
-    outdir should be an absolute path in this case
-    '''
-
-    os.system('mkdir -p'+outdir)
-
-    #copying all the initial files and the content of the mantis directory to the outdir
-    download_mantis(mantis_dir,outdir,load_folder=True)
-    download_mantis(SED_mantis_path,outdir)
-    download_mantis(solution_mantis_path,outdir)
-
-    #extracting the name for the function call below since we're going in outdir
-    SED_name=SED_mantis_path.split('/')[-1]
-    solution_name=solution_mantis_path.split('/')[-1]
-
-    #it's easier to go directly in the outdir here
-    os.chdir(outdir)
-
-    xstar_wind(solution_name,p_mhd,mdot_obs,stop_d_input,SED_name,xlum,outdir='./',h_over_r=h_over_r,ro_init=ro_init,dr_r=dr_r,v_resol=v_resol,m_Bh=m_BH,comput_mode='gricad',mantis_folder=mantis_dir)
 
 

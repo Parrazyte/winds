@@ -144,8 +144,8 @@ ap = argparse.ArgumentParser(description='Script to detect lines in XMM Spectra.
 
 '''GENERAL OPTIONS'''
 
-ap.add_argument('-satellite',nargs=1,help='telescope to fetch spectra from',default='Chandra',type=str)
-ap.add_argument("-cameras",nargs=1,help='Cameras to use for spectral analysis',default='hetg',type=str)
+ap.add_argument('-satellite',nargs=1,help='telescope to fetch spectra from',default='NICER',type=str)
+ap.add_argument("-cameras",nargs=1,help='Cameras to use for spectral analysis',default='std',type=str)
 ap.add_argument("-expmodes",nargs=1,help='restrict the analysis to a single type of exposure',default='all',type=str)
 ap.add_argument("-grouping",nargs=1,help='specfile grouping for XMM spectra in [5,10,20] cts/bin',default='opt',type=str)
 
@@ -155,7 +155,7 @@ ap.add_argument("-prefix",nargs=1,help='restrict analysis to a specific prefix',
 
 ####output directory
 ap.add_argument("-outdir",nargs=1,help="name of output directory for line plots",
-                default="lineplots_opt_dill",type=str)
+                default="lineplots_opt",type=str)
 
 #overwrite
 ap.add_argument('-overwrite',nargs=1,
@@ -185,7 +185,7 @@ ap.add_argument('-pre_reduced_NICER',nargs=1,help='change NICER data format to p
 
 #### Models and abslines lock
 ap.add_argument('-cont_model',nargs=1,help='model list to use for the autofit computation',default='cont',type=str)
-ap.add_argument('-autofit_model',nargs=1,help='model list to use for the autofit computation',default='lines_resolved',type=str)
+ap.add_argument('-autofit_model',nargs=1,help='model list to use for the autofit computation',default='lines_narrow',type=str)
 #narrow or resolved mainly
 
 ap.add_argument('-no_abslines',nargs=1,help='turn off absorption lines addition in the fit (still allows for UL computations)',
@@ -200,7 +200,7 @@ ap.add_argument("-h_update",nargs=1,help='update the bg, rmf and arf file names 
 
 '''####ANALYSIS RESTRICTION'''
 
-ap.add_argument('-restrict',nargs=1,help='restrict the computation to a number of predefined exposures',default=True,type=bool)
+ap.add_argument('-restrict',nargs=1,help='restrict the computation to a number of predefined exposures',default=False,type=bool)
 #in this mode, the line detection function isn't wrapped in a try, and the summary isn't updasted
 
 observ_restrict=['13717_heg_-1_grp_opt.pha','13717_heg_1_grp_opt.pha']
@@ -251,7 +251,7 @@ ap.add_argument('-skip_started',nargs=1,help='skip all exposures listed in the l
 #note : will skip exposures for which the exposure didn't compute or with errors
 
 ap.add_argument('-skip_complete',nargs=1,help='skip completed exposures listed in the local summary_line_det file',
-                default=False,type=bool)
+                default=True,type=bool)
 
 ap.add_argument('-skip_nongrating',nargs=1,help='skip non grating Chandra obs (used to reprocess with changes in the restrictions)',
                 default=False,type=bool)

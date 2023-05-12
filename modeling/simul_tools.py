@@ -23,7 +23,7 @@ from tqdm import tqdm
 
 from xspec import AllModels,AllData,Model,FakeitSettings,Plot
 
-from gricad_tools import upload_mantis
+from gricad_tools import upload_mantis,download_mantis
 
 import pyxstar as px
 
@@ -34,6 +34,37 @@ h_cgs = 6.624e-27
 eV2erg = 1.6e-12
 erg2eV = 1.0/eV2erg
 Ryd2eV = 13.605693
+
+def cigri_wrapper(mantis_dir,SED_mantis_path,solution_mantis_path,p_mhd,mdot_obs,stop_d_input,xlum,outdir,
+                  h_over_r,ro_init, dr_r, v_resol, m_BH):
+
+    '''
+
+    wrapper for cigri grid xstar computations
+
+    Args:
+        mantis_dir: mantis directory, where the file are saved. will be created if necessary
+        Note: the first parameter is used to define grid process names so it must be different for each process, hence why we put the directory, which are different for every solution
+
+    outdir should be an absolute path in this case
+    '''
+
+    os.system('mkdir -p'+outdir)
+
+    #copying all the initial files and the content of the mantis directory to the outdir
+    download_mantis(mantis_dir,outdir,load_folder=True)
+    download_mantis(SED_mantis_path,outdir)
+    download_mantis(solution_mantis_path,outdir)
+
+    #extracting the name for the function call below since we're going in outdir
+    SED_name=SED_mantis_path.split('/')[-1]
+    solution_name=solution_mantis_path.split('/')[-1]
+
+    #it's easier to go directly in the outdir here
+    os.chdir(outdir)
+
+    xstar_wind(solution_name,p_mhd,mdot_obs,stop_d_input,SED_name,xlum,outdir='./',h_over_r=h_over_r,ro_init=ro_init,dr_r=dr_r,v_resol=v_resol,m_Bh=m_BH,comput_mode='gricad',mantis_folder=mantis_dir)
+
 
 def xstar_func(spectrum_file,lum,t_guess,n,nh,xi,vturb_x,nbins,nsteps=1,niter=100,lcpres=0,path_logpars=None,dict_box=None,comput_mode='local',mantis_folder=''):
     
@@ -156,7 +187,7 @@ def xstar_func(spectrum_file,lum,t_guess,n,nh,xi,vturb_x,nbins,nsteps=1,niter=10
         
 def xstar_wind(solution,p_mhd,mdot_obs,stop_d_input, SED_path, xlum,outdir="xsol",
                h_over_r=0.1, ro_init=0.5,dr_r=0.05, v_resol=85.7, m_BH=8,chatter=0,
-               reload=True,comput_mode='local',mantis_folder='',force_ro_init=False):
+               reload=True,comput_mode='local',mantis_folder='',force_ro_init=False,no_turb=False):
     
     
     '''
@@ -389,9 +420,6 @@ def xstar_wind(solution,p_mhd,mdot_obs,stop_d_input, SED_path, xlum,outdir="xsol
             
             file_edit(path=path,line_id='\t'.join(main_infos[:2]),line_data='\t'.join(main_infos+ion_infos+col_infos)+'\n',header=file_header)
             time.sleep(1)
-
-        print("tchou")
-         
 
         
     #! light speed in Km/s unit
@@ -1064,8 +1092,12 @@ def xstar_wind(solution,p_mhd,mdot_obs,stop_d_input, SED_path, xlum,outdir="xsol
             zeta = zetal[i_box]*(xlum_eff/xlum)
 
             vobsx = vobsl[i_box]
-            vturb_x = vturb_in[i_box]
-        
+
+            if no_turb:
+                vturb_x=0
+            else:
+                vturb_x = vturb_in[i_box]
+
             '''
             The lines of sight considered should already be compton thin, the whole line of sight has to be compton thick and this is 
             checked directly from jonathan's solution
@@ -1142,7 +1174,11 @@ def xstar_wind(solution,p_mhd,mdot_obs,stop_d_input, SED_path, xlum,outdir="xsol
             zeta = zetal_last[i_box_final]*(xlum_final/xlum)
             
             vobsx = vobsl_last[i_box_final]
-            vturb_x = vobsl[nbox_stop[i_box_final]-1]-vobsl_last[i_box_final]
+
+            if no_turb:
+                vturb_x=0
+            else:
+                vturb_x = vobsl[nbox_stop[i_box_final]-1]-vobsl_last[i_box_final]
     
             
             if (xpxcol>1.5e24):

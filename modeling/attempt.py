@@ -55,11 +55,11 @@ lum_GROJ=flux_GROJ*dist_factor/1e38
 
 stop_d=1e6
 
-#SED=os.path.join('incident_xstar_HS.dat')
-SED='./5461_cont_deabs_fully_extended_xstar.txt'
-# SED=os.path.join('test_xstar.dat')
+SED=os.path.join('incident_xstar_HS.dat')
+#SED='./5461_cont_deabs_fully_extended_xstar.txt'
+#SED=os.path.join('test_xstar.dat')
 
 #SED_GROJ='5461_cont_deabs_extended_xstar.txt'
 
-xstar_wind(dict_sol,p,mdot, stop_d, SED, 1,outdir='Sudeb_test_good_renorm_groj_full',dr_r=0.1,ro_init=1000,
-           v_resol=5000,chatter=1,m_BH=5.4,force_ro_init=True,reload=False)
+xstar_wind(dict_sol,p,mdot, stop_d, SED, 1,outdir='Sudeb_test_good_renorm_JED_noturb',dr_r=0.1,ro_init=1000,
+           v_resol=5000,chatter=1,m_BH=5.4,force_ro_init=True,reload=False,no_turb=True)

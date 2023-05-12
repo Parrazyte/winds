@@ -23,6 +23,8 @@ from tqdm import tqdm
 
 from xspec import AllModels,AllData,Model,FakeitSettings,Plot
 
+from gricad_tools import upload_mantis
+
 import pyxstar as px
 
 # #adding some libraries 
@@ -32,37 +34,6 @@ h_cgs = 6.624e-27
 eV2erg = 1.6e-12
 erg2eV = 1.0/eV2erg
 Ryd2eV = 13.605693
-
-def copy_mantis(path,mantis_folder,delete_previous=False):
-
-    '''
-    copies a path into a mantis folder
-
-    if delete_previous is set to True, the path is supposed to be the one of the incident spectrum,
-    and the previous incident spectrum is deleted if it is not a final box incident
-
-    note: the mantis folder should be a relative path after mantis/userid/
-
-    We can't directly write into mantis so we can't file_edit directly into it, instead we straight up replace the logpar file at every box
-
-    all the paths should be relative and will be changed to absolute paths for the conversion
-    '''
-
-    #creating the spawn
-    irods_proc=pexpect.spawn('./bin/bash',encoding='utf-8')
-
-    #needs to be done when running a new terminal
-    irods_proc.sendline('source /applis/site/nix.sh')
-
-    # uploading the file
-    irods_proc.sendline('iput ' + os.path.join(os.getcqd(), path) + ' ' + mantis_folder)
-
-    #deleting the previous box spectrum if not in a final box
-    if delete_previous:
-        i_box=path.split('_')[-1].split('.')[0]
-        previous_box_incident=os.path.join(os.getcwd(),path.replace(path.split('_')[-1],path.split('_')[-1].replace(i_box,str(int(i_box)-1))))
-        irods_proc.sendline('-irm '+previous_box_incident+' '+mantis_folder)
-
 
 def xstar_func(spectrum_file,lum,t_guess,n,nh,xi,vturb_x,nbins,nsteps=1,niter=100,lcpres=0,path_logpars=None,dict_box=None,comput_mode='local',mantis_folder=''):
     
@@ -153,7 +124,7 @@ def xstar_func(spectrum_file,lum,t_guess,n,nh,xi,vturb_x,nbins,nsteps=1,niter=10
 
         #first update on mantis before the xstar run
         if comput_mode=='gricad':
-            copy_mantis(spectrum_file,mantis_folder,delete_sp=True)
+            upload_mantis(spectrum_file,mantis_folder,delete_sp=True)
 
 
     px.run_xstar(xpar,xhpar)
@@ -180,8 +151,8 @@ def xstar_func(spectrum_file,lum,t_guess,n,nh,xi,vturb_x,nbins,nsteps=1,niter=10
 
     # second update on mantis for the modified logpar and the log file
     if comput_mode == 'gricad':
-        copy_mantis(path_logpars, mantis_folder)
-        copy_mantis('./xout_log_global.log',mantis_folder)
+        upload_mantis(path_logpars, mantis_folder)
+        upload_mantis('./xout_log_global.log',mantis_folder)
         
 def xstar_wind(solution,p_mhd,mdot_obs,stop_d_input, SED_path, xlum,outdir="xsol",
                h_over_r=0.1, ro_init=0.5,dr_r=0.05, v_resol=85.7, m_BH=8,chatter=0,
@@ -1129,7 +1100,7 @@ def xstar_wind(solution,p_mhd,mdot_obs,stop_d_input, SED_path, xlum,outdir="xsol
         write_xstar_infos(i_box+1,vobsx,'./'+outdir+'/xstar_output_details.dat')
 
         if comput_mode=='gricad':
-            copy_mantis('./'+outdir+'/xstar_output_details.dat',mantis_folder)
+            upload_mantis('./'+outdir+'/xstar_output_details.dat',mantis_folder)
         
         ####!* Computing spectra and blueshift for the final box depending on stop_dist.
 
@@ -1206,8 +1177,8 @@ def xstar_wind(solution,p_mhd,mdot_obs,stop_d_input, SED_path, xlum,outdir="xsol
 
             if comput_mode == 'gricad':
 
-                copy_mantis(xstar_input,mantis_folder)
-                copy_mantis('./' + outdir + '/xstar_output_details_final.dat', mantis_folder)
+                upload_mantis(xstar_input,mantis_folder)
+                upload_mantis('./' + outdir + '/xstar_output_details_final.dat', mantis_folder)
 
             #removing the standard xstar output to gain space
             os.system('rm -f '+outdir+'/xout_*.fits')

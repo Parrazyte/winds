@@ -1,0 +1,145 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="AutoImportSettings">
+    <option name="autoReloadType" value="SELECTIVE" />
+  </component>
+  <component name="ChangeListManager">
+    <list default="true" id="ef168981-849b-4ddf-954b-5cd27a75cf21" name="Changes" comment="recovering lost files">
+      <change afterPath="$PROJECT_DIR$/../observations/.idea/inspectionProfiles/profiles_settings.xml" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/../observations/.idea/misc.xml" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/../observations/.idea/vcs.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/attempt.py" beforeDir="false" afterPath="$PROJECT_DIR$/attempt.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/gricad_tools.py" beforeDir="false" afterPath="$PROJECT_DIR$/gricad_tools.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/simul_tools.py" beforeDir="false" afterPath="$PROJECT_DIR$/simul_tools.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/../observations/spectral_analysis/4U_paper_plot.py" beforeDir="false" afterPath="$PROJECT_DIR$/../observations/spectral_analysis/4U_paper_plot.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/../observations/spectral_analysis/line_detection_multisp.py" beforeDir="false" afterPath="$PROJECT_DIR$/../observations/spectral_analysis/line_detection_multisp.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/../observations/spectral_analysis/linedet_utils.py" beforeDir="false" afterPath="$PROJECT_DIR$/../observations/spectral_analysis/linedet_utils.py" afterDir="false" />
+    </list>
+    <option name="SHOW_DIALOG" value="false" />
+    <option name="HIGHLIGHT_CONFLICTS" value="true" />
+    <option name="HIGHLIGHT_NON_ACTIVE_CHANGELIST" value="false" />
+    <option name="LAST_RESOLUTION" value="IGNORE" />
+  </component>
+  <component name="Git.Settings">
+    <option name="RECENT_GIT_ROOT_PATH" value="$PROJECT_DIR$/.." />
+  </component>
+  <component name="HighlightingSettingsPerFile">
+    <setting file="file://$PROJECT_DIR$/attempt.py" root0="FORCE_HIGHLIGHTING" />
+    <setting file="file://$PROJECT_DIR$/gricad_tools.py" root0="FORCE_HIGHLIGHTING" />
+    <setting file="file://$PROJECT_DIR$/sampling_overview.py" root0="FORCE_HIGHLIGHTING" />
+  </component>
+  <component name="MarkdownSettingsMigration">
+    <option name="stateVersion" value="1" />
+  </component>
+  <component name="ProblemsViewState">
+    <option name="selectedTabId" value="CurrentFile" />
+  </component>
+  <component name="ProjectId" id="2PVnQ2Bc1Cynr8VyjP5mMYqPspf" />
+  <component name="ProjectLevelVcsManager">
+    <ConfirmationsSetting value="2" id="Add" />
+  </component>
+  <component name="ProjectViewState">
+    <option name="hideEmptyMiddlePackages" value="true" />
+    <option name="showLibraryContents" value="true" />
+  </component>
+  <component name="PropertiesComponent"><![CDATA[{
+  "keyToString": {
+    "ASKED_SHARE_PROJECT_CONFIGURATION_FILES": "true",
+    "RunOnceActivity.ShowReadmeOnStart": "true",
+    "git-widget-placeholder": "main",
+    "last_opened_file_path": "/home/parrama/Documents/Work/PhD/Scripts/Python/general",
+    "settings.editor.selected.configurable": "preferences.keymap"
+  }
+}]]></component>
+  <component name="PyConsoleOptionsProvider">
+    <option name="myPythonConsoleState">
+      <console-settings custom-start-script="import sys; print('Python %s on %s' % (sys.version, sys.platform))&#10;sys.path.extend([WORKING_DIR_AND_PYTHON_PATHS])&#10;import os&#10;import numpy as np&#10;import pandas as pd&#10;import matplotlib as mpl&#10;mpl.use('qt5agg')&#10;#second import to reset just in case&#10;import matplotlib as mpl&#10;import matplotlib.pyplot as plt&#10;from astropy.io import fits" module-name="modeling" is-module-sdk="true" working-directory="/media/parrama/SSD/Simu/MHD/xstar">
+        <option name="useSoftWraps" value="true" />
+        <option name="myCustomStartScript" value="import sys; print('Python %s on %s' % (sys.version, sys.platform))&#10;sys.path.extend([WORKING_DIR_AND_PYTHON_PATHS])&#10;import os&#10;import numpy as np&#10;import pandas as pd&#10;import matplotlib as mpl&#10;mpl.use('qt5agg')&#10;#second import to reset just in case&#10;import matplotlib as mpl&#10;import matplotlib.pyplot as plt&#10;from astropy.io import fits" />
+        <option name="myUseModuleSdk" value="true" />
+        <option name="myModuleName" value="modeling" />
+        <option name="myWorkingDirectory" value="/media/parrama/SSD/Simu/MHD/xstar" />
+      </console-settings>
+    </option>
+    <option name="myShowVariablesByDefault" value="false" />
+    <option name="myUseExistingConsole" value="true" />
+  </component>
+  <component name="RunManager">
+    <configuration name="attempt" type="PythonConfigurationType" factoryName="Python" singleton="false" nameIsGenerated="true">
+      <module name="modeling" />
+      <option name="INTERPRETER_OPTIONS" value="" />
+      <option name="PARENT_ENVS" value="true" />
+      <option name="SDK_HOME" value="" />
+      <option name="WORKING_DIRECTORY" value="./" />
+      <option name="IS_MODULE_SDK" value="true" />
+      <option name="ADD_CONTENT_ROOTS" value="true" />
+      <option name="ADD_SOURCE_ROOTS" value="true" />
+      <option name="SCRIPT_NAME" value="$PROJECT_DIR$/attempt.py" />
+      <option name="PARAMETERS" value="" />
+      <option name="SHOW_COMMAND_LINE" value="true" />
+      <option name="EMULATE_TERMINAL" value="false" />
+      <option name="MODULE_MODE" value="false" />
+      <option name="REDIRECT_INPUT" value="false" />
+      <option name="INPUT_FILE" value="" />
+      <method v="2" />
+    </configuration>
+  </component>
+  <component name="SpellCheckerSettings" RuntimeDictionaries="0" Folders="0" CustomDictionaries="0" DefaultDictionary="application-level" UseSingleDictionary="true" transferred="true" />
+  <component name="TaskManager">
+    <task active="true" id="Default" summary="Default task">
+      <changelist id="ef168981-849b-4ddf-954b-5cd27a75cf21" name="Changes" comment="" />
+      <created>1683551096381</created>
+      <option name="number" value="Default" />
+      <option name="presentableId" value="Default" />
+      <updated>1683551096381</updated>
+    </task>
+    <task id="LOCAL-00001" summary="day updates">
+      <created>1683589494453</created>
+      <option name="number" value="00001" />
+      <option name="presentableId" value="LOCAL-00001" />
+      <option name="project" value="LOCAL" />
+      <updated>1683589494453</updated>
+    </task>
+    <task id="LOCAL-00002" summary="adjusted xlum normalization to correct range of 1-1000 Ryd">
+      <created>1683623571235</created>
+      <option name="number" value="00002" />
+      <option name="presentableId" value="LOCAL-00002" />
+      <option name="project" value="LOCAL" />
+      <updated>1683623571235</updated>
+    </task>
+    <task id="LOCAL-00003" summary="building the tools for Cigrid">
+      <created>1683886721792</created>
+      <option name="number" value="00003" />
+      <option name="presentableId" value="LOCAL-00003" />
+      <option name="project" value="LOCAL" />
+      <updated>1683886721792</updated>
+    </task>
+    <task id="LOCAL-00004" summary="recovering lost files">
+      <created>1683888312092</created>
+      <option name="number" value="00004" />
+      <option name="presentableId" value="LOCAL-00004" />
+      <option name="project" value="LOCAL" />
+      <updated>1683888312092</updated>
+    </task>
+    <option name="localTasksCounter" value="5" />
+    <servers />
+  </component>
+  <component name="Vcs.Log.Tabs.Properties">
+    <option name="TAB_STATES">
+      <map>
+        <entry key="MAIN">
+          <value>
+            <State />
+          </value>
+        </entry>
+      </map>
+    </option>
+  </component>
+  <component name="VcsManagerConfiguration">
+    <MESSAGE value="day updates" />
+    <MESSAGE value="adjusted xlum normalization to correct range of 1-1000 Ryd" />
+    <MESSAGE value="building the tools for Cigrid" />
+    <MESSAGE value="recovering lost files" />
+    <option name="LAST_COMMIT_MESSAGE" value="recovering lost files" />
+  </component>
+</project>

@@ -10,7 +10,8 @@ import os
 import numpy as np
 import matplotlib.pyplot as plt
 from xspec import Xset,AllModels,Fit,Plot,AllData
-from xspec_config_multisp import xPlot,reset,plot_std_ener,Pset,reset,catch_model_str,Plot_screen
+from xspec_config_multisp import xPlot,reset,Pset,reset,catch_model_str,Plot_screen,calc_error
+from linedet_utils import plot_std_ener
 from matplotlib.gridspec import GridSpec
 
 reset()
@@ -113,7 +114,7 @@ for i_col in range(3):
         
         if with_redshift:
             AllModels(1)(8).frozen=False
-            AllModels(1)(8).values=[0,0.001,-0.01,-0.01,0.01,0.01]
+            AllModels(1)(8).values=[0,0.001,-0.01,-0.01,0.003,0.003]
             
         # if with_redshift:
         #     AllModels(1)(5).frozen=False
@@ -126,7 +127,7 @@ for i_col in range(3):
     Fit.perform()
     
     #getting errors on everything
-    Fit.error(' max 100 1-15')
+    calc_error(logfile_read,'1-11')
     
     #saving the values of the full model
     #note: here it goes until parameter 10 or 11 with the range not taking the last parameter
@@ -198,15 +199,17 @@ for i_col in range(3):
     
     ax_low.plot(Plot.x(1),mod_zone_low,color='orange',label=r'low $\xi$ photoionization zone')
     
-    e_lines_low=[6.544,6.586,6.587,6.497,6.506,6.629]
+    e_lines_low=[[6.629,6.586,6.587,6.676,6.662,6.544,6.7],
+                 [6.676,6.662,6.629],
+                 [6.676,6.662,6.629,6.586,6.587,6.7,6.544]]
     
     e_lines_high=[6.7,6.668,6.97]
     
-    for elem_e in e_lines_low:
-        ax_low.axvline(x=elem_e,ymin=0,ymax=1,color='orange',ls='--',lw=0.75)
+    for elem_e in e_lines_low[i_col]:
+        ax_low.axvline(x=elem_e,ymin=0,ymax=1,color='brown',ls='--',lw=0.75)
         
     for elem_e in e_lines_high:
-        ax_low.axvline(x=elem_e,ymin=0,ymax=1,color='royalblue',ls='--',lw=0.75)
+        ax_low.axvline(x=elem_e,ymin=0,ymax=1,color='brown',ls='--',lw=0.75)
     
     plt.legend()
     

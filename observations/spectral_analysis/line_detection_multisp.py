@@ -114,7 +114,8 @@ from xspec import AllModels,AllData,Fit,Spectrum,Model,Plot,Xset,FakeitSettings,
 from xspec_config_multisp import allmodel_data,model_load,addcomp,Pset,Pnull,rescale,reset,Plot_screen,store_plot,freeze,allfreeze,unfreeze,\
                          calc_error,delcomp,fitmod,fitcomp,calc_fit,xcolors_grp,xPlot,xscorpeon,catch_model_str
 
-from linedet_utils import plot_line_comps,plot_line_search,plot_std_ener,coltour_chi2map,narrow_line_search
+from linedet_utils import plot_line_comps,plot_line_search,plot_std_ener,coltour_chi2map,narrow_line_search,\
+                            plot_line_ratio
 
 #custom script with a some lines and fit utilities and variables
 from fitting_tools import c_light,lines_std_names,lines_e_dict,n_absline,range_absline,model_list
@@ -1933,7 +1934,7 @@ def line_detect(epoch_id):
         First, we relaunch a global fit iteration while blocking all line parameters in the broad band.
         We then refreeze the absorption and relaunch two global fit iterations in 3-10 (for the HID) and 4-10 (for the autofit continuum)
         '''
-        
+
         if refit_cont:
             
             AllChains.clear()
@@ -2084,7 +2085,11 @@ def line_detect(epoch_id):
         
         addcomps_abslines=[comp.compname.split('_')[0] for comp in [elem for elem in fitlines.includedlist if elem is not None]\
                         if comp.named_absline]
-            
+
+        comp_absline_position=[]
+        for id_comp_absline,comp_absline in enumerate(addcomps_abslines):
+            comp_absline_position = np.argwhere(np.array(addcomps_lines) == comp_absline)[0][0]
+
         #rearranging the components in a format usable in the plot. The components start at the index 2 
         #(before it's the entire model x and y values)
         plot_autofit_cont=plot_autofit_comps[:2+len(addcomps_cont)]
@@ -2249,65 +2254,7 @@ def line_detect(epoch_id):
         
         #plotting the combined autofit plot
         
-        def plot_line_ratio(axe,mode=None):
-            
-            '''second plot (ratio + abslines ratio)'''
-            
-            axe.set_xlabel('Energy (keV)')
-            axe.xaxis.set_label_position('bottom')
-            
-            #hiding the ticks values for the lower x axis if in paper mode
-            if mode=='paper':
-                plt.setp(axe.get_xticklabels(), visible=False)
-        
-            #changing the axis for when in paper mode
-            axe.set_ylabel('Fit ratio' if mode=='paper' else 'Fit ratio compared the sum of continuum and all emission lines')
-            axe.set_xlim(line_cont_range)
-            
-            #we put the x axis on top to avoid it being hidden by the second subplot2aaa
-            axe.xaxis.tick_bottom()
-            axe.xaxis.set_label_position('bottom')
-            for i_grp in range(AllData.nGroups):
-                axe.errorbar(plot_ratio_autofit_noabs[i_grp][0][0], plot_ratio_autofit_noabs[i_grp][1][0],
-                                        xerr=plot_ratio_autofit_noabs[i_grp][0][1],yerr=plot_ratio_autofit_noabs[i_grp][1][1],
-                                        color=xcolors_grp[i_grp],ecolor=xcolors_grp[i_grp],linestyle='None',alpha=0.7)
-            axe.axhline(y=1,xmin=0,xmax=1,color='green')
-            
-            #limiting the plot to the range of the line energy search
-            axe.set_xlim(line_search_e_space[0],line_search_e_space[-1])
-            
-            plot_ratio_xind_rel=[np.array([elem for elem in np.where(plot_ratio_autofit_noabs[i_grp][0][0]>=line_search_e[0])[0]\
-                                          if elem in np.where(plot_ratio_autofit_noabs[i_grp][0][0]<=line_search_e_space[-1])[0]])\
-                                 for i_grp in range(AllData.nGroups)]
-                
-            #rescaling with errorbars (which are not taken into account by normal rescaling)
 
-            plot_ratio_y_up=np.array([(plot_ratio_autofit_noabs[i_grp][1][0]+plot_ratio_autofit_noabs[i_grp][1][1])[plot_ratio_xind_rel[i_grp]] 
-                                      for i_grp in range(AllData.nGroups)],dtype=object)
-
-                
-            plot_ratio_y_dn=np.array([(plot_ratio_autofit_noabs[i_grp][1][0]-plot_ratio_autofit_noabs[i_grp][1][1])[plot_ratio_xind_rel[i_grp]]
-                                      for i_grp in range(AllData.nGroups)],dtype=object)
-            axe.set_ylim(0.95*np.min(ravel_ragged(plot_ratio_y_dn)),1.05*np.max(ravel_ragged(plot_ratio_y_up)))
-            
-            #linestyles
-            l_styles=['solid','dotted','dashed','dashdot']
-    
-            #plotting the delta ratio of the absorption components
-            for i_line,ratio_line in enumerate(plot_autofit_ratio_lines):
-                
-                #fetching the position of the line compared to other line components to get identical alpha and ls values
-                
-                i_line_comp=np.argwhere(np.array(addcomps_lines)==addcomps_abslines[i_line])[0][0]
-                
-                #plotting each ratio when it is significantly different from the continuum, 
-                #and with the same color coding as the component plot bove
-                axe.plot(plot_autofit_cont[0][ratio_line<=1-1e-3],ratio_line[ratio_line<=1-1e-3],color='red',
-                             alpha=1-i_line_comp*0.1,linestyle=l_styles[i_line_comp%4])
-                
-            '''Plotting the Standard absorption line energies'''
-            plot_std_ener(axe)
-            
         def autofit_plot(fig):
             
             '''
@@ -2328,7 +2275,9 @@ def line_detect(epoch_id):
             
             '''second plot (ratio + abslines ratio)'''
             
-            plot_line_ratio(axes[1])
+            plot_line_ratio(axes[1],data_autofit=data_autofit,data_autofit_noabs=data_autofit_noabs,
+                            n_addcomps_cont=len(addcomps_cont),line_position=comp_absline_position,
+                            line_search_e=line_search_e,line_cont_range=line_cont_range)
             
             plt.tight_layout()
             
@@ -2387,7 +2336,9 @@ def line_detect(epoch_id):
             
             ax_paper[2]=plt.subplot(gs_paper[2,0],sharex=ax_paper[0])
             #third plot is the autofit ratio with lines added
-            plot_line_ratio(ax_paper[2],mode='paper')
+            plot_line_ratio(ax_paper[2],mode='paper',data_autofit=data_autofit,data_autofit_noabs=data_autofit_noabs,
+                            n_addcomps_cont=len(addcomps_cont),line_position=comp_absline_position,
+                            line_search_e=line_search_e,line_cont_range=line_cont_range)
             
             #fourth plot is the second blind search coltour
             ax_paper[3]=plt.subplot(gs_paper[3,0],sharex=ax_paper[0])

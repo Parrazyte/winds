@@ -547,20 +547,25 @@ def model_load(model_saves,mod_name='',mod_number=1,gap_par=None,in_add=False,mo
     if gap_par is not None:
         gap_start=int(gap_par.split('-')[0])
         gap_end=int(gap_par.split('-')[1])
-                
-    if not (type(model_saves)==list or type(model_saves)==np.ndarray):
-        model_saves_arr=np.array([model_saves])
+
+    if type(model_saves)==allmodel_data and len(model_saves.mod_list)==1:
+        model_saves_eff=model_saves.default
     else:
-        model_saves_arr=model_saves
+        model_saves_eff=model_saves
+
+    if not (type(model_saves_eff)==list or type(model_saves_eff)==np.ndarray):
+        model_saves_arr=np.array([model_saves_eff])
+    else:
+        model_saves_arr=model_saves_eff
                 
     multi_groups=False
     #using the first save to create most of the elements that are common to all data groups
     if type(model_saves_arr)==list or type(model_saves_arr)==np.ndarray:
         if len(model_saves_arr)>1:
             multi_groups=True
-        first_save=model_saves[0]
+        first_save=model_saves_eff[0]
     else:
-        first_save=model_saves
+        first_save=model_saves_eff
         
     #creating a model with the new model expression
     modclass+=(first_save.expression,mod_name,mod_number)

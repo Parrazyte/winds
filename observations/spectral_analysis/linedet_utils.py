@@ -12,7 +12,8 @@ from general_tools import ravel_ragged
 #fitting imports
 from xspec import AllData,Plot,AllModels,Fit,Xset
 
-from xspec_config_multisp import MinorSymLogLocator,xcolors_grp,addcomp,store_plot,allfreeze,xscorpeon
+from xspec_config_multisp import MinorSymLogLocator,xcolors_grp,addcomp,store_plot,allfreeze,xscorpeon,\
+                                model_load
 from fitting_tools import sign_delchis_table,lines_std,lines_e_dict,lines_w_dict,lines_broad_w_dict,\
         link_groups,lines_std_names,def_ftest_threshold,def_ftest_leeway,ang2kev
 
@@ -27,8 +28,8 @@ from shapely.geometry import Polygon,Point
 #mask propagation for the peak detection
 from scipy.ndimage import binary_dilation
 
-def narrow_line_search(data_cont, suffix,line_search_e='4 10 0.05',line_search_norm='0.01 10 500',
-                       e_sat_low=0.3,peak_thresh=9.21,peak_clean=False,line_cont_range='4 10',trig_interval='6.5 9.1',
+def narrow_line_search(data_cont, suffix,line_search_e=[4,10,0.05],line_search_norm=[0.01,10,500],
+                       e_sat_low=0.3,peak_thresh=9.21,peak_clean=False,line_cont_range=[4,10],trig_interval=[6.5,9.1],
                        scorpeon_save=None):
 
     '''
@@ -371,7 +372,117 @@ def plot_line_search(chi_dict_plot,outdir,sat,save=True,suffix=None,epoch_observ
     # putting the background plotting to its previous state
     Plot.background = curr_plot_bg_state
 
-def plot_std_ener(ax_ratio, ax_contour=None, plot_em=False, mode='ratio'):
+def plot_line_ratio(axe,data_autofit,data_autofit_noabs,n_addcomps_cont,mode=None,
+                    line_position=None,line_search_e=[4,10,0.05],line_cont_range=[4,10],plot_ener=True):
+
+    '''
+    plots the line ratio highlighting absorption components in the model
+    '''
+
+    # recreating the line search space
+    line_search_e_space = np.arange(line_search_e[0], line_search_e[1] + line_search_e[2] / 2, line_search_e[2])
+    # this one is here to avoid adding one point if incorrect roundings create problem
+    line_search_e_space = line_search_e_space[line_search_e_space <= line_search_e[1]]
+
+    '''
+    storing the different ratio and creating the main variables
+    '''
+
+    # storing the no abs line 'continuum' model
+    model_load(data_autofit_noabs)
+    plot_ratio_autofit_noabs = store_plot('ratio')
+
+    model_load(data_autofit)
+    # storing the components of the model for the first data group only
+    plot_autofit_comps = store_plot('ldata', comps=True)[1][0]
+
+    # rearranging the components in a format usable in the plot. The components start at the index 2
+    # (before it's the entire model x and y values)
+    plot_autofit_cont = plot_autofit_comps[:2 + n_addcomps_cont]
+
+    # same for the line components
+    plot_autofit_lines = plot_autofit_comps[2 + n_addcomps_cont:]
+
+    # taking off potential background components
+    if 'nxb' in list(AllModels.sources.values()):
+        plot_autofit_lines = plot_autofit_lines[:-2]
+
+    if 'sky' in list(AllModels.sources.values()):
+        plot_autofit_lines = plot_autofit_lines[:-2]
+
+    #creating a sum of all the non absorption components
+    plot_autofit_noabs = np.concatenate((([[plot_addline] for plot_addline in plot_autofit_comps[2:] \
+                                           if not max(plot_addline) <= 0]))).sum(axis=0)
+
+    #and creating a ratio of the lines addition to it
+    plot_autofit_ratio_lines = [(plot_autofit_noabs + plot_autofit_lines[i]) / plot_autofit_noabs \
+                                for i in range(len(plot_autofit_lines)) if max(plot_autofit_lines[i]) <= 0.]
+
+
+    '''second plot (ratio + abslines ratio)'''
+
+    axe.set_xlabel('Energy (keV)')
+    axe.xaxis.set_label_position('bottom')
+
+    # hiding the ticks values for the lower x axis if in paper mode
+    if mode == 'paper':
+        plt.setp(axe.get_xticklabels(), visible=False)
+
+    # changing the axis for when in paper mode
+    axe.set_ylabel('Fit ratio' if mode == 'paper' else 'Fit ratio compared the sum of continuum and all emission lines')
+    axe.set_xlim(line_cont_range)
+
+    # we put the x axis on top to avoid it being hidden by the second subplot2aaa
+    axe.xaxis.tick_bottom()
+    axe.xaxis.set_label_position('bottom')
+    for i_grp in range(AllData.nGroups):
+        axe.errorbar(plot_ratio_autofit_noabs[i_grp][0][0], plot_ratio_autofit_noabs[i_grp][1][0],
+                     xerr=plot_ratio_autofit_noabs[i_grp][0][1], yerr=plot_ratio_autofit_noabs[i_grp][1][1],
+                     color=xcolors_grp[i_grp], ecolor=xcolors_grp[i_grp], linestyle='None', alpha=0.7)
+    axe.axhline(y=1, xmin=0, xmax=1, color='green')
+
+    # limiting the plot to the range of the line energy search
+    axe.set_xlim(line_search_e_space[0], line_search_e_space[-1])
+
+    plot_ratio_xind_rel = [
+        np.array([elem for elem in np.where(plot_ratio_autofit_noabs[i_grp][0][0] >= line_search_e[0])[0] \
+                  if elem in np.where(plot_ratio_autofit_noabs[i_grp][0][0] <= line_search_e_space[-1])[0]]) \
+        for i_grp in range(AllData.nGroups)]
+
+    # rescaling with errorbars (which are not taken into account by normal rescaling)
+
+    plot_ratio_y_up = np.array(
+        [(plot_ratio_autofit_noabs[i_grp][1][0] + plot_ratio_autofit_noabs[i_grp][1][1])[plot_ratio_xind_rel[i_grp]]
+         for i_grp in range(AllData.nGroups)], dtype=object)
+
+    plot_ratio_y_dn = np.array(
+        [(plot_ratio_autofit_noabs[i_grp][1][0] - plot_ratio_autofit_noabs[i_grp][1][1])[plot_ratio_xind_rel[i_grp]]
+         for i_grp in range(AllData.nGroups)], dtype=object)
+    axe.set_ylim(0.95 * np.min(ravel_ragged(plot_ratio_y_dn)), 1.05 * np.max(ravel_ragged(plot_ratio_y_up)))
+
+    # linestyles
+    l_styles = ['solid', 'dotted', 'dashed', 'dashdot']
+
+    # plotting the delta ratio of the absorption components
+    for i_line, ratio_line in enumerate(plot_autofit_ratio_lines):
+        # fetching the position of the line compared to other line components to get identical alpha and ls values
+
+        if line_position is not None:
+            i_line_comp=line_position[i_line]
+        else:
+            i_line_comp=i_line
+
+        # plotting each ratio when it is significantly different from the continuum,
+        # and with the same color coding as the component plot bove
+        axe.plot(plot_autofit_cont[0][ratio_line <= 1 - 1e-3], ratio_line[ratio_line <= 1 - 1e-3], color='red',
+                 alpha=1 - i_line_comp * 0.1, linestyle=l_styles[i_line_comp % 4])
+
+    if plot_ener:
+        '''Plotting the Standard absorption line energies'''
+        plot_std_ener(axe)
+
+
+def plot_std_ener(ax_ratio, ax_contour=None, plot_em=False, mode='ratio',skip_last=False):
     '''
     Plots the current absorption (and emission if asked) standard lines in the current axis
     also used in the autofit plots further down
@@ -390,7 +501,7 @@ def plot_std_ener(ax_ratio, ax_contour=None, plot_em=False, mode='ratio'):
             continue
 
         # skipping some indexes for now
-        if i_line == 2 or i_line > 8:
+        if i_line == 2 or i_line > 8-(1 if skip_last else 0):
             continue
 
         # skipping Nika27:
@@ -659,13 +770,9 @@ def coltour_chi2map(fig, axe, chi_dict, title='', combined=False, ax_bar=None, n
     if ax_bar != None:
 
         if ax_bar == 'bottom':
-            try:
-                colorbar = plt.colorbar(img, location='bottom', orientation='horizontal', spacing='proportional',
-                                        ticks=cm_ticks)
-                colorbar.ax.set_yticklabels(cm_ticklabels)
-            except:
-                breakpoint()
-                print("aa")
+            colorbar = plt.colorbar(img, location='bottom', orientation='horizontal', spacing='proportional',
+                                    ticks=cm_ticks)
+            colorbar.ax.set_xticklabels(cm_ticklabels)
         elif combined == False:
             colorbar = plt.colorbar(img, ax=axe, spacing='proportional', ticks=cm_ticks)
             colorbar.ax.set_yticklabels(cm_ticklabels)
@@ -673,10 +780,10 @@ def coltour_chi2map(fig, axe, chi_dict, title='', combined=False, ax_bar=None, n
             colorbar = plt.colorbar(img, cax=ax_bar, spacing='proportional', ticks=cm_ticks)
             colorbar.ax.set_yticklabels(cm_ticklabels)
 
-    if bigline_flag == 1:
-        colorbar.set_label(r'$\sqrt{\Delta C}$ with separated scales\nfor emission and absorption')
-    else:
-        colorbar.set_label(r'$\Delta C$ with separated scales for emission and absorption')
+        if bigline_flag == 1:
+            colorbar.set_label(r'$\sqrt{\Delta C}$ with separated scales\nfor emission and absorption')
+        else:
+            colorbar.set_label(r'$\Delta C$ with separated scales for emission and absorption')
 
     '''CONTOUR PLOT'''
 

@@ -6,11 +6,12 @@ import matplotlib.pyplot as plt
 
 from linedet_utils import narrow_line_search,plot_line_ratio,coltour_chi2map,plot_std_ener
 
-from xspec_config_multisp import allmodel_data,xPlot,delcomp,model_load,reset
+from xspec_config_multisp import allmodel_data,xPlot,delcomp,model_load,reset,Plot
 
 from xspec import Xset,AllData,Plot,AllModels,Fit
 
 reset()
+Plot.xLog=False
 
 plt.ioff()
 
@@ -56,7 +57,7 @@ def paper_plot(fig_paper, chi_dict_init, chi_dict_postauto, title=None):
 
     # gridspec creates a grid of spaces for subplots. We use 4 rows for the 4 plots
     # Second column is there to keep space for the colorbar. Hspace=0. sticks the plots together
-    gs_paper = GridSpec(4, 1, figure=fig_paper, hspace=0.)
+    gs_paper = GridSpec(4, 1, figure=fig_paper,height_ratios=[1,1,1,1.3], hspace=0.)
 
     # first plot is the data with additive components
     ax_paper[0] = plt.subplot(gs_paper[0])
@@ -96,9 +97,9 @@ def paper_plot(fig_paper, chi_dict_init, chi_dict_postauto, title=None):
 
     ax_paper[3].set_xlim(line_cont_range)
 
-    plot_std_ener(ax_paper[1], plot_em=True,exclude_last=True)
+    plot_std_ener(ax_paper[1],mode='chimap', plot_em=True,exclude_last=True)
     plot_std_ener(ax_paper[2], plot_em=True,exclude_last=True)
-    plot_std_ener(ax_paper[3], plot_em=True,exclude_last=True)
+    plot_std_ener(ax_paper[3],mode='chimap', plot_em=True,exclude_last=True)
 
     #taking off the x axis of the first 3 axis to avoid ugly stuff
     for ax in ax_paper[:3]:
@@ -111,7 +112,7 @@ def paper_plot(fig_paper, chi_dict_init, chi_dict_postauto, title=None):
 
     plt.tight_layout(pad=0)
 
-fig_paper = plt.figure(figsize=(9, 16))
+fig_paper = plt.figure(figsize=(12, 16))
 
 paper_plot(fig_paper, chi_dict_init, chi_dict_autofit)
 

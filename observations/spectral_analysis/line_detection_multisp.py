@@ -2331,7 +2331,7 @@ def line_detect(epoch_id):
             #second plot is the first blind search coltour
             ax_paper[1]=plt.subplot(gs_paper[1,0],sharex=ax_paper[0])
             ax_colorbar=plt.subplot(gs_paper[1,1])
-            # coltour_chi2map(fig_paper,ax_paper[1],chi_dict_init,combined='paper',ax_bar=ax_colorbar)          
+            coltour_chi2map(fig_paper,ax_paper[1],chi_dict_init,combined='paper',ax_bar=ax_colorbar)
             ax_paper[1].set_xlim(line_cont_range)
             
             ax_paper[2]=plt.subplot(gs_paper[2,0],sharex=ax_paper[0])
@@ -2349,20 +2349,28 @@ def line_detect(epoch_id):
             coltour_chi2map(fig_paper,ax_paper[3],chi_dict_postauto,combined='nolegend',ax_bar=ax_colorbar)          
             
             ax_paper[3].set_xlim(line_cont_range)
-            
-            plot_std_ener(ax_paper[1],plot_em=True)
-            plot_std_ener(ax_paper[2],plot_em=True)
-            plot_std_ener(ax_paper[3],plot_em=True)
+
+            plot_std_ener(ax_paper[1], mode='chimap', plot_em=True)
+            plot_std_ener(ax_paper[2], plot_em=True)
+            plot_std_ener(ax_paper[3], mode='chimap', plot_em=True)
+
+            # taking off the x axis of the first 3 axis to avoid ugly stuff
+            for ax in ax_paper[:3]:
+                ax.xaxis.set_visible(False)
+
+            # adding panel names
+            for ax, name in zip(ax_paper, ['A', 'B', 'C', 'D']):
+                ax.text(0.02, 0.05, name, horizontalalignment='center',
+                        verticalalignment='center', transform=ax.transAxes, fontsize=25)
+
         
         #this is for the 4U graphs
 
-        try:
-            dill.dump_module('./test_dump.pkl')
-        except:
-            breakpoint()
-
-        breakpoint()
-
+        # try:
+        #     dill.dump_module('./test_dump.pkl')
+        # except:
+        #     breakpoint()
+        #
         #dill.dump_session('./test_dump.pkl')
         
         fig_paper=plt.figure(figsize=(14.5,22))

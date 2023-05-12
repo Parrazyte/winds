@@ -482,14 +482,15 @@ def plot_line_ratio(axe,data_autofit,data_autofit_noabs,n_addcomps_cont,mode=Non
         plot_std_ener(axe)
 
 
-def plot_std_ener(ax_ratio, ax_contour=None, plot_em=False, mode='ratio',skip_last=False):
+def plot_std_ener(ax_ratio, ax_contour=None, plot_em=False, mode='ratio',exclude_last=False):
     '''
     Plots the current absorption (and emission if asked) standard lines in the current axis
     also used in the autofit plots further down
     '''
     # since for the first plot the 1. ratio is not necessarily centered, we need to fetch the absolute position of the y=1.0 line
     # in graph height fraction
-    pos_ctr_ratio = (1 - ax_ratio.get_ylim()[0]) / (ax_ratio.get_ylim()[1] - ax_ratio.get_ylim()[0])
+    pos_ctr_ratio = 0.5 if mode=='chimap' else\
+                    (1 - ax_ratio.get_ylim()[0]) / (ax_ratio.get_ylim()[1] - ax_ratio.get_ylim()[0])
 
     lines_names = np.array(lines_std_names)
     lines_abs_pos = ['abs' in elem for elem in lines_names]
@@ -501,7 +502,7 @@ def plot_std_ener(ax_ratio, ax_contour=None, plot_em=False, mode='ratio',skip_la
             continue
 
         # skipping some indexes for now
-        if i_line == 2 or i_line > 8-(1 if skip_last else 0):
+        if i_line == 2 or i_line > 8-(1 if exclude_last else 0):
             continue
 
         # skipping Nika27:
@@ -518,8 +519,8 @@ def plot_std_ener(ax_ratio, ax_contour=None, plot_em=False, mode='ratio',skip_la
 
         # plotting the lines on the two parts of the graphs
         ax_ratio.axvline(x=lines_e_dict[line][0],
-                         ymin=0 if mode != 'ratio' else pos_ctr_ratio if em_bool else 0.,
-                         ymax=1 if mode != 'ratio' else 1 if em_bool else pos_ctr_ratio,
+                         ymin=0 if mode not in ['ratio','chimap'] else pos_ctr_ratio if em_bool else 0.,
+                         ymax=1 if mode not in ['ratio','chimap'] else 1 if em_bool else pos_ctr_ratio,
                          color='blue' if em_bool else 'brown',
                          linestyle='dashed', linewidth=1.5)
         if ax_contour is not None:

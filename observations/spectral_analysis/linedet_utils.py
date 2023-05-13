@@ -338,6 +338,9 @@ def plot_line_search(chi_dict_plot,outdir,sat,save=True,suffix=None,epoch_observ
     line_search_e=chi_dict_plot['line_search_e']
     line_search_norm=chi_dict_plot['line_search_norm']
 
+
+    line_search_e_str='_'.join(line_search_e.astype(str))
+    line_search_norm_str='_'.join(line_search_norm.astype(str))
     #back to the main computation
     curr_plot_bg_state = Plot.background
 
@@ -345,8 +348,8 @@ def plot_line_search(chi_dict_plot,outdir,sat,save=True,suffix=None,epoch_observ
     Plot.background = False
 
     comb_title = r' Blind search visualisation for observ ' + ('' if epoch_observ is None else epoch_observ[0]) +\
-                 '\n with line par ' + line_search_e + \
-                 ' and norm par' + line_search_norm + ' in continuum units'
+                 '\n with line par ' + line_search_e_str + \
+                 ' and norm par' + line_search_norm_str + ' in continuum units'
 
     comb_label = []
     for i_grp in range(AllData.nGroups):
@@ -366,7 +369,7 @@ def plot_line_search(chi_dict_plot,outdir,sat,save=True,suffix=None,epoch_observ
     if save==True:
         # saving it and closing it
         plt.savefig(outdir + '/' + epoch_observ[0] + '_' + suffix + '_line_comb_plot_' +\
-                    line_search_e.replace(' ','_') + '_' + line_search_norm.replace(' ', '_') + '.png')
+                    line_search_e_str.replace(' ','_') + '_' + line_search_norm_str.replace(' ', '_') + '.png')
         plt.close(figure_comb)
 
     # putting the background plotting to its previous state

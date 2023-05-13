@@ -247,7 +247,7 @@ ap.add_argument('-fit_lowSNR',nargs=1,help='fit the continuum of low quality dat
 ap.add_argument('-counts_min_HID',nargs=1,help='minimum counts for HID fitting in broad band',default=200,type=float)
 
 ap.add_argument('-skip_started',nargs=1,help='skip all exposures listed in the local summary_line_det file',
-                default=False,type=bool)
+                default=True,type=bool)
 #note : will skip exposures for which the exposure didn't compute or with errors
 
 ap.add_argument('-skip_complete',nargs=1,help='skip completed exposures listed in the local summary_line_det file',
@@ -1889,7 +1889,7 @@ def line_detect(epoch_id):
                            line_cont_range=line_cont_range,trig_interval=trig_interval,
                            scorpeon_save=data_broad.scorpeon)
 
-    plot_line_search(chi_dict_init, outdir, sat, epoch_observ=epoch_observ)
+    plot_line_search(chi_dict_init, outdir, sat,suffix='cont', epoch_observ=epoch_observ)
 
     '''
     Automatic line fitting
@@ -2298,7 +2298,7 @@ def line_detect(epoch_id):
                            line_cont_range=line_cont_range,trig_interval=trig_interval,
                            scorpeon_save=data_broad.scorpeon)
 
-        plot_line_search(chi_dict_autofit,outdir,sat,epoch_observ=epoch_observ)
+        plot_line_search(chi_dict_autofit,outdir,sat,suffix='autofit',epoch_observ=epoch_observ)
 
         ####Paper plot
         

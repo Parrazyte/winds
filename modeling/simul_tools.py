@@ -51,6 +51,17 @@ PI = 3.14159265
 Km2m = 1000.0
 m2cm = 100.0
 
+
+def print_log(elem,logfile_io):
+
+    '''
+    prints and logs at once
+    '''
+    print(elem)
+
+    logfile_io.write(str(elem)+('\n' if not str(elem).endswith('\n') else ''))
+
+
 def merge_mhd_solution(solutions_path):
 
     '''
@@ -110,6 +121,17 @@ def build_grid(solutions_path,mdot_obs,m_BH,r_j=6.,angle_min=30,angle_step=4,eta
     '''
 
     solutions=np.loadtxt(solutions_path)
+    
+    solutions_path_ext='.'+solutions_path.split('/')[-1].split('.')[-1]
+    solutions_log_path=solutions_path.replace(\
+        solutions_path_ext,'_angle_'+str(angle_min)+'_step_'+str(angle_step)+
+                           '_mdot_'+str(mdot_obs)+'_m_bh_'+str(m_BH)+'_rj_'+str(r_j)+'_log'+solutions_path_ext)
+    
+    solutions_mod_path=solutions_path.replace(\
+        solutions_path_ext,'_angle_'+str(angle_min)+'_step_'+str(angle_step)+
+                           '_mdot_'+str(mdot_obs)+'_m_bh_'+str(m_BH)+'_rj_'+str(r_j)+solutions_path_ext)
+    
+    solutions_log_io=open(solutions_log_path,'w+')
 
     solution_ids=solutions.T[:7].T
 
@@ -131,6 +153,8 @@ def build_grid(solutions_path,mdot_obs,m_BH,r_j=6.,angle_min=30,angle_step=4,eta
     mdot_mhd=mdot_obs/eta_mhd
 
     solutions_sample=[]
+
+    n_angles=0
 
     #working solution by solution
     for solutions_split in solutions_split_arr:
@@ -158,37 +182,45 @@ def build_grid(solutions_path,mdot_obs,m_BH,r_j=6.,angle_min=30,angle_step=4,eta
         #and the first angle value below compton-thickness
         sol_angle_thick=solutions_split.T[8][col_dens_sol < compton_thick_thresh][0]
 
+        print_log('\n\n***************',solutions_log_io)
+        print_log('Solution:\n'+
+              'epsilon='+str(solutions_split[0][0])+'\nn_island='+str(solutions_split[0][1])+
+              '\np='+str(solutions_split[0][2])+'\nmu='+str(solutions_split[0][3]),solutions_log_io)
+
+        print_log('\nFirst solution below comp thick at theta='+str(sol_angle_thick),solutions_log_io)
+
         #using it to determine how many angles will be probed
         sol_angle_sample=np.arange(angle_min,sol_angle_thick,angle_step)[::-1]
 
-        #and fetching the corresponding closest solutions
-        solutions_sample+=[solutions_split[abs(solutions_split.T[8]-elem_angle).argmin()] for elem_angle in\
-                                sol_angle_sample]
-
-
         #using it to determine how many angles will be probed
         sol_angle_sample=np.arange(angle_min,sol_angle_thick,angle_step)[::-1]
+
+        print_log('Angle sampling:',solutions_log_io)
+        print_log(sol_angle_sample,solutions_log_io)
+
+        n_angles+=len(sol_angle_sample)
 
         #restricting to unique indexes to avoid repeating solutions
         id_sol_sample=np.unique([abs(solutions_split.T[8]-elem_angle).argmin() for elem_angle in sol_angle_sample])
 
+        print_log('Angles of solutions selected:',solutions_log_io)
+        print_log(solutions_split.T[8][id_sol_sample],solutions_log_io)
+
         #and fetching the corresponding closest solutions
-        solutions_sample+=[solutions_split[id_sol] for id_sol in id_sol_sample]
+        solutions_sample+=solutions_split[id_sol_sample].tolist()
 
 
     solutions_sample=np.array(solutions_sample)
+
+    print_log('tot angles init:'+str(n_angles),solutions_log_io)
+    print_log('tot solutions:'+str(len(solutions_sample)),solutions_log_io)
 
     header_arr='#epsilon\tn_island\tp_xi\tmu\tchi_m\talpha_m\tPm\tz_over_r\ttheta\tr_cyl/r0\trho_mhd\tu_r\tu_phi\tu_z'+\
                '\tT_MHD\tB_r\tB_phi\tB_z\tT_dyn'
 
     #saving the global file
 
-    solutions_path_ext='.'+solutions_path.split('/')[-1].split('.')[-1]
-    solutions_mod_path=solutions_path.replace(\
-        solutions_path_ext,'_angle_'+str(angle_min)+'_'+str(angle_step)+
-                           '_mdot_'+str(mdot_obs)+'_m_bh_'+str(m_BH)+'_rj_'+str(r_j)+solutions_path_ext)
-
-    np.savetxt(solutions_path_ext, solutions_sample, delimiter='\t',
+    np.savetxt(solutions_mod_path, solutions_sample, delimiter='\t',
                header=header_arr)
 
 # def produce_df(data, rows, columns, row_names=None, column_names=None, row_index=None, col_index=None):

@@ -476,7 +476,7 @@ def plot_line_ratio(axe,data_autofit,data_autofit_noabs,n_addcomps_cont,mode=Non
             i_line_comp=i_line
 
         # plotting each ratio when it is significantly different from the continuum,
-        # and with the same color coding as the component plot bove
+        # and with the same color coding as the component plot above
         axe.plot(plot_autofit_cont[0][ratio_line <= 1 - 1e-3], ratio_line[ratio_line <= 1 - 1e-3], color='red',
                  alpha=1 - i_line_comp * 0.1, linestyle=l_styles[i_line_comp % 4])
 

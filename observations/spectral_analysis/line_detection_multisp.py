@@ -2088,7 +2088,7 @@ def line_detect(epoch_id):
 
         comp_absline_position=[]
         for id_comp_absline,comp_absline in enumerate(addcomps_abslines):
-            comp_absline_position = np.argwhere(np.array(addcomps_lines) == comp_absline)[0][0]
+            comp_absline_position += [np.argwhere(np.array(addcomps_lines) == comp_absline)[0][0]]
 
         #rearranging the components in a format usable in the plot. The components start at the index 2 
         #(before it's the entire model x and y values)

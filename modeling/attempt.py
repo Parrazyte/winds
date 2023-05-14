@@ -27,8 +27,8 @@ test_list=[3.836508e-01,  1.278251e+00, 2.100000e+01,  1.369094e+00,  4.065250e-
 
 os.chdir('/media/parrama/SSD/Simu/MHD/xstar')
 
-dict_sol['z_A']=test_list[0]
-dict_sol['r_A']=test_list[1]
+dict_sol['z_over_r']=test_list[0]
+dict_sol['r_cyl_r0']=test_list[1]
 dict_sol['angle']=test_list[2]
 dict_sol['func_Rsph_by_ro']=test_list[3]
 

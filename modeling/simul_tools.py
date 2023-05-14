@@ -13,7 +13,9 @@ from astropy.io import ascii
 import numpy as np
 import pexpect
 import time
+import glob
 
+import pandas as pd
 
 #trapezoid integration
 from scipy.integrate import trapezoid
@@ -34,6 +36,277 @@ h_cgs = 6.624e-27
 eV2erg = 1.6e-12
 erg2eV = 1.0/eV2erg
 Ryd2eV = 13.605693
+
+compton_thick_thresh=1.5e24
+
+# ! light speed in Km/s unit
+c_Km = 2.99792e5
+# ! light speed in cm/s unit
+c_cgs = 2.99792e10
+sigma_thomson_cgs = 6.6525e-25
+c_SI = 2.99792e8
+G_SI = 6.674e-11
+Msol_SI = 1.98892e30
+PI = 3.14159265
+Km2m = 1000.0
+m2cm = 100.0
+
+def merge_mhd_solution(solutions_path):
+
+    '''
+    Merges all the solutions inside the given folder into a unique csv with all variables directly
+    the solutions folders should all be of the type 'eps_'+epsvalue
+    inside, subfolders with each n, and inside each solution file
+    '''
+
+    startdir=os.getcwd()
+
+    #extracting the solution directories
+    os.chdir(solutions_path)
+
+    sol_list=glob.glob('**/solN**.dat',recursive=True)
+
+    global_sol_arr=[]
+
+    for sol in sol_list:
+
+        #list with the epsilon and n
+        first_cols=[float(sol.split('/')[0].split('_')[1].replace('0','0.')),float((sol.split('/')[1].replace('n','')))]
+
+        #reading the header of the file to get the second part of the solution elements
+        with open(sol) as sol_file:
+            sol_lines_header = sol_file.readlines()[1:11]
+
+        sol_parameters = np.array([elem.split()[-1] for elem in sol_lines_header]).astype(float).tolist()
+
+        #list with all the relevant solution parameters (0 is xi/p, 2 is mu, 4 5 6 are chi_m/alpha_m/Pm)
+        main_sol_pars=first_cols+[sol_parameters[0]]+[sol_parameters[2]]+sol_parameters[4:7]
+
+        #extracting the mhd solution lines
+        sol_lines=np.loadtxt(sol,skiprows=14)
+
+        #merging them with the solution parameters
+        merged_sol_line=[main_sol_pars+elem.tolist() for elem in sol_lines]
+
+        global_sol_arr+=merged_sol_line
+
+    global_sol_arr=np.array(global_sol_arr)
+
+    header_arr='#epsilon\tn_island\tp_xi\tmu\tchi_m\talpha_m\tPm\tz_over_r\ttheta\tr_cyl/r0\trho_mhd\tu_r\tu_phi\tu_z'+\
+               '\tT_MHD\tB_r\tB_phi\tB_z\tT_dyn'
+
+    #saving the global file
+    np.savetxt(os.getcwd().split('/')[-1]+'.txt', global_sol_arr, delimiter='\t',
+               header=header_arr)
+
+    os.chdir(startdir)
+
+def build_grid(solutions_path,mdot_obs,m_BH,r_j=6.,angle_min=30,angle_step=4,eta_mhd=1/12):
+
+    '''
+    split the solution grid for a range of angles up to the compton-thick point of each solution
+
+    the default value of r_j is a massive particule's isco in Rg for non spinning BH
+    '''
+
+    solutions=np.loadtxt(solutions_path)
+
+    solution_ids=solutions.T[:7].T
+
+    solution_ids_unique=np.unique(solution_ids,axis=0)
+
+    #splitting the array by solution by fetching the occurences of the first 7 indexes
+    split_sol_mask=np.array([(solution_ids==elem).all(axis=1) for elem in solution_ids_unique])
+
+    #split per solution (increasing epsilon, then n_island, then p,...)
+    solutions_split_arr=np.array([solutions[elem_mask] for elem_mask in split_sol_mask],dtype=object)
+
+    m_BH_SI = m_BH * Msol_SI
+    Rs_SI = 2.0 * G_SI * m_BH_SI / (c_SI * c_SI)
+
+    # !* Gravitational radius
+    Rg_SI = 0.5 * Rs_SI
+    Rg_cgs = Rg_SI * m2cm
+
+    mdot_mhd=mdot_obs/eta_mhd
+
+    solutions_sample=[]
+
+    #working solution by solution
+    for solutions_split in solutions_split_arr:
+
+        def column_density_full(p_mhd,rho_mhd):
+            '''
+            computes the column density at infinity starting at Rg (aka the integral of the density starting at this value)
+
+            Here we assume a SAD starting at r_j
+
+            here the previous Rg_cgs factor at the denominator has been cancelled
+            '''
+
+            return mdot_mhd/(sigma_thomson_cgs)*rho_mhd*(r_j**(p_mhd-0.5)/(0.5-p_mhd))
+
+        #retrieving p
+        p_mhd_sol=solutions_split[0][2]
+
+        #and the varying rho
+        rho_mhd_sol=solutions_split.T[10]
+
+        #computing the column densities
+        col_dens_sol=column_density_full(p_mhd_sol,rho_mhd_sol)
+
+        #and the first angle value below compton-thickness
+        sol_angle_thick=solutions_split.T[8][col_dens_sol < compton_thick_thresh][0]
+
+        #using it to determine how many angles will be probed
+        sol_angle_sample=np.arange(angle_min,sol_angle_thick,angle_step)[::-1]
+
+        #and fetching the corresponding closest solutions
+        solutions_sample+=[solutions_split[abs(solutions_split.T[8]-elem_angle).argmin()] for elem_angle in\
+                                sol_angle_sample]
+
+
+        #using it to determine how many angles will be probed
+        sol_angle_sample=np.arange(angle_min,sol_angle_thick,angle_step)[::-1]
+
+        #restricting to unique indexes to avoid repeating solutions
+        id_sol_sample=np.unique([abs(solutions_split.T[8]-elem_angle).argmin() for elem_angle in sol_angle_sample])
+
+        #and fetching the corresponding closest solutions
+        solutions_sample+=[solutions_split[id_sol] for id_sol in id_sol_sample]
+
+
+    solutions_sample=np.array(solutions_sample)
+
+    header_arr='#epsilon\tn_island\tp_xi\tmu\tchi_m\talpha_m\tPm\tz_over_r\ttheta\tr_cyl/r0\trho_mhd\tu_r\tu_phi\tu_z'+\
+               '\tT_MHD\tB_r\tB_phi\tB_z\tT_dyn'
+
+    #saving the global file
+
+    solutions_path_ext='.'+solutions_path.split('/')[-1].split('.')[-1]
+    solutions_mod_path=solutions_path.replace(\
+        solutions_path_ext,'_angle_'+str(angle_min)+'_'+str(angle_step)+
+                           '_mdot_'+str(mdot_obs)+'_m_bh_'+str(m_BH)+'_rj_'+str(r_j)+solutions_path_ext)
+
+    np.savetxt(solutions_path_ext, solutions_sample, delimiter='\t',
+               header=header_arr)
+
+# def produce_df(data, rows, columns, row_names=None, column_names=None, row_index=None, col_index=None):
+#     """
+#     rows is a list of lists that will be used to build a MultiIndex
+#     columns is a list of lists that will be used to build a MultiIndex
+#
+#     Note:
+#     replaces row_index and col_index by the values provided instead of building them if asked so
+#     """
+#
+#     if row_index is None:
+#         row_index_build = pd.MultiIndex.from_product(rows, names=row_names)
+#     else:
+#         row_index_build = row_index
+#
+#     if col_index is None:
+#         col_index_build = pd.MultiIndex.from_product(columns, names=column_names)
+#     else:
+#         col_index_build = col_index
+#
+#     return pd.DataFrame(data, index=row_index_build, columns=col_index_build)
+
+# def df_mhd_solution(solutions_path):
+#
+#     '''
+#
+#     TO BE IMPLEMENTED MAYBE, UNUSED FOR NOW BECAUSE FUCK 5 DIMENSIONNAL RAGGED OBJECTS
+#     Returns a multi dimensionnal dataframe containing all the solutions inside the folder type
+#     the solutions folders should all be of the type 'eps_'+epsvalue
+#     inside, subfolders with each n, and inside each solution file
+#     '''
+#
+#     #extracting the solution directories
+#     eps_dir_list=[elem for elem in glob.glob(os.path.join(solutions_path,'*/'))\
+#                if elem[:-1].split('/')[-1].startswith('eps_')]
+#
+#     #indexing the array by hand since it is irregular
+#     glob_sol_array=np.array([None]*len(eps_dir_list))
+#
+#     glob_sol_parameters=np.array([None]*len(eps_dir_list))
+#     for i_eps,eps_dir in enumerate(eps_dir_list):
+#
+#         #fetching subdirectories for each N (island number)
+#         n_dir_list=glob.glob(os.path.join(eps_dir,'*/'))
+#         elem_eps_array=np.array([None]*len(n_dir_list))
+#         elem_eps_parameters=np.array([None]*len(n_dir_list))
+#
+#         #ordering the islands
+#         n_dir_list.sort()
+#
+#         for i_n,n_dir in enumerate(n_dir_list):
+#
+#             #fetching files (each solution)
+#             sol_list=glob.glob(os.path.join(n_dir,'**'))
+#
+#             elem_sol_array=np.array([None]*len(sol_list))
+#             elem_sol_parameters=np.array([None]*len(sol_list))
+#
+#             for i_sol,sol in enumerate(sol_list):
+#                 #fetching the full data
+#                 elem_sol_array[i_sol] = np.loadtxt(os.path.join(sol), skiprows=14)
+#
+#                 #and the header
+#                 with open(sol) as sol_file:
+#                     sol_lines_header=sol_file.readlines()[1:11]
+#
+#
+#                 elem_sol_parameters[i_sol]=np.array([elem.split()[-1] for elem in sol_lines_header]).astype(float)
+#
+#             #trying to re-index regularly the arrays whenever possible
+#             elem_eps_array[i_n]=np.array([elem for elem in elem_sol_array],dtype='object')
+#             try:
+#                 elem_eps_array[i_n]=elem_eps_array[i_n].astype(float)
+#             except:
+#                 pass
+#
+#             elem_eps_parameters[i_n]=np.array([elem for elem in elem_sol_parameters],dtype='object')
+#             try:
+#                 elem_eps_parameters[i_n]=elem_eps_parameters[i_n].astype(float)
+#             except:
+#                 pass
+#
+#         glob_sol_array[i_eps]=np.array([elem for elem in elem_eps_array],dtype='object')
+#         try:
+#             glob_sol_array[i_eps] = glob_sol_array[i_eps].astype(float)
+#         except:
+#             pass
+#
+#         glob_sol_parameters[i_eps]=np.array([elem for elem in elem_eps_parameters],dtype='object')
+#         try:
+#             glob_sol_parameters[i_eps] = glob_sol_parameters[i_eps].astype(float)
+#         except:
+#             pass
+#
+#     glob_sol_array=np.array([elem for elem in glob_sol_array],dtype='object')
+#     try:
+#         glob_sol_array = glob_sol_array.astype(float)
+#     except:
+#         pass
+#
+#     glob_sol_parameters=np.array([elem for elem in glob_sol_parameters],dtype='object')
+#     try:
+#         glob_sol_parameters = glob_sol_parameters.astype(float)
+#     except:
+#         pass
+#
+#
+#     eps_values=[float(elem.split('/')[-2].split('_')[1].replace('0','0.')) for elem in eps_dir_list]
+#
+#     #assuming regularity for now (aka all eps_values dirs have the same n_dirs)
+#
+#     n_values=[int(elem.split('/')[-2].split('n')[1]) for elem in n_dir_list]
+#
+#
+#     #sol_lines=np.array(len(sol_files))
+
+
 
 def cigri_wrapper(mantis_dir,SED_mantis_path,solution_mantis_path,p_mhd,mdot_obs,stop_d_input,xlum,outdir,
                   h_over_r,ro_init, dr_r, v_resol, m_BH):
@@ -186,7 +459,7 @@ def xstar_func(spectrum_file,lum,t_guess,n,nh,xi,vturb_x,nbins,nsteps=1,niter=10
         upload_mantis('./xout_log_global.log',mantis_folder)
         
 def xstar_wind(solution,p_mhd,mdot_obs,stop_d_input, SED_path, xlum,outdir="xsol",
-               h_over_r=0.1, ro_init=0.5,dr_r=0.05, v_resol=85.7, m_BH=8,chatter=0,
+               h_over_r=0.1, ro_init=6.,dr_r=0.05, v_resol=85.7, m_BH=8,chatter=0,
                reload=True,comput_mode='local',mantis_folder='',force_ro_init=False,no_turb=False):
     
     
@@ -421,19 +694,6 @@ def xstar_wind(solution,p_mhd,mdot_obs,stop_d_input, SED_path, xlum,outdir="xsol
             file_edit(path=path,line_id='\t'.join(main_infos[:2]),line_data='\t'.join(main_infos+ion_infos+col_infos)+'\n',header=file_header)
             time.sleep(1)
 
-        
-    #! light speed in Km/s unit
-    c_Km = 2.99792e5 
-    #! light speed in cm/s unit
-    c_cgs = 2.99792e10 
-    sigma_thomson_cgs = 6.6525e-25
-    c_SI = 2.99792e8 
-    G_SI = 6.674e-11
-    Msol_SI = 1.98892e30
-    PI = 3.14159265
-    Km2m = 1000.0
-    m2cm = 100.0
-    
     #making sure the stop variable is an iterable
     if type(stop_d_input) not in [list, np.ndarray]:
         stop_d=[stop_d_input]
@@ -478,12 +738,13 @@ def xstar_wind(solution,p_mhd,mdot_obs,stop_d_input, SED_path, xlum,outdir="xsol
 
     if type(solution)==dict:
         #Self-similar functions f1-f10
-        z_A=solution['z_A']
-        r_A=solution['r_A']
+        z_over_r=solution['z_over_r']
+
+        #this is given in units of r_0
+        r_cyl_r0=solution['r_cyl_r0']
 
         #line of sight angle (0 is edge on)
         angle=solution['angle']
-
 
         func_Rsph_by_ro=solution['func_Rsph_by_ro']
 
@@ -502,7 +763,7 @@ def xstar_wind(solution,p_mhd,mdot_obs,stop_d_input, SED_path, xlum,outdir="xsol
         func_Tmhd=solution['func_Tmhd']
     else:
         #loading the solution file instead
-        z_A,r_A,angle,func_Rsph_by_ro,rho_mhd,vel_r,vel_phi,vel_z,func_B_r,func_B_phi,func_B_z,func_Tdyn,func_Tmhd=\
+        z_over_r,r_cyl,angle,func_Rsph_by_ro,rho_mhd,vel_r,vel_phi,vel_z,func_B_r,func_B_phi,func_B_z,func_Tdyn,func_Tmhd=\
         np.loadtxt(solution)
 
     #### variable definition
@@ -530,8 +791,8 @@ def xstar_wind(solution,p_mhd,mdot_obs,stop_d_input, SED_path, xlum,outdir="xsol
     # !* Reading functions of self-similar solutions
         
     if chatter>=5:
-        print('z_A=',z_A)
-        print('r_A=',r_A)
+        print('z_over_r=',z_over_r)
+        print('r_cyl_r0=',r_cyl_r0)
         print('angle=',angle)
         print('func_Rsph_by_ro=',func_Rsph_by_ro)
         print('rho_mhd=',rho_mhd)
@@ -580,17 +841,18 @@ def xstar_wind(solution,p_mhd,mdot_obs,stop_d_input, SED_path, xlum,outdir="xsol
     '''
     
     #defining the constant to get back to cylindric radius computations in which are made all of the MHD value computations
-    cyl_cst=np.sqrt(1.0+(z_A*z_A))
+    cyl_cst=np.sqrt(1.0+(z_over_r*z_over_r))
     
     #note: the self-similar functions are normalized for disk plane radiuses so we need to convert to r_cyl
     #the output is still for a given r_sph
     
     #all r_sph here should be given in units of Schwarzschild radii
+
+    #note: here, the rcyl corresponds to the r/r0 because the r_cyl constant is given in units of r_0 directly
     
     def func_density(r_sph):
         r_cyl=r_sph/cyl_cst
-        
-        ####NOTE: if introducing mdot_mhd radial variation, should only be for a r_cyl (or a r_0?)
+
         return (mdot_mhd/(sigma_thomson_cgs*Rg_cgs))*rho_mhd*(r_cyl**(p_mhd-1.5))
     
     def func_vel_r(r_sph):
@@ -617,7 +879,7 @@ def xstar_wind(solution,p_mhd,mdot_obs,stop_d_input, SED_path, xlum,outdir="xsol
         while ro_by_Rg <= 1.1e7 :
 
             #!* distance from black hole in cylindrical co-ordinates-the radial distance
-            rcyl_SI = ro_by_Rg*Rg_SI*r_A
+            rcyl_SI = ro_by_Rg*Rg_SI*r_cyl_r0
 
             #!* distance from black hole in spherical co-ordinates
             Rsph_SI = rcyl_SI*cyl_cst
@@ -645,7 +907,7 @@ def xstar_wind(solution,p_mhd,mdot_obs,stop_d_input, SED_path, xlum,outdir="xsol
 
     else:
         # building the standard infos
-        rcyl_SI = ro_by_Rg * Rg_SI * r_A
+        rcyl_SI = ro_by_Rg * Rg_SI * r_cyl_r0
         Rsph_SI = rcyl_SI * cyl_cst
         Rsph_Rg = Rsph_SI / Rg_SI
         vel_obs_cgs = func_vel_obs(Rsph_Rg)
@@ -664,7 +926,7 @@ def xstar_wind(solution,p_mhd,mdot_obs,stop_d_input, SED_path, xlum,outdir="xsol
     
     for i_stop,ro_stop in enumerate(stop_d):
 
-        Rsph_stop_Rg=ro_stop*r_A*cyl_cst
+        Rsph_stop_Rg=ro_stop*r_cyl_r0*cyl_cst
         
         Rsph_cgs_last[i_stop]= Rsph_stop_Rg*Rg_cgs
         vobs_last[i_stop]= func_vel_obs(Rsph_stop_Rg)/(Km2m*m2cm)
@@ -765,20 +1027,20 @@ def xstar_wind(solution,p_mhd,mdot_obs,stop_d_input, SED_path, xlum,outdir="xsol
         logxi_start[i_box] = func_logxi(Rsph_cgs_start[i_box]/Rg_cgs)
         vobs_start[i_box]=func_vel_obs(Rsph_cgs_start[i_box]/Rg_cgs)/(Km2m*m2cm)
               
-        robyRg_start[i_box] =Rsph_cgs_start[i_box]/(Rg_cgs*cyl_cst*r_A)
+        robyRg_start[i_box] =Rsph_cgs_start[i_box]/(Rg_cgs*cyl_cst*r_cyl_r0)
     
         Rsph_cgs_stop[i_box]= Rsph_cgs_end*dr_factor
         density_cgs_stop[i_box] = func_density(Rsph_cgs_stop[i_box]/Rg_cgs)
         logxi_stop[i_box] = func_logxi(Rsph_cgs_stop[i_box]/Rg_cgs)
         vobs_stop[i_box]=func_vel_obs(Rsph_cgs_stop[i_box]/Rg_cgs)/(Km2m*m2cm)
-        robyRg_stop[i_box] = Rsph_cgs_stop[i_box]/(Rg_cgs*cyl_cst*r_A)
+        robyRg_stop[i_box] = Rsph_cgs_stop[i_box]/(Rg_cgs*cyl_cst*r_cyl_r0)
          
         Rsph_cgs_mid[i_box]= (Rsph_cgs_start[i_box]+Rsph_cgs_stop[i_box])/2.0
         density_cgs_mid[i_box] = func_density(Rsph_cgs_mid[i_box]/Rg_cgs)
         logxi_mid[i_box] = func_logxi(Rsph_cgs_mid[i_box]/Rg_cgs)
         vobs_mid[i_box]=func_vel_obs(Rsph_cgs_mid[i_box]/Rg_cgs)/(Km2m*m2cm)
         
-        robyRg_mid[i_box] = Rsph_cgs_mid[i_box]/(Rg_cgs*cyl_cst*r_A)
+        robyRg_mid[i_box] = Rsph_cgs_mid[i_box]/(Rg_cgs*cyl_cst*r_cyl_r0)
         
         #!* Recording quantities for the end point of the box*/
         

@@ -2279,7 +2279,6 @@ for i_obj_r in range(n_obj_r):
     line_df_list+=[produce_df(line_plot_indiv.transpose(1,2,0).reshape(n_obs_r*sum(mask_lines),14),None,None,row_names=None,
                             column_names=None,row_index=row_index_line,col_index=column_index_line)]
     
-    
 observ_df=pd.concat(observ_df_list)
     
 line_df=pd.concat(line_df_list)

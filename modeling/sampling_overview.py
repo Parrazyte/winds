@@ -372,7 +372,9 @@ with tab_sampling:
     
     with col_fig0:
         fig_dens_thresh,ax_dens_thresh=plt.subplots(1)
-        
+
+        #threshold for significant difference in xi from absorption before the start of the computation
+        #different of compton thick
         nh_thresh=-np.log(1/1.105)/sigma_thomson_cgs
         
         plt.suptitle(r'Evolution of the column density at $R_{start}$'+'\n'+r'nh$_{\Delta log(\xi)=0.1}=%.2e'%nh_thresh+'$')

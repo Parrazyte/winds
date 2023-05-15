@@ -51,17 +51,6 @@ PI = 3.14159265
 Km2m = 1000.0
 m2cm = 100.0
 
-
-def print_log(elem,logfile_io):
-
-    '''
-    prints and logs at once
-    '''
-    print(elem)
-
-    logfile_io.write(str(elem)+('\n' if not str(elem).endswith('\n') else ''))
-
-
 def merge_mhd_solution(solutions_path):
 
     '''
@@ -111,117 +100,6 @@ def merge_mhd_solution(solutions_path):
                header=header_arr)
 
     os.chdir(startdir)
-
-def build_grid(solutions_path,mdot_obs,m_BH,r_j=6.,angle_min=30,angle_step=4,eta_mhd=1/12):
-
-    '''
-    split the solution grid for a range of angles up to the compton-thick point of each solution
-
-    the default value of r_j is a massive particule's isco in Rg for non spinning BH
-    '''
-
-    solutions=np.loadtxt(solutions_path)
-    
-    solutions_path_ext='.'+solutions_path.split('/')[-1].split('.')[-1]
-    solutions_log_path=solutions_path.replace(\
-        solutions_path_ext,'_angle_'+str(angle_min)+'_step_'+str(angle_step)+
-                           '_mdot_'+str(mdot_obs)+'_m_bh_'+str(m_BH)+'_rj_'+str(r_j)+'_log'+solutions_path_ext)
-    
-    solutions_mod_path=solutions_path.replace(\
-        solutions_path_ext,'_angle_'+str(angle_min)+'_step_'+str(angle_step)+
-                           '_mdot_'+str(mdot_obs)+'_m_bh_'+str(m_BH)+'_rj_'+str(r_j)+solutions_path_ext)
-    
-    solutions_log_io=open(solutions_log_path,'w+')
-
-    solution_ids=solutions.T[:7].T
-
-    solution_ids_unique=np.unique(solution_ids,axis=0)
-
-    #splitting the array by solution by fetching the occurences of the first 7 indexes
-    split_sol_mask=np.array([(solution_ids==elem).all(axis=1) for elem in solution_ids_unique])
-
-    #split per solution (increasing epsilon, then n_island, then p,...)
-    solutions_split_arr=np.array([solutions[elem_mask] for elem_mask in split_sol_mask],dtype=object)
-
-    m_BH_SI = m_BH * Msol_SI
-    Rs_SI = 2.0 * G_SI * m_BH_SI / (c_SI * c_SI)
-
-    # !* Gravitational radius
-    Rg_SI = 0.5 * Rs_SI
-    Rg_cgs = Rg_SI * m2cm
-
-    mdot_mhd=mdot_obs/eta_mhd
-
-    solutions_sample=[]
-
-    n_angles=0
-
-    #working solution by solution
-    for solutions_split in solutions_split_arr:
-
-        def column_density_full(p_mhd,rho_mhd):
-            '''
-            computes the column density at infinity starting at Rg (aka the integral of the density starting at this value)
-
-            Here we assume a SAD starting at r_j
-
-            here the previous Rg_cgs factor at the denominator has been cancelled
-            '''
-
-            return mdot_mhd/(sigma_thomson_cgs)*rho_mhd*(r_j**(p_mhd-0.5)/(0.5-p_mhd))
-
-        #retrieving p
-        p_mhd_sol=solutions_split[0][2]
-
-        #and the varying rho
-        rho_mhd_sol=solutions_split.T[10]
-
-        #computing the column densities
-        col_dens_sol=column_density_full(p_mhd_sol,rho_mhd_sol)
-
-        #and the first angle value below compton-thickness
-        sol_angle_thick=solutions_split.T[8][col_dens_sol < compton_thick_thresh][0]
-
-        print_log('\n\n***************',solutions_log_io)
-        print_log('Solution:\n'+
-              'epsilon='+str(solutions_split[0][0])+'\nn_island='+str(solutions_split[0][1])+
-              '\np='+str(solutions_split[0][2])+'\nmu='+str(solutions_split[0][3]),solutions_log_io)
-
-        print_log('\nFirst solution below comp thick at theta='+str(sol_angle_thick),solutions_log_io)
-
-        #using it to determine how many angles will be probed
-        sol_angle_sample=np.arange(angle_min,sol_angle_thick,angle_step)[::-1]
-
-        #using it to determine how many angles will be probed
-        sol_angle_sample=np.arange(angle_min,sol_angle_thick,angle_step)[::-1]
-
-        print_log('Angle sampling:',solutions_log_io)
-        print_log(sol_angle_sample,solutions_log_io)
-
-        n_angles+=len(sol_angle_sample)
-
-        #restricting to unique indexes to avoid repeating solutions
-        id_sol_sample=np.unique([abs(solutions_split.T[8]-elem_angle).argmin() for elem_angle in sol_angle_sample])
-
-        print_log('Angles of solutions selected:',solutions_log_io)
-        print_log(solutions_split.T[8][id_sol_sample],solutions_log_io)
-
-        #and fetching the corresponding closest solutions
-        solutions_sample+=solutions_split[id_sol_sample].tolist()
-
-
-    solutions_sample=np.array(solutions_sample)
-
-    print_log('tot angles init:'+str(n_angles),solutions_log_io)
-    print_log('tot solutions:'+str(len(solutions_sample)),solutions_log_io)
-
-    header_arr='#epsilon\tn_island\tp_xi\tmu\tchi_m\talpha_m\tPm\tz_over_r\ttheta\tr_cyl/r0\trho_mhd\tu_r\tu_phi\tu_z'+\
-               '\tT_MHD\tB_r\tB_phi\tB_z\tT_dyn'
-
-    #saving the global file
-
-    np.savetxt(solutions_mod_path, solutions_sample, delimiter='\t',
-               header=header_arr)
 
 # def produce_df(data, rows, columns, row_names=None, column_names=None, row_index=None, col_index=None):
 #     """
@@ -340,8 +218,9 @@ def build_grid(solutions_path,mdot_obs,m_BH,r_j=6.,angle_min=30,angle_step=4,eta
 
 
 
-def cigri_wrapper(mantis_dir,SED_mantis_path,solution_mantis_path,p_mhd,mdot_obs,stop_d_input,xlum,outdir,
-                  h_over_r,ro_init, dr_r, v_resol, m_BH):
+def cigri_wrapper(mantis_dir,SED_mantis_path,solution_mantis_path,simdir,
+                  mdot_obs,m_BH,xlum,
+                  ro_init, dr_r, v_resol,stop_d_input):
 
     '''
 
@@ -354,21 +233,24 @@ def cigri_wrapper(mantis_dir,SED_mantis_path,solution_mantis_path,p_mhd,mdot_obs
     outdir should be an absolute path in this case
     '''
 
-    os.system('mkdir -p'+outdir)
+    os.system('mkdir -p'+simdir)
 
-    #copying all the initial files and the content of the mantis directory to the outdir
-    download_mantis(mantis_dir,outdir,load_folder=True)
-    download_mantis(SED_mantis_path,outdir)
-    download_mantis(solution_mantis_path,outdir)
+    #copying all the initial files and the content of the mantis directory to the simdir
+    download_mantis(mantis_dir,simdir,load_folder=True)
+    download_mantis(SED_mantis_path,simdir)
+    download_mantis(solution_mantis_path,simdir)
 
-    #extracting the name for the function call below since we're going in outdir
+    #extracting the name for the function call below since we're going in simdir
     SED_name=SED_mantis_path.split('/')[-1]
     solution_name=solution_mantis_path.split('/')[-1]
 
-    #it's easier to go directly in the outdir here
-    os.chdir(outdir)
+    #it's easier to go directly in the simdir here
+    os.chdir(simdir)
 
-    xstar_wind(solution_name,p_mhd,mdot_obs,stop_d_input,SED_name,xlum,outdir='./',h_over_r=h_over_r,ro_init=ro_init,dr_r=dr_r,v_resol=v_resol,m_Bh=m_BH,comput_mode='gricad',mantis_folder=mantis_dir)
+    xstar_wind(solution_name,SED_path=SED_name,mdot_obs=mdot_obs,xlum=xlum,outdir='./',
+               m_BH=m_BH,
+               ro_init=ro_init,dr_r=dr_r,stop_d_input=stop_d_input,v_resol=v_resol,
+               comput_mode='gricad',mantis_folder=mantis_dir)
 
 
 def xstar_func(spectrum_file,lum,t_guess,n,nh,xi,vturb_x,nbins,nsteps=1,niter=100,lcpres=0,path_logpars=None,dict_box=None,comput_mode='local',mantis_folder=''):
@@ -490,9 +372,11 @@ def xstar_func(spectrum_file,lum,t_guess,n,nh,xi,vturb_x,nbins,nsteps=1,niter=10
         upload_mantis(path_logpars, mantis_folder)
         upload_mantis('./xout_log_global.log',mantis_folder)
         
-def xstar_wind(solution,p_mhd,mdot_obs,stop_d_input, SED_path, xlum,outdir="xsol",
-               h_over_r=0.1, ro_init=6.,dr_r=0.05, v_resol=85.7, m_BH=8,chatter=0,
-               reload=True,comput_mode='local',mantis_folder='',force_ro_init=False,no_turb=False):
+def xstar_wind(solution,SED_path,mdot_obs,xlum,outdir,
+               p_mhd_input=None,m_BH=8,
+               ro_init=6.,dr_r=0.05,stop_d_input=1e6,v_resol=85.7,
+               chatter=0,reload=True,comput_mode='local',mantis_folder='',
+               force_ro_init=False,no_turb=False):
     
     
     '''
@@ -502,9 +386,15 @@ def xstar_wind(solution,p_mhd,mdot_obs,stop_d_input, SED_path, xlum,outdir="xsol
     The velocity resolution should always be taken with a reasonable oversampling factor (at least 1/3) compared to the instrumental resolution
     
     Required parameters:
-        p_mhd and mdot_obs are the main parameters outside of the JED-SAD solution
-        
+
         solution is either a file path or a dictionnary with all the arguments of a JED-SAD solution
+
+        p_mhd and mdot_obs are the main parameters outside of the JED-SAD solution
+
+        p_mhd is generally given in the solution, but if it's not (in local),
+         it can be directly inputted through a parameter
+        in gricad mode, p_mhd is directly in the solution file and as such
+
 
         stop_d is a single (or list of) stop distances in units of Rg
     
@@ -768,35 +658,46 @@ def xstar_wind(solution,p_mhd,mdot_obs,stop_d_input, SED_path, xlum,outdir="xsol
     Rg_SI = 0.5*Rs_SI
     Rg_cgs = Rg_SI*m2cm
 
-    if type(solution)==dict:
-        #Self-similar functions f1-f10
-        z_over_r=solution['z_over_r']
+    if comput_mode=='gricad':
+        #loading the solution file
+        parlist = np.loadtxt(solution)
 
-        #this is given in units of r_0
-        r_cyl_r0=solution['r_cyl_r0']
+        p_mhd=parlist[1]
 
-        #line of sight angle (0 is edge on)
-        angle=solution['angle']
+        z_over_r, angle, r_cyl_r0, rho_mhd, vel_r, vel_phi, vel_z = parlist[7:-5]
 
-        func_Rsph_by_ro=solution['func_Rsph_by_ro']
+    elif comput_mode=='local':
+        if type(solution)==dict:
+            #Self-similar functions f1-f10
+            z_over_r=solution['z_over_r']
 
-        #mhd density
-        rho_mhd=solution['rho_mhd']
+            #this is given in units of r_0
+            r_cyl_r0=solution['r_cyl_r0']
 
-        #radial, phi and z axis velocity at the alfven point
-        vel_r=solution['vel_r']
-        vel_phi=solution['vel_phi']
-        vel_z=solution['vel_z']
+            #line of sight angle (0 is edge on)
+            angle=solution['angle']
 
-        func_B_r=solution['func_B_r']
-        func_B_phi=solution['func_B_phi']
-        func_B_z=solution['func_B_z']
-        func_Tdyn=solution['func_Tdyn']
-        func_Tmhd=solution['func_Tmhd']
-    else:
-        #loading the solution file instead
-        z_over_r,r_cyl,angle,func_Rsph_by_ro,rho_mhd,vel_r,vel_phi,vel_z,func_B_r,func_B_phi,func_B_z,func_Tdyn,func_Tmhd=\
-        np.loadtxt(solution)
+            func_Rsph_by_ro=solution['func_Rsph_by_ro']
+
+            #mhd density
+            rho_mhd=solution['rho_mhd']
+
+            #radial, phi and z axis velocity at the alfven point
+            vel_r=solution['vel_r']
+            vel_phi=solution['vel_phi']
+            vel_z=solution['vel_z']
+
+            func_B_r=solution['func_B_r']
+            func_B_phi=solution['func_B_phi']
+            func_B_z=solution['func_B_z']
+            func_Tdyn=solution['func_Tdyn']
+            func_Tmhd=solution['func_Tmhd']
+        else:
+            ####deprecated
+            pass
+            #loading the solution file instead
+            # z_over_r,r_cyl,angle,func_Rsph_by_ro,rho_mhd,vel_r,vel_phi,vel_z,func_B_r,func_B_phi,func_B_z,func_Tdyn,func_Tmhd=\
+            # np.loadtxt(solution)
 
     #### variable definition
     

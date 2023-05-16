@@ -376,7 +376,7 @@ def xstar_wind(solution,SED_path,mdot_obs,xlum,outdir,
                p_mhd_input=None,m_BH=8,
                ro_init=6.,dr_r=0.05,stop_d_input=1e6,v_resol=85.7,
                chatter=0,reload=True,comput_mode='local',mantis_folder='',
-               force_ro_init=False,no_turb=False):
+               force_ro_init=False,no_turb=False,cap_dr_resol=True):
     
     
     '''
@@ -452,7 +452,11 @@ def xstar_wind(solution,SED_path,mdot_obs,xlum,outdir,
     
     ####SHOULD BE UPDATED TO ADD THE JED SAD N(R) DEPENDANCY
     
-    ####SHOULD BE UPDATED TO CONSIDER THE LOGXI DEPENDANCY WHEN L CHANGES
+    Secondary options:
+
+    -force_ro_init: ignores the logxi<6 criteria and starts the boxes at ro_init
+    -no_turb: no turbulent speed in the computation
+    -cap_dr_resol: use (or not) the v_resol criteria as another cap on the dr on top of the dr/r given
     '''
     
     '''
@@ -667,6 +671,8 @@ def xstar_wind(solution,SED_path,mdot_obs,xlum,outdir,
         z_over_r, angle, r_cyl_r0, rho_mhd, vel_r, vel_phi, vel_z = parlist[7:-5]
 
     elif comput_mode=='local':
+
+        p_mhd=p_mhd_input
         if type(solution)==dict:
             #Self-similar functions f1-f10
             z_over_r=solution['z_over_r']
@@ -925,7 +931,7 @@ def xstar_wind(solution,SED_path,mdot_obs,xlum,outdir,
     while Rsph_cgs_end<Rsph_cgs_last[len(stop_d)-1]:
     
         #computing the dr/r of the velocity threshold used. We now use end_box-start_box instead of the midpoint of different boxes
-        max_dr_res=func_max_dr(Rsph_cgs_end/Rg_cgs,v_resol*1e5)
+        max_dr_res=0 if not cap_dr_resol else func_max_dr(Rsph_cgs_end/Rg_cgs,v_resol*1e5)
         
         if max_dr_res==0:
             dr_factor=(2.0+dr_r)/(2.0-dr_r)
@@ -1221,6 +1227,7 @@ def xstar_wind(solution,SED_path,mdot_obs,xlum,outdir,
     #using i_box because it's an index here, not the actual box number (shifted by 1)
     for i_box in tqdm(range(nbox_restart-1,nbox_std)):
 
+
         # resetting the global log file for the first computation
         if i_box == 0 and i_box_final == 0:
             if os.path.isfile('./'+outdir+'/xout_log_global.log'):
@@ -1275,6 +1282,8 @@ def xstar_wind(solution,SED_path,mdot_obs,xlum,outdir,
         #!**Writing the shifted spectra in a file as it is input for next box 
         xstar_input_save='./'+outdir+'/shifted_input'+str(i_box+1)+'.dat'
 
+        vobsx = vobsl[i_box]
+
         #not doing this when restarting because there's no need
         if not (i_box+1==nbox_restart and xstar_input_restart is not None):
             #shifting the spectra and storing it in the xstar input file name
@@ -1285,8 +1294,6 @@ def xstar_wind(solution,SED_path,mdot_obs,xlum,outdir,
 
             #correcting the ionization parameter for the evolution in luminosity
             zeta = zetal[i_box]*(xlum_eff/xlum)
-
-            vobsx = vobsl[i_box]
 
             if no_turb:
                 vturb_x=0
@@ -1312,7 +1319,8 @@ def xstar_wind(solution,SED_path,mdot_obs,xlum,outdir,
         
         #directly loading the restart parameters if restarting at this box
         if i_box+1==nbox_restart and xstar_input_restart is not None:
-            xstar_func(xstar_input_restart,xlum_restart,t_restart,n_restart,nh_restart,logxi_restart,vturb_x_restart,nbins=nbins,
+            xstar_func(xstar_input_restart,xlum_restart,t_restart,n_restart,nh_restart,logxi_restart,
+                       0 if no_turb else vturb_x_restart,nbins=nbins,
                        path_logpars=path_log_xpars,dict_box=dict_box)
         else:
             xstar_func(xstar_input,xlum_eff,tp,xpx,xpxcol,zeta,vturb_x,nbins=nbins,
@@ -1397,7 +1405,8 @@ def xstar_wind(solution,SED_path,mdot_obs,xlum,outdir,
             
             xstar_input='./'+outdir+'/final_blueshifted_%.1e'%stop_d[i_box_final]+'.dat'
             
-            
+            breakpoint()
+
             xlum_eff=shift_tr_spectra(del_E_bs[i_box_final],xstar_input)   
     
             #switching to the next final box to be computed    

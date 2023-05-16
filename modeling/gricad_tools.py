@@ -493,7 +493,7 @@ def create_grid_parfile(grid_folder,mantis_grid_dir,dr_r,v_resol,ro_init,stop_d)
 
 
 
-def setup_cigrid(mantis_grid_dir, silenus_grid_dir,cores,ex_time,priority)
+def setup_cigrid(mantis_grid_dir, silenus_grid_dir,cores,ex_time,priority):
 
     #creating the spawn
     irods_proc=pexpect.spawn('./bin/bash',encoding='utf-8')
@@ -504,10 +504,6 @@ def setup_cigrid(mantis_grid_dir, silenus_grid_dir,cores,ex_time,priority)
 
 
     #zipping the files and then copying them
-    if param_mode=='all':
-        n_sol=len(mhd_sol_arr)
-    else:
-        n_sol=len(h_over_r_list)*len(p_list)*len(mu_list)*len(angle_list)
 
     # # loop in the SEDs:
     # for i_SED, (elem_SED, elem_mdot, elem_xlum) in enumerate(zip(SED_list, mdot_list, xlum_list)):
@@ -555,47 +551,47 @@ def setup_cigrid(mantis_grid_dir, silenus_grid_dir,cores,ex_time,priority)
     #                         pass
 
 
-    jdl_path=os.path.join(mhd_sol_dir,'xstar_grid_'+param_mode+'_'+
-                          (mhd_solutions_path.split('/')[-1] if param_mode=='all' else n_sol+'.jdl'))
+    # jdl_path=os.path.join(mhd_sol_dir,'xstar_grid_'+param_mode+'_'+
+    #                       (mhd_solutions_path.split('/')[-1] if param_mode=='all' else n_sol+'.jdl'))
+    #
+    # template='''
+    #         {
+    #           "name": "'''+'xstar_grid_'+param_mode+'_'+\
+    #                       (mhd_solutions_path.split('/')[-1] if param_mode=='all' else n_sol)+'''",
+    #           "resources": "/core='''+str(cores)+'''",
+    #           "exec_file": "{HOME}/povray/start.bash",
+    #           "exec_directory": "{HOME}/povray",
+    #           "param_file": "{HOME}/povray_params.txt",
+    #           "test_mode": "true",
+    #           "type": "best-effort",
+    #           "prologue": [
+    #             "set -e",
+    #             "source /applis/site/guix-start.sh",
+    #             "cd {HOME}",
+    #             "imkdir -p povray_results/{CAMPAIGN_ID}",
+    #             "secure_iget -r -f povray",
+    #             "chmod u+x {HOME}/povray/start.bash"
+    #           ],
+    #           "clusters": {
+    #             "luke": {
+    #               "project": "formation-ced-calcul",
+    #               "walltime": "00:15:00"
+    #             },
+    #             "dahu": {
+    #               "project": "formation-ced-calcul",
+    #               "walltime": "00:10:00"
+    #             },
+    #             "bigfoot": {
+    #               "project": "formation-ced-calcul",
+    #               "walltime": "00:10:00",
+    #               "properties": "gpumodel!='T4'"
+    #             }
+    #           }
+    #         }
+    #         '''
 
-    template='''
-            {
-              "name": "'''+'xstar_grid_'+param_mode+'_'+\
-                          (mhd_solutions_path.split('/')[-1] if param_mode=='all' else n_sol)+'''",
-              "resources": "/core='''+str(cores)+'''",
-              "exec_file": "{HOME}/povray/start.bash",
-              "exec_directory": "{HOME}/povray",
-              "param_file": "{HOME}/povray_params.txt",
-              "test_mode": "true",
-              "type": "best-effort",
-              "prologue": [
-                "set -e",
-                "source /applis/site/guix-start.sh",
-                "cd {HOME}",
-                "imkdir -p povray_results/{CAMPAIGN_ID}",
-                "secure_iget -r -f povray",
-                "chmod u+x {HOME}/povray/start.bash"
-              ],
-              "clusters": {
-                "luke": {
-                  "project": "formation-ced-calcul",
-                  "walltime": "00:15:00"
-                },
-                "dahu": {
-                  "project": "formation-ced-calcul",
-                  "walltime": "00:10:00"
-                },
-                "bigfoot": {
-                  "project": "formation-ced-calcul",
-                  "walltime": "00:10:00",
-                  "properties": "gpumodel!='T4'"
-                }
-              }
-            }
-            '''
-
-    with open(jdl_path) as file:
-        pass
+    # with open(jdl_path) as file:
+    #     pass
 
 
     '''

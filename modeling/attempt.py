@@ -14,10 +14,6 @@ epsilon=0.1
 p=0.103
 mu=0.067
 
-####This should be changed
-mdot=0.111
-
-
 ####rechange p if necessaryn and m to 8
 
 dict_sol={}
@@ -53,6 +49,10 @@ dist_factor=1.22546712210745e+45
 
 lum_GROJ=flux_GROJ*dist_factor/1e38
 
+####This should be changed
+mdot=0.111
+
+
 stop_d=1e6
 
 SED=os.path.join('incident_xstar_HS.dat')
@@ -61,8 +61,8 @@ SED=os.path.join('incident_xstar_HS.dat')
 
 #SED_GROJ='5461_cont_deabs_extended_xstar.txt'
 
-xstar_wind(dict_sol, SED_path=SED, mdot_obs=mdot, xlum=1, outdir='Sudeb_test_good_renorm_JED_noturb',
+xstar_wind(dict_sol, SED_path=SED, mdot_obs=mdot, xlum=0.1, outdir='Sudeb_test_JED_highres_noturb',
            p_mhd_input=p,m_BH=5.4,
-           ro_init=1000, dr_r=0.1, stop_d_input=stop_d, v_resol=5000,
-           chatter=1,
-           force_ro_init=True,reload=False,no_turb=True)
+           ro_init=6, dr_r=0.05, stop_d_input=stop_d, v_resol=87.5,
+           chatter=1,cap_dr_resol=False,
+           force_ro_init=False,reload=True,no_turb=True)

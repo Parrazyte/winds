@@ -98,9 +98,9 @@ args=ap.parse_args()
 
 #local
 sys.path.append('/home/parrama/Documents/Work/PhD/Scripts/Python/general/')
-
+sys.path.append('/home/parrama/Documents/Work/PhD/Scripts/Python/observations/spectral_analysis/')
 #online
-sys.path.append('/app/winds/spectral_analysis/')
+sys.path.append('/app/winds/observations/spectral_analysis/')
 sys.path.append('/app/winds/general/')
 
 #custom script with some lines and fit utilities and variables
@@ -672,15 +672,15 @@ with st.sidebar.expander('Visualisation'):
     global_colors=st.checkbox('Normalize colors/colormaps over the entire sample',value=False)
         
     if not online:
-        paper_look=st.checkbox('Paper look',value=True)
-        
+        paper_look=st.checkbox('Paper look',value=False)
+
         bigger_text=st.checkbox('Bigger text size',value=True)
         
         square_mode=st.checkbox('Square mode',value=True)
     
         show_linked=st.checkbox('Distinguish linked detections',value=False)
     else:
-        paper_look=True
+        paper_look=False
         bigger_text=True
         square_mode=True
         show_linked=False
@@ -720,7 +720,7 @@ with st.sidebar.expander('Monitoring'):
     
 compute_only_withdet=st.sidebar.checkbox('Skip parameter analysis when no detection remain with the current constraints',value=True)
 
-mpl.rcParams.update({'font.size': 10})
+mpl.rcParams.update({'font.size': 10+(3 if paper_look else 0)})
 
 if not square_mode:
     fig_hid,ax_hid=plt.subplots(1,1,figsize=(8,5) if bigger_text else (12,6))
@@ -1697,93 +1697,96 @@ if display_dicho:
 
 
 if radio_info_cmap=='Source' or display_edgesource:
-    if paper_look:
-        
-        #looks good considering the size of the graph
-        n_col_leg_source=5 if sum(mask_obj)<30 else 6
-        
-        old_legend_size=mpl.rcParams['legend.fontsize']
-        
-        mpl.rcParams['legend.fontsize']=5.5 if sum(mask_obj)>30 and radio_info_cmap=='Source' else 7
-        
-        hid_legend=fig_hid.legend(loc='lower center',ncol=n_col_leg_source,bbox_to_anchor=(0.475,-0.11))
-            
-        elem_leg_source, labels_leg_source = plt.gca().get_legend_handles_labels()
-        
-        #selecting sources with both detections and non detections
-        sources_uniques=np.unique(labels_leg_source,return_counts=True)
-        sources_detnondet=sources_uniques[0][sources_uniques[1]!=1]
-                            
-        #recreating the elem_leg and labels_leg with grouping but only if the colormaps are separated because then it makes sense
-        if split_cmap_source:
-            
-            leg_source_gr=[]
-            labels_leg_source_gr=[]
-            
-            for elem_leg,elem_label in zip(elem_leg_source,labels_leg_source):
-                if elem_label in sources_detnondet:
-                    
-                    #only doing it for the first iteration
-                    if elem_label not in labels_leg_source_gr:
-                        leg_source_gr+=[tuple(np.array(elem_leg_source)[np.array(labels_leg_source)==elem_label])]
-                        labels_leg_source_gr+=[elem_label]
-            
-                else:
-                    leg_source_gr+=[elem_leg]
+
+    #looks good considering the size of the graph
+    n_col_leg_source=4 if paper_look else (5 if sum(mask_obj)<30 else 6)
+
+    old_legend_size=mpl.rcParams['legend.fontsize']
+
+    mpl.rcParams['legend.fontsize']=(5.5 if sum(mask_obj)>30 and radio_info_cmap=='Source' else 7)+(3 if paper_look else 0)
+
+    hid_legend=fig_hid.legend(loc='lower center',ncol=n_col_leg_source,bbox_to_anchor=(0.475,-0.11))
+
+    elem_leg_source, labels_leg_source = plt.gca().get_legend_handles_labels()
+
+    #selecting sources with both detections and non detections
+    sources_uniques=np.unique(labels_leg_source,return_counts=True)
+    sources_detnondet=sources_uniques[0][sources_uniques[1]!=1]
+
+    #recreating the elem_leg and labels_leg with grouping but only if the colormaps are separated because then it makes sense
+    if split_cmap_source:
+
+        leg_source_gr=[]
+        labels_leg_source_gr=[]
+
+        for elem_leg,elem_label in zip(elem_leg_source,labels_leg_source):
+            if elem_label in sources_detnondet:
+
+                #only doing it for the first iteration
+                if elem_label not in labels_leg_source_gr:
+                    leg_source_gr+=[tuple(np.array(elem_leg_source)[np.array(labels_leg_source)==elem_label])]
                     labels_leg_source_gr+=[elem_label]
-            
-            #updating the handle list 
-            elem_leg_source=leg_source_gr
-            labels_leg_source=labels_leg_source_gr
-        
-        n_obj_leg_source=len(elem_leg_source)
 
-        def n_lines():
-            return len(elem_leg_source)//n_col_leg_source+(1 if len(elem_leg_source)%n_col_leg_source!=0 else 0)
-        
-        #inserting blank spaces until the detections have a column for themselves        
-        while n_lines()<n_obj_withdet:
-            
-            # elem_leg_source.insert(5,plt.Line2D([],[], alpha=0))
-            # labels_leg_source.insert(5,'')
-            
-            elem_leg_source+=[plt.Line2D([],[], alpha=0)]
-            labels_leg_source+=['']
-        
-        #removing the first version with a non-aesthetic number of columns
-        hid_legend.remove()
-        
-        #recreating it with updated spacing
-        hid_legend=fig_hid.legend(elem_leg_source,labels_leg_source,loc='lower center',
-                                  ncol=n_col_leg_source,bbox_to_anchor=(0.475,-0.02*n_lines()),handler_map={tuple: HandlerTuple(ndivide=None,pad=1.)})
-        
-        ###
-        # maintaining a constant marker size in the legend (but only for markers)
-        # note: here we cannot use directly legend_handles because they don't consider the second part of the legend tuples
-        # We thus use the findobj method to search in all elements of the legend
-        ###
-        for elem_legend in  hid_legend.findobj():
-            
-            #### find a way to change the size of this
-            
-            if type(elem_legend)==mpl.collections.PathCollection:
-                if len(elem_legend._sizes)!=0:
-                    for i in range(len(elem_legend._sizes)):
+            else:
+                leg_source_gr+=[elem_leg]
+                labels_leg_source_gr+=[elem_label]
 
-                        elem_legend._sizes[i]=80 if display_upper else 40
-                        
-                        #changing the dash type of dashed element for better visualisation:
-                        if elem_legend.get_dashes()!=[(0.0, None)]:
-                            elem_legend.set_dashes((0, (5, 1)))
-        
-        # old legend version
-        # hid_legend=fig_hid.legend(loc='upper right',ncol=1,bbox_to_anchor=(1.11,0.895) if bigger_text and radio_info_cmap=='Source' \
-        #                           and display_obj_zerodet else (0.9,0.88))
-        
-        mpl.rcParams['legend.fontsize']=old_legend_size
-        
-    else:
-        hid_legend=fig_hid.legend(loc='upper left',ncol=2,bbox_to_anchor=(0.01,0.99))
+        #updating the handle list
+        elem_leg_source=leg_source_gr
+        labels_leg_source=labels_leg_source_gr
+
+    n_obj_leg_source=len(elem_leg_source)
+
+    def n_lines():
+        return len(elem_leg_source)//n_col_leg_source+(1 if len(elem_leg_source)%n_col_leg_source!=0 else 0)
+
+    #inserting blank spaces until the detections have a column for themselves
+    while n_lines()<n_obj_withdet:
+
+        # elem_leg_source.insert(5,plt.Line2D([],[], alpha=0))
+        # labels_leg_source.insert(5,'')
+
+        elem_leg_source+=[plt.Line2D([],[], alpha=0)]
+        labels_leg_source+=['']
+
+    #removing the first version with a non-aesthetic number of columns
+    hid_legend.remove()
+
+    #recreating it with updated spacing
+    hid_legend=fig_hid.legend(elem_leg_source,labels_leg_source,loc='lower center',
+                              ncol=n_col_leg_source,
+                              bbox_to_anchor=(0.475,-0.02*n_lines()-(0.02*(6-n_lines()) if paper_look else 0)-(0.1 if paper_look else 0)),
+                              handler_map={tuple: HandlerTuple(ndivide=None,pad=1.)},columnspacing=0.5 if paper_look else 1)
+
+    ###
+    # maintaining a constant marker size in the legend (but only for markers)
+    # note: here we cannot use directly legend_handles because they don't consider the second part of the legend tuples
+    # We thus use the findobj method to search in all elements of the legend
+    ###
+    for elem_legend in  hid_legend.findobj():
+
+        #### find a way to change the size of this
+
+        if type(elem_legend)==mpl.collections.PathCollection:
+            if len(elem_legend._sizes)!=0:
+                for i in range(len(elem_legend._sizes)):
+
+                    elem_legend._sizes[i]=80+(80 if paper_look else 0)  if display_upper else 40+(40 if paper_look else 0)
+
+                if paper_look and display_upper:
+
+                    elem_legend.set_linewidth(2)
+
+                #changing the dash type of dashed element for better visualisation:
+                if elem_legend.get_dashes()!=[(0.0, None)]:
+                    elem_legend.set_dashes((0, (5, 1)))
+
+    # old legend version
+    # hid_legend=fig_hid.legend(loc='upper right',ncol=1,bbox_to_anchor=(1.11,0.895) if bigger_text and radio_info_cmap=='Source' \
+    #                           and display_obj_zerodet else (0.9,0.88))
+
+    mpl.rcParams['legend.fontsize']=old_legend_size
+
             
 
 
@@ -1800,11 +1803,12 @@ if display_nonsign:
     hid_det_examples+=[
     (Line2D([0],[0],marker=marker_abs,color='white',markersize=50**(1/2),linestyle='None',markeredgecolor='grey',markeredgewidth=2))]
     
-mpl.rcParams['legend.fontsize']=7
+mpl.rcParams['legend.fontsize']=7+(2 if paper_look and not checkbox_zoom else 0)
 
 #marker legend
+
 fig_hid.legend(handles=hid_det_examples,loc='center left',labels=['upper limit' if display_upper else 'non detection ','absorption line detection\n above '+(r'3$\sigma$' if slider_sign==0.997 else str(slider_sign*100)+'%')+' significance','absorption line detection below '+str(slider_sign*100)+' significance.'],title='Markers',
-            bbox_to_anchor=(0.125,0.815) if bigger_text and square_mode else (0.125,0.82),handler_map = {tuple:mpl.legend_handler.HandlerTuple(None)},
+            bbox_to_anchor=(0.125,0.815-(0.018 if paper_look  and not checkbox_zoom else 0)) if bigger_text and square_mode else (0.125,0.82),handler_map = {tuple:mpl.legend_handler.HandlerTuple(None)},
             handlelength=2,handleheight=2.,columnspacing=1.)
 
 #note: upper left anchor (0.125,0.815)
@@ -1837,9 +1841,10 @@ else:
                         (Line2D([0],[0],marker=marker_abs,color='black',markersize=(norm_s_lin*20**norm_s_pow)**(1/2),linestyle='None')),
                         (Line2D([0],[0],marker=marker_abs,color='black',markersize=(norm_s_lin*50**norm_s_pow)**(1/2),linestyle='None'))]
 
+
 eqw_legend=fig_hid.legend(handles=hid_size_examples,loc='center left',labels=['5 eV','20 eV','50 eV'],
                           title='Equivalent widths',
-            bbox_to_anchor=(0.125,0.218) if bigger_text and square_mode else (0.125,0.218),handleheight=4, handlelength=4,facecolor='None')
+            bbox_to_anchor=(0.125,0.218+(0.028 if paper_look  and not checkbox_zoom else 0)) if bigger_text and square_mode else (0.125,0.218),handleheight=4, handlelength=4,facecolor='None')
 
 if radio_info_cmap=='Instrument':
     instru_examples=np.array([Line2D([0],[0],marker=marker_abs,color='red',markeredgecolor='black',markersize=(norm_s_lin*5**norm_s_pow)**(1/2),linestyle='None'),
@@ -1853,6 +1858,14 @@ if radio_info_cmap=='Instrument':
     instru_legend=fig_hid.legend(handles=instru_examples[instru_ind].tolist(),loc='upper right',labels=choice_telescope,
                               title=radio_info_cmap,
                 bbox_to_anchor=(0.900,0.88) if bigger_text and square_mode else (0.825,0.918),handleheight=1, handlelength=4,facecolor='None')
+
+#manual custom subplot adjust to get the same scale for the 3 visible sources plot and for the zoomed 5 sources with detection
+#elem=fig_hid.add_axes([0.5, 0.792, 0.1, 0.1])
+#mpl.rcParams.update({'font.size': 2})
+#elem.axis('off')
+
+#manual custom subplot adjust to get the same scale for the 3 visible sources plot and for the zoomed 5 sources with detection
+#plt.subplots_adjust(top=0.863)
 
 #note: 0.9 0.53
 #destacked version
@@ -2266,7 +2279,6 @@ for i_obj_r in range(n_obj_r):
     line_df_list+=[produce_df(line_plot_indiv.transpose(1,2,0).reshape(n_obs_r*sum(mask_lines),14),None,None,row_names=None,
                             column_names=None,row_index=row_index_line,col_index=column_index_line)]
     
-    
 observ_df=pd.concat(observ_df_list)
     
 line_df=pd.concat(line_df_list)
@@ -2400,6 +2412,8 @@ with st.sidebar.expander('Parameter analysis'):
     scale_log_hr=st.checkbox('Use a log scale for the HID parameters',value=True)
     display_abserr_bshift=st.checkbox('Display mean and std of Chandra velocity shift distribution',value=True)
     
+    common_observ_bounds=st.checkbox('Use common observation parameter bounds for all lines',value=True)
+    
     #plot_trend=st.checkbox('Display linear trend lines in the scatter plots',value=False)
     plot_trend=False
     
@@ -2456,6 +2470,7 @@ dict_linevis['display_pearson']=display_pearson
 dict_linevis['display_abserr_bshift']=display_abserr_bshift
 dict_linevis['glob_col_source']=glob_col_source
 dict_linevis['display_th_width_ew']=display_th_width_ew
+dict_linevis['common_observ_bounds']=common_observ_bounds
 
 os.system('mkdir -p '+save_dir+'/graphs')
 os.system('mkdir -p '+save_dir+'/graphs/distrib')
@@ -2697,7 +2712,6 @@ def streamlit_scat(mode):
                     [st.pyplot(elem) for elem in scat_width]
             
 mpl.rcParams.update({'font.size': 14})
-
 
 #storing arguments to reduce the number of arguments in the scatter plot functions    
 dict_linevis['scale_log_hr']=scale_log_hr

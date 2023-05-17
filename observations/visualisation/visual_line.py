@@ -1771,7 +1771,7 @@ if radio_info_cmap=='Source' or display_edgesource:
             if len(elem_legend._sizes)!=0:
                 for i in range(len(elem_legend._sizes)):
 
-                    elem_legend._sizes[i]=80+(80 if paper_look else 0)  if display_upper else 40+(40 if paper_look else 0)
+                    elem_legend._sizes[i]=50+(80 if paper_look else 0)+(30 if n_lines()<6 else 0)  if display_upper else 30+(40 if paper_look else 0)+(10 if n_lines()<6 else 0)
 
                 if paper_look and display_upper:
 

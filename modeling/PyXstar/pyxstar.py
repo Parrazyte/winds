@@ -485,7 +485,7 @@ modelname,s,h,'+str(par['modelname'])+',,,"model name"\n\
 #\n\
 niter,i,h,'+str(hpar['niter'])+',0,100,"number of iterations"\n\
 #\n\
-lwrite,i,h,'+str(hpar['lwrite'])+',0,1,"write switch (1=yes, 0=no)"\n\
+lwrite,i,h,'+str(hpar['lwrite'])+',-1,1,"write switch (1=yes, 0=no)"\n\
 #\n\
 lprint,i,h,'+str(hpar['lprint'])+',-1,2,"print switch (1=yes, 0=no)"\n\
 #\n\

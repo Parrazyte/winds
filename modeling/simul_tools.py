@@ -253,7 +253,7 @@ def cigri_wrapper(mantis_dir,SED_mantis_path,solution_mantis_path,simdir,
                comput_mode='gricad',mantis_folder=mantis_dir)
 
 
-def xstar_func(spectrum_file,lum,t_guess,n,nh,xi,vturb_x,nbins,nsteps=1,niter=100,lcpres=0,path_logpars=None,dict_box=None,comput_mode='local',mantis_folder=''):
+def xstar_func(spectrum_file,lum,t_guess,n,nh,xi,vturb_x,nbins,nsteps=1,niter=100,lcpres=0,path_logpars=None,dict_box=None,comput_mode='local',mantis_folder='',no_write=False):
     
     '''
     wrapper around the xstar function itself with explicit calls to the parameters routinely being changed in the computation
@@ -327,8 +327,17 @@ def xstar_func(spectrum_file,lum,t_guess,n,nh,xi,vturb_x,nbins,nsteps=1,niter=10
     
     #and putting this to hopefully not 0
     xhpar['niter']=niter
-    
+
+    #turbulent speed
     xhpar['vturbi']=vturb_x
+
+    #turning on or off the writing of the output files if necessary
+    if no_write:
+        #no writing at all
+        xhpar['lwrite']=-1
+    else:
+        #default fits writing without too much details
+        xhpar['lwrite']=0
 
     parlog_header=['#v_resol= '+str(v_resol)+' km/s | nbins= '+str(nbins)+'\n',
                    '#nsteps= '+str(nsteps)+'\tniter= '+str(niter)+'\n',
@@ -376,7 +385,7 @@ def xstar_wind(solution,SED_path,mdot_obs,xlum,outdir,
                p_mhd_input=None,m_BH=8,
                ro_init=6.,dr_r=0.05,stop_d_input=1e6,v_resol=85.7,
                chatter=0,reload=True,comput_mode='local',mantis_folder='',
-               force_ro_init=False,no_turb=False,cap_dr_resol=True):
+               force_ro_init=False,no_turb=False,cap_dr_resol=True,no_write=False):
     
     
     '''
@@ -1321,10 +1330,10 @@ def xstar_wind(solution,SED_path,mdot_obs,xlum,outdir,
         if i_box+1==nbox_restart and xstar_input_restart is not None:
             xstar_func(xstar_input_restart,xlum_restart,t_restart,n_restart,nh_restart,logxi_restart,
                        0 if no_turb else vturb_x_restart,nbins=nbins,
-                       path_logpars=path_log_xpars,dict_box=dict_box)
+                       path_logpars=path_log_xpars,dict_box=dict_box,no_write=no_write)
         else:
             xstar_func(xstar_input,xlum_eff,tp,xpx,xpxcol,zeta,vturb_x,nbins=nbins,
-                       path_logpars=path_log_xpars,dict_box=dict_box)
+                       path_logpars=path_log_xpars,dict_box=dict_box,no_write=no_write)
         
         os.chdir(currdir)
         
@@ -1396,7 +1405,7 @@ def xstar_wind(solution,SED_path,mdot_obs,xlum,outdir,
             dict_box['i_box_final']+=1
             #using xlum_final here to avoid overwriting xlum_eff if using more than a single stop distance
             xstar_func(xstar_input,xlum_final,tp,xpx,xpxcol,zeta,vturb_x,nbins=nbins,
-                       path_logpars=path_log_xpars,dict_box=dict_box)
+                       path_logpars=path_log_xpars,dict_box=dict_box,no_write=no_write)
             
             os.chdir(currdir)
             

@@ -2296,7 +2296,7 @@ def line_detect(epoch_id):
                                             line_search_e=line_search_e,line_search_norm=line_search_norm,
                            e_sat_low=e_sat_low,peak_thresh=peak_thresh,peak_clean=peak_clean,
                            line_cont_range=line_cont_range,trig_interval=trig_interval,
-                           scorpeon_save=data_broad.scorpeon)
+                           scorpeon_save=data_broad.scorpeon,data_fluxcont=data_autofit_noabs)
 
         plot_line_search(chi_dict_autofit,outdir,sat,suffix='autofit',epoch_observ=epoch_observ)
 

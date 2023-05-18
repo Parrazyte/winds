@@ -30,13 +30,17 @@ from scipy.ndimage import binary_dilation
 
 def narrow_line_search(data_cont, suffix,line_search_e=[4,10,0.05],line_search_norm=[0.01,10,500],
                        e_sat_low=0.3,peak_thresh=9.21,peak_clean=False,line_cont_range=[4,10],trig_interval=[6.5,9.1],
-                       scorpeon_save=None):
+                       scorpeon_save=None,data_fluxcont=None):
 
     '''
     Wrapper for all the line search code and associated visualisation
 
     Explores the current model in a given range by adding a line of varying normalisation and energy and mapping the associated
     2D delchi map
+
+    can use datafluxcont to compute the normalisation from the continuum of another spectrum
+    useful when negative gaussians at 0 width that go below zero in flux (which you don't care about normally
+    because it is diluted by the instrumental response, but it crashes the log flux)
     '''
 
     line_search_e_space = np.arange(line_search_e[0], line_search_e[1] + line_search_e[2] / 2, line_search_e[2])
@@ -56,6 +60,11 @@ def narrow_line_search(data_cont, suffix,line_search_e=[4,10,0.05],line_search_n
 
     Note : We do this for the first spectrum only even with multi data groups
     '''
+
+    if data_fluxcont is None:
+        model_load(data_cont)
+    else:
+        model_load(data_fluxcont)
 
     flux_cont = np.zeros(len(line_search_e_space))
 

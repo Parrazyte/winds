@@ -68,7 +68,7 @@ def narrow_line_search(data_cont, suffix,line_search_e=[4,10,0.05],line_search_n
 
     flux_cont = np.zeros(len(line_search_e_space))
 
-    n_models=len(AllModels.sources.keys())
+    #n_models=len(AllModels.sources.keys())
 
     # here to avoid filling the display with information we're already storing
     # with redirect_stdout(open(os.devnull, 'w')):
@@ -77,7 +77,10 @@ def narrow_line_search(data_cont, suffix,line_search_e=[4,10,0.05],line_search_n
         AllModels.calcFlux(str(energy - line_search_e[2] / 2) + " " + str(energy + line_search_e[2] / 2))
 
         #summing on all the models including the background because here this normalization will be added to the whole continuum (also with the BG models)
-        flux_cont[ind_e] = sum([AllData(1).flux[6*i] for i in range(n_models)])
+        #NOTE: doesn't work because the models are adapted to serve as background
+        #flux_cont[ind_e] = sum([AllData(1).flux[6*i] for i in range(n_models)])
+
+        flux_cont[ind_e] = AllData(1).flux[0]
 
         # this is required because the buffer is different when redirected
         sys.stdout.flush()
@@ -771,8 +774,11 @@ def coltour_chi2map(fig, axe, chi_dict, title='', combined=False, ax_bar=None, n
     cm_bipolar = hotcold(neutral=1)
 
     # and the non symetric normalisation
-    cm_norm = colors.TwoSlopeNorm(vcenter=0, vmin=chi_arr_plot.min() if norm is None else -norm_col[0],
-                                  vmax=chi_arr_plot.max() if norm is None else norm_col[1])
+    try:
+        cm_norm = colors.TwoSlopeNorm(vcenter=0, vmin=min(-1,chi_arr_plot.min() if norm is None else -norm_col[0]),
+                                  vmax=max(1,chi_arr_plot.max() if norm is None else norm_col[1]))
+    except:
+        breakpoint()
 
     # create evenly spaced ticks with different scales in top and bottom
     cm_ticks = np.concatenate((np.linspace(chi_arr_plot.min() if norm is None else -norm_col[0], 0, 6, endpoint=True),

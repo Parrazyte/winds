@@ -1659,7 +1659,8 @@ def line_detect(epoch_id):
             
         #computing and storing the flux for the full luminosity and two bands for the HR
         spflux_single=[None]*5
-        
+
+        #we still only compute the flux of the first model even with NICER because the rest is BG
         AllModels.calcFlux(str(hid_cont_range[0])+' '+str(hid_cont_range[1])+" err 1000 90")
         spflux_single[0]=AllData(1).flux[0],AllData(1).flux[0]-AllData(1).flux[1],AllData(1).flux[2]-AllData(1).flux[0]
         AllModels.calcFlux("3. 6. err 1000 90")
@@ -2096,8 +2097,8 @@ def line_detect(epoch_id):
         
         #same for the line components
         plot_autofit_lines=plot_autofit_comps[2+len(addcomps_cont):]
-        
-        
+
+
         #taking off potential background components
         
         if 'nxb' in list(AllModels.sources.values()):

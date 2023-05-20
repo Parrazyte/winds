@@ -81,7 +81,7 @@ ap.add_argument("-over",nargs=1,help='overwrite computed tasks (i.e. with produc
 
 #directory level overwrite (not active in local)
 ap.add_argument('-folder_over',nargs=1,help='relaunch action through folders with completed analysis',default=False,type=bool)
-ap.add_argument('-folder_cont',nargs=1,help='skip all but the last 2 directories in the summary folder file',default=False,type=bool)
+ap.add_argument('-folder_cont',nargs=1,help='skip all but the last 2 directories in the summary folder file',default=True,type=bool)
 #note : we keep the previous 2 directories because bug or breaks can start actions on a directory following the initially stopped one
 
 #action specific overwrite
@@ -225,6 +225,7 @@ def select_detector(directory,detectors='-14,-34,-54'):
                 
         #raising an error to stop the process if the command has crashed for some reason
         if select_state!=0:
+            bashproc.sendline('exit')
             select_detector_done.set()
             raise ValueError
         
@@ -303,7 +304,8 @@ def extract_all_spectral(directory,bkgmodel='scorpeon_script',language='python',
         if process_state==0:
             with open(directory+'/extract_lc.log') as file:
                 lines=file.readlines()
-            
+
+            bashproc.sendline('exit')
             extract_all_spectral_done.set()
             return lines[-1].replace('\n','')
             
@@ -436,7 +438,8 @@ s
             if process_state==0:
                 with open(directory+'/extract_lc.log') as file:
                     lines=file.readlines()
-                
+
+                bashproc.sendline('exit')
                 extract_lc_done.set()
                 return lines[-1].replace('\n','')
             
@@ -728,6 +731,7 @@ def regroup_spectrum(directory,group='opt'):
 
         #raising an error to stop the process if the command has crashed for some reason
         if not os.path.isfile(directory+'/'+directory+'_sr.pha'):
+            bashproc.sendline('exit')
             regroup_spectrum_done.set()
             return 'Source spectrum missing'
             

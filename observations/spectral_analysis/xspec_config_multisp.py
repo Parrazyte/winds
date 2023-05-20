@@ -3307,8 +3307,8 @@ class fitmod:
             
             #loop on all the components to delete them, in reverse order to avoid having to update them 
             for comp in [elem for elem in self.includedlist if elem is not None][::-1]:
-                #skipping the current component and multiplicative components which will be taken off along with the additive ones
-                if comp is fitcomp_line or comp.multipl:
+                #skipping the current component
+                if comp is fitcomp_line:
                     continue
                 
                 comp.delfrommod(rollback=False)
@@ -3320,7 +3320,7 @@ class fitmod:
                 for i_parcomp in range(len(fitcomp_line.parlist)):
                     #we only draw from the first data group, hence the [0] index in par_draw
                     AllModels(1)(i_parcomp+1).values=[par_draw[i_sim][0][fitcomp_line.parlist[i_parcomp]-1]]+AllModels(1)(i_parcomp+1).values[1:]
-                    
+
                 #computing the flux of the line 
                 #(should be negligbly affected by the energy limits of instruments since we don't have lines close to these anyway)
                 AllModels.calcFlux('0.3 10')

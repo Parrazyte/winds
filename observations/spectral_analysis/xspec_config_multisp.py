@@ -3308,7 +3308,7 @@ class fitmod:
             #loop on all the components to delete them, in reverse order to avoid having to update them 
             for comp in [elem for elem in self.includedlist if elem is not None][::-1]:
                 #skipping the current component
-                if comp is fitcomp_line:
+                if comp is fitcomp_line or comp.mandatory or (comp.absorption and comp.xcompnames[0] not in AllModels(1).componentNames):
                     continue
                 
                 comp.delfrommod(rollback=False)

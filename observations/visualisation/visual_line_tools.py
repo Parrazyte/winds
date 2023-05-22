@@ -982,8 +982,8 @@ def values_manip(abslines_inf,dict_linevis,autofit_inf):
     
     '''
     in the plt form, the new order is:
-        -the info (5 rows, eqw/bshift/delchi/sign/flux)
-        -it's uncertainty (3 rows, main value/neg uncert/pos uncert,useless for the delchi and sign)
+        -the info (5 rows, eqw/bshift/Del-C/sign/flux)
+        -it's uncertainty (3 rows, main value/neg uncert/pos uncert,useless for the Del-C and sign)
         -each absorption line
         -the number of sources
         -the number of obs for each source

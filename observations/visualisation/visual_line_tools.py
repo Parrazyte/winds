@@ -317,10 +317,10 @@ def fetch_rxte_lightcurve(name,dict_rxte=dict_lc_rxte):
     if simbad_query is None:
         return None
 
-    if simbad_query[0]['MAIN_ID'] not in dict_lc_rxte.keys():
+    if simbad_query[0]['MAIN_ID'] not in dict_rxte.keys():
         return None
     
-    return dict_lc_rxte[simbad_query[0]['MAIN_ID']]
+    return dict_rxte[simbad_query[0]['MAIN_ID']]
 
 def plot_lightcurve(dict_linevis,ctl_maxi_df,ctl_maxi_simbad,name,dict_rxte=dict_lc_rxte,mode='full',display_hid_interval=True,superpose_ew=False):
 
@@ -345,7 +345,7 @@ def plot_lightcurve(dict_linevis,ctl_maxi_df,ctl_maxi_simbad,name,dict_rxte=dict
     
     maxi_lc_df=fetch_maxi_lightcurve(ctl_maxi_df,ctl_maxi_simbad,name)
     
-    rxte_lc_df=fetch_rxte_lightcurve(name, dict_lc_rxte)
+    rxte_lc_df=fetch_rxte_lightcurve(name, dict_rxte)
     
     if maxi_lc_df is None and rxte_lc_df is None:
         return None

@@ -2343,7 +2343,7 @@ with tab_monitoring:
         else:
             with st.spinner('Building HR evolution...'):
                 fig_hr_monit=plot_lightcurve(dict_linevis,catal_maxi_df,catal_maxi_simbad,choice_source,mode='HR',display_hid_interval=monit_highlight_hid,
-                                                 superpose_ew=plot_maxi_ew)
+                                                 superpose_ew=plot_maxi_ew,dict_rxte=dict_lc_rxte)
                 # fig_maxi_lc_html = mpld3.fig_to_html(fig_maxi_lc)
                 # components.html(fig_maxi_lc_html,height=500,width=1000)
                 

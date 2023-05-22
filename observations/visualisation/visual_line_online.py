@@ -2326,7 +2326,7 @@ with tab_monitoring:
         else:
             with st.spinner('Building lightcurve...'):
                 fig_lc_monit=plot_lightcurve(dict_linevis,catal_maxi_df,catal_maxi_simbad,choice_source,display_hid_interval=monit_highlight_hid,
-                                                 superpose_ew=plot_maxi_ew)
+                                                 superpose_ew=plot_maxi_ew,dict_rxte=dict_lc_rxte)
             
                 #wrapper to avoid streamlit trying to plot a None when resetting while loading
                 if fig_lc_monit is not None:

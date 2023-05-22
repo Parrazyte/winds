@@ -480,8 +480,8 @@ dict_lc_rxte=dump_dict['dict_lc_rxte']
 #     -each habsorption line
 #     -the number of sources
 #     -the number of obs for each source
-#     -the info (5 rows, EW/bshift/delchi/sign)
-#     -it's uncertainty (3 rows, main value/neg uncert/pos uncert,useless for the delchi and sign)
+#     -the info (5 rows, EW/bshift/Del-C/sign)
+#     -it's uncertainty (3 rows, main value/neg uncert/pos uncert,useless for the Del-C and sign)
 ###
 
 #checking if the obsid identifiers of every index is in the bad flag list or if there's just no file
@@ -562,7 +562,7 @@ with st.sidebar.expander('Inclination'):
 # else:
 #     display_final=False
 
-#     radio_info_cmap=st.sidebar.radio('Color map options:',('Source','Peak delchi'))
+#     radio_info_cmap=st.sidebar.radio('Color map options:',('Source','Peak Del-C'))
 #     slider_ener=st.sidebar.slider('Peak energy range',min_value=line_search_e[0],max_value=line_search_e[1],
 #                                   step=line_search_e[2],value=[6.,9.])
 #     display_abslines=st.sidebar.checkbox('Display absorption Lines')
@@ -594,7 +594,7 @@ radio_info_cmap_str=st.sidebar.radio('HID colormap',HID_options_str,index=0)
 
 radio_info_index=np.argwhere(HID_options_str==radio_info_cmap_str)[0][0]
                              
-radio_info_cmap=['Source','Velocity shift','Delchi','EW ratio','Inclination','Time','Instrument','nH','kT'][radio_info_index]
+radio_info_cmap=['Source','Velocity shift','Del-C','EW ratio','Inclination','Time','Instrument','nH','kT'][radio_info_index]
 
 ####extremal allowed values for kT in the fitting procedure(in keV)
 
@@ -758,7 +758,7 @@ if radio_info_cmap=='EW ratio' and len(eqw_ratio_ids)<2:
 
 
 #string of the colormap legend for the informations
-radio_info_label=['Velocity shift', r'$\Delta\chi^2$', 'Equivalent width ratio']
+radio_info_label=['Velocity shift', r'$\Delta-C$', 'Equivalent width ratio']
 
 #masking for restriction to single objects
 if display_single or display_multi:
@@ -858,7 +858,7 @@ kt_plot_restrict=deepcopy(kt_plot)
 kt_plot_restrict=kt_plot_restrict.T[mask_obj].T
 
 #defining the dataset that will be used in the plots for the colormap limits
-if radio_info_cmap in ['Velocity shift','Delchi']:
+if radio_info_cmap in ['Velocity shift','Del-C']:
     radio_cmap_i=1 if radio_info_cmap=='Velocity shift' else 2
 else:
     radio_cmap_i=0
@@ -1343,10 +1343,10 @@ for i_obj,abslines_obj in enumerate(abslines_infos_perobj[mask_obj]):
                 cb.set_label(r'disk temperature (keV)',labelpad=10)
             else:
                 if restrict_threshold:
-                    cb.set_label((('minimal ' if radio_cmap_i==1 else 'maximal ') if radio_info_cmap!='EW ratio' else '')+(radio_info_label[radio_cmap_i-1].lower() if radio_info_cmap!='Delchi' else radio_info_label[radio_cmap_i-1])+
+                    cb.set_label((('minimal ' if radio_cmap_i==1 else 'maximal ') if radio_info_cmap!='EW ratio' else '')+(radio_info_label[radio_cmap_i-1].lower() if radio_info_cmap!='Del-C' else radio_info_label[radio_cmap_i-1])+
                                  ' in significant detections\n for each observation'+cb_add_str,labelpad=10)
                 else:
-                    cb.set_label((('minimal ' if radio_cmap_i==1 else 'maximal ') if radio_info_cmap!='EW ratio' else '')+(radio_info_label[radio_cmap_i-1].lower() if radio_info_cmap!='Delchi' else radio_info_label[radio_cmap_i-1])+
+                    cb.set_label((('minimal ' if radio_cmap_i==1 else 'maximal ') if radio_info_cmap!='EW ratio' else '')+(radio_info_label[radio_cmap_i-1].lower() if radio_info_cmap!='Del-C' else radio_info_label[radio_cmap_i-1])+
                                  ' in all detections\n for each observation'+cb_add_str,labelpad=10)
                     
 label_obj_plotted=np.repeat(False,len(abslines_infos_perobj[mask_obj]))
@@ -1950,7 +1950,7 @@ with tab_about:
                         ''')
         
         with col_figwinds:
-            st.image(dump_path[:dump_path.rfind('/')]+'/linedet_example.jpg',caption='Steps of the fitting procedure for a standard 4U130-47 Chandra spectra. First panel: 4-10 spectrum after the first continuum fit. Second panel: ∆χ2 map of the line blind search, restricted to positive (i.e. improvements) regions. Standard confidence intervals are highlighted with different line styles, and the colormap with the ∆χ2 improvements of emission and absorption lines. Third panel: Ratio plot of the best fit model once absorption lines are added. Fourth panel: Remaining residuals seen through a second blind search.')
+            st.image(dump_path[:dump_path.rfind('/')]+'/linedet_example.jpg',caption='Steps of the fitting procedure for a standard 4U130-47 Chandra spectra. First panel: 4-10 spectrum after the first continuum fit. Second panel: ∆C map of the line blind search, restricted to positive (i.e. improvements) regions. Standard confidence intervals are highlighted with different line styles, and the colormap with the ∆C improvements of emission and absorption lines. Third panel: Ratio plot of the best fit model once absorption lines are added. Fourth panel: Remaining residuals seen through a second blind search.')
             
         st.markdown('''
                     See [Parra et al. 2023](https://www.youtube.com/watch?v=dQw4w9WgXcQ) for detailed references to the points discussed above, and [Diaz Trigo et al. 2016](https://doi.org/10.1002/asna.201612315) or [Ponti et al. 2016](https://doi.org/10.1002/asna.201612339) for reviews on winds.  
@@ -2035,7 +2035,7 @@ with tab_about:
                    The main visualisation options allow to display several line or observation parameters as a colormap or color code for the exposures.
                    The "source" option is the only one with 2 different colormaps, a jet for the sources with detections (the same one used in the parameter analysis), and a viridis for the non-detections. We advise restricting the number of sources for easier identification of individual detections.
                    
-                   For all line parameters (currently velocity shift and delchi), the value displayed is the most extremal among the significant lines in this observation. Velocity shifts are considere d from the source point of view, which means that positive values are :red[redshifts] and negative values :blue[blueshifts].
+                   For all line parameters (currently velocity shift and Del-C), the value displayed is the most extremal among the significant lines in this observation. Velocity shifts are considere d from the source point of view, which means that positive values are :red[redshifts] and negative values :blue[blueshifts].
                    
                    If the upper limit option is selected, the user can choice a range of lines, from which the biggest upper limit will be displayed.
                    

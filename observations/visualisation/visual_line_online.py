@@ -475,9 +475,6 @@ catal_maxi_df=dump_dict['catal_maxi_df']
 catal_maxi_simbad=dump_dict['catal_maxi_simbad']
 dict_lc_rxte=dump_dict['dict_lc_rxte']
 
-if dict_lc_rxte is None:
-    sys.exit()
-
 ###
 # in the abslines_infos_perline form, the order is:
 #     -each habsorption line

@@ -23,8 +23,10 @@ import streamlit as st
 
 import matplotlib as mpl
 import matplotlib.pyplot as plt
-
+from mpl_toolkits.axes_grid1 import make_axes_locatable
 import matplotlib.colors as colors
+from matplotlib.gridspec import GridSpec
+
 from matplotlib.lines import Line2D
 from matplotlib.ticker import Locator,MaxNLocator,AutoMinorLocator
 import matplotlib.dates as mdates
@@ -1767,7 +1769,15 @@ def correl_graph(data_perinfo,infos,data_ener,dict_linevis,mode='intrinsic',mode
         
     for i in graph_range:
         
-        figsize_val=(6,6)
+        figsize_val=(8.+(-0.5 if mode!='observation' else 0),5.5) if color_scatter in ['Time','HR','width','nH'] else (6,6)
+
+        # if color_scatter in ['Time','HR','width','nH']:
+        #
+        #     fig_scat = plt.figure(figsize=figsize_val if bigger_text else (11, 10.5))
+        #     gs = GridSpec(1, 2, width_ratios=[4, 0.2])
+        #     ax_scat=plt.subplot(gs[0])
+        #     ax_cb=plt.subplot(gs[1])
+        # else:
         fig_scat,ax_scat=plt.subplots(1,1,figsize=figsize_val if bigger_text else (11,10.5))
         
         if 'width' in infos_split[1]:
@@ -2483,14 +2493,18 @@ def correl_graph(data_perinfo,infos,data_ener,dict_linevis,mode='intrinsic',mode
                     c_arr_tot+=[c_arr_ul]    
                         
             #differing norms for Time and HR:
-            if color_scatter in ['HR','nH']:
-                
-                c_norm=colors.LogNorm(vmin=min(ravel_ragged(c_arr_tot)),
-                                      vmax=max(ravel_ragged(c_arr_tot)))
+            if min(ravel_ragged(c_arr_tot))==max(ravel_ragged(c_arr_tot)):
+                #safeguard to keep a middle range color when there's only one value
+                c_norm = mpl.colors.Normalize(vmin=min(ravel_ragged(c_arr_tot))*0.9,
+                                              vmax=max(ravel_ragged(c_arr_tot))*1.1)
             else:
+                if color_scatter in ['HR','nH']:
+                    c_norm=colors.LogNorm(vmin=min(ravel_ragged(c_arr_tot)),
+                                          vmax=max(ravel_ragged(c_arr_tot)))
+                else:
 
-                c_norm=mpl.colors.Normalize(vmin=min(ravel_ragged(c_arr_tot)),
-                                            vmax=max(ravel_ragged(c_arr_tot)))
+                    c_norm=mpl.colors.Normalize(vmin=min(ravel_ragged(c_arr_tot)),
+                                                vmax=max(ravel_ragged(c_arr_tot)))
 
                     
             color_cmap=mpl.cm.plasma
@@ -2708,8 +2722,12 @@ def correl_graph(data_perinfo,infos,data_ener,dict_linevis,mode='intrinsic',mode
             if color_scatter in ['Time','HR','width','nH']:
                 
                 #adding space for the colorbar
-                ax_cb=fig_scat.add_axes([0.99, 0.123, 0.02, 0.84 if not compute_correl else 0.73])
-    
+                #breaks everything so not there currently
+                #ax_cb=fig_scat.add_axes([0.99, 0.123, 0.02, 0.84 if not compute_correl else 0.73])
+                #ax_cb = fig_scat.add_axes([0.99, 0.123, 0.02, 0.84])
+                # divider = make_axes_locatable(ax_scat)
+                # ax_cb = divider.append_axes('right', size='5%', pad=0.05)
+
                 #scatter plot on top of the errorbars to be able to map the marker colors and create the colormap
                 
                 #no labels needed here
@@ -2732,23 +2750,34 @@ def correl_graph(data_perinfo,infos,data_ener,dict_linevis,mode='intrinsic',mode
                                                 
                 if color_scatter=='Time':
                     #creating the colormap
-                    
+
                     #manually readjusting for small durations because the AutoDateLocator doesn't work well
-                    time_range=max(mdates.date2num(ravel_ragged(date_list)))-min(mdates.date2num(ravel_ragged(date_list)))
-                    
+                    time_range=max(mdates.date2num(ravel_ragged(date_list)[mask_intime_norepeat]))\
+                               -min(mdates.date2num(ravel_ragged(date_list)[mask_intime_norepeat]))
+
                     if time_range<150:
                         date_format=mdates.DateFormatter('%Y-%m-%d')
                     elif time_range<1825:
                         date_format=mdates.DateFormatter('%Y-%m')
                     else:
-                        date_format=mdates.AutoDateFormatter(mdates.AutoDateLocator())   
-                        
-                    plt.colorbar(scat_list[0],cax=ax_cb,ticks=mdates.AutoDateLocator(),format=date_format)  
-                
+                        date_format=mdates.AutoDateFormatter(mdates.AutoDateLocator())
+
+                    #test = fig_scat.colorbar(scat_list[0],cax=ax_cb,format=mdates.DateFormatter('%Y-%m'))
+
+                    ####TODO: reintroduce cax to get constant ax size
+                    test=plt.colorbar(scat_list[0],ticks=mdates.AutoDateLocator(),format=date_format)
+
                 elif color_scatter in ['HR','width','nH']:
 
                     #creating the colormap (we add a bottom extension for nH to indicate the values cut)
-                    plt.colorbar(scat_list[0],cax=ax_cb,label=r'nH ($10^{22}$ cm$^{-2}$)' if color_scatter=='nH' else color_scatter,extend='min' if color_scatter=='nH' else None)  
+                    test=plt.colorbar(scat_list[0],
+                                 label=r'nH ($10^{22}$ cm$^{-2}$)' if color_scatter=='nH' else color_scatter,
+                                 extend='min' if color_scatter=='nH' else None,aspect=30)
+
+                    # breakpoint()
+                    # print(test.values)
+                        # if mode=='observ':
+                        #     breakpoint()
 
 
             else:
@@ -2901,7 +2930,7 @@ def correl_graph(data_perinfo,infos,data_ener,dict_linevis,mode='intrinsic',mode
                 pass
             
         #resizing for a square graph shape
-        forceAspect(ax_scat,aspect=1)
+        forceAspect(ax_scat,aspect=0.8)
         
         
         #### theoretical line drawing for eqw_width
@@ -2959,10 +2988,10 @@ def correl_graph(data_perinfo,infos,data_ener,dict_linevis,mode='intrinsic',mode
                     
             
         #### legend display
-        if show_linked or compute_correl or color_scatter not in ['Time','HR','width','nH',None]:       
+        if show_linked or (compute_correl and mode!='source' and len(x_data[0])>1 and not time_mode) or color_scatter not in ['Time','HR','width','nH',None]:
             
-            scat_legend=plt.legend(fontsize=9 if infos=='eqw_width' and display_th_width_ew else 10,title=legend_title,
-                                   ncol=2 if display_th_width_ew and infos=='eqw_width' else 1)
+            scat_legend=ax_scat.legend(fontsize=9 if infos=='eqw_width' and display_th_width_ew else 10,title=legend_title,
+                                   ncol=2 if display_th_width_ew and infos=='eqw_width' else 1,loc='upper right')
             plt.setp(scat_legend.get_title(),fontsize='small')
                 
         if len(x_data_use)>0:

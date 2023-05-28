@@ -82,18 +82,20 @@ def merge_mhd_solution(solutions_path):
         #list with all the relevant solution parameters (0 is xi/p, 2 is mu, 4 5 6 are chi_m/alpha_m/Pm)
         main_sol_pars=first_cols+[sol_parameters[0]]+[sol_parameters[2]]+sol_parameters[4:7]
 
+        secondary_sol_pars=sol_parameters[7:10]
+
         #extracting the mhd solution lines
         sol_lines=np.loadtxt(sol,skiprows=14)
 
         #merging them with the solution parameters
-        merged_sol_line=[main_sol_pars+elem.tolist() for elem in sol_lines]
+        merged_sol_line=[main_sol_pars+elem.tolist()+secondary_sol_pars for elem in sol_lines]
 
         global_sol_arr+=merged_sol_line
 
     global_sol_arr=np.array(global_sol_arr)
 
     header_arr='#epsilon\tn_island\tp_xi\tmu\tchi_m\talpha_m\tPm\tz_over_r\ttheta\tr_cyl/r0\trho_mhd\tu_r\tu_phi\tu_z'+\
-               '\tT_MHD\tB_r\tB_phi\tB_z\tT_dyn'
+               '\tT_MHD\tB_r\tB_phi\tB_z\tT_dyn\ty_id\ty_SM\ty_A'
 
     #saving the global file
     np.savetxt(os.getcwd().split('/')[-1]+'.txt', global_sol_arr, delimiter='\t',

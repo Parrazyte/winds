@@ -32,7 +32,8 @@ def print_log(elem,logfile_io):
     '''
     print(elem)
 
-    logfile_io.write(str(elem)+('\n' if not str(elem).endswith('\n') else ''))
+    if logfile_io is not None:
+        logfile_io.write(str(elem)+('\n' if not str(elem).endswith('\n') else ''))
 
 
 def download_mantis(mantis_path,local_folder,load_folder=False):
@@ -89,14 +90,17 @@ def upload_mantis(path,mantis_folder,delete_previous=False):
         previous_box_incident=os.path.join(os.getcwd(),path.replace(path.split('_')[-1],path.split('_')[-1].replace(i_box,str(int(i_box)-1))))
         irods_proc.sendline('-irm '+previous_box_incident+' '+mantis_folder)
 
-def load_solutions(solutions_path,split_sol=False,split_par=False):
+def load_solutions(solutions,mode='file',split_sol=False,split_par=False):
 
-    solutions = np.loadtxt(solutions_path)
+    if mode=='file':
+        solutions_arr = np.loadtxt(solutions)
+    elif mode=='array':
+        solutions_arr=solutions
 
     if not split_sol and not split_par:
-        return solutions
+        return solutions_arr
 
-    solutions_ids = solutions.T[:7].T
+    solutions_ids = solutions_arr.T[:7].T
 
     solutions_ids_unique = np.unique(solutions_ids, axis=0)
 
@@ -106,7 +110,7 @@ def load_solutions(solutions_path,split_sol=False,split_par=False):
         split_sol_mask = np.array([(solutions_ids == elem).all(axis=1) for elem in solutions_ids_unique])
 
         # split per solution (increasing epsilon, then n_island, then p,...)
-        solutions_split_arr = np.array([solutions[elem_mask] for elem_mask in split_sol_mask], dtype=object)
+        solutions_split_arr = np.array([solutions_arr[elem_mask] for elem_mask in split_sol_mask], dtype=object)
 
         return solutions_split_arr
 
@@ -120,7 +124,7 @@ def load_solutions(solutions_path,split_sol=False,split_par=False):
 
             split_eps_mask = solutions_ids.T[0] == elem_eps
 
-            solutions_split_eps = solutions[split_eps_mask]
+            solutions_split_eps = solutions_arr[split_eps_mask]
 
             n_vals=np.unique(solutions_split_eps.T[1])
 
@@ -144,36 +148,53 @@ def load_solutions(solutions_path,split_sol=False,split_par=False):
         return solutions_split_arr
 
 
-def sample_angle(solutions_path, outdir, angle_values, mdot_obs, m_BH, r_j=6., eta_mhd=1 / 12, return_file_path=False,
-                return_array=False):
+def sample_angle(solutions_path, angle_values, mdot_obs, m_BH, r_j=6., eta_mhd=1 / 12, outdir=None,
+                 return_file_path=False,mode='file'):
     '''
     split the solution grid for a range of angles up to the compton-thick point of each solution
 
-    (angle_max=90 is equivalent to not using an angle_max limit)
-    the default value of r_j is a massive particule's isco in Rg for non spinning BH
-    '''
+    solutions_path: solutions path of the syntax of a load_solutions output
 
-    os.system('mkdir -p '+outdir)
+    outdir: output directory where the log file and solution file will be written
+
+    angle_values: direct python list-type object containing the values of the angle to be sampled
+                  (angle_max=90 is equivalent to not using an angle_max limit)
+    mode:
+        file: standard working mode
+              logs the sampling of the angles for each solution and creates a solution file in outdir
+
+        array: no log file
+               returns directly the solution array instead of writing it in a file
+
+    the default value of r_j is a massive particule's isco in Rg for non-spinning BH
+
+
+    '''
 
     solutions_path_ext = '.' + solutions_path.split('/')[-1].split('.')[-1]
 
-    solutions_log_path = solutions_path.replace( \
-        solutions_path_ext,
-        '_angle_sampl_mdot_' + str(mdot_obs) + '_m_bh_' + str(m_BH) + '_rj_' + str(r_j) + '_log' + solutions_path_ext)
 
-    solutions_mod_path = solutions_path.replace( \
-        solutions_path_ext,
-        '_angle_sampl_mdot_' + str(mdot_obs) + '_m_bh_' + str(m_BH) + '_rj_' + str(r_j) + solutions_path_ext)
+    if mode=='file':
+        solutions_log_path = solutions_path.replace( \
+            solutions_path_ext,
+            '_angle_sampl_mdot_' + str(mdot_obs) + '_m_bh_' + str(m_BH) + '_rj_' + str(r_j) + '_log' + solutions_path_ext)
 
-    # adding the outdir into it
-    solutions_log_path = os.path.join('/'.join(solutions_log_path.split('/')[:-1]), outdir,
-                                      solutions_log_path.split('/')[-1])
+        solutions_mod_path = solutions_path.replace( \
+            solutions_path_ext,
+            '_angle_sampl_mdot_' + str(mdot_obs) + '_m_bh_' + str(m_BH) + '_rj_' + str(r_j) + solutions_path_ext)
 
-    # adding the outdir into it
-    solutions_mod_path = os.path.join('/'.join(solutions_mod_path.split('/')[:-1]), outdir,
-                                      solutions_mod_path.split('/')[-1])
+        # adding the outdir into it
+        solutions_log_path = os.path.join('/'.join(solutions_log_path.split('/')[:-1]), outdir,
+                                          solutions_log_path.split('/')[-1])
 
-    solutions_log_io = open(solutions_log_path, 'w+')
+        # adding the outdir into it
+        solutions_mod_path = os.path.join('/'.join(solutions_mod_path.split('/')[:-1]), outdir,
+                                          solutions_mod_path.split('/')[-1])
+
+        os.system('mkdir -p '+outdir)
+        solutions_log_io = open(solutions_log_path, 'w+')
+    else:
+        solutions_log_io=None
 
     solutions_split_arr=load_solutions(solutions_path,split_sol=True)
 
@@ -198,7 +219,7 @@ def sample_angle(solutions_path, outdir, angle_values, mdot_obs, m_BH, r_j=6., e
 
             Here we assume a SAD starting at r_j
 
-            here the previous Rg_cgs factor at the denominator has been cancelled
+            here the previous Rg_cgs factor at the denominator has been cancelled with the dx
             '''
 
             return mdot_mhd / (sigma_thomson_cgs) * rho_mhd * (r_j ** (p_mhd - 0.5) / (0.5 - p_mhd))
@@ -247,16 +268,18 @@ def sample_angle(solutions_path, outdir, angle_values, mdot_obs, m_BH, r_j=6., e
     print_log('\ntot angles init:' + str(n_angles), solutions_log_io)
     print_log('tot solutions:' + str(len(solutions_sample)), solutions_log_io)
 
-    header_arr = '#epsilon\tn_island\tp_xi\tmu\tchi_m\talpha_m\tPm\tz_over_r\ttheta\tr_cyl/r0\trho_mhd\tu_r\tu_phi\tu_z' + \
-                 '\tT_MHD\tB_r\tB_phi\tB_z\tT_dyn'
-
+    header_arr='#epsilon\tn_island\tp_xi\tmu\tchi_m\talpha_m\tPm\tz_over_r\ttheta\tr_cyl/r0\trho_mhd\tu_r\tu_phi\tu_z'+\
+               '\tT_MHD\tB_r\tB_phi\tB_z\tT_dyn\ty_id\ty_SM\ty_A'
     # saving the global file
 
-    np.savetxt(solutions_mod_path, solutions_sample, delimiter='\t',
-               header=header_arr)
+    if mode=='file':
+        np.savetxt(solutions_mod_path, solutions_sample, delimiter='\t',
+                   header=header_arr)
 
-    if return_file_path:
-        return solutions_mod_path
+        if return_file_path:
+            return solutions_mod_path
+    elif mode=='array':
+        return solutions_sample
 
 
 def create_grid(grid_name, mhd_solutions_path,
@@ -325,9 +348,9 @@ def create_grid(grid_name, mhd_solutions_path,
         elif type(h_over_r_vals)==str:
             h_over_r_infos=h_over_r_vals.split('_')
             if h_over_r_infos[0]=='log':
-                h_over_r_list=np.logspace(float(h_over_r_infos[1]),float(h_over_r_infos[2]),float(h_over_r_infos[3]))
+                h_over_r_list=np.logspace(float(h_over_r_infos[1]),float(h_over_r_infos[2]),int(h_over_r_infos[3]))
             elif h_over_r_infos[0]=='lin':
-                h_over_r_list = np.linspace(float(h_over_r_infos[1]),float(h_over_r_infos[2]),float(h_over_r_infos[3]))
+                h_over_r_list = np.linspace(float(h_over_r_infos[1]),float(h_over_r_infos[2]),int(h_over_r_infos[3]))
                 
         if type(p_vals) in (list,np.ndarray):
             p_list=p_vals
@@ -335,19 +358,19 @@ def create_grid(grid_name, mhd_solutions_path,
             p_infos=p_vals.split('_')
             if p_infos[0] == 'log':
                 p_list = np.logspace(float(p_infos[1]), float(p_infos[2]),
-                                            float(p_infos[3]))
+                                            int(p_infos[3]))
             elif p_infos[0] == 'lin':
                 p_list = np.linspace(float(p_infos[1]), float(p_infos[2]),
-                                            float(p_infos[3]))
+                                            int(p_infos[3]))
                 
         if type(mu_vals) in (list,np.ndarray):
             mu_list=mu_vals
         elif type(mu_vals)==str:
             mu_infos=mu_vals.split('_')
             if mu_infos[0]=='log':
-                mu_list=np.logspace(float(mu_infos[1]),float(mu_infos[2]),float(mu_infos[3]))
+                mu_list=np.logspace(float(mu_infos[1]),float(mu_infos[2]),int(mu_infos[3]))
             elif mu_infos[0]=='lin':
-                mu_list = np.linspace(float(mu_infos[1]),float(mu_infos[2]),float(mu_infos[3]))
+                mu_list = np.linspace(float(mu_infos[1]),float(mu_infos[2]),int(mu_infos[3]))
 
     if param_mode in ['all','split_angle']:
 
@@ -359,9 +382,9 @@ def create_grid(grid_name, mhd_solutions_path,
             if angle_infos[0]=='range':
                 angle_list = np.arange(float(angle_infos[1]), float(angle_infos[2])+0.000001, float(angle_infos[3]))
             elif angle_infos[0]=='log':
-                angle_list=np.logspace(float(angle_infos[1]),float(angle_infos[2]),float(angle_infos[3]))
+                angle_list=np.logspace(float(angle_infos[1]),float(angle_infos[2]),int(angle_infos[3]))
             elif angle_infos[0]=='lin':
-                angle_list = np.linspace(float(angle_infos[1]),float(angle_infos[2]),float(angle_infos[3]))
+                angle_list = np.linspace(float(angle_infos[1]),float(angle_infos[2]),int(angle_infos[3]))
 
 
     '''
@@ -411,11 +434,6 @@ def create_grid(grid_name, mhd_solutions_path,
     SED_dirs=[]
     # sampl_grid_paths=[]
 
-    def create_tree_sol(solution_path):
-
-        solutions_split = load_solutions(solution_path)
-
-
     if param_mode=='split_angle':
         for elem_SED,elem_mdot,elem_m_BH,elem_rj in zip(SED_list,mdot_list,m_BH_list,rj_list):
 
@@ -425,7 +443,7 @@ def create_grid(grid_name, mhd_solutions_path,
                      '_mdot_'+str(elem_mdot)+'_m_bh_'+str(elem_m_BH)+'_rj_'+str(elem_rj))]
 
             #creating the grid in that folder
-            sampl_grid_path=sample_angle(mhd_solutions_path,SED_dirs[-1],angle_list,elem_mdot,elem_m_BH,elem_rj,
+            sampl_grid_path=sample_angle(mhd_solutions_path,angle_list,elem_mdot,elem_m_BH,elem_rj,outdir=SED_dirs[-1],
                                         return_file_path=True)
 
             sampl_grid_dir=sampl_grid_path[:sampl_grid_path.rfind('/')]

@@ -3908,7 +3908,7 @@ class fitcomp:
                 AllModels(1)(npars-3).values=[vshift]+[vshift/1e3,bshift_space[0],bshift_space[0],bshift_space[-1],bshift_space[-1]]
                     
                 #fitting
-                Fit.perform()
+                calc_fit(logfile=self.logfile)
                     
                 Xset.logChatter=10
                 
@@ -3917,7 +3917,8 @@ class fitcomp:
                 AllModels.show()
                 model_lines=self.logfile.readlines()
                 parse_xlog(model_lines,freeze_pegged=True,no_display=True)
-                Fit.perform()
+                calc_fit(logfile=self.logfile)
+                #Fit.perform()
                 
                 try:
                     #computing the EQW with errors

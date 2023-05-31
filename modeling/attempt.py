@@ -52,6 +52,10 @@ lum_GROJ=flux_GROJ*dist_factor/1e38
 ####This should be changed
 mdot=0.111
 
+v_resol_XRISM=85.7
+
+#this is a typo and should be replaced for real computations
+v_resol_test=87.5
 
 stop_d=1e6
 
@@ -61,8 +65,8 @@ SED=os.path.join('incident_xstar_HS.dat')
 
 #SED_GROJ='5461_cont_deabs_extended_xstar.txt'
 
-xstar_wind(dict_sol, SED_path=SED, mdot_obs=mdot, xlum=0.1, outdir='Sudeb_test_JED_highres_noturb_nowrite',
+xstar_wind(dict_sol, SED_path=SED, mdot_obs=mdot, xlum=0.1, outdir='test3',
            p_mhd_input=p,m_BH=5.4,
-           ro_init=6, dr_r=0.05, stop_d_input=stop_d, v_resol=87.5,
+           ro_init=6, dr_r=0.05, stop_d_input=stop_d, v_resol=v_resol_test,
            chatter=1,cap_dr_resol=False,
-           force_ro_init=False,reload=True,no_turb=True,no_write=True)
+           force_ro_init=False,reload=True,no_turb=True,no_write=False)

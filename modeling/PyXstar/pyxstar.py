@@ -7,7 +7,7 @@ from astropy.io import fits as pyfits
 #import numpy as np
 import math
 import subprocess
-
+import glob
 global hdu1,hud2,hdu3,hdu4
 
 
@@ -82,6 +82,288 @@ hpar = {
 "npass":      1,     #"number of passes"
 "mode":       "ql"   #"mode"
 }
+
+#########################
+#additions
+#########################
+
+####Copy of xstar custom and standard functions for grid overwriting
+
+custom_enerf90=['      subroutine ener(epi,ncn2) \n',
+ '!                                                                       \n',
+ '!     Name: ener.f90  \n',
+ '!     Description:  \n',
+ '!     This routine sets up the energy grid\n',
+ '!     Grid is logarithmic with two subranges:  0.1eV-40 keV, 40keV-1MeV.\n',
+ '!     This structure of epi is key to operation of various other routines\n',
+ '!     special version tailored for M. Parra\n',
+ '!     author: T. Kallman                                                \n',
+ '!     List of Parameters:\n',
+ '!           Output:\n',
+ '!           epi(ncn)=energy grid (ev)\n',
+ '!           ncn2=length of epi\n',
+ '!     Dependencies:  none\n',
+ '!     Called by:  xstar\n',
+ '!                                                                       \n',
+ '      use globaldata\n',
+ '      implicit none \n',
+ '!                                                                       \n',
+ '      real(8) epi(ncn) \n',
+ '      integer numcon,numcon2,numcon3,ncn2,ll,ll2,mm\n',
+ '      real(8) ebnd1,ebnd2,ebnd3,ebnd4,dele1,dele2,dele3,etmp\n',
+ '!                                                                       \n',
+ '      numcon = ncn2 \n',
+ "      if (numcon.gt.ncn) stop 'ncn2 too large for arry dimension' \n",
+ "      if (numcon.lt.4) write (6,*) 'in ener: numcon error' \n",
+ '!\n',
+ '!     set up\n',
+ '!     3 regions\n',
+ '      ebnd1=0.1 \n',
+ '      ebnd2=100.\n',
+ '      ebnd3=1.e+4\n',
+ '      ebnd4=1.e+6 \n',
+ '      numcon2=max(2,ncn2/50) \n',
+ '      numcon3=numcon-2*numcon2 \n',
+ '      dele1=(ebnd2/ebnd1)**(1./numcon2)\n',
+ '      dele2=(ebnd3/ebnd2)**(1./numcon3)\n',
+ '      dele3=(ebnd4/ebnd3)**(1./(numcon2-1))\n',
+ '!\n',
+ '!     step thru energies\n',
+ '      etmp=ebnd1\n',
+ '      mm=1\n',
+ '      do while (mm.le.numcon)\n',
+ '        epi(mm)=etmp\n',
+ '        mm=mm+1\n',
+ '        if (etmp.lt.ebnd2) then\n',
+ '          etmp=etmp*dele1\n',
+ '        else\n',
+ '          if (etmp.lt.ebnd3) then\n',
+ '            etmp=etmp*dele2\n',
+ '          else\n',
+ '            etmp=etmp*dele3\n',
+ '          endif\n',
+ '        endif\n',
+ '        enddo\n',
+ '!\n',
+ '!     print out\n',
+ '!      do mm=1,numcon\n',
+ '!        write (6,*)mm,epi(mm)\n',
+ '!        enddo\n',
+ '!\n',
+ '      return \n',
+ '      end                                           \n']
+
+custom_huntff90=['      subroutine huntf(xx,n,x,jlo,lpri,lun11) \n',
+ '!                                                                       \n',
+ '!     Name: huntf.f90  \n',
+ '!     Description:  \n',
+ '!           Searches in a list. \n',
+ '!           assumes logarithmically spaced values\n',
+ '!\n',
+ '!     List of Parameters:\n',
+ '!           Input: \n',
+ '!           xx(n):  list to be searched\n',
+ '!           n:  search length\n',
+ '!           x: search value\n',
+ '!           lpri:  print switch, 1=on, 0=off\n',
+ '!           lun11: logical unit number to write to\n',
+ '!           Output:\n',
+ '!           jlo:  index of found element\n',
+ '!     Dependencies:  none\n',
+ '!     Called by:  nbinc\n',
+ '!\n',
+ '!     this version of hunt assumes equally spaced data in log           \n',
+ '!     special version for Maxime Parra\n',
+ '!     author:  T. Kallman                                               \n',
+ '!                                                                       \n',
+ '      implicit none \n',
+ '!                                                                       \n',
+ '      integer n,jlo,lpri,lun11 \n',
+ '      real(8) xx(n),x,xtmp,tst,tst2 \n',
+ '      integer numcon,numcon2,numcon3,ncn2,ll,ll2,mm\n',
+ '      real(8) ebnd1,ebnd2,ebnd3,ebnd4,dele1,dele2,dele3,etmp\n',
+ '      real(8) algdele1,algdele2,algdele3\n',
+ '      integer lfirst\n',
+ '!\n',
+ '      data lfirst/1/\n',
+ '!                                                                       \n',
+ '      xtmp=max(x,xx(1)) \n',
+ '      jlo=1\n',
+ '      if ((x.lt.1.e-34).or.(xx(1).le.1.e-34).or.(xx(n).le.1.e-34)) return\n',
+ '!\n',
+ '!      if (lfirst.eq.1) then\n',
+ '      lfirst=0\n',
+ '!     set up\n',
+ '!     3 regions\n',
+ '      ebnd1=0.1 \n',
+ '      ebnd2=100.\n',
+ '      ebnd3=1.e+4\n',
+ '      ebnd4=1.e+6 \n',
+ '!     correct for the fact that huntf is called with numcon3 as argument\n',
+ '!     but definition used is the standard xstar definition\n',
+ '      numcon3=n\n',
+ '      numcon=int(numcon3/(1.-1./50.))\n',
+ '      ncn2=numcon\n',
+ '      numcon2=max0(2,ncn2/50) \n',
+ '!     now redefine numcon3\n',
+ '      numcon3=numcon-2*numcon2 \n',
+ '!      write (6,*)numcon,numcon2,numcon3\n',
+ '!      endif\n',
+ '!\n',
+ '      etmp=xtmp\n',
+ '      if (etmp.lt.ebnd2) then\n',
+ '        dele1=(ebnd2/ebnd1)**(1./numcon2)\n',
+ '        algdele1=log(dele1)\n',
+ '        jlo=int(log(etmp/ebnd1)*(1.00000001)/algdele1)+1 \n',
+ '      else\n',
+ '        if (etmp.lt.ebnd3) then\n',
+ '          dele2=(ebnd3/ebnd2)**(1./numcon3)\n',
+ '          algdele2=log(dele2)\n',
+ '          jlo=numcon2+int(log(etmp/ebnd2)*(1.00000001)/algdele2)\n',
+ '        else\n',
+ '          dele3=(ebnd4/ebnd3)**(1./(numcon2-1))\n',
+ '          algdele3=log(dele3)\n',
+ '          jlo=numcon2+numcon3+int(log(etmp/ebnd3)*(1.00000001)/algdele3)\n',
+ '        endif\n',
+ '      endif\n',
+ '      jlo=max(1,jlo) \n',
+ '      jlo=min(numcon,jlo) \n',
+ '      if (lpri.gt.0)                                                    &\n',
+ "     &  write (lun11,*)'in huntf',n,xx(1),xx(n),jlo,xx(jlo),x           \n",
+ '!                                                                       \n',
+ '      return \n',
+ '      end                                           \n']
+
+std_enerf90=['      subroutine ener(epi,ncn2) \n',
+ '!                                                                       \n',
+ '!     Name: ener.f90  \n',
+ '!     Description:  \n',
+ '!     This routine sets up the energy grid\n',
+ '!     Grid is logarithmic with two subranges:  0.1eV-40 keV, 40keV-1MeV.\n',
+ '!     This structure of epi is key to operation of various other routines\n',
+ '!     author: T. Kallman                                                \n',
+ '!     List of Parameters:\n',
+ '!           Output:\n',
+ '!           epi(ncn)=energy grid (ev)\n',
+ '!           ncn2=length of epi\n',
+ '!     Dependencies:  none\n',
+ '!     Called by:  xstar\n',
+ '!                                                                       \n',
+ '      use globaldata\n',
+ '      implicit none \n',
+ '!                                                                       \n',
+ '      real(8) epi(ncn) \n',
+ '      integer numcon,numcon2,numcon3,ncn2,ll,ll2 \n',
+ '      real(8) ebnd1,ebnd2,ebnd2o,dele \n',
+ '!                                                                       \n',
+ '      numcon = ncn2 \n',
+ "      if (numcon.gt.ncn) stop 'ncn2 too large for arry dimension' \n",
+ "      if (numcon.lt.4) write (6,*) 'in ener: numcon error' \n",
+ '      numcon2=max(2,ncn2/50) \n',
+ '      numcon3=numcon-numcon2 \n',
+ '      ebnd1=0.1 \n',
+ '!     nb changed energy grid for H only                                 \n',
+ '      ebnd2=4.e+5 \n',
+ '!      ebnd2=4.e+1                                                      \n',
+ '      ebnd2o=ebnd2 \n',
+ '      dele=(ebnd2/ebnd1)**(1./float(numcon3-1)) \n',
+ '      epi(1)=ebnd1 \n',
+ "!      write (lun11,*)'in ener',ncn2,numcon,numcon2,numcon3                 \n",
+ '      do ll=2,numcon3 \n',
+ '        epi(ll)=epi(ll-1)*dele \n',
+ '        enddo \n',
+ '      ebnd2=1.e+6 \n',
+ '      ebnd1=ebnd2o \n',
+ '      dele=(ebnd2/ebnd1)**(1./float(numcon2-1)) \n',
+ '      do ll2=1,numcon2 \n',
+ '        ll=ll2+numcon3 \n',
+ '        epi(ll)=epi(ll-1)*dele \n',
+ '        enddo \n',
+ '!                                                                       \n',
+ '      return \n',
+ '      end                                           \n']
+
+std_huntff90=['      subroutine huntf(xx,n,x,jlo,lpri,lun11) \n',
+ '!                                                                       \n',
+ '!     Name: huntf.f90  \n',
+ '!     Description:  \n',
+ '!           Searches in a list. \n',
+ '!           assumes logarithmically spaced values\n',
+ '!\n',
+ '!     List of Parameters:\n',
+ '!           Input: \n',
+ '!           xx(n):  list to be searched\n',
+ '!           n:  search length\n',
+ '!           x: search value\n',
+ '!           lpri:  print switch, 1=on, 0=off\n',
+ '!           lun11: logical unit number to write to\n',
+ '!           Output:\n',
+ '!           jlo:  index of found element\n',
+ '!     Dependencies:  none\n',
+ '!     Called by:  nbinc\n',
+ '!\n',
+ '!     this version of hunt assumes equally spaced data in log           \n',
+ '!     author:  T. Kallman                                               \n',
+ '!                                                                       \n',
+ '      implicit none \n',
+ '!                                                                       \n',
+ '      integer n,jlo,lpri,lun11 \n',
+ '      real(8) xx(n),x,xtmp,tst,tst2 \n',
+ '!                                                                       \n',
+ '      xtmp=max(x,xx(2)) \n',
+ '      jlo=1\n',
+ '      if ((x.lt.1.e-34).or.(xx(1).le.1.e-34).or.(xx(n).le.1.e-34)) return\n',
+ '      jlo=int((n-1)*log(xtmp/xx(1))/log(xx(n)/xx(1)))+1 \n',
+ '      if (jlo.lt.n) then \n',
+ '        tst=abs(log(x/(1.e-34+xx(jlo)))) \n',
+ '        tst2=abs(log(x/(1.e-34+xx(jlo+1)))) \n',
+ '        if (tst2.lt.tst) jlo=jlo+1 \n',
+ '        endif \n',
+ '      jlo=max(1,jlo) \n',
+ '      jlo=min(n,jlo) \n',
+ '      if (lpri.gt.0)                                                    &\n',
+ "     &  write (lun11,*)'in huntf',n,xx(1),xx(n),jlo,xx(jlo),x           \n",
+ '!                                                                       \n',
+ '      return \n',
+ '      end                                           \n']
+def update_grid(file_ener,file_huntf):
+    '''
+    fetches the current enerf and huntf files in the installed xstar
+    and replaces them with file_ener and file_huntf (list of lines) if necessary
+    '''
+
+    ener_path=glob.glob(os.environ['HEADAS']+'/../**/ener.f90',recursive=True)
+
+    assert len(ener_path) != 0, "No ener.f90 file found in the heasoft arborescence."
+    assert len(ener_path) == 1, "Multiple ener.f90 files found in the heasoft arborescence."
+
+    huntf_path = glob.glob(os.environ['HEADAS'] + '/../**/huntf.f90', recursive=True)
+
+    assert len(huntf_path) != 0, "No huntf.f90 file found in the heasoft arborescence."
+    assert len(huntf_path) == 1, "Multiple huntf.f90 files found in the heasoft arborescence."
+
+    ener_path=ener_path[0]
+    huntf_path = huntf_path[0]
+
+    with open(ener_path) as curr_ener_file:
+        curr_ener_lines=curr_ener_file.readlines()
+
+    if curr_ener_lines!=file_ener:
+        print('Changing ener.f90 file to match the desired grid...')
+        
+        with open(ener_path,'w+') as curr_ener_file:
+            curr_ener_file.writelines(file_ener)
+
+    with open(huntf_path) as curr_huntf_file:
+        curr_huntf_lines = curr_huntf_file.readlines()
+
+    if curr_huntf_lines != file_huntf:
+        print('Changing huntf.f90 file to match the desired grid...')
+
+        with open(huntf_path, 'w+') as curr_huntf_file:
+            curr_huntf_file.writelines(file_huntf)
+            
+#########################
 
 def LoadFiles(file1='./xout_abund1.fits',file2='./xout_lines1.fits',\
         file3='./xout_rrc1.fits', file4='./xout_spect1.fits'):
@@ -309,9 +591,12 @@ def NRRcPoints():
 
 ####################################################################
 
-def run_xstar(par,hpar):
+def run_xstar(par,hpar,file_ener=std_enerf90,file_huntf=std_huntff90):
 # Function to create the XSTAR input file xstar.par and run the code from 
 # standard Heasoft installation
+
+    if file_ener is not None and file_huntf is not None:
+        update_grid(file_ener,file_huntf)
 
 # Set $PFILES environment variable to run the code with the new xstar.par
     os.environ["PFILES"]="."
@@ -513,7 +798,7 @@ mode,s,h,'+str(hpar['mode'])+',,,"mode"\n'
 
     file.write(xstar3_in)
     file.close()
-    
+
 # Run XSTAR with new xstar.par
 
     with subprocess.Popen("xstar",stdout=subprocess.PIPE,bufsize=1,\

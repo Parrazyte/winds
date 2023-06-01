@@ -1440,16 +1440,31 @@ def line_detect(epoch_id):
     AllData.ignore('**-'+str(line_cont_range[0])+' '+str(line_cont_range[1])+'-**')
     glob_counts=0
     indiv_counts=[]
+
+    bg_counts=0
     
     for i_grp in range(1,AllData.nGroups+1):
         
         #for NICER we subtract the rate from the background which at this point is the entire model ([3])
         if sat=='NICER':
             indiv_counts+=[round((AllData(i_grp).rate[0]-AllData(i_grp).rate[3])*AllData(i_grp).exposure)]
+
+            bg_counts+=AllData(i_grp).rate[3]*AllData(i_grp).exposure
         else:
             indiv_counts+=[round(AllData(i_grp).rate[0]*AllData(i_grp).exposure)]
 
+            bg_counts+=(AllData(i_grp).rate[2]-AllData(i_grp).rate[0])*AllData(i_grp).exposure
+
         glob_counts+=indiv_counts[-1]
+
+    '''
+    SNR formula from https://xmm-tools.cosmos.esa.int/external/sas/current/doc/specgroup.pdf 4.3.2 (1)
+    #note: here indiv_count is a net count, so a full source counts is indiv_counts+ bg and
+    #source + bg is thus net + 2*bg
+    '''
+
+    SNR=(sum(indiv_counts))/np.sqrt(sum(indiv_counts)+2*bg_counts)
+
     if glob_counts<counts_min:
         flag_lowSNR_line=True
         if not fit_lowSNR:
@@ -1457,6 +1472,11 @@ def line_detect(epoch_id):
                   ') in line detection range.')
             return fill_result('Insufficient net counts ('+str(round(glob_counts))+' < '+str(round(counts_min))+\
                                ') in line detection range.')
+
+    elif SNR<50:
+        if not fit_lowSNR:
+            print('\nInsufficient SNR ('+str(round(SNR,1))+'<50) in line detection range.')
+            return fill_result('Insufficient SNR ('+str(round(SNR,1))+'<50) in line detection range.')
     else:
         flag_lowSNR_line=False
         

@@ -2961,9 +2961,8 @@ class fitmod:
             
             #we only do this for >2 components since the first one is necessarily significant and the second one too if it was just added
             if len(self.includedlist)>2:
-                
                 self.test_delcomp(chain,lock_lines,in_add=True,ftest_threshold=ftest_threshold,ftest_leeway=ftest_leeway)
-            
+
             #testing for line inversion when available
             if not lock_lines and nomixline:
                 self.test_mix_lines(chain)
@@ -2977,10 +2976,14 @@ class fitmod:
         if not lock_lines:
             self.test_unlink_lines(chain=chain,ftest_threshold=ftest_threshold)        
 
-        #testing if freezing the pegged parameters improves the fit
-        par_peg_ids=calc_error(self.logfile,param='1-'+str(AllModels(1).nParameters*AllData.nGroups),freeze_pegged=freeze_final_pegged,indiv=True,
-                               test='FeKa26abs_agaussian' in self.name_complist and round(AllData(1).energies[0][0])==3)
-        
+        try:
+            #testing if freezing the pegged parameters improves the fit
+            par_peg_ids=calc_error(self.logfile,param='1-'+str(AllModels(1).nParameters*AllData.nGroups),freeze_pegged=freeze_final_pegged,indiv=True,
+                                   test='FeKa26abs_agaussian' in self.name_complist and round(AllData(1).energies[0][0])==3)
+
+        except:
+            breakpoint()
+
         #computing the component position of the frozen parameter to allow to unfreeze them later even with modified component positions
         par_peg_comps=self.idtocomp(par_peg_ids)
         
@@ -3906,20 +3909,26 @@ class fitcomp:
                 
                 #putting the vshift value
                 AllModels(1)(npars-3).values=[vshift]+[vshift/1e3,bshift_space[0],bshift_space[0],bshift_space[-1],bshift_space[-1]]
-                    
+
+                #reading and freezing the pegged parameters to keep the EW computation from crashing
+                self.logfile.readlines()
+                AllModels.show()
+
                 #fitting
                 calc_fit(logfile=self.logfile)
                     
                 Xset.logChatter=10
                 
-                #reading and freezing the pegged parameters to keep the EW computation from crashing
-                self.logfile.readlines()
-                AllModels.show()
+                # #reading and freezing the pegged parameters to keep the EW computation from crashing
+                # self.logfile.readlines()
+                # AllModels.show()
+
                 model_lines=self.logfile.readlines()
                 parse_xlog(model_lines,freeze_pegged=True,no_display=True)
-                calc_fit(logfile=self.logfile)
-                #Fit.perform()
-                
+
+                #last attempt at fit computation with query at no
+                calc_fit()
+
                 try:
                     #computing the EQW with errors
                     AllModels.eqwidth(len(AllModels(1).componentNames),err=True,number=1000,level=99.7)

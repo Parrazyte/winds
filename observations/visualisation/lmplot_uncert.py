@@ -11,11 +11,12 @@ import seaborn as sns
 import matplotlib.pyplot as plt
 import matplotlib as mpl
 from tqdm import tqdm
+from scipy.stats import linregress
 
 from custom_pymccorrelation import perturb_values
 
 def lmplot_uncert(ax,x,y,dx,dy,data,data_d,percent=90,distrib='gaussian',nsim=1000,linecolor='blue',intercolor=None,
-                  shade_regions=False):
+                  shade_regions=False,return_intercept=True):
     
     '''
     plots line regression of a dataset with uncertainties, with an argument format similar to lmplot. 
@@ -28,7 +29,8 @@ def lmplot_uncert(ax,x,y,dx,dy,data,data_d,percent=90,distrib='gaussian',nsim=10
     
     behavior: computes nsim regplot on the ax using perturbed versions of the x and y variables, while deleting the points and line at each
     attempt. The final line displayed is the one without uncertainties added (it is displayed first).
-    
+
+    if return_intercept is set to True, returns the perturbated slope and intercept using stats.linregress
     if shade_regions is set to true:
     
     -The line 'interval' colored regions are drawn using a very low alpha so as to create a visible distribution after nsim.
@@ -57,6 +59,7 @@ def lmplot_uncert(ax,x,y,dx,dy,data,data_d,percent=90,distrib='gaussian',nsim=10
     
     x_pert=x_pert.astype(float)
     y_pert=y_pert.astype(float)
+
     #storing the elements already in the axe children at the start
     ax_children_init=ax.get_children()
     
@@ -78,14 +81,23 @@ def lmplot_uncert(ax,x,y,dx,dy,data,data_d,percent=90,distrib='gaussian',nsim=10
                 
     #updating the list of children to be preserved
     ax_children_init=ax.get_children()
-    
+
+    slope_vals=np.zeros(nsim)
+    intercept_vals=np.zeros(nsim)
+
     #loop on nsim iterations
     
     bound_inter=np.array([None]*nsim)
     
     with tqdm(total=nsim) as pbar:
         for i in range(nsim):
-            
+
+            #computing the intercept if asked to
+            if return_intercept:
+                curr_regress=linregress(x_pert[i],y_pert[i])
+                slope_vals[i]=curr_regress.slope
+                intercept_vals[i]=curr_regress.intercept
+
             #computing a dataframe set from an iteration of perturbed values
             df_pert=pd.DataFrame(data=np.array([x_pert[i],y_pert[i]]).T,columns=['x_pert','y_pert'])
             
@@ -154,4 +166,26 @@ def lmplot_uncert(ax,x,y,dx,dy,data,data_d,percent=90,distrib='gaussian',nsim=10
         
         #filling the region
         ax.fill_between(abs_inter,low_curve,high_curve,color=bandcolor)
-    
+
+    uncert_arr=np.array([[None,None,None]]*2)
+
+
+    if return_intercept:
+
+        #sorting the values to pick out the percentiles
+        slope_vals.sort()
+        intercept_vals.sort()
+
+        #storing the main medians in the array
+        uncert_arr[0][0]=slope_vals[int(nsim*0.5)]
+        uncert_arr[1][0] = intercept_vals[int(nsim * 0.5)]
+
+        #lower uncertainties
+        uncert_arr[0][1]=uncert_arr[0][0]-slope_vals[int(nsim*(50-percent/2)/100)]
+        uncert_arr[1][1] = uncert_arr[1][0] - intercept_vals[int(nsim * (50 - percent / 2) / 100)]
+
+        #upper uncertainties
+        uncert_arr[0][2] = slope_vals[int(nsim * percent/100)]-uncert_arr[0][0]
+        uncert_arr[1][2] = intercept_vals[int(nsim * percent / 100)] - uncert_arr[1][0]
+
+        return uncert_arr

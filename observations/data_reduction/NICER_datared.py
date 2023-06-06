@@ -50,6 +50,8 @@ g. group_spectra: group spectra using the optimized Kastra et al. binning
 
 m.merge: merge all spectral products in the subdirectories to a bigbatch directory
 
+c. clean: clean event products in the observation's event_cl directory
+
 DEPRECATED 
 2. select_detector: removes specific detectors from the event file (not tested)
 
@@ -71,17 +73,17 @@ ap = argparse.ArgumentParser(description='Script to reduce NICER files.\n)')
 ap.add_argument("-dir", "--startdir", nargs='?', help="starting directory. Current by default", default='./', type=str)
 ap.add_argument("-l","--local",nargs=1,help='Launch actions directly in the current directory instead',
                 default=False,type=bool)
-ap.add_argument('-catch','--catch_errors',help='Catch errors while running the data reduction and continue',default=True,type=bool)
+ap.add_argument('-catch','--catch_errors',help='Catch errors while running the data reduction and continue',default=False,type=bool)
 
 #global choices
 ap.add_argument("-a","--action",nargs='?',help='Give which action(s) to proceed,separated by comas.'+
-                '\n1.evt_build\n2.filter_evt\n3.extract_reg...',default='1,l,fs,g,m',type=str)
+                '\n1.evt_build\n2.filter_evt\n3.extract_reg...',default='c',type=str)
 ap.add_argument("-over",nargs=1,help='overwrite computed tasks (i.e. with products in the batch, or merge directory\
                 if "m" is in the actions) in a folder',default=True,type=bool)
 
 #directory level overwrite (not active in local)
 ap.add_argument('-folder_over',nargs=1,help='relaunch action through folders with completed analysis',default=False,type=bool)
-ap.add_argument('-folder_cont',nargs=1,help='skip all but the last 2 directories in the summary folder file',default=True,type=bool)
+ap.add_argument('-folder_cont',nargs=1,help='skip all but the last 2 directories in the summary folder file',default=False,type=bool)
 #note : we keep the previous 2 directories because bug or breaks can start actions on a directory following the initially stopped one
 
 #action specific overwrite
@@ -142,6 +144,7 @@ regroup_spectrum_done=threading.Event()
 batch_mover_done=threading.Event()
 select_detector_done=threading.Event()
 extract_lc_done=threading.Event()
+clean_products_done=threading.Event()
 
 def set_var(spawn):
     
@@ -786,7 +789,32 @@ def batch_mover(directory):
     
     bashproc.sendline('exit')
     batch_mover_done.set()
-    
+
+def clean_products(directory):
+
+    '''
+
+    clean products in the xti/event_cl directory
+
+    Useful to avoid bloating with how big these files are
+    '''
+
+    product_files=[elem for elem in glob.glob(directory+'/xti/event_cl/**',recursive=True)\
+                   if not elem.endswith('/')]
+
+    print('Cleaning '+str(len(product_files))+' elements in directory '+directory+'/xti/event_cl/')
+
+    for elem_product in product_files:
+        if not elem_product.endswith('/'):
+            os.remove(elem_product)
+
+    #reasonable waiting time to make sure big files can be deleted
+    time.sleep(2)
+
+    print('Cleaning complete.')
+
+    clean_products_done.set()
+
 '''''''''''''''''''''
 ''''MAIN PROCESS'''''
 '''''''''''''''''''''
@@ -903,6 +931,10 @@ if not local:
                             batch_mover(dirname)
                             batch_mover_done.wait()
 
+                        if curr_action=='c':
+                            clean_products(dirname)
+                            clean_products_done.wait()
+
                         os.chdir(startdir)
                     folder_state='Done'
 
@@ -963,7 +995,11 @@ if not local:
                     if curr_action=='m':
                         batch_mover(dirname)
                         batch_mover_done.wait()
-                        
+
+                    if curr_action=='c':
+                        clean_products(dirname)
+                        clean_products_done.wait()
+
                     os.chdir(startdir)
                 folder_state='Done'
                         
@@ -1002,3 +1038,6 @@ else:
             if curr_action=='m':
                 batch_mover(absdir)
                 batch_mover_done.wait()
+            if curr_action == 'c':
+                clean_products(absdir)
+                clean_products_done.wait()

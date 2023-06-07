@@ -41,12 +41,7 @@ def lmplot_uncert_a(ax, x, y, dx, dy, percent=90, distrib='gaussian', nsim=255, 
 
     # deleting the line interval and the points
     for elem_children in ax_children_regplot:
-        if type(elem_children) in [mpl.collections.PolyCollection, mpl.collections.PathCollection]:
-            elem_children.remove()
-        # changing the color of the points and main line
-        if type(elem_children) == mpl.lines.Line2D:
-            elem_children.set_color(linecolor)
-            elem_children.set_lw(lw)
+        elem_children.remove()
 
     # updating the list of children to be preserved
     ax_children_init = ax.get_children()
@@ -116,25 +111,35 @@ def lmplot_uncert_a(ax, x, y, dx, dy, percent=90, distrib='gaussian', nsim=255, 
 
     uncert_arr = array([[None, None, None]] * 2)
 
+    intercept_at_x_vals = slope_vals * x_intercept + intercept_vals
+
+    # sorting the values to pick out the percentiles
+    slope_vals.sort()
+    intercept_at_x_vals.sort()
+
+    # storing the main medians in the array
+    uncert_arr[0][0] = slope_vals[round(nsim * 0.5)]
+    uncert_arr[1][0] = intercept_at_x_vals[round(nsim * 0.5)]
+
+    # lower uncertainties
+    uncert_arr[0][1] = uncert_arr[0][0] - slope_vals[round(nsim * (1 - percent / 100))]
+    uncert_arr[1][1] = uncert_arr[1][0] - intercept_at_x_vals[round(nsim * (1 - percent / 100))]
+
+    # upper uncertainties
+    uncert_arr[0][2] = slope_vals[round(nsim * percent / 100)] - uncert_arr[0][0]
+    uncert_arr[1][2] = intercept_at_x_vals[round(nsim * percent / 100)] - uncert_arr[1][0]
+
+    #plotting the median line with the median value of the intercept and coefficient
+
+    #fetching two points to create the line in between
+    x_line=ax.get_xlim()
+
+    #locking the ax to avoid resizing when plotting the next line
+    ax.set_xlim(ax.get_xlim())
+    ax.set_ylum(ax.get_ylim())
+
+    #plotting the line
+    plt.plot(x_line,x_line*uncert_arr+(x_line-x_intercept),lw=lw,color=linecolor)
+
     if return_intercept:
-        intercept_at_x_vals = slope_vals * x_intercept + intercept_vals
-
-        # sorting the values to pick out the percentiles
-        slope_vals.sort()
-        intercept_at_x_vals.sort()
-
-        # storing the main medians in the array
-        uncert_arr[0][0] = slope_vals[round(nsim * 0.5)]
-        uncert_arr[1][0] = intercept_at_x_vals[round(nsim * 0.5)]
-
-        # lower uncertainties
-        uncert_arr[0][1] = uncert_arr[0][0] - slope_vals[round(nsim * (1 - percent / 100))]
-        uncert_arr[1][1] = uncert_arr[1][0] - intercept_at_x_vals[round(nsim * (1 - percent / 100))]
-
-        # upper uncertainties
-        uncert_arr[0][2] = slope_vals[round(nsim * percent / 100)] - uncert_arr[0][0]
-        uncert_arr[1][2] = intercept_at_x_vals[round(nsim * percent / 100)] - uncert_arr[1][0]
-
-        # fetching a decent value for the incercept
-
         return uncert_arr, x_intercept

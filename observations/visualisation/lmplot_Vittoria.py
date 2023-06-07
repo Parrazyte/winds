@@ -136,10 +136,10 @@ def lmplot_uncert_a(ax, x, y, dx, dy, percent=90, distrib='gaussian', nsim=255, 
 
     #locking the ax to avoid resizing when plotting the next line
     ax.set_xlim(ax.get_xlim())
-    ax.set_ylum(ax.get_ylim())
+    ax.set_ylim(ax.get_ylim())
 
     #plotting the line
-    plt.plot(x_line,x_line*uncert_arr+(x_line-x_intercept),lw=lw,color=linecolor)
+    plt.plot(x_line,(x_line-x_intercept)*uncert_arr[0][0]+uncert_arr[1][0],lw=lw,color=linecolor)
 
     if return_intercept:
         return uncert_arr, x_intercept

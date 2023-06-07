@@ -51,6 +51,70 @@ PI = 3.14159265
 Km2m = 1000.0
 m2cm = 100.0
 
+
+def func_density_sol(r_sph,z_over_r,rho_mhd,p_mhd,mdot_mhd,m_BH):
+
+    m_BH_SI = m_BH * Msol_SI
+    Rs_SI = 2.0 * G_SI * m_BH_SI / (c_SI * c_SI)
+
+    # !* Gravitational radius
+    Rg_SI = 0.5 * Rs_SI
+    Rg_cgs = Rg_SI * m2cm
+
+    cyl_cst=np.sqrt(1.0+(z_over_r*z_over_r))
+    r_cyl = r_sph / cyl_cst
+
+    return (mdot_mhd / (sigma_thomson_cgs * Rg_cgs)) * rho_mhd * (r_cyl ** (p_mhd - 1.5))
+
+def func_vel_sol(coordinate,r_sph,z_over_r,vel_r,vel_phi,vel_z):
+
+    '''
+    The (special) relativistic computation requires the 3 components
+    '''
+
+    cyl_cst = np.sqrt(1.0 + (z_over_r * z_over_r))
+    r_cyl = r_sph / cyl_cst
+
+    #nonrelat
+    u_r_nr=c_cgs * vel_r * ((r_cyl) ** (-0.5))
+    u_phi_nr = c_cgs * vel_phi * ((r_cyl) ** (-0.5))
+    u_z_nr = c_cgs * vel_z * ((r_cyl) ** (-0.5))
+
+    u_nonrelat=np.sqrt(u_r_nr**2+u_phi_nr**2+u_z_nr**2)
+
+    #done by hand
+    u_relat=u_nonrelat/np.sqrt(1+u_nonrelat**2/c_cgs**2)
+
+    gamma=1/np.sqrt(1-(u_relat/c_cgs)**2)
+
+    if coordinate=='r':
+        return u_r_nr/gamma
+    elif coordinate=='phi':
+        return u_phi_nr / gamma
+    elif coordinate=='z':
+        return u_z_nr / gamma
+    if coordinate=='obs':
+        angle_rad=np.arctan(z_over_r)
+        return (u_r_nr*np.cos(angle_rad)+u_z_nr*np.sin(angle_rad))/gamma
+
+
+# in this one, the distance appears directly so it should be the spherical one
+def func_logxi_sol(r_sph,z_over_r,L_xi_Source,rho_mhd,p_mhd,mdot_mhd,m_BH):
+
+    m_BH_SI = m_BH * Msol_SI
+    Rs_SI = 2.0 * G_SI * m_BH_SI / (c_SI * c_SI)
+
+    # !* Gravitational radius
+    Rg_SI = 0.5 * Rs_SI
+    Rg_cgs = Rg_SI * m2cm
+
+    cyl_cst = np.sqrt(1.0 + (z_over_r * z_over_r))
+    r_cyl = r_sph / cyl_cst
+
+    return np.log10(L_xi_Source / (func_density_sol(r_sph,z_over_r,rho_mhd,p_mhd,mdot_mhd,m_BH) * (r_sph * Rg_cgs) ** 2))
+
+
+
 def merge_mhd_solution(solutions_path):
 
     '''
@@ -257,7 +321,7 @@ def cigri_wrapper(mantis_dir,SED_mantis_path,solution_mantis_path,simdir,
 
 def xstar_func(spectrum_file,lum,t_guess,n,nh,xi,vturb_x,nbins,nsteps=1,niter=100,lcpres=0,path_logpars=None,
                dict_box=None,comput_mode='local',mantis_folder='',no_write=False,extract_transmitted=True,
-               ener_f90=None,huntf_f90=None):
+               headas_folder=None):
     
     '''
     wrapper around the xstar function itself with explicit calls to the parameters routinely being changed in the computation
@@ -338,7 +402,7 @@ def xstar_func(spectrum_file,lum,t_guess,n,nh,xi,vturb_x,nbins,nsteps=1,niter=10
     #turbulent speed
     xhpar['vturbi']=vturb_x
 
-    xhpar['lprint']=1
+    xhpar['lprint']=0
 
     #turning on or off the writing of the output files if necessary
     if no_write:
@@ -363,7 +427,7 @@ def xstar_func(spectrum_file,lum,t_guess,n,nh,xi,vturb_x,nbins,nsteps=1,niter=10
             upload_mantis(spectrum_file,mantis_folder,delete_sp=True)
 
 
-    px.run_xstar(xpar,xhpar,ener_f90,huntf_f90)
+    px.run_xstar(xpar,xhpar,headas_folder)
 
     #storing the lines of the xstar log file
     with open('xout_step.log') as xlog:
@@ -389,11 +453,11 @@ def xstar_func(spectrum_file,lum,t_guess,n,nh,xi,vturb_x,nbins,nsteps=1,niter=10
     if extract_transmitted:
         px.LoadFiles()
         out_sp=px.ContSpectra()
-        out_arr= np.array([out_sp.energy,out_sp.transmitted])
+        out_arr= np.array([out_sp.energy,out_sp.transmitted]).T
 
         # !**Writing the shifted spectra in a file as it is input for next box
         np.savetxt('./xout_transmitted_'+str(nbox)+'_'+str(i_box_final)+'.txt', out_arr,
-                   header=str(len(out_arr[0])), delimiter='  ', comments='')
+                   header=str(len(out_arr)), delimiter='  ', comments='')
 
     # second update on mantis for the modified logpar and the log file
     if comput_mode == 'gricad':
@@ -406,7 +470,7 @@ def xstar_wind(solution,SED_path,mdot_obs,xlum,outdir,
                ro_init=6.,dr_r=0.05,stop_d_input=1e6,v_resol=85.7,
                chatter=0,reload=True,comput_mode='local',mantis_folder='',
                force_ro_init=False,no_turb=False,cap_dr_resol=True,no_write=False,
-               grid_type="standard"):
+               grid_type="standard",custom_grid_headas=None):
     
     
     '''
@@ -464,7 +528,7 @@ def xstar_wind(solution,SED_path,mdot_obs,xlum,outdir,
 
         cap_dr_resol: use (or not) the v_resol criteria as another cap on the dr on top of the dr/r given
 
-        grid_type: either standard or custom
+        grid_type: assumes either a standard or custom grid
                     standard uses the standard xstar grid definition
                     (main grid for 0.1eV-400keV, coarser grid above up to 1MeV)
 
@@ -590,14 +654,17 @@ def xstar_wind(solution,SED_path,mdot_obs,xlum,outdir,
             plasma_pars = px.PlasmaParameters()
 
             # main infos
-            main_infos = np.array([nbox, i_step + 1,
-                                   plasma_pars.radius[i_step],
-                                   plasma_pars.delta_r[i_step],
-                                   plasma_pars.Columns('h') / plasma_pars.n_p[i_step],
-                                   plasma_pars.ion_parameter[i_step],
-                                   plasma_pars.n_p[i_step], vobsx,
-                                   plasma_pars.Columns('h'),
-                                   plasma_pars.temperature[i_step] * 1e4]).astype(str).tolist()
+            try:
+                main_infos = np.array([nbox, i_step + 1,
+                                       plasma_pars.radius[i_step],
+                                       plasma_pars.delta_r[i_step],
+                                       px.Columns('h')[0]/ plasma_pars.n_p[i_step],
+                                       plasma_pars.ion_parameter[i_step],
+                                       plasma_pars.n_p[i_step], vobsx,
+                                       px.Columns('h')[0],
+                                       plasma_pars.temperature[i_step] * 1e4]).astype(str).tolist()
+            except:
+                breakpoint()
 
             # detail for clarity
             main_infos[0] = str(int(float(main_infos[0])))
@@ -687,20 +754,18 @@ def xstar_wind(solution,SED_path,mdot_obs,xlum,outdir,
         #note: the 1/0.98 factor here is here to reflect the addition of a 1/50 nbins grid for the higher interval
         #which needs to be accounted for
         nbins=max(999,int(np.ceil(np.log(4*10**6)/np.log(1+v_resol/299792.458))/0.98))
-        ener_f90=None
-        huntf_f90=None
+        headas_folder=None
 
     elif grid_type=="custom":
         #here, each part of the sandwiching coarse grid has a 1/50 sampling, so we need to divide by 0.96 instead
         nbins=max(999,int(np.ceil(np.log(1e2)/np.log(1+v_resol/299792.458))/0.96))
-        ener_f90=px.custom_enerf90
-        huntf_f90=px.custom_huntff90
+
+        headas_folder=custom_grid_headas
 
     if chatter>=1:
         print('Number of bins for selected velocity resolution: '+str(nbins)+'\n')
         if nbins==999:
             print('(Minimum value accepted by xstar)\n')
-
 
     '''
     #### Physical constants
@@ -849,29 +914,23 @@ def xstar_wind(solution,SED_path,mdot_obs,xlum,outdir,
     #note: here, the rcyl corresponds to the r/r0 because the r_cyl constant is given in units of r_0 directly
     
     def func_density(r_sph):
-        r_cyl=r_sph/cyl_cst
-
-        return (mdot_mhd/(sigma_thomson_cgs*Rg_cgs))*rho_mhd*(r_cyl**(p_mhd-1.5))
+        return func_density_sol(r_sph,z_over_r,rho_mhd,p_mhd,mdot_mhd,m_BH)
     
     def func_vel_r(r_sph):
-        r_cyl=r_sph/cyl_cst
-        return c_cgs*vel_r*((r_cyl)**(-0.5))
+        return func_vel_sol('r',r_sph,z_over_r,vel_r,vel_phi,vel_z)
 
     def func_vel_phi(r_sph):
-        r_cyl=r_sph/cyl_cst
-        return c_cgs*vel_phi*((r_cyl)**(-0.5))
+        return func_vel_sol('phi',r_sph,z_over_r,vel_r,vel_phi,vel_z)
 
     def func_vel_z(r_sph):
-        r_cyl=r_sph/cyl_cst
-        return c_cgs*vel_z*((r_cyl)**(-0.5))
+        return func_vel_sol('z',r_sph,z_over_r,vel_r,vel_phi,vel_z)
         
     def func_vel_obs(r_sph):
-        r_cyl=r_sph/cyl_cst
-        return (c_cgs*vel_r*((r_cyl)**(-0.5))*np.cos(angle*np.pi/180.0))+(c_cgs*vel_z*((r_cyl)**(-0.5))*np.sin(angle*np.pi/180.0))
-    
+        return func_vel_sol('obs',r_sph,z_over_r,vel_r,vel_phi,vel_z)
+
     #in this one, the distance appears directly so it should be the spherical one
     def func_logxi(r_sph):
-        return np.log10(L_xi_Source/(func_density(r_sph)*(r_sph*Rg_cgs)**2))
+        return func_logxi_sol(r_sph,z_over_r,L_xi_Source,rho_mhd,p_mhd,mdot_mhd,m_BH)
     
     
     ro_by_Rg = ro_init
@@ -1309,7 +1368,7 @@ def xstar_wind(solution,SED_path,mdot_obs,xlum,outdir,
                 os.remove('./'+outdir+'/xout_log_global.log')
 
         dict_box['nbox']=i_box+1
-        
+
         #! Doppler shifting of spectra depending on relative velocity
         
         
@@ -1376,8 +1435,6 @@ def xstar_wind(solution,SED_path,mdot_obs,xlum,outdir,
 
                 break
 
-        breakpoint()
-
         #### main xstar call
         
         currdir=os.getcwd()
@@ -1388,10 +1445,12 @@ def xstar_wind(solution,SED_path,mdot_obs,xlum,outdir,
         if i_box+1==nbox_restart and xstar_input_restart is not None:
             xstar_func(xstar_input_restart,xlum_restart,t_restart,n_restart,nh_restart,logxi_restart,
                        0 if no_turb else vturb_x_restart,nbins=nbins,
-                       path_logpars=path_log_xpars,dict_box=dict_box,no_write=no_write)
+                       path_logpars=path_log_xpars,dict_box=dict_box,no_write=no_write,
+                       headas_folder=headas_folder)
         else:
             xstar_func(xstar_input,xlum_eff,tp,xpx,xpxcol,zeta,vturb_x,nbins=nbins,
-                       path_logpars=path_log_xpars,dict_box=dict_box,no_write=no_write)
+                       path_logpars=path_log_xpars,dict_box=dict_box,no_write=no_write,
+                       headas_folder=headas_folder)
         
         os.chdir(currdir)
         
@@ -1463,7 +1522,8 @@ def xstar_wind(solution,SED_path,mdot_obs,xlum,outdir,
             dict_box['i_box_final']+=1
             #using xlum_final here to avoid overwriting xlum_eff if using more than a single stop distance
             xstar_func(xstar_input,xlum_final,tp,xpx,xpxcol,zeta,vturb_x,nbins=nbins,
-                       path_logpars=path_log_xpars,dict_box=dict_box,no_write=no_write)
+                       path_logpars=path_log_xpars,dict_box=dict_box,no_write=no_write,
+                       headas_folder=headas_folder)
             
             os.chdir(currdir)
             
@@ -1471,8 +1531,6 @@ def xstar_wind(solution,SED_path,mdot_obs,xlum,outdir,
                          file3='./'+outdir+'/xout_rrc1.fits',file4='./'+outdir+'/xout_spect1.fits')
             
             xstar_input='./'+outdir+'/final_blueshifted_%.1e'%stop_d[i_box_final]+'.dat'
-            
-            breakpoint()
 
             xlum_eff=shift_tr_spectra(del_E_bs[i_box_final],xstar_input)   
     

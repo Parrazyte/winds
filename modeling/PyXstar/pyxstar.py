@@ -6,6 +6,9 @@ import os, sys
 from astropy.io import fits as pyfits
 #import numpy as np
 import math
+import time
+import pexpect
+from pexpect.popen_spawn import PopenSpawn
 import subprocess
 import glob
 global hdu1,hud2,hdu3,hdu4
@@ -328,8 +331,10 @@ std_huntff90=['      subroutine huntf(xx,n,x,jlo,lpri,lun11) \n',
  '      end                                           \n']
 def update_grid(file_ener,file_huntf):
     '''
-    fetches the current enerf and huntf files in the installed xstar
+    fetches the current enerf and huntf files in the currently installed xstar
     and replaces them with file_ener and file_huntf (list of lines) if necessary
+
+    Note: still need to reinstall heasoft after to update everything
     '''
 
     ener_path=glob.glob(os.environ['HEADAS']+'/../**/ener.f90',recursive=True)
@@ -345,24 +350,34 @@ def update_grid(file_ener,file_huntf):
     ener_path=ener_path[0]
     huntf_path = huntf_path[0]
 
+    #spawning a bash process to compile
+    gfort_proc=pexpect.spawn('/bin/bash',encoding='utf-8')
+
+    gfort_proc.logfile=sys.stdout
+
     with open(ener_path) as curr_ener_file:
         curr_ener_lines=curr_ener_file.readlines()
 
     if curr_ener_lines!=file_ener:
-        print('Changing ener.f90 file to match the desired grid...')
+        print('\nChanging ener.f90 file to match the desired grid...\n')
         
         with open(ener_path,'w+') as curr_ener_file:
             curr_ener_file.writelines(file_ener)
+
 
     with open(huntf_path) as curr_huntf_file:
         curr_huntf_lines = curr_huntf_file.readlines()
 
     if curr_huntf_lines != file_huntf:
-        print('Changing huntf.f90 file to match the desired grid...')
+        print('\nChanging huntf.f90 file to match the desired grid...\n')
 
         with open(huntf_path, 'w+') as curr_huntf_file:
             curr_huntf_file.writelines(file_huntf)
-            
+
+
+    #adding a wait to ensure the compilation have the time to run
+    gfort_proc.sendline('exit')
+
 #########################
 
 def LoadFiles(file1='./xout_abund1.fits',file2='./xout_lines1.fits',\
@@ -591,12 +606,47 @@ def NRRcPoints():
 
 ####################################################################
 
-def run_xstar(par,hpar,file_ener=std_enerf90,file_huntf=std_huntff90):
+def run_xstar(par,hpar,headas_folder=None):
 # Function to create the XSTAR input file xstar.par and run the code from 
 # standard Heasoft installation
 
-    if file_ener is not None and file_huntf is not None:
-        update_grid(file_ener,file_huntf)
+    #fetching the environment variable of the specific heasoft folder if asked to
+    if headas_folder is not None:
+        heaproc=PopenSpawn('/bin/bash',maxread=16000,logfile=sys.stdout.buffer)
+
+        heaproc.sendline('source ~/.bashrc')
+        time.sleep(1)
+        heaproc.sendline('export HEADAS='+headas_folder)
+        heaproc.sendline('source $HEADAS/headas-init.sh')
+        heaproc.sendline('cd '+os.getcwd())
+        heaproc.sendline('export PFILES=.')
+
+        # heaproc.sendline('env > temp_custom_xstar_env.txt')
+        #
+        # time.sleep(1)
+        #
+        # heaproc.sendline('exit')
+        #
+        # with open('./temp_custom_xstar_env.txt') as env_file:
+        #     env_lines=env_file.readlines()
+        #
+        # env_copy=os.environ.copy()
+        # env_copy.clear()
+        #
+        # for elem_line in env_lines:
+        #     #skipping non-heasoft lines (assuming the user didn't change the direct name of its heasoft dir)
+        #     # if 'heasoft' not in elem_line or  elem_line.split('=')[0]=='PWD':
+        #     #     continue
+        #     env_var=elem_line.split('=')[0]
+        #     env_copy[env_var]=elem_line.split('=')[1]
+        #
+        #     env_copy["PFILES"]="."
+        #
+        # os.remove('temp_custom_xstar_env.txt')
+        #
+        # xstar_path=glob.glob(headas_folder+'/**/xstar',recursive=True)[0]
+
+
 
 # Set $PFILES environment variable to run the code with the new xstar.par
     os.environ["PFILES"]="."
@@ -801,12 +851,25 @@ mode,s,h,'+str(hpar['mode'])+',,,"mode"\n'
 
 # Run XSTAR with new xstar.par
 
-    with subprocess.Popen("xstar",stdout=subprocess.PIPE,bufsize=1,\
-                          universal_newlines=True) as p:
-        for line in p.stdout:
-            print(line,end='') # process line here
-    if p.returncode != 0:
-        raise subprocess.CalledProcessError(p.returncode,p.args)
+    if headas_folder is not None:
+
+        heaproc.sendline('xstar')
+
+        heaproc_status=heaproc.expect([' total time',pexpect.TIMEOUT,
+                                       'Fortran runtime error','  Program aborting...'],timeout=3600)
+
+        assert heaproc_status!=1,'xstar timeout'
+        assert heaproc_status<2,'error while running xstar'
+
+        heaproc.sendline('exit')
+
+    else:
+        with subprocess.Popen("xstar",stdout=subprocess.PIPE,bufsize=1,shell=True,\
+                              universal_newlines=True) as p:
+            for line in p.stdout:
+                print(line,end='') # process line here
+        if p.returncode != 0:
+            raise subprocess.CalledProcessError(p.returncode,p.args)
 
 #########################################################################
 

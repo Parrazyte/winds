@@ -25,6 +25,46 @@ PI = 3.14159265
 Km2m = 1000.0
 m2cm = 100.0
 
+def interp_yaxis(x_value,x_axis,y_axis,round=True):
+    '''
+    interpolates linearly the y values of the 2 closest x_axis values to x_value
+
+    if round is set to True, returns directly a close value from x_axis if there's one
+    (to avoid issues in equalities with numpy)
+    '''
+
+    #returning directly the y point to avoid issues in precision when the x_value is in the sample
+    if x_value in x_axis:
+        return y_axis[x_axis==x_value]
+
+    #fetching the closest points
+    min_mask=np.argmin(abs(x_axis-x_value))
+
+    if round:
+        if abs(x_value-x_axis[min_mask]<1e-6):
+            return y_axis[min_mask]
+
+    if x_value<x_axis[min_mask]:
+        min_mask=[min_mask-1,min_mask]
+    else:
+        min_mask=[min_mask,min_mask+1]
+    closest_x=x_axis[min_mask]
+    closest_y=y_axis[min_mask]
+
+    #ordering them correctly for the x axis
+    closest_y = closest_y[closest_x.argsort()]
+    closest_x.sort()
+
+    # #interpolating (assuming linear here)
+    # coeff= (closest_y[1]-closest_y[0])  /(closest_x[1]-closest_x[0])
+    # ord_orig=closest_y[0]-coeff*closest_x[0]
+    #y_value=coeff*x_value+ord_orig
+
+    #directly giving it is easier
+    y_value=closest_y[0]+(closest_y[1]-closest_y[0])*(x_value-closest_x[0])/(closest_x[1]-closest_x[0])
+
+    return y_value
+
 def print_log(elem,logfile_io):
 
     '''
@@ -149,7 +189,7 @@ def load_solutions(solutions,mode='file',split_sol=False,split_par=False):
 
 
 def sample_angle(solutions_path, angle_values, mdot_obs, m_BH, r_j=6., eta_mhd=1 / 12, outdir=None,
-                 return_file_path=False,mode='file'):
+                 return_file_path=False,mode='file',return_compton_angle=False):
     '''
     split the solution grid for a range of angles up to the compton-thick point of each solution
 
@@ -165,6 +205,9 @@ def sample_angle(solutions_path, angle_values, mdot_obs, m_BH, r_j=6., eta_mhd=1
 
         array: no log file
                returns directly the solution array instead of writing it in a file
+
+                if return_compton_angle is set to True, returns a second array with the compton thick
+                angle of each solution
 
     the default value of r_j is a massive particule's isco in Rg for non-spinning BH
 
@@ -211,6 +254,8 @@ def sample_angle(solutions_path, angle_values, mdot_obs, m_BH, r_j=6., eta_mhd=1
 
     n_angles = 0
 
+    ang_compton_list=[]
+
     # working solution by solution
     for solutions_split in solutions_split_arr:
         def column_density_full(p_mhd, rho_mhd):
@@ -224,29 +269,46 @@ def sample_angle(solutions_path, angle_values, mdot_obs, m_BH, r_j=6., eta_mhd=1
 
             return mdot_mhd / (sigma_thomson_cgs) * rho_mhd * (r_j ** (p_mhd - 0.5) / (0.5 - p_mhd))
 
+        def ang_compton_thick(p_mhd,rho_mhd,angles):
+            #fetching the rho value giving exactly the compton thickness threshold
+            rho_compton=compton_thick_thresh*sigma_thomson_cgs/(mdot_mhd*(r_j ** (p_mhd - 0.5) / (0.5 - p_mhd)))
+
+            angle_compton=interp_yaxis(rho_compton,rho_mhd,angles)
+
+            return angle_compton
         # retrieving p
         p_mhd_sol = solutions_split[0][2]
 
         # and the varying rho
         rho_mhd_sol = solutions_split.T[10]
 
+        angle_sol=solutions_split.T[8]
+
         # computing the column densities
         col_dens_sol = column_density_full(p_mhd_sol, rho_mhd_sol)
 
+        #the compton thick threshold
+
+        ang_compton=ang_compton_thick(p_mhd_sol,rho_mhd_sol,angle_sol)
+
+        ang_compton_list+=[ang_compton]
+
         # and the first angle value below compton-thickness
-        sol_angle_thick = solutions_split.T[8][col_dens_sol < compton_thick_thresh][0]
+        sol_angle_thick = angle_sol[col_dens_sol < compton_thick_thresh][0]
 
         print_log('\n\n***************', solutions_log_io)
         print_log('Solution:\n' +
                   'epsilon=' + str(solutions_split[0][0]) + '\nn_island=' + str(solutions_split[0][1]) +
                   '\np=' + str(solutions_split[0][2]) + '\nmu=' + str(solutions_split[0][3]), solutions_log_io)
 
+        print_log('\nCompton thick threshold at theta~'+str(ang_compton),solutions_log_io)
         print_log('\nFirst solution below comp thick at theta=' + str(sol_angle_thick), solutions_log_io)
 
         angle_values_nonthick=angle_values[angle_values<sol_angle_thick]
 
         # using it to determine how many angles will be probed (and addin a small delta to ensure the last value
         # is taken if it is a full one
+
         ####add log space option
 
         print_log('Angle sampling:', solutions_log_io)
@@ -255,10 +317,10 @@ def sample_angle(solutions_path, angle_values, mdot_obs, m_BH, r_j=6., eta_mhd=1
         n_angles += len(angle_values_nonthick)
 
         # restricting to unique indexes to avoid repeating solutions
-        id_sol_sample = np.unique([abs(solutions_split.T[8] - elem_angle).argmin() for elem_angle in angle_values_nonthick])
+        id_sol_sample = np.unique([abs(angle_sol - elem_angle).argmin() for elem_angle in angle_values_nonthick])
 
         print_log('Angles of solutions selected:', solutions_log_io)
-        print_log(solutions_split.T[8][id_sol_sample], solutions_log_io)
+        print_log(angle_sol[id_sol_sample], solutions_log_io)
 
         # and fetching the corresponding closest solutions
         solutions_sample += solutions_split[id_sol_sample].tolist()
@@ -279,7 +341,10 @@ def sample_angle(solutions_path, angle_values, mdot_obs, m_BH, r_j=6., eta_mhd=1
         if return_file_path:
             return solutions_mod_path
     elif mode=='array':
-        return solutions_sample
+        if return_compton_angle:
+            return solutions_sample,np.array(ang_compton_list)
+        else:
+            return solutions_sample
 
 
 def create_grid(grid_name, mhd_solutions_path,

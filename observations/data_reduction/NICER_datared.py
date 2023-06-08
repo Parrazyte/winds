@@ -73,11 +73,11 @@ ap = argparse.ArgumentParser(description='Script to reduce NICER files.\n)')
 ap.add_argument("-dir", "--startdir", nargs='?', help="starting directory. Current by default", default='./', type=str)
 ap.add_argument("-l","--local",nargs=1,help='Launch actions directly in the current directory instead',
                 default=False,type=bool)
-ap.add_argument('-catch','--catch_errors',help='Catch errors while running the data reduction and continue',default=False,type=bool)
+ap.add_argument('-catch','--catch_errors',help='Catch errors while running the data reduction and continue',default=True,type=bool)
 
 #global choices
 ap.add_argument("-a","--action",nargs='?',help='Give which action(s) to proceed,separated by comas.'+
-                '\n1.evt_build\n2.filter_evt\n3.extract_reg...',default='c',type=str)
+                '\n1.evt_build\n2.filter_evt\n3.extract_reg...',default='1,l,fs,g,m,c',type=str)
 ap.add_argument("-over",nargs=1,help='overwrite computed tasks (i.e. with products in the batch, or merge directory\
                 if "m" is in the actions) in a folder',default=True,type=bool)
 

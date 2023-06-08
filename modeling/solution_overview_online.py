@@ -75,6 +75,9 @@ if update_online:
 
     file_dir=__file__[:__file__.rfind('/')]
 
+    st.text(file_dir)
+
+    st.text('cp '+solutions_path+' '+file_dir+'/solutions_dumps/')
     os.system('mkdir -p '+file_dir+'/solutions_dumps/')
 
     os.system('cp '+solutions_path+' '+file_dir+'/solutions_dumps/'+solutions_path.split('/')[-1])

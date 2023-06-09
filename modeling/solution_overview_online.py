@@ -420,10 +420,10 @@ def angle_plot(x_arr,y_arr,log_x=False,log_y='auto',xaxis_title='',yaxis_title='
         #adding the line
         line_name='p= '+str(elem_p_mu[0])+' | mu= '+str(elem_p_mu[1])
 
-        '''
-        adding a split depending on whether the line is compton thick or not to allow distinguishing the compton
-         thick zones for several solutions
-        '''
+
+        #adding a split depending on whether the line is compton thick or not to allow distinguishing the compton
+        #thick zones for several solutions
+
 
         if n_sel>1:
 
@@ -648,7 +648,7 @@ def radial_plot(rad,sol_sampl,angl_sampl,log_x=False,log_y=False,xaxis_title='',
     ang_colors = sample_colorscale(cmap,norm_angl)
 
     #creating the theme with the first line
-    fig_rad=plotly_line_wrapper(rad[0],sol_sampl[0],log_x=log_x,log_y='auto',xaxis_title=xaxis_title,yaxis_title=yaxis_title,line_color=ang_colors[0],legend=True)
+    fig_rad=plotly_line_wrapper(rad[0],sol_sampl[0],log_x=log_x,log_y='auto',xaxis_title=xaxis_title,yaxis_title=yaxis_title,line_color=ang_colors[0],legend=True,name='θ='+str(angl_sampl[0]))
 
     fig_rad.update_layout(width=515)
 
@@ -674,7 +674,7 @@ def radial_plot(rad,sol_sampl,angl_sampl,log_x=False,log_y=False,xaxis_title='',
     for id_sol,(elem_rad,elem_sampl,elem_angl,elem_color) in enumerate(zip(rad[1:],sol_sampl[1:],angl_sampl[1:],ang_colors[1:])):
         fig_rad.add_trace(
         go.Scatter(x=elem_rad,y=elem_sampl,line=dict(color=elem_color),name='',showlegend=False,
-            hovertemplate="<b>" + 'theta='+str(elem_angl) + "</b><br>" +
+            hovertemplate="<b>" + 'θ='+str(elem_angl) + "</b><br>" +
                           x_title_str + ": %{x}<br>" +
                           y_title_str + ": %{y}<br>" +
                           "<extra></extra>"))

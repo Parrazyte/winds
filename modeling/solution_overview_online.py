@@ -80,11 +80,6 @@ if update_online:
     os.system('cp '+solutions_path+' '+file_dir+'/solutions_dumps/'+solutions_path.split('/')[-1])
     os.system('cp '+possible_sol_path+' '+file_dir+'/solutions_dumps/'+possible_sol_path.split('/')[-1])
 
-solutions_path='/media/parrama/SSD/Simu/MHD/solutions/nathan_init/nathan_init.txt'
-
-possible_sol_path='/media/parrama/SSD/Simu/MHD/solutions/nathan_init/super_a_0.0.dat'
-
-
 Msol_SI = 1.98892e30
 m2cm=100
 c_SI = 2.99792e8

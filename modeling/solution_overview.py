@@ -771,6 +771,7 @@ with tab_sol_radial:
         
         radial_plot(r_sph_sampl,nh_sampl,sol_sampl_angle,log_x=True,log_y=True,
                     xaxis_title=r'$R_{sph}\;$ (Rg)',yaxis_title=r'$n_{h}\textrm{ (cm}^{-2}\textrm{)}$',
+                    logxi_ids=logxi_6_ids,
                     yrange=[np.log10(1e20),np.log10(1.5e24)])
 
     with col_b:

@@ -155,7 +155,7 @@ for i in range(len(sol_indiv_eps)):
 p_mu_space=np.array([elem for elem in p_mu_space]).T
 
 fig_scatter=go.Figure()
-fig_scatter.update_layout(width=1500,height=800,)
+fig_scatter.update_layout(width=1500,height=750)
 fig_scatter.update_xaxes(type="log")
 fig_scatter.update_yaxes(type="log")
 fig_scatter.layout.yaxis.color = 'white'
@@ -190,7 +190,7 @@ fig_scatter.update_layout(legend=dict(
     y=0.99,
     xanchor="right",
     x=0.99,font=dict(color='white')),hovermode='closest',    hoverlabel=dict(
-        bgcolor='rgba(0.,0.,0.,0.)',font=dict(color="white")))
+        bgcolor='rgba(0.,0.,0.,0.)',font=dict(color="white")),margin=dict(t=20))
 
 # fig_scatter.update_xaxes(tickfont=dict(color='white'),title_font_color="white")
 # fig_scatter.update_yaxes(tickfont=dict(color='white'),title_font_color="white")

@@ -64,8 +64,8 @@ else:
     if not check_password():
         st.stop()
 
-    solutions_path='/app/winds/modeling/solution_dumps/nathan_init.txt'
-    possible_sol_path = '/app/winds/modeling/solution_dumps/super_a_0.0.dat'
+    solutions_path='/app/winds/modeling/solutions_dumps/nathan_init.txt'
+    possible_sol_path = '/app/winds/modeling/solutions_dumps/super_a_0.0.dat'
 
 if update_online:
     # updating script

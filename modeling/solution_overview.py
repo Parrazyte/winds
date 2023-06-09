@@ -205,19 +205,26 @@ tab_p_mu, tab_sol, tab_sol_radial,tab_explo= st.tabs(["Solution selection", "Ang
 with tab_p_mu:
     selected_points = plotly_events(fig_scatter,click_event=True,select_event=True,override_height=800)
     st.info('Rerun if this figure disappears.')
-with tab_sol:
-    if len(selected_points)==0:
-        st.info('Click or select point(s) for which the MHD solution has been computed to display it/them.')
+
+if len(selected_points)==0:
+    with tab_sol:
+        st.info('Click or select point(s) for which the MHD solution has been computed to display the angular'+
+                ' distribution of its/their properties.')
+    with tab_sol_radial:
+        st.info('Click on a point for which the MHD solution has been computed to display radial distributions.')
+    with tab_explo:
+        st.info('Click on a point for which the MHD solution has been computed to display parameter exploration.')
+    st.stop()
+
+if selected_points is not None:
+
+    #only selected the points from the second trace with the curvenumber test
+    selected_sol_p_mu=np.array([[selected_points[i]['y'],selected_points[i]['x']] for i in range(len(selected_points)) if selected_points[i]['curveNumber']==1])
+    n_sel=len(selected_sol_p_mu)
+
+    if n_sel==0:
+        st.warning('None of the selected points have a MHD solution.')
         st.stop()
-    if selected_points is not None:
-
-        #only selected the points from the second trace with the curvenumber test
-        selected_sol_p_mu=np.array([[selected_points[i]['y'],selected_points[i]['x']] for i in range(len(selected_points)) if selected_points[i]['curveNumber']==1])
-        n_sel=len(selected_sol_p_mu)
-
-        if n_sel==0:
-            st.info('None of the selected points have a MHD solution.')
-            st.stop()
 
 #fetching the individual solutions with these parameters
 selected_sol_mask=np.array([np.all(np.array([elem[0][2:4] for elem in sol_splitsol])==selected_sol_p_mu[i],axis=1)\
@@ -226,12 +233,12 @@ selected_sol_mask=np.array([np.all(np.array([elem[0][2:4] for elem in sol_splits
 selected_mhd_sol=sol_splitsol[selected_sol_mask]
 
 # ordering the mask in order or reading (increasing mu)
-if sol_order_select == 'Increasing mu':
-    selected_mhd_sol = selected_mhd_sol[selected_sol_p_mu.T[1].argsort()]
-    selected_sol_p_mu = selected_sol_p_mu[selected_sol_p_mu.T[1].argsort()]
-elif sol_order_select == 'Increasing p':
-    selected_mhd_sol = selected_mhd_sol[selected_sol_p_mu.T[0].argsort()]
-    selected_sol_p_mu = selected_sol_p_mu[selected_sol_p_mu.T[0].argsort()]
+
+sol_order=selected_sol_p_mu.T[1].argsort() if sol_order_select =='Increasing mu' else\
+            selected_sol_p_mu.T[0].argsort() if sol_order_select == 'Increasing p' else True
+
+selected_mhd_sol=selected_mhd_sol[sol_order]
+selected_sol_p_mu=selected_sol_p_mu[sol_order]
 
 
 #doing this without direct transpositions because the arrays arent regular due to uneven angle sampling
@@ -268,7 +275,7 @@ sol_angle_sm_arr=y_to_ang(sol_y_sm)
 sol_angle_A_arr=y_to_ang(sol_y_A)
 
 def plotly_line_wrapper(x,y,log_x=False,log_y='auto',xaxis_title='',yaxis_title='',legend=False,
-                        line_color='lightskyblue',ex_fig=None,name='',showlegend=False):
+                        line_color='lightskyblue',ex_fig=None,name='',showlegend=False,split_ls_x=None,linedash='solid'):
 
     # '''
     # Wrapper to render the line in a "nice" streamlit theme while keeping the latex displays
@@ -320,11 +327,42 @@ def plotly_line_wrapper(x,y,log_x=False,log_y='auto',xaxis_title='',yaxis_title=
         y_title_str=y_title
 
     #note: the <extra> hides the initial template with the name hovering on the left
-    line=go.Scatter(x=x,y=abs(y) if neg_log else y,line=dict(color=line_color),name=name,showlegend=showlegend,
-                    hovertemplate="<b>"+name+"</b><br>" +
-                                  x_title_str+": %{x}<br>" +
-                                  y_title_str+": %{y}<br>"+
-                                    "<extra></extra>")
+
+    if split_ls_x is not None:
+
+        y_split=interp_yaxis(split_ls_x,x,abs(y) if neg_log else y,log_y=setup_log_y)
+
+        #inverted because the angles are backwards
+
+        line_before_split = go.Scatter(x=[split_ls_x]+(x[x<split_ls_x]).tolist(),
+                                       y=[y_split]+(abs(y[x<split_ls_x]) if neg_log else y[x<split_ls_x]).tolist(), line=dict(color=line_color, dash=linedash[0]), name=name,
+                          showlegend=showlegend,
+                          hovertemplate="<b>" + name + "</b><br>" +
+                                        x_title_str + ": %{x}<br>" +
+                                        y_title_str + ": %{y}<br>" +
+                                        "<extra></extra>")
+
+        line_after_split = go.Scatter(x=(x[x>split_ls_x]).tolist()+[split_ls_x],
+                                       y=(abs(y[x>split_ls_x]) if neg_log else y[x>split_ls_x]).tolist()+[y_split],
+                                      line=dict(color=line_color, dash=linedash[1]), name=name,
+                          showlegend=False,
+                          hovertemplate="<b>" + name + "</b><br>" +
+                                        x_title_str + ": %{x}<br>" +
+                                        y_title_str + ": %{y}<br>" +
+                                        "<extra></extra>")
+
+        fig_line.add_traces(line_before_split)
+        fig_line.add_traces(line_after_split)
+
+    else:
+        line=go.Scatter(x=x,y=abs(y) if neg_log else y,line=dict(color=line_color,dash=linedash),name=name,showlegend=showlegend,
+                        hovertemplate="<b>"+name+"</b><br>" +
+                                      x_title_str+": %{x}<br>" +
+                                      y_title_str+": %{y}<br>"+
+                                        "<extra></extra>")
+
+        fig_line.add_traces(line)
+
 
     fig_line.update_layout(xaxis=dict(showgrid=True,zeroline=False),
                                 yaxis=dict(showgrid=True,zeroline=False),
@@ -332,9 +370,6 @@ def plotly_line_wrapper(x,y,log_x=False,log_y='auto',xaxis_title='',yaxis_title=
                                 font=dict(size=14),
                                 paper_bgcolor='rgba(0.,0.,0.,0.)', plot_bgcolor='rgba(0.,0.,0.,0.)',
                        margin=dict(l=100, r=20, t=0, b=100))
-
-
-    fig_line.add_traces(line)
 
     fig_line.layout.xaxis.color = 'white'
     # line.layout.xaxis.zerolinecolor = 'rgba(0.5,0.5,.5,0.3)'
@@ -382,14 +417,31 @@ def angle_plot(x_arr,y_arr,log_x=False,log_y='auto',xaxis_title='',yaxis_title='
 
     sol_colors = sample_colorscale(cmap,norm_sol)
 
-    for id,(x,y,sampl_angles,compt_angles,elem_p_mu,sol_angle_id,sol_angle_sm,sol_angle_A,elem_color,elem_sol_angle) in\
+    for id,(x,y,sampl_angles,compt_angle,elem_p_mu,sol_angle_id,sol_angle_sm,sol_angle_A,elem_color,elem_sol_angle) in\
             enumerate(zip(x_arr,y_arr,sampl_angles_arr,compt_angles_arr,selected_sol_p_mu,sol_angle_id_arr,sol_angle_sm_arr,sol_angle_A_arr,sol_colors,x_arr)):
 
         x=x.astype(float)
         y=y.astype(float)
         #adding the line
         line_name='p= '+str(elem_p_mu[0])+' | mu= '+str(elem_p_mu[1])
-        fig_line=plotly_line_wrapper(x,y,log_x=log_x,log_y='auto',xaxis_title=xaxis_title,yaxis_title=yaxis_title,legend=legend,ex_fig=fig_line,name=line_name,
+
+        '''
+        adding a split depending on whether the line is compton thick or not to allow distinguishing the compton
+         thick zones for several solutions
+        '''
+
+        if n_sel>1:
+
+            #computing the position of the compton angle on the y axis
+            compt_y=interp_yaxis(compt_angle,x,y)
+
+            fig_line=plotly_line_wrapper(x,y,
+                                         log_x=log_x,log_y='auto',
+                                         xaxis_title=xaxis_title,yaxis_title=yaxis_title,legend=legend,ex_fig=fig_line,
+                                         name=line_name,line_color=elem_color,showlegend=legend_lines,split_ls_x=compt_angle,linedash=['solid','dash'])
+
+        else:
+            fig_line=plotly_line_wrapper(x,y,log_x=log_x,log_y='auto',xaxis_title=xaxis_title,yaxis_title=yaxis_title,legend=legend,ex_fig=fig_line,name=line_name,
                                      line_color=elem_color if n_sel>1 else 'lightskyblue',
                                      showlegend=n_sel>1 and legend_lines)
         neg_log=False
@@ -450,6 +502,7 @@ def angle_plot(x_arr,y_arr,log_x=False,log_y='auto',xaxis_title='',yaxis_title='
         fig_line.add_traces(Alfven_point)
 
         #adding the angle sampling
+
         if sampl_angles is not None:
 
             mask_sampl_angles=np.array([elem_sol_angle==elem for elem in sampl_angles]).any(0)
@@ -462,11 +515,34 @@ def angle_plot(x_arr,y_arr,log_x=False,log_y='auto',xaxis_title='',yaxis_title='
                                                   "<extra></extra>")
             fig_line.add_traces(sampl_points)
 
-        #and the compton thick region
-        if compt_angles is not None and n_sel==1:
-            fig_line.add_vrect(x0=compt_angles, x1=90, line_width=0, fillcolor="grey", opacity=0.2,
-                               annotation_text="compton-thick", annotation_position="bottom",
-                               annotation=dict(font=dict(color='white')))
+        #and the compton thick region for the single lines
+        if compt_angle:
+            if  n_sel==1:
+                fig_line.add_vrect(x0=compt_angle, x1=90, line_width=0, fillcolor="grey", opacity=0.2,
+                                   annotation_text="compton-thick", annotation_position="bottom",
+                                   annotation=dict(font=dict(color='white')))
+            else:
+                #remaking this because we need it
+                if log_y == 'auto':
+                    # testing if there's no sign change in the y axis
+                    setup_log_y = (y[y != 0] / abs(y[y != 0]) == 1).all() or (y[y != 0] / abs(y[y != 0]) == -1).all()
+
+                    neg_log = (y[y != 0] / abs(y[y != 0]) == -1).all()
+                elif log_y:
+                    setup_log_y = True
+
+                compt_angle_y=interp_yaxis(compt_angle,x,abs(y) if neg_log else y,log_y=setup_log_y)
+
+                #marking the beginning of the compton thick region with a marker
+
+                compt_thick_point= go.Scatter(x=[compt_angle], y=[compt_angle_y], mode='markers', name='compton thick thresh',marker=dict(size=13,symbol='triangle-right',color='black',line=dict(color='white',width=2)),showlegend=id==n_sel-1 and legend_points,
+                                      hovertemplate="<b>" + 'compton thick thresh' + "</b><br>" +
+                                                    "<b>" + line_name + "</b><br>"+
+                                                    x_title_str + ": %{x}<br>" +
+                                                    y_title_str + ": %{y}<br>" +
+                                                    "<extra></extra>")
+
+                fig_line.add_trace(compt_thick_point)
 
     if latex_title:
         st.components.v1.html(fig_line.to_html(include_mathjax='cdn'), width=500, height=450)
@@ -485,13 +561,18 @@ if split_angle:
 
     selected_sol_split_angle=sol_split_angle[selected_sol_mask]
 
+    #re-ordering
+    selected_sol_split_angle=selected_sol_split_angle[sol_order]
+
     selected_angles=[selected_sol_split_angle[i].T[8] for i in range(n_sel)]
 
-    compton_angle=compton_angles_arr[selected_sol_mask]
+    compton_angles=compton_angles_arr[selected_sol_mask]
+
+    compton_angles=compton_angles[sol_order]
 
 else:
     selected_angles=[None]*n_sel
-    compton_angle=[None]*n_sel
+    compton_angles=[None]*n_sel
 
 with tab_sol:
 
@@ -507,15 +588,15 @@ with tab_sol:
 
         angle_plot(sol_angle,sol_r_cyl_r0,log_x=False,log_y=True,legend_points=n_sel==1,
                             xaxis_title=r'$\theta \; (°)$',yaxis_title=r'$r_{cyl}/r_0$',legend=True,
-                            sampl_angles_arr=selected_angles,compt_angles_arr=compton_angle)
+                            sampl_angles_arr=selected_angles,compt_angles_arr=compton_angles)
 
         angle_plot(sol_angle,sol_ur,log_x=False,legend_points=n_sel==1,
                             xaxis_title=r'$\theta \; (°)$', yaxis_title=r'$u_{r}$',legend=True,
-                            sampl_angles_arr=selected_angles,compt_angles_arr=compton_angle)
+                            sampl_angles_arr=selected_angles,compt_angles_arr=compton_angles)
 
         angle_plot(sol_angle,sol_br,log_x=False,legend_points=n_sel==1,
                             xaxis_title=r'$\theta \; (°)$', yaxis_title=r'$B_r$',legend='top_left',
-                            sampl_angles_arr=selected_angles,compt_angles_arr=compton_angle)
+                            sampl_angles_arr=selected_angles,compt_angles_arr=compton_angles)
 
     with col_2:
 
@@ -524,41 +605,45 @@ with tab_sol:
         angle_plot(sol_angle,sol_rho_mhd,log_x=False,log_y=True,
                    legend='top_left' if n_sel>1 else False,legend_lines=False,
                             xaxis_title =r'$\theta \; (°)$', yaxis_title = r'$\rho_{mhd}$',
-                            sampl_angles_arr=selected_angles,compt_angles_arr=compton_angle)
+                            sampl_angles_arr=selected_angles,compt_angles_arr=compton_angles)
 
         angle_plot(sol_angle, sol_uphi,log_x=False,log_y=True,
                    legend='top_left' if n_sel>1 else False,legend_lines=False,
                             xaxis_title=r'$\theta \; (°)$', yaxis_title=r'$u_{\phi}$',
-                            sampl_angles_arr=selected_angles,compt_angles_arr=compton_angle)
+                            sampl_angles_arr=selected_angles,compt_angles_arr=compton_angles)
 
         angle_plot(sol_angle, sol_bphi,log_x=False,legend='bot_left' if n_sel>1 else False,legend_lines=False,
                             xaxis_title=r'$\theta \; (°)$', yaxis_title=r'$B_{\phi}$',
-                            sampl_angles_arr=selected_angles,compt_angles_arr=compton_angle)
+                            sampl_angles_arr=selected_angles,compt_angles_arr=compton_angles)
 
 
     with col_3:
 
         angle_plot(sol_angle,sol_t_mhd,log_x=False,log_y=True,
                             xaxis_title=r'$\theta \; (°)$', yaxis_title=r'$T_{mhd}$',
-                            sampl_angles_arr=selected_angles,compt_angles_arr=compton_angle)
+                            sampl_angles_arr=selected_angles,compt_angles_arr=compton_angles)
 
         angle_plot(sol_angle, sol_uz,log_x=False,
                             xaxis_title=r'$\theta \; (°)$', yaxis_title=r'$u_{z}$',
-                            sampl_angles_arr=selected_angles,compt_angles_arr=compton_angle)
+                            sampl_angles_arr=selected_angles,compt_angles_arr=compton_angles)
 
         angle_plot(sol_angle, sol_bz,log_x=False,
                             xaxis_title=r'$\theta \; (°)$', yaxis_title=r'$B_z$',
-                            sampl_angles_arr=selected_angles,compt_angles_arr=compton_angle)
+                            sampl_angles_arr=selected_angles,compt_angles_arr=compton_angles)
 
 if n_sel>1:
     with tab_sol_radial:
         st.info('Display of radial evolution restricted to single solution selection.')
     with tab_explo:
         st.info('Parameter exploration restricted to single solution selection.')
-    sys.exit()
+    st.stop()
 
-if not split_angle:
-    sys.exit()
+if n_sel==1 and not split_angle:
+    with tab_sol_radial:
+        st.info('Activate angle sampling in the sidebar to see radial distributions.')
+    with tab_explo:
+        st.info('Activate angle sampling in the sidebar to see parameter exploration.')
+    st.stop()
 
 def radial_plot(rad,sol_sampl,angl_sampl,log_x=False,log_y=False,xaxis_title='',yaxis_title='',legend=False,
                 cmap='plasma_r',logxi_ids=None,yrange=None):

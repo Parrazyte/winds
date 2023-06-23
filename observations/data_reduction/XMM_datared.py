@@ -113,7 +113,7 @@ from rasterio.features import rasterize
 #shape merging
 from scipy.ndimage import binary_dilation
 
-from general_tools import file_edit
+from general_tools import file_edit,interval_extract
 
 #to visualise the alphashape :
 # from descartes import PolygonPatch
@@ -1213,24 +1213,6 @@ def extract_reg(directory,mode='manual',cams='all',expos_mode='all',overwrite=Tr
         expos_mode_regex='IMAGING TIMING BURST'
     else:
         expos_mode_regex=expos_mode
-        
-    def interval_extract(list):
-        
-        '''
-        From a list of numbers, outputs a list of the integer intervals contained inside it 
-        '''
-        
-        list = sorted(set(list))
-        range_start = previous_number = list[0]
-      
-        for number in list[1:]:
-            if number == previous_number + 1:
-                previous_number = number
-            else:
-                yield [range_start, previous_number]
-                range_start = previous_number = number
-        yield [range_start, previous_number]
-    
 
     def extract_reg_single(spawn,file,filedir):
         
@@ -1498,7 +1480,7 @@ def extract_reg(directory,mode='manual',cams='all',expos_mode='all',overwrite=Tr
                 bg_counts=data_lc_bg['RATE'][gti_indexes].sum()
                 
                 if str(src_counts)!='--':
-                    #formula from https://xmm-tools.cosmos.esa.int/external/sas/current/doc/specgroup/node10.html
+                    #SNR formula from https://xmm-tools.cosmos.esa.int/external/sas/current/doc/specgroup/node10.html
                     #1e-10 here to avoid wrong divisions
                     
                     #we also switch back to count instead of count rate by multiplying by the sqrt of the exposure

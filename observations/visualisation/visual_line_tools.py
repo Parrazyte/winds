@@ -25,6 +25,7 @@ import matplotlib as mpl
 import matplotlib.pyplot as plt
 from mpl_toolkits.axes_grid1 import make_axes_locatable
 import matplotlib.colors as colors
+from matplotlib.legend_handler import HandlerTuple
 from matplotlib.gridspec import GridSpec
 
 from matplotlib.lines import Line2D
@@ -70,6 +71,9 @@ from general_tools import ravel_ragged
 
 #Catalogs and manipulation
 from astroquery.vizier import Vizier
+
+
+telescope_list=('XMM','Chandra','NICER','Suzaku','Swift')
 
 telescope_colors={'XMM':'red',
                   'Chandra':'blue',
@@ -653,7 +657,7 @@ def obj_values(file_paths,E_factors,dict_linevis):
     cameras=dict_linevis['cameras']
     expmodes=dict_linevis['expmodes']
     multi_obj=dict_linevis['multi_obj']
-    visual_line=dict_linevis['visual_line']
+    visual_line=True
     
     obs_list=np.array([None]*len(obj_list))
     lval_list=np.array([None]*len(obj_list))
@@ -914,7 +918,7 @@ def values_manip(abslines_inf,dict_linevis,autofit_inf):
     abslines_inf_line=np.array([None]*len(range_absline))
     
     if len([elem for elem in abslines_inf if elem is not None])>0:
-        for i_line in range(6):
+        for i_line in range(len(range_absline)):
             arr_part_line=np.array([None]*len(abslines_inf))
             for i_obj in range(len(abslines_inf)):
 
@@ -939,6 +943,15 @@ def values_manip(abslines_inf,dict_linevis,autofit_inf):
             abslines_inf_line[i_line]=np.array([elem for elem in arr_part_line],dtype=object)
         
         abslines_inf_line=np.array([elem for elem in abslines_inf_line])
+
+        #reorganizing the array to ensure it's non regular
+        abslines_inf_line_use=np.array([[None]*len(abslines_inf)]*len(range_absline))
+
+        for i_1 in range(len(range_absline)):
+            for i_2 in range(len(abslines_inf)):
+                abslines_inf_line_use[i_1][i_2]=abslines_inf_line[i_1][i_2]
+
+        abslines_inf_line=abslines_inf_line_use
     
     abslines_inf_obj=np.array([None]*len(obj_list))
     
@@ -948,39 +961,48 @@ def values_manip(abslines_inf,dict_linevis,autofit_inf):
         except:
             breakpoint()
             print('should not happen')
-    if multi_obj:
+
+    #creating absline_plot
+
+    abslines_plt=np.array([None]*n_infos)
+    for i_info in range(len(abslines_plt)):
+
+        arr_part_uncert=np.array([None]*3)
+        for i_uncert in range(len(arr_part_uncert)):
+
+            arr_part_line=np.array([None]*len(range_absline))
+            for i_line in range(len(arr_part_line)):
+
+                arr_part_obj=np.array([None]*len(abslines_inf))
+                for i_obj in range(len(arr_part_obj)):
+
+                    arr_part_obs=np.array([None]*len(abslines_inf[i_obj]))
+                    for i_obs in range(len(arr_part_obs)):
+
+                        arr_part_obs[i_obs]=abslines_inf_line[i_line][i_obj][i_obs][i_info][i_uncert]
+
+                    arr_part_obj[i_obj]=arr_part_obs
+
+                arr_part_line[i_line]=arr_part_obj
+
+            arr_part_uncert[i_uncert]=np.array([elem for elem in arr_part_line])
+
+        abslines_plt[i_info]=arr_part_uncert
     
-        abslines_plt=np.array([None]*n_infos)
-        for i_info in range(len(abslines_plt)):
-        
-            arr_part_uncert=np.array([None]*3)
-            for i_uncert in range(len(arr_part_uncert)):
-            
-                arr_part_line=np.array([None]*len(range_absline))
-                for i_line in range(len(arr_part_line)):
-    
-                    arr_part_obj=np.array([None]*len(abslines_inf))
-                    for i_obj in range(len(arr_part_obj)):
-                    
-                        arr_part_obs=np.array([None]*len(abslines_inf[i_obj]))
-                        for i_obs in range(len(arr_part_obs)):
-                        
-                            arr_part_obs[i_obs]=abslines_inf_line[i_line][i_obj][i_obs][i_info][i_uncert]
-                            
-                        arr_part_obj[i_obj]=arr_part_obs
-                
-                    arr_part_line[i_line]=arr_part_obj
-                
-                arr_part_uncert[i_uncert]=np.array([elem for elem in arr_part_line])
-                
-            abslines_plt[i_info]=arr_part_uncert
-    
+    #re-organizing the array to ensure it's non regular
+    abslines_plt_true=np.array([[[[None]*len(abslines_inf)]*len(range_absline)]*3]*n_infos)
+
+    if len([elem for elem in abslines_inf_line if elem is not None])>0:
+
+        for i_1 in range(n_infos):
+            for i_2 in range(3):
+                for i_3 in range(len(range_absline)):
+                    for i_4 in range(len(abslines_inf)):
+                        abslines_plt_true[i_1][i_2][i_3][i_4]=abslines_plt[i_1][i_2][i_3][i_4]
+
+        abslines_plt=abslines_plt_true
     else:
-    
-        if len([elem for elem in abslines_inf_line if elem is not None])>0:
-            abslines_plt=np.transpose(abslines_inf_line,[3,4,0,1,2])
-        else:
-            sys.exit()
+        sys.exit()
     
     '''
     in the plt form, the new order is:
@@ -1051,6 +1073,16 @@ def values_manip(abslines_inf,dict_linevis,autofit_inf):
     
         #avoiding negative uncertainties
         flux_plt[1:]=flux_plt[1:].clip(0)
+
+        #restructuring the array
+        flux_plt_use=np.array([[[None]*len(abslines_inf)]*5]*3)
+
+        for i_1 in range(3):
+            for i_2 in range(5):
+                for i_3 in range(len(abslines_inf)):
+                    flux_plt_use[i_1][i_2][i_3]=flux_plt[i_1][i_2][i_3]
+
+        flux_plt=flux_plt_use
         
     #We then use uncertainty composition for the HID
 
@@ -1144,6 +1176,1217 @@ def values_manip(abslines_inf,dict_linevis,autofit_inf):
                 kt_plt[i_uncert][i_obj]=kt_part_obj
                 
     return abslines_inf_line,abslines_inf_obj,abslines_plt,abslines_e,flux_plt,hid_plt,incl_plt,width_plt,nh_plt,kt_plt
+def hid_graph(ax_hid,dict_linevis,
+              display_single=False,display_nondet=True,display_upper=False,
+              cyclic_cmap_nondet=False,cyclic_cmap_det=False,cyclic_cmap=False,
+              cmap_incl_type=None,cmap_incl_type_str=None,
+              radio_info_label=None,
+              eqw_ratio_ids=None,
+              display_obj_zerodet=True,
+              restrict_threshold=False,display_nonsign=False,display_central_abs=False,
+              display_incl_inside=False,dash_noincl=False,
+              display_hid_error=False,display_edgesource=False,split_cmap_source=True,
+              display_evol_single=False,display_dicho=False,
+              global_colors=True,alpha_abs=1,
+              paper_look=False,bigger_text=True,square_mode=True,zoom=False):
+
+    abslines_infos_perobj=dict_linevis['abslines_infos_perobj']
+    abslines_plot=dict_linevis['abslines_plot']
+    nh_plot=dict_linevis['nh_plot']
+    kt_plot=dict_linevis['kt_plot']
+    hid_plot=dict_linevis['hid_plot']
+    incl_plot=dict_linevis['incl_plot']
+    mask_obj=dict_linevis['mask_obj']
+    mask_obj_base=dict_linevis['mask_obj_base']
+    mask_lines=dict_linevis['mask_lines']
+    mask_lines_ul=dict_linevis['mask_lines_ul']
+    obj_list=dict_linevis['obj_list']
+    date_list=dict_linevis['date_list']
+    instru_list=dict_linevis['instru_list']
+    flux_list=dict_linevis['flux_list']
+    choice_telescope=dict_linevis['choice_telescope']
+    telescope_list=dict_linevis['telescope_list']
+    bool_incl_inside=dict_linevis['bool_incl_inside']
+    bool_noincl=dict_linevis['bool_noincl']
+    slider_date=dict_linevis['slider_date']
+    slider_sign=dict_linevis['slider_sign']
+    radio_info_cmap=dict_linevis['radio_info_cmap']
+    radio_cmap_i=dict_linevis['radio_cmap_i']
+    cmap_color_source=dict_linevis['cmap_color_source']
+    cmap_color_det=dict_linevis['cmap_color_det']
+    cmap_color_nondet=dict_linevis['cmap_color_nondet']
+
+    # global normalisations values for the points
+    norm_s_lin = 5
+    norm_s_pow = 1.15
+
+    #extremal allowed values for kT in the fitting procedure(in keV)
+    kt_min = 0.5
+    kt_max = 3.
+
+    # parameters independant of the presence of lines
+    type_1_cm = ['Inclination', 'Time', 'nH', 'kT']
+
+    # parameters without actual colorbars
+    type_1_colorcode = ['Source', 'Instrument']
+
+    fig_hid=ax_hid.get_figure()
+
+    #recreating some variables
+
+    mask_obs_intime_repeat = np.array(
+        [np.repeat(((np.array([Time(subelem) for subelem in elem]) >= Time(slider_date[0])) & \
+                    (np.array([Time(subelem) for subelem in elem]) <= Time(slider_date[1]))), sum(mask_lines)) for elem
+         in date_list], dtype=object)
+
+    # checking which sources have no detection in the current combination
+
+    global_displayed_sign = np.array(
+        [ravel_ragged(elem)[mask.astype(bool)] for elem, mask in zip(abslines_plot[4][0][mask_lines].T, mask_obs_intime_repeat)],
+        dtype=object)
+
+    incl_cmap = np.array([incl_plot.T[0], incl_plot.T[0] - incl_plot.T[1], incl_plot.T[0] + incl_plot.T[2]]).T
+    incl_cmap_base = incl_cmap[mask_obj_base]
+    incl_cmap_restrict = incl_cmap[mask_obj]
+
+    nh_plot_restrict = deepcopy(nh_plot)
+    nh_plot_restrict = nh_plot_restrict.T[mask_obj].T
+
+    kt_plot_restrict = deepcopy(kt_plot)
+    kt_plot_restrict = kt_plot_restrict.T[mask_obj].T
+
+    hid_plot_restrict = hid_plot.T[mask_obj].T
+    incl_plot_restrict = incl_plot[mask_obj]
+
+    if display_nonsign:
+        mask_obj_withdet = np.array([(elem > 0).any() for elem in global_displayed_sign])
+    else:
+        mask_obj_withdet = np.array([(elem > slider_sign).any() for elem in global_displayed_sign])
+
+    # storing the number of objects with detections
+    n_obj_withdet = sum(mask_obj_withdet & mask_obj_base)
+
+    # computing the extremal values of the whole sample/plotted sample to get coherent colormap normalisations, and creating the range of object colors
+    if global_colors:
+        global_plotted_sign = abslines_plot[4][0].ravel()
+        global_plotted_data = abslines_plot[radio_cmap_i][0].ravel()
+
+        # objects colormap for common display
+        norm_colors_obj = mpl.colors.Normalize(vmin=0,
+                                               vmax=max(0, len(abslines_infos_perobj) + (-1 if not cyclic_cmap else 0)))
+        colors_obj = mpl.cm.ScalarMappable(norm=norm_colors_obj, cmap=cmap_color_source)
+
+        norm_colors_det = mpl.colors.Normalize(vmin=0, vmax=max(0,
+                                                                n_obj_withdet + (-1 if not cyclic_cmap_det else 0) + (
+                                                                    1 if n_obj_withdet == 0 else 0)))
+        colors_det = mpl.cm.ScalarMappable(norm=norm_colors_det, cmap=cmap_color_det)
+
+        norm_colors_nondet = mpl.colors.Normalize(vmin=0, vmax=max(0, len(abslines_infos_perobj) - n_obj_withdet + (
+            -1 if not cyclic_cmap_nondet else 0)))
+        colors_nondet = mpl.cm.ScalarMappable(norm=norm_colors_nondet, cmap=cmap_color_nondet)
+
+        # the date is an observation-level parameter so it needs to be repeated to have the same dimension as the other global variables
+        global_plotted_datetime = np.array([elem for elem in date_list for i in range(len(mask_lines))], dtype='object')
+
+        global_mask_intime = np.repeat(True, len(ravel_ragged(global_plotted_datetime)))
+
+        global_mask_intime_norepeat = np.repeat(True, len(ravel_ragged(date_list)))
+
+    else:
+        global_plotted_sign = abslines_plot[4][0][mask_lines].T[mask_obj].ravel()
+        global_plotted_data = abslines_plot[radio_cmap_i][0][mask_lines].T[mask_obj].ravel()
+
+        # objects colormap
+        norm_colors_obj = mpl.colors.Normalize(vmin=0, vmax=max(0, len(abslines_infos_perobj[mask_obj]) + (
+            -1 if not cyclic_cmap else 0)))
+        colors_obj = mpl.cm.ScalarMappable(norm=norm_colors_obj, cmap=cmap_color_source)
+
+        norm_colors_det = mpl.colors.Normalize(vmin=0, vmax=max(0, n_obj_withdet + (-1 if not cyclic_cmap_det else 0)))
+        colors_det = mpl.cm.ScalarMappable(norm=norm_colors_det, cmap=cmap_color_det)
+
+        norm_colors_nondet = mpl.colors.Normalize(vmin=0,
+                                                  vmax=max(0, len(abslines_infos_perobj[mask_obj]) - n_obj_withdet + (
+                                                      -1 if not cyclic_cmap_nondet else 0)))
+        colors_nondet = mpl.cm.ScalarMappable(norm=norm_colors_nondet, cmap=cmap_color_nondet)
+
+        # adapting the plotted data in regular array for each object in order to help
+        # global masks to take off elements we don't want in the comparison
+
+        # the date is an observation-level parameter so it needs to be repeated to have the same dimension as the other global variables
+        global_plotted_datetime = np.array([elem for elem in date_list[mask_obj] for i in range(sum(mask_lines))],
+                                           dtype='object')
+
+        global_mask_intime = (Time(ravel_ragged(global_plotted_datetime)) >= Time(slider_date[0])) & \
+                             (Time(ravel_ragged(global_plotted_datetime)) <= Time(slider_date[1]))
+
+        global_mask_intime_norepeat = (Time(ravel_ragged(date_list[mask_obj])) >= Time(slider_date[0])) & \
+                                      (Time(ravel_ragged(date_list[mask_obj])) <= Time(slider_date[1]))
+
+    # global_nondet_mask=(np.array([subelem for elem in global_plotted_sign for subelem in elem])<=slider_sign) & (global_mask_intime)
+
+    global_det_mask = (np.array([subelem for elem in global_plotted_sign for subelem in elem]) > 0) & (
+        global_mask_intime)
+
+    global_sign_mask = (np.array([subelem for elem in global_plotted_sign for subelem in elem]) > slider_sign) & (
+        global_mask_intime)
+
+    global_det_data = np.array([subelem for elem in global_plotted_data for subelem in elem])[global_det_mask]
+
+    # this second array is here to restrict the colorbar scalings to take into account significant detections only
+    global_sign_data = np.array([subelem for elem in global_plotted_data for subelem in elem])[global_sign_mask]
+
+    # same for the color-coded infos
+    cmap_info = mpl.cm.plasma_r.copy() if radio_info_cmap not in ['Time', 'nH', 'kT'] else mpl.cm.plasma.copy()
+
+    cmap_info.set_bad(color='grey')
+
+    # normalisation of the colormap
+    if radio_cmap_i == 1 or radio_info_cmap == 'EW ratio':
+        gamma_colors = 1 if radio_cmap_i == 1 else 0.5
+        cmap_norm_info = colors.PowerNorm(gamma=gamma_colors)
+
+    elif radio_info_cmap not in ['Inclination', 'Time', 'kT']:
+        cmap_norm_info = colors.LogNorm()
+    else:
+        # keeping a linear norm for the inclination
+        cmap_norm_info = colors.Normalize()
+
+
+    # putting the axis limits at standard bounds or the points if the points extend further
+    flux_list_ravel = np.array([subelem for elem in flux_list for subelem in elem])
+    bounds_x = [min(flux_list_ravel.T[2][0] / flux_list_ravel.T[1][0]),
+                max(flux_list_ravel.T[2][0] / flux_list_ravel.T[1][0])]
+    bounds_y = [min(flux_list_ravel.T[4][0]), max(flux_list_ravel.T[4][0])]
+
+    if zoom:
+        ax_hid.set_xlim(min(ravel_ragged(hid_plot_restrict[0][0])) * 0.9,
+                        max(ravel_ragged(hid_plot_restrict[0][0])) * 1.1)
+        ax_hid.set_ylim(min(ravel_ragged(hid_plot_restrict[1][0])) * 0.8,
+                        max(ravel_ragged(hid_plot_restrict[1][0])) * 1.3)
+    else:
+        ax_hid.set_xlim((min(bounds_x[0] * 0.9, 0.1), max(bounds_x[1] * 1.1, 2)))
+        ax_hid.set_ylim((min(bounds_y[0] * 0.9, 1e-5), max(bounds_y[1] * 1.1, 1)))
+
+    # creating space for the colorbar
+    if radio_info_cmap not in type_1_colorcode:
+        ax_cb = plt.axes([0.92, 0.105, 0.02, 0.775])
+
+        # giving a default value to the colorbar variable so we can test if a cb has been generated later on
+        cb = None
+
+    # markers
+    marker_abs = 'o'
+    marker_nondet = 'd'
+    marker_ul = 'h'
+    marker_ul_top = 'H'
+
+    alpha_ul = 0.3
+
+    # note: the value will finish at false for sources with no non-detections
+    label_obj_plotted = np.repeat(False, len(abslines_infos_perobj[mask_obj]))
+
+    is_colored_scat = False
+
+    # creating the plotted colors variable#defining the mask for detections and non detection
+    plotted_colors_var = []
+
+    #### detections HID
+
+    id_obj_det = 0
+
+    #### Still issues with colormapping when restricting time
+
+    # loop on the objects for detections (restricted or not depending on if the mode is detection only)
+    for i_obj, abslines_obj in enumerate(abslines_infos_perobj[mask_obj]):
+
+        # defining the index of the object in the entire array if asked to, in order to avoid changing colors
+        if global_colors:
+            i_obj_glob = np.argwhere(obj_list == obj_list[mask_obj][i_obj])[0][0]
+        else:
+            i_obj_glob = i_obj
+
+        '''
+        # The shape of each abslines_obj is (uncert,info,line,obs)
+        '''
+
+        # defining the hid positions of each point
+        x_hid = flux_list[mask_obj][i_obj].T[2][0] / flux_list[mask_obj][i_obj].T[1][0]
+        y_hid = flux_list[mask_obj][i_obj].T[4][0]
+
+        # defining the masks and shapes of the markers for the rest
+
+        # defining the mask for the time interval restriction
+        datelist_obj = Time(np.array([date_list[mask_obj][i_obj] for i in range(sum(mask_lines))]).astype(str))
+        mask_intime = (datelist_obj >= Time(slider_date[0])) & (datelist_obj <= Time(slider_date[1]))
+
+
+        # defining the mask for detections and non detection        
+        mask_det = (abslines_obj[0][4][mask_lines] > 0.) & (mask_intime)
+
+        # defining the mask for significant detections
+        mask_sign = (abslines_obj[0][4][mask_lines] > slider_sign) & (mask_intime)
+
+        # these ones will only be used if the restrict values chexbox is checked
+
+        obj_val_cmap_sign = np.array(
+            [np.nan if len(abslines_obj[0][radio_cmap_i][mask_lines].T[i_obs][mask_sign.T[i_obs]]) == 0 else \
+                 (max(abslines_obj[0][radio_cmap_i][mask_lines].T[i_obs][mask_sign.T[i_obs]]) \
+                      if radio_info_cmap != 'EW ratio' else \
+                      np.nan if abslines_obj[0][radio_cmap_i][eqw_ratio_ids[0]].T[i_obs] < slider_sign or \
+                                abslines_obj[0][radio_cmap_i][eqw_ratio_ids[1]].T[i_obs] < slider_sign else \
+                          abslines_obj[0][radio_cmap_i][eqw_ratio_ids[1]].T[i_obs] / \
+                          abslines_obj[0][radio_cmap_i][eqw_ratio_ids[0]].T[i_obs]) \
+             for i_obs in range(len(abslines_obj[0][radio_cmap_i][mask_lines].T))])
+
+        # the size is always tied to the EW
+        obj_size_sign = np.array([np.nan if len(abslines_obj[0][0][mask_lines].T[i_obs][mask_sign.T[i_obs]]) == 0 else \
+                                      max(abslines_obj[0][0][mask_lines].T[i_obs][mask_sign.T[i_obs]]) \
+                                  for i_obs in range(len(abslines_obj[0][0][mask_lines].T))])
+
+        # and we can create the plot mask from it (should be the same wether we take obj_size_sign or the size)
+        obj_val_mask_sign = ~np.isnan(obj_size_sign)
+
+        # creating a display order which is the reverse of the EW size order to make sure we do not hide part the detections
+        obj_order_sign = obj_size_sign[obj_val_mask_sign].argsort()[::-1]
+
+        # same thing for all detections
+        obj_val_cmap = np.array(
+            [np.nan if len(abslines_obj[0][radio_cmap_i][mask_lines].T[i_obs][mask_det.T[i_obs]]) == 0 else \
+                 max(abslines_obj[0][radio_cmap_i][mask_lines].T[i_obs][mask_det.T[i_obs]]) \
+             for i_obs in range(len(abslines_obj[0][radio_cmap_i][mask_lines].T))])
+
+        obj_size = np.array([np.nan if len(abslines_obj[0][0][mask_lines].T[i_obs][mask_det.T[i_obs]]) == 0 else \
+                                 max(abslines_obj[0][0][mask_lines].T[i_obs][mask_det.T[i_obs]]) \
+                             for i_obs in range(len(abslines_obj[0][0][mask_lines].T))])
+
+        obj_val_mask = ~np.isnan(obj_size)
+
+        # creating a display order which is the reverse of the EW size order to make sure we show as many detections as possible
+        obj_order = obj_size[obj_val_mask].argsort()[::-1]
+
+        # not used for now                
+        # else:
+        #     #in single line mode we can directly fetch the single lines values and the mask for the specific line
+        #     obj_val_cmap_sign=abslines_obj[0][radio_cmap_i][mask_lines][mask_sign[mask_lines]].astype(float)
+
+        #     #and the mask
+        #     obj_val_mask_sign=mask_sign[mask_lines]
+
+        #     #in single line mode we can directly fetch the single lines values and the mask for the specific line
+        #     obj_val_cmap=abslines_obj[0][radio_cmap_i][mask_lines][mask_det[mask_lines]].astype(float)
+
+        #     obj_val_mask=mask_det[mask_lines]
+
+        # this mask is used to plot 'unsignificant only' detection points
+        obj_val_mask_nonsign = (obj_val_mask) & (~obj_val_mask_sign)
+
+        # plotting everything
+
+        # we put the color mapped scatter into a list to clim all of them at once at the end
+        if i_obj == 0:
+            scat_col = []
+
+        # plotting the detection centers if asked for
+
+        if len(x_hid[obj_val_mask]) > 0 and display_central_abs:
+            ax_hid.scatter(x_hid[obj_val_mask], y_hid[obj_val_mask], marker=marker_abs,
+                           color=colors_obj.to_rgba(i_obj_glob) \
+                               if radio_info_cmap == 'Source' else 'grey', label='', zorder=1000, edgecolor='black',
+                           plotnonfinite=True)
+
+        #### detection scatters
+        # plotting statistically significant absorptions before values
+
+        if radio_info_cmap == 'Instrument':
+            color_instru = [telescope_colors[elem] for elem in
+                            instru_list[mask_obj][i_obj][obj_val_mask_sign][obj_order_sign]]
+
+            if display_nonsign:
+                color_instru_nonsign = [telescope_colors[elem] for elem in
+                                        instru_list[mask_obj][i_obj][obj_val_mask_nonsign]]
+
+        # note: there's no need to reorder for source level informations (ex: inclination) since the values are the same for all the points                    
+        c_scat = None if radio_info_cmap == 'Source' else \
+            mdates.date2num(
+                date_list[mask_obj][i_obj][obj_val_mask_sign][obj_order_sign]) if radio_info_cmap == 'Time' else \
+                np.repeat(incl_cmap_restrict[i_obj][cmap_incl_type],
+                          len(x_hid[obj_val_mask_sign])) if radio_info_cmap == 'Inclination' else \
+                    color_instru if radio_info_cmap == 'Instrument' else \
+                        nh_plot_restrict[0][i_obj][obj_val_mask_sign][obj_order_sign] if radio_info_cmap == 'nH' else \
+                            kt_plot_restrict[0][i_obj][obj_val_mask_sign][
+                                obj_order_sign] if radio_info_cmap == 'kT' else \
+                                obj_val_cmap_sign[obj_val_mask_sign][obj_order_sign]
+
+        #### TODO : test the dates here with just IGRJ17451 to solve color problem
+
+        # adding a failsafe to avoid problems when nothing is displayed
+        if c_scat is not None and len(c_scat) == 0:
+            c_scat = None
+
+        if restrict_threshold:
+
+            # displaying "significant only" cmaps/sizes
+            scat_col += [
+                ax_hid.scatter(x_hid[obj_val_mask_sign][obj_order_sign], y_hid[obj_val_mask_sign][obj_order_sign],
+                               marker=marker_abs, color=(colors_obj.to_rgba(i_obj_glob) if not split_cmap_source else \
+                                                             colors_det.to_rgba(
+                                                                 id_obj_det)) if radio_info_cmap == 'Source' else None,
+                               c=c_scat, s=norm_s_lin * obj_size_sign[obj_val_mask_sign][obj_order_sign] ** norm_s_pow,
+                               edgecolor='black' if not display_edgesource else colors_obj.to_rgba(i_obj_glob),
+                               linewidth=1 + int(display_edgesource) / 2,
+                               norm=cmap_norm_info,
+                               label=obj_list[mask_obj][i_obj] if not label_obj_plotted[i_obj] and \
+                                                                  (
+                                                                              radio_info_cmap == 'Source' or display_edgesource) and len(
+                                   x_hid[obj_val_mask_sign]) > 0 else '',
+                               cmap=cmap_info, alpha=alpha_abs,
+                               plotnonfinite=True)]
+
+            if (radio_info_cmap == 'Source' or display_edgesource) and len(x_hid[obj_val_mask_sign]) > 0:
+                label_obj_plotted[i_obj] = True
+
+        # plotting the maximum value and hatch coding depending on if there's a significant abs line in the obs
+        else:
+
+            # displaying "all" cmaps/sizes but only where's at least one significant detection (so we don't hatch)
+            scat_col += [
+                ax_hid.scatter(x_hid[obj_val_mask_sign][obj_order_sign], y_hid[obj_val_mask_sign][obj_order_sign],
+                               marker=marker_abs,
+                               color=(colors_obj.to_rgba(i_obj_glob) if not split_cmap_source else \
+                                          colors_det.to_rgba(id_obj_det)) if radio_info_cmap == 'Source' else None,
+                               c=c_scat, s=norm_s_lin * obj_size[obj_val_mask_sign][obj_order_sign] ** norm_s_pow,
+                               edgecolor='black' if not display_edgesource else colors_obj.to_rgba(i_obj_glob),
+                               linewidth=1 + int(display_edgesource),
+                               norm=cmap_norm_info,
+                               label=obj_list[mask_obj][i_obj] if not label_obj_plotted[i_obj] and \
+                                                                  (
+                                                                              radio_info_cmap == 'Source' or display_edgesource) and len(
+                                   x_hid[obj_val_mask_sign]) > 0 else '',
+                               cmap=cmap_info, alpha=alpha_abs,
+                               plotnonfinite=True)]
+
+            if (radio_info_cmap == 'Source' or display_edgesource) and len(x_hid[obj_val_mask_sign]) > 0:
+                label_obj_plotted[i_obj] = True
+
+        # adding the plotted colors into a list to create the ticks from it at the end
+        plotted_colors_var += [elem for elem in
+                               (incl_cmap_restrict.T[cmap_incl_type] if radio_info_cmap == 'Inclination' else \
+                                    (obj_val_cmap_sign[obj_val_mask_sign][obj_order_sign] if restrict_threshold \
+                                         else obj_val_cmap[obj_val_mask_sign][obj_order_sign]).tolist()) if
+                               not np.isnan(elem)]
+
+        if display_nonsign:
+
+            c_scat_nonsign = None if radio_info_cmap == 'Source' else \
+                mdates.date2num(date_list[mask_obj][i_obj][obj_val_mask_nonsign]) if radio_info_cmap == 'Time' else \
+                    np.repeat(incl_cmap_restrict[i_obj][cmap_incl_type],
+                              len(x_hid[obj_val_mask_nonsign])) if radio_info_cmap == 'Inclination' else \
+                        nh_plot_restrict[0][i_obj][obj_val_mask_nonsign] if radio_info_cmap == 'nH' else \
+                            kt_plot_restrict[0][i_obj][obj_val_mask_nonsign] if radio_info_cmap == 'kT' else \
+                                obj_val_cmap[obj_val_mask_nonsign]
+
+            # adding a failsafe to avoid problems when nothing is displayed
+            if c_scat is not None and len(c_scat) == 0:
+                c_scat = None
+
+            # and "unsignificant only" in any case is hatched. Edgecolor sets the color of the hatch
+            scat_col += [ax_hid.scatter(x_hid[obj_val_mask_nonsign], y_hid[obj_val_mask_nonsign], marker=marker_abs,
+                                        color=(colors_obj.to_rgba(
+                                            i_obj_glob) if not split_cmap_source else colors_det.to_rgba(
+                                            id_obj_det)) if radio_info_cmap == 'Source' else None,
+                                        c=c_scat_nonsign, s=norm_s_lin * obj_size[obj_val_mask_nonsign] ** norm_s_pow,
+                                        hatch='///',
+                                        edgecolor='grey' if not display_edgesource else colors_obj.to_rgba(i_obj_glob),
+                                        linewidth=1 + int(display_edgesource),
+                                        norm=cmap_norm_info,
+                                        label=obj_list[mask_obj][i_obj] if not label_obj_plotted[i_obj] and \
+                                                                           (
+                                                                                       radio_info_cmap == 'Source' or display_edgesource) else '',
+                                        cmap=cmap_info,
+                                        alpha=alpha_abs,
+                                        plotnonfinite=True)]
+            if (radio_info_cmap == 'Source' or display_edgesource) and len(x_hid[obj_val_mask_nonsign]) > 0:
+                label_obj_plotted[i_obj] = True
+
+            plotted_colors_var += [elem for elem in (
+                incl_cmap_restrict.T[cmap_incl_type] if radio_info_cmap == 'Inclination' else obj_val_cmap[
+                    obj_val_mask_nonsign].tolist()) if not np.isnan(elem)]
+
+        if len(x_hid[obj_val_mask_sign]) > 0 or (len(x_hid[obj_val_mask_nonsign]) > 0 and display_nonsign):
+            id_obj_det += 1
+
+        # resizing all the colors and plotting the colorbar, only done at the last iteration
+        if radio_info_cmap not in type_1_colorcode and i_obj == len(abslines_infos_perobj[mask_obj]) - 1 and len(
+                plotted_colors_var) > 0:
+
+            is_colored_scat = False
+
+            for elem_scatter in scat_col:
+
+                # standard limits for the inclination and Time
+                if radio_info_cmap == 'Inclination':
+                    elem_scatter.set_clim(vmin=0, vmax=90)
+                elif radio_info_cmap == 'Time':
+
+                    if global_colors:
+                        elem_scatter.set_clim(
+                            vmin=min(mdates.date2num(ravel_ragged(date_list))),
+                            vmax=max(mdates.date2num(ravel_ragged(date_list))))
+                    else:
+                        elem_scatter.set_clim(
+                            vmin=max(
+                                min(mdates.date2num(ravel_ragged(date_list[mask_obj])[global_mask_intime_norepeat])),
+                                mdates.date2num(slider_date[0])),
+                            vmax=min(
+                                max(mdates.date2num(ravel_ragged(date_list[mask_obj])[global_mask_intime_norepeat])),
+                                mdates.date2num(slider_date[1])))
+
+                elif radio_info_cmap == 'nH':
+
+                    if global_colors:
+                        elem_scatter.set_clim(vmin=min(ravel_ragged(nh_plot_restrict[0])),
+                                              vmax=max(ravel_ragged(nh_plot_restrict[0])))
+                    else:
+                        elem_scatter.set_clim(vmin=min(ravel_ragged(nh_plot_restrict[0])[global_mask_intime_norepeat]),
+                                              vmax=max(ravel_ragged(nh_plot_restrict[0])[global_mask_intime_norepeat]))
+                elif radio_info_cmap == 'kT':
+
+                    elem_scatter.set_clim(vmin=0.5, vmax=3)
+
+                else:
+
+                    # dynamical limits for the rest
+                    if global_colors and radio_info_cmap not in ('EW ratio', 'Inclination', 'Time', 'nH', 'kT'):
+                        if display_nonsign:
+                            elem_scatter.set_clim(vmin=min(global_det_data), vmax=max(global_det_data))
+                        else:
+                            elem_scatter.set_clim(vmin=min(global_sign_data), vmax=max(global_sign_data))
+                    else:
+                        elem_scatter.set_clim(vmin=min(plotted_colors_var), vmax=max(plotted_colors_var))
+
+                # breakpoint()
+
+                if len(elem_scatter.get_sizes()) > 0:
+                    is_colored_scat = True
+
+                    # keeping the scatter to create the colorbar from it
+                    elem_scatter_forcol = elem_scatter
+
+                # ax_cb.set_axis_off()
+
+            # defining the ticks from the currently plotted objects
+
+            if radio_cmap_i == 1 or radio_info_cmap == 'EW ratio':
+
+                cmap_min_sign = 1 if min(plotted_colors_var) == 0 else min(plotted_colors_var) / abs(
+                    min(plotted_colors_var))
+
+                cmap_max_sign = 1 if min(plotted_colors_var) == 0 else max(plotted_colors_var) / abs(
+                    max(plotted_colors_var))
+
+                # round numbers for the Velocity shift                
+                if radio_info_cmap == 'Velocity shift':
+                    bshift_step = 250 if choice_telescope == ['Chandra'] else 500
+
+                    # the +1 are here to ensure we see the extremal ticks
+
+                    cmap_norm_ticks = np.arange(((min(plotted_colors_var) // bshift_step) + 1) * bshift_step,
+                                                ((max(plotted_colors_var) // bshift_step) + 1) * bshift_step,
+                                                2 * bshift_step)
+                    elem_scatter.set_clim(vmin=min(cmap_norm_ticks), vmax=max(cmap_norm_ticks))
+
+                else:
+                    cmap_norm_ticks = np.linspace(cmap_min_sign * abs(min(plotted_colors_var)) ** (gamma_colors),
+                                                  max(plotted_colors_var) ** (gamma_colors), 7, endpoint=True)
+
+                # adjusting to round numbers
+
+                if radio_info_cmap == 'EW ratio':
+                    cmap_norm_ticks = np.concatenate((cmap_norm_ticks, np.array([1])))
+
+                    cmap_norm_ticks.sort()
+
+                if radio_cmap_i == 1 and min(plotted_colors_var) < 0:
+                    # cmap_norm_ticks=np.concatenate((cmap_norm_ticks,np.array([0])))
+                    # cmap_norm_ticks.sort()
+                    pass
+
+                if radio_info_cmap != 'Velocity shift':
+                    # maintaining the sign with the square norm
+                    cmap_norm_ticks = cmap_norm_ticks ** (1 / gamma_colors)
+
+                    cmap_norm_ticks = np.concatenate((np.array([min(plotted_colors_var)]), cmap_norm_ticks))
+
+                    cmap_norm_ticks.sort()
+
+
+            else:
+                cmap_norm_ticks = None
+
+            # only creating the colorbar if there is information to display
+            if is_colored_scat and radio_info_cmap not in type_1_colorcode:
+
+                if radio_info_cmap == 'Time':
+
+                    # manually readjusting for small durations because the AutoDateLocator doesn't work well
+                    time_range = min(max(mdates.date2num(ravel_ragged(date_list[mask_obj]))),
+                                     mdates.date2num(slider_date[1])) - \
+                                 max(min(mdates.date2num(ravel_ragged(date_list[mask_obj]))),
+                                     mdates.date2num(slider_date[0]))
+
+                    if time_range < 150:
+                        date_format = mdates.DateFormatter('%Y-%m-%d')
+                    elif time_range < 1825:
+                        date_format = mdates.DateFormatter('%Y-%m')
+                    else:
+                        date_format = mdates.AutoDateFormatter(mdates.AutoDateLocator())
+
+                    cb = plt.colorbar(elem_scatter_forcol, cax=ax_cb, ticks=mdates.AutoDateLocator(),
+                                      format=date_format)
+                else:
+                    cb = plt.colorbar(elem_scatter_forcol, cax=ax_cb, extend='min' if radio_info_cmap == 'nH' else None)
+                    if cmap_norm_ticks is not None:
+                        cb.set_ticks(cmap_norm_ticks)
+
+                # cb.ax.minorticks_off()
+
+                if radio_cmap_i == 1:
+                    cb_add_str = ' (km/s)'
+                else:
+                    cb_add_str = ''
+
+                if radio_info_cmap == 'Inclination':
+                    cb.set_label(cmap_incl_type_str + ' of the source inclination (°)', labelpad=10)
+                elif radio_info_cmap == 'Time':
+                    cb.set_label('Observation date', labelpad=30)
+                elif radio_info_cmap == 'nH':
+                    cb.set_label(r'nH ($10^{22}$ cm$^{-2}$)', labelpad=10)
+                elif radio_info_cmap == 'kT':
+                    cb.set_label(r'disk temperature (keV)', labelpad=10)
+                else:
+                    if restrict_threshold:
+                        cb.set_label(((
+                                          'minimal ' if radio_cmap_i == 1 else 'maximal ') if radio_info_cmap != 'EW ratio' else '') + (
+                                         radio_info_label[radio_cmap_i - 1].lower() if radio_info_cmap != 'Del-C' else
+                                         radio_info_label[radio_cmap_i - 1]) +
+                                     ' in significant detections\n for each observation' + cb_add_str, labelpad=10)
+                    else:
+                        cb.set_label(((
+                                          'minimal ' if radio_cmap_i == 1 else 'maximal ') if radio_info_cmap != 'EW ratio' else '') + (
+                                         radio_info_label[radio_cmap_i - 1].lower() if radio_info_cmap != 'Del-C' else
+                                         radio_info_label[radio_cmap_i - 1]) +
+                                     ' in all detections\n for each observation' + cb_add_str, labelpad=10)
+
+    label_obj_plotted = np.repeat(False, len(abslines_infos_perobj[mask_obj]))
+
+    #### non detections HID
+
+    id_obj_det = 0
+    id_obj_nondet = 0
+
+    scatter_nondet = []
+
+    # loop for non detection, separated to be able to restrict the color range in case of non detection
+    for i_obj_base, abslines_obj_base in enumerate(abslines_infos_perobj[mask_obj_base]):
+
+        # skipping everything if we don't plot nondetections
+        if not display_nondet:
+            continue
+
+        # defining the index of the object in the entire array if asked to, in order to avoid changing colors
+        if global_colors:
+            i_obj_glob = np.argwhere(obj_list == obj_list[mask_obj_base][i_obj_base])[0][0]
+        else:
+            i_obj_glob = i_obj_base
+
+        '''
+        # The shape of each abslines_obj is (uncert,info,line,obs)
+        '''
+
+        # we use non-detection-masked arrays for non detection to plot them even while restricting the colors to a part of the sample 
+        x_hid_base = flux_list[mask_obj_base][i_obj_base].T[2][0] / flux_list[mask_obj_base][i_obj_base].T[1][0]
+        y_hid_base = flux_list[mask_obj_base][i_obj_base].T[4][0]
+
+        x_hid_incert = hid_plot.T[mask_obj_base][i_obj_base].T[0]
+        y_hid_incert = hid_plot.T[mask_obj_base][i_obj_base].T[1]
+
+        # reconstructing standard arrays
+        x_hid_incert = np.array([[subelem for subelem in elem] for elem in x_hid_incert])
+        y_hid_incert = np.array([[subelem for subelem in elem] for elem in y_hid_incert])
+        # defining the masks and shapes of the markers for the rest
+
+        # defining the non detection as strictly non detection or everything below the significance threshold
+        if display_nonsign:
+            mask_det = abslines_obj_base[0][4][mask_lines] > 0.
+
+        else:
+            mask_det = abslines_obj_base[0][4][mask_lines] > slider_sign
+
+        # defining the mask for the time interval restriction
+        datelist_obj = Time(np.array([date_list[mask_obj_base][i_obj_base] \
+                                      for i in range(sum(mask_lines_ul if display_upper else mask_lines))]).astype(str))
+        mask_intime = (datelist_obj >= Time(slider_date[0])) & (datelist_obj <= Time(slider_date[1]))
+
+        mask_intime_norepeat = (Time(date_list[mask_obj_base][i_obj_base].astype(str)) >= Time(slider_date[0])) & (
+                    Time(date_list[mask_obj_base][i_obj_base].astype(str)) <= Time(slider_date[1]))
+
+        # defining the mask
+        prev_mask_nondet = np.isnan(
+            np.array([np.nan if len(abslines_obj_base[0][0][mask_lines].T[i_obs][mask_det.T[i_obs]]) == 0 else \
+                          max(abslines_obj_base[0][0][mask_lines].T[i_obs][mask_det.T[i_obs]]) \
+                      for i_obs in range(len(abslines_obj_base[0][0][mask_lines].T))]))
+
+        mask_nondet = (np.isnan(
+            np.array([np.nan if len(abslines_obj_base[0][0][mask_lines].T[i_obs][mask_det.T[i_obs]]) == 0 else \
+                          max(abslines_obj_base[0][0][mask_lines].T[i_obs][mask_det.T[i_obs]]) \
+                      for i_obs in range(len(abslines_obj_base[0][0][mask_lines].T))]))) & (mask_intime_norepeat)
+
+        # testing if the source has detections with current restrictions to adapt the color when using source colors, if asked to
+        if obj_list[mask_obj][i_obj_base] not in obj_list[mask_obj_withdet]:
+            source_nondet = True
+
+        else:
+            source_nondet = False
+
+            # increasing the counter for sources with no non detections but detections
+            if len(x_hid_base[mask_nondet]) == 0:
+                id_obj_det += 1
+
+        if len(x_hid_base[mask_nondet]) > 0:
+            # note: due to problems with colormapping of the edgecolors we directly compute the color of the edges with a normalisation
+            norm_cmap_incl = mpl.colors.Normalize(0, 90)
+
+            if global_colors:
+                norm_cmap_time = mpl.colors.Normalize(
+                    min(mdates.date2num(ravel_ragged(date_list)[global_mask_intime_norepeat])),
+                    max(mdates.date2num(ravel_ragged(date_list)[global_mask_intime_norepeat])))
+            else:
+                norm_cmap_time = mpl.colors.Normalize(
+                    min(mdates.date2num(ravel_ragged(date_list[mask_obj_base])[global_mask_intime_norepeat])),
+                    max(mdates.date2num(ravel_ragged(date_list[mask_obj_base])[global_mask_intime_norepeat])))
+            if display_upper:
+
+                # we define the upper limit range of points independantly to be able to have a different set of lines used for detection and
+                # upper limits if necessary
+
+                mask_det_ul = (abslines_obj_base[0][4][mask_lines_ul] > 0.) & (mask_intime)
+                mask_det_ul = (abslines_obj_base[0][4][mask_lines_ul] > slider_sign) & (mask_intime)
+
+                mask_nondet_ul = np.isnan(np.array( \
+                    [np.nan if len(abslines_obj_base[0][0][mask_lines_ul].T[i_obs][mask_det_ul.T[i_obs]]) == 0 else \
+                         max(abslines_obj_base[0][0][mask_lines_ul].T[i_obs][mask_det_ul.T[i_obs]]) \
+                     for i_obs in range(len(abslines_obj_base[0][0][mask_lines].T))])) & (mask_intime_norepeat)
+
+                # defining the sizes of upper limits (note: capped to 75eV)
+                obj_size_ul = np.array(
+                    [np.nan if len(abslines_obj_base[0][0][mask_lines_ul].T[i_obs][mask_det_ul.T[i_obs]]) != 0 else \
+                         min(max(abslines_obj_base[0][5][mask_lines_ul].T[i_obs][~mask_det_ul.T[i_obs]]), 75) \
+                     for i_obs in range(len(abslines_obj_base[0][0][mask_lines_ul].T))])
+
+                # creating a display order which is the reverse of the EW size order to make sure we do not hide part the ul
+                # not needed now that the UL are not filled colorwise
+                # obj_order_sign_ul=obj_size_ul[mask_nondet_ul].argsort()[::-1]
+
+                # there is no need to use different markers unless we display source per color, so we limit the different triangle to this case
+                marker_ul_curr = marker_ul_top if \
+                    ((id_obj_nondet if source_nondet else id_obj_det) if split_cmap_source else i_obj_base) % 2 != 0 and \
+                    radio_info_cmap == 'Source' else marker_ul
+
+                if radio_info_cmap == 'Instrument':
+                    color_data = [telescope_colors[elem] for elem in
+                                  instru_list[mask_obj_base][i_obj_base][mask_nondet_ul]]
+
+                    edgec_scat = [colors.to_rgba(elem) for elem in color_data]
+                else:
+
+                    edgec_scat = (colors_obj.to_rgba(i_obj_glob) if not split_cmap_source else \
+                                      (colors_nondet.to_rgba(id_obj_nondet) if source_nondet else \
+                                           colors_det.to_rgba(
+                                               id_obj_det))) if radio_info_cmap == 'Source' and display_obj_zerodet else \
+                        cmap_info(norm_cmap_incl(incl_cmap_base[i_obj_base][cmap_incl_type])) \
+                            if radio_info_cmap == 'Inclination' else \
+                            cmap_info(
+                                norm_cmap_time(mdates.date2num(date_list[mask_obj_base][i_obj_base][mask_nondet_ul]))) \
+                                if radio_info_cmap == 'Time' else \
+                                cmap_info(cmap_norm_info(nh_plot.T[mask_obj_base].T[0][i_obj_base][
+                                                             mask_nondet_ul])) if radio_info_cmap == 'nH' else \
+                                    cmap_info(
+                                        cmap_norm_info(kt_plot.T[mask_obj_base].T[0][i_obj_base][mask_nondet_ul])) if (
+                                                1 and radio_info_cmap == 'kT') else \
+                                        'grey'
+
+                # adding a failsafe to avoid problems when nothing is displayed
+                if len(edgec_scat) == 0:
+                    edgec_scat = None
+
+                elem_scatter_nondet = ax_hid.scatter(
+                    x_hid_base[mask_nondet_ul], y_hid_base[mask_nondet_ul], marker=marker_ul_curr,
+                    color='none', edgecolor=edgec_scat, s=norm_s_lin * obj_size_ul[mask_nondet_ul] ** norm_s_pow,
+                    label='' if not display_obj_zerodet else (
+                        obj_list[mask_obj][i_obj_base] if not label_obj_plotted[i_obj_base] and \
+                                                          (radio_info_cmap == 'Source' or display_edgesource) else ''),
+                    zorder=500, alpha=alpha_abs - 0.2,
+                    cmap=cmap_info if radio_info_cmap in ['Inclination', 'Time'] else None, ls='--' if (
+                                display_incl_inside and not bool_incl_inside[mask_obj_base][
+                            i_obj_base] or dash_noincl and bool_noincl[mask_obj_base][i_obj_base]) else 'solid',
+                    plotnonfinite=True)
+
+                scatter_nondet += [elem_scatter_nondet]
+
+            else:
+
+                if radio_info_cmap == 'Instrument':
+                    color_data = [telescope_colors[elem] for elem in
+                                  instru_list[mask_obj_base][i_obj_base][mask_nondet]]
+
+                    c_scat_nondet = [colors.to_rgba(elem) for elem in color_data]
+                else:
+
+                    c_scat_nondet = np.array([(colors_obj.to_rgba(i_obj_glob) if not split_cmap_source else \
+                                                   (colors_nondet.to_rgba(id_obj_nondet) if source_nondet else \
+                                                        colors_det.to_rgba(
+                                                            id_obj_det)))]) if radio_info_cmap == 'Source' and display_obj_zerodet else \
+                        np.repeat(incl_cmap_base[i_obj_base][cmap_incl_type], sum(mask_nondet)) \
+                            if radio_info_cmap == 'Inclination' else \
+                            mdates.date2num(date_list[mask_obj_base][i_obj_base][mask_nondet]) \
+                                if radio_info_cmap == 'Time' else \
+                                nh_plot.T[mask_obj_base].T[0][i_obj_base][mask_nondet] if radio_info_cmap == 'nH' else \
+                                    kt_plot.T[mask_obj_base].T[0][i_obj_base][
+                                        mask_nondet] if radio_info_cmap == 'kT' else \
+                                        'grey'
+
+                elem_scatter_nondet = ax_hid.scatter(x_hid_base[mask_nondet], y_hid_base[mask_nondet],
+                                                     marker=marker_nondet,
+                                                     c=c_scat_nondet, cmap=cmap_info, norm=cmap_norm_info,
+                                                     label='' if not display_obj_zerodet else (
+                                                         obj_list[mask_obj][i_obj_base] if not label_obj_plotted[
+                                                             i_obj_base] and \
+                                                                                           (
+                                                                                                       radio_info_cmap == 'Source' or display_edgesource) else ''),
+                                                     zorder=1000, edgecolor='black', alpha=1.,
+                                                     plotnonfinite=True)
+
+                # note: the plot non finite allows to plot the nan values passed to the colormap with the color predefined as bad in
+                # the colormap
+
+                if display_hid_error:
+
+                    # in order to get the same clim as with the standard scatter plots, we manually readjust the rgba values of the colors before plotting
+                    # the errorbar "empty" and changing its color manually (because as of now matplotlib doesn't like multiple color inputs for errbars)
+                    if radio_info_cmap in type_1_cm:
+                        if radio_info_cmap == 'Inclination':
+                            cmap_norm_info.vmin = 0
+                            cmap_norm_info.vmax = 90
+                        elif radio_info_cmap == 'Time':
+                            cmap_norm_info.vmin = max(min(mdates.date2num(
+                                ravel_ragged(date_list[mask_obj_base])[global_mask_intime_norepeat])),
+                                                      mdates.date2num(slider_date[0]))
+                            cmap_norm_info.vmax = min(max(mdates.date2num(
+                                ravel_ragged(date_list[mask_obj_base])[global_mask_intime_norepeat])),
+                                                      mdates.date2num(slider_date[1]))
+
+                        elif radio_info_cmap == 'nH':
+                            cmap_norm_info.vmin = min(
+                                ravel_ragged(nh_plot.T[mask_obj_base].T[0])[global_mask_intime_norepeat])
+                            cmap_norm_info.vmax = max(
+                                ravel_ragged(nh_plot.T[mask_obj_base].T[0])[global_mask_intime_norepeat])
+                        elif radio_info_cmap == 'kT':
+                            cmap_norm_info.vmin = kt_min
+                            cmap_norm_info.vmax = kt_max
+
+                        colors_func = mpl.cm.ScalarMappable(norm=cmap_norm_info, cmap=cmap_info)
+
+                        c_scat_nondet_rgba_clim = colors_func.to_rgba(c_scat_nondet)
+
+                    elem_err_nondet = ax_hid.errorbar(x_hid_incert[0][mask_nondet], y_hid_incert[0][mask_nondet],
+                                                      xerr=x_hid_incert[1:].T[mask_nondet].T,
+                                                      yerr=y_hid_incert[1:].T[mask_nondet].T, marker='None',
+                                                      linestyle='None', linewidth=0.5,
+                                                      c=c_scat_nondet if radio_info_cmap not in type_1_cm else None,
+                                                      label='', zorder=1000, alpha=1.)
+
+                    if radio_info_cmap in type_1_cm:
+                        for elem_children in elem_err_nondet.get_children()[1:]:
+                            elem_children.set_colors(c_scat_nondet_rgba_clim)
+
+            if radio_info_cmap == 'Source' and display_obj_zerodet:
+                label_obj_plotted[i_obj_base] = True
+
+            if radio_info_cmap in type_1_cm:
+
+                if radio_info_cmap == 'Inclination':
+                    elem_scatter_nondet.set_clim(vmin=0, vmax=90)
+
+                    # if display_hid_error:
+                    #     elem_err_nondet.set_clim(vmin=0,vmax=90)
+
+                elif radio_info_cmap == 'Time':
+                    if global_colors:
+                        elem_scatter_nondet.set_clim(
+                            vmin=min(mdates.date2num(ravel_ragged(date_list))),
+                            vmax=max(mdates.date2num(ravel_ragged(date_list))))
+                    else:
+                        elem_scatter_nondet.set_clim(
+                            vmin=max(min(mdates.date2num(
+                                ravel_ragged(date_list[mask_obj_base])[global_mask_intime_norepeat])),
+                                     mdates.date2num(slider_date[0])),
+                            vmax=min(max(mdates.date2num(
+                                ravel_ragged(date_list[mask_obj_base])[global_mask_intime_norepeat])),
+                                     mdates.date2num(slider_date[1])))
+                        # if display_hid_error:
+                    #     elem_err_nondet.set_clim(
+                    #     vmin=max(min(mdates.date2num(ravel_ragged(date_list[mask_obj_base][global_mask_intime_norepeat]))),mdates.date2num(slider_date[0])),
+                    #     vmax=min(max(mdates.date2num(ravel_ragged(date_list[mask_obj_base][global_mask_intime_norepeat]))),mdates.date2num(slider_date[1])))
+
+                elif radio_info_cmap == 'nH':
+                    if global_colors:
+                        elem_scatter_nondet.set_clim(vmin=min(ravel_ragged(nh_plot[0])),
+                                                     vmax=max(ravel_ragged(nh_plot[0])))
+                    else:
+                        elem_scatter_nondet.set_clim(
+                            vmin=min(ravel_ragged(nh_plot.T[mask_obj_base].T[0])[global_mask_intime_norepeat]),
+                            vmax=max(ravel_ragged(nh_plot.T[mask_obj_base].T[0])[global_mask_intime_norepeat]))
+                elif radio_info_cmap == 'kT':
+                    elem_scatter_nondet.set_clim(vmin=kt_min,
+                                                 vmax=kt_max)
+
+                if len(elem_scatter_nondet.get_sizes()) > 0:
+                    is_colored_scat_nondet = True
+
+                # creating the colorbar at the end if it hasn't been created with the detections
+                if i_obj_base == len(
+                        abslines_infos_perobj[mask_obj_base]) - 1 and not is_colored_scat and is_colored_scat_nondet:
+
+                    # creating an empty scatter with a 'c' value to serve as base for the colorbar
+                    elem_scatter_empty = ax_hid.scatter(x_hid_base[mask_nondet][False], y_hid_base[mask_nondet][False],
+                                                        marker=None,
+                                                        c=cmap_info(norm_cmap_time(mdates.date2num(
+                                                            date_list[mask_obj_base][i_obj_base][mask_nondet])))[False],
+                                                        label='', zorder=1000, edgecolor=None, cmap=cmap_info, alpha=1.)
+
+                    if radio_info_cmap == 'Inclination':
+
+                        elem_scatter_empty.set_clim(vmin=0, vmax=90)
+
+                        cb = plt.colorbar(elem_scatter_empty, cax=ax_cb)
+
+                        cb.set_label(cmap_incl_type_str + ' of the source inclination (°)', labelpad=10)
+                    elif radio_info_cmap == 'Time':
+
+                        elem_scatter_empty.set_clim(
+                            vmin=max(min(mdates.date2num(ravel_ragged(date_list[mask_obj_base]))),
+                                     mdates.date2num(slider_date[0])),
+                            vmax=min(max(mdates.date2num(ravel_ragged(date_list[mask_obj_base]))),
+                                     mdates.date2num(slider_date[1])))
+
+                        # manually readjusting for small durations because the AutoDateLocator doesn't work well
+                        time_range = min(max(mdates.date2num(ravel_ragged(date_list[mask_obj_base]))),
+                                         mdates.date2num(slider_date[1])) - \
+                                     max(min(mdates.date2num(ravel_ragged(date_list[mask_obj_base]))),
+                                         mdates.date2num(slider_date[0]))
+
+                        if time_range < 150:
+                            date_format = mdates.DateFormatter('%Y-%m-%d')
+                        elif time_range < 1825:
+                            date_format = mdates.DateFormatter('%Y-%m')
+                        else:
+                            date_format = mdates.AutoDateFormatter(mdates.AutoDateLocator())
+
+                        cb = plt.colorbar(elem_scatter_empty, cax=ax_cb, ticks=mdates.AutoDateLocator(),
+                                          format=date_format)
+
+                        cb.set_label('Observation date', labelpad=10)
+
+                    elif radio_info_cmap == 'nH':
+                        elem_scatter_empty.set_clim(
+                            vmin=min(ravel_ragged(nh_plot.T[mask_obj_base].T[0])[global_mask_intime_norepeat]),
+                            vmax=max(ravel_ragged(nh_plot.T[mask_obj_base].T[0])[global_mask_intime_norepeat]))
+                        cb = plt.colorbar(elem_scatter_empty, cax=ax_cb, extend='min')
+
+                        cb.set_label(r'nH ($10^{22}$ cm$^{-2}$)')
+
+                    elif radio_info_cmap == 'kT':
+                        elem_scatter_empty.set_clim(vmin=kt_min, vmax=kt_max)
+
+                        cb = plt.colorbar(elem_scatter_empty, cax=ax_cb)
+
+                        cb.set_label(r'disk temperature (keV)')
+
+            # only adding to the index if there are non detections
+            if source_nondet:
+                id_obj_nondet += 1
+            else:
+                id_obj_det += 1
+
+    # taking off the axes in the colorbar axes if no colorbar was displayed
+
+    if radio_info_cmap not in type_1_colorcode and cb is None:
+        ax_cb.axis('off')
+
+    #### Displaying arrow evolution if needed and if there are points
+    if display_single and display_evol_single and sum(global_mask_intime_norepeat) > 1:
+
+        # odering the points depending on the observation date
+        date_order = datelist_obj[0][mask_intime[0]].argsort()
+
+        # plotting the main line between all points
+        ax_hid.plot(x_hid_base[mask_intime[0]][date_order], y_hid_base[mask_intime[0]][date_order], color='grey',
+                    linewidth=0.5)
+
+        # computing the position of the arrows to superpose to the lines
+        xarr_start = x_hid_base[mask_intime[0]][date_order][range(len(x_hid_base[mask_intime[0]][date_order]) - 1)]
+        xarr_end = x_hid_base[mask_intime[0]][date_order][range(1, len(x_hid_base[mask_intime[0]][date_order]))]
+        yarr_start = y_hid_base[mask_intime[0]][date_order][range(len(y_hid_base[mask_intime[0]][date_order]) - 1)]
+        yarr_end = y_hid_base[mask_intime[0]][date_order][range(1, len(y_hid_base[mask_intime[0]][date_order]))]
+        xpos = (xarr_start + xarr_end) / 2
+        ypos = (yarr_start + yarr_end) / 2
+        xdir = xarr_end - xarr_start
+        ydir = yarr_end - yarr_start
+
+        for X, Y, dX, dY in zip(xpos, ypos, xdir, ydir):
+            ax_hid.annotate("", xytext=(X, Y), xy=(X + 0.001 * dX, Y + 0.001 * dY),
+                            arrowprops=dict(arrowstyle='->', color='grey'), size=10)
+
+    ####displaying the thresholds if asked to
+
+    if display_dicho:
+        # horizontal
+        ax_hid.axline((0.01, 1e-2), (10, 1e-2), ls='--', color='grey')
+
+        # vertical
+        ax_hid.axline((0.8, 1e-6), (0.8, 10), ls='--', color='grey')
+
+        # restricting the graph to the portion inside the thrsesolds
+        # ax_hid.set_xlim(ax_hid.get_xlim()[0],0.8)
+        # ax_hid.set_ylim(1e-2,ax_hid.get_ylim()[1])
+
+    ''''''''''''''''''
+    #### legends
+    ''''''''''''''''''
+
+    if radio_info_cmap == 'Source' or display_edgesource:
+
+        # looks good considering the size of the graph
+        n_col_leg_source = 4 if paper_look else (5 if sum(mask_obj) < 30 else 6)
+
+        old_legend_size = mpl.rcParams['legend.fontsize']
+
+        mpl.rcParams['legend.fontsize'] = (5.5 if sum(mask_obj) > 30 and radio_info_cmap == 'Source' else 7) + (
+            3 if paper_look else 0)
+
+        hid_legend = fig_hid.legend(loc='lower center', ncol=n_col_leg_source, bbox_to_anchor=(0.475, -0.11))
+
+        elem_leg_source, labels_leg_source = plt.gca().get_legend_handles_labels()
+
+        # selecting sources with both detections and non detections
+        sources_uniques = np.unique(labels_leg_source, return_counts=True)
+        sources_detnondet = sources_uniques[0][sources_uniques[1] != 1]
+
+        # recreating the elem_leg and labels_leg with grouping but only if the colormaps are separated because then it makes sense
+        if split_cmap_source:
+
+            leg_source_gr = []
+            labels_leg_source_gr = []
+
+            for elem_leg, elem_label in zip(elem_leg_source, labels_leg_source):
+                if elem_label in sources_detnondet:
+
+                    # only doing it for the first iteration
+                    if elem_label not in labels_leg_source_gr:
+                        leg_source_gr += [tuple(np.array(elem_leg_source)[np.array(labels_leg_source) == elem_label])]
+                        labels_leg_source_gr += [elem_label]
+
+                else:
+                    leg_source_gr += [elem_leg]
+                    labels_leg_source_gr += [elem_label]
+
+            # updating the handle list
+            elem_leg_source = leg_source_gr
+            labels_leg_source = labels_leg_source_gr
+
+        n_obj_leg_source = len(elem_leg_source)
+
+        def n_lines():
+            return len(elem_leg_source) // n_col_leg_source + (1 if len(elem_leg_source) % n_col_leg_source != 0 else 0)
+
+        # inserting blank spaces until the detections have a column for themselves
+        while n_lines() < n_obj_withdet:
+            # elem_leg_source.insert(5,plt.Line2D([],[], alpha=0))
+            # labels_leg_source.insert(5,'')
+
+            elem_leg_source += [plt.Line2D([], [], alpha=0)]
+            labels_leg_source += ['']
+
+        # removing the first version with a non-aesthetic number of columns
+        hid_legend.remove()
+
+        # recreating it with updated spacing
+        hid_legend = fig_hid.legend(elem_leg_source, labels_leg_source, loc='lower center',
+                                    ncol=n_col_leg_source,
+                                    bbox_to_anchor=(0.475, -0.02 * n_lines() - (
+                                        0.02 * (6 - n_lines()) if paper_look else 0) - (0.1 if paper_look else 0)),
+                                    handler_map={tuple: HandlerTuple(ndivide=None, pad=1.)},
+                                    columnspacing=0.5 if paper_look else 1)
+
+        '''
+        # maintaining a constant marker size in the legend (but only for markers)
+        # note: here we cannot use directly legend_handles because they don't consider the second part of the legend tuples
+        # We thus use the findobj method to search in all elements of the legend
+        '''
+        for elem_legend in hid_legend.findobj():
+
+            #### find a way to change the size of this
+
+            if type(elem_legend) == mpl.collections.PathCollection:
+                if len(elem_legend._sizes) != 0:
+                    for i in range(len(elem_legend._sizes)):
+                        elem_legend._sizes[i] = 50 + (80 if paper_look else 0) + (
+                            30 if n_lines() < 6 else 0) if display_upper else 30 + (40 if paper_look else 0) + (
+                            10 if n_lines() < 6 else 0)
+
+                    if paper_look and display_upper:
+                        elem_legend.set_linewidth(2)
+
+                    # changing the dash type of dashed element for better visualisation:
+                    if elem_legend.get_dashes() != [(0.0, None)]:
+                        elem_legend.set_dashes((0, (5, 1)))
+
+        # old legend version
+        # hid_legend=fig_hid.legend(loc='upper right',ncol=1,bbox_to_anchor=(1.11,0.895) if bigger_text and radio_info_cmap=='Source' \
+        #                           and display_obj_zerodet else (0.9,0.88))
+
+        mpl.rcParams['legend.fontsize'] = old_legend_size
+
+    hid_det_examples = [
+        ((Line2D([0], [0], marker=marker_ul, color='white', markersize=50 ** (1 / 2), alpha=alpha_ul, linestyle='None',
+                 markeredgecolor='black', markeredgewidth=2),
+          Line2D([0], [0], marker=marker_ul_top, color='white', markersize=50 ** (1 / 2), alpha=alpha_ul,
+                 linestyle='None', markeredgecolor='black', markeredgewidth=2)) \
+             if radio_info_cmap == 'Source' else Line2D([0], [0], marker=marker_ul, color='white',
+                                                        markersize=50 ** (1 / 2), alpha=alpha_ul, linestyle='None',
+                                                        markeredgecolor='black', markeredgewidth=2)) \
+            if display_upper else
+        (Line2D([0], [0], marker=marker_nondet, color='white', markersize=50 ** (1 / 2), linestyle='None',
+                markeredgecolor='black', markeredgewidth=2)),
+        (Line2D([0], [0], marker=marker_abs, color='white', markersize=50 ** (1 / 2), linestyle='None',
+                markeredgecolor='black', markeredgewidth=2))]
+
+    if display_nonsign:
+        hid_det_examples += [
+            (Line2D([0], [0], marker=marker_abs, color='white', markersize=50 ** (1 / 2), linestyle='None',
+                    markeredgecolor='grey', markeredgewidth=2))]
+
+    mpl.rcParams['legend.fontsize'] = 7 + (2 if paper_look and not zoom else 0)
+
+    # marker legend
+
+    fig_hid.legend(handles=hid_det_examples, loc='center left',
+                   labels=['upper limit' if display_upper else 'non detection ',
+                           'absorption line detection\n above ' + (r'3$\sigma$' if slider_sign == 0.997 else str(
+                               slider_sign * 100) + '%') + ' significance',
+                           'absorption line detection below ' + str(slider_sign * 100) + ' significance.'],
+                   title='Markers',
+                   bbox_to_anchor=(0.125, 0.815 - (
+                       0.018 if paper_look and not zoom else 0)) if bigger_text and square_mode else (
+                   0.125, 0.82), handler_map={tuple: mpl.legend_handler.HandlerTuple(None)},
+                   handlelength=2, handleheight=2., columnspacing=1.)
+
+    # note: upper left anchor (0.125,0.815)
+    # note : upper right anchor (0.690,0.815)
+    # note: 0.420 0.815
+
+    # size legend
+
+    if display_upper:
+        # displaying the 
+        if radio_info_cmap == 'Source':
+            hid_size_examples = [(Line2D([0], [0], marker=marker_abs, color='black',
+                                         markersize=(norm_s_lin * 5 ** norm_s_pow) ** (1 / 2), linestyle='None'),
+                                  Line2D([0], [0], marker=marker_ul, color='None', markeredgecolor='grey',
+                                         markersize=(norm_s_lin * 5 ** norm_s_pow) ** (1 / 2), linestyle='None',
+                                         zorder=500),
+                                  Line2D([0], [0], marker=marker_ul_top, color='None', markeredgecolor='grey',
+                                         markersize=(norm_s_lin * 5 ** norm_s_pow) ** (1 / 2), linestyle='None',
+                                         zorder=500)),
+                                 (Line2D([0], [0], marker=marker_abs, color='black',
+                                         markersize=(norm_s_lin * 20 ** norm_s_pow) ** (1 / 2), linestyle='None'),
+                                  Line2D([0], [0], marker=marker_ul, color='None', markeredgecolor='grey',
+                                         markersize=(norm_s_lin * 20 ** norm_s_pow) ** (1 / 2), linestyle='None',
+                                         zorder=500),
+                                  Line2D([0], [0], marker=marker_ul_top, color='None', markeredgecolor='grey',
+                                         markersize=(norm_s_lin * 20 ** norm_s_pow) ** (1 / 2), linestyle='None',
+                                         zorder=500)),
+                                 (Line2D([0], [0], marker=marker_abs, color='black',
+                                         markersize=(norm_s_lin * 50 ** norm_s_pow) ** (1 / 2), linestyle='None'),
+                                  Line2D([0], [0], marker=marker_ul, color='None', markeredgecolor='grey',
+                                         markersize=(norm_s_lin * 50 ** norm_s_pow) ** (1 / 2), linestyle='None',
+                                         zorder=500),
+                                  Line2D([0], [0], marker=marker_ul_top, color='None', markeredgecolor='grey',
+                                         markersize=(norm_s_lin * 50 ** norm_s_pow) ** (1 / 2), linestyle='None',
+                                         zorder=500))]
+        else:
+            hid_size_examples = [(Line2D([0], [0], marker=marker_abs, color='black',
+                                         markersize=(norm_s_lin * 5 ** norm_s_pow) ** (1 / 2), linestyle='None'),
+                                  Line2D([0], [0], marker=marker_ul, color='None', markeredgecolor='grey',
+                                         markersize=(norm_s_lin * 5 ** norm_s_pow) ** (1 / 2), linestyle='None',
+                                         zorder=500)),
+                                 (Line2D([0], [0], marker=marker_abs, color='black',
+                                         markersize=(norm_s_lin * 20 ** norm_s_pow) ** (1 / 2), linestyle='None'),
+                                  Line2D([0], [0], marker=marker_ul, color='None', markeredgecolor='grey',
+                                         markersize=(norm_s_lin * 20 ** norm_s_pow) ** (1 / 2), linestyle='None',
+                                         zorder=500)),
+                                 (Line2D([0], [0], marker=marker_abs, color='black',
+                                         markersize=(norm_s_lin * 50 ** norm_s_pow) ** (1 / 2), linestyle='None'),
+                                  Line2D([0], [0], marker=marker_ul, color='None', markeredgecolor='grey',
+                                         markersize=(norm_s_lin * 50 ** norm_s_pow) ** (1 / 2), linestyle='None',
+                                         zorder=500))]
+    else:
+        hid_size_examples = [(Line2D([0], [0], marker=marker_abs, color='black',
+                                     markersize=(norm_s_lin * 5 ** norm_s_pow) ** (1 / 2), linestyle='None')),
+                             (Line2D([0], [0], marker=marker_abs, color='black',
+                                     markersize=(norm_s_lin * 20 ** norm_s_pow) ** (1 / 2), linestyle='None')),
+                             (Line2D([0], [0], marker=marker_abs, color='black',
+                                     markersize=(norm_s_lin * 50 ** norm_s_pow) ** (1 / 2), linestyle='None'))]
+
+    eqw_legend = fig_hid.legend(handles=hid_size_examples, loc='center left', labels=['5 eV', '20 eV', '50 eV'],
+                                title='Equivalent widths',
+                                bbox_to_anchor=(0.125, 0.218 + (
+                                    0.028 if paper_look and not zoom else 0)) if bigger_text and square_mode else (
+                                0.125, 0.218), handleheight=4, handlelength=4, facecolor='None')
+
+    if radio_info_cmap == 'Instrument':
+        instru_examples = np.array([Line2D([0], [0], marker=marker_abs, color='red', markeredgecolor='black',
+                                           markersize=(norm_s_lin * 5 ** norm_s_pow) ** (1 / 2), linestyle='None'),
+                                    Line2D([0], [0], marker=marker_abs, color='blue', markeredgecolor='black',
+                                           markersize=(norm_s_lin * 5 ** norm_s_pow) ** (1 / 2), linestyle='None'),
+                                    Line2D([0], [0], marker=marker_abs, color='green', markeredgecolor='black',
+                                           markersize=(norm_s_lin * 5 ** norm_s_pow) ** (1 / 2), linestyle='None'),
+                                    Line2D([0], [0], marker=marker_abs, color='magenta', markeredgecolor='black',
+                                           markersize=(norm_s_lin * 5 ** norm_s_pow) ** (1 / 2), linestyle='None'),
+                                    Line2D([0], [0], marker=marker_abs, color='orange', markeredgecolor='black',
+                                           markersize=(norm_s_lin * 5 ** norm_s_pow) ** (1 / 2), linestyle='None')])
+
+        instru_ind = [np.argwhere(np.array(telescope_list) == elem)[0][0] for elem in np.array(choice_telescope)]
+
+        instru_legend = fig_hid.legend(handles=instru_examples[instru_ind].tolist(), loc='upper right',
+                                       labels=choice_telescope,
+                                       title=radio_info_cmap,
+                                       bbox_to_anchor=(0.900, 0.88) if bigger_text and square_mode else (0.825, 0.918),
+                                       handleheight=1, handlelength=4, facecolor='None')
+
+    # manual custom subplot adjust to get the same scale for the 3 visible sources plot and for the zoomed 5 sources with detection
+    # elem=fig_hid.add_axes([0.5, 0.792, 0.1, 0.1])
+    # mpl.rcParams.update({'font.size': 2})
+    # elem.axis('off')
+
+    # manual custom subplot adjust to get the same scale for the 3 visible sources plot and for the zoomed 5 sources with detection
+    # plt.subplots_adjust(top=0.863)
+
+    # note: 0.9 0.53
+    # destacked version
+    # fig_hid.legend(handles=hid_size_examples,loc='center left',labels=['5 eV','20 eV','50 eV'],title='Equivalent widths',
+    #             bbox_to_anchor=(0.125,0.235) if bigger_text and square_mode else (0.125,0.235),handler_map = {tuple:mpl.legend_handler.HandlerTuple(None)},handlelength=8,handleheight=5,columnspacing=5.)
+
 
 def distrib_graph(data_perinfo,info,dict_linevis,data_ener=None,conf_thresh=0.99,indiv=False,save=False,close=False,streamlit=False,bigger_text=False,split=None):
     

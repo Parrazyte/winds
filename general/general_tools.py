@@ -44,6 +44,26 @@ def ravel_ragged(array,mode=None):
             list_elem+=[elem]
     return np.array(list_elem,dtype=mode)
 
+def interval_extract(list):
+
+    '''
+    From a list of numbers, outputs a list of the integer intervals contained inside it
+    '''
+
+    if len(list)==0:
+        return list
+
+    list = sorted(set(list))
+    range_start = previous_number = list[0]
+
+    for number in list[1:]:
+        if number == previous_number + 1:
+            previous_number = number
+        else:
+            yield [range_start, previous_number]
+            range_start = previous_number = number
+    yield [range_start, previous_number]
+
 def file_edit(path,line_id,line_data,header):
     
     '''

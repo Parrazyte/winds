@@ -14,8 +14,11 @@ import threading
 import numpy as np
 import time
 
+from astropy.stats import sigma_clip
 import matplotlib as mpl
-mpl.use('Qt5Agg')
+
+#using agg because qtagg still generates backends with plt.ioff()
+mpl.use('qt5agg')
 
 import matplotlib as mpl
 
@@ -26,7 +29,7 @@ from matplotlib import pyplot as plt
 
 
 from astropy.time import Time
-from general_tools import file_edit,ravel_ragged
+from general_tools import file_edit,ravel_ragged,interval_extract
 
 #astro imports
 from astropy.io import fits
@@ -41,6 +44,8 @@ Searches for all NICER Obs type directories in the subdirectories and launches t
 list of possible actions : 
 
 1. process_obsdir: run the nicerl2 script to process an obsid folder
+
+gti. create_gtis: create custom gtis files to be used later for lightcurve and spectrum creation
 
 fs. extract_all_spectral: runs the nicerl3-spect script to compute spectral products of an obsid folder (aka s,b,r at the same time)
 
@@ -77,19 +82,19 @@ ap.add_argument('-catch','--catch_errors',help='Catch errors while running the d
 
 #global choices
 ap.add_argument("-a","--action",nargs='?',help='Give which action(s) to proceed,separated by comas.'+
-                '\n1.evt_build\n2.filter_evt\n3.extract_reg...',default='1,l,fs,g,m,c',type=str)
+                '\n1.evt_build\n2.filter_evt\n3.extract_reg...',default='l',type=str)
 ap.add_argument("-over",nargs=1,help='overwrite computed tasks (i.e. with products in the batch, or merge directory\
                 if "m" is in the actions) in a folder',default=True,type=bool)
 
 #directory level overwrite (not active in local)
-ap.add_argument('-folder_over',nargs=1,help='relaunch action through folders with completed analysis',default=False,type=bool)
+ap.add_argument('-folder_over',nargs=1,help='relaunch action through folders with completed analysis',default=True,type=bool)
 ap.add_argument('-folder_cont',nargs=1,help='skip all but the last 2 directories in the summary folder file',default=False,type=bool)
 #note : we keep the previous 2 directories because bug or breaks can start actions on a directory following the initially stopped one
 
 #action specific overwrite
 
 #lightcurve
-ap.add_argument('-lc_bin',nargs=1,help='Gives the binning of all lightcurces/HR evolutions (in s)',default=60,type=str)
+ap.add_argument('-lc_bin',nargs=1,help='Gives the binning of all lightcurces/HR evolutions (in s)',default=1,type=str)
 ap.add_argument('-lc_bands_str',nargs=1,help='Gives the list of bands to create lightcurves from',default='3-15',type=str)
 ap.add_argument('-hr_bands_str',nargs=1,help='Gives the list of bands to create hrsfrom',default='6-10/3-6',type=str)
 
@@ -238,7 +243,178 @@ def select_detector(directory,detectors='-14,-34,-54'):
         #exiting the bashproc
         bashproc.sendline('exit')
         select_detector_done.set()
-        
+
+def create_gtis(directory,split='orbit+clip',band='3-15',binning=1,overwrite=True):
+    '''
+    wrapper for a function to split nicer obsids into indivudal portions
+
+    first creates a lightcurve with the chosen binning then uses it to define
+    individual gtis
+
+    modes (combinable:
+        -orbit:split each obs into each individual nicer observation period
+        -clip: isolates broad band flare/dip periods in each observation and creates individual
+        note that all individual flare/dip periods in single orbits are grouped together
+         gtis for them
+
+    NOTE: requires sas and a sasinit alias to initialize it (to use tabgtigen)
+
+    '''
+
+    bashproc = pexpect.spawn("/bin/bash", encoding='utf-8')
+
+    print('\n\n\nCreating gtis products...')
+
+    set_var(bashproc)
+
+    if os.path.isfile(directory + '/extract_gtis.log'):
+        os.system('rm ' + directory + '/extract_gtis.log')
+
+
+    pi_band = '-'.join((np.array(band.split('-')).astype(int) * 100).astype(str).tolist())
+
+    #removing old lc files
+    old_files_lc = [elem for elem in glob.glob(directory + '/xti/**/*', recursive=True) if
+                    elem.endswith('.lc') and 'bin' not in elem]
+
+    for elem_file in old_files_lc:
+        os.remove(elem_file)
+
+    bashproc.sendline('nicerl3-lc ' + directory + ' pirange=' + pi_band + ' timebin=' + str(binning) + ' ' +
+                      ' clobber=' + ('YES' if overwrite else 'FALSE'))
+
+    process_state = bashproc.expect(['Task aborting due', 'DONE'], timeout=None)
+
+    # raising an error to stop the process if the command has crashed for some reason
+    if process_state == 0:
+        with open(directory + '/extract_lc.log') as file:
+            lines = file.readlines()
+
+        bashproc.sendline('exit')
+        extract_lc_done.set()
+        return lines[-1].replace('\n', '')
+
+
+    file_lc = [elem for elem in glob.glob(directory + '/xti/**/*', recursive=True) if elem.endswith('.lc')][0]
+
+    # storing the data of the lc
+    with fits.open(file_lc) as fits_lc:
+        data_lc_arr = fits_lc[1].data
+
+    # removing the direct products
+    new_files_lc = [elem for elem in glob.glob(directory + '/xti/**/*', recursive=True) if
+                    '.lc' in elem and 'bin' not in elem]
+
+    for elem_file in new_files_lc:
+        os.remove(elem_file)
+
+    times = data_lc_arr['TIME']
+
+    id_gti_split=[-1]
+
+    if 'orbit' in split:
+        #adding gaps of more than 100s as cuts in the gtis
+        for i in range(len(times) - 1):
+            if times[i + 1] - times[i] > 100:
+                id_gti_split += [i]
+
+    id_gti_orbit=[]
+    if len(id_gti_split)==1:
+        id_gti_orbit+=[range(len(times))]
+    else:
+        for id_split in range(len(id_gti_split)):
+
+            #note:+1 at the end since we're using a range
+            id_gti_orbit+=[list(range(id_gti_split[id_split]+1,(len(times)-1 if\
+                id_split==len(id_gti_split)-1 else id_gti_split[id_split+1])+1))]
+
+    n_orbit=len(id_gti_orbit)
+
+    if 'clip' in split:
+        id_gti=[]
+        id_flares=[]
+        id_dips=[]
+        for elem_gti_orbit in id_gti_orbit:
+            clip_data = sigma_clip(data_lc_arr['RATE'][elem_gti_orbit], 3)
+
+            clip_std=clip_data.std()
+            clip_mean=clip_data.mean()
+
+            #computing the gtis outside of the 3 sigma of the clipped distribution
+            #even with uncertainties
+            #note: inverted errors in the data on purpose
+            elem_id_gti=[elem for elem in elem_gti_orbit if \
+                         (data_lc_arr['RATE'][elem]+3*data_lc_arr['ERROR'][elem])>=clip_mean-3*clip_std\
+                         and (data_lc_arr['RATE'][elem]-3*data_lc_arr['ERROR'][elem])<=clip_mean+3*clip_std]
+
+            elem_id_flares=[elem for elem in elem_gti_orbit if \
+                         (data_lc_arr['RATE'][elem]-3*data_lc_arr['ERROR'][elem])>clip_mean+3*clip_std]
+
+            elem_id_dips=[elem for elem in elem_gti_orbit if \
+                         (data_lc_arr['RATE'][elem]+3*data_lc_arr['ERROR'][elem])<clip_mean-3*clip_std]
+
+            id_gti+=[elem_id_gti]
+            id_flares+=[elem_id_flares]
+            id_dips+=[elem_id_dips]
+
+    else:
+        id_gti=id_gti_orbit
+        id_flares=[]
+        id_dips=[]
+
+    #creating global figure
+    plt.figure()
+    plt.errorbar(data_lc_arr['TIME'], data_lc_arr['RATE'], yerr=data_lc_arr['ERROR'])
+
+    #creating figure (if no orbit cut is made, a single orbit will be performed)
+    for id_orbit in range(n_orbit):
+
+        #splitting the individual gti intervals in each orbit (even though they are stacked)
+        #to avoid overlapping the colors
+
+        for id_inter,list_inter in enumerate(list(interval_extract(id_gti[id_orbit]))):
+            plt.axvspan(data_lc_arr['TIME'][min(list_inter)], data_lc_arr['TIME'][max(list_inter)], color='grey', alpha=0.2,label='standard gtis' if id_inter==0 else '')
+
+        for id_inter,list_inter in enumerate(list(interval_extract(id_flares[id_orbit]))):
+            plt.axvspan(data_lc_arr['TIME'][min(list_inter)], data_lc_arr['TIME'][max(list_inter)], color='green', alpha=0.2,label='flare gtis' if id_inter==0 else '')
+
+        for id_inter,list_inter in enumerate(list(interval_extract(id_dips[id_orbit]))):
+            plt.axvspan(data_lc_arr['TIME'][min(list_inter)], data_lc_arr['TIME'][max(list_inter)], color='red', alpha=0.2,label='dip gtis' if id_inter==0 else '')
+
+
+    #creating the gti files for each part of the obsid
+    bashproc.sendline('sasinit')
+
+    def expr_gti(time_arr,id_arr):
+
+        intervals_id=list(interval_extract(id_arr))
+
+        expr=''
+
+        for i_inter,elem_inter in enumerate(intervals_id):
+            expr+='(TIME>='+str(time_arr[elem_inter[0]])+' AND TIME<='+str(time_arr[elem_inter[1]])+')'
+
+            if i_inter!=len(intervals_id)-1:
+                expr+=' OR '
+
+        return expr
+
+    def create_gtis(id_gti,data_lc,suffix):
+
+        if len(id_gti)>0:
+            #creating the orbit gti expression
+
+
+            bashproc.sendline('tabgtigen table='+file_lc+' expression="'+expr_gti(data_lc['TIME'],id_gti)+'" gtiset='+os.path.join(file_lc[file_lc.rfind('/')],directory+'_gti_'+
+            ('%3.f'%id_orbit).replace(' ','0')+suffix))
+
+    for id_orbit in range(n_orbit):
+
+        create_gtis(id_gti[id_orbit],'')
+        create_gtis(id_flares[id_orbit], 'F')
+        create_gtis(id_dips[id_orbit], 'D')
+
+
 #### extract_all_spectral
 def extract_all_spectral(directory,bkgmodel='scorpeon_script',language='python',overwrite=True):
     
@@ -425,7 +601,7 @@ s
         #storing the 
         for i_lc,indiv_band in enumerate(lc_bands):       
                     
-            old_files_lc=[elem for elem in glob.glob(directory+'/xti/**/*',recursive=True) if elem.endswith('.lc')]
+            old_files_lc=[elem for elem in glob.glob(directory+'/xti/**/*',recursive=True) if elem.endswith('.lc') and 'bin' not in elem]
             
             for elem_file in old_files_lc:
                 os.remove(elem_file)
@@ -456,9 +632,16 @@ s
                 
                 time_zero_arr[i_lc]=str(time_zero.to_datetime())
             
-                #saving the lc in a different 
-                fits_lc.writeto(file_lc.replace('.lc',indiv_band+'_bin_'+str(binning)+'.lc'),overwrite=True)
-                
+                #saving the lc in a different file
+                fits_lc.writeto(file_lc.replace('.lc',indiv_band+'_bin_'+str(binning)+'.dat'),overwrite=True)
+
+            #removing the direct products
+            new_files_lc = [elem for elem in glob.glob(directory + '/xti/**/*', recursive=True) if
+                            '.lc' in elem and 'bin' not in elem]
+
+            for elem_file in new_files_lc:
+                os.remove(elem_file)
+
             #and plotting it
             fig_lc,ax_lc=plt.subplots(1,figsize=(10,8))
 

@@ -5,7 +5,7 @@ import os, sys
 #import matplotlib.pyplot as plt
 from astropy.io import fits as pyfits
 #import numpy as np
-import math
+#import math
 import time
 import pexpect
 from pexpect.popen_spawn import PopenSpawn

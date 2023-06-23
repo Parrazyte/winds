@@ -106,7 +106,7 @@ def func_density_sol(r_sph,z_over_r,rho_mhd,p_mhd,mdot_mhd,m_BH):
 
     return (mdot_mhd / (sigma_thomson_cgs * Rg_cgs)) * rho_mhd * (r_cyl ** (p_mhd - 1.5))
 
-def func_vel_sol(coordinate,r_sph,z_over_r,vel_r,vel_phi,vel_z):
+def func_vel_sol(coordinate,r_sph,z_over_r,vel_r,vel_phi,vel_z,m_BH):
 
     '''
     The (special) relativistic computation requires the 3 components
@@ -119,6 +119,13 @@ def func_vel_sol(coordinate,r_sph,z_over_r,vel_r,vel_phi,vel_z):
     u_r_nr=c_cgs * vel_r * ((r_cyl) ** (-0.5))
     u_phi_nr = c_cgs * vel_phi * ((r_cyl) ** (-0.5))
     u_z_nr = c_cgs * vel_z * ((r_cyl) ** (-0.5))
+
+    m_BH_SI = m_BH * Msol_SI
+    Rs_SI = 2.0 * G_SI * m_BH_SI / (c_SI * c_SI)
+
+    # !* Gravitational radius
+    Rg_SI = 0.5 * Rs_SI
+    Rg_cgs = Rg_SI * m2cm
 
     u_nonrelat=np.sqrt(u_r_nr**2+u_phi_nr**2+u_z_nr**2)
 
@@ -135,7 +142,7 @@ def func_vel_sol(coordinate,r_sph,z_over_r,vel_r,vel_phi,vel_z):
         return u_z_nr / gamma
     if coordinate=='obs':
         angle_rad=np.arctan(z_over_r)
-        return (u_r_nr*np.cos(angle_rad)+u_z_nr*np.sin(angle_rad))/gamma
+        return (u_r_nr*np.cos(angle_rad)+u_z_nr*np.sin(angle_rad))*Rg_cgs/gamma
 
 
 # in this one, the distance appears directly so it should be the spherical one
@@ -147,9 +154,6 @@ def func_logxi_sol(r_sph,z_over_r,L_xi_Source,rho_mhd,p_mhd,mdot_mhd,m_BH):
     # !* Gravitational radius
     Rg_SI = 0.5 * Rs_SI
     Rg_cgs = Rg_SI * m2cm
-
-    cyl_cst = np.sqrt(1.0 + (z_over_r * z_over_r))
-    r_cyl = r_sph / cyl_cst
 
     return np.log10(L_xi_Source / (func_density_sol(r_sph,z_over_r,rho_mhd,p_mhd,mdot_mhd,m_BH) * (r_sph * Rg_cgs) ** 2))
 
@@ -263,21 +267,19 @@ def sample_angle(solutions_path, angle_values, mdot_obs, m_BH, r_j=6., eta_mhd=1
 
 
     if mode=='file':
-        solutions_log_path = solutions_path.replace( \
+        solutions_log_path = solutions_path.split('/')[-1].replace( \
             solutions_path_ext,
             '_angle_sampl_mdot_' + str(mdot_obs) + '_m_bh_' + str(m_BH) + '_rj_' + str(r_j) + '_log' + solutions_path_ext)
 
-        solutions_mod_path = solutions_path.replace( \
+        solutions_mod_path = solutions_path.split('/')[-1].replace( \
             solutions_path_ext,
             '_angle_sampl_mdot_' + str(mdot_obs) + '_m_bh_' + str(m_BH) + '_rj_' + str(r_j) + solutions_path_ext)
 
         # adding the outdir into it
-        solutions_log_path = os.path.join('/'.join(solutions_log_path.split('/')[:-1]), outdir,
-                                          solutions_log_path.split('/')[-1])
+        solutions_log_path = os.path.join(outdir,solutions_log_path)
 
         # adding the outdir into it
-        solutions_mod_path = os.path.join('/'.join(solutions_mod_path.split('/')[:-1]), outdir,
-                                          solutions_mod_path.split('/')[-1])
+        solutions_mod_path = os.path.join(outdir,solutions_mod_path)
 
         os.system('mkdir -p '+outdir)
         solutions_log_io = open(solutions_log_path, 'w+')
@@ -365,7 +367,8 @@ def sample_angle(solutions_path, angle_values, mdot_obs, m_BH, r_j=6., eta_mhd=1
         id_sol_sample = np.unique([abs(angle_sol - elem_angle).argmin() for elem_angle in angle_values_nonthick])
 
         print_log('Angles of solutions selected:', solutions_log_io,silent)
-        print_log(angle_sol[id_sol_sample], solutions_log_io,silent)
+
+        print_log(angle_sol[id_sol_sample][::-1], solutions_log_io,silent)
 
         # and fetching the corresponding closest solutions
         solutions_sample += solutions_split[id_sol_sample].tolist()

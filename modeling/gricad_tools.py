@@ -84,51 +84,42 @@ def create_grid(grid_name, mhd_solutions_path,
 
     '''
 
-    Setups Cigrid computations by creating a proper mantis folder tree, and associated launching script and parameter file
+    Setups Cigrid computations by creating a proper mantis folder tree and a parameter file
 
-    Args:
-
+    Main args:
         grid_name: name of grid and of the folder tree which will be copied to mantis
-        cores:
-        ex_time:
-        priority:
-        local:creates the mantis directories, script and parameter files locally using the mantis_grid_dir instead (used for testing)
+        mhd_solutions_path: path where to find the mhd solutions to sample from
 
-    Parameter arguments:
-    global arguments (a single per run)
-        dr_r
-        v_resol
-        ro_init
-        stop_d
-        mode:
-            -all: computes the spectra for every single mhd solution in the file without decomposing
-            -split_angle: considers all solutions but only in a given range of angles
-            -decompose: combines the individual parameter space asked for every value, among the nearest available in the
-            solution file (nearest for h_over_r_vals, 2-dimension nearest in log distance in p/mu and nearest again in angle)
-            creates intermediary folders to reflect the dimensions
+        param_mode:
+                -all: computes the spectra for every single mhd solution in the file without decomposing
+                -split_angle: considers all solutions but only in a given range of angles
+                -decompose: combines the individual parameter space asked for every value, among the nearest available in the
+                solution file (nearest for h_over_r_vals, 2-dimension nearest in log distance in p/mu and nearest again in angle)
+                creates intermediary folders to reflect the dimensions
 
-    coupled parameter arguments (should all be the same length or single to indicate one value to be repeated)
-        SED:list of SED paths (will be copied to mantis_grid_dir for use)
-        mdot: mdot OBSERVED (natural units)
-        xlum: Xray luminosities (1e38 erg/s in 1-1000 Ryd)
-        m_BH: black hole mass (M_sol)
-        rj: JED-SAD transition radius
-            (which acts as the starting point for the nH computation to get the angle thresholds)
+        coupled parameter arguments (should all be the same length or single to indicate one value to be repeated)
+            SED:list of SED paths (will be copied to mantis_grid_dir for use)
+            mdot: mdot OBSERVED (natural units)
+            xlum: Xray luminosities (1e38 erg/s in 1-1000 Ryd)
+            m_BH: black hole mass (M_sol)
+            rj: JED-SAD transition radius. Double use:
+                -acts as the starting point for the nH computation to get the angle thresholds
+                -acts as the minimal ro for the xstar_wind computation
 
 
-    decoupled parameter arguments for 'decompose' mode (one MHD solution for each combination)
+        decoupled parameter arguments for 'decompose' mode (one MHD solution for each combination):
 
-    input possibles are either list/array like elements or str of type 'log/lin_valmin/valmax_nelements'
-    (with valmin and valmax included) values should be in logspace for log type
-    angle is the only variable which only accepts lin because it doesn't make sense otherwise
+            input possibles are either list/array like elements or str of type 'log/lin_valmin/valmax_nelements'
+            (with valmin and valmax included) values should be in logspace for log type
+            angle is the only variable which only accepts lin because it doesn't make sense otherwise
 
-        h_over_r_vals: values for the aspect ratio
-        p_vals: values for the ejection index
-        mu_vals: values for the magnetisation
-        angle_vals: values for the angle. LINEAR if interval
-                    Note:
-                    The max value will always be restricted to the maximal value possible to remain
-                    non-compton thick in the solution. Putting 90 as the max is equivalent to fetching this
+            h_over_r_vals: values for the aspect ratio
+            p_vals: values for the ejection index
+            mu_vals: values for the magnetisation
+            angle_vals: values for the angle. LINEAR if interval
+                        Note:
+                        The max value will always be restricted to the maximal value possible to remain
+                        non-compton thick in the solution. Putting 90 as the max is equivalent to fetching this
 
     '''
 
@@ -186,14 +177,6 @@ def create_grid(grid_name, mhd_solutions_path,
     converting the SED variables into lists
     '''
 
-    #future variables which will be used in the code
-    SED_list=None
-    mdot_list=None
-    xlum_list=None
-    m_BH_list=None
-    rj_list=None
-
-
     SED_var_list=[SED,mdot,xlum,m_BH,rj]
     SED_list_var_list=[]
 
@@ -216,18 +199,15 @@ def create_grid(grid_name, mhd_solutions_path,
 
     SED_list,mdot_list,xlum_list,m_BH_list,rj_list=SED_list_var_list
 
-    #converting the mhd solution files
-    mhd_sol_arr=np.loadtxt(mhd_solutions_path)
-
-    #identifying the folder of the solution file
-    mhd_sol_dir = mhd_solutions_path[:mhd_solutions_path.rfind('/')]
-
-    #converting the solutions depending on the parameter_mode
+    # #converting the mhd solution files
+    # mhd_sol_arr=np.loadtxt(mhd_solutions_path)
+    #
+    # #identifying the folder of the solution file
+    # mhd_sol_dir = mhd_solutions_path[:mhd_solutions_path.rfind('/')]
 
     #creating the solution angle sampling for every solution
 
     SED_dirs=[]
-    # sampl_grid_paths=[]
 
     if param_mode=='split_angle':
         for elem_SED,elem_mdot,elem_m_BH,elem_rj in zip(SED_list,mdot_list,m_BH_list,rj_list):
@@ -269,9 +249,8 @@ def create_grid(grid_name, mhd_solutions_path,
                 np.savetxt(os.path.join(sampl_grid_dir,dir_sol,dir_sol.replace('/','_')+'.txt'),sol_save,
                            header=solution_header[1:].replace('\n',''))
 
-    #creating the parameter file above everything
 
-def create_grid_parfile(grid_folder,mantis_grid_dir,dr_r,v_resol,ro_init,stop_d):
+def create_grid_parfile(grid_folder,mantis_grid_dir,sim_grid_dir,xlum,dr_r,v_resol,stop_d):
 
     '''
     Inserts a parfile inside an already existing grid folder structure
@@ -279,7 +258,7 @@ def create_grid_parfile(grid_folder,mantis_grid_dir,dr_r,v_resol,ro_init,stop_d)
     the list of parameters is the list of arguments of cigri_wrapper
     '''
 
-    sol_files = glob.glob('grid/**/eps**.txt', recursive=True)
+    sol_files = glob.glob(grid_folder+'/**/eps**.txt', recursive=True)
 
     #creating an array with the argument elements for each solution
 
@@ -287,23 +266,45 @@ def create_grid_parfile(grid_folder,mantis_grid_dir,dr_r,v_resol,ro_init,stop_d)
 
     for i_sol,elem_sol_file in enumerate(sol_files):
 
-        #creating the mantis dir
-        sol_file_dir=elem_sol_file[:elem_sol_file.rfind('/')]
-        mantis_dir=os.path.join(mantis_grid_dir,sol_file_dir)
+        sol_rel_dir=elem_sol_file[:elem_sol_file.rfind('/')]
 
-        #fetching the SED id from the directory names
-        sed_file_id=sol_file_dir.split('/')[1][:sol_file_dir.split('/')[1].rfind('_mdot')]
+        #fetching the parameters in the SED
+        sed_file_pars=sol_rel_dir.split('/')[1][sol_rel_dir.split('/')[1].rfind('_mdot')+1:]
 
-        #Convoluted expression to retrieve the extension of the SED
-        sed_file=glob.glob(os.path.join(sol_file_dir.split('/')[0],sol_file_dir.split('/')[1],sed_file_id+'**'))[0]
-        SED_mantis_path=os.path.join(mantis_grid_dir,sed_file)
+        sol_mdot=sed_file_pars.split('_')[1]
 
-        #the solution file
-        solution_mantis_path=os.path.join(mantis_grid_dir,elem_sol_file)
+        #defining the outdir for xstar inside the computation directory with the grid's folder structure
+        sol_outdir_comput=os.path.join(sim_grid_dir,elem_sol_file[:elem_sol_file.rfind('/')])
 
+        sol_m_bh=sed_file_pars.split('_')[4]
 
+        #using rj here
+        sol_ro=sed_file_pars.split('_')[6]
 
+        #direct names of the xstar_wind function arguments.
+        parameters[i_sol]={'solution_rel_dir':sol_rel_dir,
+                           'mantis_grid_dir':mantis_grid_dir,
+                           'comput_grid_dir':sim_grid_dir,
 
+                           'mdot_obs':sol_mdot,
+                           'xlum':str(xlum),
+                           'm_BH':sol_m_bh,
+
+                           'ro_init':sol_ro,
+                           'dr_r':str(dr_r),
+                           'stop_d_input':str(stop_d),
+                           'v_resol': str(v_resol),
+                           }
+
+    #writing in the file
+    with open(os.path.join(grid_folder,'parfile_xlum_'+str(xlum)+'_dr_r_'+str(dr_r)+'_v_resol_'+str(v_resol)+'_stop_d%.1e'%(stop_d)+'.par'),'w+')\
+            as file:
+
+        #writing the header
+        file.write('#'+'\t'.join(list(parameters[0].keys()))+'\n')
+
+        #writing the main lines
+        file.writelines(['\t'.join(list(elem_dict.values()))+'\n' for elem_dict in parameters])
 
 
 def setup_cigrid(mantis_grid_dir, silenus_grid_dir,cores,ex_time,priority):

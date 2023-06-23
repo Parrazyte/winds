@@ -13,9 +13,6 @@ from astropy.io import ascii
 import numpy as np
 import pexpect
 import time
-import glob
-
-import pandas as pd
 
 #trapezoid integration
 from scipy.integrate import trapezoid
@@ -172,31 +169,64 @@ m2cm = 100.0
 
 
 
-def cigri_wrapper(mantis_dir,SED_mantis_path,solution_mantis_path,simdir,
-                  mdot_obs,m_BH,xlum,
-                  ro_init, dr_r, v_resol,stop_d_input):
+def cigri_wrapper(solution_rel_dir,mantis_grid_dir,sim_grid_dir,
+                  mdot_obs,xlum,m_BH,
+                  ro_init, dr_r,stop_d_input,v_resol,
+                  sol_file='auto',
+                  SED_file='auto'):
 
     '''
-
     wrapper for cigri grid xstar computations
 
-    Args:
-        mantis_dir: mantis directory, where the file are saved. will be created if necessary
-        Note: the first parameter is used to define grid process names so it must be different for each process, hence why we put the directory, which are different for every solution
+    Note: the first parameter is used to define grid process names so it must be different for each process,
+          hence why we put the solution grid directory, which are different for every solution
 
-    outdir should be an absolute path in this case
+          Assuming the naming conventions allow to have a shorter parameter file
+
+    Args:
+        solution_rel_dir: solution relative directory inside the grid structure
+                          (will be added to both mantis_dir and simdir)
+        mantis_grid_dir: mantis grid directory, where all the files will be saved
+        sim_grid_dir: computation grid directory, where all the xstar computations will be ran
+
+        mdot_obs,m_BH,xlum: SED parameters for xstar
+        ro_init,dr_r,v_resol,stop_d_input: box parameters for xstar
+
+        sol_file: naming of the sol file inside solution_rel_dir. If set to 'auto',
+                 assumes the solution file name from the directory structure
+        SED_file: naming of the SED file inside solution_rel_dir. If set to 'auto_fileextension',
+                assumes the SED file name from the directory structure, using the extension fileextension
     '''
+
+    if sol_file=='auto':
+        solution_name=('/').join(solution_rel_dir[solution_rel_dir.rfind('rj'):].split('/')[1:]).replace('/','_')+'.txt'
+        solution_rel_path=os.path.join(solution_rel_dir,solution_name)
+    else:
+        solution_rel_path=sol_file
+
+    if SED_file.startswith('auto'):
+        SED_extension=SED_file.split('_')[1]
+        SED_name=solution_rel_dir[:solution_rel_dir.rfind('mdot')].split('/')[-1][:-1]+SED_extension
+        SED_rel_dir=('/').join(solution_rel_dir[:solution_rel_dir.rfind('mdot')].split('/')[:-1])
+        SED_rel_path=os.path.join(SED_rel_dir,SED_name)
+    else:
+        SED_rel_path=SED_file
+
+    simdir=os.path.join(sim_grid_dir,solution_rel_dir)
+    mantis_dir=os.path.join(mantis_grid_dir,solution_rel_dir)
 
     os.system('mkdir -p'+simdir)
 
     #copying all the initial files and the content of the mantis directory to the simdir
     download_mantis(mantis_dir,simdir,load_folder=True)
-    download_mantis(SED_mantis_path,simdir)
-    download_mantis(solution_mantis_path,simdir)
+    download_mantis(os.path.join(mantis_grid_dir,SED_rel_path),simdir)
+
+    #this shouldn't be needed
+    #download_mantis(os.path.join(mantis_grid_dir, solution_rel_path), simdir)
 
     #extracting the name for the function call below since we're going in simdir
-    SED_name=SED_mantis_path.split('/')[-1]
-    solution_name=solution_mantis_path.split('/')[-1]
+    SED_name=SED_rel_path.split('/')[-1]
+    solution_name=solution_rel_path.split('/')[-1]
 
     #it's easier to go directly in the simdir here
     os.chdir(simdir)
@@ -436,7 +466,8 @@ def xstar_wind(solution,SED_path,mdot_obs,xlum,outdir,
                     -saves to Mantis the current input spectrum before each xstar run
                 
                 -saves each final transmitted spectrum, par log file, global xout log, (obtained through compacting of each individual xout log),
-                and box data files to Mantis
+                and box data files to Mantis at the "mantis_folder" location.
+                NOTE: if "mantis_folder" is set to "=sol", uses the mhd solution's folder as the mantis save folder
                 
                 -(with "clean" option) cleans all the individual spectra at the end of the task to gain space
                 
@@ -613,8 +644,13 @@ def xstar_wind(solution,SED_path,mdot_obs,xlum,outdir,
         stop_d=[stop_d_input]
     else:
         stop_d=stop_d_input
-    
-    
+
+    #using the solution directory for the mantis save if asked to
+    if mantis_folder=="=sol":
+        mantis_folder_use=solution[:solution.rfind('/')]
+    else:
+        mantis_folder_use=mantis_folder
+
     #chatter value, 0 for not print, 1 for printing
     if chatter>=10:
         lpri=1
@@ -805,16 +841,16 @@ def xstar_wind(solution,SED_path,mdot_obs,xlum,outdir,
         return func_density_sol(r_sph,z_over_r,rho_mhd,p_mhd,mdot_mhd,m_BH)
     
     def func_vel_r(r_sph):
-        return func_vel_sol('r',r_sph,z_over_r,vel_r,vel_phi,vel_z)
+        return func_vel_sol('r',r_sph,z_over_r,vel_r,vel_phi,vel_z,m_BH)
 
     def func_vel_phi(r_sph):
-        return func_vel_sol('phi',r_sph,z_over_r,vel_r,vel_phi,vel_z)
+        return func_vel_sol('phi',r_sph,z_over_r,vel_r,vel_phi,vel_z,m_BH)
 
     def func_vel_z(r_sph):
-        return func_vel_sol('z',r_sph,z_over_r,vel_r,vel_phi,vel_z)
+        return func_vel_sol('z',r_sph,z_over_r,vel_r,vel_phi,vel_z,m_BH)
         
     def func_vel_obs(r_sph):
-        return func_vel_sol('obs',r_sph,z_over_r,vel_r,vel_phi,vel_z)
+        return func_vel_sol('obs',r_sph,z_over_r,vel_r,vel_phi,vel_z,m_BH)
 
     #in this one, the distance appears directly so it should be the spherical one
     def func_logxi(r_sph):
@@ -835,13 +871,7 @@ def xstar_wind(solution,SED_path,mdot_obs,xlum,outdir,
 
             Rsph_Rg=Rsph_SI/Rg_SI
 
-            density_cgs = func_density(Rsph_Rg)
-
-            vel_r_cgs = func_vel_r(Rsph_Rg)
-            vel_phi_cgs=func_vel_phi(Rsph_Rg)
-            vel_z_cgs = func_vel_z(Rsph_Rg)
-
-            vel_obs_cgs = func_vel_obs(Rsph_Rg)
+            vel_obs_cgs = func_vel_obs('obs',Rsph_Rg)
 
             logxi = func_logxi(Rsph_Rg)
 
@@ -1344,7 +1374,7 @@ def xstar_wind(solution,SED_path,mdot_obs,xlum,outdir,
         write_xstar_infos(i_box+1,vobsx,'./'+outdir+'/xstar_output_details.dat')
 
         if comput_mode=='gricad':
-            upload_mantis('./'+outdir+'/xstar_output_details.dat',mantis_folder)
+            upload_mantis('./'+outdir+'/xstar_output_details.dat',mantis_folder_use)
         
         ####!* Computing spectra and blueshift for the final box depending on stop_dist.
 
@@ -1406,7 +1436,7 @@ def xstar_wind(solution,SED_path,mdot_obs,xlum,outdir,
             #using xlum_final here to avoid overwriting xlum_eff if using more than a single stop distance
             xstar_func(xstar_input,xlum_final,tp,xpx,xpxcol,zeta,vturb_x,nbins=nbins,
                        path_logpars=path_log_xpars,dict_box=dict_box,no_write=no_write,
-                       headas_folder=headas_folder)
+                       headas_folder=headas_folder,mantis_folder=mantis_folder_use)
             
             os.chdir(currdir)
             
@@ -1425,8 +1455,8 @@ def xstar_wind(solution,SED_path,mdot_obs,xlum,outdir,
 
             if comput_mode == 'gricad':
 
-                upload_mantis(xstar_input,mantis_folder)
-                upload_mantis('./' + outdir + '/xstar_output_details_final.dat', mantis_folder)
+                upload_mantis(xstar_input,mantis_folder_use)
+                upload_mantis('./' + outdir + '/xstar_output_details_final.dat', mantis_folder_use)
 
             #removing the standard xstar output to gain space
             os.system('rm -f '+outdir+'/xout_*.fits')

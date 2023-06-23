@@ -738,16 +738,16 @@ with tab_sol_radial:
 
     #here all speeds are divided by 1e5 to go to km/s
     ur_sampl=np.array([func_vel_sol('r',r_sph_sampl[i],sol_sampl_z_over_r[i],sol_sampl_ur[i],
-                                    sol_sampl_uphi[i],sol_sampl_uz[i]) for i in range(n_sol)])/1e5
+                                    sol_sampl_uphi[i],sol_sampl_uz[i],m_BH) for i in range(n_sol)])/1e5
 
     uphi_sampl=np.array([func_vel_sol('phi',r_sph_sampl[i],sol_sampl_z_over_r[i],sol_sampl_ur[i],
-                                      sol_sampl_uphi[i],sol_sampl_uz[i]) for i in range(n_sol)])/1e5
+                                      sol_sampl_uphi[i],sol_sampl_uz[i],m_BH) for i in range(n_sol)])/1e5
 
     uz_sampl=np.array([func_vel_sol('z',r_sph_sampl[i],sol_sampl_z_over_r[i],sol_sampl_ur[i],
-                                    sol_sampl_uphi[i],sol_sampl_uz[i]) for i in range(n_sol)])/1e5
+                                    sol_sampl_uphi[i],sol_sampl_uz[i],m_BH) for i in range(n_sol)])/1e5
 
     uobs_sampl=np.array([func_vel_sol('obs',r_sph_sampl[i],sol_sampl_z_over_r[i],sol_sampl_ur[i],
-                                      sol_sampl_uphi[i],sol_sampl_uz[i]) for i in range(n_sol)])/1e5
+                                      sol_sampl_uphi[i],sol_sampl_uz[i],m_BH) for i in range(n_sol)])/1e5
 
     #fetching the positions at which logxi=6 for each angle
     logxi_6_ids=np.array([np.argmin(abs(elem-6)) for elem in logxi_sampl])

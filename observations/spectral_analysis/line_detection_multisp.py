@@ -112,7 +112,7 @@ from xspec import AllModels,AllData,Fit,Spectrum,Model,Plot,Xset,FakeitSettings,
 
 #custom script with a few shorter xspec commands
 from xspec_config_multisp import allmodel_data,model_load,addcomp,Pset,Pnull,rescale,reset,Plot_screen,store_plot,freeze,allfreeze,unfreeze,\
-                         calc_error,delcomp,fitmod,fitcomp,calc_fit,xcolors_grp,xPlot,xscorpeon,catch_model_str
+                         calc_error,delcomp,fitmod,fitcomp,calc_fit,xcolors_grp,xPlot,xscorpeon,catch_model_str,load_fitmod
 
 from linedet_utils import plot_line_comps,plot_line_search,plot_std_ener,coltour_chi2map,narrow_line_search,\
                             plot_line_ratio
@@ -262,7 +262,11 @@ ap.add_argument('-write_pdf',nargs=1,help='overwrite finished pdf at the end of 
 '''MODES'''
 
 ap.add_argument('-pdf_only',nargs=1,help='Updates the pdf with already existing elements but skips the line detection entirely',
-                default=True,type=bool)
+                default=False,type=bool)
+
+#note: used mainly to recompute obs with bugged UL computations
+ap.add_argument('line_ul_only',nargs=1,help='Reloads the autofit computations and re-computes the ULs',
+                default=False,type=bool)
 
 ap.add_argument('-hid_only',nargs=1,help='skip the line detection and directly plot the hid',
                 default=False,type=bool)
@@ -388,6 +392,7 @@ glob_summary_save_line_infos=args.line_infos_pdf
 restrict_order=args.restrict_order
 no_abslines=args.no_abslines
 NICER_bkg=args.NICER_bkg
+line_ul_only=args.line_ul_only
 
 outdir=args.outdir
 pileup_lim=args.pileup_lim
@@ -1231,6 +1236,137 @@ def line_detect(epoch_id):
 
         return result_arr
 
+    def html_table_maker():
+
+        def strmaker(value_arr,is_overlap=False):
+
+            '''
+            wrapper for making a string of the line abs values
+
+            set is_shift to true for energy/blueshift values, for which 0 values or low uncertainties equal to the value
+            are sign of being pegged to the blueshift limit
+            '''
+
+            #the first case is for eqwidths and blueshifts (argument is an array with the uncertainties)
+            if type(value_arr)==np.ndarray:
+                #If the value array is entirely empty, it means the line is not detected and thus we put a different string
+                if len(np.nonzero(value_arr)[0])==0:
+                    newstr='/'
+                else:
+                    #maybe the is_shift test needs to be put back
+                    if type(value_arr[1])==str:
+                        #we do not show uncertainties for the linked parameters since it is just a repeat
+                        newstr=str(round(value_arr[0],2))
+
+                    else:
+                        #to get a more logical display in cases where the error bounds are out of the interval, we test the
+                        #sign of the errors to write the error range differently
+                        str_minus=' -' if str(round(value_arr[1],1))[0]!='-' else' +'
+                        str_plus=' +' if str(round(value_arr[1],1))[0]!='-' else' '
+                        newstr=str(round(value_arr[0],1))+str_minus+str(abs(round(value_arr[1],1)))+\
+                                str_plus+str(round(value_arr[2],1))
+
+            #the second case is for the significance, delchis and the eqw upper limit, which are floats
+            else:
+                #same empty test except for overlap values which can go to zero
+                if value_arr==0:
+                    if not is_overlap:
+                        newstr='/'
+                    else:
+                        return '0'
+                else:
+                    #the significance is always lower than 1
+                    if value_arr<=1 and not is_overlap:
+                        newstr=(str(round(100*value_arr,len(str(nfakes)))) if value_arr!=1 else '>'+str((1-1/nfakes)*100))+'%'
+                    #and the delchis should always be higher than 1 else the component would have been deleted
+                    else:
+                        newstr=str(round(value_arr,2))
+
+            return newstr
+
+        #emission lines to be added
+        '''
+        </tr>
+          <tr>
+            <td>emission</td>
+            <td>Fe Ka Neutral</td>
+            <td>6.40</td>
+            <td>no</td>
+            <td>/</td>
+            <td>'''+''''strmaker(abslines_ener[0])'''+'''</td>
+            <td>'''+'''strmaker(abslines_bshift[0])'''+'''</td>
+            <td>/</td>
+          </tr>
+          <tr>
+            <td>emission</td>
+            <td>Fe Kb Neutral</td>
+            <td>7.06</td>
+            <td>no</td>
+            <td>/</td>
+            <td>'''+'''strmaker(abslines_ener[1])'''+'''</td>
+            <td>'''+'''strmaker(abslines_bshift[1])'''+'''</td>
+            <td>/</td>
+          </tr>
+        '''
+
+        html_summary=\
+        '''
+        <table>
+        <thead>
+          <tr>
+            <th width="9%">Line</th>
+            <th width="9%">rest energy</th>
+            <th width="9%">em overlap</th>
+            <th width="14%">line flux</th>
+            <th width="14%">blueshift</th>
+            <th width="8%">3sig. distinct</th>
+            <th width="9%">width</th>
+            <th width="9%">EW</th>
+            <th width="9%">EW '''+str(sign_threshold)+''' UL</th>
+            <th width="5%">MC sign.</th>
+            <th width="5%">delchi²</th>
+          </tr>
+        </thead>
+        <tbody>
+        <tr>
+            <td></td>
+            <td>keV</td>
+            <td></td>
+            <td>1e-12 erg/s/cm²</td>
+            <td>km/s</td>
+            <td></td>
+            <td>eV (+-3sigma)</td>
+            <td>eV</td>
+            <td>eV</td>
+            <td></td>
+            <td></td>
+
+        </tr>
+        '''
+
+        for i_line,line_name in enumerate([elem for elem in lines_e_dict.keys() if 'em' not in elem]):
+            html_summary+='''
+          <tr>
+            <td>'''+line_name+'''</td>
+            <td>'''+str(lines_e_dict[line_name][0])+'''</td>
+            <td>'''+('/' if strmaker(abslines_sign[i_line])=='/' else\
+                strmaker(abslines_em_overlap[i_line],is_overlap=True))+'''</td>
+            <td>'''+strmaker(abslines_flux[i_line]*1e12)+'''</td>
+            <td>'''+strmaker(abslines_bshift[i_line])+'''</td>
+            <td>'''+str('/' if abslines_bshift_distinct[i_line] is None else abslines_bshift_distinct[i_line])+'''</td>
+            <td>'''+strmaker(abslines_width[i_line]*1e3)+'''</td>
+            <td>'''+strmaker(abslines_eqw[i_line])+'''</td>
+            <td>'''+strmaker(abslines_eqw_upper[i_line])+'''</td>
+            <td>'''+strmaker(abslines_sign[i_line])+'''</td>
+            <td>'''+strmaker(abslines_delchi[i_line])+'''</td>
+          </tr>
+          '''
+        html_summary+='''
+        </tbody>
+        </table>
+        '''
+        return html_summary
+
     if pdf_only:
 
         try:
@@ -1244,6 +1380,110 @@ def line_detect(epoch_id):
             return fill_result('Line detection complete.')
         except:
             return fill_result('Missing elements to compute PDF.')
+
+    elif line_ul_only:
+
+        #loading the autofit model
+        Xset.restore(outdir+'/'+epoch_observ[0]+'_mod_autofit.xcm')
+
+        #reloading the fitlines class
+        fitlines=load_fitmod(outdir+'/'+epoch_observ[0]+'_fitmod_autofit.pkl')
+
+        #updating fitcomps
+        fitlines.update_fitcomps()
+
+        #recreating the no abs version
+
+        #deleting all absorption components (reversed so we don't have to update the fitcomps)
+        for comp in [elem for elem in fitlines.includedlist if elem is not None][::-1]:
+            if comp.named_absline:
+                #note that with no rollback we do not update the values of the component so it has still its included status and everything else
+                comp.delfrommod(rollback=False)
+
+        #storing the no abs line 'continuum' model
+        data_autofit_noabs=allmodel_data()
+
+        #reloading previously computed information
+        dict_linevis={'visual_line':False,
+                      'cameras':cameras,
+                      'expmodes':expmodes}
+
+        precomp_absline_vals,precomp_autofit_vals=abslines_values(autofit_store_path,dict_linevis,
+                                             obsid=epoch_observ[0])
+
+        #selecting object 0 and obs 0 aka this obs
+        precomp_absline_vals=precomp_absline_vals[0][0]
+        precomp_autofit_vals=precomp_autofit_vals[0][0]
+
+        abslines_eqw,abslines_bshift,abslines_delchi,abslines_flux,abslines_sign=precomp_absline_vals[:5]
+
+        abslines_eqw_upper=np.zeros(len(range_absline))
+
+        abslines_em_overlap,abslines_width,abslines_bshift_distinct=precomp_absline_vals[6:]
+
+        autofit_parerrors,autofit_parnames=precomp_autofit_vals
+
+        sign_widths_arr=np.array([elem[0] if elem[0]-elem[1]>1e-6 else 0 for elem in abslines_width])
+
+        #fetching the ID of this observation
+        # freezing the model to avoid it being affected by the missing absorption lines
+        # note : it would be better to let it free when no absorption lines are there but we keep the same procedure for
+        # consistency
+        allfreeze()
+
+        # computing a mask for significant lines
+        mask_abslines_sign = abslines_sign > sign_threshold
+
+        # computing the upper limits for the non significant lines
+        abslines_eqw_upper = fitlines.get_eqwidth_uls(mask_abslines_sign, abslines_bshift, sign_widths_arr,
+                                                      pre_delete=True)
+
+        # here will need to reload an accurate model before updating the fitcomps
+        '''HTML TABLE FOR the pdf summary'''
+
+        abslines_table_str = html_table_maker()
+
+        with open(outdir + '/' + epoch_observ[0] + '_abslines_table.txt', 'w+') as abslines_table_file:
+            abslines_table_file.write(abslines_table_str)
+
+            Xset.logChatter = 10
+
+        # storing line string
+        autofit_store_str = epoch_observ[0] + '\t' + \
+                            str(abslines_eqw.tolist()) + '\t' + str(abslines_bshift.tolist()) + '\t' + str(
+            abslines_delchi.tolist()) + '\t' + \
+                            str(abslines_flux.tolist()) + '\t' + str(abslines_sign.tolist()) + '\t' + str(
+            abslines_eqw_upper.tolist()) + '\t' + \
+                            str(abslines_em_overlap.tolist()) + '\t' + str(abslines_width.tolist()) + '\t' + str(
+            abslines_bshift_distinct.tolist()) + '\t' + \
+                            str(autofit_parerrors.tolist()) + '\t' + str(autofit_parnames.tolist()) + '\n'
+
+    else:
+        autofit_store_str = epoch_observ[0] + '\t' + '\t' + '\t' + '\t' + '\t' + '\t' + '\t' + '\t' + '\t' + '\t' + '\n'
+
+    '''Storing the results'''
+
+    autofit_store_header = 'Observ_id\tabslines_eqw\tabslines_bshift\tablines_delchi\tabslines_flux\t' + \
+                           'abslines_sign\tabslines_eqw_upper\tabslines_em_overlap\tabslines_width\tabslines_bshift_distinct' + \
+                           '\tautofit_parerrors\tautofit_parnames\n'
+
+    file_edit(path=autofit_store_path, line_id=epoch_observ[0], line_data=autofit_store_str,
+              header=autofit_store_header)
+
+    '''PDF creation'''
+
+    if write_pdf:
+        pdf_summary(epoch_observ, fit_ok=True, summary_epoch=fill_result('Line detection complete.'))
+
+    # closing the logfile for both access and Xspec
+    curr_logfile.close()
+    Xset.closeLog()
+
+    return fill_result('Line detection complete.')
+
+    '''
+    normal behavior
+    '''
 
     for i_sp,elem_sp in enumerate(epoch_files):
 
@@ -2665,137 +2905,6 @@ def line_detect(epoch_id):
 
         #here will need to reload an accurate model before updating the fitcomps
         '''HTML TABLE FOR the pdf summary'''
-
-        def html_table_maker():
-
-            def strmaker(value_arr,is_overlap=False):
-
-                '''
-                wrapper for making a string of the line abs values
-
-                set is_shift to true for energy/blueshift values, for which 0 values or low uncertainties equal to the value
-                are sign of being pegged to the blueshift limit
-                '''
-
-                #the first case is for eqwidths and blueshifts (argument is an array with the uncertainties)
-                if type(value_arr)==np.ndarray:
-                    #If the value array is entirely empty, it means the line is not detected and thus we put a different string
-                    if len(np.nonzero(value_arr)[0])==0:
-                        newstr='/'
-                    else:
-                        #maybe the is_shift test needs to be put back
-                        if type(value_arr[1])==str:
-                            #we do not show uncertainties for the linked parameters since it is just a repeat
-                            newstr=str(round(value_arr[0],2))
-
-                        else:
-                            #to get a more logical display in cases where the error bounds are out of the interval, we test the
-                            #sign of the errors to write the error range differently
-                            str_minus=' -' if str(round(value_arr[1],1))[0]!='-' else' +'
-                            str_plus=' +' if str(round(value_arr[1],1))[0]!='-' else' '
-                            newstr=str(round(value_arr[0],1))+str_minus+str(abs(round(value_arr[1],1)))+\
-                                    str_plus+str(round(value_arr[2],1))
-
-                #the second case is for the significance, delchis and the eqw upper limit, which are floats
-                else:
-                    #same empty test except for overlap values which can go to zero
-                    if value_arr==0:
-                        if not is_overlap:
-                            newstr='/'
-                        else:
-                            return '0'
-                    else:
-                        #the significance is always lower than 1
-                        if value_arr<=1 and not is_overlap:
-                            newstr=(str(round(100*value_arr,len(str(nfakes)))) if value_arr!=1 else '>'+str((1-1/nfakes)*100))+'%'
-                        #and the delchis should always be higher than 1 else the component would have been deleted
-                        else:
-                            newstr=str(round(value_arr,2))
-
-                return newstr
-
-            #emission lines to be added
-            '''
-            </tr>
-              <tr>
-                <td>emission</td>
-                <td>Fe Ka Neutral</td>
-                <td>6.40</td>
-                <td>no</td>
-                <td>/</td>
-                <td>'''+''''strmaker(abslines_ener[0])'''+'''</td>
-                <td>'''+'''strmaker(abslines_bshift[0])'''+'''</td>
-                <td>/</td>
-              </tr>
-              <tr>
-                <td>emission</td>
-                <td>Fe Kb Neutral</td>
-                <td>7.06</td>
-                <td>no</td>
-                <td>/</td>
-                <td>'''+'''strmaker(abslines_ener[1])'''+'''</td>
-                <td>'''+'''strmaker(abslines_bshift[1])'''+'''</td>
-                <td>/</td>
-              </tr>
-            '''
-
-            html_summary=\
-            '''
-            <table>
-            <thead>
-              <tr>
-                <th width="9%">Line</th>
-                <th width="9%">rest energy</th>
-                <th width="9%">em overlap</th>
-                <th width="14%">line flux</th>
-                <th width="14%">blueshift</th>
-                <th width="8%">3sig. distinct</th>
-                <th width="9%">width</th>
-                <th width="9%">EW</th>
-                <th width="9%">EW '''+str(sign_threshold)+''' UL</th>
-                <th width="5%">MC sign.</th>
-                <th width="5%">delchi²</th>
-              </tr>
-            </thead>
-            <tbody>
-            <tr>
-                <td></td>
-                <td>keV</td>
-                <td></td>
-                <td>1e-12 erg/s/cm²</td>
-                <td>km/s</td>
-                <td></td>
-                <td>eV (+-3sigma)</td>
-                <td>eV</td>
-                <td>eV</td>
-                <td></td>
-                <td></td>
-
-            </tr>
-            '''
-
-            for i_line,line_name in enumerate([elem for elem in lines_e_dict.keys() if 'em' not in elem]):
-                html_summary+='''
-              <tr>
-                <td>'''+line_name+'''</td>
-                <td>'''+str(lines_e_dict[line_name][0])+'''</td>
-                <td>'''+('/' if strmaker(abslines_sign[i_line])=='/' else\
-                    strmaker(abslines_em_overlap[i_line],is_overlap=True))+'''</td>
-                <td>'''+strmaker(abslines_flux[i_line]*1e12)+'''</td>
-                <td>'''+strmaker(abslines_bshift[i_line])+'''</td>
-                <td>'''+str('/' if abslines_bshift_distinct[i_line] is None else abslines_bshift_distinct[i_line])+'''</td>
-                <td>'''+strmaker(abslines_width[i_line]*1e3)+'''</td>
-                <td>'''+strmaker(abslines_eqw[i_line])+'''</td>
-                <td>'''+strmaker(abslines_eqw_upper[i_line])+'''</td>
-                <td>'''+strmaker(abslines_sign[i_line])+'''</td>
-                <td>'''+strmaker(abslines_delchi[i_line])+'''</td>
-              </tr>
-              '''
-            html_summary+='''
-            </tbody>
-            </table>
-            '''
-            return html_summary
 
         abslines_table_str=html_table_maker()
 

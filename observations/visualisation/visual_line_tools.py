@@ -808,27 +808,42 @@ def obj_values(file_paths,E_factors,dict_linevis):
     return obs_list,lval_list,f_list,date_list,instru_list,exptime_list
 
 #@st.cache_data
-def abslines_values(file_paths,dict_linevis):
+def abslines_values(file_paths,dict_linevis,only_abs=False,obsid=None):
 
     '''
-    Extracts the stored data from each value autofit_values file
+    Extracts the stored data from each autofit_values file
+
+    if obsid is set to an obsid string or identifier, only returns the values of the line(s)
+    containing that obsid
     '''
 
-    obj_list=dict_linevis['obj_list']
+    #converting non-arrays (notably a single string) into iterables
+    if type(file_paths) not in (np.array,list,tuple):
+        file_paths_use=[file_paths]
+    else:
+        file_paths_use=file_paths
+
     cameras=dict_linevis['cameras']
     expmodes=dict_linevis['expmodes']
     visual_line=dict_linevis['visual_line']
-    
-    abslines_inf=np.array([None]*len(obj_list))
-    autofit_inf=np.array([None]*len(obj_list))
+    if visual_line:
+        obj_list = dict_linevis['obj_list']
+        abslines_inf=np.array([None]*len(obj_list))
+        autofit_inf=np.array([None]*len(obj_list))
+    else:
+        obj_list=['current']
+        abslines_inf=np.array([None])
+        autofit_inf=np.array([None])
+
+
 
     for i in range(len(obj_list)):
             
         #matching the line paths corresponding to each object
         if visual_line:    
-            curr_obj_paths=[elem for elem in file_paths if '/'+obj_list[i]+'/' in elem]
+            curr_obj_paths=[elem for elem in file_paths_use if '/'+obj_list[i]+'/' in elem]
         else:
-            curr_obj_paths=file_paths
+            curr_obj_paths=file_paths_use
         
         store_lines=[]
 
@@ -841,13 +856,18 @@ def abslines_values(file_paths,dict_linevis):
                 
                 #only keeping the lines with selected cameras and exposures
                 #for NICER observation, there's no camera to check so we pass directly
+
+                #restricting to the given obsid if asked to
+                if obsid is not None:
+                    store_lines_single=[elem_line for elem_line in store_lines_single if obsid in elem_line]
+
                 if len(store_lines_single[0].split('\t')[0].split('_')):
                     store_lines+=store_lines_single
                 else:
                     store_lines_single=[elem for elem in store_lines_single if elem.split('\t')[0].split('_')[1] in cameras]
-                    
+
                     #checking if it's an XMM file and selecting exposures if so
-                    if 'NICER' not in elem_path and store_lines_single[0].split('\t')[0].split('_')[1] in ['pn','mos1','mos2']:    
+                    if 'NICER' not in elem_path and store_lines_single[0].split('\t')[0].split('_')[1] in ['pn','mos1','mos2']:
                         store_lines+=[elem for elem in store_lines_single if elem.split('\t')[0].split('_')[3] in expmodes]
 
         
@@ -901,8 +921,11 @@ def abslines_values(file_paths,dict_linevis):
                 
         abslines_inf[i]=curr_abslines_infos
         autofit_inf[i]=curr_autofit_infos
-        
-    return abslines_inf,autofit_inf
+
+    if only_abs:
+        return abslines_inf
+    else:
+        return abslines_inf,autofit_inf
 
 
 #@st.cache_data

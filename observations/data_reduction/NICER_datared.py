@@ -280,6 +280,13 @@ def create_gtis(directory,split='orbit+clip',band='3-15',binning=1,overwrite=Tru
     for elem_file in old_files_lc:
         os.remove(elem_file)
 
+    #removing old gti files
+    old_files_gti=[elem for elem in glob.glob(directory + '/xti/**/*', recursive=True) if
+                   '_gti_' in elem]
+
+    for elem_file_gti in old_files_gti:
+        os.remove(elem_file_gti)
+
     bashproc.sendline('nicerl3-lc ' + directory + ' pirange=' + pi_band + ' timebin=' + str(binning) + ' ' +
                       ' clobber=' + ('YES' if overwrite else 'FALSE'))
 
@@ -304,9 +311,6 @@ def create_gtis(directory,split='orbit+clip',band='3-15',binning=1,overwrite=Tru
     # removing the direct products
     new_files_lc = [elem for elem in glob.glob(directory + '/xti/**/*', recursive=True) if
                     '.lc' in elem and 'bin' not in elem]
-
-    for elem_file in new_files_lc:
-        os.remove(elem_file)
 
     times = data_lc_arr['TIME']
 
@@ -363,7 +367,7 @@ def create_gtis(directory,split='orbit+clip',band='3-15',binning=1,overwrite=Tru
         id_dips=[]
 
     #creating global figure
-    plt.figure()
+    plt.figure(figsize=(15,8))
     plt.errorbar(data_lc_arr['TIME'], data_lc_arr['RATE'], yerr=data_lc_arr['ERROR'])
 
     #creating figure (if no orbit cut is made, a single orbit will be performed)
@@ -381,38 +385,63 @@ def create_gtis(directory,split='orbit+clip',band='3-15',binning=1,overwrite=Tru
         for id_inter,list_inter in enumerate(list(interval_extract(id_dips[id_orbit]))):
             plt.axvspan(data_lc_arr['TIME'][min(list_inter)], data_lc_arr['TIME'][max(list_inter)], color='red', alpha=0.2,label='dip gtis' if id_inter==0 else '')
 
-
+    plt.savefig('./'+directory+'/'+directory+'_lc_'+band+'_bin_'+str(binning)+'_gtis.png')
     #creating the gti files for each part of the obsid
     bashproc.sendline('sasinit')
 
-    def expr_gti(time_arr,id_arr):
+    # NOTE: this doesn't work nor it did back then with XMM_datared, so using masks instead
+    # def expr_gti(time_arr,id_arr):
+    #
+    #     intervals_id=list(interval_extract(id_arr))
+    #
+    #     expr=''
+    #
+    #     for i_inter,elem_inter in enumerate(intervals_id):
+    #         expr+='(TIME>='+str(time_arr[elem_inter[0]])+' AND TIME<='+str(time_arr[elem_inter[1]])+')'
+    #
+    #         if i_inter!=len(intervals_id)-1:
+    #             expr+=' OR '
+    #
+    #     return expr
 
-        intervals_id=list(interval_extract(id_arr))
-
-        expr=''
-
-        for i_inter,elem_inter in enumerate(intervals_id):
-            expr+='(TIME>='+str(time_arr[elem_inter[0]])+' AND TIME<='+str(time_arr[elem_inter[1]])+')'
-
-            if i_inter!=len(intervals_id)-1:
-                expr+=' OR '
-
-        return expr
-
-    def create_gtis(id_gti,data_lc,suffix):
+    def create_gti_files(id_gti,data_lc,suffix):
 
         if len(id_gti)>0:
+
+            fits_gti=fits.open(file_lc)
+
+            #creating a custom gti 'mask' file
+            gti_column=fits.ColDefs([fits.Column(name='IS_GTI', format='I',
+                                    array=np.array([1 if i in id_gti else 0 for i in range(len(data_lc))]))])
+
+            #replacing the hdu with a hdu containing it
+            fits_gti[1]=fits.BinTableHDU.from_columns(fits_gti[1].columns[:2]+gti_column)
+            fits_gti[1].name='IS_GTI'
+
+            lc_mask_path = os.path.join(file_lc[:file_lc.rfind('/')],directory+'_gti_mask_'+('%3.f'%(id_orbit+1)).replace(' ','0')+suffix)+'.fits'
+
+            fits_gti.writeto(lc_mask_path, overwrite=True)
+
             #creating the orbit gti expression
 
+            bashproc.sendline('tabgtigen table='+lc_mask_path+' expression="IS_GTI==1" gtiset='\
+                              +os.path.join(file_lc[:file_lc.rfind('/')],directory+'_gti_'+
+            ('%3.f'%(id_orbit+1)).replace(' ','0')+suffix)+'.gti')
 
-            bashproc.sendline('tabgtigen table='+file_lc+' expression="'+expr_gti(data_lc['TIME'],id_gti)+'" gtiset='+os.path.join(file_lc[file_lc.rfind('/')],directory+'_gti_'+
-            ('%3.f'%id_orbit).replace(' ','0')+suffix))
+            #waiting time to let time for the file to be created
+            time.sleep(1)
 
     for id_orbit in range(n_orbit):
 
-        create_gtis(id_gti[id_orbit],'')
-        create_gtis(id_flares[id_orbit], 'F')
-        create_gtis(id_dips[id_orbit], 'D')
+        create_gti_files(id_gti[id_orbit],data_lc_arr,'')
+        create_gti_files(id_flares[id_orbit],data_lc_arr, 'F')
+        create_gti_files(id_dips[id_orbit],data_lc_arr, 'D')
+
+    #only deleting the lightcurve files after everything has been finished
+    for elem_file in new_files_lc:
+        os.remove(elem_file)
+
+breakpoint()
 
 
 #### extract_all_spectral

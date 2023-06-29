@@ -127,3 +127,14 @@ def file_edit(path,line_id,line_data,header):
             
             file.writelines(header_eff+lines)
             
+def print_log(elem,logfile_io,silent=False):
+
+    '''
+    prints and logs at once
+    '''
+
+    if not silent:
+        print(elem)
+
+    if logfile_io is not None:
+        logfile_io.write(str(elem)+('\n' if not str(elem).endswith('\n') else ''))

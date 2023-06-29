@@ -183,6 +183,8 @@ ap.add_argument('-NICER_bkg',nargs=1,help='NICER background type',default='scorp
 
 ap.add_argument('-pre_reduced_NICER',nargs=1,help='change NICER data format to pre-reduced obsids',default=False,type=bool)
 
+ap.add_argument('-NICER_lc_binning',nargs=1,help='NICER LC binning',default='1',type=str)
+
 #### Models and abslines lock
 ap.add_argument('-cont_model',nargs=1,help='model list to use for the autofit computation',default='cont',type=str)
 ap.add_argument('-autofit_model',nargs=1,help='model list to use for the autofit computation',default='lines_narrow',type=str)
@@ -203,7 +205,12 @@ ap.add_argument("-h_update",nargs=1,help='update the bg, rmf and arf file names 
 ap.add_argument('-restrict',nargs=1,help='restrict the computation to a number of predefined exposures',default=False,type=bool)
 #in this mode, the line detection function isn't wrapped in a try, and the summary isn't updasted
 
-observ_restrict=['13717_heg_-1_grp_opt.pha','13717_heg_1_grp_opt.pha']
+observ_restrict=['5501010106-001_sp_grp_opt.pha'
+                 '5501010106-002_sp_grp_opt.pha'
+                 '5501010106-003_sp_grp_opt.pha'
+                 '5501010106-003F_sp_grp_opt.pha'
+                 '5501010106-004_sp_grp_opt.pha'
+                 '5501010106-005_sp_grp_opt.pha']
 
 ''' 
 Chandra:
@@ -247,17 +254,17 @@ ap.add_argument('-fit_lowSNR',nargs=1,help='fit the continuum of low quality dat
 ap.add_argument('-counts_min_HID',nargs=1,help='minimum counts for HID fitting in broad band',default=200,type=float)
 
 ap.add_argument('-skip_started',nargs=1,help='skip all exposures listed in the local summary_line_det file',
-                default=True,type=bool)
+                default=False,type=bool)
 #note : will skip exposures for which the exposure didn't compute or with errors
 
 ap.add_argument('-skip_complete',nargs=1,help='skip completed exposures listed in the local summary_line_det file',
-                default=True,type=bool)
+                default=False,type=bool)
 
 ap.add_argument('-skip_nongrating',nargs=1,help='skip non grating Chandra obs (used to reprocess with changes in the restrictions)',
                 default=False,type=bool)
 
 ap.add_argument('-write_pdf',nargs=1,help='overwrite finished pdf at the end of the line detection',
-                default=True,type=bool)
+                default=False,type=bool)
 
 '''MODES'''
 
@@ -265,7 +272,7 @@ ap.add_argument('-pdf_only',nargs=1,help='Updates the pdf with already existing 
                 default=False,type=bool)
 
 #note: used mainly to recompute obs with bugged UL computations
-ap.add_argument('line_ul_only',nargs=1,help='Reloads the autofit computations and re-computes the ULs',
+ap.add_argument('-line_ul_only',nargs=1,help='Reloads the autofit computations and re-computes the ULs',
                 default=False,type=bool)
 
 ap.add_argument('-hid_only',nargs=1,help='skip the line detection and directly plot the hid',
@@ -393,6 +400,7 @@ restrict_order=args.restrict_order
 no_abslines=args.no_abslines
 NICER_bkg=args.NICER_bkg
 line_ul_only=args.line_ul_only
+NICER_lc_binning=args.NICER_lc_binning
 
 outdir=args.outdir
 pileup_lim=args.pileup_lim
@@ -1021,12 +1029,15 @@ def pdf_summary(epoch_observ,fit_ok=False,summary_epoch=None):
             pdf.set_font('helvetica', 'B', 16)
             pdf.cell(1,10,'Lightcurves for obsid '+elem_observ,align='C',center=True)
             pdf.ln(10)
-            pdf.image(elem_observ+'_lc_3-6_bin_60.png',x=2,y=50,w=90)
-            pdf.image(elem_observ+'_lc_6-10_bin_60.png',x=100,y=50,w=90)
-            pdf.image(elem_observ+'_lc_3-15_bin_60.png',x=200,y=50,w=90)
-            pdf.cell(1,10,'HR evolution for obsid '+elem_observ,align='C',center=True)
-            pdf.image(elem_observ+'_hr_6-10_bin_60.png',x=100,y=150,w=90)
+            try:
+                pdf.image(elem_observ + '_lc_3-15_bin_' + NICER_lc_binning + '.png', x=200, y=50, w=90)
+                pdf.image(elem_observ+'_lc_3-6_bin_'+NICER_lc_binning+'.png',x=2,y=50,w=90)
+                pdf.image(elem_observ+'_lc_6-10_bin_'+NICER_lc_binning+'.png',x=100,y=50,w=90)
 
+                pdf.cell(1,10,'HR evolution for obsid '+elem_observ,align='C',center=True)
+                pdf.image(elem_observ+'_hr_6-10_bin_'+NICER_lc_binning+'.png',x=100,y=150,w=90)
+            except:
+                pass
     if sat=='XMM':
         for i_obs,elem_observ in enumerate(epoch_observ):
             if is_sp[i_obs]:
@@ -1458,28 +1469,25 @@ def line_detect(epoch_id):
             abslines_bshift_distinct.tolist()) + '\t' + \
                             str(autofit_parerrors.tolist()) + '\t' + str(autofit_parnames.tolist()) + '\n'
 
-    else:
-        autofit_store_str = epoch_observ[0] + '\t' + '\t' + '\t' + '\t' + '\t' + '\t' + '\t' + '\t' + '\t' + '\t' + '\n'
+        '''Storing the results'''
 
-    '''Storing the results'''
+        autofit_store_header = 'Observ_id\tabslines_eqw\tabslines_bshift\tablines_delchi\tabslines_flux\t' + \
+                               'abslines_sign\tabslines_eqw_upper\tabslines_em_overlap\tabslines_width\tabslines_bshift_distinct' + \
+                               '\tautofit_parerrors\tautofit_parnames\n'
 
-    autofit_store_header = 'Observ_id\tabslines_eqw\tabslines_bshift\tablines_delchi\tabslines_flux\t' + \
-                           'abslines_sign\tabslines_eqw_upper\tabslines_em_overlap\tabslines_width\tabslines_bshift_distinct' + \
-                           '\tautofit_parerrors\tautofit_parnames\n'
+        file_edit(path=autofit_store_path, line_id=epoch_observ[0], line_data=autofit_store_str,
+                  header=autofit_store_header)
 
-    file_edit(path=autofit_store_path, line_id=epoch_observ[0], line_data=autofit_store_str,
-              header=autofit_store_header)
+        '''PDF creation'''
 
-    '''PDF creation'''
+        if write_pdf:
+            pdf_summary(epoch_observ, fit_ok=True, summary_epoch=fill_result('Line detection complete.'))
 
-    if write_pdf:
-        pdf_summary(epoch_observ, fit_ok=True, summary_epoch=fill_result('Line detection complete.'))
+        # closing the logfile for both access and Xspec
+        curr_logfile.close()
+        Xset.closeLog()
 
-    # closing the logfile for both access and Xspec
-    curr_logfile.close()
-    Xset.closeLog()
-
-    return fill_result('Line detection complete.')
+        return fill_result('Line detection complete.')
 
     '''
     normal behavior
@@ -3077,7 +3085,7 @@ elif sat in ['NICER','Suzaku','Swift']:
 
     for obsid in obsid_list:
 
-        epoch_list+=[[elem for elem in spfile_list if elem.startswith(obsid)]]
+        epoch_list+=[[elem for elem in spfile_list if elem.startswith(obsid+'_')]]
 
     if sat=='Swift':
         obsid_list_started=np.unique([elem.split('_')[0][:11] for elem in started_expos[1:]])
@@ -3086,6 +3094,8 @@ elif sat in ['NICER','Suzaku','Swift']:
 
     for obsid in obsid_list_started.tolist():
         epoch_list_started+=[[elem] for elem in started_expos if elem.startswith(obsid)]
+
+breakpoint()
 
 #### line detections for exposure with a spectrum
 for epoch_id,epoch_files in enumerate(epoch_list):
@@ -3127,7 +3137,7 @@ for epoch_id,epoch_files in enumerate(epoch_list):
         continue
 
     #we don't use the error catcher/log file in restrict mode to avoid passing through bpoints
-    if restrict==False:
+    if not restrict:
 
         if log_console:
             prev_stdout=sys.stdout
@@ -3143,6 +3153,8 @@ for epoch_id,epoch_files in enumerate(epoch_list):
         else:
 
             summary_lines=line_detect(epoch_id)
+
+        breakpoint()
 
         if log_console:
             sys.stdout=prev_stdout

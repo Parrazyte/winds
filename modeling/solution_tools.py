@@ -1,6 +1,12 @@
-import os
+import os,sys
 import numpy as np
 import glob
+
+#ensuring general_tools can be imported in local and on streamlit
+sys.path.append('/home/parrama/Documents/Work/PhD/Scripts/Python/general/')
+sys.path.append('/app/winds/observations/general/')
+
+from general_tools import print_log
 
 h_cgs = 6.624e-27
 eV2erg = 1.6e-12
@@ -78,19 +84,6 @@ def interp_yaxis(x_value,x_axis,y_axis,log_y=False,log_x=False,round=True):
     # y_value=closest_y[0]+(closest_y[1]-closest_y[0])*(x_value-closest_x[0])/(closest_x[1]-closest_x[0])
 
     return y_value
-
-def print_log(elem,logfile_io,silent=False):
-
-    '''
-    prints and logs at once
-    '''
-
-    if not silent:
-        print(elem)
-
-    if logfile_io is not None:
-        logfile_io.write(str(elem)+('\n' if not str(elem).endswith('\n') else ''))
-
 
 def func_density_sol(r_sph,z_over_r,rho_mhd,p_mhd,mdot_mhd,m_BH):
 

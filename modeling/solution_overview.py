@@ -195,7 +195,7 @@ fig_scatter.update_layout(legend=dict(
 # fig_scatter.update_xaxes(tickfont=dict(color='white'),title_font_color="white")
 # fig_scatter.update_yaxes(tickfont=dict(color='white'),title_font_color="white")
 
-tab_p_mu, tab_sol, tab_sol_radial,tab_explo= st.tabs(["Solution selection", "Angular distribution", "radial distribution","parameter exploration"])
+tab_p_mu, tab_sol, tab_sol_radial,tab_explo,tab_2D= st.tabs(["Solution selection", "Angular distributions", "radial distribution","parameter exploration","full solution vizualisation"])
 
 with tab_p_mu:
     selected_points = plotly_events(fig_scatter,click_event=True,select_event=True,override_height=800)
@@ -369,7 +369,7 @@ def plotly_line_wrapper(x,y,log_x=False,log_y='auto',xaxis_title='',yaxis_title=
     fig_line.layout.xaxis.color = 'white'
     # line.layout.xaxis.zerolinecolor = 'rgba(0.5,0.5,.5,0.3)'
     fig_line.layout.xaxis.gridcolor = 'rgba(0.5,0.5,.5,0.3)'
-    
+
     fig_line.layout.yaxis.color = 'white'
     # line.layout.yaxis.zerolinecolor = 'rgba(0.5,0.5,.5,0.3)'
     fig_line.layout.yaxis.gridcolor = 'rgba(0.5,0.5,.5,0.3)'
@@ -427,13 +427,13 @@ def angle_plot(x_arr,y_arr,log_x=False,log_y='auto',xaxis_title='',yaxis_title='
 
         if n_sel>1:
 
-            #computing the position of the compton angle on the y axis
-            compt_y=interp_yaxis(compt_angle,x,y)
+            # #computing the position of the compton angle on the y axis
+            # compt_y=interp_yaxis(compt_angle,x,y)
 
             fig_line=plotly_line_wrapper(x,y,
                                          log_x=log_x,log_y='auto',
                                          xaxis_title=xaxis_title,yaxis_title=yaxis_title,legend=legend,ex_fig=fig_line,
-                                         name=line_name,line_color=elem_color,showlegend=legend_lines,split_ls_x=compt_angle,linedash=['solid','dash'])
+                                         name=line_name,line_color=elem_color,showlegend=legend_lines,split_ls_x=compt_angle,linedash='solid' if compt_angle is None else ['solid','dash'])
 
         else:
             fig_line=plotly_line_wrapper(x,y,log_x=log_x,log_y='auto',xaxis_title=xaxis_title,yaxis_title=yaxis_title,legend=legend,ex_fig=fig_line,name=line_name,
@@ -706,26 +706,29 @@ def radial_plot(rad,sol_sampl,angl_sampl,log_x=False,log_y=False,xaxis_title='',
     else:
         st.plotly_chart(fig_rad, use_container_width=False, theme=None)
 
+
+n_sol=len(selected_sol_split_angle[0])
+
+#breakpoint()
+
+sol_sampl_z_over_r = selected_sol_split_angle[0].T[7]
+sol_sampl_angle = selected_sol_split_angle[0].T[8]
+
+sol_sampl_r_cyl_r0 = selected_sol_split_angle[0].T[9]
+sol_sampl_rho_mhd = selected_sol_split_angle[0].T[10]
+
+sol_sampl_ur, sol_sampl_uphi, sol_sampl_uz = selected_sol_split_angle[0].T[11:14]
+sol_sampl_br, sol_sampl_bphi, sol_sampl_bz = selected_sol_split_angle[0].T[15:18]
+
+sol_p_mhd=selected_sol_split_angle[0][0][3]
+
+mdot_mhd=mdot_obs*12
+
+cyl_cst_sampl=np.sqrt(1+sol_sampl_z_over_r**2)
+
+r_sph_sampl=np.array([np.logspace(np.log10(rj*cyl_cst_sampl[i]),7,300) for i in range(n_sol)])
+
 with tab_sol_radial:
-
-    n_sol=len(selected_sol_split_angle[0])
-    
-    sol_sampl_z_over_r = selected_sol_split_angle[0].T[7]
-    sol_sampl_angle = selected_sol_split_angle[0].T[8]
-
-    sol_sampl_r_cyl_r0 = selected_sol_split_angle[0].T[9]
-    sol_sampl_rho_mhd = selected_sol_split_angle[0].T[10]
-
-    sol_sampl_ur, sol_sampl_uphi, sol_sampl_uz = selected_sol_split_angle[0].T[11:14]
-    sol_sampl_br, sol_sampl_bphi, sol_sampl_bz = selected_sol_split_angle[0].T[15:18]
-
-    sol_p_mhd=selected_sol_split_angle[0][0][3]
-
-    mdot_mhd=mdot_obs*12
-
-    cyl_cst_sampl=np.sqrt(1+sol_sampl_z_over_r**2)
-
-    r_sph_sampl=np.array([np.logspace(np.log10(rj*cyl_cst_sampl[i]),7,300) for i in range(n_sol)])
 
     n_sampl=np.array([func_density_sol(r_sph_sampl[i],sol_sampl_z_over_r[i],sol_sampl_rho_mhd[i],sol_p_mhd,
                                        mdot_mhd,m_BH) for i in range(n_sol)])
@@ -753,7 +756,7 @@ with tab_sol_radial:
     logxi_6_ids=np.array([np.argmin(abs(elem-6)) for elem in logxi_sampl])
 
     r_sph_nonthick_sampl=np.array([r_sph_sampl[i][logxi_6_ids[i]:] for i in range(n_sol)],dtype=object)
-    
+
     nh_nonthick_sampl=np.array([func_nh_sol(r_sph_sampl[i][logxi_6_ids[i]:],r_sph_sampl[i][logxi_6_ids[i]],
                         sol_sampl_z_over_r[i],sol_sampl_rho_mhd[i],sol_p_mhd,mdot_mhd,m_BH) for i in range(n_sol)],
                                dtype=object)
@@ -768,7 +771,7 @@ with tab_sol_radial:
         radial_plot(r_sph_sampl,ur_sampl,sol_sampl_angle,log_x=True,
                                     log_y=True,xaxis_title=r'$R_{sph}\;$ (Rg)',yaxis_title=r'$v_{r}\textrm{ (km/s)}$',
                     logxi_ids=logxi_6_ids)
-        
+
         radial_plot(r_sph_sampl,nh_sampl,sol_sampl_angle,log_x=True,log_y=True,
                     xaxis_title=r'$R_{sph}\;$ (Rg)',yaxis_title=r'$n_{h}\textrm{ (cm}^{-2}\textrm{)}$',
                     logxi_ids=logxi_6_ids,
@@ -797,7 +800,56 @@ with tab_sol_radial:
                     log_y=True, xaxis_title=r'$R_{sph}\;$ (Rg)', yaxis_title=r'$v_{z}\textrm{ (km/s)}$',
                     logxi_ids=logxi_6_ids)
 
-
+# with tab_2D:
+#
+#     if n_sel==1:
+#
+#         '''
+#         Creating the full 2D mapping for the single solution to do quarter angle plotting
+#         '''
+#         cyl_cst_sol_indiv = np.sqrt(1 + sol_z_over_r ** 2)
+#
+#         n_angles_sol_indiv=len(sol_z_over_r)
+#
+#         r_sph_sol_indiv = np.array([np.logspace(np.log10(rj * cyl_cst_sol_indiv[i]), 7, 300) for i in range(n_angles_sol_indiv)])
+#
+#         # n_full_sol_indiv= np.array([func_density_sol(r_sph_sampl[i], sol_sampl_z_over_r[i], sol_sampl_rho_mhd[i], sol_p_mhd,
+#         #                                      mdot_mhd, m_BH) for i in range(n_sol)])
+#
+#         logxi_sol_indiv = np.array([func_logxi_sol(r_sph_sol_indiv[i], sol_z_over_r[0][i], val_L_source, sol_rho_mhd[0][i],
+#                                                sol_p_mhd, mdot_mhd, m_BH) for i in range(n_angles_sol_indiv)])
+#
+#         fig = plt.figure(figsize=[5, 5])
+#
+#         breakpoint()
+#
+#         nh_sol_indiv = np.array([func_nh_sol(r_sph_sol_indiv[i], rj * cyl_cst_sol_indiv[i], sol_z_over_r[0][i],
+#                                          sol_rho_mhd[0][i], sol_p_mhd, mdot_mhd, m_BH) for i in range(n_angles_sol_indiv)])
+#
+#         # here all speeds are divided by 1e5 to go to km/s
+#         ur_sol_indiv = np.array([func_vel_sol('r', r_sph_sol_indiv[i], sol_z_over_r[0][i], sol_ur[0][i],
+#                                           sol_uphi[0][i], sol_uz[0][i], m_BH) for i in range(n_angles_sol_indiv)]) / 1e5
+#
+#         uphi_sol_indiv = np.array([func_vel_sol('phi', r_sph_sol_indiv[i], sol_z_over_r[0][i], sol_ur[0][i],
+#                                             sol_uphi[0][i], sol_uz[0][i], m_BH) for i in range(n_angles_sol_indiv)]) / 1e5
+#
+#         uz_sol_indiv = np.array([func_vel_sol('z', r_sph_sol_indiv[i], sol_z_over_r[0][i], sol_ur[0][i],
+#                                           sol_uphi[0][i], sol_uz[0][i], m_BH) for i in range(n_angles_sol_indiv)]) / 1e5
+#
+#         uobs_sol_indiv = np.array([func_vel_sol('obs', r_sph_sol_indiv[i], sol_z_over_r[0][i], sol_ur[0][i],
+#                                             sol_uphi[0][i], sol_uz[0][i], m_BH) for i in range(n_angles_sol_indiv)]) / 1e5
+#
+#         # fetching the positions at which logxi=6 for each angle
+#         logxi_6_ids = np.array([np.argmin(abs(elem - 6)) for elem in logxi_sol_indiv])
+#
+#         r_sph_nonthick_sol_indiv = np.array([r_sph_sol_indiv[i][logxi_6_ids[i]:] for i in range(n_angles_sol_indiv)], dtype=object)
+#
+#         nh_nonthick_sol_indiv = np.array([func_nh_sol(r_sph_sol_indiv[i][logxi_6_ids[i]:], r_sph_sol_indiv[i][logxi_6_ids[i]],
+#                                                   sol_z_over_r[0][i], sol_rho_mhd[0][i], sol_p_mhd, mdot_mhd, m_BH)
+#                                       for i in range(n_angles_sol_indiv)],
+#                                      dtype=object)
+#
+#         col_a, col_b, col_c = st.columns(3)
 
 #luminosity at which logxi is 6
 
@@ -819,3 +871,77 @@ with tab_explo:
     with col_explo_a:
         radial_plot(r_sph_sampl,L_xi_6, sol_sampl_angle, log_x=True,
                     log_y=True, xaxis_title=r'$R_{sph}\;$ (Rg)', yaxis_title=r'L/L$_{Edd}$')
+
+
+#thermal structure and aspect ratio (everything should be in cgs, except r in Rg units)
+
+#opacity regimes in decreasing temperature relevancy
+#Kr=K_0*rho^(alpha)*T_c^(Beta)
+# in cgs, from Bell & Lin 1994 and Frank, King and Raine 2002 for the Kramer values
+
+#electrons
+kappa_0_e=0.348
+alpha_tau_e=0
+beta_tau_e=0
+
+#Kramer
+kappa_0_kramer=5e24
+alpha_tau_kramer=1
+beta_tau_kramer=-7/2
+
+#Bound-Free and Free/Free
+kappa_0_BFFF=1.5e20
+alpha_tau_BFFF=1
+beta_tau_BFFF=-5/2
+
+#Hydrogen scattering
+kappa_0_H=1e-36
+alpha_tau_H=1/3
+beta_tau_H=10
+
+#add molecules ?
+
+#arrays
+kappa_0_arr=np.array([kappa_0_e,kappa_0_kramer,kappa_0_BFFF,kappa_0_H])
+alpha_tau_arr=np.array([alpha_tau_e,alpha_tau_kramer,alpha_tau_BFFF,alpha_tau_H])
+beta_tau_arr=np.array([beta_tau_e,beta_tau_kramer,beta_tau_BFFF,beta_tau_H])
+
+#funfction for the H/R ratio
+
+def func_H_R(mdot_in,r,kappa_0,alpha_tau,beta_tau,mu,b=0,p=0,alpha_m=1,Prandlt_m=1,m_BH=1):
+
+    '''
+    wrapper for the H_R (or epsilon) analytical solution for a standard SAD in the P_gaz dominant regime
+
+    mdot_in:mass accretion rate at the starting radius
+
+    r: radius in Rg
+
+    kappa_0,alpha_tau,beta_tau: coefficients to compute the oppacity (see above)
+
+    b: Jet Power index
+    p: ejection index
+
+    both default to 0
+
+    p is constant along r, but if b is not constant the code should be edited
+
+    alpha_m, Prandlt_m: turbulence coefficients, the product gives the alpha_0 value used with mu to get the
+                        viscosity parameter of the disk
+
+    m_BH: Black Hole mass in solar masses
+    '''
+
+    #radial dependant mdot
+    mdot_r=mdot_in*r**(p)
+
+    m_BH_cgs=m_BH*M_sol_cgs
+
+    #value for Epsilon with the powers of the oppacity still in in P_gaz regime
+    H_R_expr=(m_p*c_light**2/(2*k_boltzman))**(beta_tau-4)* \
+             (m_p*n_star/(alpha_0*mu**(1/2)))**(alpha_tau+1)*\
+             (3*kappa_0/4*sigma_boltzman)*(1-b)*(1-p)*(c_light**4/(8*pi*G*m_BH_cgs))* \
+             (m_dot_r)**(alpha+2)*\
+             r*(4-beta_tau-3/2(alpha_tau+1)-2)
+
+

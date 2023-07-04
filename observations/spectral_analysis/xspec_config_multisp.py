@@ -4370,7 +4370,7 @@ def xPlot(types,axes_input=None,plot_saves_input=None,plot_arg=None,includedlist
 
             #using fitcomp labels if possible            
             if includedlist is not None:
-                label_comps=[comp.compname for comp in [elem for elem in includedlist if elem is not None and not elem.multipl]]
+                label_comps=[comp if type(comp)==str else comp.compname for comp in [elem for elem in includedlist if elem is not None and not elem.multipl]]
                 
                 #adding NICER background component Names
                 if 'nxb' in list_models:

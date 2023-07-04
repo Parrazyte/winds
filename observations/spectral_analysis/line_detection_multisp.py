@@ -202,17 +202,21 @@ ap.add_argument("-h_update",nargs=1,help='update the bg, rmf and arf file names 
 
 '''####ANALYSIS RESTRICTION'''
 
-ap.add_argument('-restrict',nargs=1,help='restrict the computation to a number of predefined exposures',default=False,type=bool)
+ap.add_argument('-restrict',nargs=1,help='restrict the computation to a number of predefined exposures',default=True,type=bool)
 #in this mode, the line detection function isn't wrapped in a try, and the summary isn't updasted
 
-observ_restrict=['5501010106-001_sp_grp_opt.pha'
+observ_restrict=['5501010106-003F_sp_grp_opt.pha']
+
+''' 
+
+test:
+'5501010106-001_sp_grp_opt.pha'
                  '5501010106-002_sp_grp_opt.pha'
                  '5501010106-003_sp_grp_opt.pha'
                  '5501010106-003F_sp_grp_opt.pha'
                  '5501010106-004_sp_grp_opt.pha'
-                 '5501010106-005_sp_grp_opt.pha']
-
-''' 
+                 '5501010106-005_sp_grp_opt.pha'
+                 
 Chandra:
 -GRS:
 Three semi-compton thick obs
@@ -276,7 +280,7 @@ ap.add_argument('-line_ul_only',nargs=1,help='Reloads the autofit computations a
                 default=False,type=bool)
 
 ap.add_argument('-hid_only',nargs=1,help='skip the line detection and directly plot the hid',
-                default=False,type=bool)
+                default=True,type=bool)
 
 ap.add_argument('-multi_obj',nargs=1,help='compute the hid for multiple obj directories inside the current directory',
                 default=False)
@@ -3095,8 +3099,6 @@ elif sat in ['NICER','Suzaku','Swift']:
     for obsid in obsid_list_started.tolist():
         epoch_list_started+=[[elem] for elem in started_expos if elem.startswith(obsid)]
 
-breakpoint()
-
 #### line detections for exposure with a spectrum
 for epoch_id,epoch_files in enumerate(epoch_list):
 
@@ -3153,8 +3155,6 @@ for epoch_id,epoch_files in enumerate(epoch_list):
         else:
 
             summary_lines=line_detect(epoch_id)
-
-        breakpoint()
 
         if log_console:
             sys.stdout=prev_stdout

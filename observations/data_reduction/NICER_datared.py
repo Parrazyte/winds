@@ -18,7 +18,9 @@ from astropy.stats import sigma_clip
 import matplotlib as mpl
 
 #using agg because qtagg still generates backends with plt.ioff()
-mpl.use('qt5agg')
+mpl.use('qtagg')
+
+#mpl.use('qt5agg')
 
 import matplotlib as mpl
 
@@ -81,8 +83,8 @@ ap.add_argument("-l","--local",nargs=1,help='Launch actions directly in the curr
 ap.add_argument('-catch','--catch_errors',help='Catch errors while running the data reduction and continue',default=False,type=bool)
 
 #global choices
-ap.add_argument("-a","--action",nargs='?',help='Give which action(s) to proceed,separated by comas.'+
-                '\n1.evt_build\n2.filter_evt\n3.extract_reg...',default='g,m',type=str)
+ap.add_argument("-a","--action",nargs='?',help='Give which action(s) to proceed,separated by comas.',
+                default='1,gti,l,c,m',type=str)
 ap.add_argument("-over",nargs=1,help='overwrite computed tasks (i.e. with products in the batch, or merge directory\
                 if "m" is in the actions) in a folder',default=True,type=bool)
 
@@ -94,15 +96,15 @@ ap.add_argument('-folder_cont',nargs=1,help='skip all but the last 2 directories
 #action specific overwrite
 
 #gti
-ap.add_argument('-gti_split',nargs=1,help='GTI split method',default='orbit+flare',type=str)
+ap.add_argument('-gti_split',nargs=1,help='GTI split method',default='orbit+clip',type=str)
 ap.add_argument('-gti_lc_band',nargs=1,help='Band for the lightcurve used for GTI splitting',
-                default='3-15',type=str)
+                default='12-15',type=str)
 
 #lightcurve
 ap.add_argument('-lc_bin',nargs=1,help='Gives the binning of all lightcurces/HR evolutions (in s)',default=1,type=str)
 #note: also defines the binning used for the gti definition
 
-ap.add_argument('-lc_bands_str',nargs=1,help='Gives the list of bands to create lightcurves from',default='3-15',type=str)
+ap.add_argument('-lc_bands_str',nargs=1,help='Gives the list of bands to create lightcurves from',default='3-12',type=str)
 ap.add_argument('-hr_bands_str',nargs=1,help='Gives the list of bands to create hrsfrom',default='6-10/3-6',type=str)
 
 
@@ -327,7 +329,14 @@ def create_gtis(directory,split='orbit+clip',band='3-15',binning=1,overwrite=Tru
         # storing the data of the lc
         with fits.open(file_lc) as fits_lc:
             data_lc_arr = fits_lc[1].data
-            time_zero=fits_lc[1].header['TSTART']
+
+            #different format here to consider the leap second
+            time_zero=fits_lc[1].header['TSTART']-fits_lc[1].header['LEAPINIT']
+
+            #saving for titles later
+            time_zero_str=Time(fits_lc[1].header['MJDREFI']+(fits_lc[1].header['TIMEZERO']-fits_lc[1].header['LEAPINIT'])/86400,format='mjd')
+
+            time_zero_str=str(time_zero_str.to_datetime())
 
         # removing the direct products
         new_files_lc = [elem for elem in glob.glob(directory + '/xti/**/*', recursive=True) if
@@ -389,13 +398,44 @@ def create_gtis(directory,split='orbit+clip',band='3-15',binning=1,overwrite=Tru
 
         #creating global figure
         plt.figure(figsize=(15,8))
-        plt.errorbar(data_lc_arr['TIME'], data_lc_arr['RATE'], yerr=data_lc_arr['ERROR'])
+        plt.suptitle(
+            'NICER global flaring lightcurve for observation ' + directory + ' in the ' + band + ' keV band')
+        plt.xlabel('Time (s) after ' + time_zero_str)
+        plt.ylabel('RATE (counts/s)')
+        plt.tight_layout()
+        plt.errorbar(data_lc_arr['TIME'], data_lc_arr['RATE'], xerr=binning,yerr=data_lc_arr['ERROR'],
+                     ls='-',lw=1,color='grey',ecolor='blue')
 
         #creating figure (if no orbit cut is made, a single orbit will be performed)
         for id_orbit in range(n_orbit):
 
             #splitting the individual gti intervals in each orbit (even though they are stacked)
             #to avoid overlapping the colors
+
+            for id_inter,list_inter in enumerate(list(interval_extract(id_gti[id_orbit]))):
+                plt.axvspan(data_lc_arr['TIME'][min(list_inter)], data_lc_arr['TIME'][max(list_inter)], color='grey', alpha=0.2,label='standard gtis' if (id_inter==0 and id_orbit==0) else '')
+
+            for id_inter,list_inter in enumerate(list(interval_extract(id_flares[id_orbit]))):
+                plt.axvspan(data_lc_arr['TIME'][min(list_inter)], data_lc_arr['TIME'][max(list_inter)], color='green', alpha=0.2,label='flare gtis' if (id_inter==0 and id_orbit==0) else '')
+
+            for id_inter,list_inter in enumerate(list(interval_extract(id_dips[id_orbit]))):
+                plt.axvspan(data_lc_arr['TIME'][min(list_inter)], data_lc_arr['TIME'][max(list_inter)], color='red', alpha=0.2,label='dip gtis' if (id_inter==0 and id_orbit==0) else '')
+
+        plt.legend()
+        plt.savefig('./'+directory+'/'+directory+'_lc_'+band+'_bin_'+str(binning)+'_gtis.png')
+        plt.close()
+
+        #creating individual orbit figures
+        for id_orbit in range(n_orbit):
+            plt.figure(figsize=(15,8))
+
+            plt.suptitle(
+                'NICER flaring lightcurve for orbit '+('%3.f'%(id_orbit+1)).replace(' ','0')+' of observation ' + directory + ' in the ' + band + ' keV band')
+            plt.xlabel('Time (s) after ' + time_zero_str)
+            plt.ylabel('RATE (counts/s)')
+            plt.tight_layout()
+
+            plt.errorbar(data_lc_arr['TIME'][id_gti[id_orbit]], data_lc_arr['RATE'][id_gti[id_orbit]],xerr=binning,yerr=data_lc_arr['ERROR'][id_gti[id_orbit]],ls='-',lw=1,color='grey',ecolor='blue')
 
             for id_inter,list_inter in enumerate(list(interval_extract(id_gti[id_orbit]))):
                 plt.axvspan(data_lc_arr['TIME'][min(list_inter)], data_lc_arr['TIME'][max(list_inter)], color='grey', alpha=0.2,label='standard gtis' if id_inter==0 else '')
@@ -406,7 +446,11 @@ def create_gtis(directory,split='orbit+clip',band='3-15',binning=1,overwrite=Tru
             for id_inter,list_inter in enumerate(list(interval_extract(id_dips[id_orbit]))):
                 plt.axvspan(data_lc_arr['TIME'][min(list_inter)], data_lc_arr['TIME'][max(list_inter)], color='red', alpha=0.2,label='dip gtis' if id_inter==0 else '')
 
-        plt.savefig('./'+directory+'/'+directory+'_lc_'+band+'_bin_'+str(binning)+'_gtis.png')
+            plt.legend()
+            plt.savefig('./'+directory+'/'+directory+'-'+('%3.f'%(id_orbit+1)).replace(' ','0')+
+                        '_lc_'+band+'_bin_'+str(binning)+'_gtis.png')
+            plt.close()
+
         #creating the gti files for each part of the obsid
         bashproc.sendline('sasinit')
 
@@ -765,7 +809,7 @@ s
 
                 plt.errorbar(data_lc_arr[i_lc]['TIME'],data_lc_arr[i_lc]['RATE'],xerr=float(binning),yerr=data_lc_arr[i_lc]['ERROR'],ls='-',lw=1,color='grey',ecolor='blue')
 
-                plt.suptitle('NICER lightcurve for observation '+directory+' in the '+indiv_band+' keV band')
+                plt.suptitle('NICER lightcurve for observation '+directory+gti_suffix+' in the '+indiv_band+' keV band')
 
                 plt.xlabel('Time (s) after '+time_zero_arr[i_lc])
                 plt.ylabel('RATE (counts/s)')
@@ -788,10 +832,10 @@ s
 
             plt.errorbar(data_lc_arr[id_band_num_HR]['TIME'],hr_vals,xerr=binning,yerr=hr_err,ls='-',lw=1,color='grey',ecolor='blue')
 
-            plt.suptitle('NICER HR evolution for observation '+directory+' in the '+HR+' keV band')
+            plt.suptitle('NICER HR evolution for observation '+directory+gti_suffix+' in the '+HR+' keV band')
 
             plt.xlabel('Time (s) after '+time_zero_arr[id_band_num_HR])
-            plt.ylabel('RATE (counts/s)')
+            plt.ylabel('Hardness Ratio ('+HR+' keV)')
 
             plt.tight_layout()
             plt.savefig('./'+directory+'/'+directory+gti_suffix+'_hr_'+indiv_band+'_bin_'+str(binning)+'.png')
@@ -1252,8 +1296,10 @@ if not local:
                             select_detector_done.wait()
 
                         if curr_action=='gti':
-                            create_gtis(dirname,split=gti_split,band=gti_lc_band,binning=lc_bin,
+                            output_err=create_gtis(dirname,split=gti_split,band=gti_lc_band,binning=lc_bin,
                                         overwrite=overwrite_glob)
+                            if type(output_err)==str:
+                                raise ValueError
                             create_gtis_done.wait()
 
                         if curr_action=='fs':
@@ -1312,6 +1358,15 @@ if not local:
                     if curr_action=='2':
                         select_detector(dirname,detectors=bad_detectors)
                         select_detector_done.wait()
+
+                    if curr_action=='gti':
+                        output_err=create_gtis(dirname,split=gti_split,band=gti_lc_band,binning=lc_bin,
+                                    overwrite=overwrite_glob)
+                        if type(output_err) == str:
+                            folder_state=output_err
+                        else:
+                            pass
+                        create_gtis_done.wait()
 
                     if curr_action == 'fs':
                         output_err = extract_all_spectral(dirname, bkgmodel=bgmodel, language=bglanguage,

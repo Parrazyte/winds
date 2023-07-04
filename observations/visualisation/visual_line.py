@@ -703,6 +703,12 @@ with st.sidebar.expander('Monitoring'):
     
 compute_only_withdet=st.sidebar.checkbox('Skip parameter analysis when no detection remain with the current constraints',value=True)
 
+with st.sidebar.expander('Stacking'):
+    stack_det=st.checkbox('Stack detections')
+    stack_flux_lim = st.number_input(r'Max ratio of fluxes to stack', value=2., min_value=1e-10, format='%.3e')
+    stack_HR_lim=st.number_input(r'Max ratio of HR to stack',value=2.,min_value=1e-10,format='%.3e')
+    stack_time_lim=st.number_input(r'Max time delta to stack',value=2.,min_value=1e-1,format='%.3e')
+
 mpl.rcParams.update({'font.size': 10+(3 if paper_look else 0)})
 
 if not square_mode:

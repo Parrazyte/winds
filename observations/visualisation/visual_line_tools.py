@@ -2626,10 +2626,11 @@ def distrib_graph(data_perinfo,info,dict_linevis,data_ener=None,conf_thresh=0.99
             
             bool_sign_line=[]
             for id_line,line in enumerate(list_id_lines):
-                bool_sign_line+=[(bool_signdet) & (ravel_ragged(np.repeat(False,line_indiv_size*id_line)).tolist()+\
+
+                bool_sign_line+=[(bool_signdet) & (np.array(ravel_ragged(np.repeat(False,line_indiv_size*id_line)).tolist()+\
                                                    ravel_ragged(np.repeat(True,line_indiv_size)).tolist()+\
-                                                   ravel_ragged(np.repeat(False,line_indiv_size*(len(list_id_lines)-(id_line+1))).tolist()))]
-            
+                                                   ravel_ragged(np.repeat(False,line_indiv_size*(len(list_id_lines)-(id_line+1)))).tolist()))]
+
             #here we create a 2D array with the number of lines detected per source and per line
             hist_data_splitsource=np.array([[sum((data_perinfo[4][0][i_line][i_obj]>=conf_thresh) & (~np.isnan(data_perinfo[4][0][i_line][i_obj].astype(float))))\
                                           for i_line in range_line] for i_obj in range(len(obj_disp_list))])
@@ -2654,15 +2655,19 @@ def distrib_graph(data_perinfo,info,dict_linevis,data_ener=None,conf_thresh=0.99
             bool_det_ratio=(sign_ratio_arr[0]!=0.) & (~np.isnan(sign_ratio_arr[0])) & (sign_ratio_arr[1]!=0.) & (~np.isnan(sign_ratio_arr[1]))
             
             #this doesn't work with bitwise comparison
-            bool_sign_ratio=bool_det_ratio[sign_ratio_arr.T.min(1)>=conf_thresh]
+            bool_sign_ratio=(sign_ratio_arr[0]>=conf_thresh) & (~np.isnan(sign_ratio_arr[0])) & (sign_ratio_arr[1]>=conf_thresh) & (~np.isnan(sign_ratio_arr[1]))
+
+            #making it clearer
+            bool_sign_ratio=bool_sign_ratio[bool_det_ratio]
                         
             #before using them to create the data ratio
+
             hist_data=np.array(
                   [ravel_ragged(data_plot[0][ratio_indexes_x[0]])[bool_det_ratio][bool_sign_ratio]/\
                    ravel_ragged(data_plot[0][ratio_indexes_x[1]])[bool_det_ratio][bool_sign_ratio],
                    ravel_ragged(data_plot[0][ratio_indexes_x[0]])[bool_det_ratio][~bool_sign_ratio]/\
                ravel_ragged(data_plot[0][ratio_indexes_x[1]])[bool_det_ratio][~bool_sign_ratio]],dtype=object)
-                
+
             if not split_off:
                 
                 if split_source:

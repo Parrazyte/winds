@@ -13,7 +13,20 @@ sys.path.append('/home/parrama/Documents/Work/PhD/Scripts/Python/modeling/PyXsta
 sys.path.append('/app/winds/observations/spectral_analysis/')
 sys.path.append('/app/winds/modeling/PyXstar')
 
+from general_tools import interval_extract
+
 from solution_tools import func_density_sol,func_vel_sol,func_logxi_sol,func_nh_sol,load_solutions,sample_angle,interp_yaxis
+
+sigma_thomson_cgs = 6.6525e-25
+c_cgs = 2.99792e10
+G_cgs = 6.674e-8
+Msol_cgs = 1.98892e33
+
+k_boltzmann_cgs=1.3807e-16
+sigma_boltzmann_cgs=5.6704e-5
+m_p_cgs=1.6726e-24
+
+
 
 try:
     st.set_page_config(page_icon=":magnet:",layout='wide')
@@ -195,7 +208,7 @@ fig_scatter.update_layout(legend=dict(
 # fig_scatter.update_xaxes(tickfont=dict(color='white'),title_font_color="white")
 # fig_scatter.update_yaxes(tickfont=dict(color='white'),title_font_color="white")
 
-tab_p_mu, tab_sol, tab_sol_radial,tab_explo,tab_2D= st.tabs(["Solution selection", "Angular distributions", "radial distribution","parameter exploration","full solution vizualisation"])
+tab_p_mu, tab_sol, tab_sol_radial,tab_explo,tab_2D,tab_tstruct= st.tabs(["Solution selection", "Angular distributions", "radial distribution","parameter exploration","full solution vizualisation","thermal structure"])
 
 with tab_p_mu:
     selected_points = plotly_events(fig_scatter,click_event=True,select_event=True,override_height=800)
@@ -209,9 +222,11 @@ if len(selected_points)==0:
         st.info('Click on a point for which the MHD solution has been computed to display radial distributions.')
     with tab_explo:
         st.info('Click on a point for which the MHD solution has been computed to display parameter exploration.')
-    st.stop()
 
-if selected_points is not None:
+#initial value
+n_sel=0
+
+if len(selected_points)!=0:
 
     #only selected the points from the second trace with the curvenumber test
     selected_sol_p_mu=np.array([[selected_points[i]['y'],selected_points[i]['x']] for i in range(len(selected_points)) if selected_points[i]['curveNumber']==1])
@@ -219,58 +234,57 @@ if selected_points is not None:
 
     if n_sel==0:
         st.warning('None of the selected points have a MHD solution.')
-        st.stop()
 
-#fetching the individual solutions with these parameters
-selected_sol_mask=np.array([np.all(np.array([elem[0][2:4] for elem in sol_splitsol])==selected_sol_p_mu[i],axis=1)\
-                            for i in range(n_sel)]).any(0)
+    #fetching the individual solutions with these parameters
+    selected_sol_mask=np.array([np.all(np.array([elem[0][2:4] for elem in sol_splitsol])==selected_sol_p_mu[i],axis=1)\
+                                for i in range(n_sel)]).any(0)
 
-selected_mhd_sol=sol_splitsol[selected_sol_mask]
+    selected_mhd_sol=sol_splitsol[selected_sol_mask]
 
-# ordering the mask in order or reading (increasing mu)
+    # ordering the mask in order or reading (increasing mu)
 
-sol_order=selected_sol_p_mu.T[1].argsort() if sol_order_select =='Increasing mu' else\
-            selected_sol_p_mu.T[0].argsort() if sol_order_select == 'Increasing p' else True
+    sol_order=selected_sol_p_mu.T[1].argsort() if sol_order_select =='Increasing mu' else\
+                selected_sol_p_mu.T[0].argsort() if sol_order_select == 'Increasing p' else True
 
-selected_mhd_sol=selected_mhd_sol[sol_order]
-selected_sol_p_mu=selected_sol_p_mu[sol_order]
-
-
-#doing this without direct transpositions because the arrays arent regular due to uneven angle sampling
-
-sol_z_over_r=np.array([selected_mhd_sol[i].T[7] for i in range(n_sel)],dtype=object)
-sol_angle=np.array([selected_mhd_sol[i].T[8] for i in range(n_sel)],dtype=object)
-
-sol_r_cyl_r0=np.array([selected_mhd_sol[i].T[9] for i in range(n_sel)],dtype=object)
-sol_rho_mhd=np.array([selected_mhd_sol[i].T[10] for i in range(n_sel)],dtype=object)
-sol_t_mhd=np.array([selected_mhd_sol[i].T[14] for i in range(n_sel)],dtype=object)
-
-sol_ur,sol_uphi,sol_uz=[np.array([selected_mhd_sol[i].T[j] for i in range(n_sel)],dtype=object) for j in range(11,14)]
-sol_br,sol_bphi,sol_bz=[np.array([selected_mhd_sol[i].T[j] for i in range(n_sel)],dtype=object) for j in range(15,18)]
-
-#start of ideal MHD
-sol_y_id=np.array([selected_mhd_sol[i].T[19][0] for i in range(n_sel)])
-
-#slow magnetosonic
-sol_y_sm=np.array([selected_mhd_sol[i].T[20][0] for i in range(n_sel)])
-
-#Alfven
-sol_y_A=np.array([selected_mhd_sol[i].T[21][0] for i in range(n_sel)])
+    selected_mhd_sol=selected_mhd_sol[sol_order]
+    selected_sol_p_mu=selected_sol_p_mu[sol_order]
 
 
-#converting these last 3 into angles
-def y_to_ang(y):
-    '''
-    output in degrees
-    '''
-    return 90-(180/(np.pi)*np.arctan(y))
+    #doing this without direct transpositions because the arrays arent regular due to uneven angle sampling
 
-sol_angle_id_arr=y_to_ang(sol_y_id)
-sol_angle_sm_arr=y_to_ang(sol_y_sm)
-sol_angle_A_arr=y_to_ang(sol_y_A)
+    sol_z_over_r=np.array([selected_mhd_sol[i].T[7] for i in range(n_sel)],dtype=object)
+    sol_angle=np.array([selected_mhd_sol[i].T[8] for i in range(n_sel)],dtype=object)
+
+    sol_r_cyl_r0=np.array([selected_mhd_sol[i].T[9] for i in range(n_sel)],dtype=object)
+    sol_rho_mhd=np.array([selected_mhd_sol[i].T[10] for i in range(n_sel)],dtype=object)
+    sol_t_mhd=np.array([selected_mhd_sol[i].T[14] for i in range(n_sel)],dtype=object)
+
+    sol_ur,sol_uphi,sol_uz=[np.array([selected_mhd_sol[i].T[j] for i in range(n_sel)],dtype=object) for j in range(11,14)]
+    sol_br,sol_bphi,sol_bz=[np.array([selected_mhd_sol[i].T[j] for i in range(n_sel)],dtype=object) for j in range(15,18)]
+
+    #start of ideal MHD
+    sol_y_id=np.array([selected_mhd_sol[i].T[19][0] for i in range(n_sel)])
+
+    #slow magnetosonic
+    sol_y_sm=np.array([selected_mhd_sol[i].T[20][0] for i in range(n_sel)])
+
+    #Alfven
+    sol_y_A=np.array([selected_mhd_sol[i].T[21][0] for i in range(n_sel)])
+
+
+    #converting these last 3 into angles
+    def y_to_ang(y):
+        '''
+        output in degrees
+        '''
+        return 90-(180/(np.pi)*np.arctan(y))
+
+    sol_angle_id_arr=y_to_ang(sol_y_id)
+    sol_angle_sm_arr=y_to_ang(sol_y_sm)
+    sol_angle_A_arr=y_to_ang(sol_y_A)
 
 def plotly_line_wrapper(x,y,log_x=False,log_y='auto',xaxis_title='',yaxis_title='',legend=False,
-                        line_color='lightskyblue',ex_fig=None,name='',showlegend=False,split_ls_x=None,linedash='solid'):
+                        line_color='lightskyblue',ex_fig=None,name='',showlegend=False,split_ls_x=None,linedash='solid',figwidth=None):
 
     # '''
     # Wrapper to render the line in a "nice" streamlit theme while keeping the latex displays
@@ -291,6 +305,10 @@ def plotly_line_wrapper(x,y,log_x=False,log_y='auto',xaxis_title='',yaxis_title=
         fig_line=ex_fig
     else:
         fig_line=go.Figure()
+
+        if figwidth is not None:
+            fig_line.update_layout(width=figwidth)
+
 
     neg_log=False
 
@@ -546,7 +564,7 @@ def angle_plot(x_arr,y_arr,log_x=False,log_y='auto',xaxis_title='',yaxis_title='
 
 
 
-if split_angle:
+if split_angle and n_sel>0:
 
     array_sampl_angle,compton_angles_arr=sample_angle(solutions_path,
                                           angle_values=np.arange(val_angle_low,val_angle_high+0.00001,val_angle_step),
@@ -579,66 +597,65 @@ with tab_sol:
     #now we can display the plots of the individual solution
     col_1,col_2,col_3=st.columns(3)
 
-    with col_1:
+    if n_sel>0:
+        with col_1:
 
-        angle_plot(sol_angle,sol_r_cyl_r0,log_x=False,log_y=True,legend_points=n_sel==1,
-                            xaxis_title=r'$\theta \; (°)$',yaxis_title=r'$r_{cyl}/r_0$',legend=True,
-                            sampl_angles_arr=selected_angles,compt_angles_arr=compton_angles)
+            angle_plot(sol_angle,sol_r_cyl_r0,log_x=False,log_y=True,legend_points=n_sel==1,
+                                xaxis_title=r'$\theta \; (°)$',yaxis_title=r'$r_{cyl}/r_0$',legend=True,
+                                sampl_angles_arr=selected_angles,compt_angles_arr=compton_angles)
 
-        angle_plot(sol_angle,sol_ur,log_x=False,legend_points=n_sel==1,
-                            xaxis_title=r'$\theta \; (°)$', yaxis_title=r'$u_{r}$',legend=True,
-                            sampl_angles_arr=selected_angles,compt_angles_arr=compton_angles)
+            angle_plot(sol_angle,sol_ur,log_x=False,legend_points=n_sel==1,
+                                xaxis_title=r'$\theta \; (°)$', yaxis_title=r'$u_{r}$',legend=True,
+                                sampl_angles_arr=selected_angles,compt_angles_arr=compton_angles)
 
-        angle_plot(sol_angle,sol_br,log_x=False,legend_points=n_sel==1,
-                            xaxis_title=r'$\theta \; (°)$', yaxis_title=r'$B_r$',legend='top_left',
-                            sampl_angles_arr=selected_angles,compt_angles_arr=compton_angles)
+            angle_plot(sol_angle,sol_br,log_x=False,legend_points=n_sel==1,
+                                xaxis_title=r'$\theta \; (°)$', yaxis_title=r'$B_r$',legend='top_left',
+                                sampl_angles_arr=selected_angles,compt_angles_arr=compton_angles)
 
-    with col_2:
+        with col_2:
 
-        #when several solutions are selected we plot the legend for the points here to avoid cluttering the first
-        #plots
-        angle_plot(sol_angle,sol_rho_mhd,log_x=False,log_y=True,
-                   legend='top_left' if n_sel>1 else False,legend_lines=False,
-                            xaxis_title =r'$\theta \; (°)$', yaxis_title = r'$\rho_{mhd}$',
-                            sampl_angles_arr=selected_angles,compt_angles_arr=compton_angles)
+            #when several solutions are selected we plot the legend for the points here to avoid cluttering the first
+            #plots
+            angle_plot(sol_angle,sol_rho_mhd,log_x=False,log_y=True,
+                       legend='top_left' if n_sel>1 else False,legend_lines=False,
+                                xaxis_title =r'$\theta \; (°)$', yaxis_title = r'$\ρ_{mhd}$',
+                                sampl_angles_arr=selected_angles,compt_angles_arr=compton_angles)
 
-        angle_plot(sol_angle, sol_uphi,log_x=False,log_y=True,
-                   legend='top_left' if n_sel>1 else False,legend_lines=False,
-                            xaxis_title=r'$\theta \; (°)$', yaxis_title=r'$u_{\phi}$',
-                            sampl_angles_arr=selected_angles,compt_angles_arr=compton_angles)
+            angle_plot(sol_angle, sol_uphi,log_x=False,log_y=True,
+                       legend='top_left' if n_sel>1 else False,legend_lines=False,
+                                xaxis_title=r'$\theta \; (°)$', yaxis_title=r'$u_{\phi}$',
+                                sampl_angles_arr=selected_angles,compt_angles_arr=compton_angles)
 
-        angle_plot(sol_angle, sol_bphi,log_x=False,legend='bot_left' if n_sel>1 else False,legend_lines=False,
-                            xaxis_title=r'$\theta \; (°)$', yaxis_title=r'$B_{\phi}$',
-                            sampl_angles_arr=selected_angles,compt_angles_arr=compton_angles)
+            angle_plot(sol_angle, sol_bphi,log_x=False,legend='bot_left' if n_sel>1 else False,legend_lines=False,
+                                xaxis_title=r'$\theta \; (°)$', yaxis_title=r'$B_{\phi}$',
+                                sampl_angles_arr=selected_angles,compt_angles_arr=compton_angles)
 
 
-    with col_3:
+        with col_3:
 
-        angle_plot(sol_angle,sol_t_mhd,log_x=False,log_y=True,
-                            xaxis_title=r'$\theta \; (°)$', yaxis_title=r'$T_{mhd}$',
-                            sampl_angles_arr=selected_angles,compt_angles_arr=compton_angles)
+            angle_plot(sol_angle,sol_t_mhd,log_x=False,log_y=True,
+                                xaxis_title=r'$\theta \; (°)$', yaxis_title=r'$T_{mhd}$',
+                                sampl_angles_arr=selected_angles,compt_angles_arr=compton_angles)
 
-        angle_plot(sol_angle, sol_uz,log_x=False,
-                            xaxis_title=r'$\theta \; (°)$', yaxis_title=r'$u_{z}$',
-                            sampl_angles_arr=selected_angles,compt_angles_arr=compton_angles)
+            angle_plot(sol_angle, sol_uz,log_x=False,
+                                xaxis_title=r'$\theta \; (°)$', yaxis_title=r'$u_{z}$',
+                                sampl_angles_arr=selected_angles,compt_angles_arr=compton_angles)
 
-        angle_plot(sol_angle, sol_bz,log_x=False,
-                            xaxis_title=r'$\theta \; (°)$', yaxis_title=r'$B_z$',
-                            sampl_angles_arr=selected_angles,compt_angles_arr=compton_angles)
+            angle_plot(sol_angle, sol_bz,log_x=False,
+                                xaxis_title=r'$\theta \; (°)$', yaxis_title=r'$B_z$',
+                                sampl_angles_arr=selected_angles,compt_angles_arr=compton_angles)
 
 if n_sel>1:
     with tab_sol_radial:
         st.info('Display of radial evolution restricted to single solution selection.')
     with tab_explo:
         st.info('Parameter exploration restricted to single solution selection.')
-    st.stop()
 
 if n_sel==1 and not split_angle:
     with tab_sol_radial:
         st.info('Activate angle sampling in the sidebar to see radial distributions.')
     with tab_explo:
         st.info('Activate angle sampling in the sidebar to see parameter exploration.')
-    st.stop()
 
 def radial_plot(rad,sol_sampl,angl_sampl,log_x=False,log_y=False,xaxis_title='',yaxis_title='',legend=False,
                 cmap='plasma_r',logxi_ids=None,yrange=None):
@@ -706,99 +723,118 @@ def radial_plot(rad,sol_sampl,angl_sampl,log_x=False,log_y=False,xaxis_title='',
     else:
         st.plotly_chart(fig_rad, use_container_width=False, theme=None)
 
+if split_angle and n_sel==1:
+    n_sol=len(selected_sol_split_angle[0])
 
-n_sol=len(selected_sol_split_angle[0])
+    sol_sampl_z_over_r = selected_sol_split_angle[0].T[7]
+    sol_sampl_angle = selected_sol_split_angle[0].T[8]
 
-#breakpoint()
+    sol_sampl_r_cyl_r0 = selected_sol_split_angle[0].T[9]
+    sol_sampl_rho_mhd = selected_sol_split_angle[0].T[10]
 
-sol_sampl_z_over_r = selected_sol_split_angle[0].T[7]
-sol_sampl_angle = selected_sol_split_angle[0].T[8]
+    sol_sampl_ur, sol_sampl_uphi, sol_sampl_uz = selected_sol_split_angle[0].T[11:14]
+    sol_sampl_br, sol_sampl_bphi, sol_sampl_bz = selected_sol_split_angle[0].T[15:18]
 
-sol_sampl_r_cyl_r0 = selected_sol_split_angle[0].T[9]
-sol_sampl_rho_mhd = selected_sol_split_angle[0].T[10]
+    sol_p_mhd=selected_sol_split_angle[0][0][3]
 
-sol_sampl_ur, sol_sampl_uphi, sol_sampl_uz = selected_sol_split_angle[0].T[11:14]
-sol_sampl_br, sol_sampl_bphi, sol_sampl_bz = selected_sol_split_angle[0].T[15:18]
+    mdot_mhd=mdot_obs*12
 
-sol_p_mhd=selected_sol_split_angle[0][0][3]
+    cyl_cst_sampl=np.sqrt(1+sol_sampl_z_over_r**2)
 
-mdot_mhd=mdot_obs*12
+    r_sph_sampl=np.array([np.logspace(np.log10(rj*cyl_cst_sampl[i]),7,300) for i in range(n_sol)])
 
-cyl_cst_sampl=np.sqrt(1+sol_sampl_z_over_r**2)
+    with tab_sol_radial:
 
-r_sph_sampl=np.array([np.logspace(np.log10(rj*cyl_cst_sampl[i]),7,300) for i in range(n_sol)])
+        n_sampl=np.array([func_density_sol(r_sph_sampl[i],sol_sampl_z_over_r[i],sol_sampl_rho_mhd[i],sol_p_mhd,
+                                           mdot_mhd,m_BH) for i in range(n_sol)])
 
-with tab_sol_radial:
+        logxi_sampl=np.array([func_logxi_sol(r_sph_sampl[i],sol_sampl_z_over_r[i],val_L_source,sol_sampl_rho_mhd[i],
+                                             sol_p_mhd,mdot_mhd,m_BH) for i in range(n_sol)])
 
-    n_sampl=np.array([func_density_sol(r_sph_sampl[i],sol_sampl_z_over_r[i],sol_sampl_rho_mhd[i],sol_p_mhd,
-                                       mdot_mhd,m_BH) for i in range(n_sol)])
+        nh_sampl=np.array([func_nh_sol(r_sph_sampl[i],rj*cyl_cst_sampl[i],sol_sampl_z_over_r[i],
+                                       sol_sampl_rho_mhd[i],sol_p_mhd,mdot_mhd,m_BH) for i in range(n_sol)])
 
-    logxi_sampl=np.array([func_logxi_sol(r_sph_sampl[i],sol_sampl_z_over_r[i],val_L_source,sol_sampl_rho_mhd[i],
-                                         sol_p_mhd,mdot_mhd,m_BH) for i in range(n_sol)])
+        #here all speeds are divided by 1e5 to go to km/s
+        ur_sampl=np.array([func_vel_sol('r',r_sph_sampl[i],sol_sampl_z_over_r[i],sol_sampl_ur[i],
+                                        sol_sampl_uphi[i],sol_sampl_uz[i],m_BH) for i in range(n_sol)])/1e5
 
-    nh_sampl=np.array([func_nh_sol(r_sph_sampl[i],rj*cyl_cst_sampl[i],sol_sampl_z_over_r[i],
-                                   sol_sampl_rho_mhd[i],sol_p_mhd,mdot_mhd,m_BH) for i in range(n_sol)])
+        uphi_sampl=np.array([func_vel_sol('phi',r_sph_sampl[i],sol_sampl_z_over_r[i],sol_sampl_ur[i],
+                                          sol_sampl_uphi[i],sol_sampl_uz[i],m_BH) for i in range(n_sol)])/1e5
 
-    #here all speeds are divided by 1e5 to go to km/s
-    ur_sampl=np.array([func_vel_sol('r',r_sph_sampl[i],sol_sampl_z_over_r[i],sol_sampl_ur[i],
-                                    sol_sampl_uphi[i],sol_sampl_uz[i],m_BH) for i in range(n_sol)])/1e5
+        uz_sampl=np.array([func_vel_sol('z',r_sph_sampl[i],sol_sampl_z_over_r[i],sol_sampl_ur[i],
+                                        sol_sampl_uphi[i],sol_sampl_uz[i],m_BH) for i in range(n_sol)])/1e5
 
-    uphi_sampl=np.array([func_vel_sol('phi',r_sph_sampl[i],sol_sampl_z_over_r[i],sol_sampl_ur[i],
-                                      sol_sampl_uphi[i],sol_sampl_uz[i],m_BH) for i in range(n_sol)])/1e5
+        uobs_sampl=np.array([func_vel_sol('obs',r_sph_sampl[i],sol_sampl_z_over_r[i],sol_sampl_ur[i],
+                                          sol_sampl_uphi[i],sol_sampl_uz[i],m_BH) for i in range(n_sol)])/1e5
 
-    uz_sampl=np.array([func_vel_sol('z',r_sph_sampl[i],sol_sampl_z_over_r[i],sol_sampl_ur[i],
-                                    sol_sampl_uphi[i],sol_sampl_uz[i],m_BH) for i in range(n_sol)])/1e5
+        #fetching the positions at which logxi=6 for each angle
+        logxi_6_ids=np.array([np.argmin(abs(elem-6)) for elem in logxi_sampl])
 
-    uobs_sampl=np.array([func_vel_sol('obs',r_sph_sampl[i],sol_sampl_z_over_r[i],sol_sampl_ur[i],
-                                      sol_sampl_uphi[i],sol_sampl_uz[i],m_BH) for i in range(n_sol)])/1e5
+        r_sph_nonthick_sampl=np.array([r_sph_sampl[i][logxi_6_ids[i]:] for i in range(n_sol)],dtype=object)
 
-    #fetching the positions at which logxi=6 for each angle
-    logxi_6_ids=np.array([np.argmin(abs(elem-6)) for elem in logxi_sampl])
+        nh_nonthick_sampl=np.array([func_nh_sol(r_sph_sampl[i][logxi_6_ids[i]:],r_sph_sampl[i][logxi_6_ids[i]],
+                            sol_sampl_z_over_r[i],sol_sampl_rho_mhd[i],sol_p_mhd,mdot_mhd,m_BH) for i in range(n_sol)],
+                                   dtype=object)
 
-    r_sph_nonthick_sampl=np.array([r_sph_sampl[i][logxi_6_ids[i]:] for i in range(n_sol)],dtype=object)
+        col_a,col_b,col_c=st.columns(3)
 
-    nh_nonthick_sampl=np.array([func_nh_sol(r_sph_sampl[i][logxi_6_ids[i]:],r_sph_sampl[i][logxi_6_ids[i]],
-                        sol_sampl_z_over_r[i],sol_sampl_rho_mhd[i],sol_p_mhd,mdot_mhd,m_BH) for i in range(n_sol)],
-                               dtype=object)
+        with col_a:
+            radial_plot(r_sph_sampl,n_sampl,sol_sampl_angle,log_x=True,
+                                        log_y=True,xaxis_title=r'$R_{sph}\;$ (Rg)',yaxis_title=r'$n\textrm{ (cgs)}$',
+                        logxi_ids=logxi_6_ids)
 
-    col_a,col_b,col_c=st.columns(3)
+            radial_plot(r_sph_sampl,ur_sampl,sol_sampl_angle,log_x=True,
+                                        log_y=True,xaxis_title=r'$R_{sph}\;$ (Rg)',yaxis_title=r'$v_{r}\textrm{ (km/s)}$',
+                        logxi_ids=logxi_6_ids)
 
-    with col_a:
-        radial_plot(r_sph_sampl,n_sampl,sol_sampl_angle,log_x=True,
-                                    log_y=True,xaxis_title=r'$R_{sph}\;$ (Rg)',yaxis_title=r'$n\textrm{ (cgs)}$',
-                    logxi_ids=logxi_6_ids)
+            radial_plot(r_sph_sampl,nh_sampl,sol_sampl_angle,log_x=True,log_y=True,
+                        xaxis_title=r'$R_{sph}\;$ (Rg)',yaxis_title=r'$n_{h}\textrm{ (cm}^{-2}\textrm{)}$',
+                        logxi_ids=logxi_6_ids,
+                        yrange=[np.log10(1e20),np.log10(1.5e24)])
 
-        radial_plot(r_sph_sampl,ur_sampl,sol_sampl_angle,log_x=True,
-                                    log_y=True,xaxis_title=r'$R_{sph}\;$ (Rg)',yaxis_title=r'$v_{r}\textrm{ (km/s)}$',
-                    logxi_ids=logxi_6_ids)
+        with col_b:
+            radial_plot(r_sph_sampl,logxi_sampl, sol_sampl_angle, log_x=True,
+                        log_y=False, xaxis_title=r'$R_{sph}\;$ (Rg)', yaxis_title=r'$log\xi$',
+                        logxi_ids=logxi_6_ids)
 
-        radial_plot(r_sph_sampl,nh_sampl,sol_sampl_angle,log_x=True,log_y=True,
-                    xaxis_title=r'$R_{sph}\;$ (Rg)',yaxis_title=r'$n_{h}\textrm{ (cm}^{-2}\textrm{)}$',
-                    logxi_ids=logxi_6_ids,
-                    yrange=[np.log10(1e20),np.log10(1.5e24)])
+            radial_plot(r_sph_sampl, uphi_sampl, sol_sampl_angle, log_x=True,
+                        log_y=True, xaxis_title=r'$R_{sph}\;$ (Rg)', yaxis_title=r'$v_{\phi}\textrm{ (km/s)}$',
+                        logxi_ids=logxi_6_ids)
 
-    with col_b:
-        radial_plot(r_sph_sampl,logxi_sampl, sol_sampl_angle, log_x=True,
-                    log_y=False, xaxis_title=r'$R_{sph}\;$ (Rg)', yaxis_title=r'$log\xi$',
-                    logxi_ids=logxi_6_ids)
+            radial_plot(r_sph_nonthick_sampl,nh_nonthick_sampl,sol_sampl_angle,log_x=True,log_y=True,
+                        xaxis_title=r'$R_{sph}\;$ (Rg)',yaxis_title=r'$n_{h}^{\textrm{log}\xi\leq6}\textrm{(cm}^{-2}\textrm{)}$',
+                        yrange=[np.log10(1e20),np.log10(1.5e24)])
 
-        radial_plot(r_sph_sampl, uphi_sampl, sol_sampl_angle, log_x=True,
-                    log_y=True, xaxis_title=r'$R_{sph}\;$ (Rg)', yaxis_title=r'$v_{\phi}\textrm{ (km/s)}$',
-                    logxi_ids=logxi_6_ids)
+        with col_c:
 
-        radial_plot(r_sph_nonthick_sampl,nh_nonthick_sampl,sol_sampl_angle,log_x=True,log_y=True,
-                    xaxis_title=r'$R_{sph}\;$ (Rg)',yaxis_title=r'$n_{h}^{\textrm{log}\xi\leq6}\textrm{(cm}^{-2}\textrm{)}$',
-                    yrange=[np.log10(1e20),np.log10(1.5e24)])
+            radial_plot(r_sph_sampl, uobs_sampl, sol_sampl_angle, log_x=True,
+                        log_y=True, xaxis_title=r'$R_{sph}\;$ (Rg)', yaxis_title=r'$v_{obs}\textrm{ (km/s)}$',
+                        logxi_ids=logxi_6_ids)
 
-    with col_c:
+            radial_plot(r_sph_sampl, uz_sampl, sol_sampl_angle, log_x=True,
+                        log_y=True, xaxis_title=r'$R_{sph}\;$ (Rg)', yaxis_title=r'$v_{z}\textrm{ (km/s)}$',
+                        logxi_ids=logxi_6_ids)
 
-        radial_plot(r_sph_sampl, uobs_sampl, sol_sampl_angle, log_x=True,
-                    log_y=True, xaxis_title=r'$R_{sph}\;$ (Rg)', yaxis_title=r'$v_{obs}\textrm{ (km/s)}$',
-                    logxi_ids=logxi_6_ids)
+    #luminosity at which logxi is 6
 
-        radial_plot(r_sph_sampl, uz_sampl, sol_sampl_angle, log_x=True,
-                    log_y=True, xaxis_title=r'$R_{sph}\;$ (Rg)', yaxis_title=r'$v_{z}\textrm{ (km/s)}$',
-                    logxi_ids=logxi_6_ids)
+    m_BH_SI = m_BH * Msol_SI
+    Rs_SI = 2.0 * G_SI * m_BH_SI / (c_SI * c_SI)
+
+    # !* Gravitational radius
+    Rg_SI = 0.5 * Rs_SI
+    Rg_cgs = Rg_SI * m2cm
+
+    L_xi_6=10**6*n_sampl*Rg_cgs**2*r_sph_sampl**2
+
+    L_xi_6_Edd=L_xi_6/(1.26e38*m_BH)
+
+    with tab_explo:
+
+        col_explo_a,col_explo_b,col_explo_c=st.columns(3)
+
+        with col_explo_a:
+            radial_plot(r_sph_sampl,L_xi_6, sol_sampl_angle, log_x=True,
+                        log_y=True, xaxis_title=r'$R_{sph}\;$ (Rg)', yaxis_title=r'L/L$_{Edd}$')
 
 # with tab_2D:
 #
@@ -851,27 +887,6 @@ with tab_sol_radial:
 #
 #         col_a, col_b, col_c = st.columns(3)
 
-#luminosity at which logxi is 6
-
-m_BH_SI = m_BH * Msol_SI
-Rs_SI = 2.0 * G_SI * m_BH_SI / (c_SI * c_SI)
-
-# !* Gravitational radius
-Rg_SI = 0.5 * Rs_SI
-Rg_cgs = Rg_SI * m2cm
-
-L_xi_6=10**6*n_sampl*Rg_cgs**2*r_sph_sampl**2
-
-L_xi_6_Edd=L_xi_6/(1.26e38*m_BH)
-
-with tab_explo:
-
-    col_explo_a,col_explo_b,col_explo_c=st.columns(3)
-
-    with col_explo_a:
-        radial_plot(r_sph_sampl,L_xi_6, sol_sampl_angle, log_x=True,
-                    log_y=True, xaxis_title=r'$R_{sph}\;$ (Rg)', yaxis_title=r'L/L$_{Edd}$')
-
 
 #thermal structure and aspect ratio (everything should be in cgs, except r in Rg units)
 
@@ -906,18 +921,28 @@ kappa_0_arr=np.array([kappa_0_e,kappa_0_kramer,kappa_0_BFFF,kappa_0_H])
 alpha_tau_arr=np.array([alpha_tau_e,alpha_tau_kramer,alpha_tau_BFFF,alpha_tau_H])
 beta_tau_arr=np.array([beta_tau_e,beta_tau_kramer,beta_tau_BFFF,beta_tau_H])
 
-#funfction for the H/R ratio
+n_regimes=len(kappa_0_arr)
 
-def func_H_R(mdot_in,r,kappa_0,alpha_tau,beta_tau,mu,b=0,p=0,alpha_m=1,Prandlt_m=1,m_BH=1):
+name_regimes=['electrons','Kramer','Bound-Free/Free-Free','Hydrogen scattering']
+
+norm_col_regimes=np.array(range(n_regimes))/n_regimes
+
+col_regimes=sample_colorscale('plasma',norm_col_regimes)
+
+#function for the H/R ratio
+
+def func_H_R(r,mdot_in,kappa_0,alpha_tau,beta_tau,eta=0.1,mu=0.1,b=0,p=0,alpha_0=10,m_BH=1,r_j=6):
 
     '''
     wrapper for the H_R (or epsilon) analytical solution for a standard SAD in the P_gaz dominant regime
 
-    mdot_in:mass accretion rate at the starting radius
-
     r: radius in Rg
 
-    kappa_0,alpha_tau,beta_tau: coefficients to compute the oppacity (see above)
+    mdot_in:mass accretion rate at the starting radius
+
+    kappa_0,alpha_tau,beta_tau: coefficients to compute the opacity (see above)
+
+    mu: magnetization
 
     b: Jet Power index
     p: ejection index
@@ -926,22 +951,390 @@ def func_H_R(mdot_in,r,kappa_0,alpha_tau,beta_tau,mu,b=0,p=0,alpha_m=1,Prandlt_m
 
     p is constant along r, but if b is not constant the code should be edited
 
-    alpha_m, Prandlt_m: turbulence coefficients, the product gives the alpha_0 value used with mu to get the
+    alpha_0= viscosity coefficient, can also be seen as alpha_m*Prandlt_m, value used with mu to get the
                         viscosity parameter of the disk
 
     m_BH: Black Hole mass in solar masses
     '''
 
-    #radial dependant mdot
-    mdot_r=mdot_in*r**(p)
+    #defining useful mass dependant constants
+    m_BH_cgs=m_BH*Msol_cgs
+    Rg_cgs=2*G_cgs*m_BH_cgs/c_cgs**2
+    n_star=1/(sigma_thomson_cgs*Rg_cgs)
+    L_Edd = 1.26e38 * m_BH
 
-    m_BH_cgs=m_BH*M_sol_cgs
+    # radial dependant mdot in CGS units
+    mdot_r = (r/r_j) ** (p) * mdot_in * 1/eta * L_Edd / c_cgs ** 2
 
-    #value for Epsilon with the powers of the oppacity still in in P_gaz regime
-    H_R_expr=(m_p*c_light**2/(2*k_boltzman))**(beta_tau-4)* \
-             (m_p*n_star/(alpha_0*mu**(1/2)))**(alpha_tau+1)*\
-             (3*kappa_0/4*sigma_boltzman)*(1-b)*(1-p)*(c_light**4/(8*pi*G*m_BH_cgs))* \
-             (m_dot_r)**(alpha+2)*\
-             r*(4-beta_tau-3/2(alpha_tau+1)-2)
+    try:
+        #value for Epsilon with the powers of the opacity still in in P_gaz regime
+        H_R_expr=(m_p_cgs*c_cgs**2/(2*k_boltzmann_cgs))**(beta_tau-4)* \
+                 (m_p_cgs*n_star/(alpha_0*mu**(1/2)))**(alpha_tau+1)*\
+                 (3*kappa_0/4*sigma_boltzmann_cgs)*(1-b)*(1-p)*(c_cgs**4/(8*np.pi*G_cgs*m_BH_cgs))* \
+                 (mdot_r)**(alpha_tau+2)*\
+                 r**(4-beta_tau-3/2*(alpha_tau+1)-2)
+    except:
+        H_1=(m_p_cgs*c_cgs**2/(2*k_boltzmann_cgs))**(beta_tau-4)
+        H_2=(m_p_cgs*n_star/(alpha_0*mu**(1/2)))**(alpha_tau+1)
+        H_3=(3*kappa_0/4*sigma_boltzmann_cgs)*(1-b)*(1-p)*(c_cgs**4/(8*np.pi*G_cgs*m_BH_cgs))
+        H_4=(mdot_r)**(alpha_tau+2)
+        H_5=r**(4-beta_tau-3/2*(alpha_tau+1)-2)
+        breakpoint()
+
+        print("tchou")
+    H_R=H_R_expr**(1/(11+3*alpha_tau-2*beta_tau))
+
+    return H_R
+
+def func_rho_0(r,mdot_in,kappa_0,alpha_tau,beta_tau,eta=0.1,mu=0.1,b=0,p=0,alpha_0=10,m_BH=1,r_j=6):
+
+    '''
+    wrapper for the rho_0 (density at midplane) solution for a standard SAD in the P_gaz dominant regime
+
+    r: radius in Rg
+
+    mdot_in:mass accretion rate at the starting radius
+
+    kappa_0,alpha_tau,beta_tau: coefficients to compute the opacity (see above)
+
+    mu: magnetization
+
+    b: Jet Power index
+    p: ejection index
+
+    both default to 0
+
+    p is constant along r, but if b is not constant the code should be edited
+
+    alpha_0= viscosity coefficient, can also be seen as alpha_m*Prandlt_m, value used with mu to get the
+                        viscosity parameter of the disk
+
+    m_BH: Black Hole mass in solar masses
+    '''
+
+    #defining useful mass dependant constants
+    m_BH_cgs=m_BH*Msol_cgs
+    Rg_cgs=2*G_cgs*m_BH_cgs/c_cgs**2
+    n_star=1/(sigma_thomson_cgs*Rg_cgs)
+    L_Edd=1.26e38*m_BH
+
+    #radial dependant mdot in CGS units
+    mdot_r = (r/r_j) ** (p) * mdot_in * 1/eta * L_Edd / c_cgs ** 2
+
+    rho_0=m_p_cgs*n_star * 1/(alpha_0*mu**(1/2)) * mdot_r * r**(-3/2) * func_H_R(r,mdot_in,kappa_0,alpha_tau,beta_tau,eta,mu,b,p,alpha_0,m_BH)**(-3)
+
+    return rho_0
+
+def func_T_0(r,mdot_in,kappa_0,alpha_tau,beta_tau,eta=0.1,mu=0.1,b=0,p=0,alpha_0=10,m_BH=1,r_j=6):
+
+    '''
+    wrapper for the T_0 (temperature at midplane) solution for a standard SAD in the P_gaz dominant regime
+
+    r: radius in Rg
+
+    mdot_in:mass accretion rate at the starting radius
+
+    kappa_0,alpha_tau,beta_tau: coefficients to compute the opacity (see above)
+
+    mu: magnetization
+
+    b: Jet Power index
+    p: ejection index
+
+    both default to 0
+
+    p is constant along r, but if b is not constant the code should be edited
+
+    alpha_0= viscosity coefficient, can also be seen as alpha_m*Prandlt_m, value used with mu to get the
+                        viscosity parameter of the disk
+
+    m_BH: Black Hole mass in solar masses
+    '''
+
+    T_0=m_p_cgs*c_cgs**2/(2*k_boltzmann_cgs) *\
+        1/r * func_H_R(r,mdot_in,kappa_0,alpha_tau,beta_tau,eta,mu,b,p,alpha_0,m_BH,r_j)**2
+
+    return T_0
+
+def func_K_r(r,mdot_in,kappa_0,alpha_tau,beta_tau,eta=0.1,mu=0.1,b=0,p=0,alpha_0=10,m_BH=1,r_j=6):
+
+    '''
+    wrapper for the K_r (opacity) solution for a standard SAD in the P_gaz dominant regime
+
+    r: radius in Rg
+
+    mdot_in:mass accretion rate at the starting radius
+
+    kappa_0,alpha_tau,beta_tau: coefficients to compute the opacity (see above)
+
+    mu: magnetization
+
+    b: Jet Power index
+    p: ejection index
+
+    both default to 0
+
+    p is constant along r, but if b is not constant the code should be edited
+
+    alpha_0= viscosity coefficient, can also be seen as alpha_m*Prandlt_m, value used with mu to get the
+                        viscosity parameter of the disk
+
+    m_BH: Black Hole mass in solar masses
+    '''
+
+    K_r=kappa_0*func_rho_0(r,mdot_in,kappa_0,alpha_tau,beta_tau,eta,mu,b,p,alpha_0,m_BH,r_j)**(alpha_tau)*\
+                func_T_0(r,mdot_in,kappa_0,alpha_tau,beta_tau,eta,mu,b,p,alpha_0,m_BH,r_j)**(beta_tau)
+
+    return K_r
+
+def func_Tau(r,mdot_in,kappa_0,alpha_tau,beta_tau,eta=0.1,mu=0.1,b=0,p=0,alpha_0=10,m_BH=1,r_j=6):
+
+    '''
+    wrapper for the Tau (optical depth) solution for a standard SAD in the P_gaz dominant regime
+
+    r: radius in Rg
+
+    mdot_in:mass accretion rate at the starting radius
+
+    kappa_0,alpha_tau,beta_tau: coefficients to compute the opacity (see above)
+
+    mu: magnetization
+
+    b: Jet Power index
+    p: ejection index
+
+    both default to 0
+
+    p is constant along r, but if b is not constant the code should be edited
+
+    alpha_0= viscosity coefficient, can also be seen as alpha_m*Prandlt_m, value used with mu to get the
+                        viscosity parameter of the disk
+
+    m_BH: Black Hole mass in solar masses
+    '''
+
+    #defining useful mass dependant constants
+    m_BH_cgs=m_BH*Msol_cgs
+    Rg_cgs=2*G_cgs*m_BH_cgs/c_cgs**2
+
+    #note: we fetch back H as H/R*R, with a conversion to cgs
+    Tau=func_K_r(r,mdot_in,kappa_0,alpha_tau,beta_tau,eta,mu,b,p,alpha_0,m_BH,r_j)*\
+        func_rho_0(r,mdot_in,kappa_0,alpha_tau,beta_tau,eta,mu,b,p,alpha_0,m_BH,r_j)*\
+        func_H_R(r,mdot_in,kappa_0,alpha_tau,beta_tau,eta,mu,b,p,alpha_0,m_BH,r_j)*r*Rg_cgs
+
+    return Tau
+def func_P_gaz(r,mdot_in,kappa_0,alpha_tau,beta_tau,eta=0.1,mu=0.1,b=0,p=0,alpha_0=10,m_BH=1,r_j=6):
+
+    '''
+    wrapper for the gas pressure solution for a standard SAD
+    important: only in the P_gaz dominant regime
+
+    r: radius in Rg
+
+    mdot_in:mass accretion rate at the starting radius
+
+    kappa_0,alpha_tau,beta_tau: coefficients to compute the opacity (see above)
+
+    mu: magnetization
+
+    b: Jet Power index
+    p: ejection index
+
+    both default to 0
+
+    p is constant along r, but if b is not constant the code should be edited
+
+    alpha_0= viscosity coefficient, can also be seen as alpha_m*Prandlt_m, value used with mu to get the
+                        viscosity parameter of the disk
+
+    m_BH: Black Hole mass in solar masses
+    '''
+
+    #computed with P_gaz=2*n_e*k*T0=2*rho_0/mp*k*T_0
+    P_gaz=2*func_rho_0(r,mdot_in,kappa_0,alpha_tau,beta_tau,eta,mu,b,p,alpha_0,m_BH,r_j)/m_p_cgs*\
+            k_boltzmann_cgs*func_T_0(r,mdot_in,kappa_0,alpha_tau,beta_tau,eta,mu,b,p,alpha_0,m_BH,r_j)
+
+    return P_gaz
+
+def func_P_rad(r,mdot_in,kappa_0,alpha_tau,beta_tau,eta=0.1,mu=0.1,b=0,p=0,alpha_0=10,m_BH=1,r_j=6):
+
+    '''
+    wrapper for the radiation pressure solution for a standard SAD
+    important: only in the P_gaz dominant regime
+
+    r: radius in Rg
+
+    mdot_in:mass accretion rate at the starting radius
+
+    kappa_0,alpha_tau,beta_tau: coefficients to compute the opacity (see above)
+
+    mu: magnetization
+
+    b: Jet Power index
+    p: ejection index
+
+    both default to 0
+
+    p is constant along r, but if b is not constant the code should be edited
+
+    alpha_0= viscosity coefficient, can also be seen as alpha_m*Prandlt_m, value used with mu to get the
+                        viscosity parameter of the disk
+
+    m_BH: Black Hole mass in solar masses
+    '''
+
+    P_rad=(4*sigma_boltzmann_cgs/3*c_cgs)*func_T_0(r,mdot_in,kappa_0,alpha_tau,beta_tau,eta,mu,b,p,alpha_0,m_BH,r_j)**4
+
+    return P_rad
+
+with st.sidebar.expander('Thermal structure computation'):
+    compute_tstruct=st.checkbox('Compute thermal structure')
+
+    struct_sol_mode=st.radio('Use solution from:',('Selected solution','Manual parameter input'),
+                             index=1)
+    st.text('Will only be considered\n if a single solution\n has been selected previously')
+
+    st.title('Parameter inputs')
+
+    struct_input_rj=st.number_input(r'Standard disk starting radius in Rg',value=6,format='%.3e')
+
+    struct_input_mdot = st.number_input(r'mdot_in',value=1e-1,format='%.3e')
+
+    struct_input_eta = st.number_input(r'$\eta$ (radiative efficiency)', value=1e-1, format='%.3e')
+
+    struct_input_mu = st.number_input(r'$\mu$ (magnetization)', value=1e-3, format='%.3e')
+
+    struct_input_b = st.number_input(r'$b$ (jet power)', value=0, format='%.3e')
+
+    struct_input_p = st.number_input(r'$p$ (ejection index)', value=0.1, format='%.3e')
+
+    struct_input_alpha_0 = st.number_input(r'$\alpha_0$ (viscosity)', value=10, format='%.3e')
+
+    struct_input_m_BH = st.number_input(r'$M_{BH}$ in $M_\odot$', value=8, format='%.3e')
+
+if struct_sol_mode=='Manual parameter input':
+
+    struct_rj = struct_input_rj
+    struct_mdot = struct_input_mdot
+    struct_eta = struct_input_eta
+    struct_mu = struct_input_mu
+    struct_b = struct_input_b
+    struct_p = struct_input_p
+    struct_alpha_0 = struct_input_alpha_0
+    struct_m_BH = struct_input_m_BH
+
+# elif struct_sol_mode is 'Selected solution':
+#
+#     #will need to be changed
+#     struct_rj = struct_input_rj
+#     struct_mdot = struct_input_mdot
+#     struct_eta = struct_input_eta
+#     struct_mu = struct_input_mu
+#     struct_b = struct_input_b
+#     struct_p = struct_input_p
+#     struct_alpha_0 = struct_input_alpha_0
+#     struct_m_BH = struct_input_m_BH
+
+if compute_tstruct:
+
+    #creating a range of radiuses from the inside to the outside
+    struct_rsph = np.logspace(np.log10(struct_rj), 7, 300)
+
+    K_r_arr=np.zeros((n_regimes,len(struct_rsph)))
+
+    #computing each individual opacity regime within this radius sample
+    for id_K_r in range(n_regimes):
+        K_r_arr[id_K_r]=func_K_r(struct_rsph,struct_mdot,
+                                 kappa_0_arr[id_K_r],alpha_tau_arr[id_K_r],beta_tau_arr[id_K_r],
+                                 struct_eta,struct_mu,struct_b,struct_p,struct_alpha_0,struct_m_BH,struct_rj)
+
+    max_opacity_mask=np.argmax(K_r_arr,0)
+
+    #creating an array with the values of the dominant opacity regime at each radius
+    kappa_0_dom_arr=np.array([kappa_0_arr[max_opacity_mask[i]] for i in range(len(struct_rsph))])
+    alpha_tau_dom_arr = np.array([alpha_tau_arr[max_opacity_mask[i]] for i in range(len(struct_rsph))])
+    beta_tau_dom_arr = np.array([beta_tau_arr[max_opacity_mask[i]] for i in range(len(struct_rsph))])
+
+    #computing the main quantities
+    struct_HR=func_H_R(struct_rsph,struct_mdot,kappa_0_dom_arr,alpha_tau_dom_arr,beta_tau_dom_arr,
+                        struct_eta,struct_mu,struct_b,struct_b,struct_alpha_0,struct_m_BH,struct_rj)
+
+    struct_rho_0=func_rho_0(struct_rsph,struct_mdot,kappa_0_dom_arr,alpha_tau_dom_arr,beta_tau_dom_arr,
+                        struct_eta,struct_mu,struct_b,struct_b,struct_alpha_0,struct_m_BH,struct_rj)
+
+    struct_T_0=func_T_0(struct_rsph,struct_mdot,kappa_0_dom_arr,alpha_tau_dom_arr,beta_tau_dom_arr,
+                        struct_eta,struct_mu,struct_b,struct_b,struct_alpha_0,struct_m_BH,struct_rj)
+
+    struct_Tau=func_Tau(struct_rsph,struct_mdot,kappa_0_dom_arr,alpha_tau_dom_arr,beta_tau_dom_arr,
+                        struct_eta,struct_mu,struct_b,struct_b,struct_alpha_0,struct_m_BH,struct_rj)
+
+    struct_P_gaz=func_P_gaz(struct_rsph,struct_mdot,kappa_0_dom_arr,alpha_tau_dom_arr,beta_tau_dom_arr,
+                        struct_eta,struct_mu,struct_b,struct_b,struct_alpha_0,struct_m_BH,struct_rj)
+
+    struct_P_rad = func_P_rad(struct_rsph, struct_mdot, kappa_0_dom_arr, alpha_tau_dom_arr, beta_tau_dom_arr,
+                            struct_eta, struct_mu, struct_b, struct_b, struct_alpha_0, struct_m_BH,struct_rj)
+
+    #figures
+    fig_HR=plotly_line_wrapper(struct_rsph,struct_HR,log_x=True,log_y=True,xaxis_title='radius (Rg)', yaxis_title=r'H/R', legend='HR',
+                                       name='H/R',showlegend=True,figwidth=515)
+
+    fig_rho_0=plotly_line_wrapper(struct_rsph,struct_rho_0,log_x=True,log_y=True,xaxis_title='radius (Rg)', yaxis_title=r' density (cgs)', legend='ρ_0',
+                                       name='ρ_0',showlegend=True,figwidth=515)
+
+    fig_T_0=plotly_line_wrapper(struct_rsph,struct_T_0,log_x=True,log_y=True,xaxis_title='radius (Rg)', yaxis_title=r' Temperature (K)', legend='T_0',
+                                       name='T_0',showlegend=True,figwidth=515)
+
+    fig_Tau=plotly_line_wrapper(struct_rsph,struct_Tau,log_x=True,log_y=True,xaxis_title='radius (Rg)', yaxis_title=r'opacity', legend='Tau',
+                                       name='Tau',showlegend=True,figwidth=515)
+
+    fig_P=plotly_line_wrapper(struct_rsph,struct_P_gaz,log_x=True,log_y=True,xaxis_title='radius (Rg)', yaxis_title=r' Pressure (cgs)', legend='P_gaz',line_color='blue',
+                                       name='P_gaz',showlegend=True,figwidth=515)
+
+    fig_P=plotly_line_wrapper(struct_rsph,struct_P_rad,ex_fig=fig_P,log_x=True,log_y=True,xaxis_title='Pressure (cgs)', yaxis_title=r' density (cgs)', legend='P_rad',line_color='yellow',
+                                       name='P_rad',showlegend=True,figwidth=515)
+
+    #plot the opacity regime evolutions
+    fig_opacity=None
+    for i in range(n_regimes):
+        fig_opacity = plotly_line_wrapper(struct_rsph, K_r_arr[i],ex_fig=fig_opacity,
+                                       log_x=True, log_y=True,line_color=col_regimes[i],
+                                       xaxis_title='radius (Rg)', yaxis_title=r'opacity ($cm^2/g$)', legend=name_regimes[i],
+                                       name=name_regimes[i],showlegend=True,figwidth=615)
+
+    #computing the intervals where each non-validity condition applies
+    rads_rad_dom=np.argwhere(struct_P_rad>struct_P_gaz).T[0]
+    rads_non_thick=np.argwhere(struct_Tau<100).T[0]
+
+    non_thick_regs=list(interval_extract(rads_non_thick))
+    rad_dom_regs=list(interval_extract(rads_rad_dom))
+
+    #adding the non-optically thick and Pressure dominated regions in each graph:
+    for fig in [fig_HR,fig_rho_0,fig_T_0,fig_P,fig_opacity]:
+        #adding each zones to the graphs
+        for i_reg, reg in enumerate(non_thick_regs):
+            fig.add_vrect(x0=struct_rsph[reg[0]], x1=struct_rsph[reg[1]], line_width=0, fillcolor="grey", opacity=0.2,
+                           name='Tau<100 regions',
+                          label=dict(text='Tau<100 regions' if i_reg==0 else '',
+                                    textposition="top center",
+                                    font=dict(size=20, family="Times New Roman")))
+
+        for i_reg, reg in enumerate(rad_dom_regs):
+            fig.add_vrect(x0=struct_rsph[reg[0]], x1=struct_rsph[reg[1]], line_width=0, fillcolor="purple", opacity=0.2,
+                           name='P_rad dominated region',
+                          label=dict(text='P_rad dominated region' if i_reg==0 else '',
+                                    textposition="top center",
+                                    font=dict(size=20, family="Times New Roman")))
 
 
+
+    with tab_tstruct:
+        #placing them accordingly
+        col_1,col_2,col_3=st.columns(3)
+        with col_1:
+            st.plotly_chart(fig_HR,use_container_width=False,theme=None)
+            st.plotly_chart(fig_P, use_container_width=False, theme=None)
+        with col_2:
+            st.plotly_chart(fig_rho_0,use_container_width=False,theme=None)
+            st.plotly_chart(fig_opacity, use_container_width=False, theme=None)
+        with col_3:
+            st.plotly_chart(fig_T_0,use_container_width=False,theme=None)

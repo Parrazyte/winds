@@ -100,6 +100,9 @@ class MinorSymLogLocator(Locator):
     
 model_dir='/home/parrama/Soft/Xspec/Models'
 
+#custom model loads
+AllModels.lmod('relxill',dirPath=model_dir+'/relxill')
+
 #example of model loading
 # AllModels.initpackage('tbnew_mod',"lmodel_tbnew.dat",dirPath=model_dir+'/tbnew')
 #### should be updated for the new custom model addition in xspec 12.13 and pyxspec 2.1.1
@@ -4386,11 +4389,15 @@ def xPlot(types,axes_input=None,plot_saves_input=None,plot_arg=None,includedlist
                 for i_comp in range(len(curr_save.addcomps[id_grp])):
 
                     try:
-                        curr_ax.plot(curr_save.x[0],curr_save.addcomps[id_grp][i_comp],color=colors_addcomp.to_rgba(i_comp),
+                        curr_ax.plot(curr_save.x[id_grp],curr_save.addcomps[id_grp][i_comp],color=colors_addcomp.to_rgba(i_comp),
                                  label=label_comps[i_comp],linestyle=ls_types[i_comp%3],linewidth=1)
                     except:
-                        breakpoint()
-                        print("check if other x work")
+                        try:
+                            curr_ax.plot(curr_save.x[0],curr_save.addcomps[id_grp][i_comp],color=colors_addcomp.to_rgba(i_comp),
+                                     label=label_comps[i_comp],linestyle=ls_types[i_comp%3],linewidth=1)
+                        except:
+                            breakpoint()
+                            print("check if other x work")
 
         #ratio line
         if 'ratio' in plot_type:

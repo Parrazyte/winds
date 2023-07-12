@@ -4,6 +4,7 @@ import streamlit as st
 import plotly.graph_objects as go
 from streamlit_plotly_events import plotly_events
 from plotly.express.colors import sample_colorscale
+from plotly.subplots import make_subplots
 
 #local
 sys.path.append('/home/parrama/Documents/Work/PhD/Scripts/Python/general/')
@@ -13,18 +14,18 @@ sys.path.append('/home/parrama/Documents/Work/PhD/Scripts/Python/modeling/PyXsta
 sys.path.append('/app/winds/observations/spectral_analysis/')
 sys.path.append('/app/winds/modeling/PyXstar')
 
-from general_tools import interval_extract
+from general_tools import interval_extract,ravel_ragged
 
 from solution_tools import func_density_sol,func_vel_sol,func_logxi_sol,func_nh_sol,load_solutions,sample_angle,interp_yaxis
 
-sigma_thomson_cgs = 6.6525e-25
-c_cgs = 2.99792e10
-G_cgs = 6.674e-8
-Msol_cgs = 1.98892e33
+sigma_thomson_cgs = 6.6524587321e-25
+c_cgs = 2.99792458e10
+G_cgs = 6.6743015e-8
+Msol_cgs = 1.98847e33
 
-k_boltzmann_cgs=1.3807e-16
-sigma_boltzmann_cgs=5.6704e-5
-m_p_cgs=1.6726e-24
+k_boltzmann_cgs=1.380649e-16
+sigma_boltzmann_cgs=5.670374e-5
+m_p_cgs=1.67262192e-24
 
 
 
@@ -284,7 +285,8 @@ if len(selected_points)!=0:
     sol_angle_A_arr=y_to_ang(sol_y_A)
 
 def plotly_line_wrapper(x,y,log_x=False,log_y='auto',xaxis_title='',yaxis_title='',legend=False,
-                        line_color='lightskyblue',ex_fig=None,name='',showlegend=False,split_ls_x=None,linedash='solid',figwidth=None):
+                        line_color='lightskyblue',ex_fig=None,name='',showlegend=False,split_ls_x=None,
+                        linedash='solid',figwidth=None,secondary_y=False):
 
     # '''
     # Wrapper to render the line in a "nice" streamlit theme while keeping the latex displays
@@ -304,7 +306,10 @@ def plotly_line_wrapper(x,y,log_x=False,log_y='auto',xaxis_title='',yaxis_title=
     if ex_fig is not None:
         fig_line=ex_fig
     else:
-        fig_line=go.Figure()
+        if secondary_y:
+            fig_line=make_subplots(specs=[[{"secondary_y": True}]])
+        else:
+            fig_line=go.Figure()
 
         if figwidth is not None:
             fig_line.update_layout(width=figwidth)
@@ -778,6 +783,8 @@ if split_angle and n_sel==1:
 
         col_a,col_b,col_c=st.columns(3)
 
+        yrange_speed=[np.log10(1),np.log10(299792.458)]
+
         with col_a:
             radial_plot(r_sph_sampl,n_sampl,sol_sampl_angle,log_x=True,
                                         log_y=True,xaxis_title=r'$R_{sph}\;$ (Rg)',yaxis_title=r'$n\textrm{ (cgs)}$',
@@ -785,12 +792,12 @@ if split_angle and n_sel==1:
 
             radial_plot(r_sph_sampl,ur_sampl,sol_sampl_angle,log_x=True,
                                         log_y=True,xaxis_title=r'$R_{sph}\;$ (Rg)',yaxis_title=r'$v_{r}\textrm{ (km/s)}$',
-                        logxi_ids=logxi_6_ids)
+                        logxi_ids=logxi_6_ids,yrange=yrange_speed)
 
             radial_plot(r_sph_sampl,nh_sampl,sol_sampl_angle,log_x=True,log_y=True,
                         xaxis_title=r'$R_{sph}\;$ (Rg)',yaxis_title=r'$n_{h}\textrm{ (cm}^{-2}\textrm{)}$',
                         logxi_ids=logxi_6_ids,
-                        yrange=[np.log10(1e20),np.log10(1.5e24)])
+                        yrange=[np.log10(1e20),np.log10(max(ravel_ragged(nh_sampl)))])
 
         with col_b:
             radial_plot(r_sph_sampl,logxi_sampl, sol_sampl_angle, log_x=True,
@@ -799,21 +806,21 @@ if split_angle and n_sel==1:
 
             radial_plot(r_sph_sampl, uphi_sampl, sol_sampl_angle, log_x=True,
                         log_y=True, xaxis_title=r'$R_{sph}\;$ (Rg)', yaxis_title=r'$v_{\phi}\textrm{ (km/s)}$',
-                        logxi_ids=logxi_6_ids)
+                        logxi_ids=logxi_6_ids,yrange=yrange_speed)
 
             radial_plot(r_sph_nonthick_sampl,nh_nonthick_sampl,sol_sampl_angle,log_x=True,log_y=True,
                         xaxis_title=r'$R_{sph}\;$ (Rg)',yaxis_title=r'$n_{h}^{\textrm{log}\xi\leq6}\textrm{(cm}^{-2}\textrm{)}$',
-                        yrange=[np.log10(1e20),np.log10(1.5e24)])
+                        yrange=[np.log10(1e20),np.log10(max(ravel_ragged(nh_nonthick_sampl)))])
 
         with col_c:
 
             radial_plot(r_sph_sampl, uobs_sampl, sol_sampl_angle, log_x=True,
                         log_y=True, xaxis_title=r'$R_{sph}\;$ (Rg)', yaxis_title=r'$v_{obs}\textrm{ (km/s)}$',
-                        logxi_ids=logxi_6_ids)
+                        logxi_ids=logxi_6_ids,yrange=yrange_speed)
 
             radial_plot(r_sph_sampl, uz_sampl, sol_sampl_angle, log_x=True,
                         log_y=True, xaxis_title=r'$R_{sph}\;$ (Rg)', yaxis_title=r'$v_{z}\textrm{ (km/s)}$',
-                        logxi_ids=logxi_6_ids)
+                        logxi_ids=logxi_6_ids,yrange=yrange_speed)
 
     #luminosity at which logxi is 6
 
@@ -899,12 +906,14 @@ kappa_0_e=0.348
 alpha_tau_e=0
 beta_tau_e=0
 
-#Kramer
+#Kramer (only Free-Free)
 kappa_0_kramer=5e24
 alpha_tau_kramer=1
 beta_tau_kramer=-7/2
 
 #Bound-Free and Free/Free
+#deactivated for tests
+#kappa_0_BFFF=1.5e20
 kappa_0_BFFF=1.5e20
 alpha_tau_BFFF=1
 beta_tau_BFFF=-5/2
@@ -914,16 +923,20 @@ kappa_0_H=1e-36
 alpha_tau_H=1/3
 beta_tau_H=10
 
-#add molecules ?
+#Molecules
+#real value kappa_0_mol=1e-8
+kappa_0_mol=1e-80
+alpha_tau_mol=2/3
+beta_tau_mol=3
 
 #arrays
-kappa_0_arr=np.array([kappa_0_e,kappa_0_kramer,kappa_0_BFFF,kappa_0_H])
-alpha_tau_arr=np.array([alpha_tau_e,alpha_tau_kramer,alpha_tau_BFFF,alpha_tau_H])
-beta_tau_arr=np.array([beta_tau_e,beta_tau_kramer,beta_tau_BFFF,beta_tau_H])
+kappa_0_arr=np.array([kappa_0_e,kappa_0_kramer,kappa_0_BFFF,kappa_0_H,kappa_0_mol])
+alpha_tau_arr=np.array([alpha_tau_e,alpha_tau_kramer,alpha_tau_BFFF,alpha_tau_H,alpha_tau_mol])
+beta_tau_arr=np.array([beta_tau_e,beta_tau_kramer,beta_tau_BFFF,beta_tau_H,beta_tau_mol])
 
 n_regimes=len(kappa_0_arr)
 
-name_regimes=['electrons','Kramer','Bound-Free/Free-Free','Hydrogen scattering']
+name_regimes=['electrons','Kramer','B-F/F-F','Hydrogen','Molecules']
 
 norm_col_regimes=np.array(range(n_regimes))/n_regimes
 
@@ -931,10 +944,22 @@ col_regimes=sample_colorscale('plasma',norm_col_regimes)
 
 #function for the H/R ratio
 
-def func_H_R(r,mdot_in,kappa_0,alpha_tau,beta_tau,eta=0.1,mu=0.1,b=0,p=0,alpha_0=10,m_BH=1,r_j=6):
+def func_H_R(r_arr,mdot_in,kappa_0,alpha_tau,beta_tau,eta=0.1,mu=0.1,b=0,p=0,alpha_0=10,m_BH=1,r_j=6,
+             mode='interp'):
 
     '''
-    wrapper for the H_R (or epsilon) analytical solution for a standard SAD in the P_gaz dominant regime
+    wrapper for the H_R (or epsilon) analytical solution for a standard optically thick SAD
+
+    modes:
+    -gaz: general solution (any opacity regime) when gaz pressure dominates
+    -rad: general solution (any opacity regime) when radiative pressure dominates
+    -interp: computes the radiation and gaz pressure in gaz mode,
+             then replaces the zones in rad mode with the computation in rad mode
+             (ad-hoc but works independantly of the opacity regime)
+             then, recomputes Prad and Pgaz and ensures Prad is still > Pgaz in the Prad dominated zone
+             (else returns an error)
+
+
 
     r: radius in Rg
 
@@ -959,34 +984,57 @@ def func_H_R(r,mdot_in,kappa_0,alpha_tau,beta_tau,eta=0.1,mu=0.1,b=0,p=0,alpha_0
 
     #defining useful mass dependant constants
     m_BH_cgs=m_BH*Msol_cgs
-    Rg_cgs=2*G_cgs*m_BH_cgs/c_cgs**2
+    Rg_cgs=G_cgs*m_BH_cgs/c_cgs**2
     n_star=1/(sigma_thomson_cgs*Rg_cgs)
     L_Edd = 1.26e38 * m_BH
 
+    M_Edd= L_Edd / c_cgs ** 2
+
     # radial dependant mdot in CGS units
-    mdot_r = (r/r_j) ** (p) * mdot_in * 1/eta * L_Edd / c_cgs ** 2
+    mdot_r = (r_arr/r_j) ** (p) * mdot_in
 
-    try:
-        #value for Epsilon with the powers of the opacity still in in P_gaz regime
-        H_R_expr=(m_p_cgs*c_cgs**2/(2*k_boltzmann_cgs))**(beta_tau-4)* \
-                 (m_p_cgs*n_star/(alpha_0*mu**(1/2)))**(alpha_tau+1)*\
-                 (3*kappa_0/4*sigma_boltzmann_cgs)*(1-b)*(1-p)*(c_cgs**4/(8*np.pi*G_cgs*m_BH_cgs))* \
-                 (mdot_r)**(alpha_tau+2)*\
-                 r**(4-beta_tau-3/2*(alpha_tau+1)-2)
-    except:
-        H_1=(m_p_cgs*c_cgs**2/(2*k_boltzmann_cgs))**(beta_tau-4)
-        H_2=(m_p_cgs*n_star/(alpha_0*mu**(1/2)))**(alpha_tau+1)
-        H_3=(3*kappa_0/4*sigma_boltzmann_cgs)*(1-b)*(1-p)*(c_cgs**4/(8*np.pi*G_cgs*m_BH_cgs))
-        H_4=(mdot_r)**(alpha_tau+2)
-        H_5=r**(4-beta_tau-3/2*(alpha_tau+1)-2)
-        breakpoint()
+    #value for Epsilon with the powers of the opacity still in in P_gaz regime
 
-        print("tchou")
-    H_R=H_R_expr**(1/(11+3*alpha_tau-2*beta_tau))
+    def H_R_gaz_dom():
+        H_R_expr = (m_p_cgs * c_cgs ** 2 / (2 * k_boltzmann_cgs)) ** (beta_tau - 4) \
+                   * (m_p_cgs * n_star / (alpha_0 * mu ** (1 / 2))) ** (alpha_tau + 1) \
+                   * (3 * kappa_0 / (4 * sigma_boltzmann_cgs)) * (1 - b) * (1 - p) \
+                   * (c_cgs ** 4 / (8 * np.pi * G_cgs * m_BH_cgs)) \
+                   * (mdot_r) ** (alpha_tau + 2) * M_Edd \
+                   * r_arr ** (4 - beta_tau - 3 / 2 * (alpha_tau + 1) - 2) \
+ \
+            # we don't simplify the last exponent to make verifications easier
+        return H_R_expr ** (1 / (10 + 3 * alpha_tau - 2 * beta_tau))
 
-    return H_R
+    def H_R_rad_dom():
+        H_R_expr = (m_p_cgs * n_star / (alpha_0 * mu ** (1 / 2))) ** (-(alpha_tau + 1)) \
+                   * (3 * c_cgs ** 3 * m_p_cgs * n_star / (4 * sigma_boltzmann_cgs * alpha_0 * mu ** (1 / 2))) ** ( -b / 4) \
+                   * 2 / ((1 - b) * (1 - p) * kappa_0 * Rg_cgs * alpha_0 * mu ** (1 / 2)) \
+                   * mdot_r ** (-(alpha_tau + 1 + beta_tau / 4)) \
+                   * r_arr ** (3 / 2 * (alpha_tau + 1) + 5 * beta_tau / 8 - 1 / 2)
+        # we don't simplify the last exponent to make verifications easier
+        return H_R_expr ** (1 / (-3 * (alpha_tau + 1) - beta_tau / 4 + 2))
 
-def func_rho_0(r,mdot_in,kappa_0,alpha_tau,beta_tau,eta=0.1,mu=0.1,b=0,p=0,alpha_0=10,m_BH=1,r_j=6):
+    if mode=='gaz':
+        return H_R_gaz_dom()
+    elif mode=='rad':
+        return H_R_rad_dom()
+    elif mode=='bridge':
+        P_gaz_gaz = func_P_gaz(r_arr, mdot_in, kappa_0, alpha_tau, beta_tau, eta, mu, b, p, alpha_0, m_BH, r_j,
+                               mode='gaz')
+        P_rad_gaz=func_P_rad(r_arr,mdot_in,kappa_0,alpha_tau,beta_tau,eta,mu,b,p,alpha_0,m_BH,r_j,
+                             mode='gaz')
+
+        P_rad_dom_mask=P_rad_gaz>P_gaz_gaz
+
+        H_R_gaz=H_R_gaz_dom()
+        H_R_rad=H_R_rad_dom()
+
+        H_R_bridge=np.array([H_R_rad[i] if P_rad_dom_mask[i] else H_R_gaz[i] for i in range(len(r_arr))])
+
+        return H_R_bridge
+
+def func_rho_0(r_arr,mdot_in,kappa_0,alpha_tau,beta_tau,eta=0.1,mu=0.1,b=0,p=0,alpha_0=10,m_BH=1,r_j=6,mode='bridge'):
 
     '''
     wrapper for the rho_0 (density at midplane) solution for a standard SAD in the P_gaz dominant regime
@@ -1014,18 +1062,25 @@ def func_rho_0(r,mdot_in,kappa_0,alpha_tau,beta_tau,eta=0.1,mu=0.1,b=0,p=0,alpha
 
     #defining useful mass dependant constants
     m_BH_cgs=m_BH*Msol_cgs
-    Rg_cgs=2*G_cgs*m_BH_cgs/c_cgs**2
+    Rg_cgs=G_cgs*m_BH_cgs/c_cgs**2
     n_star=1/(sigma_thomson_cgs*Rg_cgs)
-    L_Edd=1.26e38*m_BH
+    L_Edd = 1.26e38 * m_BH
 
-    #radial dependant mdot in CGS units
-    mdot_r = (r/r_j) ** (p) * mdot_in * 1/eta * L_Edd / c_cgs ** 2
+    M_Edd= L_Edd / c_cgs ** 2
 
-    rho_0=m_p_cgs*n_star * 1/(alpha_0*mu**(1/2)) * mdot_r * r**(-3/2) * func_H_R(r,mdot_in,kappa_0,alpha_tau,beta_tau,eta,mu,b,p,alpha_0,m_BH)**(-3)
+    # radial dependant mdot in CGS units
+    mdot_r = (r_arr/r_j) ** (p) * mdot_in
+
+    rho_0=m_p_cgs*n_star * 1/(alpha_0*mu**(1/2)) * mdot_r * r_arr ** (-3/2) *\
+          func_H_R(r_arr,mdot_in,kappa_0,alpha_tau,beta_tau,eta,mu,b,p,alpha_0,m_BH,r_j,mode=mode)**(-3)
+
+    # rho_0=m_p_cgs*n_star * 1/(alpha_0*mu**(1/2)) * mdot_r * r**(-3/2) * 0.1**(-3)
+
+    #*L_Edd / c_cgs ** 2
 
     return rho_0
 
-def func_T_0(r,mdot_in,kappa_0,alpha_tau,beta_tau,eta=0.1,mu=0.1,b=0,p=0,alpha_0=10,m_BH=1,r_j=6):
+def func_T_0(r_arr,mdot_in,kappa_0,alpha_tau,beta_tau,eta=0.1,mu=0.1,b=0,p=0,alpha_0=10,m_BH=1,r_j=6,mode='bridge'):
 
     '''
     wrapper for the T_0 (temperature at midplane) solution for a standard SAD in the P_gaz dominant regime
@@ -1050,13 +1105,65 @@ def func_T_0(r,mdot_in,kappa_0,alpha_tau,beta_tau,eta=0.1,mu=0.1,b=0,p=0,alpha_0
 
     m_BH: Black Hole mass in solar masses
     '''
+    #defining useful mass dependant constants
+    m_BH_cgs=m_BH*Msol_cgs
+    Rg_cgs=G_cgs*m_BH_cgs/c_cgs**2
+    n_star=1/(sigma_thomson_cgs*Rg_cgs)
+    L_Edd = 1.26e38 * m_BH
 
-    T_0=m_p_cgs*c_cgs**2/(2*k_boltzmann_cgs) *\
-        1/r * func_H_R(r,mdot_in,kappa_0,alpha_tau,beta_tau,eta,mu,b,p,alpha_0,m_BH,r_j)**2
+    M_Edd= L_Edd / c_cgs ** 2
 
-    return T_0
+    # radial dependant mdot in CGS units
+    mdot_r = (r_arr/r_j) ** (p) * mdot_in
 
-def func_K_r(r,mdot_in,kappa_0,alpha_tau,beta_tau,eta=0.1,mu=0.1,b=0,p=0,alpha_0=10,m_BH=1,r_j=6):
+    # T_0=m_p_cgs*c_cgs**2/(2*k_boltzmann_cgs) *\
+    #     1/r_arr * func_H_R(r_arr,mdot_in,kappa_0,alpha_tau,beta_tau,eta,mu,b,p,alpha_0,m_BH,r_j)**2
+
+    #this one should work no matter the pressure as long as no advection
+
+    def T0_rad_dom():
+
+        #this only work in Prad and is no good for bridging
+        T_0=(3*c_cgs**3*m_p_cgs*n_star/(4*sigma_thomson_cgs*alpha_0*mu**(1/2))*mdot_r*r_arr**(-5/2) \
+            *func_H_R(r_arr,mdot_in,kappa_0,alpha_tau,beta_tau,eta,mu,b,p,alpha_0,m_BH,r_j,mode=mode)**(-1))**(1/4)
+        return T_0
+
+    def T0_gen():
+
+        #this one has been computed directly from the qrad=qthick equation so it is valid independantly of the state
+        #as long as optically thick
+        T_0=((3*kappa_0)*(1-b)*(1-p)/(4*sigma_boltzmann_cgs)*\
+            func_H_R(r_arr,mdot_in,kappa_0,alpha_tau,beta_tau,eta,mu,b,p,alpha_0,m_BH,r_j,mode=mode)* \
+            (c_cgs**4/(8*np.pi*G_cgs*m_BH_cgs))*(M_Edd*mdot_r)*r_arr**(-2)*\
+            func_rho_0(r_arr,mdot_in,kappa_0,alpha_tau,beta_tau,eta,mu,b,p,alpha_0,m_BH,r_j,mode=mode)**(alpha_tau+1)\
+                )**(1/(4-beta_tau))
+
+        return T_0
+
+    return T0_gen()
+
+    # if mode=='rad':
+    #     return T0_rad_dom()
+    # elif mode=='gaz':
+    #     return T0_gaz_dom()
+    #
+    # elif mode=='bridge':
+    #     P_gaz_gaz = func_P_gaz(r_arr, mdot_in, kappa_0, alpha_tau, beta_tau, eta, mu, b, p, alpha_0, m_BH, r_j,
+    #                            mode='gaz')
+    #     P_rad_gaz=func_P_rad(r_arr,mdot_in,kappa_0,alpha_tau,beta_tau,eta,mu,b,p,alpha_0,m_BH,r_j,
+    #                          mode='gaz')
+    #
+    #     P_rad_dom_mask=P_rad_gaz>P_gaz_gaz
+    #
+    #     T0_gaz=T0_gaz_dom()
+    #     T0_rad=T0_rad_dom()
+    #
+    #     T0_bridge=np.array([T0_rad[i] if P_rad_dom_mask[i] else T0_gaz[i] for i in range(len(r_arr))])
+    #
+    #     return T0_bridge
+
+
+def func_K_r(r_arr,mdot_in,kappa_0,alpha_tau,beta_tau,eta=0.1,mu=0.1,b=0,p=0,alpha_0=10,m_BH=1,r_j=6,mode='bridge'):
 
     '''
     wrapper for the K_r (opacity) solution for a standard SAD in the P_gaz dominant regime
@@ -1082,12 +1189,14 @@ def func_K_r(r,mdot_in,kappa_0,alpha_tau,beta_tau,eta=0.1,mu=0.1,b=0,p=0,alpha_0
     m_BH: Black Hole mass in solar masses
     '''
 
-    K_r=kappa_0*func_rho_0(r,mdot_in,kappa_0,alpha_tau,beta_tau,eta,mu,b,p,alpha_0,m_BH,r_j)**(alpha_tau)*\
-                func_T_0(r,mdot_in,kappa_0,alpha_tau,beta_tau,eta,mu,b,p,alpha_0,m_BH,r_j)**(beta_tau)
+    test_1=func_rho_0(r_arr,mdot_in,kappa_0,alpha_tau,beta_tau,eta,mu,b,p,alpha_0,m_BH,r_j,mode=mode)
+    test_2=func_T_0(r_arr,mdot_in,kappa_0,alpha_tau,beta_tau,eta,mu,b,p,alpha_0,m_BH,r_j,mode=mode)
+    K_r=kappa_0*func_rho_0(r_arr,mdot_in,kappa_0,alpha_tau,beta_tau,eta,mu,b,p,alpha_0,m_BH,r_j,mode=mode)**(alpha_tau)*\
+                func_T_0(r_arr,mdot_in,kappa_0,alpha_tau,beta_tau,eta,mu,b,p,alpha_0,m_BH,r_j,mode=mode)**(beta_tau)
 
     return K_r
 
-def func_Tau(r,mdot_in,kappa_0,alpha_tau,beta_tau,eta=0.1,mu=0.1,b=0,p=0,alpha_0=10,m_BH=1,r_j=6):
+def func_Tau(r_arr,mdot_in,kappa_0,alpha_tau,beta_tau,eta=0.1,mu=0.1,b=0,p=0,alpha_0=10,m_BH=1,r_j=6,mode='bridge'):
 
     '''
     wrapper for the Tau (optical depth) solution for a standard SAD in the P_gaz dominant regime
@@ -1115,15 +1224,15 @@ def func_Tau(r,mdot_in,kappa_0,alpha_tau,beta_tau,eta=0.1,mu=0.1,b=0,p=0,alpha_0
 
     #defining useful mass dependant constants
     m_BH_cgs=m_BH*Msol_cgs
-    Rg_cgs=2*G_cgs*m_BH_cgs/c_cgs**2
+    Rg_cgs=G_cgs*m_BH_cgs/c_cgs**2
 
     #note: we fetch back H as H/R*R, with a conversion to cgs
-    Tau=func_K_r(r,mdot_in,kappa_0,alpha_tau,beta_tau,eta,mu,b,p,alpha_0,m_BH,r_j)*\
-        func_rho_0(r,mdot_in,kappa_0,alpha_tau,beta_tau,eta,mu,b,p,alpha_0,m_BH,r_j)*\
-        func_H_R(r,mdot_in,kappa_0,alpha_tau,beta_tau,eta,mu,b,p,alpha_0,m_BH,r_j)*r*Rg_cgs
+    Tau=func_K_r(r_arr,mdot_in,kappa_0,alpha_tau,beta_tau,eta,mu,b,p,alpha_0,m_BH,r_j,mode=mode)*\
+        func_rho_0(r_arr,mdot_in,kappa_0,alpha_tau,beta_tau,eta,mu,b,p,alpha_0,m_BH,r_j,mode=mode)*\
+        func_H_R(r_arr,mdot_in,kappa_0,alpha_tau,beta_tau,eta,mu,b,p,alpha_0,m_BH,r_j,mode=mode)*r_arr*Rg_cgs
 
     return Tau
-def func_P_gaz(r,mdot_in,kappa_0,alpha_tau,beta_tau,eta=0.1,mu=0.1,b=0,p=0,alpha_0=10,m_BH=1,r_j=6):
+def func_P_gaz(r_arr,mdot_in,kappa_0,alpha_tau,beta_tau,eta=0.1,mu=0.1,b=0,p=0,alpha_0=10,m_BH=1,r_j=6,mode='bridge'):
 
     '''
     wrapper for the gas pressure solution for a standard SAD
@@ -1150,13 +1259,32 @@ def func_P_gaz(r,mdot_in,kappa_0,alpha_tau,beta_tau,eta=0.1,mu=0.1,b=0,p=0,alpha
     m_BH: Black Hole mass in solar masses
     '''
 
+    m_BH_cgs=m_BH*Msol_cgs
+    Rg_cgs=G_cgs*m_BH_cgs/c_cgs**2
+
+    n_star=1/(sigma_thomson_cgs*Rg_cgs)
+    P_star=m_p_cgs * n_star * c_cgs ** 2
+
+    L_Edd=1.26e38*m_BH
+
+    #radial dependant mdot in CGS units
+    mdot_r = (r_arr/r_j) ** (p) * mdot_in
+
     #computed with P_gaz=2*n_e*k*T0=2*rho_0/mp*k*T_0
-    P_gaz=2*func_rho_0(r,mdot_in,kappa_0,alpha_tau,beta_tau,eta,mu,b,p,alpha_0,m_BH,r_j)/m_p_cgs*\
-            k_boltzmann_cgs*func_T_0(r,mdot_in,kappa_0,alpha_tau,beta_tau,eta,mu,b,p,alpha_0,m_BH,r_j)
+    #P_gaz=2*func_rho_0(r_arr,mdot_in,kappa_0,alpha_tau,beta_tau,eta,mu,b,p,alpha_0,m_BH,r_j,mode=mode)/m_p_cgs*\
+    #        k_boltzmann_cgs*func_T_0(r_arr,mdot_in,kappa_0,alpha_tau,beta_tau,eta,mu,b,p,alpha_0,m_BH,r_j,mode=mode)
+
+    # #other way to compute it
+    #P_gaz=func_rho_0(r_arr,mdot_in,kappa_0,alpha_tau,beta_tau,eta,mu,b,p,alpha_0,m_BH,r_j)*G_cgs*m_BH_cgs*\
+    #         func_H_R(r_arr,mdot_in,kappa_0,alpha_tau,beta_tau,eta,mu,b,p,alpha_0,m_BH,r_j)**2*\
+    #         1/(Rg_cgs*r_arr)
+
+    P_gaz=P_star*mdot_r*r_arr**(-5/2)*1/(alpha_0*mu**(1/2)* \
+           func_H_R(r_arr, mdot_in, kappa_0, alpha_tau, beta_tau, eta, mu, b, p, alpha_0, m_BH, r_j,mode=mode))
 
     return P_gaz
 
-def func_P_rad(r,mdot_in,kappa_0,alpha_tau,beta_tau,eta=0.1,mu=0.1,b=0,p=0,alpha_0=10,m_BH=1,r_j=6):
+def func_P_rad(r_arr,mdot_in,kappa_0,alpha_tau,beta_tau,eta=0.1,mu=0.1,b=0,p=0,alpha_0=10,m_BH=1,r_j=6,mode='bridge'):
 
     '''
     wrapper for the radiation pressure solution for a standard SAD
@@ -1183,7 +1311,8 @@ def func_P_rad(r,mdot_in,kappa_0,alpha_tau,beta_tau,eta=0.1,mu=0.1,b=0,p=0,alpha
     m_BH: Black Hole mass in solar masses
     '''
 
-    P_rad=(4*sigma_boltzmann_cgs/3*c_cgs)*func_T_0(r,mdot_in,kappa_0,alpha_tau,beta_tau,eta,mu,b,p,alpha_0,m_BH,r_j)**4
+    P_rad=(4*sigma_boltzmann_cgs/(3*c_cgs))*func_T_0(r_arr,mdot_in,kappa_0,alpha_tau,beta_tau,eta,mu,b,p,alpha_0,m_BH,r_j,
+                                                     mode=mode)**4
 
     return P_rad
 
@@ -1194,11 +1323,13 @@ with st.sidebar.expander('Thermal structure computation'):
                              index=1)
     st.text('Will only be considered\n if a single solution\n has been selected previously')
 
+    P_dom_regime=st.radio('Regime to use',('bridge','gaz','rad'))
+
     st.title('Parameter inputs')
 
     struct_input_rj=st.number_input(r'Standard disk starting radius in Rg',value=6,format='%.3e')
 
-    struct_input_mdot = st.number_input(r'mdot_in',value=1e-1,format='%.3e')
+    struct_input_mdot = st.number_input(r'mdot_in',value=1e0,format='%.3e')
 
     struct_input_eta = st.number_input(r'$\eta$ (radiative efficiency)', value=1e-1, format='%.3e')
 
@@ -1208,7 +1339,8 @@ with st.sidebar.expander('Thermal structure computation'):
 
     struct_input_p = st.number_input(r'$p$ (ejection index)', value=0.1, format='%.3e')
 
-    struct_input_alpha_0 = st.number_input(r'$\alpha_0$ (viscosity)', value=10, format='%.3e')
+    struct_input_alpha_0 = st.number_input(r'$\alpha_0$ (viscosity)', value=7, format='%.3e')
+    #see salvesen16 or Jacquemin19
 
     struct_input_m_BH = st.number_input(r'$M_{BH}$ in $M_\odot$', value=8, format='%.3e')
 
@@ -1238,15 +1370,16 @@ if struct_sol_mode=='Manual parameter input':
 if compute_tstruct:
 
     #creating a range of radiuses from the inside to the outside
-    struct_rsph = np.logspace(np.log10(struct_rj), 7, 300)
+    struct_rsph = np.logspace(np.log10(struct_rj), 8, 5000)
 
     K_r_arr=np.zeros((n_regimes,len(struct_rsph)))
 
     #computing each individual opacity regime within this radius sample
+    # for mode in 'gaz','rad'
     for id_K_r in range(n_regimes):
         K_r_arr[id_K_r]=func_K_r(struct_rsph,struct_mdot,
                                  kappa_0_arr[id_K_r],alpha_tau_arr[id_K_r],beta_tau_arr[id_K_r],
-                                 struct_eta,struct_mu,struct_b,struct_p,struct_alpha_0,struct_m_BH,struct_rj)
+                                 struct_eta,struct_mu,struct_b,struct_p,struct_alpha_0,struct_m_BH,struct_rj,mode=P_dom_regime)
 
     max_opacity_mask=np.argmax(K_r_arr,0)
 
@@ -1257,40 +1390,53 @@ if compute_tstruct:
 
     #computing the main quantities
     struct_HR=func_H_R(struct_rsph,struct_mdot,kappa_0_dom_arr,alpha_tau_dom_arr,beta_tau_dom_arr,
-                        struct_eta,struct_mu,struct_b,struct_b,struct_alpha_0,struct_m_BH,struct_rj)
+                        struct_eta,struct_mu,struct_b,struct_p,struct_alpha_0,struct_m_BH,struct_rj,mode=P_dom_regime)
 
     struct_rho_0=func_rho_0(struct_rsph,struct_mdot,kappa_0_dom_arr,alpha_tau_dom_arr,beta_tau_dom_arr,
-                        struct_eta,struct_mu,struct_b,struct_b,struct_alpha_0,struct_m_BH,struct_rj)
+                        struct_eta,struct_mu,struct_b,struct_p,struct_alpha_0,struct_m_BH,struct_rj,mode=P_dom_regime)
 
     struct_T_0=func_T_0(struct_rsph,struct_mdot,kappa_0_dom_arr,alpha_tau_dom_arr,beta_tau_dom_arr,
-                        struct_eta,struct_mu,struct_b,struct_b,struct_alpha_0,struct_m_BH,struct_rj)
+                        struct_eta,struct_mu,struct_b,struct_p,struct_alpha_0,struct_m_BH,struct_rj,mode=P_dom_regime)
 
     struct_Tau=func_Tau(struct_rsph,struct_mdot,kappa_0_dom_arr,alpha_tau_dom_arr,beta_tau_dom_arr,
-                        struct_eta,struct_mu,struct_b,struct_b,struct_alpha_0,struct_m_BH,struct_rj)
+                        struct_eta,struct_mu,struct_b,struct_p,struct_alpha_0,struct_m_BH,struct_rj,mode=P_dom_regime)
 
     struct_P_gaz=func_P_gaz(struct_rsph,struct_mdot,kappa_0_dom_arr,alpha_tau_dom_arr,beta_tau_dom_arr,
-                        struct_eta,struct_mu,struct_b,struct_b,struct_alpha_0,struct_m_BH,struct_rj)
+                        struct_eta,struct_mu,struct_b,struct_p,struct_alpha_0,struct_m_BH,struct_rj,mode=P_dom_regime)
 
     struct_P_rad = func_P_rad(struct_rsph, struct_mdot, kappa_0_dom_arr, alpha_tau_dom_arr, beta_tau_dom_arr,
-                            struct_eta, struct_mu, struct_b, struct_b, struct_alpha_0, struct_m_BH,struct_rj)
+                            struct_eta, struct_mu, struct_b, struct_p, struct_alpha_0, struct_m_BH,struct_rj,mode=P_dom_regime)
 
     #figures
     fig_HR=plotly_line_wrapper(struct_rsph,struct_HR,log_x=True,log_y=True,xaxis_title='radius (Rg)', yaxis_title=r'H/R', legend='HR',
                                        name='H/R',showlegend=True,figwidth=515)
 
-    fig_rho_0=plotly_line_wrapper(struct_rsph,struct_rho_0,log_x=True,log_y=True,xaxis_title='radius (Rg)', yaxis_title=r' density (cgs)', legend='ρ_0',
-                                       name='ρ_0',showlegend=True,figwidth=515)
+    fig_rho_0 = make_subplots(specs=[[{"secondary_y": True}]])
+    fig_rho_0.update_layout(width=515)
+    #giving a name to the secondary y axis
+    fig_rho_0.update_yaxes(title_text="n_e (cgs)",gridcolor = 'rgba(0.5,0.5,.5,0.)',secondary_y=True)
+
+    #adding second axis for the rho figure
+    fig_rho_0.add_trace(go.Scatter(x=struct_rsph,y=struct_rho_0/m_p_cgs,
+                                   line=dict(color='rgba(0.,0.,0.,0.)'),name='n_e'),
+                                    secondary_y=True,)
+
+    fig_rho_0=plotly_line_wrapper(struct_rsph,struct_rho_0,ex_fig=fig_rho_0,log_x=True,log_y=True,xaxis_title='radius (Rg)', yaxis_title=r' density (cgs)', legend='ρ_0',
+                                       name='ρ_0',showlegend=True)
+
+
 
     fig_T_0=plotly_line_wrapper(struct_rsph,struct_T_0,log_x=True,log_y=True,xaxis_title='radius (Rg)', yaxis_title=r' Temperature (K)', legend='T_0',
                                        name='T_0',showlegend=True,figwidth=515)
 
-    fig_Tau=plotly_line_wrapper(struct_rsph,struct_Tau,log_x=True,log_y=True,xaxis_title='radius (Rg)', yaxis_title=r'opacity', legend='Tau',
+    fig_Tau=plotly_line_wrapper(struct_rsph,struct_Tau,log_x=True,log_y=True,xaxis_title='radius (Rg)', yaxis_title=r'optical depth', legend='Tau',
                                        name='Tau',showlegend=True,figwidth=515)
 
     fig_P=plotly_line_wrapper(struct_rsph,struct_P_gaz,log_x=True,log_y=True,xaxis_title='radius (Rg)', yaxis_title=r' Pressure (cgs)', legend='P_gaz',line_color='blue',
                                        name='P_gaz',showlegend=True,figwidth=515)
 
-    fig_P=plotly_line_wrapper(struct_rsph,struct_P_rad,ex_fig=fig_P,log_x=True,log_y=True,xaxis_title='Pressure (cgs)', yaxis_title=r' density (cgs)', legend='P_rad',line_color='yellow',
+    fig_P=plotly_line_wrapper(struct_rsph,struct_P_rad,ex_fig=fig_P,log_x=True,log_y=True,
+                              xaxis_title='radius (Rg)', yaxis_title=r' Pressure (cgs)', legend='P_rad',line_color='yellow',
                                        name='P_rad',showlegend=True,figwidth=515)
 
     #plot the opacity regime evolutions
@@ -1299,7 +1445,7 @@ if compute_tstruct:
         fig_opacity = plotly_line_wrapper(struct_rsph, K_r_arr[i],ex_fig=fig_opacity,
                                        log_x=True, log_y=True,line_color=col_regimes[i],
                                        xaxis_title='radius (Rg)', yaxis_title=r'opacity ($cm^2/g$)', legend=name_regimes[i],
-                                       name=name_regimes[i],showlegend=True,figwidth=615)
+                                       name=name_regimes[i],showlegend=True,figwidth=515)
 
     #computing the intervals where each non-validity condition applies
     rads_rad_dom=np.argwhere(struct_P_rad>struct_P_gaz).T[0]
@@ -1309,7 +1455,7 @@ if compute_tstruct:
     rad_dom_regs=list(interval_extract(rads_rad_dom))
 
     #adding the non-optically thick and Pressure dominated regions in each graph:
-    for fig in [fig_HR,fig_rho_0,fig_T_0,fig_P,fig_opacity]:
+    for fig in [fig_HR,fig_rho_0,fig_T_0,fig_P,fig_opacity,fig_Tau]:
         #adding each zones to the graphs
         for i_reg, reg in enumerate(non_thick_regs):
             fig.add_vrect(x0=struct_rsph[reg[0]], x1=struct_rsph[reg[1]], line_width=0, fillcolor="grey", opacity=0.2,
@@ -1333,8 +1479,11 @@ if compute_tstruct:
         with col_1:
             st.plotly_chart(fig_HR,use_container_width=False,theme=None)
             st.plotly_chart(fig_P, use_container_width=False, theme=None)
+
         with col_2:
             st.plotly_chart(fig_rho_0,use_container_width=False,theme=None)
             st.plotly_chart(fig_opacity, use_container_width=False, theme=None)
+
         with col_3:
             st.plotly_chart(fig_T_0,use_container_width=False,theme=None)
+            st.plotly_chart(fig_Tau, use_container_width=False, theme=None)

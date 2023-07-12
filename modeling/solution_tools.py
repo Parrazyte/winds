@@ -99,6 +99,20 @@ def func_density_sol(r_sph,z_over_r,rho_mhd,p_mhd,mdot_mhd,m_BH):
 
     return (mdot_mhd / (sigma_thomson_cgs * Rg_cgs)) * rho_mhd * (r_cyl ** (p_mhd - 1.5))
 
+def func_temp_mhd(r_sph,z_over_r,rho_mhd,p_mhd,mdot_mhd,m_BH):
+
+    m_BH_SI = m_BH * Msol_SI
+    Rs_SI = 2.0 * G_SI * m_BH_SI / (c_SI * c_SI)
+
+    # !* Gravitational radius
+    Rg_SI = 0.5 * Rs_SI
+    Rg_cgs = Rg_SI * m2cm
+
+    cyl_cst=np.sqrt(1.0+(z_over_r*z_over_r))
+    r_cyl = r_sph / cyl_cst
+
+    return (mdot_mhd / (sigma_thomson_cgs * Rg_cgs)) * rho_mhd * (r_cyl ** (p_mhd - 1.5))
+
 def func_vel_sol(coordinate,r_sph,z_over_r,vel_r,vel_phi,vel_z,m_BH):
 
     '''
@@ -135,7 +149,7 @@ def func_vel_sol(coordinate,r_sph,z_over_r,vel_r,vel_phi,vel_z,m_BH):
         return u_z_nr / gamma
     if coordinate=='obs':
         angle_rad=np.arctan(z_over_r)
-        return (u_r_nr*np.cos(angle_rad)+u_z_nr*np.sin(angle_rad))*Rg_cgs/gamma
+        return (u_r_nr*np.cos(angle_rad)+u_z_nr*np.sin(angle_rad))/gamma
 
 
 # in this one, the distance appears directly so it should be the spherical one
@@ -231,9 +245,11 @@ def load_solutions(solutions,mode='file',split_sol=False,split_par=False):
 
 
 def sample_angle(solutions_path, angle_values, mdot_obs, m_BH, r_j=6., eta_mhd=1 / 12, outdir=None,
-                 return_file_path=False,mode='file',return_compton_angle=False,silent=True):
+                 return_file_path=False,mode='file',return_compton_angle=False,silent=True,
+                 stop_at_compton=False):
     '''
-    split the solution grid for a range of angles up to the compton-thick point of each solution
+    split the solution grid for a range of angles, up to the compton-thick point of each solution
+        if stop_at_compton is set to True, otherwise to the given limit
 
     solutions_path: solutions path of the syntax of a load_solutions output
 
@@ -346,18 +362,23 @@ def sample_angle(solutions_path, angle_values, mdot_obs, m_BH, r_j=6., eta_mhd=1
 
         angle_values_nonthick=angle_values[angle_values<sol_angle_thick]
 
-        # using it to determine how many angles will be probed (and addin a small delta to ensure the last value
+        if stop_at_compton:
+            angle_values_select=angle_values_nonthick
+        else:
+            angle_values_select=angle_values
+
+        # using it to determine how many angles will be probed (and adding a small delta to ensure the last value
         # is taken if it is a full one
 
         ####add log space option
 
         print_log('Angle sampling:', solutions_log_io,silent)
-        print_log(angle_values_nonthick, solutions_log_io,silent)
+        print_log(angle_values_select, solutions_log_io,silent)
 
-        n_angles += len(angle_values_nonthick)
+        n_angles += len(angle_values_select)
 
         # restricting to unique indexes to avoid repeating solutions
-        id_sol_sample = np.unique([abs(angle_sol - elem_angle).argmin() for elem_angle in angle_values_nonthick])
+        id_sol_sample = np.unique([abs(angle_sol - elem_angle).argmin() for elem_angle in angle_values_select])
 
         print_log('Angles of solutions selected:', solutions_log_io,silent)
 

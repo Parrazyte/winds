@@ -3126,12 +3126,8 @@ def correl_graph(data_perinfo,infos,data_ener,dict_linevis,mode='intrinsic',mode
         date_list_repeat=np.array([date_list for repeater in (i if type(i)==range else [i])]) if not ratio_mode else date_list
         
         if streamlit:
-            try:
-                mask_intime=(Time(ravel_ragged(date_list_repeat))>=slider_date[0]) & (Time(ravel_ragged(date_list_repeat))<=slider_date[1])
-                
-            except:
-                breakpoint()
-                
+            mask_intime=(Time(ravel_ragged(date_list_repeat))>=slider_date[0]) & (Time(ravel_ragged(date_list_repeat))<=slider_date[1])
+
         else:
             mask_intime=True
         
@@ -3242,10 +3238,9 @@ def correl_graph(data_perinfo,infos,data_ener,dict_linevis,mode='intrinsic',mode
                         dtype=object)
 
             else:
-
                 x_data=np.array([ravel_ragged(data_plot[0][0][i])[bool_det][bool_sign],ravel_ragged(data_plot[0][0][i])[bool_det][~bool_sign]],
-                        dtype=object)
-                    
+                    dtype=object)
+
         #applying the same thing to the y axis if ratios are also plotted there
         if type(ind_infos[1]) not in [int,np.int64] and 'ratio' in ind_infos[1]:
                 #note:not needed for now
@@ -4044,11 +4039,6 @@ def correl_graph(data_perinfo,infos,data_ener,dict_linevis,mode='intrinsic',mode
                     test=plt.colorbar(scat_list[0],
                                  label=r'nH ($10^{22}$ cm$^{-2}$)' if color_scatter=='nH' else color_scatter,
                                  extend='min' if color_scatter=='nH' else None,aspect=30)
-
-                    # breakpoint()
-                    # print(test.values)
-                        # if mode=='observ':
-                        #     breakpoint()
 
 
             else:

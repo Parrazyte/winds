@@ -1224,14 +1224,16 @@ bins_ener=np.arange(6.,9.,2*line_search_e[2])
 
 #creating restricted ploting arrays witht the current streamlit object and lines selections
 abslines_plot_restrict=deepcopy(abslines_plot)
-for i_info in range(len(abslines_plot_restrict)):
-    for i_incer in range(len(abslines_plot_restrict[i_info])):
-        abslines_plot_restrict[i_info][i_incer]=abslines_plot_restrict[i_info][i_incer][mask_lines].T[mask_obj].T
-        
+#re-regularizing the array to have an easier time selecting the axes
+abslines_plot_restrict=np.array([[[sss_elem for sss_elem in ss_elem] for ss_elem in s_elem] for s_elem in abslines_plot])
+abslines_plot_restrict=np.transpose(np.transpose(abslines_plot_restrict.T[mask_obj],(1,0,2,3))[mask_lines],(3,2,0,1))
+
+#same for abslines_ener
 abslines_ener_restrict=deepcopy(abslines_ener)
-for i_incer in range(len(abslines_ener_restrict)):
-    abslines_ener_restrict[i_incer]=abslines_ener_restrict[i_incer][mask_lines].T[mask_obj].T
-    
+abslines_ener_restrict=np.array([elem for elem in abslines_ener])
+abslines_ener_restrict=np.transpose(np.transpose(abslines_ener_restrict,(1,0,2))[mask_lines].T[mask_obj],(1,2,0))
+
+#and the width was created later in the code's writing so it is already regular
 width_plot_restrict=deepcopy(width_plot)
 width_plot_restrict=np.transpose(np.transpose(width_plot_restrict,(1,0,2))[mask_lines].T[mask_obj],(1,2,0))
 
@@ -1550,18 +1552,24 @@ if display_param_withdet:
         st.warning('No detections for current object/date selection. Cannot compute parameter analysis.')
         st.stop()
         
-    #recreating restricted ploting arrays witht the current streamlit object and lines selections    
-    abslines_plot_restrict=deepcopy(abslines_plot)
-    for i_info in range(len(abslines_plot_restrict)):
-        for i_incer in range(len(abslines_plot_restrict[i_info])):
-            abslines_plot_restrict[i_info][i_incer]=abslines_plot_restrict[i_info][i_incer][mask_lines].T[mask_obj].T
-            
-    abslines_ener_restrict=deepcopy(abslines_ener)
-    for i_incer in range(len(abslines_ener_restrict)):
-        abslines_ener_restrict[i_incer]=abslines_ener_restrict[i_incer][mask_lines].T[mask_obj].T
-    
-    width_plot_restrict=deepcopy(width_plot)
-    width_plot_restrict=np.transpose(np.transpose(width_plot_restrict,(1,0,2))[mask_lines].T[mask_obj],(1,2,0))
+    #recreating restricted ploting arrays with the current streamlit object and lines selections
+    abslines_plot_restrict = deepcopy(abslines_plot)
+    # re-regularizing the array to have an easier time selecting the axes
+    abslines_plot_restrict = np.array(
+        [[[sss_elem for sss_elem in ss_elem] for ss_elem in s_elem] for s_elem in abslines_plot])
+    abslines_plot_restrict = np.transpose(np.transpose(abslines_plot_restrict.T[mask_obj], (1, 0, 2, 3))[mask_lines],
+                                          (3, 2, 0, 1))
+
+    # same for abslines_ener
+    abslines_ener_restrict = deepcopy(abslines_ener)
+    abslines_ener_restrict = np.array([elem for elem in abslines_ener])
+    abslines_ener_restrict = np.transpose(np.transpose(abslines_ener_restrict, (1, 0, 2))[mask_lines].T[mask_obj],
+                                       (1, 2, 0))
+
+    # and the width was created later in the code's writing so it is already regular
+    width_plot_restrict = deepcopy(width_plot)
+    width_plot_restrict = np.transpose(np.transpose(width_plot_restrict, (1, 0, 2))[mask_lines].T[mask_obj], (1, 2, 0))
+
     hid_plot_restrict=hid_plot.T[mask_obj].T
     incl_plot_restrict=incl_plot[mask_obj]
     

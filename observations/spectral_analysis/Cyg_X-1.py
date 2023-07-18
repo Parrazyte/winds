@@ -3,6 +3,7 @@
 
 import os
 from xspec import AllModels,AllData, Model,Fit,Plot,Spectrum,Xset
+import glob
 
 from xspec_config_multisp import reset,xPlot,Pset,calc_fit
 from astropy.io import fits
@@ -15,9 +16,9 @@ startdir='/media/parrama/SSD/Observ/Pola/CygX-1'
 os.chdir(startdir)
 
 reset()
-
+Pset(xlog=True)
 Plot.background=True
-Plot.xLog=True
+
 
 def load_first():
     AllData.clear()
@@ -64,28 +65,28 @@ def load_first():
     # sp_nub=Spectrum('nu80902318004B01_sr.grp')
     os.chdir('../../')
 
-    AllData('1:1 INTEGRAL/CygX-1_2651_sum_pha.fits 2:2 NuSTAR/14-06/nu80902318004A01_sr.grp '+
-            '3:3 NuSTAR/14-06/nu80902318004B01_sr.grp')
-    AllData(1).response='INTEGRAL/CygX-1_2651_sum_rbn_rmf.fits'
+    AllData('1:1 NuSTAR/14-06/nu80902318004A01_sr.grp '+
+            '2:2 NuSTAR/14-06/nu80902318004B01_sr.grp '+
+            '3:3 INTEGRAL/CygX-1_2651_sum_pha.fits')
 
-    AllData(2).response='NuSTAR/14-06/nu80902318004A01_sr.rmf'
-    AllData(2).response.arf = 'NuSTAR/14-06/nu80902318004A01_sr.arf'
-    AllData(2).background= 'NuSTAR/14-06/nu80902318004A01_bk.pha'
-
-    AllData(3).response='NuSTAR/14-06/nu80902318004B01_sr.rmf'
-    AllData(3).response.arf = 'NuSTAR/14-06/nu80902318004B01_sr.arf'
-    AllData(3).background= 'NuSTAR/14-06/nu80902318004B01_bk.pha'
-
-    AllData(1).ignore('**-30. 500.-**')
+    AllData(1).response='NuSTAR/14-06/nu80902318004A01_sr.rmf'
+    AllData(1).response.arf = 'NuSTAR/14-06/nu80902318004A01_sr.arf'
+    AllData(1).background= 'NuSTAR/14-06/nu80902318004A01_bk.pha'
     AllData(1).ignore('bad')
+    AllData(1).ignore('**-3. 70.-**')
 
+    AllData(2).response='NuSTAR/14-06/nu80902318004B01_sr.rmf'
+    AllData(2).response.arf = 'NuSTAR/14-06/nu80902318004B01_sr.arf'
+    AllData(2).background= 'NuSTAR/14-06/nu80902318004B01_bk.pha'
     AllData(2).ignore('bad')
     AllData(2).ignore('**-3. 70.-**')
 
+    AllData(3).response = 'INTEGRAL/CygX-1_2651_sum_rbn_rmf.fits'
+    AllData(3).ignore('**-30. 500.-**')
     AllData(3).ignore('bad')
-    AllData(3).ignore('**-3. 70.-**')
 
-def load_second():
+
+def load_second(NICER='obsid'):
 
     AllData.clear()
     AllModels.clear()
@@ -129,50 +130,58 @@ def load_second():
     # sp_nub=Spectrum('nu80902318004B01_sr.grp')
     os.chdir('../../')
 
-    # taking off the grouping of the NICER spectrum to load it from out of the folder
-    with fits.open('NICER/NICERbyObsID/20-06/nicer_obs2_TOTAL.grp', mode='update') as hdul:
-        # if we want to remake a direct group load (but annoying to load in different data groups)
-        # hdul[1].header['RESPFILE'] = './nicer_obs2_TOTAL.rmf'
-        # hdul[1].header['ANCRFILE'] = './nicer_obs2_TOTAL.arf'
-        # hdul[1].header['BACKFILE'] = './nicer_obs2_TOTAL.scorpeonbg'
+    if NICER=='obsid':
 
-        hdul[1].header['RESPFILE'] = ''
-        hdul[1].header['ANCRFILE'] = ''
-        hdul[1].header['BACKFILE'] = ''
+        NICER_gti_grps = ['NICER/NICERbyObsID/20-06/nicer_obs2_TOTAL.grp']
 
-        hdul.flush()
+    elif NICER == 'gtis':
+
+        NICER_gti_grps = glob.glob('NICER/NICERbyGTI/20-06/**.grp')
+
+    #and updating the fits files
+    for elem_gti in NICER_gti_grps:
+        # taking off the grouping of the NICER spectrum to load it from out of the folder
+        with fits.open(elem_gti, mode='update') as hdul:
+            # if we want to remake a direct group load (but annoying to load in different data groups)
 
 
-    AllData('1:1 INTEGRAL/CygX-1_2653_sum_pha.fits 2:2 NuSTAR/20-06/nu80902318006A01_sr.grp ' +
-            '3:3 NuSTAR/20-06/nu80902318006B01_sr.grp 4:4 NICER/NICERbyObsID/20-06/nicer_obs2_TOTAL.grp')
-    AllData(1).response = 'INTEGRAL/CygX-1_2651_sum_rbn_rmf.fits'
+            hdul[1].header['RESPFILE'] = ''
+            hdul[1].header['ANCRFILE'] = ''
+            hdul[1].header['BACKFILE'] = ''
 
-    AllData(2).response = 'NuSTAR/14-06/nu80902318004A01_sr.rmf'
-    AllData(2).response.arf = 'NuSTAR/14-06/nu80902318004A01_sr.arf'
-    AllData(2).background = 'NuSTAR/14-06/nu80902318004A01_bk.pha'
+            hdul.flush()
 
-    AllData(3).response = 'NuSTAR/14-06/nu80902318004B01_sr.rmf'
-    AllData(3).response.arf = 'NuSTAR/14-06/nu80902318004B01_sr.arf'
-    AllData(3).background = 'NuSTAR/14-06/nu80902318004B01_bk.pha'
+    datas=['NuSTAR/20-06/nu80902318006A01_sr.grp','NuSTAR/20-06/nu80902318006B01_sr.grp']
 
-    AllData(4).response='NICER/NICERbyObsID/20-06/nicer_obs2_TOTAL.rmf'
-    AllData(4).response.arf='NICER/NICERbyObsID/20-06//nicer_obs2_TOTAL.arf'
-    AllData(4).background='NICER/NICERbyObsID/20-06/nicer_obs2_TOTAL.scorpeonbg'
+    datas+=NICER_gti_grps
 
-    AllData.notice('all')
+    datas+=['INTEGRAL/CygX-1_2653_sum_pha.fits']
 
-    AllData(1).ignore('**-30. 500.-**')
-    AllData(1).ignore('bad')
+    AllData(' '.join([str(i+1)+':'+str(i+1)+' '+datas[i] for i in range(len(datas))]))
 
-    AllData(2).ignore('bad')
+    AllData(1).response = datas[0].split('_')[0]+'_sr.rmf'
+    AllData(1).response.arf = datas[0].split('_')[0]+'_sr.arf'
+    AllData(1).background = datas[0].split('_')[0]+'_bk.pha'
+
+    AllData(2).response = datas[1].split('_')[0]+'_sr.rmf'
+    AllData(2).response.arf = datas[1].split('_')[0]+'_sr.arf'
+    AllData(2).background = datas[1].split('_')[0]+'_bk.pha'
+
+
+    AllData(1).ignore('**-3. 70.-**')
     AllData(2).ignore('**-3. 70.-**')
 
-    AllData(3).ignore('bad')
-    AllData(3).ignore('**-3. 70.-**')
+    for i_gti,elem_gti in enumerate(NICER_gti_grps):
 
-    AllData(4).ignore('bad')
-    AllData(4).ignore('**-2. 10.-**')
+        AllData(i_gti+3).response=datas[i_gti+2].split('.')[0]+'.rmf'
+        AllData(i_gti+3).response.arf=datas[i_gti+2].split('.')[0]+'.arf'
+        AllData(i_gti+3).background=datas[i_gti+2].split('.')[0]+'.scorpeonbg'
 
+        AllData(i_gti+3).ignore('**-0.5 10.-**')
+
+    #loading integral response
+    AllData(3+len(NICER_gti_grps)).response = 'INTEGRAL/CygX-1_2651_sum_rbn_rmf.fits'
+    AllData(3+len(NICER_gti_grps)).ignore('**-30. 500.-**')
 
 def make_std_mod(fit=False,cut_low_Nustar=True):
 

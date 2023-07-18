@@ -8,12 +8,15 @@ Created on Wed Oct 13 11:01:03 2021
 import matplotlib as mpl
 import matplotlib.pyplot as plt
 
+from astropy.io import fits
+
 from xspec import AllModels,AllData,Fit,Spectrum,Model,Plot,Xset,AllChains,Chain
 
 from fitting_tools import sign_delchis_table,lines_std,lines_e_dict,lines_w_dict,lines_broad_w_dict,\
         link_groups,lines_std_names,def_ftest_threshold,def_ftest_leeway,ang2kev
 
 from general_tools import ravel_ragged
+
 
 from contextlib import redirect_stdout
 import subprocess
@@ -129,7 +132,7 @@ xspec_multmods=\
      gsmooth    kerrconv      rdblur       simpl     mtable{4u1630_best.fits}
 '''.split()
     
-xcolors_grp=['black','red','green','blue','cyan','purple','yellow']
+xcolors_grp=['black','red','lightgreen','blue','cyan','purple','yellow']
 
 #not used anymore now that we take the info directly from the log file
 
@@ -4093,21 +4096,6 @@ class plot_save:
                 self.yErr[i_grp-1]=np.array(Plot.yErr(i_grp))
             except:
                 pass
-            
-        #adding elements relevant to the data plot:
-            
-        if self.datatype=='data':
-            
-            #the background
-            if self.addbg:
-                self.background=np.array([None]*AllData.nGroups)
-                for i_grp in range(1,AllData.nGroups+1):
-                    self.background[i_grp-1]=np.array(Plot.backgroundVals(i_grp))
-            else:
-                self.background=None
-                
-        else:
-            self.background=None
 
         #and the model
         #testing if there is a model loadded
@@ -4183,7 +4171,39 @@ class plot_save:
         else:
             self.addcomps=None
             self.addcompnames=[]
-            
+
+        self.background_x = np.array([None] * max(1, AllData.nGroups))
+        self.background_xErr = np.array([None] * max(1, AllData.nGroups))
+        self.background_y = np.array([None] * max(1, AllData.nGroups))
+        self.background_yErr = np.array([None] * max(1, AllData.nGroups))
+
+        # adding elements relevant to the dataplot
+        if self.datatype == 'data':
+
+            # the background (which necessitates a separate plotting to get the error)
+            if self.addbg:
+
+                try:
+                    Plot('background')
+                except:
+                    pass
+
+                # some of these may exist or not depending on the plot type
+                for i_grp in range(1, max(1, AllData.nGroups) + 1):
+
+                    #skipping if the background is empty
+                    if len(np.nonzero(Plot.y(i_grp))[0])==0:
+                        continue
+
+                    self.background_x[i_grp - 1] = np.array(Plot.x(i_grp))
+
+                    self.background_xErr[i_grp - 1] = np.array(Plot.xErr(i_grp))
+
+                    self.background_y[i_grp - 1] = np.array(Plot.y(i_grp))
+
+                    self.background_yErr[i_grp - 1] = np.array(Plot.yErr(i_grp))
+
+
 def plot_saver(datatypes):
 
     '''wrapper to store multiple plots at once'''
@@ -4208,8 +4228,8 @@ def EW_ang2keV(x,e_line):
     return x*(h_keV*3*10**18)/l_line**2
 
 
-def xPlot(types,axes_input=None,plot_saves_input=None,plot_arg=None,includedlist=None,group_names=None,hide_ticks=True,
-          secondary_x=True,legend_position=None,xlims=None,ylims=None):
+def xPlot(types,axes_input=None,plot_saves_input=None,plot_arg=None,includedlist=None,group_names='auto',hide_ticks=True,
+          secondary_x=True,legend_position=None,xlims=None,ylims=None,label_bg=False):
     
     '''
     Replot xspec plots using matplotib. Accepts custom types:
@@ -4316,13 +4336,41 @@ def xPlot(types,axes_input=None,plot_saves_input=None,plot_arg=None,includedlist
             curr_ax.set_xlim(xlims[0],xlims[1])
         if ylims is not None:
             curr_ax.set_ylim(ylims[0],ylims[1])
-        
+
         for id_grp in range(max(1,curr_save.nGroups)):
         
-            
-            grp_name='' if group_names=='nolabel' else\
-                ('group '+str(id_grp+1) if curr_save.nGroups>1 else '') if group_names is None else group_names_list[id_grp]
-            
+            if group_names=='auto':
+                #auto naming the group from header infos
+
+                try:
+                    with fits.open(AllData(id_grp+1).fileName) as hdul:
+
+                        try:
+                            grp_tel=hdul[1].header['TELESCOP']
+                        except:
+                            grp_tel=''
+
+                        try:
+                            grp_instru=hdul[1].header['INSTRUME']
+                        except:
+                            grp_instru=''
+                        try:
+                            grp_obsid=hdul[1].header['OBS_ID']
+                        except:
+                            try:
+                                grp_obsid=hdul[1].header['OGID']
+                            except:
+                                grp_obsid=''
+                except:
+                    grp_tel=''
+                    grp_instru=''
+                    grp_obsid=''
+
+                grp_name=' '.join([elem for elem in [grp_tel,grp_obsid,grp_instru] if len(elem)>0])
+            else:
+                grp_name='' if group_names=='nolabel' else\
+                    ('group '+str(id_grp+1) if curr_save.nGroups>1 else '') if group_names is None else group_names_list[id_grp]
+
             if curr_save.y[id_grp] is not None:
                 #plotting each data group
                 curr_ax.errorbar(curr_save.x[id_grp],curr_save.y[id_grp],xerr=curr_save.xErr[id_grp],yerr=curr_save.yErr[id_grp],
@@ -4339,10 +4387,10 @@ def xPlot(types,axes_input=None,plot_saves_input=None,plot_arg=None,includedlist
                 
                 #plotting backgrounds
                 #empty backgrounds are stored as 0 values everywhere so we test for that to avoid plotting them for nothing
-                if curr_save.addbg and sum(curr_save.background[id_grp])!=0:
-                    curr_ax.errorbar(curr_save.x[id_grp],curr_save.background[id_grp],xerr=curr_save.xErr[id_grp],
-                                     yerr=curr_save.yErr[id_grp],color=xcolors_grp[id_grp],linestyle='None',elinewidth=0.5,
-                                     marker='x',mew=0.5,label='' if group_names=='nolabel' else grp_name+' background')
+                if curr_save.addbg and curr_save.background_y[id_grp] is not None:
+                    curr_ax.errorbar(curr_save.background_x[id_grp],curr_save.background_y[id_grp],xerr=curr_save.background_xErr[id_grp],
+                                     yerr=curr_save.background_yErr[id_grp],color=xcolors_grp[id_grp],linestyle='None',elinewidth=0.5,
+                                     marker='x',mew=0.5,label='' if not label_bg or group_names=='nolabel' else grp_name+' background')
         
         #### locking the axe limits
         '''

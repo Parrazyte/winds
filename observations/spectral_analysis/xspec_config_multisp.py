@@ -129,10 +129,17 @@ xspec_multmods=\
        cflux    ireflect      kyconv     reflect      thcomp     xilconv
       clumin      kdblur     lsmooth     rfxconv     vashift     zashift
       cpflux     kdblur2     partcov     rgsxsrc     vmshift     zmshift
-     gsmooth    kerrconv      rdblur       simpl     mtable{4u1630_best.fits}
+     gsmooth    kerrconv      rdblur       simpl     
 '''.split()
-    
-xcolors_grp=['black','red','lightgreen','blue','cyan','purple','yellow']
+
+
+xcolors_grp=['black','red','limegreen','blue','cyan','purple','yellow',
+             'black','red','limegreen','blue','cyan','purple','yellow',
+             'black','red','limegreen','blue','cyan','purple','yellow',
+             'black','red','limegreen','blue','cyan','purple','yellow',
+             'black','red','limegreen','blue','cyan','purple','yellow',
+             'black','red','limegreen','blue','cyan','purple','yellow',
+             'black','red','limegreen','blue','cyan','purple','yellow']
 
 #not used anymore now that we take the info directly from the log file
 
@@ -530,7 +537,7 @@ def reset():
     Plot.xAxis='keV'
     Plot.add=True
 
-def model_load(model_saves,mod_name='',mod_number=1,gap_par=None,in_add=False,modclass=AllModels):
+def model_load(model_saves,mod_name='',mod_number=1,gap_par=None,in_add=False,table_dict=None,modclass=AllModels):
 
     '''
     loads a mod_data class into the active xspec model class or all model_data into all the current data groups
@@ -538,9 +545,13 @@ def model_load(model_saves,mod_name='',mod_number=1,gap_par=None,in_add=False,mo
     
     can be used to lad custom models through model_name and mod_number. The default values update the "standard" xspec model
     
-    gap par introduces a gap in the parameter loading. Used for loading with new expressions including new components 
-    in the middle of the model.
-    gap_par must be an interval string, i.e. '1-4'
+    gap par:    introduces a gap in the parameter loading. Used for loading with new expressions
+                including new components in the middle of the model.
+                gap_par must be an interval string, i.e. '1-4'
+
+    in_add:     controls a display of the model and the fit from after the change in the model
+
+    table_dict: inherited argument when using delcomp, to allow to load custom fit table models correctly
 
     '''
     #lowering the chatter to avoid thousands of lines of load messages
@@ -574,8 +585,7 @@ def model_load(model_saves,mod_name='',mod_number=1,gap_par=None,in_add=False,mo
         first_save=model_saves_eff
         
     #creating a model with the new model expression
-    modclass+=(first_save.expression,mod_name,mod_number)
-
+    xModel(first_save.expression,table_dict=table_dict,mod_name=mod_name,mod_number=mod_number)
         
     # 
     # for i_grp in range(len(model_saves_arr)):
@@ -719,6 +729,9 @@ def numbered_expression(expression=None):
     '''
     Return an edit model xspec expression with each component's naming in the current xspec model
     by default, uses the current model expression
+
+    Also returns a dictionnary containing all custom table component and their xspec names
+
     '''
     
     if expression is None:
@@ -727,7 +740,9 @@ def numbered_expression(expression=None):
         string=expression
         
     xspec_str=[]
-    
+
+    dict_tables={}
+
     #variable defining the index of the start of the current word if any
     comp_str=-1
     for i in range(len(string)):
@@ -748,18 +763,67 @@ def numbered_expression(expression=None):
             #storing the word if we arrived at the last char of the string
             if  i==len(string)-1:
              xspec_str+=[string[comp_str:i+1]]
-    
+
     i=0
     #adding numbers by replacing by the actual model component names
     for j,elem in enumerate(xspec_str):
         if elem in '()+-* ':
             continue
-        
+
+        #testing if the component is a table
+        if '{' in xspec_str[j]:
+            if xspec_str[j] not in dict_tables.values():
+                #adding the table
+                dict_tables[AllModels(1).componentNames[i]]=xspec_str[j]
+
         #needs a proper call to AllModels(1) here to be able to use it whenever we want
         xspec_str[j]=AllModels(1).componentNames[i]
         i+=1
             
-    return ''.join(xspec_str)
+    return ''.join(xspec_str),dict_tables
+
+'''
+In order to allow the use of custom atable & mtable components in the fitting architecture,
+we need to replace the mtable model names (which appear when using AllModels.componentNames) with their fits table
+
+in order to do so, we scan for potential mtables in the current model at each addcomp and then load the model with
+a custom function that replaces the expression with the fits
+'''
+
+def xModel(expression,table_dict=None,modclass=AllModels,mod_name='',mod_number=1,return_mod=False):
+
+    '''
+    replace the elements in expression with names stored as custom xspec table model names in table_dict, and replaces
+    accordingly to be able to load the model
+    '''
+
+    #variable expression that will be modified recursively
+    expr_load=expression
+
+    if table_dict is not None:
+
+        table_keys = table_dict.keys()
+        for table_comp in list(table_keys):
+
+            #quick hack to avoid replacing the name inside of the mtable if it matches the component name
+            #note: won't work if several tables have similar name matching a single component
+            expr_load = expr_load.replace(table_dict[table_comp], 'XXXXXXXXXXXXXXX')
+
+            #replacing the table component in the new model expression
+            expr_load=expr_load.replace(table_comp,table_dict[table_comp])
+
+
+            expr_load = expr_load.replace('XXXXXXXXXXXXXXX',table_dict[table_comp])
+
+    #deleting eventual remains of numbered components
+    for i in range(100):
+        if '}_'+str(i) in expr_load:
+            expr_load.replace('}_'+str(i),'}')
+
+    modclass+=(expr_load,mod_name,mod_number)
+
+    if return_mod:
+        return AllModels(1,mod_name)
     
 def addcomp(compname,position='last',endmult=None,return_pos=False,modclass=AllModels,included_list=None,values=None,links=None,frozen=None):
     
@@ -859,7 +923,7 @@ def addcomp(compname,position='last',endmult=None,return_pos=False,modclass=AllM
         comp_custom=None
         comp_split=compname
         
-    if comp_split in xspec_multmods:
+    if comp_split in xspec_multmods or comp_split.startswith('mtable'):
         multipl=True
     #dichotomy between custom models
     
@@ -927,6 +991,8 @@ def addcomp(compname,position='last',endmult=None,return_pos=False,modclass=AllM
         is_model=True
     except:
         is_model=False
+
+        #this one doesn't need to be loaded in a specific way with tables since here there is no model to begin with
         xspec_model=Model(comp_split)
 
     if is_model:
@@ -934,8 +1000,8 @@ def addcomp(compname,position='last',endmult=None,return_pos=False,modclass=AllM
         model_saves=allmodel_data().default
         
         #getting the xspec expression of the current model as well as the list of components
-        num_expr=numbered_expression()
-        
+        num_expr,table_dict=numbered_expression()
+
         #replacing a * by parenthesis for single constant*additive models to have an easier time later
         
         xcomps=AllModels(1).componentNames
@@ -1004,11 +1070,23 @@ def addcomp(compname,position='last',endmult=None,return_pos=False,modclass=AllM
                 
             #inserting at the desired position                
             new_expr=num_expr.replace(xcomp_start,comp_split+('+' if not multipl else '(')+xcomp_start,1)
-            
+
         #introducing the end parenthesis
         if multipl:
-            new_expr=new_expr.replace(xcomp_end,xcomp_end+')',1)
-            
+            try:
+                #note: the 1 is important here to avoid replacing in the wrong component
+                '''
+                here the issue is that we can replace fits table name if they have the name of their model 
+                in their fits name
+                Thus, we temporarily replace the comp_split element by a string that'll never be changed, 
+                then reset it again
+                '''
+                new_expr=new_expr.replace(comp_split,'XXXXXXXXXXXXXXX')
+                new_expr=new_expr.replace(xcomp_end,xcomp_end+')',1)
+                new_expr=new_expr.replace('XXXXXXXXXXXXXXX',comp_split)
+            except:
+                breakpoint()
+
         #returning the expression to its xspec readable equivalent (without numbering)
         for elemcomp in AllModels(1).componentNames:
             if '_' in elemcomp:
@@ -1031,11 +1109,12 @@ def addcomp(compname,position='last',endmult=None,return_pos=False,modclass=AllM
             #We use the component number instead of its name to avoid problems
             
             try:
-                xspec_model=Model(new_expr)
+                xspec_model=xModel(new_expr,table_dict,return_mod=True)
             except:
                 print(new_expr)
                 breakpoint()
                 print(new_expr)
+
             added_ncomps=len(xspec_model.componentNames)-old_ncomps
             shifted_xcomp_start=xspec_model.componentNames[xcomp_start_n+added_ncomps]
             
@@ -1048,7 +1127,7 @@ def addcomp(compname,position='last',endmult=None,return_pos=False,modclass=AllM
             gap_start=AllModels(1).nParameters+1
 
             try:
-                xspec_model=Model(new_expr)
+                xspec_model=xModel(new_expr,table_dict,return_mod=True)
             except:
                 
                 '''
@@ -1063,7 +1142,8 @@ def addcomp(compname,position='last',endmult=None,return_pos=False,modclass=AllM
             
         gap_str=str(gap_start)+'-'+str(gap_end)
         
-        model_load(model_saves,gap_par=gap_str,in_add=True)
+        model_load(model_saves,gap_par=gap_str,in_add=True,table_dict=table_dict)
+
         #we need to recreate the variable name because the model load has overriden it
         xspec_model=AllModels(1)
         
@@ -1306,6 +1386,8 @@ def delcomp(compname,modclass=AllModels,give_ndel=False):
     if multiple components have the same name, use the xspec name of the component you want to delete
     
     give_ndel returns the number of components that had to be deleted. Important for automatic fitting processes
+
+    Note: Deleting atable and mult_table requires using the component names instead of mtable{*.fits}
     '''
     
     first_mod=modclass(1)
@@ -1321,7 +1403,7 @@ def delcomp(compname,modclass=AllModels,give_ndel=False):
     
     
     #the easiest way to fetch the position of the component to delete is to transform the model expression according to xspec namings
-    xspec_expr=numbered_expression(old_exp)          
+    xspec_expr,table_dict=numbered_expression(old_exp)
     
     new_exp_bef=xspec_expr[:xspec_expr.find(compname)].replace(' ','')
     new_exp_aft=xspec_expr[xspec_expr.find(compname)+len(compname):].replace(' ','')
@@ -1494,16 +1576,75 @@ def delcomp(compname,modclass=AllModels,give_ndel=False):
         
     #now we can finally recreate the model
     model_saves[0].expression=new_exp_full
-    
 
-    new_models=model_load(model_saves)
+    new_models=model_load(model_saves,table_dict=table_dict)
 
-        
-        
     if give_ndel:
         return len(id_delcomp_list)
     else:
         return new_models
+
+def par_error(group,par,n_round=3):
+
+    '''
+    returns an array with the error of the chosen parameter
+
+    n_round chooses the rounding of the returned elements
+    if set to auto, uses 1e-3 times the first digit as a rounding reference
+
+    '''
+    val_arr=np.array([AllModels(group)(par).values[0],
+              0 if AllModels(group)(par).error[0]==0 else (AllModels(group)(par).values[0] - AllModels(group)(par).error[0]),
+                      0 if AllModels(group)(par).error[1] == 0 else
+                      AllModels(group)(par).error[1] - AllModels(group)(par).values[0]])
+
+    if n_round is not None:
+
+        return np.array([('%.'+str(n_round)+'e')%(elem) for elem in val_arr],dtype=float)
+    else:
+        return val_arr
+
+def display_mod_errors(n_round=2):
+    '''
+    displays the errors of every parameter in the model
+
+    if n_round is set to auto, rounds automatically to 1e-3 * the first non zero
+    digit of each parameter
+    '''
+    for i_grp in range(1,AllData.nGroups+1):
+        #fetching the name of the component and parameters
+        comp_par=[]
+        for elem_comp in AllModels(i_grp).componentNames:
+            comp_par+=(elem_comp+'.'+np.array(getattr(AllModels(i_grp),elem_comp).parameterNames,dtype=object)).tolist()
+
+        n_max_char=max([len(elem) for elem in comp_par])
+
+        for i_par in range(1,AllModels(i_grp).nParameters+1):
+            par_error_arr=par_error(i_grp,i_par,n_round=n_round)
+
+            '''
+            here we align each part of the display according to different alignment and lengths to get a good display, 
+            see https://www.geeksforgeeks.org/string-alignment-in-python-f-string/ 
+            '''
+
+            par_value_str=('%.'+str(n_round)+'e')%(par_error_arr[0])
+            print_str=f"{i_grp :>3}  "+\
+                      f"{i_par :>3}  "+\
+                      f"{comp_par[i_par - 1]:<{n_max_char}}  "+\
+                      f"{par_value_str:>{n_round+7}} "
+                        #('%.' + str(n_round) + 'e') % (par_error_arr[0])
+
+            if AllModels(i_grp)(i_par).link!='':
+                print_str+='\t'+AllModels(i_grp)(i_par).link
+            elif AllModels(i_grp)(i_par).frozen:
+                print_str+='\tfrozen'
+            else:
+                print_str+='\t-'+('%.'+str(n_round)+'e')%(par_error_arr[1])+\
+                           '\t+'+('%.'+str(n_round)+'e')%(par_error_arr[2])
+            print(print_str)
+
+        print('')
+
 
 def freeze(model=None,modclass=AllModels,unfreeze=False,parlist=None):
     
@@ -4229,7 +4370,8 @@ def EW_ang2keV(x,e_line):
 
 
 def xPlot(types,axes_input=None,plot_saves_input=None,plot_arg=None,includedlist=None,group_names='auto',hide_ticks=True,
-          secondary_x=True,legend_position=None,xlims=None,ylims=None,label_bg=False):
+          secondary_x=True,legend_position=None,xlims=None,ylims=None,label_bg=False,
+          no_name_data='auto',force_ylog_ratio=False):
     
     '''
     Replot xspec plots using matplotib. Accepts custom types:
@@ -4259,6 +4401,10 @@ def xPlot(types,axes_input=None,plot_saves_input=None,plot_arg=None,includedlist
     secondary_x enables plotting an Angstrom top axis or not
     
     legend position forces a specific legend position
+
+    if no_name_data is set to auto,
+    removes the data label for plots with more than 1 panel
+
     '''
     
     if axes_input is None:
@@ -4328,7 +4474,7 @@ def xPlot(types,axes_input=None,plot_saves_input=None,plot_arg=None,includedlist
         curr_ax.set_ylabel(curr_save.labels[1])
         if curr_save.xLog:
             curr_ax.set_xscale('log')
-        if curr_save.yLog:
+        if curr_save.yLog or (plot_type=='ratio' and force_ylog_ratio):
             curr_ax.set_yscale('log')
         
         #this needs to be performed independantly of how many groups there are
@@ -4368,6 +4514,7 @@ def xPlot(types,axes_input=None,plot_saves_input=None,plot_arg=None,includedlist
 
                 grp_name=' '.join([elem for elem in [grp_tel,grp_obsid,grp_instru] if len(elem)>0])
             else:
+                breakpoint()
                 grp_name='' if group_names=='nolabel' else\
                     ('group '+str(id_grp+1) if curr_save.nGroups>1 else '') if group_names is None else group_names_list[id_grp]
 
@@ -4375,7 +4522,7 @@ def xPlot(types,axes_input=None,plot_saves_input=None,plot_arg=None,includedlist
                 #plotting each data group
                 curr_ax.errorbar(curr_save.x[id_grp],curr_save.y[id_grp],xerr=curr_save.xErr[id_grp],yerr=curr_save.yErr[id_grp],
                                  color=xcolors_grp[id_grp],linestyle='None',elinewidth=0.75,
-                                 label='' if group_names=='nolabel' else grp_name)
+                                 label='' if group_names=='nolabel' or (no_name_data=='auto' and i_ax!=len(types_split)-1) else grp_name)
             
             #plotting models
             if 'ratio' not in plot_type and curr_save.model[id_grp] is not None:
@@ -4438,11 +4585,11 @@ def xPlot(types,axes_input=None,plot_saves_input=None,plot_arg=None,includedlist
 
                     try:
                         curr_ax.plot(curr_save.x[id_grp],curr_save.addcomps[id_grp][i_comp],color=colors_addcomp.to_rgba(i_comp),
-                                 label=label_comps[i_comp],linestyle=ls_types[i_comp%3],linewidth=1)
+                                 label=label_comps[i_comp] if id_grp==0 else '',linestyle=ls_types[i_comp%3],linewidth=1)
                     except:
                         try:
                             curr_ax.plot(curr_save.x[0],curr_save.addcomps[id_grp][i_comp],color=colors_addcomp.to_rgba(i_comp),
-                                     label=label_comps[i_comp],linestyle=ls_types[i_comp%3],linewidth=1)
+                                     label=label_comps[i_comp] if id_grp==0 else '',linestyle=ls_types[i_comp%3],linewidth=1)
                         except:
                             breakpoint()
                             print("check if other x work")

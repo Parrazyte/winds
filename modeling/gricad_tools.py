@@ -250,12 +250,14 @@ def create_grid(grid_name, mhd_solutions_path,
                            header=solution_header[1:].replace('\n',''))
 
 
-def create_grid_parfile(grid_folder,mantis_grid_dir,sim_grid_dir,xlum,dr_r,v_resol,stop_d):
+def create_grid_parfile(grid_folder,save_grid_dir,sim_grid_dir,mode,xlum,dr_r,v_resol,stop_d):
 
     '''
     Inserts a parfile inside an already existing grid folder structure
 
-    the list of parameters is the list of arguments of cigri_wrapper
+    the list of parameters is the list of arguments of oar_wrapper
+
+    note: there is a line in oar_wrapper for different sed extensions. Might need to be added here in the future
     '''
 
     sol_files = glob.glob(grid_folder+'/**/eps**.txt', recursive=True)
@@ -283,9 +285,8 @@ def create_grid_parfile(grid_folder,mantis_grid_dir,sim_grid_dir,xlum,dr_r,v_res
 
         #direct names of the xstar_wind function arguments.
         parameters[i_sol]={'solution_rel_dir':sol_rel_dir,
-                           'mantis_grid_dir':mantis_grid_dir,
+                           'save_grid_dir':save_grid_dir,
                            'comput_grid_dir':sim_grid_dir,
-
                            'mdot_obs':sol_mdot,
                            'xlum':str(xlum),
                            'm_BH':sol_m_bh,
@@ -294,6 +295,7 @@ def create_grid_parfile(grid_folder,mantis_grid_dir,sim_grid_dir,xlum,dr_r,v_res
                            'dr_r':str(dr_r),
                            'stop_d_input':str(stop_d),
                            'v_resol': str(v_resol),
+                           'mode':mode,
                            }
 
     #writing in the file

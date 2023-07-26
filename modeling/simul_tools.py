@@ -169,14 +169,15 @@ m2cm = 100.0
 
 
 
-def cigri_wrapper(solution_rel_dir,mantis_grid_dir,sim_grid_dir,
+def oar_wrapper(solution_rel_dir,save_grid_dir,sim_grid_dir,
                   mdot_obs,xlum,m_BH,
                   ro_init, dr_r,stop_d_input,v_resol,
+                  mode='standard',
                   sol_file='auto',
-                  SED_file='auto'):
+                  SED_file='auto_.dat'):
 
     '''
-    wrapper for cigri grid xstar computations
+    wrapper for grid xstar computations
 
     Note: the first parameter is used to define grid process names so it must be different for each process,
           hence why we put the solution grid directory, which are different for every solution
@@ -185,12 +186,18 @@ def cigri_wrapper(solution_rel_dir,mantis_grid_dir,sim_grid_dir,
 
     Args:
         solution_rel_dir: solution relative directory inside the grid structure
-                          (will be added to both mantis_dir and simdir)
-        mantis_grid_dir: mantis grid directory, where all the files will be saved
-        sim_grid_dir: computation grid directory, where all the xstar computations will be ran
+                          (will be added to both save_dir and simdir)
+
+        save_grid_dir: save grid directory, where all the files will be saved
+
+        sim_grid_dir: computation grid directory, where all the xstar computations will be run
 
         mdot_obs,m_BH,xlum: SED parameters for xstar
         ro_init,dr_r,v_resol,stop_d_input: box parameters for xstar
+
+        mode: changes the save behavior
+            -cigrid: uses mantis as a save folder. save_grid_dir is expected to be a mantis absolute path
+            -standard: uses a standard save folder with normal copying commands
 
         sol_file: naming of the sol file inside solution_rel_dir. If set to 'auto',
                  assumes the solution file name from the directory structure
@@ -213,16 +220,31 @@ def cigri_wrapper(solution_rel_dir,mantis_grid_dir,sim_grid_dir,
         SED_rel_path=SED_file
 
     simdir=os.path.join(sim_grid_dir,solution_rel_dir)
-    mantis_dir=os.path.join(mantis_grid_dir,solution_rel_dir)
+
+    save_dir=os.path.join(save_grid_dir,solution_rel_dir)
 
     os.system('mkdir -p'+simdir)
 
     #copying all the initial files and the content of the mantis directory to the simdir
-    download_mantis(mantis_dir,simdir,load_folder=True)
-    download_mantis(os.path.join(mantis_grid_dir,SED_rel_path),simdir)
+    if mode=='cigrid':
 
-    #this shouldn't be needed
-    #download_mantis(os.path.join(mantis_grid_dir, solution_rel_path), simdir)
+        #downloading the elements in the save directory
+        download_mantis(save_dir,simdir,load_folder=True)
+
+        #and the SED
+        download_mantis(os.path.join(save_grid_dir,SED_rel_path),simdir)
+
+        #this shouldn't be needed
+        #download_mantis(os.path.join(mantis_grid_dir, solution_rel_path), simdir)
+
+    elif mode=='standard':
+
+        #copying from the save to the sim
+        os.system('cp '+os.path.join(save_dir,simdir)+'/* '+simdir)
+
+        #copying the SED file
+        os.system('cp '+os.path.join(save_grid_dir,SED_rel_path)+' '+simdir)
+
 
     #extracting the name for the function call below since we're going in simdir
     SED_name=SED_rel_path.split('/')[-1]
@@ -234,11 +256,11 @@ def cigri_wrapper(solution_rel_dir,mantis_grid_dir,sim_grid_dir,
     xstar_wind(solution_name,SED_path=SED_name,mdot_obs=mdot_obs,xlum=xlum,outdir='./',
                m_BH=m_BH,
                ro_init=ro_init,dr_r=dr_r,stop_d_input=stop_d_input,v_resol=v_resol,
-               comput_mode='gricad',mantis_folder=mantis_dir)
+               comput_mode='server' if mode=='standard' else mode,save_folder=save_dir)
 
 
 def xstar_func(spectrum_file,lum,t_guess,n,nh,xi,vturb_x,nbins,nsteps=1,niter=100,lcpres=0,path_logpars=None,
-               dict_box=None,comput_mode='local',mantis_folder='',no_write=False,extract_transmitted=True,
+               dict_box=None,comput_mode='local',save_folder='',no_write=False,extract_transmitted=True,
                headas_folder=None):
     
     '''
@@ -340,10 +362,13 @@ def xstar_func(spectrum_file,lum,t_guess,n,nh,xi,vturb_x,nbins,nsteps=1,niter=10
         
         file_edit(path_logpars,'\t'.join([str(nbox),str(i_box_final),spectrum_file]),parlog_str,parlog_header)
 
-        #first update on mantis before the xstar run
-        if comput_mode=='gricad':
-            upload_mantis(spectrum_file,mantis_folder,delete_sp=True)
+        #first save before the xstar run
+        if comput_mode in ['server','cigrid']:
 
+            if comput_mode=='cigrid':
+                upload_mantis(spectrum_file,save_folder,delete_previous=True)
+            elif comput_mode=='server':
+                os.system('cp '+spectrum_file+' '+save_folder)
 
     px.run_xstar(xpar,xhpar,headas_folder)
 
@@ -377,16 +402,19 @@ def xstar_func(spectrum_file,lum,t_guess,n,nh,xi,vturb_x,nbins,nsteps=1,niter=10
         np.savetxt('./xout_transmitted_'+str(nbox)+'_'+str(i_box_final)+'.txt', out_arr,
                    header=str(len(out_arr)), delimiter='  ', comments='')
 
-    # second update on mantis for the modified logpar and the log file
-    if comput_mode == 'gricad':
-        upload_mantis(path_logpars, mantis_folder)
-        upload_mantis('./xout_log_global.log',mantis_folder)
+    # second save for the modified logpar and the log file
+    if comput_mode in ['server','cigrid']:
 
+        if comput_mode=='cigrid':
+            upload_mantis(path_logpars, save_folder)
+            upload_mantis('./xout_log_global.log',save_folder)
+        elif comput_mode=='server':
+            os.system('cp '+path_logpars+' '+save_folder)
 
 def xstar_wind(solution,SED_path,mdot_obs,xlum,outdir,
                p_mhd_input=None,m_BH=8,
                ro_init=6.,dr_r=0.05,stop_d_input=1e6,v_resol=85.7,
-               chatter=0,reload=True,comput_mode='local',mantis_folder='',
+               chatter=0,reload=True,comput_mode='local',save_folder='',
                force_ro_init=False,no_turb=False,cap_dr_resol=True,no_write=False,
                grid_type="standard",custom_grid_headas=None):
     
@@ -405,7 +433,7 @@ def xstar_wind(solution,SED_path,mdot_obs,xlum,outdir,
 
         p_mhd is generally given in the solution, but if it's not (in local),
          it can be directly inputted through a parameter
-        in gricad mode, p_mhd is directly in the solution file and as such
+        in server/cigrid mode, p_mhd is directly in the solution file and as such
 
 
         stop_d is a single (or list of) stop distances in units of Rg
@@ -457,20 +485,23 @@ def xstar_wind(solution,SED_path,mdot_obs,xlum,outdir,
     Computation mode:
         -local:
             standard behavior, computes everything in the outdir directory
-            
-        -gricad:
-            setup for grid computation on gricad (using Cigri on Dahu & Bigfoot) 
+
+
+        -server/cigrid:
+            setup for grid computation on server. main difference is save impementation
+
+            cigrid (using Cigri on Dahu & Bigfoot)
                 
                 to be implemented for Luke:
                     -fetches from Mantis the current last input spectrum and parameter files when starting a job
                     -saves to Mantis the current input spectrum before each xstar run
                 
                 -saves each final transmitted spectrum, par log file, global xout log, (obtained through compacting of each individual xout log),
-                and box data files to Mantis at the "mantis_folder" location.
-                NOTE: if "mantis_folder" is set to "=sol", uses the mhd solution's folder as the mantis save folder
-                
+                and box data files to either  at the "save_folder" location.
                 -(with "clean" option) cleans all the individual spectra at the end of the task to gain space
-                
+
+            server:
+                same behavior but uses a save_dir in a normal arborescence
 
     Notes on the python conversion:
         -since array numbers starts at 0, we use "index" box numbers (starting at 0) and adapt all of the consequences,
@@ -645,11 +676,15 @@ def xstar_wind(solution,SED_path,mdot_obs,xlum,outdir,
     else:
         stop_d=stop_d_input
 
-    #using the solution directory for the mantis save if asked to
-    if mantis_folder=="=sol":
-        mantis_folder_use=solution[:solution.rfind('/')]
-    else:
-        mantis_folder_use=mantis_folder
+    #deprecated because the solution path is not in the save atm
+    #using the solution directory for the mantis save if asked to to gain space in the function call
+    # if save_folder=="=sol":
+    #     save_folder_use=solution[:solution.rfind('/')]
+    # else:
+    #     save_folder_use=save_folder
+
+    save_folder_use=save_folder
+
 
     #chatter value, 0 for not print, 1 for printing
     if chatter>=10:
@@ -710,7 +745,7 @@ def xstar_wind(solution,SED_path,mdot_obs,xlum,outdir,
     Rg_SI = 0.5*Rs_SI
     Rg_cgs = Rg_SI*m2cm
 
-    if comput_mode=='gricad':
+    if comput_mode in ['server','cigrid']:
         #loading the solution file
         parlist = np.loadtxt(solution)
 
@@ -1373,9 +1408,12 @@ def xstar_wind(solution,SED_path,mdot_obs,xlum,outdir,
         
         write_xstar_infos(i_box+1,vobsx,'./'+outdir+'/xstar_output_details.dat')
 
-        if comput_mode=='gricad':
-            upload_mantis('./'+outdir+'/xstar_output_details.dat',mantis_folder_use)
-        
+        if comput_mode in ['server','cigrid']:
+            if comput_mode=='cigrid':
+                upload_mantis('./'+outdir+'/xstar_output_details.dat',save_folder_use)
+            elif comput_mode=='server':
+                os.system('cp '+'./'+outdir+'/xstar_output_details.dat'+' '+save_folder_use)
+
         ####!* Computing spectra and blueshift for the final box depending on stop_dist.
 
         if i_box+1==nbox_stop[i_box_final]:
@@ -1436,7 +1474,7 @@ def xstar_wind(solution,SED_path,mdot_obs,xlum,outdir,
             #using xlum_final here to avoid overwriting xlum_eff if using more than a single stop distance
             xstar_func(xstar_input,xlum_final,tp,xpx,xpxcol,zeta,vturb_x,nbins=nbins,
                        path_logpars=path_log_xpars,dict_box=dict_box,no_write=no_write,
-                       headas_folder=headas_folder,mantis_folder=mantis_folder_use)
+                       headas_folder=headas_folder,save_folder=save_folder_use)
             
             os.chdir(currdir)
             
@@ -1453,10 +1491,14 @@ def xstar_wind(solution,SED_path,mdot_obs,xlum,outdir,
             #writing the infos with the final iteration
             write_xstar_infos(i_box+1,vobsx,'./'+outdir+'/xstar_output_details_final.dat')
 
-            if comput_mode == 'gricad':
+            if comput_mode in['server','cigrid']:
 
-                upload_mantis(xstar_input,mantis_folder_use)
-                upload_mantis('./' + outdir + '/xstar_output_details_final.dat', mantis_folder_use)
+                if comput_mode=='cigrid':
+                    upload_mantis(xstar_input,save_folder_use)
+                    upload_mantis('./' + outdir + '/xstar_output_details_final.dat', save_folder_use)
+                elif comput_mode=='server':
+                    os.system('cp '+xstar_input+' '+save_folder_use)
+                    os.system('cp ./' + outdir + '/xstar_output_details_final.dat '+save_folder_use)
 
             #removing the standard xstar output to gain space
             os.system('rm -f '+outdir+'/xout_*.fits')

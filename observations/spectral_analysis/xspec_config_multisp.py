@@ -248,17 +248,18 @@ class allmodel_data:
         else:
             self.scorpeon=None
             
-    def load(self):
+    def load(self,verbose=False):
                                 
         for elem_mod,elem_key in zip(self.mod_list,self.mod_keys):
-            model_load(getattr(self,elem_mod),mod_name='' if elem_mod=='default' else elem_mod,mod_number=elem_key)
+            model_load(getattr(self,elem_mod),mod_name='' if elem_mod=='default' else elem_mod,mod_number=elem_key,
+                       verbose=verbose)
 
         xchatter=Xset.chatter
         xlogchatter=Xset.logChatter
         
         #doing this silently to avoid surcharching the screen and log files        
-        Xset.chatter=0
-        Xset.logChatter=0
+        Xset.chatter=10 if verbose else 0
+        Xset.logChatter=10 if verbose else 0
         
         if 'scorpeon' in dir(self):
             xscorpeon.load(scorpeon_save=self.scorpeon)
@@ -288,7 +289,14 @@ class model_data:
         frozen=np.zeros(self.npars).astype(bool)
         for  i in range(1,self.npars+1):
             values[i-1]=xspec_model(i).values
-            links[i-1]=xspec_model(i).link.replace('= p','')
+
+            # safeguard against linked parameters with values out of their bounds
+            if values[i-1][0] < values[i-1][2]:
+                values[i-1][2] = values[i-1][0]
+            if values[i-1][0] > values[i-1][5]:
+                values[i-1][5] = values[i-1][0]
+
+            links[i-1]=xspec_model(i).link.replace('= ','')
             frozen[i-1]=xspec_model(i).frozen
         self.values=values
         self.links=links
@@ -311,7 +319,14 @@ class model_data:
         for elem_comp in new_comp_order:
             for elem_par in getattr(self,elem_comp).pars:
                 self.values[id_par]=getattr(getattr(self,elem_comp),elem_par).values
-                self.links[id_par]=getattr(getattr(self,elem_comp),elem_par).link.replace('= p','')
+
+                #safeguard against linked parameters with values out of their bounds
+                if self.values[0]<self.values[2]:
+                    self.values[2]=self.values[0]
+                if self.values[0]>self.values[5]:
+                    self.values[5]=self.values[0]
+
+                self.links[id_par]=getattr(getattr(self,elem_comp),elem_par).link.replace('=','')
                 self.frozen[id_par]=getattr(getattr(self,elem_comp),elem_par).frozen
                 id_par+=1
 
@@ -481,7 +496,7 @@ class scorpeon_group_save:
         
         self.values=[model(i_par+1).values for i_par in range(model.nParameters)]
     
-        self.link=[model(i_par+1).link.replace('= p','') for i_par in range(model.nParameters)]
+        self.link=[model(i_par+1).link.replace('=','') for i_par in range(model.nParameters)]
             
         self.frozen=[model(i_par+1).frozen for i_par in range(model.nParameters)]
             
@@ -506,7 +521,7 @@ class parameter_data:
     
     def __init__(self,xspec_parameter):
         self.values=xspec_parameter.values
-        self.link=xspec_parameter.link.replace('= p','')
+        self.link=xspec_parameter.link.replace('=','')
         self.frozen=xspec_parameter.frozen     
     
 def par_degroup(parnumber,mod_name=''):
@@ -537,7 +552,8 @@ def reset():
     Plot.xAxis='keV'
     Plot.add=True
 
-def model_load(model_saves,mod_name='',mod_number=1,gap_par=None,in_add=False,table_dict=None,modclass=AllModels):
+def model_load(model_saves,mod_name='',mod_number=1,gap_par=None,in_add=False,table_dict=None,modclass=AllModels,
+               verbose=False):
 
     '''
     loads a mod_data class into the active xspec model class or all model_data into all the current data groups
@@ -558,8 +574,8 @@ def model_load(model_saves,mod_name='',mod_number=1,gap_par=None,in_add=False,ta
     prev_chatter=Xset.chatter
     prev_logchatter=Xset.logChatter
     
-    Xset.chatter=0
-    Xset.logChatter=0
+    Xset.chatter=10 if verbose else 0
+    Xset.logChatter=10 if verbose else 0
     
     if gap_par is not None:
         gap_start=int(gap_par.split('-')[0])
@@ -616,8 +632,9 @@ def model_load(model_saves,mod_name='',mod_number=1,gap_par=None,in_add=False,ta
                     
                     #we add 1 to the gap length since the lower bound is included in the gap                    
                     parload_grp[i_par]=str(save_grp.values[i_par-1-(gap_end-gap_start+1)])[1:-1]
-                    
+
         xspec_mod_grp.setPars(parload_grp)
+
 
     #we load directly all the values dictionnaries before the rest to avoid problems with links if the intervals don't follow
     for i_grp,save_grp in enumerate(model_saves_arr):
@@ -629,7 +646,7 @@ def model_load(model_saves,mod_name='',mod_number=1,gap_par=None,in_add=False,ta
 
             if gap_par is None:
                 #we parse the link string to get the parameter number back
-                xspec_mod_grp(i_par).link=save_grp.links[i_par-1].replace('= p','')
+                xspec_mod_grp(i_par).link=save_grp.links[i_par-1].replace('=','')
                 
                 #the if is just there to avoid useless prints        
                 if xspec_mod_grp(i_par).frozen!=save_grp.frozen[i_par-1]:
@@ -652,17 +669,34 @@ def model_load(model_saves,mod_name='',mod_number=1,gap_par=None,in_add=False,ta
                     
                     in each group we also need to shift once more links pointing to after the gap start in that group
                     '''
-                    
+                    #NOTE: as of now, only works with link expressions using a single parameter
+
                     if save_grp.links[i_shifted-1]!='':
+
+                        #fetching the link parameter inside the link expression
+                        save_grp_link_par_str=[elem for elem in split_str_expr(save_grp.links[i_shifted-1])
+                                               if 'p' in elem]
+
+                        assert len(save_grp_link_par_str)==1,'link with several parameters detected.'+\
+                                                        'Custom functions update required'
+
+                        save_grp_link_par_str=save_grp_link_par_str[0]
+
+                        #getting something that can be transformed back to an int
+                        save_grp_link_par=save_grp_link_par_str.replace('=','').replace('p','')
+
                         #the shift by one and 0 minimum is here to allow all the last parameters of each groups to stay in the group below
-                        link_pointer=str(int(save_grp.links[i_shifted-1].replace('= p',''))+(gap_end-gap_start+1)*\
-                                         (max(int(save_grp.links[i_shifted-1].replace('= p',''))-1,0)//first_save.npars))
+                        link_pointer=str(int(save_grp_link_par)+(gap_end-gap_start+1)*\
+                                         (max(int(save_grp_link_par)-1,0)//first_save.npars))
                         
                         #here we test if there were links to after the gap in a single group
                         #The second test is here for the last parameter of the group
-                        if int(save_grp.links[i_shifted-1].replace('= p',''))%first_save.npars>=gap_start or \
-                            (int(save_grp.links[i_shifted-1].replace('= p',''))%first_save.npars==0 and first_save.npars>=gap_start):                        
+                        if int(save_grp_link_par)%first_save.npars>=gap_start or \
+                            (int(save_grp_link_par)%first_save.npars==0 and first_save.npars>=gap_start):
                             link_pointer=str(int(link_pointer)+(gap_end-gap_start+1))
+
+                        #replacing the pointer by the real expression with the new parameter
+                        link_pointer=save_grp.links[i_shifted-1].replace(save_grp_link_par_str,'p'+link_pointer)
                     else:
                         link_pointer=save_grp.links[i_shifted-1]
                             
@@ -723,7 +757,34 @@ def editmod(new_expression,model=None,modclass=AllModels,pointers=None):
             save_grp.update()
             
         return model_load(model_saves)
-    
+
+def split_str_expr(string):
+
+    xspec_str=[]
+
+    #variable defining the index of the start of the current word if any
+    comp_str=-1
+
+    for i in range(len(string)):
+        if string[i] in '()+-* ':
+            # adding the current punctuation if the last element was also a ponctuation
+            if comp_str == -1:
+                xspec_str += [string[i]]
+            # in the other case, adding the previous word which started from the index
+            else:
+                xspec_str += [string[comp_str:i], string[i]]
+
+            # and resetting the word count
+            comp_str = -1
+        else:
+            # starting the word count at the current index
+            if comp_str == -1:
+                comp_str = i
+            # storing the word if we arrived at the last char of the string
+            if i == len(string) - 1:
+                xspec_str += [string[comp_str:i + 1]]
+
+    return xspec_str
 def numbered_expression(expression=None):
 
     '''
@@ -738,31 +799,10 @@ def numbered_expression(expression=None):
         string=AllModels(1).expression
     else:
         string=expression
-        
-    xspec_str=[]
 
     dict_tables={}
 
-    #variable defining the index of the start of the current word if any
-    comp_str=-1
-    for i in range(len(string)):
-        if string[i] in '()+-* ':
-            #adding the current punctuation if the last element was also a ponctuation
-            if comp_str==-1:
-                xspec_str+=[string[i]]
-            #in the other case, adding the previous word which started from the index
-            else:
-                xspec_str+=[string[comp_str:i],string[i]]
-            
-            #and resetting the word count
-            comp_str=-1
-        else:
-            #starting the word count at the current index
-            if comp_str==-1:
-                comp_str=i
-            #storing the word if we arrived at the last char of the string
-            if  i==len(string)-1:
-             xspec_str+=[string[comp_str:i+1]]
+    xspec_str=split_str_expr(string)
 
     i=0
     #adding numbers by replacing by the actual model component names
@@ -1266,7 +1306,7 @@ def addcomp(compname,position='last',endmult=None,return_pos=False,modclass=AllM
 
     '''laor specifics'''
     
-    if comp_split=='laor':
+    if comp_split=='laor' and comp_custom is not None:
         #selecting a broad energy range
         if 'FeKa' in comp_custom:
             xspec_model(gap_end-5).values=[6.6,0.01,6.4,6.4,7.06,7.06]
@@ -1294,7 +1334,7 @@ def addcomp(compname,position='last',endmult=None,return_pos=False,modclass=AllM
                 if np.argwhere(np.array(added_link_group)\
                 ==gaussian_type)[0][0]>np.argwhere(np.array(added_link_group)==comp.compname.split('_')[0])[0][0]:
                     #if we detect a component from the same group, its first parameter should be its vashift
-                    xspec_model(gap_end-3).link=str(comp.parlist[0])
+                    xspec_model(gap_end-3).link='p'+str(comp.parlist[0])
                     break
 
     '''
@@ -1547,8 +1587,20 @@ def delcomp(compname,modclass=AllModels,give_ndel=False):
             the goal of the concatenate here is to add the zero to consider when the link points to the last parameter of the group if this 
             parameter is among the deleted one
             '''
+
+            # fetching the link parameter inside the link expression
+            link_par_str = [elem for elem in split_str_expr(link) if 'p' in elem]
+
+            assert len(link_par_str) == 1, 'link with several parameters detected.' + \
+                                                'Custom functions update required'
+
+            link_par_str = link_par_str[0]
+
+            # getting something that can be transformed back to an int
+            link_par = link_par_str.replace('=', '').replace('p', '')
+
             
-            if int(link)%AllModels(1).nParameters in np.concatenate((np.arange(skippar_start+1,skippar_start+skippar_n+1),
+            if int(link_par)%AllModels(1).nParameters in np.concatenate((np.arange(skippar_start+1,skippar_start+skippar_n+1),
                                                     np.array([0]) if skippar_start+skippar_n==AllModels(1).nParameters else np.array([]))).astype(int):
                 print('\nParameter '+str(grp_id*AllModels(1).nParameters+par_id+1)+
                       ' was linked to one of the deleted components parameters. Deleting link.')
@@ -1565,9 +1617,13 @@ def delcomp(compname,modclass=AllModels,give_ndel=False):
                 
             #shifting the link value if it points to a parameter originally after the deleted components
             #the 0 test accounts for the very last parameter, which will always need to be shifted if it wasn't in the deleted comps
-            elif int(link)%AllModels(1).nParameters>=skippar_start+skippar_n or int(link)%AllModels(1).nParameters==0:
-                mod_data_grp.links[par_id]=str(int(mod_data_grp.links[par_id])-skippar_n)
-            
+            elif int(link_par)%AllModels(1).nParameters>=skippar_start+skippar_n or int(link_par)%AllModels(1).nParameters==0:
+
+                new_link_par=str(int(link_par)-skippar_n)
+
+                mod_data_grp.links[par_id]=link_par_str.replace(link_par_str,'p'+new_link_par)
+
+
         mod_data_grp.links[skippar_start:-skippar_n]=mod_data_grp.links[skippar_start+skippar_n:]
         mod_data_grp.links=mod_data_grp.links[:-skippar_n]
             
@@ -3419,7 +3475,7 @@ class fitmod:
             #if the parameter is linked to something we note it instead of fetching the uncertainty:
             if AllModels(1)(vashift_parid).link!='':
                 #identifying the parameter it is linked to
-                vashift_parlink=int(AllModels(1)(vashift_parid).link.replace('= p',''))
+                vashift_parlink=int(AllModels(1)(vashift_parid).link.replace('=',''))
                 #fetching the name of the component associated to this parameter
                 for comp in [elem for elem in self.includedlist if elem is not None]:
                     if vashift_parlink in comp.parlist:
@@ -4402,8 +4458,8 @@ def xPlot(types,axes_input=None,plot_saves_input=None,plot_arg=None,includedlist
     
     legend position forces a specific legend position
 
-    if no_name_data is set to auto,
-    removes the data label for plots with more than 1 panel
+    no_name_data: -if set to auto, removes the data label for plots with more than 1 panel
+                    and rearranges the position when there are many datagroups
 
     '''
     
@@ -4600,8 +4656,16 @@ def xPlot(types,axes_input=None,plot_saves_input=None,plot_arg=None,includedlist
         if 'delchi' in plot_type:
             curr_ax.axhline(y=0,xmin=0,xmax=1,color='green')
                 
-        #plotting the legend for the first axe    
-        curr_ax.legend(loc=legend_position)
+        #plotting the legend in horizontal and below the main result if necessary
+        if AllData.nGroups>=5 and no_name_data=='auto':
+            if i_ax==0:
+                curr_ax.legend(loc=legend_position)
+            if i_ax==len(types_split)-1:
+                curr_ax.legend(loc='lower center',
+                               bbox_to_anchor=(0.5,-0.3-0.2*np.ceil(AllData.nGroups/3)),ncols=3)
+
+        else:
+            curr_ax.legend(loc=legend_position)
     
     if axes_input is None:
         fig.tight_layout()

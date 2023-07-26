@@ -8,7 +8,7 @@ import glob
 import time
 
 from xspec_config_multisp import reset,xPlot,Pset,calc_fit, calc_error, addcomp,delcomp,\
-    display_mod_errors
+    display_mod_errors,allmodel_data,calc_fit
 from astropy.io import fits
 
 import matplotlib as mpl
@@ -199,12 +199,85 @@ def load_second(NICER='gtis', integral=True):
         AllData(3+len(NICER_gti_grps)).response = 'INTEGRAL/CygX-1_2651_sum_rbn_rmf.fits'
         AllData(3+len(NICER_gti_grps)).ignore('**-30. 500.-**')
 
-def load_nathan_ref_1():
+def load_nathan_ref_1(prefit=True,integral=False):
     load_first(integral=False)
     Xset.restore('full_reflection__2.xcm')
-def load_nathan_ref_2():
-    load_second(NICER='gtis',integral=False)
-    Xset.restore('full_reflection__3.xcm')
+    if prefit:
+        calc_fit(timeout=30)
+
+    if integral:
+        mod_init=allmodel_data()
+        AllModels.clear()
+        AllData.clear()
+
+        load_first()
+        mod_init.load()
+
+        AllModels(3)(1).link=''
+        AllModels(3)(1).frozen=False
+
+def load_nathan_ref_2(prefit=True,integral=False,nolow=False):
+
+    if not integral:
+        load_second(NICER='gtis',integral=False)
+        Xset.restore('full_reflection__3.xcm')
+        if prefit:
+            calc_fit(timeout=30)
+    else:
+        Xset.restore("ref_3_post_fit.xcm")
+
+    if integral:
+        mod_init=allmodel_data()
+
+        AllModels.clear()
+        AllData.clear()
+        AllModels.systematic=0.
+
+        load_second()
+
+        mod_init.load()
+
+        AllModels(16)(1).link=''
+        AllModels(16)(1).frozen=False
+
+        if nolow:
+            AllModels(1)(8).frozen=True
+            AllModels(1)(9).frozen = True
+            AllModels(1)(10).frozen = True
+
+            #ignoring the lower part of the NICER data
+            for i in range(3,16):
+                AllData(i).ignore('**-2.5')
+
+            #fixing the low E gaussian values
+            #the E and sigma are in the first datagroup and the norm in the first nicer
+            #datagroup (third)
+            AllModels(1)(43).frozen=True
+            AllModels(1)(44).frozen = True
+            AllModels(3)(45).frozen = True
+            AllModels(1)(46).frozen = True
+            AllModels(1)(47).frozen = True
+            AllModels(3)(48).frozen = True
+
+            #same for the first gabs, who's entirely from the nicer datagroup
+            AllModels(3)(3).frozen=True
+            AllModels(3)(4).frozen = True
+            AllModels(3)(5).frozen=True
+
+            #and the edge
+
+            AllModels(3)(6).frozen = True
+            AllModels(3)(7).frozen=True
+
+            #approaching the normalization factor of some parameter else the fit crashes
+            AllModels(16)(1).values = 4.95
+
+            #putting the line normalizations to zero
+            AllModels(3)(45).values=0
+            AllModels(3)(48).values=0
+            AllModels(3)(5).values=0
+            AllModels(3)(7).values=0
+
 def load_nathan_emp_1():
     load_first(integral=False)
     Xset.restore('empirical__2.xcm')
@@ -213,9 +286,31 @@ def load_nathan_emp_1():
     AllModels.systematic=0
     Fit.perform()
 
-def load_nathan_emp_2():
+def load_nathan_emp_2(integral=False,nolow=False):
+
     load_second(NICER='gtis',integral=False)
     Xset.restore('empirical__3.xcm')
+
+    if integral:
+        mod_init=allmodel_data()
+        AllModels.clear()
+        AllData.clear()
+        AllModels.systematic=0.
+
+        load_second()
+        mod_init.load()
+
+        AllModels(16)(1).link=''
+        AllModels(16)(1).frozen=False
+
+        if nolow:
+            AllModels(1)(3).frozen=True
+            AllModels(1)(4).frozen = True
+            AllModels(1)(5).frozen = True
+
+            #ignoring the lower part of the NICER data
+            for i in range(3,16):
+                AllData(i).ignore('**-2.5')
 
 def nathan_mod_refl():
 
@@ -289,6 +384,7 @@ def nathan_mod_emp(integral=True,systematics=False,custom=False):
 
     if custom:
         delcomp('smedge')
+        #delcomp('laor')
         AllData(3).ignore('**-2.5')
 
         #freezing the nH values since it's mostly unconstrained with this energy restriction
@@ -316,6 +412,20 @@ def nathan_mod_emp(integral=True,systematics=False,custom=False):
             AllModels(i_grp)(2).values=1
             AllModels(i_grp)(2).frozen=True
 
+    if custom:
+        AllModels(2)(1).frozen=False
+
+        Fit.perform()
+
+        #re-adding the smedge with the correct parameters
+        addcomp('smedge',position=5)
+        AllModels(1)(9).values=[8.,0.,0.1,7.,7.,9.,9.]
+        AllModels(1)(9).frozen=False
+        AllModels(1)(12).values=7
+        AllModels(1)(12).frozen=True
+
+
+        Fit.perform()
 
 def make_std_mod(fit=False,cut_low_Nustar=True):
 

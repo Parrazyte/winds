@@ -202,6 +202,10 @@ def load_second(NICER='gtis', integral=True):
 def load_nathan_ref_1(prefit=True,integral=False):
     load_first(integral=False)
     Xset.restore('full_reflection__2.xcm')
+
+    # extending the energy range for simpl
+    AllModels.setEnergies('0.05 1000 1000 log')
+
     if prefit:
         calc_fit(timeout=30)
 
@@ -216,11 +220,18 @@ def load_nathan_ref_1(prefit=True,integral=False):
         AllModels(3)(1).link=''
         AllModels(3)(1).frozen=False
 
+        #extending the energy range for simpl
+        AllModels.setEnergies('0.05 1000 1000 log')
+
 def load_nathan_ref_2(prefit=True,integral=False,nolow=False):
 
     if not integral:
         load_second(NICER='gtis',integral=False)
         Xset.restore('full_reflection__3.xcm')
+
+        #extending the energy range for simpl
+        AllModels.setEnergies('0.05 1000 1000 log')
+
         if prefit:
             calc_fit(timeout=30)
     else:
@@ -317,6 +328,10 @@ def nathan_mod_refl():
     AllModels.clear()
 
     mod=Model('constant*mtable{nuMLIv1.mod}*gabs*edge*TBfeo*simpl(mbknpo(relxillCp + xillverCp) + diskbb) + gaussian + gaussian')
+
+
+    # extending the energy range for simpl
+    AllModels.setEnergies('0.05 1000 1000 log')
 
 def nathan_mod_emp(integral=True,systematics=False,custom=False):
 

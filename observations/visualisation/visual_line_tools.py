@@ -2308,8 +2308,8 @@ def hid_graph(ax_hid,dict_linevis,
                            'absorption line detection\n above ' + (r'3$\sigma$' if slider_sign == 0.997 else str(
                                slider_sign * 100) + '%') + ' significance',
                            'absorption line detection below ' + str(slider_sign * 100) + ' significance.'],
-                   title='Markers',
-                   bbox_to_anchor=(0.125, 0.815 - (
+                   title='',
+                   bbox_to_anchor=(0.125, 0.829 - (
                        0.018 if paper_look and not zoom else 0)) if bigger_text and square_mode else (
                    0.125, 0.82), handler_map={tuple: mpl.legend_handler.HandlerTuple(None)},
                    handlelength=2, handleheight=2., columnspacing=1.)

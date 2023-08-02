@@ -45,13 +45,6 @@ import dill
 #Catalogs and manipulation
 from astroquery.vizier import Vizier
 
-#local
-sys.path.append('/home/parrama/Documents/Work/PhD/Scripts/Python/general/')
-sys.path.append('/home/parrama/Documents/Work/PhD/Scripts/Python/observations/spectral_analysis/')
-#online
-sys.path.append('/mount/src/winds/observations/spectral_analysis/')
-sys.path.append('/mount/src/winds/general/')
-
 #visualisation functions
 from visual_line_tools import load_catalogs,dist_mass,obj_values,abslines_values,values_manip,distrib_graph,correl_graph,incl_dic,\
     n_infos, plot_lightcurve, hid_graph, sources_det_dic, dippers_list,telescope_list
@@ -98,7 +91,12 @@ args=ap.parse_args()
 
 #adding the top directory to the path to avoid issues when importing fitting_tools
 
-
+#local
+sys.path.append('/home/parrama/Documents/Work/PhD/Scripts/Python/general/')
+sys.path.append('/home/parrama/Documents/Work/PhD/Scripts/Python/observations/spectral_analysis/')
+#online
+sys.path.append('/mount/src/winds/observations/spectral_analysis/')
+sys.path.append('/mount/src/winds/general/')
 
 #custom script with some lines and fit utilities and variables
 from fitting_tools import lines_std,lines_std_names,range_absline
@@ -705,12 +703,15 @@ with st.sidebar.expander('Monitoring'):
     
 compute_only_withdet=st.sidebar.checkbox('Skip parameter analysis when no detection remain with the current constraints',value=True)
 
-with st.sidebar.expander('Stacking'):
-    stack_det=st.checkbox('Stack detections')
-    stack_flux_lim = st.number_input(r'Max ratio of fluxes to stack', value=2., min_value=1e-10, format='%.3e')
-    stack_HR_lim=st.number_input(r'Max ratio of HR to stack',value=2.,min_value=1e-10,format='%.3e')
-    stack_time_lim=st.number_input(r'Max time delta to stack',value=2.,min_value=1e-1,format='%.3e')
-
+if not online:
+    with st.sidebar.expander('Stacking'):
+        stack_det=st.checkbox('Stack detections')
+        stack_flux_lim = st.number_input(r'Max ratio of fluxes to stack', value=2., min_value=1e-10, format='%.3e')
+        stack_HR_lim=st.number_input(r'Max ratio of HR to stack',value=2.,min_value=1e-10,format='%.3e')
+        stack_time_lim=st.number_input(r'Max time delta to stack',value=2.,min_value=1e-1,format='%.3e')
+else:
+    stack_det=False
+    
 mpl.rcParams.update({'font.size': 10+(3 if paper_look else 0)})
 
 if not square_mode:

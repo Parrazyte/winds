@@ -45,6 +45,13 @@ import dill
 #Catalogs and manipulation
 from astroquery.vizier import Vizier
 
+#local
+sys.path.append('/home/parrama/Documents/Work/PhD/Scripts/Python/general/')
+sys.path.append('/home/parrama/Documents/Work/PhD/Scripts/Python/observations/spectral_analysis/')
+#online
+sys.path.append('/app/winds/observations/spectral_analysis/')
+sys.path.append('/app/winds/general/')
+
 #visualisation functions
 from visual_line_tools import load_catalogs,dist_mass,obj_values,abslines_values,values_manip,distrib_graph,correl_graph,incl_dic,\
     n_infos, plot_lightcurve, hid_graph, sources_det_dic, dippers_list,telescope_list
@@ -91,16 +98,10 @@ args=ap.parse_args()
 
 #adding the top directory to the path to avoid issues when importing fitting_tools
 
-#local
-sys.path.append('/home/parrama/Documents/Work/PhD/Scripts/Python/general/')
-sys.path.append('/home/parrama/Documents/Work/PhD/Scripts/Python/observations/spectral_analysis/')
-#online
-sys.path.append('/app/winds/observations/spectral_analysis/')
-sys.path.append('/app/winds/observations/')
-sys.path.append('/app/winds/general/')
+
 
 #custom script with some lines and fit utilities and variables
-# from fitting_tools import lines_std,lines_std_names,range_absline
+from fitting_tools import lines_std,lines_std_names,range_absline
 
 from general_tools import ravel_ragged
 ###

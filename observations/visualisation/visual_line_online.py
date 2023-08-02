@@ -96,10 +96,11 @@ sys.path.append('/home/parrama/Documents/Work/PhD/Scripts/Python/general/')
 sys.path.append('/home/parrama/Documents/Work/PhD/Scripts/Python/observations/spectral_analysis/')
 #online
 sys.path.append('/app/winds/observations/spectral_analysis/')
+sys.path.append('/app/winds/observations/')
 sys.path.append('/app/winds/general/')
 
 #custom script with some lines and fit utilities and variables
-from fitting_tools import lines_std,lines_std_names,range_absline
+# from fitting_tools import lines_std,lines_std_names,range_absline
 
 from general_tools import ravel_ragged
 ###

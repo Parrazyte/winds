@@ -95,8 +95,8 @@ args=ap.parse_args()
 sys.path.append('/home/parrama/Documents/Work/PhD/Scripts/Python/general/')
 sys.path.append('/home/parrama/Documents/Work/PhD/Scripts/Python/observations/spectral_analysis/')
 #online
-sys.path.append('/app/winds/observations/spectral_analysis/')
-sys.path.append('/app/winds/general/')
+sys.path.append('/mount/src/winds/observations/spectral_analysis/')
+sys.path.append('/mount/src/winds/general/')
 
 #custom script with some lines and fit utilities and variables
 from fitting_tools import lines_std,lines_std_names,range_absline
@@ -259,7 +259,7 @@ join_telescope_str.sort()
 join_telescope_str='_'.join(join_telescope_str.tolist())
 
 if online:
-    dump_path='/app/winds/observations/visualisation/visual_line_dumps/dump_'+join_telescope_str+'_'+('no' if radio_ignore_full else '')+'full.pkl'
+    dump_path='/mount/src/winds/observations/visualisation/visual_line_dumps/dump_'+join_telescope_str+'_'+('no' if radio_ignore_full else '')+'full.pkl'
     
     update_dump=False
 else:

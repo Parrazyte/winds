@@ -49,8 +49,8 @@ from astroquery.vizier import Vizier
 sys.path.append('/home/parrama/Documents/Work/PhD/Scripts/Python/general/')
 sys.path.append('/home/parrama/Documents/Work/PhD/Scripts/Python/observations/spectral_analysis/')
 #online
-sys.path.append('/app/winds/observations/spectral_analysis/')
-sys.path.append('/app/winds/general/')
+sys.path.append('/mount/src/winds/observations/spectral_analysis/')
+sys.path.append('/mount/src/winds/general/')
 
 #visualisation functions
 from visual_line_tools import load_catalogs,dist_mass,obj_values,abslines_values,values_manip,distrib_graph,correl_graph,incl_dic,\
@@ -261,7 +261,7 @@ join_telescope_str.sort()
 join_telescope_str='_'.join(join_telescope_str.tolist())
 
 if online:
-    dump_path='/app/winds/observations/visualisation/visual_line_dumps/dump_'+join_telescope_str+'_'+('no' if radio_ignore_full else '')+'full.pkl'
+    dump_path='/mount/src/winds/observations/visualisation/visual_line_dumps/dump_'+join_telescope_str+'_'+('no' if radio_ignore_full else '')+'full.pkl'
     
     update_dump=False
 else:

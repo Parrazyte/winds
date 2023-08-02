@@ -2303,6 +2303,10 @@ def hid_graph(ax_hid,dict_linevis,
 
     # marker legend
 
+    # manual custom subplot adjust to get the same scale for the 3 sources with ULs and for the zoomed 5 sources with detection
+    # to be put in the 5 sources
+    custom=False
+
     fig_hid.legend(handles=hid_det_examples, loc='center left',
                    labels=['upper limit' if display_upper else 'non detection ',
                            'absorption line detection\n above ' + (r'3$\sigma$' if slider_sign == 0.997 else str(
@@ -2310,7 +2314,7 @@ def hid_graph(ax_hid,dict_linevis,
                            'absorption line detection below ' + str(slider_sign * 100) + ' significance.'],
                    title='',
                    bbox_to_anchor=(0.125, 0.829 - (
-                       0.018 if paper_look and not zoom else 0)) if bigger_text and square_mode else (
+                       0.012 if paper_look and not zoom else 0)) if bigger_text and square_mode else (
                    0.125, 0.82), handler_map={tuple: mpl.legend_handler.HandlerTuple(None)},
                    handlelength=2, handleheight=2., columnspacing=1.)
 
@@ -2402,8 +2406,11 @@ def hid_graph(ax_hid,dict_linevis,
     # mpl.rcParams.update({'font.size': 2})
     # elem.axis('off')
 
-    # manual custom subplot adjust to get the same scale for the 3 visible sources plot and for the zoomed 5 sources with detection
-    # plt.subplots_adjust(top=0.863)
+    # manual custom subplot adjust to get the same scale for the 3 sources with ULs and for the zoomed 5 sources with detection
+    #to be put in the 5 sources
+
+    if custom:
+        plt.subplots_adjust(top=0.863)
 
     # note: 0.9 0.53
     # destacked version

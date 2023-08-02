@@ -1003,7 +1003,7 @@ with tab_hid:
 #### About tab
 with tab_about:
     st.markdown('**visual_line** is a visualisation and download tool for iron-band X-ray absorption lines signatures in Black Hole Low-Mass X-ray Binaries (BHLMXBs).')
-    st.markdown('It is made to complement and give access to the results of [Parra et al. 2023](https://www.youtube.com/watch?v=dQw4w9WgXcQ), and more generally, to give an overview of the sampling and X-ray evolution of the outbursts of this category of sources.')
+    st.markdown('It is made to complement and give access to the results of [Parra et al. 2023](https://arxiv.org/abs/2308.00691), and more generally, to give an overview of the sampling and X-ray evolution of the outbursts of this category of sources.')
     st.markdown('Please contact me at [maxime.parra@univ-grenoble-alpes.fr](mailto:maxime.parra@univ-grenoble-alpes.fr) for questions, to report bugs or request features.')
     
     with st.expander('I want an overview of the science behind this'):
@@ -1068,7 +1068,7 @@ with tab_about:
             st.image(dump_path[:dump_path.rfind('/')]+'/linedet_example.jpg',caption='Steps of the fitting procedure for a standard 4U130-47 Chandra spectra. First panel: 4-10 spectrum after the first continuum fit. Second panel: ∆C map of the line blind search, restricted to positive (i.e. improvements) regions. Standard confidence intervals are highlighted with different line styles, and the colormap with the ∆C improvements of emission and absorption lines. Third panel: Ratio plot of the best fit model once absorption lines are added. Fourth panel: Remaining residuals seen through a second blind search.')
             
         st.markdown('''
-                    See [Parra et al. 2023](https://www.youtube.com/watch?v=dQw4w9WgXcQ) for detailed references to the points discussed above, and [Diaz Trigo et al. 2016](https://doi.org/10.1002/asna.201612315) or [Ponti et al. 2016](https://doi.org/10.1002/asna.201612339) for reviews on winds.  
+                    See [Parra et al. 2023](https://arxiv.org/abs/2308.00691) for detailed references to the points discussed above, and [Diaz Trigo et al. 2016](https://doi.org/10.1002/asna.201612315) or [Ponti et al. 2016](https://doi.org/10.1002/asna.201612339) for reviews on winds.  
                     
                     Figure references:  
                         [Petrucci et al. 2021](https://doi.org/10.1051/0004-6361/202039524)  

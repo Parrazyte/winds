@@ -6,6 +6,9 @@ from streamlit_plotly_events import plotly_events
 from plotly.express.colors import sample_colorscale
 from plotly.subplots import make_subplots
 
+from scipy.interpolate import interp1d
+from scipy.ndimage import map_coordinates
+
 #local
 sys.path.append('/home/parrama/Documents/Work/PhD/Scripts/Python/general/')
 sys.path.append('/home/parrama/Documents/Work/PhD/Scripts/Python/observations/spectral_analysis/')
@@ -250,10 +253,13 @@ if len(selected_points)!=0:
     selected_mhd_sol=selected_mhd_sol[sol_order]
     selected_sol_p_mu=selected_sol_p_mu[sol_order]
 
+    sol_p_mhd=selected_sol_p_mu.T[0]
 
     #doing this without direct transpositions because the arrays arent regular due to uneven angle sampling
-
     sol_z_over_r=np.array([selected_mhd_sol[i].T[7] for i in range(n_sel)],dtype=object)
+
+    sol_cyl_cst= np.array([np.sqrt(1 + sol_z_over_r[i].astype(float) ** 2) for i in range(n_sel)])
+
     sol_angle=np.array([selected_mhd_sol[i].T[8] for i in range(n_sel)],dtype=object)
 
     sol_r_cyl_r0=np.array([selected_mhd_sol[i].T[9] for i in range(n_sel)],dtype=object)
@@ -425,7 +431,8 @@ def plotly_line_wrapper(x,y,log_x=False,log_y='auto',xaxis_title='',yaxis_title=
 
     return fig_line
 
-def angle_plot(x_arr,y_arr,log_x=False,log_y='auto',xaxis_title='',yaxis_title='',legend=False,sampl_angles_arr=None,compt_angles_arr=None,cmap='cividis',legend_lines=True,legend_points=True):
+def angle_plot(x_arr,y_arr,log_x=False,log_y='auto',xaxis_title='',yaxis_title='',legend=False,sampl_angles_arr=None,
+               compt_angles_arr=None,cmap='cividis',legend_lines=True,legend_points=True):
 
     fig_line=go.Figure()
 
@@ -728,6 +735,9 @@ def radial_plot(rad,sol_sampl,angl_sampl,log_x=False,log_y=False,xaxis_title='',
     else:
         st.plotly_chart(fig_rad, use_container_width=False, theme=None)
 
+
+mdot_mhd=mdot_obs*12
+
 if split_angle and n_sel==1:
     n_sol=len(selected_sol_split_angle[0])
 
@@ -741,8 +751,6 @@ if split_angle and n_sel==1:
     sol_sampl_br, sol_sampl_bphi, sol_sampl_bz = selected_sol_split_angle[0].T[15:18]
 
     sol_p_mhd=selected_sol_split_angle[0][0][3]
-
-    mdot_mhd=mdot_obs*12
 
     cyl_cst_sampl=np.sqrt(1+sol_sampl_z_over_r**2)
 
@@ -843,57 +851,126 @@ if split_angle and n_sel==1:
             radial_plot(r_sph_sampl,L_xi_6, sol_sampl_angle, log_x=True,
                         log_y=True, xaxis_title=r'$R_{sph}\;$ (Rg)', yaxis_title=r'L/L$_{Edd}$')
 
-# with tab_2D:
-#
-#     if n_sel==1:
-#
-#         '''
-#         Creating the full 2D mapping for the single solution to do quarter angle plotting
-#         '''
-#         cyl_cst_sol_indiv = np.sqrt(1 + sol_z_over_r ** 2)
-#
-#         n_angles_sol_indiv=len(sol_z_over_r)
-#
-#         r_sph_sol_indiv = np.array([np.logspace(np.log10(rj * cyl_cst_sol_indiv[i]), 7, 300) for i in range(n_angles_sol_indiv)])
-#
-#         # n_full_sol_indiv= np.array([func_density_sol(r_sph_sampl[i], sol_sampl_z_over_r[i], sol_sampl_rho_mhd[i], sol_p_mhd,
-#         #                                      mdot_mhd, m_BH) for i in range(n_sol)])
-#
-#         logxi_sol_indiv = np.array([func_logxi_sol(r_sph_sol_indiv[i], sol_z_over_r[0][i], val_L_source, sol_rho_mhd[0][i],
-#                                                sol_p_mhd, mdot_mhd, m_BH) for i in range(n_angles_sol_indiv)])
-#
-#         fig = plt.figure(figsize=[5, 5])
-#
-#         breakpoint()
-#
-#         nh_sol_indiv = np.array([func_nh_sol(r_sph_sol_indiv[i], rj * cyl_cst_sol_indiv[i], sol_z_over_r[0][i],
-#                                          sol_rho_mhd[0][i], sol_p_mhd, mdot_mhd, m_BH) for i in range(n_angles_sol_indiv)])
-#
-#         # here all speeds are divided by 1e5 to go to km/s
-#         ur_sol_indiv = np.array([func_vel_sol('r', r_sph_sol_indiv[i], sol_z_over_r[0][i], sol_ur[0][i],
-#                                           sol_uphi[0][i], sol_uz[0][i], m_BH) for i in range(n_angles_sol_indiv)]) / 1e5
-#
-#         uphi_sol_indiv = np.array([func_vel_sol('phi', r_sph_sol_indiv[i], sol_z_over_r[0][i], sol_ur[0][i],
-#                                             sol_uphi[0][i], sol_uz[0][i], m_BH) for i in range(n_angles_sol_indiv)]) / 1e5
-#
-#         uz_sol_indiv = np.array([func_vel_sol('z', r_sph_sol_indiv[i], sol_z_over_r[0][i], sol_ur[0][i],
-#                                           sol_uphi[0][i], sol_uz[0][i], m_BH) for i in range(n_angles_sol_indiv)]) / 1e5
-#
-#         uobs_sol_indiv = np.array([func_vel_sol('obs', r_sph_sol_indiv[i], sol_z_over_r[0][i], sol_ur[0][i],
-#                                             sol_uphi[0][i], sol_uz[0][i], m_BH) for i in range(n_angles_sol_indiv)]) / 1e5
-#
-#         # fetching the positions at which logxi=6 for each angle
-#         logxi_6_ids = np.array([np.argmin(abs(elem - 6)) for elem in logxi_sol_indiv])
-#
-#         r_sph_nonthick_sol_indiv = np.array([r_sph_sol_indiv[i][logxi_6_ids[i]:] for i in range(n_angles_sol_indiv)], dtype=object)
-#
-#         nh_nonthick_sol_indiv = np.array([func_nh_sol(r_sph_sol_indiv[i][logxi_6_ids[i]:], r_sph_sol_indiv[i][logxi_6_ids[i]],
-#                                                   sol_z_over_r[0][i], sol_rho_mhd[0][i], sol_p_mhd, mdot_mhd, m_BH)
-#                                       for i in range(n_angles_sol_indiv)],
-#                                      dtype=object)
-#
-#         col_a, col_b, col_c = st.columns(3)
 
+# def polar2cartesian(rad_range, theta_range, grid, x, y, order=3):
+#
+#     #taken from https://stackoverflow.com/questions/2164570/reprojecting-polar-to-cartesian-grid
+#
+#     X, Y = np.meshgrid(x, y)
+#
+#     new_r = np.sqrt(X * X + Y * Y)
+#     new_t = np.arctan2(X, Y)
+#
+#     ir = interp1d(rad_range, np.arange(len(rad_range)), bounds_error=False)
+#     it = interp1d(theta_range, np.arange(len(theta_range)), bounds_error=False)
+#
+#     new_ir = ir(new_r.ravel())
+#
+#     new_it = it(new_t.ravel())
+#
+#     breakpoint()
+#
+#     new_ir[new_r.ravel() > rad_range.max()] = len(rad_range) - 1
+#     new_ir[new_r.ravel() < rad_range.min()] = 0
+#
+#     return map_coordinates(grid, np.array([new_ir, new_it]),
+#                            order=order).reshape(new_r.shape)
+
+import cv2
+
+#2D plotting function
+def plot_2D(r_sampl_sol,angle_sampl_sol,data,r_j,r_max,n_rad,cmap='plasma',log_sampl=True,figwidth=515):
+
+
+    #interpolating back onto a cartesian grid
+    coord_sampl=np.logspace(np.log10(r_j),np.log10(r_max),n_rad) if log_sampl else np.linspace(r_j,r_max,n_rad)
+
+    #polar_img = cv2.warpPolar(image, (256, 1024), (image.shape[0] / 2, image.shape[1] / 2),
+     #                         image.shape[1] * margin * 0.5, cv2.WARP_POLAR_LINEAR)
+
+    cart_data = cv2.warpPolar(np.log10(data), (n_rad,n_rad), (0,0),n_rad*100, flags=cv2.WARP_INVERSE_MAP+cv2.WARP_POLAR_LOG)
+
+
+    #cart_data=polar2cartesian(r_sampl_sol,angle_sampl_sol.astype(float)*np.pi/180,np.log10(data),coord_sampl,coord_sampl,order=3)
+
+    fig_2D = go.Figure()
+
+    if figwidth is not None:
+        fig_2D.update_layout(width=figwidth)
+        fig_2D.update_layout(height=figwidth)
+    if log_sampl:
+
+        fig_2D.update_xaxes(type="log")
+        fig_2D.update_yaxes(type="log")
+
+    trace_2D=go.Heatmap(x=coord_sampl,
+            y=coord_sampl,
+            z=cart_data,
+            zsmooth='best',
+            type='heatmap',
+            colorscale=cmap)
+
+    fig_2D.add_trace(trace_2D)
+
+    return fig_2D
+
+with tab_2D:
+
+    if n_sel==1:
+
+        '''
+        Creating the full 2D mapping for the single solution to do quarter angle plotting
+        '''
+
+        n_rad=300
+
+        n_angles_sol_indiv=len(sol_z_over_r[0])
+
+
+        #r_sph_sol_indiv = np.array([np.logspace(np.log10(rj * cyl_cst_sol_indiv[i]), 7, n_rad) for i in range(n_angles_sol_indiv)])
+
+        # using a constant start value for now to avoid issues when interpolating back to cartesian grid
+        r_sph_sol= np.logspace(np.log10(rj), 7, n_rad)
+
+        n_sol_map= np.array([[func_density_sol(r_sph_sol, sol_z_over_r[i][j], sol_rho_mhd[i][j], sol_p_mhd[i],
+                                             mdot_mhd, m_BH) for j in range(len(sol_z_over_r[i]))] for i in range(n_sel)])
+
+        # logxi_sol_map = np.array([func_logxi_sol(r_sph_sol, sol_z_over_r[0][i], val_L_source, sol_rho_mhd[0][i],
+        #                                        sol_p_mhd, mdot_mhd, m_BH) for i in range(n_angles_sol_indiv)])
+        #
+        # nh_sol_map = np.array([func_nh_sol(r_sph_sol_indiv[i], rj * cyl_cst_sol_indiv[i], sol_z_over_r[0][i],
+        #                                  sol_rho_mhd[0][i], sol_p_mhd, mdot_mhd, m_BH) for i in range(n_angles_sol_indiv)])
+        #
+        # # here all speeds are divided by 1e5 to go to km/s
+        # ur_sol_indiv = np.array([func_vel_sol('r', r_sph_sol_indiv[i], sol_z_over_r[0][i], sol_ur[0][i],
+        #                                   sol_uphi[0][i], sol_uz[0][i], m_BH) for i in range(n_angles_sol_indiv)]) / 1e5
+        #
+        # uphi_sol_indiv = np.array([func_vel_sol('phi', r_sph_sol_indiv[i], sol_z_over_r[0][i], sol_ur[0][i],
+        #                                     sol_uphi[0][i], sol_uz[0][i], m_BH) for i in range(n_angles_sol_indiv)]) / 1e5
+        #
+        # uz_sol_indiv = np.array([func_vel_sol('z', r_sph_sol_indiv[i], sol_z_over_r[0][i], sol_ur[0][i],
+        #                                   sol_uphi[0][i], sol_uz[0][i], m_BH) for i in range(n_angles_sol_indiv)]) / 1e5
+        #
+        # uobs_sol_indiv = np.array([func_vel_sol('obs', r_sph_sol_indiv[i], sol_z_over_r[0][i], sol_ur[0][i],
+        #                                     sol_uphi[0][i], sol_uz[0][i], m_BH) for i in range(n_angles_sol_indiv)]) / 1e5
+        #
+        # # fetching the positions at which logxi=6 for each angle
+        # logxi_6_ids = np.array([np.argmin(abs(elem - 6)) for elem in logxi_sol_indiv])
+        #
+        # r_sph_nonthick_sol_indiv = np.array([r_sph_sol_indiv[i][logxi_6_ids[i]:] for i in range(n_angles_sol_indiv)], dtype=object)
+        #
+        # nh_nonthick_sol_indiv = np.array([func_nh_sol(r_sph_sol_indiv[i][logxi_6_ids[i]:], r_sph_sol_indiv[i][logxi_6_ids[i]],
+        #                                           sol_z_over_r[0][i], sol_rho_mhd[0][i], sol_p_mhd, mdot_mhd, m_BH)
+        #                               for i in range(n_angles_sol_indiv)],
+        #                              dtype=object)
+
+
+        test=plot_2D(r_sph_sol,sol_angle[0],n_sol_map[0],r_j=rj,r_max=1e7,n_rad=n_rad)
+
+        col_a, col_b, col_c = st.columns(3)
+
+        with col_a:
+            st.plotly_chart(test)
 
 #thermal structure and aspect ratio (everything should be in cgs, except r in Rg units)
 

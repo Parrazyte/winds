@@ -95,6 +95,7 @@ def func_density_sol(r_sph,z_over_r,rho_mhd,p_mhd,mdot_mhd,m_BH):
     Rg_cgs = Rg_SI * m2cm
 
     cyl_cst=np.sqrt(1.0+(z_over_r*z_over_r))
+
     r_cyl = r_sph / cyl_cst
 
     return (mdot_mhd / (sigma_thomson_cgs * Rg_cgs)) * rho_mhd * (r_cyl ** (p_mhd - 1.5))

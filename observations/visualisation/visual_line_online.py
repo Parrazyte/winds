@@ -711,7 +711,7 @@ if not online:
         stack_time_lim=st.number_input(r'Max time delta to stack',value=2.,min_value=1e-1,format='%.3e')
 else:
     stack_det=False
-    
+
 mpl.rcParams.update({'font.size': 10+(3 if paper_look else 0)})
 
 if not square_mode:
@@ -1808,27 +1808,27 @@ def streamlit_scat(mode):
                 col_list[col_name]=st_cols[i_col]
             
             with col_list['eqw']:
-                [st.pyplot(elem) for elem in scat_eqw]
+                pholder_ew=[st.pyplot(elem) for elem in scat_eqw]
                             
             if mode!='eqwratio' or use_time:
     
                 with col_list['bshift']:
-                    [st.pyplot(elem) for elem in scat_bshift]
+                    pholder_bshift=[st.pyplot(elem) for elem in scat_bshift]
     
             if mode!='eqwratio':
                 with col_list['ener']:
-                    [st.pyplot(elem) for elem in scat_ener]
+                    pholder_ener=[st.pyplot(elem) for elem in scat_ener]
                 if use_eqwratio and (mode=='observ' or use_width):
                     with col_list['eqwratio']:
-                        [st.pyplot(elem) for elem in scat_eqwratio]
+                        pholder_ewratio=[st.pyplot(elem) for elem in scat_eqwratio]
                         
             if use_lineflux and n_infos>=5:
                 with col_list['lineflux']:
-                    [st.pyplot(elem) for elem in scat_lineflux]
+                    pholder_lineflux=[st.pyplot(elem) for elem in scat_lineflux]
                     
             if use_width:
                 with col_list['width']:
-                    [st.pyplot(elem) for elem in scat_width]
+                    pholder_width=[st.pyplot(elem) for elem in scat_width]
             
 mpl.rcParams.update({'font.size': 14})
 

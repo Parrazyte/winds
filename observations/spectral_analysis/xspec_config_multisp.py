@@ -1605,14 +1605,18 @@ def delcomp(compname,modclass=AllModels,give_ndel=False):
                 print('\nParameter '+str(grp_id*AllModels(1).nParameters+par_id+1)+
                       ' was linked to one of the deleted components parameters. Deleting link.')
                 
-                
-                #Deleting links resets the values boundaries so we save and replace the values to make non-default bounds remain saved
-                par_linked_vals=AllModels(grp_id+1)(par_id).values
+                try:
+                    #Deleting links resets the values boundaries so we save and replace the values to make non-default bounds remain saved
+                    par_linked_vals=AllModels(grp_id+1)(par_id+1).values
+                except:
+                    breakpoint()
 
                 mod_data_grp.links[par_id]=''
-                
-                AllModels(grp_id+1)(par_id).values=par_linked_vals
-                
+                try:
+                    AllModels(grp_id+1)(par_id+1).values=par_linked_vals
+                except:
+                    breakpoint()
+
                 continue
                 
             #shifting the link value if it points to a parameter originally after the deleted components

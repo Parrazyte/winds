@@ -6,6 +6,8 @@ from streamlit_plotly_events import plotly_events
 from plotly.express.colors import sample_colorscale
 from plotly.subplots import make_subplots
 
+import scipy
+
 from scipy.interpolate import interp1d
 from scipy.ndimage import map_coordinates
 
@@ -883,12 +885,27 @@ def plot_2D(r_sampl_sol,angle_sampl_sol,data,r_j,r_max,n_rad,cmap='plasma',log_s
 
 
     #interpolating back onto a cartesian grid
-    coord_sampl=np.logspace(np.log10(r_j),np.log10(r_max),n_rad) if log_sampl else np.linspace(r_j,r_max,n_rad)
+    coord_sampl=np.logspace(np.log10(r_j),np.log10(r_max),n_rad*3) if log_sampl else np.linspace(r_j,r_max,n_rad)
 
     #polar_img = cv2.warpPolar(image, (256, 1024), (image.shape[0] / 2, image.shape[1] / 2),
      #                         image.shape[1] * margin * 0.5, cv2.WARP_POLAR_LINEAR)
 
-    cart_data = cv2.warpPolar(np.log10(data), (n_rad,n_rad), (0,0),n_rad*100, flags=cv2.WARP_INVERSE_MAP+cv2.WARP_POLAR_LOG)
+
+    #initial values grid
+    coord_cyl=np.array([[r_sampl_sol[i]*np.cos(angle_sampl_sol[j]*np.pi/180),
+                         r_sampl_sol[i]*np.sin(angle_sampl_sol[j]*np.pi/180)]
+                         for i in range(len(r_sampl_sol)) for j in range(len(angle_sampl_sol))])
+
+    coord_cart=np.array([np.repeat(coord_sampl,len(coord_sampl)).reshape(len(coord_sampl),len(coord_sampl)),
+                         np.repeat(coord_sampl,len(coord_sampl)).reshape(len(coord_sampl),len(coord_sampl)).T])
+
+
+
+    cart_data=scipy.interpolate.griddata(coord_cyl, np.ravel(data),(coord_cart[0],coord_cart[1]),
+                                         method='linear', fill_value=0, rescale=False)
+
+    #cart_data = cv2.warpPolar(np.log10(data), (np.shape(data)[1],np.shape(data)[0]), (0,0),n_rad,
+     #                         flags=cv2.WARP_INVERSE_MAP+cv2.WARP_POLAR_LOG)
 
 
     #cart_data=polar2cartesian(r_sampl_sol,angle_sampl_sol.astype(float)*np.pi/180,np.log10(data),coord_sampl,coord_sampl,order=3)
@@ -905,7 +922,7 @@ def plot_2D(r_sampl_sol,angle_sampl_sol,data,r_j,r_max,n_rad,cmap='plasma',log_s
 
     trace_2D=go.Heatmap(x=coord_sampl,
             y=coord_sampl,
-            z=cart_data,
+            z=np.log10(cart_data),
             zsmooth='best',
             type='heatmap',
             colorscale=cmap)
@@ -965,13 +982,35 @@ with tab_2D:
         #                              dtype=object)
 
 
-        test=plot_2D(r_sph_sol,sol_angle[0],n_sol_map[0],r_j=rj,r_max=1e7,n_rad=n_rad)
+        test=plot_2D(r_sph_sol, sol_angle[0],n_sol_map[0].T,r_j=rj,r_max=1e7,n_rad=n_rad)
 
+        import matplotlib.pyplot as plt
+
+        fig,ax=plt.subplots(1,1,subplot_kw=dict(polar=True))
+
+
+        mesh=ax.pcolormesh(np.pi/2-sol_angle[0].astype(float)*np.pi/180, r_sph_sol, np.log10(n_sol_map[0].T),shading='nearest',
+                      cmap='plasma')
+        ax.grid(alpha=0.1)
+        ax.set_rlim(0)
+        ax.set_rscale('symlog')
+        ax.set_thetamin(0)
+        ax.set_thetamax(90)
+        fig.colorbar(mesh, ax=ax)
         col_a, col_b, col_c = st.columns(3)
 
         with col_a:
+            st.pyplot(fig)
+
+        with col_b:
             st.plotly_chart(test)
 
+        with col_c:
+            plt.figure()
+            test1=plt.imshow(np.log10(n_sol_map[0].T),cmap='plasma')
+            fig1=test1.get_figure()
+
+            st.pyplot(fig1)
 #thermal structure and aspect ratio (everything should be in cgs, except r in Rg units)
 
 #opacity regimes in decreasing temperature relevancy

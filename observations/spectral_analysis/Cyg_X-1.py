@@ -220,8 +220,6 @@ def load_nathan_ref_1(prefit=True,integral=False):
         AllModels(3)(1).link=''
         AllModels(3)(1).frozen=False
 
-        #extending the energy range for simpl
-        AllModels.setEnergies('0.05 1000 1000 log')
 
 def load_nathan_ref_2(prefit=True,integral=False,nolow=False):
 
@@ -289,13 +287,23 @@ def load_nathan_ref_2(prefit=True,integral=False,nolow=False):
             AllModels(3)(5).values=0
             AllModels(3)(7).values=0
 
-def load_nathan_emp_1():
+def load_nathan_emp_1(integral=False):
     load_first(integral=False)
     Xset.restore('empirical__2.xcm')
 
     #this shouldn't be here so we're updating it
     AllModels.systematic=0
     Fit.perform()
+
+    if integral:
+        mod_init=allmodel_data()
+        AllModels.clear()
+        AllData.clear()
+        AllModels.systematic=0.
+
+        load_second()
+        mod_init.load()
+
 
 def load_nathan_emp_2(integral=False,nolow=False):
 
@@ -441,6 +449,14 @@ def nathan_mod_emp(integral=True,systematics=False,custom=False):
 
 
         Fit.perform()
+
+def mod_nthcomp():
+
+    test=Model("nthcomp")
+
+    addcomp('glob_constant')
+
+    Fit.perform()
 
 def make_std_mod(fit=False,cut_low_Nustar=True):
 

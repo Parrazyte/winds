@@ -188,6 +188,12 @@ def func_nh_sol(r_sph,r_sph_0,z_over_r,rho_mhd,p_mhd,mdot_mhd,m_BH):
 
 def load_solutions(solutions,mode='file',split_sol=False,split_par=False):
 
+    '''
+    loads the solutions from either a file or an array and splits them depending on the arguments passed
+
+    returns an array
+    '''
+
     if mode=='file':
         solutions_arr = np.loadtxt(solutions)
     elif mode=='array':
@@ -245,7 +251,8 @@ def load_solutions(solutions,mode='file',split_sol=False,split_par=False):
 
 
 
-def sample_angle(solutions_path, angle_values, mdot_obs, m_BH, r_j=6., eta_mhd=1 / 12, outdir=None,
+def sample_angle(solutions_path, angle_values, mdot_obs, m_BH, r_j=6., eta_mhd=1 / 12, xlum=None,
+                 outdir=None,
                  return_file_path=False,mode='file',return_compton_angle=False,silent=True,
                  stop_at_compton=False):
     '''
@@ -279,11 +286,13 @@ def sample_angle(solutions_path, angle_values, mdot_obs, m_BH, r_j=6., eta_mhd=1
     if mode=='file':
         solutions_log_path = solutions_path.split('/')[-1].replace( \
             solutions_path_ext,
-            '_angle_sampl_mdot_' + str(mdot_obs) + '_m_bh_' + str(m_BH) + '_rj_' + str(r_j) + '_log' + solutions_path_ext)
+            '_angle_sampl_mdot_' + str(mdot_obs) +('' if mdot_obs != 'auto' else '_xlum_' + str(xlum)) +\
+            '_m_bh_' + str(m_BH) + '_rj_' + str(r_j) + '_log' + solutions_path_ext)
 
         solutions_mod_path = solutions_path.split('/')[-1].replace( \
             solutions_path_ext,
-            '_angle_sampl_mdot_' + str(mdot_obs) + '_m_bh_' + str(m_BH) + '_rj_' + str(r_j) + solutions_path_ext)
+            '_angle_sampl_mdot_' + str(mdot_obs) +('' if mdot_obs != 'auto' else '_xlum_' + str(xlum)) +\
+            '_m_bh_' + str(m_BH) + '_rj_' + str(r_j) + solutions_path_ext)
 
         # adding the outdir into it
         solutions_log_path = os.path.join(outdir,solutions_log_path)
@@ -305,7 +314,11 @@ def sample_angle(solutions_path, angle_values, mdot_obs, m_BH, r_j=6., eta_mhd=1
     Rg_SI = 0.5 * Rs_SI
     Rg_cgs = Rg_SI * m2cm
 
-    mdot_mhd = mdot_obs / eta_mhd
+    if mdot_obs=='auto':
+        mdot_mhd=xlum/(1.26*m_BH)/eta_mhd
+    else:
+        mdot_mhd = mdot_obs/eta_mhd
+
 
     solutions_sample = []
 
@@ -410,7 +423,7 @@ def sample_angle(solutions_path, angle_values, mdot_obs, m_BH, r_j=6., eta_mhd=1
             return solutions_sample
 
 
-def merge_mhd_solution(solutions_path):
+def merge_mhd_solution(solutions_path,tree='new'):
 
     '''
     Merges all the solutions inside the given folder into a unique csv with all variables directly
@@ -430,11 +443,13 @@ def merge_mhd_solution(solutions_path):
     for sol in sol_list:
 
         #list with the epsilon and n
-        first_cols=[float(sol.split('/')[0].split('_')[1].replace('0','0.')),float((sol.split('/')[1].replace('n','')))]
+        first_cols=[float(sol.split('/')[0].split('_')[-1].split('ep')[-1].replace('0','0.')),float((sol.split('/')[1].replace('n','')))]
 
         #reading the header of the file to get the second part of the solution elements
         with open(sol) as sol_file:
-            sol_lines_header = sol_file.readlines()[1:11]
+            sol_head = sol_file.readlines()[1:17]
+
+        sol_lines_header = (sol_head[:8] + sol_head[10:13]) if tree=='new' else sol_head[:10]
 
         sol_parameters = np.array([elem.split()[-1] for elem in sol_lines_header]).astype(float).tolist()
 
@@ -444,7 +459,7 @@ def merge_mhd_solution(solutions_path):
         secondary_sol_pars=sol_parameters[7:10]
 
         #extracting the mhd solution lines
-        sol_lines=np.loadtxt(sol,skiprows=14)
+        sol_lines=np.loadtxt(sol,skiprows=17 if tree=='new' else 14)
 
         #merging them with the solution parameters
         merged_sol_line=[main_sol_pars+elem.tolist()+secondary_sol_pars for elem in sol_lines]

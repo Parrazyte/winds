@@ -78,16 +78,16 @@ def upload_mantis(path,mantis_folder,delete_previous=False):
         irods_proc.sendline('-irm '+previous_box_incident+' '+mantis_folder)
 
 def create_grid(grid_name, mhd_solutions_path,
-                 SED,mdot,xlum,m_BH,rj,
+                 SED,m_BH,rj,mdot='auto',xlum=None,
                  param_mode='split_angle',
                  h_over_r_vals=None,p_vals=None,mu_vals=None,angle_vals=None):
 
     '''
 
-    Setups Cigrid computations by creating a proper mantis folder tree and a parameter file
+    Setups grid or cigrid computations by creating a proper folder tree in the current directory
 
     Main args:
-        grid_name: name of grid and of the folder tree which will be copied to mantis
+        grid_name: name of grid aka folder tree where the arborescence will be created
         mhd_solutions_path: path where to find the mhd solutions to sample from
 
         param_mode:
@@ -98,9 +98,11 @@ def create_grid(grid_name, mhd_solutions_path,
                 creates intermediary folders to reflect the dimensions
 
         coupled parameter arguments (should all be the same length or single to indicate one value to be repeated)
-            SED:list of SED paths (will be copied to mantis_grid_dir for use)
+            SED:list of SED paths (will be copied to the grid directory and later to the save directory for use)
             mdot: mdot OBSERVED (natural units)
+                    can be set to auto to fetch it automatically from xlum using the black hole mass
             xlum: Xray luminosities (1e38 erg/s in 1-1000 Ryd)
+                    required ony if mdot is set to auto
             m_BH: black hole mass (M_sol)
             rj: JED-SAD transition radius. Double use:
                 -acts as the starting point for the nH computation to get the angle thresholds
@@ -124,6 +126,12 @@ def create_grid(grid_name, mhd_solutions_path,
     '''
 
     '''
+    creating the grid folder if necessary
+    '''
+
+    os.system('mkdir -p '+grid_name)
+
+    '''
     decomposing the values if in interval form
     '''
 
@@ -137,7 +145,7 @@ def create_grid(grid_name, mhd_solutions_path,
                 h_over_r_list=np.logspace(float(h_over_r_infos[1]),float(h_over_r_infos[2]),int(h_over_r_infos[3]))
             elif h_over_r_infos[0]=='lin':
                 h_over_r_list = np.linspace(float(h_over_r_infos[1]),float(h_over_r_infos[2]),int(h_over_r_infos[3]))
-                
+
         if type(p_vals) in (list,np.ndarray):
             p_list=p_vals
         elif type(p_vals)==str:
@@ -148,7 +156,7 @@ def create_grid(grid_name, mhd_solutions_path,
             elif p_infos[0] == 'lin':
                 p_list = np.linspace(float(p_infos[1]), float(p_infos[2]),
                                             int(p_infos[3]))
-                
+
         if type(mu_vals) in (list,np.ndarray):
             mu_list=mu_vals
         elif type(mu_vals)==str:
@@ -173,11 +181,13 @@ def create_grid(grid_name, mhd_solutions_path,
                 angle_list = np.linspace(float(angle_infos[1]),float(angle_infos[2]),int(angle_infos[3]))
 
 
+    #fetching the mdot from the luminosity if asked to
+
     '''
     converting the SED variables into lists
     '''
 
-    SED_var_list=[SED,mdot,xlum,m_BH,rj]
+    SED_var_list=[SED,mdot,m_BH,rj,xlum]
     SED_list_var_list=[]
 
     #checking if any is already like that
@@ -193,15 +203,16 @@ def create_grid(grid_name, mhd_solutions_path,
             SED_list_var_list+=[np.repeat(SED_type_var,len_SED_vars)]
         else:
             assert  len(SED_type_var)==len_SED_vars,'Error: SED variables have different len'
-            SED_list_var_list+=SED_type_var
+            SED_list_var_list+=np.array(SED_type_var)
 
     #and outputing them in each variable name
 
-    SED_list,mdot_list,xlum_list,m_BH_list,rj_list=SED_list_var_list
+    SED_arr,mdot_arr,m_BH_arr,rj_arr,xlum_arr=SED_list_var_list
 
-    # #converting the mhd solution files
-    # mhd_sol_arr=np.loadtxt(mhd_solutions_path)
-    #
+    #Using the x-ray luminosity as conversion if asked to
+    if mdot=='auto':
+        mdot_arr = xlum_arr / (1.26 * m_BH_arr)
+
     # #identifying the folder of the solution file
     # mhd_sol_dir = mhd_solutions_path[:mhd_solutions_path.rfind('/')]
 
@@ -210,15 +221,18 @@ def create_grid(grid_name, mhd_solutions_path,
     SED_dirs=[]
 
     if param_mode=='split_angle':
-        for elem_SED,elem_mdot,elem_m_BH,elem_rj in zip(SED_list,mdot_list,m_BH_list,rj_list):
+        for elem_SED,elem_mdot,elem_m_BH,elem_rj,elem_xlum in zip(SED_arr,mdot_arr,m_BH_arr,rj_arr,xlum_arr):
 
             #the name of the grid is used as global directory
             #the name of the SED and other parameters will be used as the outdirs for the combination
             SED_dirs+=[os.path.join(grid_name,elem_SED.split('/')[-1][:elem_SED.split('/')[-1].rfind('.')]+\
-                     '_mdot_'+str(elem_mdot)+'_m_bh_'+str(elem_m_BH)+'_rj_'+str(elem_rj))]
+                     '_mdot_'+str(elem_mdot)+('' if mdot!='auto' else '_xlum_'+str(elem_xlum))+\
+                                    '_m_bh_'+str(elem_m_BH)+'_rj_'+str(elem_rj))]
 
             #creating the grid in that folder
-            sampl_grid_path=sample_angle(mhd_solutions_path,angle_list,elem_mdot,elem_m_BH,elem_rj,outdir=SED_dirs[-1],
+            sampl_grid_path=sample_angle(mhd_solutions_path,angle_list,elem_mdot,elem_m_BH,elem_rj,
+                                         xlum=elem_xlum if mdot=='auto' else None,
+                                         outdir=SED_dirs[-1],
                                         return_file_path=True)
 
             sampl_grid_dir=sampl_grid_path[:sampl_grid_path.rfind('/')]
@@ -235,9 +249,9 @@ def create_grid(grid_name, mhd_solutions_path,
             for solution in solutions_grid:
 
                 #note: no decomposition for the turbulence as of now
-                dir_sol=os.path.join('eps_'+str(solution[0]),
+                dir_sol=os.path.join('eps_%.02f'%solution[0],
                                      'n_island_'+str(int(solution[1])),
-                                     'p_'+str(solution[2])+'_mu_'+str(solution[3]),
+                                     'p_%.04f'%solution[2]+'_mu_%.04f'%solution[3],
                                      'angle_'+str(round((solution[8]),1)))
 
                 #creating the directory
@@ -250,12 +264,51 @@ def create_grid(grid_name, mhd_solutions_path,
                            header=solution_header[1:].replace('\n',''))
 
 
+def create_oar_script(grid_folder,parfile,cores,cpus=2,nodes=1,
+                      walltime=72,mail="maxime.parra@univ-grenoble-alpes.fr"):
+
+    '''
+    Create standard oar script for non-cigrid computations
+
+    cpu value shouldn't be changed if in ipag-calc (all servers have two cpus)
+    walltime is in hours
+
+    parfile should be a relative path inside grid_folder
+    '''
+
+    parfile_path=os.path.join(grid_folder,parfile)
+
+    wall_h='%02.f'%(int(walltime))
+    wall_m = '%02.f' % (int((walltime-int(walltime))*60))
+
+    script_str=\
+    '''
+    #OAR -l /nodes='''+nodes+'''/cpu='''+cpus+'''/core='''+cores+''',walltime='''+wall_h+''':'''+wall_m+''':00
+    #OAR --stdout grid_folder.%jobid%.out
+    #OAR --stderr grid_dolder.%jobid%.err
+    #OAR --notify mail:'''+mail+'''
+    
+    source /soft2/env.bash
+    source /nix/nix-profile
+    
+    python $WIND_RUNNER -parfile '''+parfile_path+'''
+    
+    '''
+    with open(os.path.join(grid_folder,'oar_script.sh'),'w+') as oar_file:
+        oar_file.write(script_str)
+
+
+
 def create_grid_parfile(grid_folder,save_grid_dir,sim_grid_dir,mode,xlum,dr_r,v_resol,stop_d):
 
     '''
     Inserts a parfile inside an already existing grid folder structure
 
     the list of parameters is the list of arguments of oar_wrapper
+
+    mode: changes the save behavior
+        -cigrid: uses mantis as a save folder. save_grid_dir is expected to be a mantis absolute path
+        -standard: uses a standard save folder with normal copying commands
 
     note: there is a line in oar_wrapper for different sed extensions. Might need to be added here in the future
     '''
@@ -287,6 +340,7 @@ def create_grid_parfile(grid_folder,save_grid_dir,sim_grid_dir,mode,xlum,dr_r,v_
         parameters[i_sol]={'solution_rel_dir':sol_rel_dir,
                            'save_grid_dir':save_grid_dir,
                            'comput_grid_dir':sim_grid_dir,
+
                            'mdot_obs':sol_mdot,
                            'xlum':str(xlum),
                            'm_BH':sol_m_bh,

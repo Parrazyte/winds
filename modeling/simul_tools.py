@@ -253,7 +253,12 @@ def oar_wrapper(solution_rel_dir,save_grid_dir,sim_grid_dir,
     #it's easier to go directly in the simdir here
     os.chdir(simdir)
 
-    xstar_wind(solution_name,SED_path=SED_name,mdot_obs=mdot_obs,xlum=xlum,outdir='./',
+    if mdot_obs.isdigit():
+        mdot_obs_use=float(mdot_obs)
+    else:
+        mdot_obs_use=mdot_obs
+
+    xstar_wind(solution_name,SED_path=SED_name,xlum=xlum,mdot_obs=mdot_obs_use,outdir='./',
                m_BH=m_BH,
                ro_init=ro_init,dr_r=dr_r,stop_d_input=stop_d_input,v_resol=v_resol,
                comput_mode='server' if mode=='standard' else mode,save_folder=save_dir)
@@ -411,8 +416,8 @@ def xstar_func(spectrum_file,lum,t_guess,n,nh,xi,vturb_x,nbins,nsteps=1,niter=10
         elif comput_mode=='server':
             os.system('cp '+path_logpars+' '+save_folder)
 
-def xstar_wind(solution,SED_path,mdot_obs,xlum,outdir,
-               p_mhd_input=None,m_BH=8,
+def xstar_wind(solution,SED_path,xlum,outdir,
+               mdot_obs='auto',p_mhd_input=None,m_BH=8,
                ro_init=6.,dr_r=0.05,stop_d_input=1e6,v_resol=85.7,
                chatter=0,reload=True,comput_mode='local',save_folder='',
                force_ro_init=False,no_turb=False,cap_dr_resol=True,no_write=False,
@@ -430,6 +435,9 @@ def xstar_wind(solution,SED_path,mdot_obs,xlum,outdir,
         solution is either a file path or a dictionnary with all the arguments of a JED-SAD solution
 
         p_mhd and mdot_obs are the main parameters outside of the JED-SAD solution
+
+        if mdot_obs is set to auto, assumes the mdot value as a fraction of the Eddington luminosity
+        with the provided Black Hole Mass
 
         p_mhd is generally given in the solution, but if it's not (in local),
          it can be directly inputted through a parameter
@@ -732,8 +740,11 @@ def xstar_wind(solution,SED_path,mdot_obs,xlum,outdir,
 
     # ! From formula (rg/2.0*r_in), Equation (12) of Chakravorty et al. 2016. Here r_in is 6.0*r_g. eta_rad is assumed to be 1.0.
     eta_s = (1.0/12.0)
-    
-    mdot_mhd = mdot_obs/eta_s
+
+    if mdot_obs=='auto':
+        mdot_mhd=xlum/(1.26*m_BH)/eta_s
+    else:
+        mdot_mhd = mdot_obs/eta_s
     
     #!* This value is used to match Keigo's normalization
     #!mdot_norm=4.7130834*2.48e15 

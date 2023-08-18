@@ -209,10 +209,6 @@ def create_grid(grid_name, mhd_solutions_path,
 
     SED_arr,mdot_arr,m_BH_arr,rj_arr,xlum_arr=SED_list_var_list
 
-    #Using the x-ray luminosity as conversion if asked to
-    if mdot=='auto':
-        mdot_arr = xlum_arr / (1.26 * m_BH_arr)
-
     # #identifying the folder of the solution file
     # mhd_sol_dir = mhd_solutions_path[:mhd_solutions_path.rfind('/')]
 
@@ -226,12 +222,12 @@ def create_grid(grid_name, mhd_solutions_path,
             #the name of the grid is used as global directory
             #the name of the SED and other parameters will be used as the outdirs for the combination
             SED_dirs+=[os.path.join(grid_name,elem_SED.split('/')[-1][:elem_SED.split('/')[-1].rfind('.')]+\
-                     '_mdot_'+str(elem_mdot)+('' if mdot!='auto' else '_xlum_'+str(elem_xlum))+\
+                     '_mdot_'+str(elem_mdot)+('' if elem_mdot!='auto' else '_xlum_'+str(elem_xlum))+\
                                     '_m_bh_'+str(elem_m_BH)+'_rj_'+str(elem_rj))]
 
             #creating the grid in that folder
             sampl_grid_path=sample_angle(mhd_solutions_path,angle_list,elem_mdot,elem_m_BH,elem_rj,
-                                         xlum=elem_xlum if mdot=='auto' else None,
+                                         xlum=elem_xlum if elem_mdot=='auto' else None,
                                          outdir=SED_dirs[-1],
                                         return_file_path=True)
 
@@ -282,24 +278,22 @@ def create_oar_script(grid_folder,parfile,cores,cpus=2,nodes=1,
     wall_m = '%02.f' % (int((walltime-int(walltime))*60))
 
     script_str=\
-    '''
-    #OAR -l /nodes='''+nodes+'''/cpu='''+cpus+'''/core='''+cores+''',walltime='''+wall_h+''':'''+wall_m+''':00
-    #OAR --stdout grid_folder.%jobid%.out
-    #OAR --stderr grid_dolder.%jobid%.err
-    #OAR --notify mail:'''+mail+'''
-    
-    source /soft2/env.bash
-    source /nix/nix-profile
-    
-    python $WIND_RUNNER -parfile '''+parfile_path+'''
-    
-    '''
+    "#OAR -l /nodes="+str(nodes)+"/cpu="+str(cpus)+"/core="+str(cores)+\
+    ",walltime="+wall_h+":"+wall_m+":00\n"+\
+    "#OAR --stdout grid_folder.%jobid%.out\n"+\
+    "#OAR --stderr grid_dolder.%jobid%.err\n"+\
+    "#OAR --notify mail:"+mail+"\n"+\
+    "\nsource /soft2/env.bash\n"+\
+    "source /nix/nix-profile\n\n"+\
+    "python $WIND_RUNNER -parfile "+parfile_path
+
     with open(os.path.join(grid_folder,'oar_script.sh'),'w+') as oar_file:
         oar_file.write(script_str)
 
 
 
-def create_grid_parfile(grid_folder,save_grid_dir,sim_grid_dir,mode,xlum,dr_r,v_resol,stop_d):
+def create_grid_parfile(grid_folder,save_grid_dir,sim_grid_dir,xlum,dr_r,
+                        mode='standard',v_resol=85.7,stop_d=1e6):
 
     '''
     Inserts a parfile inside an already existing grid folder structure
@@ -311,6 +305,8 @@ def create_grid_parfile(grid_folder,save_grid_dir,sim_grid_dir,mode,xlum,dr_r,v_
         -standard: uses a standard save folder with normal copying commands
 
     note: there is a line in oar_wrapper for different sed extensions. Might need to be added here in the future
+
+    the default resolution value of 85.7 matches a XRISM resolution of 6eV with an oversampling of 3
     '''
 
     sol_files = glob.glob(grid_folder+'/**/eps**.txt', recursive=True)
@@ -331,10 +327,10 @@ def create_grid_parfile(grid_folder,save_grid_dir,sim_grid_dir,mode,xlum,dr_r,v_
         #defining the outdir for xstar inside the computation directory with the grid's folder structure
         sol_outdir_comput=os.path.join(sim_grid_dir,elem_sol_file[:elem_sol_file.rfind('/')])
 
-        sol_m_bh=sed_file_pars.split('_')[4]
+        sol_m_bh=sed_file_pars.split('m_bh_')[1].split('_')[0]
 
         #using rj here
-        sol_ro=sed_file_pars.split('_')[6]
+        sol_ro=sed_file_pars.split('_rj_')[1].split('_')[0]
 
         #direct names of the xstar_wind function arguments.
         parameters[i_sol]={'solution_rel_dir':sol_rel_dir,

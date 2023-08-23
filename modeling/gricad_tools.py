@@ -283,8 +283,9 @@ def create_oar_script(grid_folder,parfile,cores,cpus=2,nodes=1,
     "#OAR --stdout grid_folder.%jobid%.out\n"+\
     "#OAR --stderr grid_dolder.%jobid%.err\n"+\
     "#OAR --notify mail:"+mail+"\n"+\
-    "\nsource /soft2/env.bash\n"+\
-    "source /nix/nix-profile\n\n"+\
+    "\nsource ~/.bashrc"+\
+    "\npyload" \
+    "\npyloadenv"
     "python $WIND_RUNNER -parfile "+parfile_path
 
     with open(os.path.join(grid_folder,'oar_script.sh'),'w+') as oar_file:

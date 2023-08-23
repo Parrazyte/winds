@@ -373,7 +373,12 @@ def xstar_func(spectrum_file,lum,t_guess,n,nh,xi,vturb_x,nbins,nsteps=1,niter=10
             elif comput_mode=='server':
                 os.system('cp '+spectrum_file+' '+save_folder)
 
-    px.run_xstar(xpar,xhpar,headas_folder)
+    if comput_mode=='server':
+        #using the local directory as the xstar identifier
+        px.docker_run_xstar(xpar,xhpar,identifier=os.getcwd().split('/')[-1])
+        
+    elif comput_mode=='local':
+        px.run_xstar(xpar,xhpar,headas_folder)
 
     #storing the lines of the xstar log file
     with open('xout_step.log') as xlog:
@@ -494,10 +499,14 @@ def xstar_wind(solution,SED_path,xlum,outdir,
 
 
         -server/cigrid:
-            setup for grid computation on server. main difference is save impementation
+
+            setups for grid computation on servers.
+            The main difference is the way to run xstar and how saves are implemented
 
             cigrid (using Cigri on Dahu & Bigfoot)
-                
+                still in progress
+
+                uses charliecloud instead of docker for launching xstar
                 to be implemented for Luke:
                     -fetches from Mantis the current last input spectrum and parameter files when starting a job
                     -saves to Mantis the current input spectrum before each xstar run
@@ -507,7 +516,7 @@ def xstar_wind(solution,SED_path,xlum,outdir,
                 -(with "clean" option) cleans all the individual spectra at the end of the task to gain space
 
             server:
-                same behavior but uses a save_dir in a normal arborescence
+                same behavior but uses a save_dir in a normal arborescence, and docker directly
 
     Notes on the python conversion:
         -since array numbers starts at 0, we use "index" box numbers (starting at 0) and adapt all of the consequences,

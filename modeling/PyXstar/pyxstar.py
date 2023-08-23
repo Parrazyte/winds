@@ -6,6 +6,7 @@ import os, sys
 from astropy.io import fits as pyfits
 #import numpy as np
 #import math
+import numpy as np
 import time
 import pexpect
 from pexpect.popen_spawn import PopenSpawn
@@ -27,7 +28,7 @@ par = {
 "pressure":     0.03,       #"pressure (dyne/cm**2)"
 "density":      1.e+20,     #"density (cm**-3)"
 "spectrum":     "pow",      #"spectrum type?"
-"spectrum_file":"spct.dat", #"spectrum file?"
+"spectrum_file":'', #"spectrum file?"
 "spectun":      0,          #"spectrum units? (0=energy, 1=photons)"
 "trad":        -1.0,        #"radiation temperature or alpha?"
 "rlrad38":      1.e-6,      #"luminosity (/10**38 erg/s)"
@@ -874,11 +875,26 @@ mode,s,h,'+str(hpar['mode'])+',,,"mode"\n'
 #########################################################################
 
 def docker_run_xstar(par,hpar,\
-    container="heasoft:v6.31.1",\
-    host_account="nb@000.000"):
+    container="heasoft:v6.32",\
+    host_account="noperm",
+    identifier='xstar_output'):
 
-# Function to create the XSTAR input file xstar.par and run the code from
-# the XSTAR Docker container
+    # Function to create the XSTAR input file xstar.par and run the code from
+    # the XSTAR Docker container
+
+    '''
+
+    note: heasoft:v6.32 tarball created locally, modified to add the new binemis version
+
+    transformed into tar with docker export name > name.tar
+    copied via scp to the server (scp file.txt ipag-calc1.u-ga.fr.viaipagssh:)
+    loaded via docker load < name.tar
+
+    Custom addition:
+    when there are no permissions (flag given by setting the hot account tonoperm),
+    copies the parameter files inside the docker (in a directory given by the identifier folder)
+    then copies the output xstar files from the docker to the main directory before closure
+    '''
 
 # Remove old xstar.par and output files from current directory
     os.system("rm -f xstar.par")
@@ -1078,7 +1094,63 @@ mode,s,h,'+str(hpar['mode'])+',,,"mode"\n'
     
 # Run XSTAR with new xstar.par
 
-    if host_account == "nb@000.000":
+    def docker_runner(command):
+        '''
+        wrapping the redirection to avoid repetition
+        '''
+        with subprocess.Popen(command, stdout=subprocess.PIPE, bufsize=1, \
+                              universal_newlines=True) as p:
+            for line in p.stdout:
+                print(line, end='')  # process line here
+        if p.returncode != 0:
+            raise subprocess.CalledProcessError(p.returncode, p.args)
+
+    if host_account == "noperm":
+
+        #as of now, we make a single docker run and like all the runs to it
+        #identifying the docker id
+        docker_list=str(subprocess.check_output("docker ps", shell=True)).split('\\n')
+        docker_list_mask=[elem.endswith('xstar') for elem in docker_list]
+
+        if sum(docker_list_mask)==0:
+            #calling the docker with no mounts
+            subprocess.call(['docker','run','--name','xstar','-dt',container,'bash'])
+
+            #identifying the docker id
+            docker_list=str(subprocess.check_output("docker ps", shell=True)).split('\\n')
+            docker_list_mask=[elem.endswith('xstar') for elem in docker_list]
+
+        docker_id=np.array(docker_list)[docker_list_mask][0].split()[0]
+
+        #creating the custom folder for the current xstar run
+        subprocess.call(['docker','exec','-t','xstar','bash','-c',\
+            'mkdir -p '+identifier])
+
+        #copying the pfiles into that directory (with no write access but that's not an issue)
+        #the docker cp prints stuff that we can use to check if things have gone correctly
+        for elem_file in ['xstar.par',par['spectrum_file']]:
+            #skipping empty spectrum files if there is none used
+            if elem_file is not None:
+                docker_runner(['docker','cp',os.path.join(os.getcwd(),elem_file),
+                               docker_id+':/home/heasoft/'+identifier])
+
+        xstar_cmd=['docker','exec','-t','xstar','bash','-c',\
+            'export PFILES=/home/heasoft/'+identifier+' && cd '+identifier+' && xstar']
+
+        docker_runner(xstar_cmd)
+
+        #list of the standard xstar output files
+        files_output_list=['xout_abund1.fits','xout_rrc1.fits','xout_cont1.fits',
+                           'xout_spect1.fits','xout_lines1.fits','xout_step.log']
+
+        # copying the output files to the outside directory
+        for elem_file in files_output_list:
+            docker_runner(['docker','cp',docker_id+':'+os.path.join('/home/heasoft/',identifier,elem_file),
+                          os.getcwd()])
+
+        #note: we don't kill the xstar runner here to avoid issues with multiple process accessing it
+
+    elif host_account == "nb@000.000":
         subprocess.call(['docker','run','--name','xstar','-dt','-v',\
             os.getcwd()+':/mydata','-w','/mydata',container,'bash'])
         docker_cmd=['docker','exec','-t','xstar','bash','-c',\

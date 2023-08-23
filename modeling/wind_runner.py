@@ -5,6 +5,7 @@ import argparse
 import numpy as np
 from simul_tools import oar_wrapper
 from multiprocessing import Pool
+import subprocess
 
 '''
 Wrapper for a single/multiple solution computations in an oar environment. 
@@ -92,9 +93,15 @@ if parfile_path!='':
     with Pool() as pool:
         pool.starmap(oar_wrapper,param_arr)
 
+    #cleaning the xstar docker
+    #note that this should only be done if the wind_runner itself isn't parallelized
+    subprocess.call(['docker', 'container', 'rm', '--force', 'xstar'])
 
 else:
     oar_wrapper(solution_rel_dir=solution_rel_dir,save_grid_dir=save_grid_dir,comput_grid_dir=comput_grid_dir,
             mdot_obs=mdot_obs,xlum=xlum,m_BH=m_BH,
             ro_init=ro_init,dr_r=dr_r,stop_d_input=stop_d_input,v_resol=v_resol,
             mode=mode)
+
+
+

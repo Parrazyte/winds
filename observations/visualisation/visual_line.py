@@ -1075,7 +1075,7 @@ with tab_about:
                     
                     Figure references:  
                         [Petrucci et al. 2021](https://doi.org/10.1051/0004-6361/202039524)  
-                        [Done et al. 2007]((https://doi.org/10.1007/s00159-007-0006-1))  
+                        [Done et al. 2007](https://doi.org/10.1007/s00159-007-0006-1)  
                     #''')
                 
     with st.expander('I want to know how to use this tool'):
@@ -1088,7 +1088,7 @@ with tab_about:
                     
                     **The monitoring and parameter analysis plots take time to compute**, as the first one fetches data from the MAXI website in real time, and the second computes perturbative estimates of the correlation coefficient for each plot. As such, they are deactivated by default.  
                     
-                    It is worth noting that the current version of this tool has trouble performing too many actions in a short time. This is partially covered through internal failsafes, but if you modify several options at once and something crashes, or displays in a non-standard way, either resettoing an option (which reruns the script internally) or restarting the tool (either by pressing R or going in the top-right menu and clicking on Rerun) can fix the issue.
+                    It is worth noting that the current version of this tool has trouble performing too many actions in a short time. This is partially covered through internal failsafes, but if you modify several options at once and something crashes, or displays in a non-standard way, either resetting an option (which reruns the script internally) or restarting the tool (either by pressing R or going in the top-right menu and clicking on Rerun) can fix the issue.
                     
                     Moreover, to avoid too much issues for data management, the data is split between each combination of instrument, and the creation of subsequent widget depends on this data.
                     

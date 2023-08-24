@@ -21,7 +21,8 @@ In this case, the multiprocessing is done internally through a pool loop of the 
 ap = argparse.ArgumentParser(description='Wrapper for a single wind solution run in a oar environment.\n)')
 
 #parfile mode (empty string means not using this mode)
-ap.add_argument('-parfile',nargs=1,help="parfile to use instead of single solution",default='')
+ap.add_argument('-parfile',nargs=1,help="parfile to use instead of single solution",default='',
+                type=str)
 
 #paths
 ap.add_argument("-solution_rel_dir",nargs=1,help="solution relative directory inside the grid structure",type=str,default='')
@@ -69,14 +70,16 @@ m_BH=args.m_BH
 ro_init=args.ro_init
 dr_r=args.dr_r
 stop_d_input=args.stop_d_input
+stop_d_input=args.stop_d_input
 v_resol=args.v_resol
 mode=args.mode
 
 if parfile_path!='':
-
     #loading the file as an array
-    param_arr=np.loadtxt(parfile_path,dtype=object).T
+    param_arr=np.loadtxt(parfile_path[0],dtype=str).T
 
+    #converting in object to modify the types of the variables inside
+    param_arr=param_arr.astype(object)
     #note: ununsed as of now since pool.starmap directly takes an iterable
     # #and decomposing the arguments (with some type conversions to get the floats whenever needed)
     # solution_rel_dir_arr,save_grid_dir_arr,comput_grid_dir_arr=param_arr.T[:4]
@@ -92,10 +95,6 @@ if parfile_path!='':
     #pool loop
     with Pool() as pool:
         pool.starmap(oar_wrapper,param_arr)
-
-    #cleaning the xstar docker
-    #note that this should only be done if the wind_runner itself isn't parallelized
-    subprocess.call(['docker', 'container', 'rm', '--force', 'xstar'])
 
 else:
     oar_wrapper(solution_rel_dir=solution_rel_dir,save_grid_dir=save_grid_dir,comput_grid_dir=comput_grid_dir,

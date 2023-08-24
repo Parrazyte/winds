@@ -9,12 +9,16 @@ Created on Mon Sep 12 15:49:00 2022
 simulation tools, separated from the rest to have few imports
 """
 
-import os
+import os,sys
 import numpy as np
 import time
+import glob
+import subprocess
 
 #trapezoid integration
 from scipy.integrate import trapezoid
+
+sys.path.extend(['/home/parrama/Documents/Work/PhD/Scripts/Python/general'])
 from general_tools import file_edit
 
 from tqdm import tqdm
@@ -22,8 +26,9 @@ from tqdm import tqdm
 
 from solution_tools import func_density_sol,func_nh_sol,func_vel_sol,func_logxi_sol
 
-from gricad_tools import upload_mantis,download_mantis
+from grid_tools import upload_mantis,download_mantis
 
+sys.path.extend(['/home/parrama/Documents/Work/PhD/Scripts/Python/modeling/PyXstar'])
 import pyxstar as px
 
 # #adding some libraries 
@@ -212,7 +217,9 @@ def oar_wrapper(solution_rel_dir,save_grid_dir,sim_grid_dir,
     if SED_file.startswith('auto'):
         SED_extension=SED_file.split('_')[1]
         SED_name=solution_rel_dir[:solution_rel_dir.rfind('mdot')].split('/')[-1][:-1]+SED_extension
-        SED_rel_dir=('/').join(solution_rel_dir[:solution_rel_dir.rfind('mdot')].split('/')[:-1])
+
+        #cutting the directory just above the epsilon directories, which are the first directories below the SED
+        SED_rel_dir=('/').join(solution_rel_dir[:solution_rel_dir.rfind('eps')].split('/')[:-1])
         SED_rel_path=os.path.join(SED_rel_dir,SED_name)
     else:
         SED_rel_path=SED_file
@@ -221,7 +228,7 @@ def oar_wrapper(solution_rel_dir,save_grid_dir,sim_grid_dir,
 
     save_dir=os.path.join(save_grid_dir,solution_rel_dir)
 
-    os.system('mkdir -p'+simdir)
+    os.system('mkdir -p '+simdir)
 
     #copying all the initial files and the content of the mantis directory to the simdir
     if mode=='cigrid':
@@ -238,7 +245,8 @@ def oar_wrapper(solution_rel_dir,save_grid_dir,sim_grid_dir,
     elif mode=='standard':
 
         #copying from the save to the sim
-        os.system('cp '+os.path.join(save_dir,simdir)+'/* '+simdir)
+        for elem_file in glob.glob(save_dir+'/**'):
+            os.system('cp '+os.path.join(save_dir,elem_file)+' '+simdir)
 
         #copying the SED file
         os.system('cp '+os.path.join(save_grid_dir,SED_rel_path)+' '+simdir)
@@ -374,8 +382,12 @@ def xstar_func(spectrum_file,lum,t_guess,n,nh,xi,vturb_x,nbins,nsteps=1,niter=10
                 os.system('cp '+spectrum_file+' '+save_folder)
 
     if comput_mode=='server':
-        #using the local directory as the xstar identifier
-        px.docker_run_xstar(xpar,xhpar,identifier=os.getcwd().split('/')[-1])
+
+        #in order to ensure we're not gonna mix the xstar runs, we make a global identifier with the name
+        #of the grid and the solution
+        identifier_str=os.getcwd()[os.getcwd().find('grid'):]
+        identifier_str=identifier_str.replace('/','_')
+        px.docker_run_xstar(xpar,xhpar,identifier=identifier_str)
         
     elif comput_mode=='local':
         px.run_xstar(xpar,xhpar,headas_folder)
@@ -684,6 +696,25 @@ def xstar_wind(solution,SED_path,xlum,outdir,
             file_edit(path=path, line_id='\t'.join(main_infos[:2]),
                       line_data='\t'.join(main_infos + ion_infos + col_infos) + '\n', header=file_header)
             time.sleep(1)
+    def clean_xstar_docker(xstar_id):
+        # cleaning the xstar dockers in case of issue
+        docker_list = str(subprocess.check_output("docker ps", shell=True)).split('\\n')
+        docker_xstar_list = [elem.split()[-1] for elem in docker_list\
+                             if elem.split()[-1].startswith('xstar_'+xstar_id)]
+        for elem_docker in docker_xstar_list:
+            subprocess.call(['docker', 'container', 'rm', '--force', elem_docker])
+
+    if outdir=='./':
+        xstar_dir=os.getcwd()
+    else:
+        xstar_dir=os.path.join(os.getcwd(),outdir)
+
+    xstar_identifier = xstar_dir[xstar_dir.find('grid'):]
+    xstar_identifier = xstar_identifier.replace('/', '_')
+
+    print(xstar_identifier)
+    #cleaning previous xstar runs before starting the computation
+    clean_xstar_docker(xstar_identifier)
 
     #making sure the stop variable is an iterable
     if type(stop_d_input) not in [list, np.ndarray]:
@@ -767,9 +798,9 @@ def xstar_wind(solution,SED_path,xlum,outdir,
         #loading the solution file
         parlist = np.loadtxt(solution)
 
-        p_mhd=parlist[1]
+        p_mhd=round(parlist[2],5)
 
-        z_over_r, angle, r_cyl_r0, rho_mhd, vel_r, vel_phi, vel_z = parlist[7:-5]
+        z_over_r, angle, r_cyl_r0, rho_mhd, vel_r, vel_phi, vel_z = [round(elem,5) for elem in parlist[7:14]]
 
     elif comput_mode=='local':
 
@@ -924,7 +955,7 @@ def xstar_wind(solution,SED_path,xlum,outdir,
 
             Rsph_Rg=Rsph_SI/Rg_SI
 
-            vel_obs_cgs = func_vel_obs('obs',Rsph_Rg)
+            vel_obs_cgs = func_vel_obs(Rsph_Rg)
 
             logxi = func_logxi(Rsph_Rg)
 
@@ -1411,11 +1442,17 @@ def xstar_wind(solution,SED_path,xlum,outdir,
         if i_box+1==nbox_restart and xstar_input_restart is not None:
             xstar_func(xstar_input_restart,xlum_restart,t_restart,n_restart,nh_restart,logxi_restart,
                        0 if no_turb else vturb_x_restart,nbins=nbins,
-                       path_logpars=path_log_xpars,dict_box=dict_box,no_write=no_write,
+                       path_logpars=path_log_xpars,dict_box=dict_box,
+                       comput_mode=comput_mode,
+                       save_folder=save_folder_use,
+                       no_write=no_write,
                        headas_folder=headas_folder)
         else:
             xstar_func(xstar_input,xlum_eff,tp,xpx,xpxcol,zeta,vturb_x,nbins=nbins,
-                       path_logpars=path_log_xpars,dict_box=dict_box,no_write=no_write,
+                       path_logpars=path_log_xpars,dict_box=dict_box,
+                       comput_mode=comput_mode,
+                       save_folder=save_folder_use,
+                       no_write=no_write,
                        headas_folder=headas_folder)
         
         os.chdir(currdir)
@@ -1491,8 +1528,11 @@ def xstar_wind(solution,SED_path,xlum,outdir,
             dict_box['i_box_final']+=1
             #using xlum_final here to avoid overwriting xlum_eff if using more than a single stop distance
             xstar_func(xstar_input,xlum_final,tp,xpx,xpxcol,zeta,vturb_x,nbins=nbins,
-                       path_logpars=path_log_xpars,dict_box=dict_box,no_write=no_write,
-                       headas_folder=headas_folder,save_folder=save_folder_use)
+                       path_logpars=path_log_xpars,dict_box=dict_box,
+                       comput_mode=comput_mode,
+                       save_folder=save_folder_use,
+                       no_write=no_write,
+                       headas_folder=headas_folder)
             
             os.chdir(currdir)
             
@@ -1521,6 +1561,8 @@ def xstar_wind(solution,SED_path,xlum,outdir,
             #removing the standard xstar output to gain space
             os.system('rm -f '+outdir+'/xout_*.fits')
             
+    #cleaning the xstar docker before ending the computation
+    clean_xstar_docker(xstar_identifier)
 
 def nuLnu_to_xstar(path,renorm=False,Edd_ratio=1,M_BH=8,display=False):
     

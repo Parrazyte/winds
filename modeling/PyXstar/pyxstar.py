@@ -1107,23 +1107,25 @@ mode,s,h,'+str(hpar['mode'])+',,,"mode"\n'
 
     if host_account == "noperm":
 
-        #as of now, we make a single docker run and like all the runs to it
+        # The docker should only be created on the first run
         #identifying the docker id
         docker_list=str(subprocess.check_output("docker ps", shell=True)).split('\\n')
-        docker_list_mask=[elem.endswith('xstar') for elem in docker_list]
+        docker_list_mask=[elem.endswith('xstar_'+identifier) for elem in docker_list]
 
         if sum(docker_list_mask)==0:
             #calling the docker with no mounts
-            subprocess.call(['docker','run','--name','xstar','-dt',container,'bash'])
+            print("no running xstar docker detected. Creating it...")
 
-            #identifying the docker id
-            docker_list=str(subprocess.check_output("docker ps", shell=True)).split('\\n')
-            docker_list_mask=[elem.endswith('xstar') for elem in docker_list]
+            subprocess.call(['docker','run','--name','xstar_'+identifier,'-dt',container,'bash'])
+
+        #identifying the docker id
+        docker_list=str(subprocess.check_output("docker ps", shell=True)).split('\\n')
+        docker_list_mask=[elem.endswith('xstar_'+identifier) for elem in docker_list]
 
         docker_id=np.array(docker_list)[docker_list_mask][0].split()[0]
 
         #creating the custom folder for the current xstar run
-        subprocess.call(['docker','exec','-t','xstar','bash','-c',\
+        subprocess.call(['docker','exec','-t','xstar_'+identifier,'bash','-c',\
             'mkdir -p '+identifier])
 
         #copying the pfiles into that directory (with no write access but that's not an issue)
@@ -1134,7 +1136,7 @@ mode,s,h,'+str(hpar['mode'])+',,,"mode"\n'
                 docker_runner(['docker','cp',os.path.join(os.getcwd(),elem_file),
                                docker_id+':/home/heasoft/'+identifier])
 
-        xstar_cmd=['docker','exec','-t','xstar','bash','-c',\
+        xstar_cmd=['docker','exec','-t','xstar_'+identifier,'bash','-c',\
             'export PFILES=/home/heasoft/'+identifier+' && cd '+identifier+' && xstar']
 
         docker_runner(xstar_cmd)

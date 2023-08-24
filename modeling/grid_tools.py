@@ -272,7 +272,8 @@ def create_oar_script(grid_folder,parfile,cores,cpus=2,nodes=1,
     parfile should be a relative path inside grid_folder
     '''
 
-    parfile_path=os.path.join(grid_folder,parfile)
+    #parfile_path=os.path.join(grid_folder,parfile)
+    parfile_path=parfile
 
     wall_h='%02.f'%(int(walltime))
     wall_m = '%02.f' % (int((walltime-int(walltime))*60))
@@ -286,11 +287,10 @@ def create_oar_script(grid_folder,parfile,cores,cpus=2,nodes=1,
     "\nsource ~/.bashrc"+\
     "\npyload" \
     "\npyloadenv"
-    "python $WIND_RUNNER -parfile "+parfile_path
+    "python $wind_runner -parfile "+parfile_path
 
     with open(os.path.join(grid_folder,'oar_script.sh'),'w+') as oar_file:
         oar_file.write(script_str)
-
 
 
 def create_grid_parfile(grid_folder,save_grid_dir,sim_grid_dir,xlum,dr_r,
@@ -300,6 +300,8 @@ def create_grid_parfile(grid_folder,save_grid_dir,sim_grid_dir,xlum,dr_r,
     Inserts a parfile inside an already existing grid folder structure
 
     the list of parameters is the list of arguments of oar_wrapper
+
+    save_grid_dir and sim_grid_dir are global forder, to which the gird_folder arborescence will be added
 
     mode: changes the save behavior
         -cigrid: uses mantis as a save folder. save_grid_dir is expected to be a mantis absolute path

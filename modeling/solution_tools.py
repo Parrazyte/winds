@@ -117,7 +117,10 @@ def func_temp_mhd(r_sph,z_over_r,rho_mhd,p_mhd,mdot_mhd,m_BH):
 def func_vel_sol(coordinate,r_sph,z_over_r,vel_r,vel_phi,vel_z,m_BH):
 
     '''
-    The (special) relativistic computation requires the 3 components
+
+    returns various information about the relativistic speed of the gaz
+
+    The (special) relativistic computation requires the 3 components, so requires vel_r, vel_phi and vel_z
     '''
 
     cyl_cst = np.sqrt(1.0 + (z_over_r * z_over_r))
@@ -143,18 +146,69 @@ def func_vel_sol(coordinate,r_sph,z_over_r,vel_r,vel_phi,vel_z,m_BH):
     gamma=1/np.sqrt(1-(u_relat/c_cgs)**2)
 
     if coordinate=='r':
-        return u_r_nr/gamma
+        return u_r_nr*u_nonrelat/u_relat
     elif coordinate=='phi':
-        return u_phi_nr / gamma
+        return u_phi_nr *u_nonrelat/u_relat
     elif coordinate=='z':
-        return u_z_nr / gamma
+        return u_z_nr *u_nonrelat/u_relat
     if coordinate=='obs':
         angle_rad=np.arctan(z_over_r)
-        return (u_r_nr*np.cos(angle_rad)+u_z_nr*np.sin(angle_rad))/gamma
+        return (u_r_nr*np.cos(angle_rad)+u_z_nr*np.sin(angle_rad))*u_nonrelat/u_relat
 
+    if coordinate=='tot':
+        return u_relat
+
+    if coordinate=='angle':
+        # scalar product between the gaz and the line of sight
+        # (which has coords (1,z_over_r,0) when putting r at 1
+        scal_gaz_los=u_r_nr*u_nonrelat/u_relat*1/cyl_cst+u_z_nr*u_nonrelat/u_relat*z_over_r/cyl_cst
+
+        cos_angle=scal_gaz_los/u_relat
+
+        # relativistic aberration on the angle
+        cos_angle_relat=(cos_angle-u_relat/c_cgs)/(1-u_relat/c_cgs*cos_angle)
+
+        #returning a value in degrees
+        return np.arccos(cos_angle_relat)*180/np.pi
+
+def func_E_deboost_sol(r_sph,z_over_r,vel_r,vel_phi,vel_z,m_BH):
+
+    '''
+    Formula from the Luminari20 for the change in Energies
+
+    the angle computation considers the relatvistic aberration
+    '''
+
+    v_gaz=func_vel_sol('tot',r_sph,z_over_r,vel_r,vel_phi,vel_z,m_BH)
+
+    angle_gaz_los=func_vel_sol('angle',r_sph,z_over_r,vel_r,vel_phi,vel_z,m_BH)
+
+    gamma_gaz=1/np.sqrt(1-(v_gaz/c_cgs)**2)
+    beta_gaz=v_gaz/c_cgs
+
+    psi=1/(gamma_gaz*(1-beta_gaz*np.cos(angle_gaz_los*np.pi/180)))
+
+    return psi
+
+def func_lum_deboost_sol(r_sph,z_over_r,vel_r,vel_phi,vel_z,m_BH):
+
+    '''
+    Formula from the Luminari20 for the global deboost in luminosities
+
+    the angle computation considers the relatvistic aberration
+    '''
+
+    return func_E_deboost_sol(r_sph,z_over_r,vel_r,vel_phi,vel_z,m_BH)**4
 
 # in this one, the distance appears directly so it should be the spherical one
-def func_logxi_sol(r_sph,z_over_r,L_xi_Source,rho_mhd,p_mhd,mdot_mhd,m_BH):
+def func_logxi_sol(r_sph,z_over_r,L_xi_Source,rho_mhd,p_mhd,mdot_mhd,m_BH,vel_r,vel_phi,vel_z):
+
+    '''
+    in this one, the distance appears directly so it should be the spherical one
+
+    Also considers the speed of the material at this distance, which deboosts the luminosity
+    (see function above)
+    '''
 
     m_BH_SI = m_BH * Msol_SI
     Rs_SI = 2.0 * G_SI * m_BH_SI / (c_SI * c_SI)
@@ -163,7 +217,8 @@ def func_logxi_sol(r_sph,z_over_r,L_xi_Source,rho_mhd,p_mhd,mdot_mhd,m_BH):
     Rg_SI = 0.5 * Rs_SI
     Rg_cgs = Rg_SI * m2cm
 
-    return np.log10(L_xi_Source / (func_density_sol(r_sph,z_over_r,rho_mhd,p_mhd,mdot_mhd,m_BH) * (r_sph * Rg_cgs) ** 2))
+    return np.log10(L_xi_Source*func_lum_deboost_sol(r_sph,z_over_r,vel_r,vel_phi,vel_z,m_BH)\
+                    / (func_density_sol(r_sph,z_over_r,rho_mhd,p_mhd,mdot_mhd,m_BH) * (r_sph * Rg_cgs) ** 2))
 
 def func_nh_sol(r_sph,r_sph_0,z_over_r,rho_mhd,p_mhd,mdot_mhd,m_BH):
 

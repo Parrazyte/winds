@@ -217,7 +217,9 @@ def func_max_dr(x_start,vmax):
     
     note: vmax should be in cgs, x_start in R_g
     '''
-                  
+
+    #more complete version in simul_tools
+
     rad_angle=angle*np.pi/180
     
     x_end=1/((x_start)**(-1/2)-vmax/(c_cgs*(vel_r*np.cos(rad_angle)+vel_z*np.sin(rad_angle))))**2

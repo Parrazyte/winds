@@ -160,8 +160,9 @@ def func_vel_sol(coordinate,r_sph,z_over_r,vel_r,vel_phi,vel_z,m_BH):
 
     if coordinate=='angle':
         # scalar product between the gaz and the line of sight
+        # pov of the gaz so the gaz speed is inverted, very important for the aberration
         # (which has coords (1,z_over_r,0) when putting r at 1
-        scal_gaz_los=u_r_nr*u_nonrelat/u_relat*1/cyl_cst+u_z_nr*u_nonrelat/u_relat*z_over_r/cyl_cst
+        scal_gaz_los=-u_r_nr*u_nonrelat/u_relat*1/cyl_cst-u_z_nr*u_nonrelat/u_relat*z_over_r/cyl_cst
 
         cos_angle=scal_gaz_los/u_relat
 
@@ -169,7 +170,13 @@ def func_vel_sol(coordinate,r_sph,z_over_r,vel_r,vel_phi,vel_z,m_BH):
         cos_angle_relat=(cos_angle-u_relat/c_cgs)/(1-u_relat/c_cgs*cos_angle)
 
         #returning a value in degrees
+        # print('cos:')
+        # print(cos_angle_relat)
+        # print('angle')
+        # print(np.arccos(cos_angle_relat)*180/np.pi)
+
         return np.arccos(cos_angle_relat)*180/np.pi
+
 
 def func_E_deboost_sol(r_sph,z_over_r,vel_r,vel_phi,vel_z,m_BH):
 
@@ -197,6 +204,18 @@ def func_lum_deboost_sol(r_sph,z_over_r,vel_r,vel_phi,vel_z,m_BH):
 
     the angle computation considers the relatvistic aberration
     '''
+
+    #here if need to test things on func_E without breaking lum_deboos
+    # v_gaz=func_vel_sol('tot',r_sph,z_over_r,vel_r,vel_phi,vel_z,m_BH)
+    #
+    # angle_gaz_los=func_vel_sol('angle',r_sph,z_over_r,vel_r,vel_phi,vel_z,m_BH)
+    #
+    # gamma_gaz=1/np.sqrt(1-(v_gaz/c_cgs)**2)
+    # beta_gaz=v_gaz/c_cgs
+    #
+    # psi=1/(gamma_gaz*(1-beta_gaz*np.cos(angle_gaz_los*np.pi/180)))
+    #
+    # return psi**4
 
     return func_E_deboost_sol(r_sph,z_over_r,vel_r,vel_phi,vel_z,m_BH)**4
 

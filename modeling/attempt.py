@@ -61,15 +61,15 @@ stop_d=1e6
 
 custom_xstar_folder='/home/parrama/Soft/Heasoft/xstar_modif/heasoft-6.31.1/x86_64-pc-linux-gnu-libc2.31'
 
-SED=os.path.join('incident_xstar_HS.dat')
-#SED='./5461_cont_deabs_fully_extended_xstar.txt'
+#SED=os.path.join('incident_xstar_HS.dat')
+SED='./5461_cont_deabs_fully_extended_xstar.txt'
 #SED=os.path.join('test_xstar.dat')
 
 #SED_GROJ='5461_cont_deabs_extended_xstar.txt'
 
-xstar_wind(dict_sol, SED_path=SED, mdot_obs=mdot, xlum=0.1, outdir='test_r0',
+xstar_wind(dict_sol, SED_path=SED, mdot_obs=mdot, xlum=0.1, outdir='test_relat3',
            p_mhd_input=p,m_BH=5.4,
-           ro_init=6, dr_r=0.05, stop_d_input=stop_d, v_resol=v_resol_test,
+           ro_init=6, dr_r=0.05, stop_d_input=stop_d, v_resol=85.7,
            chatter=1,cap_dr_resol=False,
            force_ro_init=False,reload=True,no_turb=False,no_write=False,
            grid_type='standard',custom_grid_headas=custom_xstar_folder)

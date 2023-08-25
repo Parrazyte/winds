@@ -17,6 +17,8 @@ import subprocess
 
 #trapezoid integration
 from scipy.integrate import trapezoid
+from scipy.interpolate import griddata
+
 
 sys.path.extend(['/home/parrama/Documents/Work/PhD/Scripts/Python/general'])
 from general_tools import file_edit
@@ -321,9 +323,13 @@ def xstar_func(spectrum_file,lum,t_guess,n,nh,xi,vturb_x,nbins,nsteps=1,niter=10
         i_box_final=dict_box['i_box_final']
         dr_r_eff_list=dict_box['dr_r_eff_list']
         v_resol=dict_box['v_resol']
+        xlum=dict_box['xlum']
+        lum_corr_factor=dict_box['xlum_corr']
     else:
         nbox=''
         i_box_final=''
+        xlum=0
+
 
     #copying the parameter dictionnaries to avoid issues if overwriting the defaults
     xpar=px.par.copy()
@@ -364,13 +370,16 @@ def xstar_func(spectrum_file,lum,t_guess,n,nh,xi,vturb_x,nbins,nsteps=1,niter=10
         #default fits writing without too much details
         xhpar['lwrite']=0
 
-    parlog_header=['#v_resol= '+str(v_resol)+' km/s | nbins= '+str(nbins)+'\n',
+    parlog_header=['#xlum_init =%.2e'%(xlum)+' *1e38 erg/s | v_resol= '+str(v_resol)+' km/s | nbins= '+str(nbins)+'\n',
                    '#nsteps= '+str(nsteps)+'\tniter= '+str(niter)+'\n',
                    '#Remember logxi is shifted to give xstar the correct luminosity input and the density at the half-box radius\n',
-                   '#nbox\tnbox_final\tspectrum\tlum\tt_guess\tn\tnh\tlogxi\tvturb_x\tdr_r\tt_run\n']
+                   '############################################################################################################\n',
+                   '#nbox\tnbox_final\tspectrum\tlum\tlum_corr_factor\tt_guess\tn\tnh\tlogxi\tvturb_x\tdr_r\tt_run\n']
 
     if path_logpars is not None:
-        parlog_str='\t'.join([str(nbox),str(i_box_final),spectrum_file,'%.5e'%lum,'%.5e'%t_guess,'%.5e'%n,'%.5e'%nh,'%.5e'%xi,'%.5e'%vturb_x,'%.5e'%dr_r_eff_list[nbox-1]])+'\n'
+        parlog_str='\t'.join([str(nbox),str(i_box_final),spectrum_file,'%.6e'%lum,'%.6e'%lum_corr_factor,
+                              '%.6e'%t_guess,'%.6e'%n,'%.6e'%nh,'%.6e'%xi,'%.6e'%vturb_x,
+                              '%.6e'%dr_r_eff_list[nbox-1]])+'\n'
         
         file_edit(path_logpars,'\t'.join([str(nbox),str(i_box_final),spectrum_file]),parlog_str,parlog_header)
 
@@ -540,7 +549,7 @@ def xstar_wind(solution,SED_path,xlum,outdir,
 
     '''
 
-    def shift_transmitted_sp_gaz_rest(psi, path, incident_path):
+    def shift_transmitted_sp_gaz_rest(psi, path, incident_path,xlum_eff):
 
         '''
         shifts the current xstar transmitted spectrum (in the gaz frame) to the rest frame
@@ -554,7 +563,10 @@ def xstar_wind(solution,SED_path,xlum,outdir,
 
         Works with easy integration of the xstar file because the unit is ergs/s/cm²/erg,
         aka ergs*cst after integration
-        Works independantly of the normalisation of the spectra
+
+        the xstar output files has x axis in units of eV and y axis in units of 1e38erg/s/erg
+        so we need to integrate and the x axis must be renormalized to ergs (so with the conversion factor below)
+        the renormalization considers 1-1000 Rydbergs only, so we ensure to only consider thart part of the spectrum
 
         '''
 
@@ -567,11 +579,28 @@ def xstar_wind(solution,SED_path,xlum,outdir,
         # loading the energy and spectrum from the input spectrum file (which should be in xstar form)
         eptmp_incid, zrtmp_incid = np.loadtxt(incident_path, skiprows=1).T
 
-        #the end point is the rest frame, so in energies this is the incident (rest frame) non-shifted grid
-        eptmp_relat = eptmp_incid
+        '''
+        the end point is the rest frame, so in energies this is the incident (rest frame) non-shifted grid
+        the issue is that for the first computation the starting grid is not xstar-like
+        Thus we interpolate the incident spectrum on the xstar grid before adding it
+        
+        NOTE: This means we "lose" all of the SED beyond the xstar grid bounds, 
+              and the luminosity evolves accordingly. This is expected to be negligible
+              
+        '''
+        eptmp_relat = eptmp_trans
+
+        if not np.all(eptmp_incid==eptmp_trans):
+            zrtmp_incid_interp=10**griddata(np.log10(eptmp_incid),np.log10(zrtmp_incid),np.log10(eptmp_trans),
+                                            method='linear',fill_value=-10)
+
+            #renormalizing the incident flux in case the starting spectrum isn't normalized
+            zrtmp_incid_interp=zrtmp_incid_interp*xlum_eff/trapezoid(zrtmp_incid_interp,x=eptmp_relat * 1.6021773E-12)
+        else:
+            zrtmp_incid_interp=zrtmp_incid
 
         # true relativistic expression of the transmitted spectrum
-        zrtmp_relat= zrtmp_incid*(1-psi**3)+zrtmp_trans*1/psi
+        zrtmp_relat= zrtmp_incid_interp*(1-psi**3)+zrtmp_trans*1/psi
 
         # should not need to remap the spectrum since it will be done internally by xstar if necessary
         shifted_input_arr = np.array([eptmp_relat, zrtmp_relat]).T
@@ -628,15 +657,25 @@ def xstar_wind(solution,SED_path,xlum,outdir,
         between the 1-1000Ryd luminosity and the bolometric luminosity
         
         (note that this doesn't need the normalization to be correct as this is a relative computation)
+        
+        Note: we add an interpolation in case the initial spectrum or xstar isn't 
         '''
 
-        energy_mask = (eptmp_shifted / Ryd2eV > 1) & (eptmp_shifted / Ryd2eV < 1000)
+        eptmp_shifted_highres=np.logspace(np.log10(eptmp_shifted[0]),np.log10(eptmp_shifted[-1]),int(1e6))
 
-        xlum_xstar_range = trapezoid(zrtmp_shifted[energy_mask], x=eptmp_shifted[energy_mask] * 1.6021773E-12)
+        zrtmp_shifted_interp =10**(griddata(np.log10(eptmp_shifted),np.log10(zrtmp_shifted),
+                                            np.log10(eptmp_shifted_highres), method='linear',fill_value=-10))
 
-        xlum_bol= trapezoid(zrtmp_shifted,x=eptmp_shifted * 1.6021773E-12)
+        energy_mask = (eptmp_shifted_highres / Ryd2eV > 1) & (eptmp_shifted_highres / Ryd2eV < 1000)
 
-        return xlum_xstar_range
+        #note: both absolute values of these luminosities can be false is the spectrum isn't correctly normalized,
+        #but this doesn't affect the ratio of luminosities
+        xlum_xstar_range = trapezoid(zrtmp_shifted_interp[energy_mask],
+                                     x=eptmp_shifted_highres[energy_mask] * 1.6021773E-12)
+
+        xlum_bol= trapezoid(zrtmp_shifted_interp,x=eptmp_shifted_highres * 1.6021773E-12)
+
+        return xlum_xstar_range/xlum_bol
 
     def write_xstar_infos(nbox, vobsx, path):
 
@@ -757,7 +796,7 @@ def xstar_wind(solution,SED_path,xlum,outdir,
     xstar_identifier = xstar_dir[xstar_dir.find('grid'):]
     xstar_identifier = xstar_identifier.replace('/', '_')
 
-    print(xstar_identifier)
+    print('Using xstar docker id xstar_identifier')
     #cleaning previous xstar runs before starting the computation
     clean_xstar_docker(xstar_identifier)
 
@@ -935,25 +974,28 @@ def xstar_wind(solution,SED_path,xlum,outdir,
 
     fileobj_box_ascii_xstar.write('#Xstar parameters for the non-final boxes. The logxi is only theoretical since  '+
                                     ' it assumes negligible absorption\n')
-    fileobj_box_ascii_xstar.write('#Rsph_cgs_mid(nbox) log10(density_cgs_mid(nbox)) log10(NhOfBox(nbox)) logxi_mid(nbox) '+
-                                     ' vobs_mid(nbox)\n')
+    fileobj_box_ascii_xstar.write('#n_box log10(density_cgs_mid(nbox)) log10(NhOfBox(nbox)) logxi_mid(nbox) '+
+                                     ' vobs_mid(nbox) psi_box(nbox)\n')
     #448
     fileobj_box_ascii_xstar_last=open('./'+outdir+"/last_box_Ascii_for_xstar_%.1e"%stop_dl+".dat",'w+')
 
     fileobj_box_ascii_xstar_last.write('#Xstar parameters for the final boxes. The logxi is only theoretical since  '+
                                     ' it assumes negligible absorption\n')
-    fileobj_box_ascii_xstar_last.write('#Rsph_cgs_mid(nbox) log10(density_cgs_mid(nbox)) log10(NhOfBox(nbox)) logxi_mid(nbox) '+
-                                     ' vobs_mid(nbox)\n')
+    fileobj_box_ascii_xstar_last.write('#n_box_last log10(density_cgs_mid(nbox)) log10(NhOfBox(nbox)) logxi_mid(nbox) '+
+                                     ' vobs_mid(nbox) psi_box(nbox)\n')
 
     #449
     fileobj_box_ascii_stop_dis=open('./'+outdir+"/box_Ascii_stop_dist_%.1e"%stop_dl+".dat",'w+')
     
-    fileobj_box_ascii_stop_dis.write('#Rsph_cgs_mid(nbox) log10(density_cgs_mid(nbox)) log10(NhOfBox(nbox)) logxi_mid(nbox) '+
+    fileobj_box_ascii_stop_dis.write('#n_box Rsph_cgs_mid(nbox) log10(density_cgs_mid(nbox)) log10(NhOfBox(nbox)) logxi_mid(nbox) '+
                                      ' vobs_mid(nbox)\n')
     
     #450
     fileobj_box_ascii_last=open('./'+outdir+"/last_box_Ascii_%.1e"%stop_dl+".dat",'w+')
-        
+
+    fileobj_box_ascii_last.write('#n_box_last Rsph_cgs_mid(nbox) log10(density_cgs_mid(nbox)) log10(NhOfBox(nbox)) logxi_mid(nbox) '+
+                                     ' vobs_mid(nbox)\n')
+
     '''
     !* This following 'while' loop is used to find the first suitable value of 
     !* ro_by_Rg where logxi becomes less than some predefined suitable value. 
@@ -1121,13 +1163,14 @@ def xstar_wind(solution,SED_path,xlum,outdir,
     Rsph_cgs_end= Rsph_cgs_1st
     i_box = 0
     i_box_stop=0
-    
+
     nbox_rad=0
     nbox_v=0
 
     dr_r_eff_list=[]
 
-    while Rsph_cgs_end<Rsph_cgs_last[len(stop_d)-1]:
+    #note: we add a rounding in the test condition here to avoid an issue with np precision
+    while np.round(Rsph_cgs_end/Rsph_cgs_last[len(stop_d)-1],8)<1.:
     
         #computing the dr/r of the velocity threshold used. We now use end_box-start_box instead of the midpoint of different boxes
         max_dr_res=0 if not cap_dr_resol else func_max_dr(Rsph_cgs_end/Rg_cgs,v_resol*1e5)
@@ -1236,36 +1279,38 @@ def xstar_wind(solution,SED_path,xlum,outdir,
         # !* xi value we are providing from ASCII file to xstar wrong to estimate the distance correctly.
         # !* It is wrong because luminosity is calculated wrongly by multiplying 4.0*Pi 
         # !* This loop is to prepare the ASCII file which will be input of xstar
-        
-        if not final_box_flag:
 
-            i_last=1
+        if final_box_flag:
 
             #!* calculated suitably from density_mid and Rsph_start
             #!* logxi_mid is changed to logxi_input (to have the correct value with xstar balance)
-            fileobj_box_ascii_xstar.write(str(i_last)+'\t'+str(np.log10(density_cgs_mid[i_box]))
-                                          +'\t'+str(np.log10(NhOfBox[i_box]))+'\t'
-                                   +str(logxi_input[i_box])+'\t'+str(vobs_mid[i_box])+'\t'+str(psi_box[i_box])+'\n')
+            fileobj_box_ascii_xstar_last.write('%03i\t%.15e\t%.15e\t%.15e\t%.15e\t%.15e\n'\
+                                               %(i_box_stop+1,np.log10(density_cgs_mid[i_box]),np.log10(NhOfBox[i_box]),
+                                                logxi_input[i_box],vobs_mid[i_box],psi_box[i_box]))
 
-            i_last+=1
+            #!* This loop is to prepare the ASCII file where xi value is the actual physical value
+            fileobj_box_ascii_last.write('%03i\t%.15e\t%.15e\t%.15e\t%.15e\t%.15e\n'\
+                                               %(i_box+1-i_box_stop,Rsph_cgs_mid[i_box],
+                                                 np.log10(density_cgs_mid[i_box]),
+                                                 np.log10(NhOfBox[i_box]),
+                                                logxi_mid[i_box],vobs_mid[i_box]))
+
+
 
         else:
             #!* calculated suitably fron density_mid and Rsph_start
             #!* logxi_mid is changed to logxi_input
-            fileobj_box_ascii_xstar_last.write(str(i_box-i_last+1)+'\t'+str(np.log10(density_cgs_mid[i_box]))
-                                               +'\t'+str(np.log10(NhOfBox[i_box]))+'\t'
-                                   +str(logxi_input[i_box])+'\t'+str(vobs_mid[i_box])+'\t'+str(psi_box[i_box])+'\n')
-        
-        #!* This loop is to prepare the ASCII file where xi value is the actual physical value
-        
-        if not final_box_flag:
-            fileobj_box_ascii_stop_dis.write(str(Rsph_cgs_mid[i_box])+'\t'+str(np.log10(density_cgs_mid[i_box]))+
-                                             '\t'+str(np.log10(NhOfBox[i_box]))+'\t'+str(logxi_mid[i_box])+
-                                             '\t'+str(vobs_mid[i_box])+'\n')
-        else:
-            fileobj_box_ascii_last.write(str(Rsph_cgs_mid[i_box])+'\t'+str(np.log10(density_cgs_mid[i_box]))+
-                                         '\t'+str(np.log10(NhOfBox[i_box]))+'\t'+str(logxi_mid[i_box])+
-                                         '\t'+str(vobs_mid[i_box])+'\n')
+            fileobj_box_ascii_xstar.write('%03i\t%.15e\t%.15e\t%.15e\t%.15e\t%.15e\n'\
+                                               %(i_box+1-i_box_stop,np.log10(density_cgs_mid[i_box]),
+                                                 np.log10(NhOfBox[i_box]),
+                                                logxi_input[i_box],vobs_mid[i_box],psi_box[i_box]))
+
+            #!* This loop is to prepare the ASCII file where xi value is the actual physical value
+            fileobj_box_ascii_stop_dis.write('%03i\t%.15e\t%.15e\t%.15e\t%.15e\t%.15e\n'\
+                                               %(i_box+1-i_box_stop,Rsph_cgs_mid[i_box],
+                                                 np.log10(density_cgs_mid[i_box]),
+                                                 np.log10(NhOfBox[i_box]),
+                                                logxi_mid[i_box],vobs_mid[i_box]))
 
         
         if chatter>=10:
@@ -1304,6 +1349,7 @@ def xstar_wind(solution,SED_path,xlum,outdir,
     density_cgs_stop=density_cgs_stop[:i_box]
     logxi_stop=logxi_stop[:i_box]
     NhOfBox=NhOfBox[:i_box]
+    psi_box=psi_box[:i_box]
 
     #total number of boxes is the nbox of the last stop distance
     nbox_std = nbox_stop[len(stop_d)-1]
@@ -1339,7 +1385,7 @@ def xstar_wind(solution,SED_path,xlum,outdir,
 
     #211
     with open('./'+outdir+'/box_Ascii_stop_dist_for_xstar_%.1e'%stop_dl+'.dat','r') as fileobj_box_ascii_stop_dist:
-        box_stop_dist_list=fileobj_box_ascii_stop_dist.readlines()[1:]
+        box_stop_dist_list=fileobj_box_ascii_stop_dist.readlines()[2:]
     
     #! xpx, xpxcol are given in log value. zeta is logxi. vobs in Km/s
     
@@ -1352,7 +1398,7 @@ def xstar_wind(solution,SED_path,xlum,outdir,
     
     #212
     with open('./'+outdir+'/last_box_Ascii_for_xstar_%.1e'%stop_dl+'.dat','r') as fileobj_box_ascii_stop_dist_last:
-        box_stop_dist_list_last=fileobj_box_ascii_stop_dist_last.readlines()[1:]
+        box_stop_dist_list_last=fileobj_box_ascii_stop_dist_last.readlines()[2:]
     
     for i in range(len(stop_d)):
         #note: we skip the box number info
@@ -1396,7 +1442,8 @@ def xstar_wind(solution,SED_path,xlum,outdir,
 
     dict_box={'dr_r_eff_list':dr_r_eff_list,
               'v_resol':v_resol,
-              'i_box_final':i_box_final}
+              'i_box_final':i_box_final,
+              'xlum':xlum}
 
     # computing the velocities and del_E factors for the whole grid
 
@@ -1426,7 +1473,7 @@ def xstar_wind(solution,SED_path,xlum,outdir,
             
             if int(line_restart.split('\t')[0])!=1:
 
-                print('unfinished computation detected. Fetching last computed box...\n')
+                print('unfinished computation detected. Restarting from last computed box...\n')
                     
                 #fetching the information about the box
                 nbox_restart=int(line_restart.split('\t')[0])
@@ -1436,16 +1483,18 @@ def xstar_wind(solution,SED_path,xlum,outdir,
                 xstar_input_restart=line_restart.split('\t')[2]
                 
                 xlum_restart=float(line_restart.split('\t')[3])
+
+                dict_box['xlum_corr']=float(line_restart.split('\t')[4])
                 
-                t_restart=float(line_restart.split('\t')[4])
+                t_restart=float(line_restart.split('\t')[5])
                 
-                n_restart=float(line_restart.split('\t')[5])
+                n_restart=float(line_restart.split('\t')[6])
                 
-                nh_restart=float(line_restart.split('\t')[6])
+                nh_restart=float(line_restart.split('\t')[7])
                 
-                logxi_restart=float(line_restart.split('\t')[7])
+                logxi_restart=float(line_restart.split('\t')[8])
                 
-                vturb_x_restart=float(line_restart.split('\t')[8])
+                vturb_x_restart=float(line_restart.split('\t')[9])
                 
                 print("Restarting from box "+str(nbox_restart)+"\n")
             
@@ -1495,9 +1544,26 @@ def xstar_wind(solution,SED_path,xlum,outdir,
         #not doing this when restarting because there's no need
         if not (i_box+1==nbox_restart and xstar_input_restart is not None):
 
+            if i_box+1!=nbox_restart:
+                #! Read output from the box
+                px.LoadFiles(file1='./'+outdir+'/xout_abund1.fits',file2='./'+outdir+'/xout_lines1.fits',
+                             file3='./'+outdir+'/xout_rrc1.fits',file4='./'+outdir+'/xout_spect1.fits')
+
+                #note that if the code crashed between the end of a computation and the beginning
+                #of the next one, but in this case the computation will restart on the previous box
+
+                # loading the temperature of the previous box
+                plasma_par = px.PlasmaParameters()
+
+                # retrieving the plasma temperature of the last step
+                tp=plasma_par.temperature[-1]
+
             #shifting the spectrum and storing it in the xstar input file name
             lum_corr_factor=shift_incident_sp_rest_gaz(psi_box_std[i_box],xstar_input_save,incident_path=shift_input)
-            
+
+            #this info is important so we log it in the box dictionnary to write it in the xstar file
+            dict_box['xlum_corr']=lum_corr_factor
+
             xpx = 10.0**(xpxl[i_box])
             xpxcol = 10.0**(xpxcoll[i_box])
 
@@ -1560,7 +1626,8 @@ def xstar_wind(solution,SED_path,xlum,outdir,
         shift_output='./'+outdir+'/sp_tr_rest_%03i'%(i_box+1)+'.dat'
 
         #writing the rest frame output and storing the new value of the luminosity
-        xlum_eff=shift_transmitted_sp_gaz_rest(psi_box_std[i_box],shift_output,shift_input)
+        #note: the xlum_eff value in argument here is the bolometric luminosity of the incident spectrum
+        xlum_eff=shift_transmitted_sp_gaz_rest(psi_box_std[i_box],shift_output,shift_input,xlum_eff)
 
         if comput_mode in ['server','cigrid']:
             if comput_mode=='cigrid':
@@ -1653,7 +1720,7 @@ def xstar_wind(solution,SED_path,xlum,outdir,
 
             #note: we don't use this luminosity to overwrite xlum_eff since the final boxes are independant
             xlum_final=shift_transmitted_sp_gaz_rest(psi_box_last[i_box_final],shift_output_last,
-                                                     incident_path=shift_output)
+                                                     incident_path=shift_output,xlum_eff=xlum_eff)
     
             #switching to the next final box to be computed    
             i_box_final= i_box_final+1

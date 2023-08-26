@@ -38,7 +38,7 @@ import pyxstar as px
 # os.environ['LD_LIBRARY_PATH']+=os.pathsep+'/home/parrama/Soft/Heasoft/heasoft-6.31.1/x86_64-pc-linux-gnu-libc2.31/lib'
 
 h_cgs = 6.624e-27
-eV2erg = 1.6e-12
+eV2erg = 1.6021773E-12
 erg2eV = 1.0/eV2erg
 Ryd2eV = 13.605693
 
@@ -178,7 +178,7 @@ m2cm = 100.0
 def oar_wrapper(solution_rel_dir,save_grid_dir,sim_grid_dir,
                   mdot_obs,xlum,m_BH,
                   ro_init, dr_r,stop_d_input,v_resol,
-                  mode='standard',
+                  mode='server_standalone_default',
                   sol_file='auto',
                   SED_file='auto_.dat'):
 
@@ -201,9 +201,21 @@ def oar_wrapper(solution_rel_dir,save_grid_dir,sim_grid_dir,
         mdot_obs,m_BH,xlum: SED parameters for xstar
         ro_init,dr_r,v_resol,stop_d_input: box parameters for xstar
 
-        mode: changes the save behavior
+        mode: changes the computation behavior: 'type_xstaruse_xstaruseid'
+
+            type:
             -cigrid: uses mantis as a save folder. save_grid_dir is expected to be a mantis absolute path
-            -standard: uses a standard save folder with normal copying commands
+            -server: uses a standard save folder with normal copying commands
+
+            xstar use:
+            -standalone: uses an xstar version directly installed within an heasoft folder.
+            -docker: uses an xstar version installed in a docker. Uses smart copying to avoid necessiting permissions
+                    (besides the one to run the docker)
+            -charliecloud: uses an xstar version installed in a charliecloud environment.
+
+            xstarid:
+            in standalone: the path of the heasoft version to use. 'default' uses the standard version installed on the computer
+            in docker/charliecloud: the identifier of the container (not the image) to launch
 
         sol_file: naming of the sol file inside solution_rel_dir. If set to 'auto',
                  assumes the solution file name from the directory structure
@@ -233,8 +245,15 @@ def oar_wrapper(solution_rel_dir,save_grid_dir,sim_grid_dir,
 
     os.system('mkdir -p '+simdir)
 
+    #splitting the mode informations
+    comput_mode=mode.split('_')[0]
+    xstar_mode=mode.split('_')[1]
+
+    #this syntax avoids issues if there are _ in the path/identifier
+    xstar_loc=mode[mode.find(xstar_mode)+len(xstar_mode)+1:]
+
     #copying all the initial files and the content of the mantis directory to the simdir
-    if mode=='cigrid':
+    if comput_mode=='cigrid':
 
         #downloading the elements in the save directory
         download_mantis(save_dir,simdir,load_folder=True)
@@ -245,7 +264,7 @@ def oar_wrapper(solution_rel_dir,save_grid_dir,sim_grid_dir,
         #this shouldn't be needed
         #download_mantis(os.path.join(mantis_grid_dir, solution_rel_path), simdir)
 
-    elif mode=='standard':
+    elif comput_mode=='server':
 
         #copying from the save to the sim
         for elem_file in glob.glob(save_dir+'/**'):
@@ -270,20 +289,27 @@ def oar_wrapper(solution_rel_dir,save_grid_dir,sim_grid_dir,
     xstar_wind(solution_name,SED_path=SED_name,xlum=xlum,mdot_obs=mdot_obs_use,outdir='./',
                m_BH=m_BH,
                ro_init=ro_init,dr_r=dr_r,stop_d_input=stop_d_input,v_resol=v_resol,
-               comput_mode='server' if mode=='standard' else mode,save_folder=save_dir)
+               comput_mode=comput_mode,
+               xstar_mode=xstar_mode,
+               save_folder=save_dir,
+               xstar_loc=xstar_loc)
 
 
-def xstar_func(spectrum_file,lum,t_guess,n,nh,xi,vturb_x,nbins,nsteps=1,niter=100,lcpres=0,path_logpars=None,
-               dict_box=None,comput_mode='local',save_folder='',no_write=False,extract_transmitted=True,
-               headas_folder=None):
+def xstar_func(spectrum_file,lum,t_guess,n,nh,xi,vturb_x,nbins,nsteps=1,niter=100,lcpres=0,
+               path_logpars=None,
+               comput_mode='local',xstar_mode='standalone',xstar_loc='default',
+               dict_box=None,save_folder='',no_write=False,extract_transmitted=False):
     
     '''
     wrapper around the xstar function itself with explicit calls to the parameters routinely being changed in the computation
+
+    non-direct arguments:
+        dict-box: information for the box number
+        comput_mode/xstar_mode/xstar_loc: identical to the comput modes of the other functions
     
     if path_logpars is not None, saves the list of modifiable parameters into a file
     
     lum -> rlrad38
-
     
     -lcpres determines if the pressure is constant. In this case t stays constant. Should be kept at 0
     
@@ -391,16 +417,24 @@ def xstar_func(spectrum_file,lum,t_guess,n,nh,xi,vturb_x,nbins,nsteps=1,niter=10
             elif comput_mode=='server':
                 os.system('cp '+spectrum_file+' '+save_folder)
 
-    if comput_mode=='server':
+    if xstar_mode=='standalone':
+
+        #using xstar_loc for the path of the headas folder where to run xstar
+        px.run_xstar(xpar, xhpar, headas_folder=xstar_loc)
+
+    elif xstar_mode=='docker':
 
         #in order to ensure we're not gonna mix the xstar runs, we make a global identifier with the name
         #of the grid and the solution
         identifier_str=os.getcwd()[os.getcwd().find('grid'):]
         identifier_str=identifier_str.replace('/','_')
-        px.docker_run_xstar(xpar,xhpar,identifier=identifier_str)
-        
-    elif comput_mode=='local':
-        px.run_xstar(xpar,xhpar,headas_folder)
+
+        #using xstar_loc for the name of the xstar container to create an image of
+
+        if xstar_loc!='default':
+            px.docker_run_xstar(xpar, xhpar, container=xstar_loc,identifier=identifier_str)
+        else:
+            px.docker_run_xstar(xpar, xhpar,identifier=identifier_str)
 
     #storing the lines of the xstar log file
     with open('xout_step.log') as xlog:
@@ -444,7 +478,9 @@ def xstar_func(spectrum_file,lum,t_guess,n,nh,xi,vturb_x,nbins,nsteps=1,niter=10
 def xstar_wind(solution,SED_path,xlum,outdir,
                mdot_obs='auto',p_mhd_input=None,m_BH=8,
                ro_init=6.,dr_r=0.05,stop_d_input=1e6,v_resol=85.7,
-               chatter=0,reload=True,comput_mode='local',save_folder='',
+               chatter=0,reload=True,
+               comput_mode='local',xstar_mode='standalone',xstar_loc='default',
+               save_folder='',
                force_ro_init=False,no_turb=False,cap_dr_resol=True,no_write=False,
                grid_type="standard",custom_grid_headas=None):
     
@@ -515,10 +551,12 @@ def xstar_wind(solution,SED_path,xlum,outdir,
                     The main sampled one is only between 0.1keV and 10keV, and the coarser one covers the rest
                     (aka 0.1eV-0.1keV and 10keV-1MeV)
 
-    Computation mode:
+                    it is assumed that a custom grid_type will also have an xstar_loc pointing to a folder with
+                    the corresponding grid type setup
+
+    comput_mode:
         -local:
             standard behavior, computes everything in the outdir directory
-
 
         -server/cigrid:
 
@@ -538,7 +576,18 @@ def xstar_wind(solution,SED_path,xlum,outdir,
                 -(with "clean" option) cleans all the individual spectra at the end of the task to gain space
 
             server:
-                same behavior but uses a save_dir in a normal arborescence, and docker directly
+                same behavior but uses a save_dir in a normal arborescence
+
+
+    xstar_mode:
+    -standalone: uses an xstar version directly installed within an heasoft folder.
+    -docker: uses an xstar version installed in a docker. Uses smart copying to avoid necessiting permissions
+            (besides the one to run the docker)
+    -charliecloud: uses an xstar version installed in a charliecloud environment.
+
+    xstar_loc:
+    in standalone: the path of the heasoft version to use. 'default' uses the standard version installed on the computer
+    in docker/charliecloud: the identifier of the container (not the image) to launch
 
     Notes on the python conversion:
         -since array numbers starts at 0, we use "index" box numbers (starting at 0) and adapt all of the consequences,
@@ -588,19 +637,30 @@ def xstar_wind(solution,SED_path,xlum,outdir,
               and the luminosity evolves accordingly. This is expected to be negligible
               
         '''
+        #this is the xstar output grid (always the same)
         eptmp_relat = eptmp_trans
 
         if not np.all(eptmp_incid==eptmp_trans):
-            zrtmp_incid_interp=10**griddata(np.log10(eptmp_incid),np.log10(zrtmp_incid),np.log10(eptmp_trans),
+            zrtmp_incid_interp=10**griddata(np.log10(eptmp_incid),np.log10(zrtmp_incid),np.log10(eptmp_relat),
                                             method='linear',fill_value=-10)
 
             #renormalizing the incident flux in case the starting spectrum isn't normalized
-            zrtmp_incid_interp=zrtmp_incid_interp*xlum_eff/trapezoid(zrtmp_incid_interp,x=eptmp_relat * 1.6021773E-12)
+            zrtmp_incid_interp=zrtmp_incid_interp*xlum_eff/trapezoid(zrtmp_incid_interp,x=eptmp_relat * eV2erg)
         else:
             zrtmp_incid_interp=zrtmp_incid
 
-        # true relativistic expression of the transmitted spectrum
-        zrtmp_relat= zrtmp_incid_interp*(1-psi**3)+zrtmp_trans*1/psi
+        '''
+        true relativistic expression of the transmitted spectrum
+
+        the *1/psi expression in the Luminari2020 is misleading
+        It has to be used to doppler shift the frequencies of the transmitted spectra before adding it back to the rest
+        this means we need to interpolate once more
+        '''
+
+        zrtmp_trans_rest=10**griddata(np.log10(eptmp_relat/psi),np.log10(zrtmp_trans),np.log10(eptmp_relat),
+                                            method='linear',fill_value=-10)
+
+        zrtmp_relat= zrtmp_incid_interp*(1-psi**3)+zrtmp_trans_rest
 
         # should not need to remap the spectrum since it will be done internally by xstar if necessary
         shifted_input_arr = np.array([eptmp_relat, zrtmp_relat]).T
@@ -609,7 +669,7 @@ def xstar_wind(solution,SED_path,xlum,outdir,
         np.savetxt(path, shifted_input_arr, header=str(len(eptmp_relat)), delimiter='  ', comments='')
 
         #new value of the luminosity (rest frame)
-        xlum_bol= trapezoid(zrtmp_relat,x=eptmp_relat * 1.6021773E-12)
+        xlum_bol= trapezoid(zrtmp_relat,x=eptmp_relat * eV2erg)
 
         return xlum_bol
 
@@ -671,9 +731,9 @@ def xstar_wind(solution,SED_path,xlum,outdir,
         #note: both absolute values of these luminosities can be false is the spectrum isn't correctly normalized,
         #but this doesn't affect the ratio of luminosities
         xlum_xstar_range = trapezoid(zrtmp_shifted_interp[energy_mask],
-                                     x=eptmp_shifted_highres[energy_mask] * 1.6021773E-12)
+                                     x=eptmp_shifted_highres[energy_mask] * eV2erg)
 
-        xlum_bol= trapezoid(zrtmp_shifted_interp,x=eptmp_shifted_highres * 1.6021773E-12)
+        xlum_bol= trapezoid(zrtmp_shifted_interp,x=eptmp_shifted_highres * eV2erg)
 
         return xlum_xstar_range/xlum_bol
 
@@ -843,13 +903,11 @@ def xstar_wind(solution,SED_path,xlum,outdir,
         #note: the 1/0.98 factor here is here to reflect the addition of a 1/50 nbins grid for the higher interval
         #which needs to be accounted for
         nbins=max(999,int(np.ceil(np.log(4*10**6)/np.log(1+v_resol/299792.458))/0.98))
-        headas_folder=None
 
     elif grid_type=="custom":
         #here, each part of the sandwiching coarse grid has a 1/50 sampling, so we need to divide by 0.96 instead
         nbins=max(999,int(np.ceil(np.log(1e2)/np.log(1+v_resol/299792.458))/0.96))
 
-        headas_folder=custom_grid_headas
 
     if chatter>=1:
         print('Number of bins for selected velocity resolution: '+str(nbins)+'\n')
@@ -1571,6 +1629,7 @@ def xstar_wind(solution,SED_path,xlum,outdir,
             # #luminosity
 
             ####TODO: THIS SHOULD BE CHECKED
+            #note: no psi_box_std here because the zetal already considers psi_box
             zeta_corr = zetal[i_box]+np.log10(xlum_eff/xlum*lum_corr_factor)
 
             xlum_corr=xlum_eff*psi_box_std[i_box]**4*lum_corr_factor
@@ -1606,14 +1665,16 @@ def xstar_wind(solution,SED_path,xlum,outdir,
                        comput_mode=comput_mode,
                        save_folder=save_folder_use,
                        no_write=no_write,
-                       headas_folder=headas_folder)
+                       xstar_mode=xstar_mode,
+                       xstar_loc=xstar_loc)
         else:
             xstar_func(xstar_input,xlum_corr,tp,xpx,xpxcol,zeta_corr,vturb_x,nbins=nbins,
                        path_logpars=path_log_xpars,dict_box=dict_box,
                        comput_mode=comput_mode,
                        save_folder=save_folder_use,
                        no_write=no_write,
-                       headas_folder=headas_folder)
+                       xstar_mode=xstar_mode,
+                       xstar_loc=xstar_loc)
         
         os.chdir(currdir)
         
@@ -1706,7 +1767,8 @@ def xstar_wind(solution,SED_path,xlum,outdir,
                        comput_mode=comput_mode,
                        save_folder=save_folder_use,
                        no_write=no_write,
-                       headas_folder=headas_folder)
+                       xstar_mode=xstar_mode,
+                       xstar_loc=xstar_loc)
             
             os.chdir(currdir)
             

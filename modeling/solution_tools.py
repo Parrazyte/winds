@@ -9,7 +9,7 @@ sys.path.append('/app/winds/observations/general/')
 from general_tools import print_log
 
 h_cgs = 6.624e-27
-eV2erg = 1.6e-12
+eV2erg = 1.6021773E-12
 erg2eV = 1.0/eV2erg
 Ryd2eV = 13.605693
 

@@ -607,12 +607,12 @@ def NRRcPoints():
 
 ####################################################################
 
-def run_xstar(par,hpar,headas_folder=None):
+def run_xstar(par,hpar,headas_folder='default'):
 # Function to create the XSTAR input file xstar.par and run the code from 
 # standard Heasoft installation
 
     #fetching the environment variable of the specific heasoft folder if asked to
-    if headas_folder is not None:
+    if headas_folder!='default':
         heaproc=PopenSpawn('/bin/bash',maxread=16000,logfile=sys.stdout.buffer)
 
         heaproc.sendline('source ~/.bashrc')
@@ -850,9 +850,9 @@ mode,s,h,'+str(hpar['mode'])+',,,"mode"\n'
     file.write(xstar3_in)
     file.close()
 
-# Run XSTAR with new xstar.par
+    # Run XSTAR with new xstar.par
 
-    if headas_folder is not None:
+    if headas_folder!='default':
 
         heaproc.sendline('xstar')
 

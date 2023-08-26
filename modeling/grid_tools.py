@@ -294,7 +294,7 @@ def create_oar_script(grid_folder,parfile,cores,cpus=2,nodes=1,
 
 
 def create_grid_parfile(grid_folder,save_grid_dir,sim_grid_dir,xlum,dr_r,
-                        mode='standard',v_resol=85.7,stop_d=1e6):
+                        mode='server_standalone_default',v_resol=85.7,stop_d=1e6):
 
     '''
     Inserts a parfile inside an already existing grid folder structure
@@ -303,9 +303,23 @@ def create_grid_parfile(grid_folder,save_grid_dir,sim_grid_dir,xlum,dr_r,
 
     save_grid_dir and sim_grid_dir are global forder, to which the gird_folder arborescence will be added
 
-    mode: changes the save behavior
-        -cigrid: uses mantis as a save folder. save_grid_dir is expected to be a mantis absolute path
-        -standard: uses a standard save folder with normal copying commands
+    mode: changes the computation behavior: 'type_xstaruse_xstaruseid'
+
+        type:
+        -server: uses a standard save folder with normal copying commands
+        -cigrid: uses mantis commands for the save folder. save_grid_dir is expected to be a mantis absolute path
+
+
+        xstar use:
+        -standalone: uses an xstar version directly installed within an heasoft folder.
+        -docker: uses an xstar version installed in a docker. Uses smart copying to avoid necessiting permissions
+                (besides the one to run the docker)
+        -charliecloud: uses an xstar version installed in a charliecloud environment.
+
+        xstar use id:
+        in standalone: the path of the heasoft version to use. 'default' uses the standard version installed on the computer
+        in docker/charliecloud: the identifier of the container (not the image) to launch
+
 
     note: there is a line in oar_wrapper for different sed extensions. Might need to be added here in the future
 

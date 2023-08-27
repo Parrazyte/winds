@@ -100,7 +100,7 @@ def create_fake_xstar(table, rmf, arf, exposure, nofile=True, reset=True, prefix
     # loading the model table in an xspec model
     tablemod = Model('atable{' + table + '}')
 
-    # freezing the model to avoid probkems in case the table has free parameters
+    # freezing the model to avoid problems in case the table has free parameters
     freeze()
 
     # creating the fakeit settings

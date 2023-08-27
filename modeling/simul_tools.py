@@ -1850,7 +1850,7 @@ def nuLnu_to_xstar(path,renorm=False,Edd_ratio=1,M_BH=8,display=False):
         f1.write("%d\n" % (np.size(sed[:,0])))
         
         for j in range(np.size(sed[:,0])):
-            Lnu_per_erg[j] = Lnu_per_erg[j]*norm_factor #L_nu is normalized such that L_keV equals to 0.13 L_Edd
+            Lnu_per_erg[j] = Lnu_per_erg[j]*norm_factor
             f1.write("%e  %e\n" % (E_eV[j], Lnu_per_erg[j]))
     
     if display:

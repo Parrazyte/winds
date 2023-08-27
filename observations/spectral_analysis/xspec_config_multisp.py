@@ -1129,7 +1129,9 @@ def addcomp(compname,position='last',endmult=None,return_pos=False,modclass=AllM
 
         #returning the expression to its xspec readable equivalent (without numbering)
         for elemcomp in AllModels(1).componentNames:
-            if '_' in elemcomp:
+
+            #here the second condition is to avoid supressing custom model names who have no numebering
+            if '_' in elemcomp and elemcomp[elemcomp.rfind('_')+1:].isdigit():
                 #the 1 is important here to avoid replacing twice incompletely some of the first named components
                 new_expr=new_expr.replace(elemcomp,elemcomp[:elemcomp.rfind('_')],1)
         

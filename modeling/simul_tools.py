@@ -396,8 +396,8 @@ def xstar_func(spectrum_file,lum,t_guess,n,nh,xi,vturb_x,nbins,nsteps=1,niter=10
         #default fits writing without too much details
         xhpar['lwrite']=0
 
-    parlog_header=['#xlum_init =%.2e'%(xlum)+' *1e38 erg/s | v_resol= '+str(v_resol)+' km/s | nbins= '+str(nbins)+'\n',
-                   '#nsteps= '+str(nsteps)+'\tniter= '+str(niter)+'\n',
+    parlog_header=['#xlum_init = %.2e'%(xlum)+' *1e38 erg/s | v_resol = '+str(v_resol)+' km/s | nbins = '+str(nbins)+'\n',
+                   '#nsteps = '+str(nsteps)+'\tniter = '+str(niter)+'\n',
                    '#Remember logxi is shifted to give xstar the correct luminosity input and the density at the half-box radius\n',
                    '############################################################################################################\n',
                    '#nbox\tnbox_final\tspectrum\tlum\tlum_corr_factor\tt_guess\tn\tnh\tlogxi\tvturb_x\tdr_r\tt_run\n']

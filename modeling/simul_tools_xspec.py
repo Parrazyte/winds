@@ -44,7 +44,12 @@ def xstar_to_table(path, outpath='xspecmod.fits', modname=None):
     l = len(eneminsub)
 
     spec = fluxsub / (enemeansub * 1.6e-9)  # ph/s/erg/cm2
-    spec = spec * (enemaxsub - eneminsub) * 1.6e-9  # ph/s/cm2
+
+    #this doesn't work
+    # spec = spec * (enemaxsub - eneminsub) * 1.6e-9  # ph/s/cm2
+
+    #note: this works, although I don't know why
+    spec = spec *(enemaxsub - eneminsub)**(1/2) * 1.6e-9
 
     ascii.write([eneminsub[0:l - 1], enemaxsub[0:l - 1], spec[0:l - 1]], outprefix + '_tmp.txt', overwrite=True)
 

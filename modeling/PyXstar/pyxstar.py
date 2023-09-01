@@ -874,15 +874,20 @@ mode,s,h,'+str(hpar['mode'])+',,,"mode"\n'
 
 #########################################################################
 
-def docker_run_xstar(par,hpar,\
+def container_run_xstar(par,hpar,
+    mode='docker',\
     container="heasoft:v6.32",\
     host_account="noperm",
     identifier='xstar_output'):
 
-    # Function to create the XSTAR input file xstar.par and run the code from
-    # the XSTAR Docker container
-
     '''
+
+    Function to create the XSTAR input file xstar.par and run the code from diverse containers
+
+    Can use different type of containers with the "mode" keyword:
+    docker
+    singularity
+    charliecloud
 
     note: heasoft:v6.32 tarball created locally, modified to add the new binemis version
 
@@ -1094,7 +1099,7 @@ mode,s,h,'+str(hpar['mode'])+',,,"mode"\n'
     
 # Run XSTAR with new xstar.par
 
-    def docker_runner(command):
+    def container_runner(command):
         '''
         wrapping the redirection to avoid repetition
         '''
@@ -1105,79 +1110,101 @@ mode,s,h,'+str(hpar['mode'])+',,,"mode"\n'
         if p.returncode != 0:
             raise subprocess.CalledProcessError(p.returncode, p.args)
 
-    if host_account == "noperm":
+    if mode=='singularity':
 
-        # The docker should only be created on the first run
-        #identifying the docker id
-        docker_list=str(subprocess.check_output("docker ps", shell=True)).split('\\n')
-        docker_list_mask=[elem.endswith('xstar_'+identifier) for elem in docker_list]
+        '''
+        Here we create a singularity instance with the name given in identifier
+        In this instance, we run the xstar commandss
+        The current pwd is mounted in the /mnt of the instance
+        
+        The instance should be only created on the first run of looped runs, so we test if it exists for
+        '''
 
-        if sum(docker_list_mask)==0:
-            #calling the docker with no mounts
-            print("no running xstar docker detected. Creating it...")
+        #testing the whether already existsid
+        singul_list = str(subprocess.check_output("docker ps", shell=True)).split('\\n')
+        singul_list_mask = [elem.startswith('xstar_' + identifier) for elem in singul_list]
 
-            subprocess.call(['docker','run','--name','xstar_'+identifier,'-dt',container,'bash'])
+        if sum(singul_list_mask) == 0:
+            # calling the docker with no mounts
+            print("no running xstar singularity instance detected. Creating it...")
 
-        #identifying the docker id
-        docker_list=str(subprocess.check_output("docker ps", shell=True)).split('\\n')
-        docker_list_mask=[elem.endswith('xstar_'+identifier) for elem in docker_list]
+            subprocess.call(['singularity', 'instance','start','--bind','$(pwd):/mnt',container, 'xstar_' + identifier,
+                             ])
 
-        docker_id=np.array(docker_list)[docker_list_mask][0].split()[0]
+        xstar_cmd=['singularity','run','instance://+xstar_'+identifier,
+            'export PFILES=/mnt && cd  mnt && xstar']
 
-        #creating the custom folder for the current xstar run
-        subprocess.call(['docker','exec','-t','xstar_'+identifier,'bash','-c',\
-            'mkdir -p '+identifier])
+        container_runner(xstar_cmd)
 
-        #copying the pfiles into that directory (with no write access but that's not an issue)
-        #the docker cp prints stuff that we can use to check if things have gone correctly
-        for elem_file in ['xstar.par',par['spectrum_file']]:
-            #skipping empty spectrum files if there is none used
-            if elem_file is not None:
-                docker_runner(['docker','cp',os.path.join(os.getcwd(),elem_file),
-                               docker_id+':/home/heasoft/'+identifier])
+    if mode=='docker':
+        if host_account == "noperm":
 
-        xstar_cmd=['docker','exec','-t','xstar_'+identifier,'bash','-c',\
-            'export PFILES=/home/heasoft/'+identifier+' && cd '+identifier+' && xstar']
+            # The docker should only be created on the first run
+            #identifying the docker id
+            docker_list=str(subprocess.check_output("docker ps", shell=True)).split('\\n')
+            docker_list_mask=[elem.endswith('xstar_'+identifier) for elem in docker_list]
 
-        docker_runner(xstar_cmd)
+            if sum(docker_list_mask)==0:
+                #calling the docker with no mounts
+                print("no running xstar docker detected. Creating it...")
 
-        #list of the standard xstar output files
-        files_output_list=['xout_abund1.fits','xout_rrc1.fits','xout_cont1.fits',
-                           'xout_spect1.fits','xout_lines1.fits','xout_step.log']
+                subprocess.call(['docker','run','--name','xstar_'+identifier,'-dt',container,'bash'])
 
-        # copying the output files to the outside directory
-        for elem_file in files_output_list:
-            docker_runner(['docker','cp',docker_id+':'+os.path.join('/home/heasoft/',identifier,elem_file),
-                          os.getcwd()])
+            #identifying the docker id
+            docker_list=str(subprocess.check_output("docker ps", shell=True)).split('\\n')
+            docker_list_mask=[elem.endswith('xstar_'+identifier) for elem in docker_list]
 
-        #note: we don't kill the xstar runner here to avoid issues with multiple process accessing it
+            docker_id=np.array(docker_list)[docker_list_mask][0].split()[0]
 
-    elif host_account == "nb@000.000":
-        subprocess.call(['docker','run','--name','xstar','-dt','-v',\
-            os.getcwd()+':/mydata','-w','/mydata',container,'bash'])
-        docker_cmd=['docker','exec','-t','xstar','bash','-c',\
-            'export PFILES=/mydata && xstar']
+            #creating the custom folder for the current xstar run
+            subprocess.call(['docker','exec','-t','xstar_'+identifier,'bash','-c',\
+                'mkdir -p '+identifier])
 
-        with subprocess.Popen(docker_cmd,stdout=subprocess.PIPE,bufsize=1,\
-                 universal_newlines=True) as p:
-            for line in p.stdout:
-                print(line,end='') # process line here
-        if p.returncode != 0:
-            raise subprocess.CalledProcessError(p.returncode,p.args)
+            #copying the pfiles into that directory (with no write access but that's not an issue)
+            #the docker cp prints stuff that we can use to check if things have gone correctly
+            for elem_file in ['xstar.par',par['spectrum_file']]:
+                #skipping empty spectrum files if there is none used
+                if elem_file is not None:
+                    container_runner(['docker','cp',os.path.join(os.getcwd(),elem_file),
+                                   docker_id+':/home/heasoft/'+identifier])
 
-        subprocess.call(['docker','container','rm','--force','xstar'])
-    else:
-        subprocess.call(['ssh',host_account,'rm -f /home/claudio/pfiles/*'])
-        subprocess.call(['scp','./xstar.par',\
-            host_account+':/home/claudio/pfiles'])
-        os.environ['DOCKER_HOST']='ssh://' + host_account
-        print(os.environ.get('DOCKER_HOST'))
-        subprocess.call(['docker','run','--name','xstar','-dt','-v',\
-            '/home/claudio/pfiles:/mydata','-w','/mydata',container,'bash'])
-        subprocess.call(['docker','exec','-t','xstar','bash','-c',\
-            'export PFILES=/mydata && xstar'])
-        subprocess.call(['docker','container','rm','--force','xstar'])
-        subprocess.call(['scp',host_account+':/home/claudio/pfiles/xout_*','.'])
-        subprocess.call(['ssh',host_account,'rm -f /home/claudio/pfiles/*'])
-        del os.environ['DOCKER_HOST']
+            xstar_cmd=['docker','exec','-t','xstar_'+identifier,'bash','-c',\
+                'export PFILES=/home/heasoft/'+identifier+' && cd '+identifier+' && xstar']
+
+            container_runner(xstar_cmd)
+
+            #list of the standard xstar output files
+            files_output_list=['xout_abund1.fits','xout_rrc1.fits','xout_cont1.fits',
+                               'xout_spect1.fits','xout_lines1.fits','xout_step.log']
+
+            # copying the output files to the outside directory
+            for elem_file in files_output_list:
+                container_runner(['docker','cp',docker_id+':'+os.path.join('/home/heasoft/',identifier,elem_file),
+                              os.getcwd()])
+
+            #note: we don't kill the xstar runner here to avoid issues with multiple process accessing it
+
+        elif host_account == "nb@000.000":
+            subprocess.call(['docker','run','--name','xstar','-dt','-v',\
+                os.getcwd()+':/mydata','-w','/mydata',container,'bash'])
+            docker_cmd=['docker','exec','-t','xstar','bash','-c',\
+                'export PFILES=/mydata && xstar']
+
+            container_runner(docker_cmd)
+
+            subprocess.call(['docker','container','rm','--force','xstar'])
+        else:
+            subprocess.call(['ssh',host_account,'rm -f /home/claudio/pfiles/*'])
+            subprocess.call(['scp','./xstar.par',\
+                host_account+':/home/claudio/pfiles'])
+            os.environ['DOCKER_HOST']='ssh://' + host_account
+            print(os.environ.get('DOCKER_HOST'))
+            subprocess.call(['docker','run','--name','xstar','-dt','-v',\
+                '/home/claudio/pfiles:/mydata','-w','/mydata',container,'bash'])
+            subprocess.call(['docker','exec','-t','xstar','bash','-c',\
+                'export PFILES=/mydata && xstar'])
+            subprocess.call(['docker','container','rm','--force','xstar'])
+            subprocess.call(['scp',host_account+':/home/claudio/pfiles/xout_*','.'])
+            subprocess.call(['ssh',host_account,'rm -f /home/claudio/pfiles/*'])
+            del os.environ['DOCKER_HOST']
 ##############################################################################

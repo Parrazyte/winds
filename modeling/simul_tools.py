@@ -422,7 +422,7 @@ def xstar_func(spectrum_file,lum,t_guess,n,nh,xi,vturb_x,nbins,nsteps=1,niter=10
         #using xstar_loc for the path of the headas folder where to run xstar
         px.run_xstar(xpar, xhpar, headas_folder=xstar_loc)
 
-    elif xstar_mode=='docker':
+    else:
 
         #in order to ensure we're not gonna mix the xstar runs, we make a global identifier with the name
         #of the grid and the solution
@@ -431,10 +431,10 @@ def xstar_func(spectrum_file,lum,t_guess,n,nh,xi,vturb_x,nbins,nsteps=1,niter=10
 
         #using xstar_loc for the name of the xstar container to create an image of
 
-        if xstar_loc!='default':
-            px.docker_run_xstar(xpar, xhpar, container=xstar_loc,identifier=identifier_str)
+        if xstar_mode=='docker' and xstar_loc=='default':
+            px.container_run_xstar(xpar, xhpar,mode=xstar_mode,dentifier=identifier_str)
         else:
-            px.docker_run_xstar(xpar, xhpar,identifier=identifier_str)
+            px.container_run_xstar(xpar, xhpar, mode=xstar_mode, container=xstar_loc,identifier=identifier_str)
 
     #storing the lines of the xstar log file
     with open('xout_step.log') as xlog:
@@ -840,13 +840,27 @@ def xstar_wind(solution,SED_path,xlum,outdir,
             file_edit(path=path, line_id='\t'.join(main_infos[:2]),
                       line_data='\t'.join(main_infos + ion_infos + col_infos) + '\n', header=file_header)
             time.sleep(1)
-    def clean_xstar_docker(xstar_id):
-        # cleaning the xstar dockers in case of issue
-        docker_list = str(subprocess.check_output("docker ps", shell=True)).split('\\n')
-        docker_xstar_list = [elem.split()[-1] for elem in docker_list\
-                             if elem.split()[-1].startswith('xstar_'+xstar_id)]
-        for elem_docker in docker_xstar_list:
-            subprocess.call(['docker', 'container', 'rm', '--force', elem_docker])
+    def clean_xstar_container(xstar_id,xstar_mode):
+
+        #cleaning the xstar containers in case of issue
+
+        if xstar_mode=='docker':
+            docker_list = str(subprocess.check_output("docker ps", shell=True)).split('\\n')
+            docker_xstar_list = [elem.split()[-1] for elem in docker_list\
+                                 if elem.split()[-1].startswith('xstar_'+xstar_id)]
+
+            #should only be a single one
+            for elem_docker in docker_xstar_list:
+                subprocess.call(['docker', 'container', 'rm', '--force', elem_docker])
+
+        elif xstar_mode=='singularity':
+            singul_list = str(subprocess.check_output("singularity instance list", shell=True)).split('\\n')
+            singul_xstar_list = [elem.split()[0] for elem in singul_list\
+                                if elem.startswith('xstar_' + xstar_id)]
+
+            #should only be a single one
+            for elem_instance in singul_xstar_list:
+                subprocess.call(['singularity', 'instance', 'stop', elem_instance])
 
     if outdir=='./':
         xstar_dir=os.getcwd()
@@ -858,7 +872,7 @@ def xstar_wind(solution,SED_path,xlum,outdir,
 
     print('Using xstar docker id xstar_identifier')
     #cleaning previous xstar runs before starting the computation
-    clean_xstar_docker(xstar_identifier)
+    clean_xstar_container(xstar_identifier,xstar_mode=xstar_mode)
 
     #making sure the stop variable is an iterable
     if type(stop_d_input) not in [list, np.ndarray]:
@@ -1803,7 +1817,7 @@ def xstar_wind(solution,SED_path,xlum,outdir,
             os.system('rm -f '+outdir+'/xout_*.fits')
             
     #cleaning the xstar docker before ending the computation
-    clean_xstar_docker(xstar_identifier)
+    clean_xstar_container(xstar_identifier,xstar_mode=xstar_mode)
 
 def nuLnu_to_xstar(path,renorm=False,Edd_ratio=1,M_BH=8,display=False):
     

@@ -860,6 +860,7 @@ def xstar_wind(solution,SED_path,xlum,outdir,
 
             #should only be a single one
             for elem_instance in singul_xstar_list:
+                print('deleting singularity instance '+elem_instance+'\n')
                 subprocess.call(['singularity', 'instance', 'stop', elem_instance])
 
     if outdir=='./':

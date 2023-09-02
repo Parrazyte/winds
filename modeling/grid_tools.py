@@ -301,7 +301,7 @@ def create_grid_parfile(grid_folder,save_grid_dir,sim_grid_dir,xlum,dr_r,
 
     the list of parameters is the list of arguments of oar_wrapper
 
-    save_grid_dir and sim_grid_dir are global forder, to which the gird_folder arborescence will be added
+    save_grid_dir and sim_grid_dir are global folders, to which the gird_folder arborescence will be added
 
     mode: changes the computation behavior: 'type_xstaruse_xstaruseid'
 
@@ -314,12 +314,14 @@ def create_grid_parfile(grid_folder,save_grid_dir,sim_grid_dir,xlum,dr_r,
         -standalone: uses an xstar version directly installed within an heasoft folder.
         -docker: uses an xstar version installed in a docker. Uses smart copying to avoid necessiting permissions
                 (besides the one to run the docker)
+        -singularity: uses an xstar version installed in a singularity container.
         -charliecloud: uses an xstar version installed in a charliecloud environment.
 
         xstar use id:
         in standalone: the path of the heasoft version to use. 'default' uses the standard version installed on the computer
         in docker/charliecloud: the identifier of the container (not the image) to launch
-
+        in singularity: the path of the container to launch. 'default' uses the path put within the xstar_singularity
+                        environment variable
 
     note: there is a line in oar_wrapper for different sed extensions. Might need to be added here in the future
 

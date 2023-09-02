@@ -1120,19 +1120,28 @@ mode,s,h,'+str(hpar['mode'])+',,,"mode"\n'
         The instance should be only created on the first run of looped runs, so we test if it exists for
         '''
 
+        #default path for the container
+        if container=='default':
+            container_use=os.environ['xstar_singularity']
+        else:
+            container_use=container
+
         #testing the whether already existsid
-        singul_list = str(subprocess.check_output("docker ps", shell=True)).split('\\n')
+        singul_list = str(subprocess.check_output("singularity instance list", shell=True)).split('\\n')
         singul_list_mask = [elem.startswith('xstar_' + identifier) for elem in singul_list]
 
         if sum(singul_list_mask) == 0:
             # calling the docker with no mounts
             print("no running xstar singularity instance detected. Creating it...")
 
-            subprocess.call(['singularity', 'instance','start','--bind','$(pwd):/mnt',container, 'xstar_' + identifier,
+            subprocess.call(['singularity', 'instance','start','--bind',os.getcwd()+':/mnt',container_use, 'xstar_' + identifier,
                              ])
 
-        xstar_cmd=['singularity','run','instance://+xstar_'+identifier,
-            'export PFILES=/mnt && cd  mnt && xstar']
+            #to keep the display up to date
+            time.sleep(0.5)
+
+        xstar_cmd=['singularity','exec','instance://xstar_'+identifier,'bash','-c',
+            'export PFILES=/mnt && cd /mnt && xstar']
 
         container_runner(xstar_cmd)
 

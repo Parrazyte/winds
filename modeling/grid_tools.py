@@ -86,6 +86,11 @@ def create_grid(grid_name, mhd_solutions_path,
 
     Setups grid or cigrid computations by creating a proper folder tree in the current directory
 
+    use exemple:
+    create_grid('grid_groj','nathan_new_ep01.txt','5461_cont_deabs_fully_extended_xstar.txt',
+                5.4,6,xlum=0.4167,angle_vals='range_30_80_4')
+
+    grid should always begin with the world "grid"
     Main args:
         grid_name: name of grid aka folder tree where the arborescence will be created
         mhd_solutions_path: path where to find the mhd solutions to sample from
@@ -267,9 +272,12 @@ def create_oar_script(grid_folder,parfile,cores,cpus=2,nodes=1,
     Create standard oar script for non-cigrid computations
 
     cpu value shouldn't be changed if in ipag-calc (all servers have two cpus)
+
     walltime is in hours
 
     parfile should be a relative path inside grid_folder
+
+
     '''
 
     #parfile_path=os.path.join(grid_folder,parfile)
@@ -285,9 +293,9 @@ def create_oar_script(grid_folder,parfile,cores,cpus=2,nodes=1,
     "#OAR --stderr grid_dolder.%jobid%.err\n"+\
     "#OAR --notify mail:"+mail+"\n"+\
     "\nsource ~/.bashrc"+\
-    "\npyload" \
-    "\npyloadenv"
-    "python $wind_runner -parfile "+parfile_path
+    "\npyload"+\
+    "\npyloadenv"+\
+    "\npython $wind_runner -parfile "+parfile_path
 
     with open(os.path.join(grid_folder,'oar_script.sh'),'w+') as oar_file:
         oar_file.write(script_str)

@@ -48,6 +48,7 @@ flux_GROJ=3.401e-8
 dist_factor=1.22546712210745e+45
 
 lum_GROJ=flux_GROJ*dist_factor/1e38
+#value:0.4167
 
 ####This should be changed
 mdot=0.111
@@ -67,7 +68,7 @@ SED='./5461_cont_deabs_fully_extended_xstar.txt'
 
 #SED_GROJ='5461_cont_deabs_extended_xstar.txt'
 
-xstar_wind(dict_sol, SED_path=SED, mdot_obs=mdot, xlum=0.1, outdir='test_relat3',
+xstar_wind(dict_sol, SED_path=SED, mdot_obs='auto', xlum=1., outdir='test_lum_1',
            p_mhd_input=p,m_BH=5.4,
            ro_init=6, dr_r=0.05, stop_d_input=stop_d, v_resol=85.7,
            chatter=1,cap_dr_resol=False,

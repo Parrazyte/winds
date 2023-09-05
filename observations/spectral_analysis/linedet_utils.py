@@ -18,6 +18,7 @@ from fitting_tools import sign_delchis_table,lines_std,lines_e_dict,lines_w_dict
         link_groups,lines_std_names,def_ftest_threshold,def_ftest_leeway,ang2kev
 
 #bipolar colormap from a custom library (https://github.com/endolith/bipolar-colormap)
+#directly in the neighboring folder
 from bipolar import hotcold
 
 '''peak detection'''

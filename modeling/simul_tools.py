@@ -396,7 +396,7 @@ def xstar_func(spectrum_file,lum,t_guess,n,nh,xi,vturb_x,nbins,nsteps=1,niter=10
         #default fits writing without too much details
         xhpar['lwrite']=0
 
-    parlog_header=['#xlum_init = %.2e'%(xlum)+' *1e38 erg/s | v_resol = '+str(v_resol)+' km/s | nbins = '+str(nbins)+'\n',
+    parlog_header=['#xlum_init = %.3e'%(xlum)+' *1e38 erg/s | v_resol = '+str(v_resol)+' km/s | nbins = '+str(nbins)+'\n',
                    '#nsteps = '+str(nsteps)+'\tniter = '+str(niter)+'\n',
                    '#Remember logxi is shifted to give xstar the correct luminosity input and the density at the half-box radius\n',
                    '############################################################################################################\n',
@@ -1162,6 +1162,10 @@ def xstar_wind(solution,SED_path,xlum,outdir,
         Rsph_Rg = Rsph_SI / Rg_SI
         vel_obs_cgs = func_vel_obs(Rsph_Rg)
         logxi = func_logxi(Rsph_Rg)
+
+
+    breakpoint()
+
 
     #!* After getting the starting value of ro_by_Rg from the above 'while' loop, fixing the values for 1st box.
     Rsph_cgs_1st = Rsph_SI*m2cm

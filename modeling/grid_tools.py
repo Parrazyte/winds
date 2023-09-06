@@ -1,6 +1,15 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
+'''
+
+note: easy test on ipag_calc with:
+ oarsub -I -p "host='ipag-calc2'"
+
+note: currently the prefixes for job in oar scripts don't work
+use full inline syntax like:
+oarsub -p "host='ipag-calc2'" -l /nodes=1/core=3,walltime=72:00:00 ./oar_script_serv_test.sh
+'''
 import os
 
 import numpy as np
@@ -292,9 +301,10 @@ def create_oar_script(grid_folder,parfile,cores,cpus=2,nodes=1,
     "#OAR --stdout grid_folder.%jobid%.out\n"+\
     "#OAR --stderr grid_dolder.%jobid%.err\n"+\
     "#OAR --notify mail:"+mail+"\n"+\
-    "\nsource ~/.bashrc"+\
+    "shopt -s expand_aliases\n"+\
+    "source ~/.bashrc\n"+\
     "\npyload"+\
-    "\npyloadenv"+\
+    "\npyloadenv\n"+\
     "\npython $wind_runner -parfile "+parfile_path
 
     with open(os.path.join(grid_folder,'oar_script.sh'),'w+') as oar_file:

@@ -1118,6 +1118,10 @@ mode,s,h,'+str(hpar['mode'])+',,,"mode"\n'
         The current pwd is mounted in the /mnt of the instance
         
         The instance should be only created on the first run of looped runs, so we test if it exists for
+        
+        note: while on server side, there is often a need to load some modules as defined in the bashrc to 
+        access singularity, so remember to run the python script into an environment in which the container modules
+        have been loaded
         '''
 
         #default path for the container

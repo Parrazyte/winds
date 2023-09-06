@@ -7,6 +7,8 @@ Created on Mon Sep 12 15:49:00 2022
 @author: parrama
 
 simulation tools, separated from the rest to have few imports
+
+
 """
 
 import os,sys
@@ -640,7 +642,8 @@ def xstar_wind(solution,SED_path,xlum,outdir,
         #this is the xstar output grid (always the same)
         eptmp_relat = eptmp_trans
 
-        if not np.all(eptmp_incid==eptmp_trans):
+        #length condition avoids error when comparing elements in arrays of different lengths
+        if len(eptmp_incid)!=len(eptmp_trans) or not np.all(eptmp_incid==eptmp_trans):
             zrtmp_incid_interp=10**griddata(np.log10(eptmp_incid),np.log10(zrtmp_incid),np.log10(eptmp_relat),
                                             method='linear',fill_value=-10)
 
@@ -1162,10 +1165,6 @@ def xstar_wind(solution,SED_path,xlum,outdir,
         Rsph_Rg = Rsph_SI / Rg_SI
         vel_obs_cgs = func_vel_obs(Rsph_Rg)
         logxi = func_logxi(Rsph_Rg)
-
-
-    breakpoint()
-
 
     #!* After getting the starting value of ro_by_Rg from the above 'while' loop, fixing the values for 1st box.
     Rsph_cgs_1st = Rsph_SI*m2cm

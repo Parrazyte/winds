@@ -411,13 +411,14 @@ def xstar_func(spectrum_file,lum,t_guess,n,nh,xi,vturb_x,nbins,nsteps=1,niter=10
         
         file_edit(path_logpars,'\t'.join([str(nbox),str(i_box_final),spectrum_file]),parlog_str,parlog_header)
 
-        #first save before the xstar run
-        if comput_mode in ['server','cigrid']:
-
-            if comput_mode=='cigrid':
-                upload_mantis(spectrum_file,save_folder,delete_previous=True)
-            elif comput_mode=='server':
-                os.system('cp '+spectrum_file+' '+save_folder)
+        #we don't save the gaz frame spectra to avoid storing too much data
+        # #first save before the xstar run
+        # if comput_mode in ['server','cigrid']:
+        #
+        #     if comput_mode=='cigrid':
+        #         upload_mantis(spectrum_file,save_folder,delete_previous=True)
+        #     elif comput_mode=='server':
+        #         os.system('cp '+spectrum_file+' '+save_folder)
 
     if xstar_mode=='standalone':
 
@@ -1116,7 +1117,7 @@ def xstar_wind(solution,SED_path,xlum,outdir,
         Modified value of a "box" logxi value to give as an xstar input
 
         Uses the density at the middle of the box but the radius at the start of the box,
-        except for the relativistic corrections on the luminosiy, which are computed at the box midpoint
+        except for the relativistic corrections on the luminosiy and radius, which are computed at the box midpoint
 
         Computed like this because this is used as a starting value for Xstar's logxi computation,
         AND to retrieve the starting radius. Thus using R_start allows the box to correctly retrieve R_start,
@@ -1126,7 +1127,7 @@ def xstar_wind(solution,SED_path,xlum,outdir,
         '''
 
         return np.log10(lum * func_E_deboost(r_sph_mid)**4 \
-                 / (density_mid * (r_sph_start * Rg_cgs) ** 2))
+                 / (density_mid * (r_sph_start * Rg_cgs * func_E_deboost(r_sph_mid)) ** 2))
 
 
     ro_by_Rg = ro_init
@@ -1822,6 +1823,10 @@ def xstar_wind(solution,SED_path,xlum,outdir,
             
     #cleaning the xstar docker before ending the computation
     clean_xstar_container(xstar_identifier,xstar_mode=xstar_mode)
+
+    #cleaning the sim directory
+    #removing the contents of the sim directory to gain space
+    os.system('rm -f '+outdir+'/*')
 
 def nuLnu_to_xstar(path,renorm=False,Edd_ratio=1,M_BH=8,display=False):
     

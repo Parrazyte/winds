@@ -225,7 +225,7 @@ def func_logxi_sol(r_sph,z_over_r,L_xi_Source,rho_mhd,p_mhd,mdot_mhd,m_BH,vel_r,
     '''
     in this one, the distance appears directly so it should be the spherical one
 
-    Also considers the speed of the material at this distance, which deboosts the luminosity
+    Also considers the speed of the material at this distance, which deboosts the luminosity and contracts the length
     (see function above)
     '''
 
@@ -237,7 +237,8 @@ def func_logxi_sol(r_sph,z_over_r,L_xi_Source,rho_mhd,p_mhd,mdot_mhd,m_BH,vel_r,
     Rg_cgs = Rg_SI * m2cm
 
     return np.log10(L_xi_Source*func_lum_deboost_sol(r_sph,z_over_r,vel_r,vel_phi,vel_z,m_BH)\
-                    / (func_density_sol(r_sph,z_over_r,rho_mhd,p_mhd,mdot_mhd,m_BH) * (r_sph * Rg_cgs) ** 2))
+                    / (func_density_sol(r_sph,z_over_r,rho_mhd,p_mhd,mdot_mhd,m_BH) *\
+                       (r_sph * Rg_cgs * func_E_deboost_sol(r_sph,z_over_r,vel_r,vel_phi,vel_z,m_BH)) ** 2))
 
 def func_nh_sol(r_sph,r_sph_0,z_over_r,rho_mhd,p_mhd,mdot_mhd,m_BH):
 

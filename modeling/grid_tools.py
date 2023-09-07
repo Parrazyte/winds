@@ -302,7 +302,7 @@ def create_oar_script(grid_folder,parfile,cores,cpus=2,nodes=1,
     "#OAR --stderr grid_dolder.%jobid%.err\n"+\
     "#OAR --notify mail:"+mail+"\n"+\
     "shopt -s expand_aliases\n"+\
-    "source ~/.bashrc\n"+\
+    "source /user/home/parrama/.bashrc\n"+\
     "\npyload"+\
     "\npyloadenv\n"+\
     "\npython $wind_runner -parfile "+parfile_path
@@ -316,6 +316,11 @@ def create_grid_parfile(grid_folder,save_grid_dir,sim_grid_dir,xlum,dr_r,
 
     '''
     Inserts a parfile inside an already existing grid folder structure
+
+    exemple:
+    create_grid_parfile('grid_groj_newrelat','/user/home/parrama/workdir/simu/xstar/grid/save',
+    '/user/home/parrama/workdir/simu/xstar/grid/sim',xlum=0.4167,dr_r=0.05,mode='server_singularity_default')
+
 
     the list of parameters is the list of arguments of oar_wrapper
 
@@ -347,6 +352,8 @@ def create_grid_parfile(grid_folder,save_grid_dir,sim_grid_dir,xlum,dr_r,
     '''
 
     sol_files = glob.glob(grid_folder+'/**/eps**.txt', recursive=True)
+
+    sol_files.sort()
 
     #creating an array with the argument elements for each solution
 

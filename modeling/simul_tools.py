@@ -412,13 +412,12 @@ def xstar_func(spectrum_file,lum,t_guess,n,nh,xi,vturb_x,nbins,nsteps=1,niter=10
         file_edit(path_logpars,'\t'.join([str(nbox),str(i_box_final),spectrum_file]),parlog_str,parlog_header)
 
         #we don't save the gaz frame spectra to avoid storing too much data
-        # #first save before the xstar run
-        # if comput_mode in ['server','cigrid']:
-        #
-        #     if comput_mode=='cigrid':
-        #         upload_mantis(spectrum_file,save_folder,delete_previous=True)
-        #     elif comput_mode=='server':
-        #         os.system('cp '+spectrum_file+' '+save_folder)
+        #first save before the xstar run
+        if comput_mode in ['server','cigrid']:
+            if comput_mode=='cigrid':
+                upload_mantis(spectrum_file,save_folder,delete_previous=True)
+            elif comput_mode=='server':
+                os.system('cp '+spectrum_file+' '+save_folder)
 
     if xstar_mode=='standalone':
 
@@ -875,7 +874,7 @@ def xstar_wind(solution,SED_path,xlum,outdir,
     xstar_identifier = xstar_dir[xstar_dir.find('grid'):]
     xstar_identifier = xstar_identifier.replace('/', '_')
 
-    print('Using xstar docker id xstar_identifier')
+    print('Using xstar docker id '+xstar_identifier)
     #cleaning previous xstar runs before starting the computation
     clean_xstar_container(xstar_identifier,xstar_mode=xstar_mode)
 
@@ -1476,7 +1475,27 @@ def xstar_wind(solution,SED_path,xlum,outdir,
     #212
     with open('./'+outdir+'/last_box_Ascii_for_xstar_%.1e'%stop_dl+'.dat','r') as fileobj_box_ascii_stop_dist_last:
         box_stop_dist_list_last=fileobj_box_ascii_stop_dist_last.readlines()[2:]
-    
+
+    if len(box_stop_dist_list_last)==0:
+
+        #this means there's no final box because there's only one box.
+        #currently we stop the xstar computation
+        #should be adjusted to have a single final box instead (this is a bug)
+        ####TODO: get rid of this with proper single box computing
+
+        # copying the box files to the save directory
+        if comput_mode == 'server':
+            box_files = glob.glob(outdir + '/*box*')
+            for elem_box_file in box_files:
+                os.system('cp ' + elem_box_file + ' ' + save_folder_use)
+        # cleaning the sim directory
+        # removing the contents of the sim directory to gain space
+        if comput_mode == 'server':
+            os.system('rm -f ' + outdir + '/*')
+            os.system('rm -f ' + save_folder_use + '/sp_incid*')
+
+        return
+
     for i in range(len(stop_d)):
         #note: we skip the box number info
         xpxl_last[i],xpxcoll_last[i],zetal_last[i],vobsl_last[i],psi_box_last[i]=\
@@ -1824,9 +1843,16 @@ def xstar_wind(solution,SED_path,xlum,outdir,
     #cleaning the xstar docker before ending the computation
     clean_xstar_container(xstar_identifier,xstar_mode=xstar_mode)
 
+    #copying the box files to the save directory
+    if comput_mode=='server':
+        box_files=glob.glob(outdir+'/*box*')
+        for elem_box_file in box_files:
+            os.system('cp '+elem_box_file+' '+save_folder_use)
     #cleaning the sim directory
     #removing the contents of the sim directory to gain space
-    os.system('rm -f '+outdir+'/*')
+    if comput_mode=='server':
+        os.system('rm -f '+outdir+'/*')
+        os.system('rm -f '+save_folder_use+'/sp_incid*')
 
 def nuLnu_to_xstar(path,renorm=False,Edd_ratio=1,M_BH=8,display=False):
     

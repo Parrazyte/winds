@@ -68,6 +68,13 @@ If it is, overwrite checks if the products are in the global "mergedir" obsid
 
 -For crowded fields, it can be useful to set the bigger_fit argument to False to avoid a source mismatch, and to reduce the rad_crop value
 -Elsewhere, keeping it on True allows better determination of overexposed PSFs
+
+
+Notes:
+
+Issue with base64 package for DS9 use can be solved by adding a custom script for calling ds9
+see https://askubuntu.com/questions/1451534/saods9-package-require-base64
+
 '''
 
 #general imports
@@ -86,6 +93,8 @@ import re
 import numpy as np
 import matplotlib as mpl
 import matplotlib.pyplot as plt
+#note: might need to install opencv-python-headless to avoid dependancies issues with mpl
+
 # import matplotlib.cm as cm
 from matplotlib.collections import LineCollection
 
@@ -148,7 +157,7 @@ ap.add_argument("-evtname",nargs='?',help='substring present in previously proce
 
 #global choices
 ap.add_argument("-a","--action",nargs='?',help='Give which action(s) to proceed,separated by comas.'+
-                '\n1.evt_build\n2.filter_evt\n3.extract_reg...',default='2std,3,l,s,m',type=str)
+                '\n1.evt_build\n2.filter_evt\n3.extract_reg...',default='3,l,s,m',type=str)
 
 #std : '2n,3,l,s,m'
 
@@ -156,6 +165,7 @@ ap.add_argument("-c","--cameras",nargs='?',help='Cameras to reduce',default='all
 ap.add_argument("-e","--expmode",nargs=1,help='restrict the analysis to a single type of exposure (in caps)',default='all',type=str)
 ap.add_argument("-l","--local",nargs=1,help='Launch actions directly in the current directory instead',
                 default=False,type=bool)
+#note: local mode has no error handling
 
 #directory level overwrite (not active in local)
 ap.add_argument('-folder_over',nargs=1,help='relaunch action through folders with completed analysis',default=False,type=bool)
@@ -174,6 +184,9 @@ ap.add_argument('-flareband',nargs=1,help='flare computation band',default='6.-1
 #Should correspond to the most important energy band for subsequent science analysis. also used in the region computation
 
 '''region computation'''
+
+ap.add_argument('-use_file_coords',nargs=1,
+                help='Allows to extract regions when Simbad doesnt recognize the name of the source',default=True)
 
 ap.add_argument("-mainfocus",nargs=1,help='only extracts spectra when the source is the main focus of the observation',
                 default=False,type=bool)
@@ -254,6 +267,7 @@ point_source=args.point_source
 maxrad_source=args.maxrad_source
 pileup_max_ex=args.pileup_max_ex
 pileup_treshold=args.pileup_treshold
+use_file_coords_glob=args.use_file_coords
 
 '''''''''''''''''
 ''''FUNCTIONS''''
@@ -1198,7 +1212,8 @@ def pileup_bool(pileup_line):
     else:
         return abs(pattern_s_val-1)>pattern_s_err or d_pileup
 
-def extract_reg(directory,mode='manual',cams='all',expos_mode='all',overwrite=True):
+def extract_reg(directory,mode='manual',cams='all',expos_mode='all',use_file_coords=False,
+                overwrite=True):
     
     '''
     Extracts the optimal source/bg regions for a given exposure
@@ -1264,10 +1279,14 @@ def extract_reg(directory,mode='manual',cams='all',expos_mode='all',overwrite=Tr
             spawn.sendline('\ncd $currdir')
             return "Could not load the image file with ds9. There must be a problem with the exposure."
 
-        def source_catal(dirpath):  
+        def source_catal(dirpath,use_file_coords=False):
             
             '''
             Tries to identify a Simbad object from either the directory structure or the source name in the file itself
+
+            If use_file_coords is set to True, does not produce cancel the process when Simbad
+            doesn't recognize the source and uses the file coordinates instead
+
             '''
             
             #splitting the directories and searching every name in Simbad
@@ -1323,8 +1342,12 @@ def extract_reg(directory,mode='manual',cams='all',expos_mode='all',overwrite=Tr
                 target_query=file_query[0]['MAIN_ID']
                 
             if type(obj_list)==type(file_query) and type(obj_list)==type(None):
-                print("\nSimbad couldn't detect an object name. Skipping this observation...")
-                spawn.sendline('\ncd $currdir')
+
+                print("\nSimbad couldn't detect an object name.")
+                if not use_file_coords:
+                    print("\nSkipping this observation...")
+                    spawn.sendline('\ncd $currdir')
+
                 return "Simbad couldn't detect an object name."
 
             #if we have at least one detections, it is assumed the "last" find is the name of the object                
@@ -1672,31 +1695,36 @@ def extract_reg(directory,mode='manual',cams='all',expos_mode='all',overwrite=Tr
                 
                 #But first, we check that the target of the timing observation is not too far from our own object.
                 if timing_check:
-                    obj_auto=source_catal(fulldir)
-                    
+                    obj_auto=source_catal(fulldir,use_file_coords=use_file_coords)
+
                     #checking if the function returned an error message (folder movement done in the function)
                     if type(obj_auto)==str:
-                        return obj_auto
-                    
-                    #if not, we compare the distance to the coordinates given in the file's header
-                    obj_deg=sexa2deg([obj_auto['DEC'].replace(' ',':'),obj_auto['RA'].replace(' ',':')])[::-1]
-                    
-                    #to the theoretical pointing coordinates
-                    target_obj_deg=fits_evtclean[0].header['RA_OBJ'],fits_evtclean[0].header['DEC_OBJ']
-                    
-                    #to the average coordinates
-                    target_avg_deg=fits_evtclean[0].header['RA_PNT'],fits_evtclean[0].header['DEC_PNT']
-                    
-                    #computing the angular distance in arcsecs from both of those
-                    dist_target_obj_catal=(np.sum(((obj_deg-target_obj_deg)*3600))**2)**(1/2)
-                    dist_target_avg_catal=(np.sum(((obj_deg-target_avg_deg)*3600))**2)**(1/2)
-                    
-                    #most objects with correct pointings will have a very small obj to catal distance
-                    #if they don't, the rage pointing to catal distance acts as a failsafe 
-                    if dist_target_obj_catal>30 and dist_target_avg_catal>60:
-                        print('\nTiming position check activated and the catalog position is too far from the target.\nSkipping...')
-                        spawn.sendline('\ncd $currdir')
-                        return 'Catalog position too far from the exposure target.'
+                        if not use_file_coords:
+                            return obj_auto
+                        else:
+                            #making this to have a valid name for the DS9 region
+                            obj_auto = {'MAIN_ID':fits_evtclean[0].header['OBJECT']}
+                            obj_deg=fits_evtclean[0].header['RA_OBJ'],fits_evtclean[0].header['DEC_OBJ']
+                    else:
+                        #if not, we compare the distance to the coordinates given in the file's header
+                        obj_deg=sexa2deg([obj_auto['DEC'].replace(' ',':'),obj_auto['RA'].replace(' ',':')])[::-1]
+
+                        #to the theoretical pointing coordinates
+                        target_obj_deg=fits_evtclean[0].header['RA_OBJ'],fits_evtclean[0].header['DEC_OBJ']
+
+                        #to the average coordinates
+                        target_avg_deg=fits_evtclean[0].header['RA_PNT'],fits_evtclean[0].header['DEC_PNT']
+
+                        #computing the angular distance in arcsecs from both of those
+                        dist_target_obj_catal=(np.sum(((obj_deg-target_obj_deg)*3600))**2)**(1/2)
+                        dist_target_avg_catal=(np.sum(((obj_deg-target_avg_deg)*3600))**2)**(1/2)
+
+                        #most objects with correct pointings will have a very small obj to catal distance
+                        #if they don't, the rage pointing to catal distance acts as a failsafe
+                        if dist_target_obj_catal>30 and dist_target_avg_catal>60:
+                            print('\nTiming position check activated and the catalog position is too far from the target.\nSkipping...')
+                            spawn.sendline('\ncd $currdir')
+                            return 'Catalog position too far from the exposure target.'
                     
                 #fetching any eventual discrepancy between the RAWX and IMAGE X axis
                 try:
@@ -2011,15 +2039,19 @@ def extract_reg(directory,mode='manual',cams='all',expos_mode='all',overwrite=Tr
                 
                 prefix='_auto'
                 
-                obj_auto=source_catal(fulldir)
-                
-                #checking if the function returned an error message (folder movement done in the function)
-                if type(obj_auto)==str:
-                    return obj_auto
-                    
-                #careful the output after the first line is in dec,ra not ra,dec
-                obj_deg=sexa2deg([obj_auto['DEC'].replace(' ',':'),obj_auto['RA'].replace(' ',':')])
-                obj_deg=[str(obj_deg[1]),str(obj_deg[0])]
+                obj_auto=source_catal(fulldir,use_file_coords=use_file_coords)
+
+                # checking if the function returned an error message (folder movement done in the function)
+                if type(obj_auto) == str:
+                    if not use_file_coords:
+                        return obj_auto
+                    else:
+                        obj_auto = {'MAIN_ID': fits_evtclean[0].header['OBJECT']}
+                        obj_deg =[fits_evtclean[0].header['RA_OBJ'],fits_evtclean[0].header['DEC_OBJ']]
+                else:
+                    #careful the output after the first line is in dec,ra not ra,dec
+                    obj_deg=sexa2deg([obj_auto['DEC'].replace(' ',':'),obj_auto['RA'].replace(' ',':')])
+                    obj_deg=[str(obj_deg[1]),str(obj_deg[0])]
 
                 #loading the fits file with MPDAF has to be done after a preliminary fits load since the format isn't accepted
                 src_mpdaf_WCS=mpdaf_WCS(fits_img[0].header)
@@ -4216,7 +4248,8 @@ if local==False:
                         filter_evt(obsdir,cams=cameras_glob,expos_mode=expos_mode_glob,overwrite=True,mode=filter_mode)
                         filter_evt_done.wait()
                     if curr_action=='3':
-                        extract_reg(obsdir,mode='auto',cams=cameras_glob,expos_mode=expos_mode_glob,overwrite=overwrite_glob)
+                        extract_reg(obsdir,mode='auto',cams=cameras_glob,expos_mode=expos_mode_glob,overwrite=overwrite_glob,
+                                    use_file_coords=use_file_coords_glob)
                         extract_reg_done.wait()
                     if curr_action=='l':
                         extract_lc(obsdir,mode='auto',cams=cameras_glob,expos_mode=expos_mode_glob,overwrite=overwrite_glob)
@@ -4270,7 +4303,8 @@ else:
                 filter_evt(absdir,cams=cameras_glob,expos_mode=expos_mode_glob,overwrite=True,mode=filter_mode)
                 filter_evt_done.wait()
             if curr_action=='3':
-                extract_reg(absdir,mode='auto',cams=cameras_glob,expos_mode=expos_mode_glob,overwrite=overwrite_glob)
+                extract_reg(absdir,mode='auto',cams=cameras_glob,expos_mode=expos_mode_glob,overwrite=overwrite_glob,
+                            use_file_coords=use_file_coords_glob)
                 extract_reg_done.wait()
             if curr_action=='l':
                 extract_lc(absdir,mode='auto',cams=cameras_glob,expos_mode=expos_mode_glob,overwrite=overwrite_glob)

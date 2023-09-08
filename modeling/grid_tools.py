@@ -8,7 +8,7 @@ note: easy test on ipag_calc with:
 
 note: currently the prefixes for job in oar scripts don't work
 use full inline syntax like:
-oarsub -p "host='ipag-calc2'" -l /nodes=1/core=3,walltime=72:00:00 ./oar_script_serv_test.sh
+oarsub -p "host='ipag-calc3'" -l /nodes=1/core=48,walltime=72:00:00 ./oar_script.sh
 '''
 import os
 
@@ -240,6 +240,8 @@ def create_grid(grid_name, mhd_solutions_path,
                                     '_m_bh_'+str(elem_m_BH)+'_rj_'+str(elem_rj))]
 
             #creating the grid in that folder
+            #NOTE: should be updated for relativistic effects if going back to stop at compton=True
+
             sampl_grid_path=sample_angle(mhd_solutions_path,angle_list,elem_mdot,elem_m_BH,elem_rj,
                                          xlum=elem_xlum if elem_mdot=='auto' else None,
                                          outdir=SED_dirs[-1],

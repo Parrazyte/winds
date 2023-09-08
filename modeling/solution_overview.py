@@ -74,7 +74,14 @@ if not online:
     update_online = st.sidebar.button('Update online version')
 
     solutions_path='/media/parrama/SSD/Simu/MHD/solutions/nathan_init/nathan_init.txt'
+
     possible_sol_path='/media/parrama/SSD/Simu/MHD/solutions/nathan_init/super_a_0.0.dat'
+
+    #solutions_path='/media/parrama/SSD/Simu/MHD/solutions/nathan_init/nathan_init.txt'
+    #refaire un merge des trois epsilon
+
+    #possible_sol_path='/media/parrama/SSD/Simu/MHD/solutions/nathan_new/a_alphat_0.0_ep_0.10.dat'
+    #et le reste
 
 else:
 
@@ -764,7 +771,8 @@ if split_angle and n_sel==1:
                                            mdot_mhd,m_BH) for i in range(n_sol)])
 
         logxi_sampl=np.array([func_logxi_sol(r_sph_sampl[i],sol_sampl_z_over_r[i],val_L_source,sol_sampl_rho_mhd[i],
-                                             sol_p_mhd,mdot_mhd,m_BH) for i in range(n_sol)])
+                                             sol_p_mhd,mdot_mhd,sol_sampl_ur, sol_sampl_uphi, sol_sampl_uz,m_BH)\
+                              for i in range(n_sol)])
 
         nh_sampl=np.array([func_nh_sol(r_sph_sampl[i],rj*cyl_cst_sampl[i],sol_sampl_z_over_r[i],
                                        sol_sampl_rho_mhd[i],sol_p_mhd,mdot_mhd,m_BH) for i in range(n_sol)])

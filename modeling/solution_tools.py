@@ -100,6 +100,21 @@ def func_density_sol(r_sph,z_over_r,rho_mhd,p_mhd,mdot_mhd,m_BH):
 
     return (mdot_mhd / (sigma_thomson_cgs * Rg_cgs)) * rho_mhd * (r_cyl ** (p_mhd - 1.5))
 
+def func_density_relat_sol(r_sph,z_over_r,rho_mhd,p_mhd,mdot_mhd,vel_r,vel_phi,vel_z,m_BH):
+
+    '''
+    Relativistically corrected density, with expression from the PhD of Alfredo Luminari
+
+    The factor is quite straightforward:
+    you can always decompose the volume in one dimension parallel to the gas speed angle,
+    which is dilated by a factor gamma, and two others with no dilatation. Then inversion because it's a density
+
+    '''
+    v_gas=func_vel_sol('tot',r_sph,z_over_r,vel_r,vel_phi,vel_z,m_BH)
+
+    gamma_gas=1/np.sqrt(1-(v_gas/c_cgs)**2)
+
+    func_density_sol(r_sph, z_over_r, rho_mhd, p_mhd, mdot_mhd, m_BH) / gamma_gas
 def func_temp_mhd(r_sph,z_over_r,rho_mhd,p_mhd,mdot_mhd,m_BH):
 
     m_BH_SI = m_BH * Msol_SI
@@ -118,7 +133,7 @@ def func_vel_sol(coordinate,r_sph,z_over_r,vel_r,vel_phi,vel_z,m_BH):
 
     '''
 
-    returns various information about the relativistic speed of the gaz
+    returns various information about the relativistic speed of the gas
 
     The (special) relativistic computation requires the 3 components, so requires vel_r, vel_phi and vel_z
     '''
@@ -159,14 +174,17 @@ def func_vel_sol(coordinate,r_sph,z_over_r,vel_r,vel_phi,vel_z,m_BH):
         return u_relat
 
     if coordinate=='angle':
-        # scalar product between the gaz and the line of sight
-        # pov of the gaz so the gaz speed is inverted, very important for the aberration
+        # scalar product between the gas and the line of sight
+        # pov of the gas so the gas speed is inverted, very important for the aberration
         # (which has coords (1,z_over_r,0) when putting r at 1
-        scal_gaz_los=-u_r_nr*u_nonrelat/u_relat*1/cyl_cst-u_z_nr*u_nonrelat/u_relat*z_over_r/cyl_cst
+        scal_gas_los=-u_r_nr*u_nonrelat/u_relat*1/cyl_cst-u_z_nr*u_nonrelat/u_relat*z_over_r/cyl_cst
 
-        cos_angle=scal_gaz_los/u_relat
+        cos_angle=scal_gas_los/u_relat
 
         # relativistic aberration on the angle
+
+        #note: if want to keep the same value with opposite angle convention,
+        # also need to invert u_relat, it's an algebric value
         cos_angle_relat=(cos_angle-u_relat/c_cgs)/(1-u_relat/c_cgs*cos_angle)
 
         #returning a value in degrees
@@ -186,14 +204,14 @@ def func_E_deboost_sol(r_sph,z_over_r,vel_r,vel_phi,vel_z,m_BH):
     the angle computation considers the relatvistic aberration
     '''
 
-    v_gaz=func_vel_sol('tot',r_sph,z_over_r,vel_r,vel_phi,vel_z,m_BH)
+    v_gas=func_vel_sol('tot',r_sph,z_over_r,vel_r,vel_phi,vel_z,m_BH)
 
-    angle_gaz_los=func_vel_sol('angle',r_sph,z_over_r,vel_r,vel_phi,vel_z,m_BH)
+    angle_gas_los=func_vel_sol('angle',r_sph,z_over_r,vel_r,vel_phi,vel_z,m_BH)
 
-    gamma_gaz=1/np.sqrt(1-(v_gaz/c_cgs)**2)
-    beta_gaz=v_gaz/c_cgs
+    gamma_gas=1/np.sqrt(1-(v_gas/c_cgs)**2)
+    beta_gas=v_gas/c_cgs
 
-    psi=1/(gamma_gaz*(1-beta_gaz*np.cos(angle_gaz_los*np.pi/180)))
+    psi=1/(gamma_gas*(1-beta_gas*np.cos(angle_gas_los*np.pi/180)))
 
     return psi
 
@@ -206,23 +224,44 @@ def func_lum_deboost_sol(r_sph,z_over_r,vel_r,vel_phi,vel_z,m_BH):
     '''
 
     #here if need to test things on func_E without breaking lum_deboos
-    # v_gaz=func_vel_sol('tot',r_sph,z_over_r,vel_r,vel_phi,vel_z,m_BH)
+    # v_gas=func_vel_sol('tot',r_sph,z_over_r,vel_r,vel_phi,vel_z,m_BH)
     #
-    # angle_gaz_los=func_vel_sol('angle',r_sph,z_over_r,vel_r,vel_phi,vel_z,m_BH)
+    # angle_gas_los=func_vel_sol('angle',r_sph,z_over_r,vel_r,vel_phi,vel_z,m_BH)
     #
-    # gamma_gaz=1/np.sqrt(1-(v_gaz/c_cgs)**2)
-    # beta_gaz=v_gaz/c_cgs
+    # gamma_gas=1/np.sqrt(1-(v_gas/c_cgs)**2)
+    # beta_gas=v_gas/c_cgs
     #
-    # psi=1/(gamma_gaz*(1-beta_gaz*np.cos(angle_gaz_los*np.pi/180)))
+    # psi=1/(gamma_gas*(1-beta_gas*np.cos(angle_gas_los*np.pi/180)))
     #
     # return psi**4
 
     return func_E_deboost_sol(r_sph,z_over_r,vel_r,vel_phi,vel_z,m_BH)**4
 
+def func_r_boost_sol(r_sph,z_over_r,vel_r,vel_phi,vel_z,m_BH):
+    
+    '''
+    Relativistic correction on the length from the gas pov
+    
+    use for the logxi computation and also to allow the correct radius
+
+    From the PhD of Alfredo Luminari p.77 BUT inverted since the angle convention we use here is the opposite
+    '''
+    
+    v_gas=func_vel_sol('tot',r_sph,z_over_r,vel_r,vel_phi,vel_z,m_BH)
+    
+    angle_gas_los=func_vel_sol('angle',r_sph,z_over_r,vel_r,vel_phi,vel_z,m_BH)
+
+    gamma_gas=1/np.sqrt(1-(v_gas/c_cgs)**2)
+    
+    return 1+(1- gamma_gas)*np.cos(angle_gas_los*np.pi/180)
+    
 # in this one, the distance appears directly so it should be the spherical one
-def func_logxi_sol(r_sph,z_over_r,L_xi_Source,rho_mhd,p_mhd,mdot_mhd,m_BH,vel_r,vel_phi,vel_z):
+def func_logxi_sol(r_sph,z_over_r,L_xi_Source,rho_mhd,p_mhd,mdot_mhd,vel_r,vel_phi,vel_z,m_BH,):
 
     '''
+
+    NOTE: this is computed in the GAZ FRAME, hence all the relativistic effects
+
     in this one, the distance appears directly so it should be the spherical one
 
     Also considers the speed of the material at this distance, which deboosts the luminosity and contracts the length
@@ -237,8 +276,8 @@ def func_logxi_sol(r_sph,z_over_r,L_xi_Source,rho_mhd,p_mhd,mdot_mhd,m_BH,vel_r,
     Rg_cgs = Rg_SI * m2cm
 
     return np.log10(L_xi_Source*func_lum_deboost_sol(r_sph,z_over_r,vel_r,vel_phi,vel_z,m_BH)\
-                    / (func_density_sol(r_sph,z_over_r,rho_mhd,p_mhd,mdot_mhd,m_BH) *\
-                       (r_sph * Rg_cgs * func_E_deboost_sol(r_sph,z_over_r,vel_r,vel_phi,vel_z,m_BH)) ** 2))
+                    / (func_density_relat_sol(r_sph,z_over_r,rho_mhd,p_mhd,mdot_mhd,vel_r,vel_phi,vel_z,m_BH) *\
+                       (r_sph * Rg_cgs * func_r_boost_sol(r_sph,z_over_r,vel_r,vel_phi,vel_z,m_BH)) ** 2))
 
 def func_nh_sol(r_sph,r_sph_0,z_over_r,rho_mhd,p_mhd,mdot_mhd,m_BH):
 
@@ -331,6 +370,9 @@ def sample_angle(solutions_path, angle_values, mdot_obs, m_BH, r_j=6., eta_mhd=1
                  return_file_path=False,mode='file',return_compton_angle=False,silent=True,
                  stop_at_compton=False):
     '''
+
+
+
     split the solution grid for a range of angles, up to the compton-thick point of each solution
         if stop_at_compton is set to True, otherwise to the given limit
 
@@ -416,6 +458,10 @@ def sample_angle(solutions_path, angle_values, mdot_obs, m_BH, r_j=6., eta_mhd=1
 
         def ang_compton_thick(p_mhd,rho_mhd,angles):
             #fetching the rho value giving exactly the compton thickness threshold
+
+            #no relativistic correction if we consider this in rest frame (0 speed at infinity)
+            #this is a good approximation if we assume the gas won't become compton thick before getting to low speeds
+
             rho_compton=compton_thick_thresh*sigma_thomson_cgs/(mdot_mhd*(r_j ** (p_mhd - 0.5) / (0.5 - p_mhd)))
 
             angle_compton=interp_yaxis(rho_compton,rho_mhd,angles)

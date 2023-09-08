@@ -28,8 +28,8 @@ from general_tools import file_edit
 from tqdm import tqdm
 
 
-from solution_tools import func_density_sol,func_nh_sol,func_vel_sol,func_logxi_sol,func_E_deboost_sol,\
-                           func_lum_deboost_sol
+from solution_tools import func_density_sol,func_nh_sol,func_r_boost_sol,func_density_relat_sol,\
+                           func_vel_sol,func_logxi_sol,func_E_deboost_sol,func_lum_deboost_sol
 
 from grid_tools import upload_mantis,download_mantis
 
@@ -1090,7 +1090,10 @@ def xstar_wind(solution,SED_path,xlum,outdir,
     
     def func_density(r_sph):
         return func_density_sol(r_sph,z_over_r,rho_mhd,p_mhd,mdot_mhd,m_BH)
-    
+
+    def func_density_relat(r_sph):
+        return func_density_relat_sol(r_sph,z_over_r,rho_mhd,p_mhd,mdot_mhd,vel_r,vel_phi,vel_z,m_BH)
+
     def func_vel_r(r_sph):
         return func_vel_sol('r',r_sph,z_over_r,vel_r,vel_phi,vel_z,m_BH)
 
@@ -1104,14 +1107,16 @@ def xstar_wind(solution,SED_path,xlum,outdir,
         return func_vel_sol('obs',r_sph,z_over_r,vel_r,vel_phi,vel_z,m_BH)
     def func_E_deboost(r_sph):
         return func_E_deboost_sol(r_sph, z_over_r, vel_r, vel_phi, vel_z, m_BH)
+    def func_r_boost(r_sph):
+        return func_r_boost_sol(r_sph, z_over_r, vel_r, vel_phi, vel_z, m_BH)
 
     #in this one, the distance appears directly so it should be the spherical one
     def func_logxi(r_sph,lum=L_xi_Source):
 
         #note: here we add a second argument to allow to recompute the luminosity from xstar's output
-        return func_logxi_sol(r_sph,z_over_r,lum,rho_mhd,p_mhd,mdot_mhd,m_BH,vel_r,vel_phi,vel_z,)
+        return func_logxi_sol(r_sph,z_over_r,lum,rho_mhd,p_mhd,mdot_mhd,vel_r,vel_phi,vel_z,m_BH)
     
-    def func_logxi_xstar(r_sph_start,r_sph_mid,density_mid,lum):
+    def func_logxi_xstar(r_sph_start,r_sph_mid,density_relat_mid,lum):
         '''
         Modified value of a "box" logxi value to give as an xstar input
 
@@ -1126,7 +1131,7 @@ def xstar_wind(solution,SED_path,xlum,outdir,
         '''
 
         return np.log10(lum * func_E_deboost(r_sph_mid)**4 \
-                 / (density_mid * (r_sph_start * Rg_cgs * func_E_deboost(r_sph_mid)) ** 2))
+                 / (density_relat_mid * (r_sph_start * Rg_cgs * func_r_boost(r_sph_start)) ** 2))
 
 
     ro_by_Rg = ro_init
@@ -1191,9 +1196,9 @@ def xstar_wind(solution,SED_path,xlum,outdir,
 
     
     #### This is very ugly and should be changed to the proper number of boxes, computed before this loop
-    vobs_start,robyRg_start,Rsph_cgs_start,density_cgs_start,logxi_start=np.zeros((5,int(1e5)))
-    vobs_mid,robyRg_mid,Rsph_cgs_mid,density_cgs_mid,logxi_mid=np.zeros((5,int(1e5)))
-    vobs_stop,robyRg_stop,Rsph_cgs_stop,density_cgs_stop,logxi_stop,NhOfBox=np.zeros((6,int(1e5)))
+    vobs_start,robyRg_start,Rsph_cgs_start,density_relat_cgs_start,logxi_start=np.zeros((5,int(1e5)))
+    vobs_mid,robyRg_mid,Rsph_cgs_mid,density_relat_cgs_mid,logxi_mid=np.zeros((5,int(1e5)))
+    vobs_stop,robyRg_stop,Rsph_cgs_stop,density_relat_cgs_stop,logxi_stop,NhOfBox=np.zeros((6,int(1e5)))
     logxi_input=np.zeros(int(1e5))
     psi_box=np.zeros(int(1e5))
 
@@ -1279,27 +1284,36 @@ def xstar_wind(solution,SED_path,xlum,outdir,
             box_type='r_out limit'
             
         Rsph_cgs_start[i_box]= Rsph_cgs_end
+
+        '''
+        All densities aer computed with relativistic corrections because they need to be correct to match
+        the logxi, which needs to be relativistically corrected 
         
-        density_cgs_start[i_box] = func_density(Rsph_cgs_start[i_box]/Rg_cgs)
+        The nH value on the other hand, is in the rest frame, because instead of relativistically correcting it
+        (aka complicated changes on cross-sections), we use the rest/gas/rest spectrum changes
+        Thus nH thus needs to use a non relativistic density
+        '''
+
+        density_relat_cgs_start[i_box] = func_density_relat(Rsph_cgs_start[i_box]/Rg_cgs)
         logxi_start[i_box] = func_logxi(Rsph_cgs_start[i_box]/Rg_cgs)
         vobs_start[i_box]=func_vel_obs(Rsph_cgs_start[i_box]/Rg_cgs)/(Km2m*m2cm)
               
         robyRg_start[i_box] =Rsph_cgs_start[i_box]/(Rg_cgs*cyl_cst*r_cyl_r0)
     
         Rsph_cgs_stop[i_box]= Rsph_cgs_end*dr_factor
-        density_cgs_stop[i_box] = func_density(Rsph_cgs_stop[i_box]/Rg_cgs)
+        density_relat_cgs_stop[i_box] = func_density_relat(Rsph_cgs_stop[i_box]/Rg_cgs)
         logxi_stop[i_box] = func_logxi(Rsph_cgs_stop[i_box]/Rg_cgs)
         vobs_stop[i_box]=func_vel_obs(Rsph_cgs_stop[i_box]/Rg_cgs)/(Km2m*m2cm)
         robyRg_stop[i_box] = Rsph_cgs_stop[i_box]/(Rg_cgs*cyl_cst*r_cyl_r0)
          
         Rsph_cgs_mid[i_box]= (Rsph_cgs_start[i_box]+Rsph_cgs_stop[i_box])/2.0
-        density_cgs_mid[i_box] = func_density(Rsph_cgs_mid[i_box]/Rg_cgs)
+        density_relat_cgs_stop[i_box] = func_density_relat(Rsph_cgs_mid[i_box]/Rg_cgs)
         logxi_mid[i_box] = func_logxi(Rsph_cgs_mid[i_box]/Rg_cgs)
         vobs_mid[i_box]=func_vel_obs(Rsph_cgs_mid[i_box]/Rg_cgs)/(Km2m*m2cm)
         
         robyRg_mid[i_box] = Rsph_cgs_mid[i_box]/(Rg_cgs*cyl_cst*r_cyl_r0)
 
-        #relativistic correction for the box
+        #relativistic energy correction for the box
         psi_box[i_box] = func_E_deboost(Rsph_cgs_mid[i_box]/(Rg_cgs))
 
         #!* Recording quantities for the end point of the box*/
@@ -1307,10 +1321,11 @@ def xstar_wind(solution,SED_path,xlum,outdir,
         #different computation for the theoretical xstar logxi
         logxi_input[i_box]=func_logxi_xstar(r_sph_start=Rsph_cgs_start[i_box]/Rg_cgs,
                                             r_sph_mid=Rsph_cgs_mid[i_box]/Rg_cgs,
-                                            density_mid=density_cgs_mid[i_box],
+                                            density_relat_mid=density_relat_cgs_mid[i_box],
                                             lum=L_xi_Source)
-        #!* Calculate Nh for the box
-        NhOfBox[i_box] = density_cgs_mid[i_box]*(Rsph_cgs_stop[i_box]-Rsph_cgs_start[i_box])
+
+        #computing the non-relativistic nH for the box
+        NhOfBox[i_box] = func_density(Rsph_cgs_mid[i_box]/Rg_cgs)*(Rsph_cgs_stop[i_box]-Rsph_cgs_start[i_box])
         
         #!* Print the quantities in the log checking
         
@@ -1332,23 +1347,23 @@ def xstar_wind(solution,SED_path,xlum,outdir,
         fileobj_box_details.write('Box n°'+str(i_box+1)+'\n')
         fileobj_box_details.write('Box dimension criteria: '+box_type+'\nBox dr/r:'+str(dr_r_eff_list[i_box])+'\n\n')
         fileobj_box_details.write('robyRg_start='+str(robyRg_start[i_box])+'\nvobs_start in km/s='+str(vobs_start[i_box])
-                                 +'\nRsph_start in cm='+str(Rsph_cgs_start[i_box])+'\nlognH_start (in /cc)='
-                                 +str(np.log10(density_cgs_start[i_box]))+"\nlogxi_start="+str(logxi_start[i_box])+'\n\n')
+                                 +'\nRsph_start in cm='+str(Rsph_cgs_start[i_box])+'\nlog n(H)_start_relat (in /cc)='
+                                 +str(np.log10(density_relat_cgs_start[i_box]))+"\nlogxi_start="+str(logxi_start[i_box])+'\n\n')
 
         # !* log(4*Pi) is subtracted to print the correct logxi.
         # !* We have multiplied xlum i.e. luminosity by 4*Pi to make the estimation of flux correctly.
         # !* xi value also we are providing from ASCII file to xstar wrong to estimate the distance correctly.
          
         fileobj_box_details.write('robyRg_mid='+str(robyRg_mid[i_box])+'\nvobs_mid in km/s='+str(vobs_mid[i_box])+
-                                  '\nRsph_mid in cm='+str(Rsph_cgs_mid[i_box])+'\nlognH_mid (in /cc)='
-                                  +str(np.log10(density_cgs_mid[i_box]))+'\nlogxi_mid='+str(logxi_mid[i_box])+'\n\n')
+                                  '\nRsph_mid in cm='+str(Rsph_cgs_mid[i_box])+'\nlog n(H)_mid_relat (in /cc)='
+                                  +str(np.log10(density_relat_cgs_mid[i_box]))+'\nlogxi_mid='+str(logxi_mid[i_box])+'\n\n')
                                                    
         fileobj_box_details.write('robyRg_stop='+str(robyRg_stop[i_box])+'\nvobs_stop in km/s='+str(vobs_stop[i_box])+
-                                  '\nRsph_stop in cm='+str(Rsph_cgs_stop[i_box])+'\nlognH_stop (in /cc)='
-                                  +str(np.log10(density_cgs_stop[i_box]))+'\nlogxi_stop='+str(logxi_stop[i_box])+'\n\n')
+                                  '\nRsph_stop in cm='+str(Rsph_cgs_stop[i_box])+'\nlog n(H)_stop_relat (in /cc)='
+                                  +str(np.log10(density_relat_cgs_stop[i_box]))+'\nlogxi_stop='+str(logxi_stop[i_box])+'\n\n')
         
         fileobj_box_details.write('Parameters to go to xstar are:\n')
-        fileobj_box_details.write('Gas slab of lognH='+str(np.log10(density_cgs_mid[i_box]))+'\nlogNH='+str(np.log10(NhOfBox[i_box]))
+        fileobj_box_details.write('Gas slab of log n(H)_relat='+str(np.log10(density_relat_cgs_mid[i_box]))+'\nlogNH='+str(np.log10(NhOfBox[i_box]))
                                   +'\nof logxi='+str(logxi_mid[i_box])+'\nis travelling at a velocity of vobs in Km/s='
                                   +str(vobs_mid[i_box])+'\n\n')
         
@@ -1361,13 +1376,13 @@ def xstar_wind(solution,SED_path,xlum,outdir,
             #!* calculated suitably from density_mid and Rsph_start
             #!* logxi_mid is changed to logxi_input (to have the correct value with xstar balance)
             fileobj_box_ascii_xstar_last.write('%03i\t%.15e\t%.15e\t%.15e\t%.15e\t%.15e\n'\
-                                               %(i_box_stop+1,np.log10(density_cgs_mid[i_box]),np.log10(NhOfBox[i_box]),
+                                               %(i_box_stop+1,np.log10(density_relat_cgs_mid[i_box]),np.log10(NhOfBox[i_box]),
                                                 logxi_input[i_box],vobs_mid[i_box],psi_box[i_box]))
 
             #!* This loop is to prepare the ASCII file where xi value is the actual physical value
             fileobj_box_ascii_last.write('%03i\t%.15e\t%.15e\t%.15e\t%.15e\t%.15e\n'\
                                                %(i_box+1-i_box_stop,Rsph_cgs_mid[i_box],
-                                                 np.log10(density_cgs_mid[i_box]),
+                                                 np.log10(density_relat_cgs_mid[i_box]),
                                                  np.log10(NhOfBox[i_box]),
                                                 logxi_mid[i_box],vobs_mid[i_box]))
 
@@ -1377,14 +1392,14 @@ def xstar_wind(solution,SED_path,xlum,outdir,
             #!* calculated suitably fron density_mid and Rsph_start
             #!* logxi_mid is changed to logxi_input
             fileobj_box_ascii_xstar.write('%03i\t%.15e\t%.15e\t%.15e\t%.15e\t%.15e\n'\
-                                               %(i_box+1-i_box_stop,np.log10(density_cgs_mid[i_box]),
+                                               %(i_box+1-i_box_stop,np.log10(density_relat_cgs_mid[i_box]),
                                                  np.log10(NhOfBox[i_box]),
                                                 logxi_input[i_box],vobs_mid[i_box],psi_box[i_box]))
 
             #!* This loop is to prepare the ASCII file where xi value is the actual physical value
             fileobj_box_ascii_stop_dis.write('%03i\t%.15e\t%.15e\t%.15e\t%.15e\t%.15e\n'\
                                                %(i_box+1-i_box_stop,Rsph_cgs_mid[i_box],
-                                                 np.log10(density_cgs_mid[i_box]),
+                                                 np.log10(density_relat_cgs_mid[i_box]),
                                                  np.log10(NhOfBox[i_box]),
                                                 logxi_mid[i_box],vobs_mid[i_box]))
 
@@ -1412,17 +1427,17 @@ def xstar_wind(solution,SED_path,xlum,outdir,
     vobs_start=vobs_start[:i_box]
     robyRg_start=robyRg_start[:i_box]
     Rsph_cgs_start=Rsph_cgs_start[:i_box]
-    density_cgs_start=density_cgs_start[:i_box]
+    density_cgs_start=density_relat_cgs_start[:i_box]
     logxi_start=logxi_start[:i_box]
     vobs_mid=vobs_mid[:i_box]
     robyRg_mid=robyRg_mid[:i_box]
     Rsph_cgs_mid=Rsph_cgs_mid[:i_box]
-    density_cgs_mid=density_cgs_mid[:i_box]
+    density_cgs_mid=density_relat_cgs_mid[:i_box]
     logxi_mid=logxi_mid[:i_box]
     vobs_stop=vobs_stop[:i_box]
     robyRg_stop=robyRg_stop[:i_box]
     Rsph_cgs_stop=Rsph_cgs_stop[:i_box]
-    density_cgs_stop=density_cgs_stop[:i_box]
+    density_cgs_stop=density_relat_cgs_stop[:i_box]
     logxi_stop=logxi_stop[:i_box]
     NhOfBox=NhOfBox[:i_box]
     psi_box=psi_box[:i_box]
@@ -1515,7 +1530,7 @@ def xstar_wind(solution,SED_path,xlum,outdir,
     t is the temperature of the plasma. Starts at the default value of 400, but will be updated starting on the second box
     with the temperature of the previous box as a "guess"
     '''
-    
+
     tp=400
     
     #current index of the list of "final" boxes for which we compute a final spectrum
@@ -1660,11 +1675,14 @@ def xstar_wind(solution,SED_path,xlum,outdir,
             #this info is important so we log it in the box dictionnary to write it in the xstar file
             dict_box['xlum_corr']=lum_corr_factor
 
+            #reminder: this is relativistic to match the relativistic logxi
             xpx = 10.0**(xpxl[i_box])
+
+            #this isn't because we change the spectrum instead
             xpxcol = 10.0**(xpxcoll[i_box])
 
             #correcting the ionization parameter for the ratio between the xstar computed luminosity and the input
-            # #luminosity
+            # luminosity
 
             ####TODO: THIS SHOULD BE CHECKED
             #note: no psi_box_std here because the zetal already considers psi_box
@@ -1742,13 +1760,6 @@ def xstar_wind(solution,SED_path,xlum,outdir,
 
             vrel_last[i_box_final] = vobsl_last[i_box_final]-vobsl[i_box]
 
-            #blueshifts for the final box
-            del_E_final[i_box_final] = np.sqrt((1-vrel_last[i_box_final]/c_Km)/(1+vrel_last[i_box_final]/c_Km))
-            
-            del_E_bs[i_box_final] = np.sqrt((1+vobsl_last[i_box_final]/c_Km)/(1-vobsl_last[i_box_final]/c_Km))
-     
-            #!del_E_final[i_box_final] = 1.00
-            
             #here in the fortran code we go back to the beginning of the code (where opening ./varying_spectra.dat)
             #we can't continue the loop because we are now computing the final box, which is not a standard "n+1" box
             #instead here we repeat the commands that should be run again
@@ -1771,8 +1782,11 @@ def xstar_wind(solution,SED_path,xlum,outdir,
             #note: we use shift output here because we want the rest frame of the computation we just did,
             # not the one before
             lum_corr_factor=shift_incident_sp_rest_gaz(psi_box_last[i_box_final],xstar_input_save,shift_output)
-    
+
+            #reminder: this is relativistic to match the relativistic logxi
             xpx = 10.0**(xpxl_last[i_box_final])
+
+            #this isn't because we change the spectrum instead
             xpxcol = 10.0**(xpxcoll_last[i_box_final])
 
             ####TODO: THIS SHOULD BE CHECKED

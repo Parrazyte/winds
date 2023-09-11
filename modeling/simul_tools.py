@@ -11,7 +11,7 @@ simulation tools, separated from the rest to have few imports
 
 """
 
-import os,sys
+import os,sys,io
 import numpy as np
 import time
 import glob
@@ -181,6 +181,7 @@ def oar_wrapper(solution_rel_dir,save_grid_dir,sim_grid_dir,
                   mdot_obs,xlum,m_BH,
                   ro_init, dr_r,stop_d_input,v_resol,
                   mode='server_standalone_default',
+                  progress_file='',
                   sol_file='auto',
                   SED_file='auto_.dat'):
 
@@ -258,6 +259,7 @@ def oar_wrapper(solution_rel_dir,save_grid_dir,sim_grid_dir,
     if comput_mode=='cigrid':
 
         #downloading the elements in the save directory
+        ####THIS SHOULD BE CHANGED TO ONLY DOWNLOAD THE LAST spectrum
         download_mantis(save_dir,simdir,load_folder=True)
 
         #and the SED
@@ -268,9 +270,26 @@ def oar_wrapper(solution_rel_dir,save_grid_dir,sim_grid_dir,
 
     elif comput_mode=='server':
 
-        #copying from the save to the sim
-        for elem_file in glob.glob(save_dir+'/**'):
+        sp_saves=glob.glob(save_dir+'/sp_**')
+
+        #copying everything but the saves from the save_dir to the sim_dir
+        for elem_file in [elem for elem in glob.glob(save_dir+'/**') if elem not in sp_saves]:
             os.system('cp '+os.path.join(save_dir,elem_file)+' '+simdir)
+
+        #copying the last non-final incident and rest spectra to restart the computation if necessary
+        sp_saves_rest=np.array([elem for elem in sp_saves if '_tr_rest_' in elem and '_final_' not in elem])
+        if len(sp_saves_rest)>0:
+            sp_saves.sort()
+            os.system('cp '+os.path.join(save_dir,sp_saves_rest[-1])+' '+simdir)
+
+            #we also copy the spectrum of the n-1 box to avoid issues when restarting from the last box
+            if len(sp_saves_rest)>1:
+                os.system('cp ' + os.path.join(save_dir, sp_saves_rest[-2]) + ' ' + simdir)
+
+        sp_saves_incid = np.array([elem for elem in sp_saves if '_incid_' in elem and '_final_' not in elem])
+        if len(sp_saves_incid) > 0:
+            sp_saves.sort()
+            os.system('cp ' + os.path.join(save_dir, sp_saves_incid[-1]) + ' ' + simdir)
 
         #copying the SED file
         os.system('cp '+os.path.join(save_grid_dir,SED_rel_path)+' '+simdir)
@@ -279,6 +298,16 @@ def oar_wrapper(solution_rel_dir,save_grid_dir,sim_grid_dir,
     #extracting the name for the function call below since we're going in simdir
     SED_name=SED_rel_path.split('/')[-1]
     solution_name=solution_rel_path.split('/')[-1]
+
+    #creating the path of the progress file if asked to
+    if progress_file=='auto':
+        if comput_mode=='server':
+            #in server mode, it's fine to put the logs in the save folder because we can access it easily
+            progress_file_path=os.path.join(save_grid_dir,solution_rel_dir.split('/')[0],'grid_progress.log')
+        elif comput_mode=='cigrid':
+            progress_file_path = os.path.join(sim_grid_dir,solution_rel_dir.split('/')[0],'grid_progress.log')
+    else:
+        progress_file_path=None if progress_file=='' else progress_file
 
     #it's easier to go directly in the simdir here
     os.chdir(simdir)
@@ -294,7 +323,8 @@ def oar_wrapper(solution_rel_dir,save_grid_dir,sim_grid_dir,
                comput_mode=comput_mode,
                xstar_mode=xstar_mode,
                save_folder=save_dir,
-               xstar_loc=xstar_loc)
+               xstar_loc=xstar_loc,
+               progress_file=progress_file_path)
 
 
 def xstar_func(spectrum_file,lum,t_guess,n,nh,xi,vturb_x,nbins,nsteps=1,niter=100,lcpres=0,
@@ -404,6 +434,14 @@ def xstar_func(spectrum_file,lum,t_guess,n,nh,xi,vturb_x,nbins,nsteps=1,niter=10
                    '############################################################################################################\n',
                    '#nbox\tnbox_final\tspectrum\tlum\tlum_corr_factor\tt_guess\tn\tnh\tlogxi\tvturb_x\tdr_r\tt_run\n']
 
+    # we don't save the gaz frame spectra to avoid storing too much data
+    # first save before the xstar run
+    if comput_mode in ['server', 'cigrid']:
+        if comput_mode == 'cigrid':
+            upload_mantis(spectrum_file, save_folder, delete_previous=True)
+        elif comput_mode == 'server':
+            os.system('cp ' + spectrum_file + ' ' + save_folder)
+
     if path_logpars is not None:
         parlog_str='\t'.join([str(nbox),str(i_box_final),spectrum_file,'%.6e'%lum,'%.6e'%lum_corr_factor,
                               '%.6e'%t_guess,'%.6e'%n,'%.6e'%nh,'%.6e'%xi,'%.6e'%vturb_x,
@@ -411,13 +449,6 @@ def xstar_func(spectrum_file,lum,t_guess,n,nh,xi,vturb_x,nbins,nsteps=1,niter=10
         
         file_edit(path_logpars,'\t'.join([str(nbox),str(i_box_final),spectrum_file]),parlog_str,parlog_header)
 
-        #we don't save the gaz frame spectra to avoid storing too much data
-        #first save before the xstar run
-        if comput_mode in ['server','cigrid']:
-            if comput_mode=='cigrid':
-                upload_mantis(spectrum_file,save_folder,delete_previous=True)
-            elif comput_mode=='server':
-                os.system('cp '+spectrum_file+' '+save_folder)
 
     if xstar_mode=='standalone':
 
@@ -484,15 +515,17 @@ def xstar_wind(solution,SED_path,xlum,outdir,
                comput_mode='local',xstar_mode='standalone',xstar_loc='default',
                save_folder='',
                force_ro_init=False,no_turb=False,cap_dr_resol=True,no_write=False,
-               grid_type="standard",custom_grid_headas=None):
+               grid_type="standard",custom_grid_headas=None,progress_file=None):
     
     
     '''
     Python wrapper for the xstar computation of a single solution
     
     The box size is computed dynamically to "satisfy" two criteria, a maximal dr/r and a velocity resolution
-    The velocity resolution should always be taken with a reasonable oversampling factor (at least 1/3) compared to the instrumental resolution
-    
+    The velocity resolution should always be taken with a reasonable oversampling factor (at least 1/3) compared to the
+    instrumental resolution
+
+
     Required parameters:
 
         solution is either a file path or a dictionnary with all the arguments of a JED-SAD solution
@@ -565,6 +598,8 @@ def xstar_wind(solution,SED_path,xlum,outdir,
             setups for grid computation on servers.
             The main difference is the way to run xstar and how saves are implemented
 
+            the grid folder need to start by "grid" to get a recognizable identifier for the xstar_id and the progress_id
+
             cigrid (using Cigri on Dahu & Bigfoot)
                 still in progress
 
@@ -589,13 +624,20 @@ def xstar_wind(solution,SED_path,xlum,outdir,
 
     xstar_loc:
     in standalone: the path of the heasoft version to use. 'default' uses the standard version installed on the computer
+
     in docker/charliecloud: the identifier of the container (not the image) to launch
+                            if default, merges the directory structure from the grid folder (which should start with grid)
+
+    progress_file:
+        -global log file for grid computation where the tqdm of all grid files are listed
+        Useful to see how big computations are progressing
+        if progress_file is not set to None, the tqdm display is redirected and doesn't appear in stderr
 
     Notes on the python conversion:
         -since array numbers starts at 0, we use "index" box numbers (starting at 0) and adapt all of the consequences,
         but still print the correct box number (+1)
 
-    
+
     ####SHOULD BE UPDATED TO ADD THE JED SAD N(R) if necessary
 
     '''
@@ -660,8 +702,11 @@ def xstar_wind(solution,SED_path,xlum,outdir,
         this means we need to interpolate once more
         '''
 
-        zrtmp_trans_rest=10**griddata(np.log10(eptmp_relat/psi),np.log10(zrtmp_trans),np.log10(eptmp_relat),
-                                            method='linear',fill_value=-10)
+        #ignoring the divided by 0 warning because this is just the result of using log on 0 values
+        # (which can be there for bins with no flux)
+        with np.errstate(divide='ignore'):
+            zrtmp_trans_rest=10**griddata(np.log10(eptmp_relat/psi),np.log10(zrtmp_trans),np.log10(eptmp_relat),
+                                                method='linear',fill_value=-10)
 
         zrtmp_relat= zrtmp_incid_interp*(1-psi**3)+zrtmp_trans_rest
 
@@ -874,7 +919,7 @@ def xstar_wind(solution,SED_path,xlum,outdir,
     xstar_identifier = xstar_dir[xstar_dir.find('grid'):]
     xstar_identifier = xstar_identifier.replace('/', '_')
 
-    print('Using xstar docker id '+xstar_identifier)
+    print('Using xstar container id '+xstar_identifier)
     #cleaning previous xstar runs before starting the computation
     clean_xstar_container(xstar_identifier,xstar_mode=xstar_mode)
 
@@ -1507,6 +1552,7 @@ def xstar_wind(solution,SED_path,xlum,outdir,
         # removing the contents of the sim directory to gain space
         if comput_mode == 'server':
             os.system('rm -f ' + outdir + '/*')
+
             os.system('rm -f ' + save_folder_use + '/sp_incid*')
 
         return
@@ -1608,12 +1654,36 @@ def xstar_wind(solution,SED_path,xlum,outdir,
                 vturb_x_restart=float(line_restart.split('\t')[9])
                 
                 print("Restarting from box "+str(nbox_restart)+"\n")
-            
-    ####main loop
-    
-    #using i_box because it's an index here, not the actual box number (shifted by 1)
-    for i_box in tqdm(range(nbox_restart-1,nbox_std)):
 
+
+    #creating an io if a progress file is given to redirect the tqdm messages
+    if progress_file is not None:
+        progress_io=io.StringIO()
+    else:
+        progress_io=None
+
+    progress_header='#grid_identifier\tprogress\n'
+
+    ####main loop
+
+    # creating a progess_id to log the progress
+    currdir = os.getcwd()
+    os.chdir(outdir)
+    progress_id = os.getcwd()[os.getcwd().find('grid'):]
+    progress_id = progress_id.replace('/', '_')
+    os.chdir(currdir)
+
+
+    #using i_box because it's an index here, not the actual box number (shifted by 1)
+    for i_box in tqdm(range(nbox_restart-1,nbox_std),file=progress_io,
+                      initial=nbox_restart-1,total=nbox_std):
+
+        #logging the tqdm values in a global progress file if asked to, using the same identifier as for xstar containers
+        if progress_file is not None:
+
+            #extracting the last progress bar iteration
+            progress_val=progress_io.getvalue().split('\r')[-1]
+            file_edit(progress_file,line_id=progress_id,line_data=progress_id+progress_val,header=progress_header)
 
         # resetting the global log file for the first computation
         if i_box == 0 and i_box_final == 0:
@@ -1642,12 +1712,12 @@ def xstar_wind(solution,SED_path,xlum,outdir,
 
             shift_input=SED_path
 
-        elif i_box+1!=nbox_restart:
+        else:
                 
-            shift_input='./'+outdir+'/sp_tr_rest_%03i'%(i_box)+'.dat'
+            shift_input=os.path.join(outdir,'sp_tr_rest_%03i'%(i_box)+'.dat')
 
         #here because xstar is launched in outdir
-        xstar_input_save='./'+outdir+'/sp_incid_gaz_%03i'%(i_box+1)+'.dat'
+        xstar_input_save=os.path.join(outdir,'sp_incid_gaz_%03i'%(i_box+1)+'.dat')
         xstar_input='./sp_incid_gaz_%03i'%(i_box+1)+'.dat'
 
         vobsx = vobsl[i_box]
@@ -1853,6 +1923,14 @@ def xstar_wind(solution,SED_path,xlum,outdir,
 
             #removing the standard xstar output to gain space
             os.system('rm -f '+outdir+'/xout_*.fits')
+
+    #logging the final tqdm values in a global progress file if asked to, using the same identifier as for xstar containers
+    if progress_file is not None:
+
+        #extracting the last progress bar iteration
+        progress_val=progress_io.getvalue().split('\r')[-1]
+        file_edit(progress_file,line_id=progress_id,line_data=progress_id+progress_val,header=progress_header)
+
             
     #cleaning the xstar docker before ending the computation
     clean_xstar_container(xstar_identifier,xstar_mode=xstar_mode)
@@ -1862,11 +1940,22 @@ def xstar_wind(solution,SED_path,xlum,outdir,
         box_files=glob.glob(outdir+'/*box*')
         for elem_box_file in box_files:
             os.system('cp '+elem_box_file+' '+save_folder_use)
+
     #cleaning the sim directory
     #removing the contents of the sim directory to gain space
     if comput_mode=='server':
         os.system('rm -f '+outdir+'/*')
-        os.system('rm -f '+save_folder_use+'/sp_incid*')
+
+        #also removing the incident spectra except for the last one to be able to relaunch the last computation
+        list_incid_spectra=glob.glob(save_folder_use+'/sp_incid_*')
+        last_incid_spectra=[elem for elem in list_incid_spectra if '_final_' not in elem][-1]
+
+        print(last_incid_spectra)
+
+        print(list_incid_spectra)
+
+        for elem_incid in [elem for elem in list_incid_spectra if elem!=last_incid_spectra]:
+            os.system('rm -f '+save_folder_use+'/'+elem_incid)
 
 def nuLnu_to_xstar(path,renorm=False,Edd_ratio=1,M_BH=8,display=False):
     

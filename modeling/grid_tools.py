@@ -8,7 +8,9 @@ note: easy test on ipag_calc with:
 
 note: currently the prefixes for job in oar scripts don't work
 use full inline syntax like:
+
 oarsub -p "host='ipag-calc3'" -l /nodes=1/core=48,walltime=72:00:00 ./oar_script.sh
+
 '''
 import os
 
@@ -314,7 +316,7 @@ def create_oar_script(grid_folder,parfile,cores,cpus=2,nodes=1,
 
 
 def create_grid_parfile(grid_folder,save_grid_dir,sim_grid_dir,xlum,dr_r,
-                        mode='server_standalone_default',v_resol=85.7,stop_d=1e6):
+                        mode='server_standalone_default',v_resol=85.7,stop_d=1e6,progress_file='default'):
 
     '''
     Inserts a parfile inside an already existing grid folder structure
@@ -347,6 +349,9 @@ def create_grid_parfile(grid_folder,save_grid_dir,sim_grid_dir,xlum,dr_r,
         in docker/charliecloud: the identifier of the container (not the image) to launch
         in singularity: the path of the container to launch. 'default' uses the path put within the xstar_singularity
                         environment variable
+
+    progress_file: location of the file where the progresses of the xstar computation are stored
+                    if set to default, saves into a file named progress_sim.log in the main grid directory
 
     note: there is a line in oar_wrapper for different sed extensions. Might need to be added here in the future
 
@@ -392,6 +397,7 @@ def create_grid_parfile(grid_folder,save_grid_dir,sim_grid_dir,xlum,dr_r,
                            'stop_d_input':str(stop_d),
                            'v_resol': str(v_resol),
                            'mode':mode,
+                           'progress_file':progress_file,
                            }
 
     #writing in the file

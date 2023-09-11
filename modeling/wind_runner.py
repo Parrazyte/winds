@@ -55,6 +55,8 @@ ap.add_argument("-v_resol",nargs=1,help="box parameter for xstar",type=float,def
 
 ap.add_argument("-mode",nargs=1,help="computation mode for the save",type=str,default='')
 
+ap.add_argument("-progress_file",nargs=1,help='global progress file where to store the box evolution',type=str,default='')
+
 args=ap.parse_args()
 
 parfile_path=args.parfile
@@ -72,7 +74,10 @@ dr_r=args.dr_r
 stop_d_input=args.stop_d_input
 stop_d_input=args.stop_d_input
 v_resol=args.v_resol
+
+
 mode=args.mode
+progress_file=args.progress_file
 
 if parfile_path!='':
     #loading the file as an array
@@ -100,7 +105,7 @@ else:
     oar_wrapper(solution_rel_dir=solution_rel_dir,save_grid_dir=save_grid_dir,comput_grid_dir=comput_grid_dir,
             mdot_obs=mdot_obs,xlum=xlum,m_BH=m_BH,
             ro_init=ro_init,dr_r=dr_r,stop_d_input=stop_d_input,v_resol=v_resol,
-            mode=mode)
+            mode=mode,progress_file=progress_file)
 
 
 

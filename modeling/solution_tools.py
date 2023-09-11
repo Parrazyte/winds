@@ -114,7 +114,8 @@ def func_density_relat_sol(r_sph,z_over_r,rho_mhd,p_mhd,mdot_mhd,vel_r,vel_phi,v
 
     gamma_gas=1/np.sqrt(1-(v_gas/c_cgs)**2)
 
-    func_density_sol(r_sph, z_over_r, rho_mhd, p_mhd, mdot_mhd, m_BH) / gamma_gas
+    return func_density_sol(r_sph, z_over_r, rho_mhd, p_mhd, mdot_mhd, m_BH) / gamma_gas
+
 def func_temp_mhd(r_sph,z_over_r,rho_mhd,p_mhd,mdot_mhd,m_BH):
 
     m_BH_SI = m_BH * Msol_SI

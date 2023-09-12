@@ -300,7 +300,7 @@ def oar_wrapper(solution_rel_dir,save_grid_dir,sim_grid_dir,
     solution_name=solution_rel_path.split('/')[-1]
 
     #creating the path of the progress file if asked to
-    if progress_file=='auto':
+    if progress_file=='default':
         if comput_mode=='server':
             #in server mode, it's fine to put the logs in the save folder because we can access it easily
             progress_file_path=os.path.join(save_grid_dir,solution_rel_dir.split('/')[0],'grid_progress.log')
@@ -1696,10 +1696,9 @@ def xstar_wind(solution,SED_path,xlum,outdir,
     print('progress file:', progress_file)
 
     #using i_box because it's an index here, not the actual box number (shifted by 1)
-    for i_box in tqdm(range(nbox_restart-1,nbox_std),file=None,
+    for i_box in tqdm(range(nbox_restart-1,nbox_std),file=progress_io,
                       initial=nbox_restart-1,total=nbox_std):
 
-        print('progress file:',progress_file)
         #logging the tqdm values in a global progress file if asked to, using the same identifier as for xstar containers
         if progress_file is not None:
 

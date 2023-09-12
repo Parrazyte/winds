@@ -1652,7 +1652,27 @@ def xstar_wind(solution,SED_path,xlum,outdir,
                 logxi_restart=float(line_restart.split('\t')[8])
                 
                 vturb_x_restart=float(line_restart.split('\t')[9])
-                
+
+
+                # checking if the incident file exists to reconstruct it if it doesn't
+                xstar_input_save = os.path.join(outdir, 'sp_incid_gaz_%03i' % (nbox_restart) + '.dat')
+
+                if not os.path.isfile(xstar_input_save):
+
+                    print('Incident file missing. Reconstructing...')
+                    if nbox_restart-1 < 1:
+
+                        # Nengrid=int(incident_spectra_lines[0])
+
+                        shift_input = SED_path
+
+                    else:
+
+                        shift_input = os.path.join(outdir, 'sp_tr_rest_%03i' % (nbox_restart-1) + '.dat')
+
+                    lum_corr_factor = shift_incident_sp_rest_gaz(psi_box_std[nbox_restart-1], xstar_input_save,
+                                                             incident_path=shift_input)
+
                 print("Restarting from box "+str(nbox_restart)+"\n")
 
 
@@ -1678,6 +1698,7 @@ def xstar_wind(solution,SED_path,xlum,outdir,
     for i_box in tqdm(range(nbox_restart-1,nbox_std),file=progress_io,
                       initial=nbox_restart-1,total=nbox_std):
 
+        print('progress file:',progress_file)
         #logging the tqdm values in a global progress file if asked to, using the same identifier as for xstar containers
         if progress_file is not None:
 
@@ -1723,6 +1744,7 @@ def xstar_wind(solution,SED_path,xlum,outdir,
         vobsx = vobsl[i_box]
 
         #not doing this when restarting because there's no need
+        #note: if there was an issue and the incident spectrum wasn't save, we recreate it
         if not (i_box+1==nbox_restart and xstar_input_restart is not None):
 
             if i_box+1!=nbox_restart:

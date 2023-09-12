@@ -351,7 +351,7 @@ def create_grid_parfile(grid_folder,save_grid_dir,sim_grid_dir,xlum,dr_r,
                         environment variable
 
     progress_file: location of the file where the progresses of the xstar computation are stored
-                    if set to default, saves into a file named progress_sim.log in the main grid directory
+                    if set to default, saves into a file named grid_progress.log in the main grid directory
 
     note: there is a line in oar_wrapper for different sed extensions. Might need to be added here in the future
 

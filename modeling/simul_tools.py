@@ -1704,7 +1704,7 @@ def xstar_wind(solution,SED_path,xlum,outdir,
 
             #extracting the last progress bar iteration
             progress_val=progress_io.getvalue().split('\r')[-1]
-            file_edit(progress_file,line_id=progress_id,line_data=progress_id+progress_val,header=progress_header)
+            file_edit(progress_file,line_id=progress_id,line_data=progress_id+'\t'+progress_val,header=progress_header)
 
         # resetting the global log file for the first computation
         if i_box == 0 and i_box_final == 0:
@@ -1951,7 +1951,7 @@ def xstar_wind(solution,SED_path,xlum,outdir,
 
         #extracting the last progress bar iteration
         progress_val=progress_io.getvalue().split('\r')[-1]
-        file_edit(progress_file,line_id=progress_id,line_data=progress_id+progress_val,header=progress_header)
+        file_edit(progress_file,line_id=progress_id,line_data=progress_id+'\t'+progress_val,header=progress_header)
 
             
     #cleaning the xstar docker before ending the computation

@@ -1695,7 +1695,7 @@ def xstar_wind(solution,SED_path,xlum,outdir,
 
 
     #using i_box because it's an index here, not the actual box number (shifted by 1)
-    for i_box in tqdm(range(nbox_restart-1,nbox_std),file=progress_io,
+    for i_box in tqdm(range(nbox_restart-1,nbox_std),file=None,
                       initial=nbox_restart-1,total=nbox_std):
 
         print('progress file:',progress_file)

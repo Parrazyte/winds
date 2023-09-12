@@ -9,7 +9,7 @@ note: easy test on ipag_calc with:
 note: currently the prefixes for job in oar scripts don't work
 use full inline syntax like:
 
-oarsub -p "host='ipag-calc4'" -l /nodes=1/core=24,walltime=256:00:00 ./oar_script.sh
+oarsub -p "host='ipag-calc3'" -l /nodes=1/core=2,walltime=256:00:00 ./oar_script.sh
 
 '''
 import os

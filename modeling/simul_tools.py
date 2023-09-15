@@ -272,38 +272,42 @@ def oar_wrapper(solution_rel_dir,save_grid_dir,sim_grid_dir,
     elif comput_mode=='server':
 
         sp_saves=glob.glob(save_dir+'/sp_**')
+        sp_saves.sort()
+
+        sp_saves_rest=np.array([elem for elem in sp_saves if '_tr_rest_' in elem and '_final_' not in elem])
+
+        # deleting the previous tr spectra when there's more than two and no intermediate save is asked
+        if len(sp_saves_rest) > 2 and not save_inter_sp:
+            for i_save_rest in range(len(sp_saves_rest) - 2):
+                os.system('rm ' + os.path.join(save_dir, sp_saves_rest[i_save_rest]))
+                time.sleep(0.1)
 
         #copying everything but the saves from the save_dir to the sim_dir
         for elem_file in [elem for elem in glob.glob(save_dir+'/**') if elem not in sp_saves]:
             os.system('cp '+os.path.join(save_dir,elem_file)+' '+simdir)
 
         #copying the last non-final incident and rest spectra to restart the computation if necessary
-        sp_saves_rest=np.array([elem for elem in sp_saves if '_tr_rest_' in elem and '_final_' not in elem])
         if len(sp_saves_rest)>0:
-            sp_saves.sort()
             os.system('cp '+os.path.join(save_dir,sp_saves_rest[-1])+' '+simdir)
 
             #we also copy the spectrum of the n-1 box to avoid issues when restarting from the last box
             if len(sp_saves_rest)>1:
                 os.system('cp ' + os.path.join(save_dir, sp_saves_rest[-2]) + ' ' + simdir)
 
-            #deleting the previous tr spectra when there's more than two and no intermediary save is asked
-            if len(sp_saves_rest)>2 and not save_inter_sp:
-                for i_save_rest in range(len(sp_saves_rest)-2):
-                    os.system('rm ' + os.path.join(save_dir, sp_saves_rest[i_save_rest]))
-                    time.sleep(0.1)
-
 
         sp_saves_incid = np.array([elem for elem in sp_saves if '_incid_' in elem and '_final_' not in elem])
+        sp_saves.sort()
+
         if len(sp_saves_incid) > 0:
-            sp_saves.sort()
-            os.system('cp ' + os.path.join(save_dir, sp_saves_incid[-1]) + ' ' + simdir)
 
             #deleting the previous incid spectra when there's more than one
             if len(sp_saves_incid)>1 and not save_inter_sp:
                 for i_save_incid in range(len(sp_saves_incid)-1):
                     os.system('rm ' + os.path.join(save_dir, sp_saves_incid[i_save_incid]))
                     time.sleep(0.1)
+
+            #copying the last incident spectrum
+            os.system('cp ' + os.path.join(save_dir, sp_saves_incid[-1]) + ' ' + simdir)
 
         #copying the SED file
         os.system('cp '+os.path.join(save_grid_dir,SED_rel_path)+' '+simdir)

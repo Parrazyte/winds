@@ -57,7 +57,7 @@ ap.add_argument("-mode",nargs=1,help="computation mode for the save",type=str,de
 
 ap.add_argument("-progress_file",nargs=1,help='global progress file where to store the box evolution',type=str,default='')
 
-ap.add_argument("-save_inter_sp",nargs=1,help='save intermediary transmitted rest frame spectra',type=bool,default=True)
+ap.add_argument("-save_inter_sp",nargs=1,help='save intermediate transmitted rest frame spectra',type=bool,default=True)
 
 args=ap.parse_args()
 

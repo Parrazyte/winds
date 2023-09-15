@@ -11,6 +11,8 @@ use full inline syntax like:
 
 oarsub -p "host='ipag-calc3'" -l /nodes=1/core=2,walltime=256:00:00 ./oar_script.sh
 
+oarsub -p "host='ipag-calc6'" -l /nodes=1/core=20,walltime=512:00:00 ./oar_script.sh
+
 du -sh to see size of directories
 
 '''
@@ -113,7 +115,7 @@ def create_grid(grid_name, mhd_solutions_path,
                 -split_angle: considers all solutions but only in a given range of angles
                 -decompose: combines the individual parameter space asked for every value, among the nearest available in the
                 solution file (nearest for h_over_r_vals, 2-dimension nearest in log distance in p/mu and nearest again in angle)
-                creates intermediary folders to reflect the dimensions
+                creates intermediate folders to reflect the dimensions
 
         coupled parameter arguments (should all be the same length or single to indicate one value to be repeated)
             SED:list of SED paths (will be copied to the grid directory and later to the save directory for use)

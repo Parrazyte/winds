@@ -182,6 +182,7 @@ def oar_wrapper(solution_rel_dir,save_grid_dir,sim_grid_dir,
                   ro_init, dr_r,stop_d_input,v_resol,
                   mode='server_standalone_default',
                   progress_file='',
+                  save_inter_sp=True,
                   sol_file='auto',
                   SED_file='auto_.dat'):
 
@@ -286,10 +287,23 @@ def oar_wrapper(solution_rel_dir,save_grid_dir,sim_grid_dir,
             if len(sp_saves_rest)>1:
                 os.system('cp ' + os.path.join(save_dir, sp_saves_rest[-2]) + ' ' + simdir)
 
+            #deleting the previous tr spectra when there's more than two and no intermediary save is asked
+            if len(sp_saves_rest)>2 and not save_inter_sp:
+                for i_save_rest in range(len(sp_saves_rest)-2):
+                    os.system('rm ' + os.path.join(save_dir, sp_saves_rest[i_save_rest]))
+                    time.sleep(0.1)
+
+
         sp_saves_incid = np.array([elem for elem in sp_saves if '_incid_' in elem and '_final_' not in elem])
         if len(sp_saves_incid) > 0:
             sp_saves.sort()
             os.system('cp ' + os.path.join(save_dir, sp_saves_incid[-1]) + ' ' + simdir)
+
+            #deleting the previous incid spectra when there's more than one
+            if len(sp_saves_incid)>1 and not save_inter_sp:
+                for i_save_incid in range(len(sp_saves_incid)-1):
+                    os.system('rm ' + os.path.join(save_dir, sp_saves_incid[i_save_incid]))
+                    time.sleep(0.1)
 
         #copying the SED file
         os.system('cp '+os.path.join(save_grid_dir,SED_rel_path)+' '+simdir)
@@ -324,7 +338,8 @@ def oar_wrapper(solution_rel_dir,save_grid_dir,sim_grid_dir,
                xstar_mode=xstar_mode,
                save_folder=save_dir,
                xstar_loc=xstar_loc,
-               progress_file=progress_file_path)
+               progress_file=progress_file_path,
+               save_inter_sp=save_inter_sp)
 
 
 def xstar_func(spectrum_file,lum,t_guess,n,nh,xi,vturb_x,nbins,nsteps=1,niter=100,lcpres=0,
@@ -515,7 +530,8 @@ def xstar_wind(solution,SED_path,xlum,outdir,
                comput_mode='local',xstar_mode='standalone',xstar_loc='default',
                save_folder='',
                force_ro_init=False,no_turb=False,cap_dr_resol=True,no_write=False,
-               grid_type="standard",custom_grid_headas=None,progress_file=None):
+               grid_type="standard",custom_grid_headas=None,progress_file=None,
+               save_inter_sp=True):
     
     
     '''
@@ -1842,9 +1858,18 @@ def xstar_wind(solution,SED_path,xlum,outdir,
             if comput_mode=='cigrid':
                 upload_mantis('./'+outdir+'/xstar_output_details.dat',save_folder_use)
                 upload_mantis('./'+outdir+'/sp_tr_rest_%03i'%(i_box+1)+'.dat', save_folder_use)
+
+                #no save_inter_sp mode should be added
+
             elif comput_mode=='server':
                 os.system('cp '+'./'+outdir+'/xstar_output_details.dat'+' '+save_folder_use)
                 os.system('cp ' + './'+outdir+'/sp_tr_rest_%03i'%(i_box+1)+'.dat' + ' ' + save_folder_use)
+
+                #removing the n-2 tr spectrum which doesn't need to be saved
+                if not save_inter_sp:
+                    non_needed_sp=os.path.join(save_folder_use,'sp_tr_rest_%03i'%(i_box-1)+'.dat')
+                    if os.path.isfile(non_needed_sp):
+                        os.system('rm '+non_needed_sp)
 
         ####!* Computing spectra and blueshift for the final box depending on stop_dist.
 

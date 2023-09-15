@@ -57,6 +57,8 @@ ap.add_argument("-mode",nargs=1,help="computation mode for the save",type=str,de
 
 ap.add_argument("-progress_file",nargs=1,help='global progress file where to store the box evolution',type=str,default='')
 
+ap.add_argument("-save_inter_sp",nargs=1,help='save intermediary transmitted rest frame spectra',type=bool,default=True)
+
 args=ap.parse_args()
 
 parfile_path=args.parfile
@@ -78,6 +80,7 @@ v_resol=args.v_resol
 
 mode=args.mode
 progress_file=args.progress_file
+save_inter_sp=args.save_inter_sp
 
 if parfile_path!='':
     #loading the file as an array
@@ -105,7 +108,7 @@ else:
     oar_wrapper(solution_rel_dir=solution_rel_dir,save_grid_dir=save_grid_dir,comput_grid_dir=comput_grid_dir,
             mdot_obs=mdot_obs,xlum=xlum,m_BH=m_BH,
             ro_init=ro_init,dr_r=dr_r,stop_d_input=stop_d_input,v_resol=v_resol,
-            mode=mode,progress_file=progress_file)
+            mode=mode,progress_file=progress_file,save_inter_sp=save_inter_sp)
 
 
 

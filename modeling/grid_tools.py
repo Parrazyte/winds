@@ -11,6 +11,8 @@ use full inline syntax like:
 
 oarsub -p "host='ipag-calc3'" -l /nodes=1/core=2,walltime=256:00:00 ./oar_script.sh
 
+du -sh to see size of directories
+
 '''
 import os
 
@@ -316,7 +318,8 @@ def create_oar_script(grid_folder,parfile,cores,cpus=2,nodes=1,
 
 
 def create_grid_parfile(grid_folder,save_grid_dir,sim_grid_dir,xlum,dr_r,
-                        mode='server_standalone_default',v_resol=85.7,stop_d=1e6,progress_file='default'):
+                        mode='server_standalone_default',v_resol=85.7,stop_d=1e6,progress_file='default',
+                        save_inter_sp=True):
 
     '''
     Inserts a parfile inside an already existing grid folder structure
@@ -398,6 +401,7 @@ def create_grid_parfile(grid_folder,save_grid_dir,sim_grid_dir,xlum,dr_r,
                            'v_resol': str(v_resol),
                            'mode':mode,
                            'progress_file':progress_file,
+                           'save_inter_sp':save_inter_sp,
                            }
 
     #writing in the file

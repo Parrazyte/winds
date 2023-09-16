@@ -12,9 +12,7 @@ currdir=os.getcwd()
 listdirs=glob.glob('./**/',recursive=True)
 
 #restricting to angle directories
-angle_dirs=[elem for elem in listdirs if elem.split('/')[-1].startswith('angle')]
-
-breakpoint()
+angle_dirs=[elem for elem in listdirs if elem.split('/')[-2].startswith('angle')]
 
 for elem_dir in angle_dirs:
     print('found directory '+elem_dir)
@@ -30,6 +28,8 @@ for elem_dir in angle_dirs:
     # deleting the previous tr spectra when there's more than two and no intermediate save is asked
     if len(sp_saves_rest) > 2:
         for i_save_rest in range(len(sp_saves_rest) - 2):
+
+            print('Deleting sp '+sp_saves_rest[i_save_rest])
             os.system('rm ' + sp_saves_rest[i_save_rest])
             time.sleep(0.1)
 
@@ -40,6 +40,9 @@ for elem_dir in angle_dirs:
     # deleting the previous incid spectra when there's more than one
     if len(sp_saves_incid) > 1:
         for i_save_incid in range(len(sp_saves_incid) - 1):
+
+            print('Deleting sp '+sp_saves_incid[i_save_incid])
             os.system('rm ' + sp_saves_incid[i_save_incid])
             time.sleep(0.1)
 
+    os.chdir(currdir)

@@ -931,8 +931,6 @@ def xstar_wind(solution,SED_path,xlum,outdir,
                 print('deleting singularity instance '+elem_instance+'\n')
                 subprocess.call(['singularity', 'instance', 'stop', elem_instance])
 
-    dirfiles=glob.glob('./')
-
     if outdir=='./':
         xstar_dir=os.getcwd()
     else:
@@ -942,13 +940,9 @@ def xstar_wind(solution,SED_path,xlum,outdir,
     xstar_identifier = xstar_identifier.replace('/', '_')
 
     print('Using xstar container id '+xstar_identifier)
+
     #cleaning previous xstar runs before starting the computation
     clean_xstar_container(xstar_identifier,xstar_mode=xstar_mode)
-
-    #skipping completed directories if asked to
-    if skip_complete and 'sp_tr_rest_final_001.dat' in dirfiles:
-        print('Computation complete. Skipping directory...')
-        return
 
     #making sure the stop variable is an iterable
     if type(stop_d_input) not in [list, np.ndarray]:
@@ -965,6 +959,11 @@ def xstar_wind(solution,SED_path,xlum,outdir,
 
     save_folder_use=save_folder
 
+    dirfiles = glob.glob(os.path.join(save_folder,'*'))
+    # skipping completed directories if asked to
+    if skip_complete and 'sp_tr_rest_final_001.dat' in dirfiles:
+        print('Computation complete. Skipping directory...')
+        return
 
     #chatter value, 0 for not print, 1 for printing
     if chatter>=10:

@@ -933,11 +933,6 @@ def xstar_wind(solution,SED_path,xlum,outdir,
 
     dirfiles=glob.glob('./')
 
-    #skipping completed directories if asked to
-    if skip_complete and 'sp_tr_rest_final_001.dat' in dirfiles:
-        print('Computation complete. Skipping directory...')
-        return
-
     if outdir=='./':
         xstar_dir=os.getcwd()
     else:
@@ -949,6 +944,11 @@ def xstar_wind(solution,SED_path,xlum,outdir,
     print('Using xstar container id '+xstar_identifier)
     #cleaning previous xstar runs before starting the computation
     clean_xstar_container(xstar_identifier,xstar_mode=xstar_mode)
+
+    #skipping completed directories if asked to
+    if skip_complete and 'sp_tr_rest_final_001.dat' in dirfiles:
+        print('Computation complete. Skipping directory...')
+        return
 
     #making sure the stop variable is an iterable
     if type(stop_d_input) not in [list, np.ndarray]:

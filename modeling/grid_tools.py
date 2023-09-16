@@ -13,6 +13,8 @@ oarsub -p "host='ipag-calc3'" -l /nodes=1/core=2,walltime=256:00:00 ./oar_script
 
 oarsub -p "host='ipag-calc6'" -l /nodes=1/core=20,walltime=512:00:00 ./oar_script.sh
 
+oarsub -p "host='ipag-calc4'" -l /nodes=1/core=64,walltime=512:00:00 ./oar_script.sh
+
 du -sh to see size of directories
 
 '''

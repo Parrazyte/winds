@@ -1025,7 +1025,11 @@ def xstar_wind(solution,SED_path,xlum,outdir,
 
     if comput_mode in ['server','cigrid']:
         #loading the solution file
-        parlist = np.loadtxt(solution)
+        try:
+            parlist = np.loadtxt(solution)
+        except:
+            print(solution)
+            raise ValueError
 
         p_mhd=round(parlist[2],5)
 

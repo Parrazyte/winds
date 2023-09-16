@@ -535,7 +535,7 @@ def xstar_wind(solution,SED_path,xlum,outdir,
                save_folder='',
                force_ro_init=False,no_turb=False,cap_dr_resol=True,no_write=False,
                grid_type="standard",custom_grid_headas=None,progress_file=None,
-               save_inter_sp=True):
+               save_inter_sp=True,skip_complete=True):
     
     
     '''
@@ -930,6 +930,13 @@ def xstar_wind(solution,SED_path,xlum,outdir,
             for elem_instance in singul_xstar_list:
                 print('deleting singularity instance '+elem_instance+'\n')
                 subprocess.call(['singularity', 'instance', 'stop', elem_instance])
+
+    dirfiles=glob.glob('./')
+
+    #skipping completed directories if asked to
+    if skip_complete and 'sp_tr_rest_final_001.dat' in dirfiles:
+        print('Computation complete. Skipping directory...')
+        return
 
     if outdir=='./':
         xstar_dir=os.getcwd()

@@ -29,9 +29,11 @@ for elem_dir in angle_dirs:
     if len(sp_saves_rest) > 2:
         for i_save_rest in range(len(sp_saves_rest) - 2):
 
-            print('Deleting sp '+sp_saves_rest[i_save_rest])
             os.system('rm ' + sp_saves_rest[i_save_rest])
-            time.sleep(0.1)
+            while os.path.isfile(sp_saves_rest[i_save_rest]):
+                time.sleep(0.1)
+
+            print('Deleted sp '+sp_saves_rest[i_save_rest])
 
 
     sp_saves_incid = np.array([elem for elem in sp_saves if '_incid_' in elem and '_final_' not in elem])
@@ -41,8 +43,11 @@ for elem_dir in angle_dirs:
     if len(sp_saves_incid) > 1:
         for i_save_incid in range(len(sp_saves_incid) - 1):
 
-            print('Deleting sp '+sp_saves_incid[i_save_incid])
             os.system('rm ' + sp_saves_incid[i_save_incid])
             time.sleep(0.1)
+            while os.path.isfile(sp_saves_incid[i_save_incid]):
+                time.sleep(0.1)
+
+            print('Deleted sp '+sp_saves_incid[i_save_incid])
 
     os.chdir(currdir)

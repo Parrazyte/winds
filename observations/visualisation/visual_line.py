@@ -1451,20 +1451,33 @@ with tab_monitoring:
             st.info('HR monitoring plots are restricted to single source mode.')
             
         else:
-            with st.spinner('Building HR evolution...'):
-                fig_hr_monit=plot_lightcurve(dict_linevis,catal_maxi_df,catal_maxi_simbad,choice_source,mode='HR',display_hid_interval=monit_highlight_hid,
+            with st.spinner('Building soft HR evolution...'):
+                fig_hr_soft_monit=plot_lightcurve(dict_linevis,catal_maxi_df,catal_maxi_simbad,choice_source,
+                                             mode='HR_soft',display_hid_interval=monit_highlight_hid,
                                                  superpose_ew=plot_maxi_ew,dict_rxte=dict_lc_rxte)
                 # fig_maxi_lc_html = mpld3.fig_to_html(fig_maxi_lc)
                 # components.html(fig_maxi_lc_html,height=500,width=1000)
                 
                 #wrapper to avoid streamlit trying to plot a None when resetting while loading
-                if fig_hr_monit is not None:
-                    st.pyplot(fig_hr_monit)
+                if fig_hr_soft_monit is not None:
+                    st.pyplot(fig_hr_soft_monit)
+
+            with st.spinner('Building hard HR evolution...'):
+                fig_hr_hard_monit = plot_lightcurve(dict_linevis, catal_maxi_df, catal_maxi_simbad, choice_source,
+                                               mode='HR_hard',
+                                               display_hid_interval=monit_highlight_hid,
+                                               superpose_ew=plot_maxi_ew, dict_rxte=dict_lc_rxte)
+                # fig_maxi_lc_html = mpld3.fig_to_html(fig_maxi_lc)
+                # components.html(fig_maxi_lc_html,height=500,width=1000)
+
+                # wrapper to avoid streamlit trying to plot a None when resetting while loading
+                if fig_hr_hard_monit is not None:
+                    st.pyplot(fig_hr_hard_monit)
     
     if not plot_lc_monit and not plot_hr_monit:
         st.info('In single source mode, select a monitoring option in the sidebar to plot lightcurves and HR evolutions of the selected object')
     
-    if ((plot_lc_monit and fig_lc_monit is None) or (plot_hr_monit and fig_hr_monit is None)) and display_single:
+    if ((plot_lc_monit and fig_lc_monit is None) or (plot_hr_monit and fig_hr_soft_monit is None)) and display_single:
         st.warning('No match in MAXI/RXTE source list found.')
         
 '''''''''''''''''''''

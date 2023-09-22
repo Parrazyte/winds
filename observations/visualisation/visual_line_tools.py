@@ -366,8 +366,8 @@ def plot_lightcurve(dict_linevis,ctl_maxi_df,ctl_maxi_simbad,name,dict_rxte=dict
         maxi_y_str='MAXI '+maxi_lc_df.columns[1] if maxi_lc_df is not None else ''
         rxte_y_str='RXTE '+rxte_lc_df.columns[1]+'/25' if rxte_lc_df is not None else ''
         ax_lc.set_ylabel(maxi_y_str+('/' if maxi_lc_df is not None and rxte_lc_df is not None else '')+rxte_y_str)
-    elif mode=='HR':
-        ax_lc.set_title(name[0]+' Hardness Ratio monitoring')
+    elif mode=='HR_soft':
+        ax_lc.set_title(name[0]+' Soft Hardness Ratio monitoring')
         ax_lc.set_ylabel('MAXI counts HR in [4-10]/[2-4] bands')
         
         maxi_y_str='MAXI counts HR in [4-10]/[2-4] keV' if maxi_lc_df is not None else ''
@@ -375,7 +375,13 @@ def plot_lightcurve(dict_linevis,ctl_maxi_df,ctl_maxi_simbad,name,dict_rxte=dict
         ax_lc.set_ylabel(maxi_y_str+\
                          ("/" if maxi_lc_df is not None and rxte_lc_df is not None else '')+\
                          rxte_y_str,fontsize=8 if maxi_lc_df is not None and rxte_lc_df is not None else None)
-        
+
+    elif mode=='HR_hard':
+        ax_lc.set_title(name[0] + ' Hard Hardness Ratio monitoring')
+        ax_lc.set_ylabel('MAXI counts HR in [10-20]/[2-4] bands')
+
+        maxi_y_str = 'MAXI counts HR in [10-20]/[2-4] keV' if maxi_lc_df is not None else ''
+        ax_lc.set_ylabel(maxi_y_str)
         
     '''MAXI'''
     
@@ -397,7 +403,7 @@ def plot_lightcurve(dict_linevis,ctl_maxi_df,ctl_maxi_simbad,name,dict_rxte=dict
                         linestyle='',color='sienna',marker='',elinewidth=0.5,label='RXTE standard counts')
             ax_lc.set_ylim(0.1,ax_lc.get_ylim()[1])
     
-        if mode=='HR':
+        if mode=='HR_soft':
             
             '''
             for RXTE, 
@@ -443,9 +449,9 @@ def plot_lightcurve(dict_linevis,ctl_maxi_df,ctl_maxi_simbad,name,dict_rxte=dict
             #plotting the full lightcurve
             ax_lc.errorbar(num_maxi_dates,maxi_lc_df[maxi_lc_df.columns[1]],xerr=0.5,yerr=maxi_lc_df[maxi_lc_df.columns[2]],
                         linestyle='',color='black',marker='',elinewidth=0.5,label='MAXI standard counts')
-            ax_lc.set_ylim(0.1,ax_lc.get_ylim()[1])
+            ax_lc.set_ylim(0.05,ax_lc.get_ylim()[1])
     
-        if mode=='HR':
+        if mode=='HR_soft':
             #computing the HR evolution and uncertainties
             maxi_hr=maxi_lc_df[maxi_lc_df.columns[5]]/maxi_lc_df[maxi_lc_df.columns[3]]
             
@@ -465,6 +471,27 @@ def plot_lightcurve(dict_linevis,ctl_maxi_df,ctl_maxi_simbad,name,dict_rxte=dict
             #replacing indiviudally the alpha values for each point but the line
             for elem_children in maxi_hr_errbar.get_children()[1:]:
     
+                elem_children.set_alpha(maxi_hr_alpha)
+        if mode=='HR_hard':
+            # computing the HR evolution and uncertainties
+            maxi_hr = maxi_lc_df[maxi_lc_df.columns[7]] / maxi_lc_df[maxi_lc_df.columns[3]]
+
+            maxi_hr_err = abs((maxi_lc_df[maxi_lc_df.columns[8]] / maxi_lc_df[maxi_lc_df.columns[7]] + maxi_lc_df[
+                maxi_lc_df.columns[4]] / maxi_lc_df[maxi_lc_df.columns[3]]) * maxi_hr)
+            ax_lc.set_yscale('log')
+
+            ax_lc.set_ylim(0.03, 2)
+
+            # plotting the full lightcurve
+            maxi_hr_errbar = ax_lc.errorbar(num_maxi_dates, maxi_hr, xerr=0.5, yerr=maxi_hr_err,
+                                            linestyle='', color='black', marker='', elinewidth=0.5, label='MAXI HR')
+
+            # adapting the transparency to hide the noisy elements
+            maxi_hr_alpha_val = 1 / (20 * abs(maxi_hr_err / maxi_hr) ** 2)
+            maxi_hr_alpha = [min(1, elem) for elem in maxi_hr_alpha_val]
+
+            # replacing indiviudally the alpha values for each point but the line
+            for elem_children in maxi_hr_errbar.get_children()[1:]:
                 elem_children.set_alpha(maxi_hr_alpha)
 
         # ax_lc.set_ylim(0.1,ax_lc.get_ylim()[1])
@@ -487,40 +514,55 @@ def plot_lightcurve(dict_linevis,ctl_maxi_df,ctl_maxi_simbad,name,dict_rxte=dict
         instru_list_repeat=np.array([instru_list for repeater in range(sum(mask_lines))])
         
         #these boolean arrays distinguish non detections (i.e. 0/nan significance) and statistically significant detections from the others            
-        bool_sign=ravel_ragged(abslines_plot_restrict[4][0]).astype(float)
+        val_sign=ravel_ragged(abslines_plot_restrict[4][0]).astype(float)
         
         #standard detection mask (we don't need the intime here since the graph bounds will be cut if needed
-        bool_det=(bool_sign!=0.) & (~np.isnan(bool_sign))
+        bool_detsign=(val_sign>=conf_thresh) & (~np.isnan(val_sign))
         
         #mask used for upper limits only
-        bool_nondetsign=((bool_sign<=conf_thresh) | (np.isnan(bool_sign)))
-        
-        #restricted significant mask, to be used in conjunction with bool_det
-        bool_sign=bool_sign[bool_det]>=conf_thresh
+        bool_nondetsign=((val_sign<conf_thresh) | (np.isnan(val_sign)))
 
-        x_data_det=mdates.date2num(ravel_ragged(date_list_repeat))[bool_det][bool_sign]
-        y_data_det=ravel_ragged(abslines_plot_restrict[0][0])[bool_det][bool_sign]
+        #makers for different lines
+        marker_style_lines=np.array(['+','x','.','P','X','*'])
+
+        markers_arr=np.array([np.repeat(marker_style_lines[mask_lines][i_line],
+                                        len(ravel_ragged(abslines_plot_restrict[4][0][i_line])))\
+                              for i_line in range(sum(mask_lines))])
+
+        markers_arr_det=ravel_ragged(markers_arr)[bool_detsign]
+        markers_arr_ul=ravel_ragged(markers_arr)[bool_nondetsign]
+
+        x_data_det=mdates.date2num(ravel_ragged(date_list_repeat))[bool_detsign]
+        y_data_det=ravel_ragged(abslines_plot_restrict[0][0])[bool_detsign]
         
-        y_error_det=np.array([ravel_ragged(abslines_plot_restrict[0][1])[bool_det][bool_sign],
-                              ravel_ragged(abslines_plot_restrict[0][2])[bool_det][bool_sign]]).T
+        y_error_det=np.array([ravel_ragged(abslines_plot_restrict[0][1])[bool_detsign],
+                              ravel_ragged(abslines_plot_restrict[0][2])[bool_detsign]]).T
         
         x_data_ul=mdates.date2num(ravel_ragged(date_list_repeat))[bool_nondetsign]
         y_data_ul=ravel_ragged(abslines_plot_restrict[5][0])[bool_nondetsign]
                     
-        color_det=[telescope_colors[elem] for elem in ravel_ragged(instru_list_repeat)[bool_det][bool_sign]]
+        color_det=[telescope_colors[elem] for elem in ravel_ragged(instru_list_repeat)[bool_detsign]]
         
         color_ul=[telescope_colors[elem] for elem in ravel_ragged(instru_list_repeat)[bool_nondetsign]]
-        
+
+        markers_legend_done_list=[]
         #zipping the errorbars to allow different colors
-        for x_data,y_data,y_err,color in zip(x_data_det,y_data_det,y_error_det,color_det):
-            
-            ax_lc_ew.errorbar(x_data,y_data,xerr=0.5,yerr=np.array([y_err]).T,color=color,marker='d',markersize=2,elinewidth=1)
-            
+        for x_data,y_data,y_err,color,marker in zip(x_data_det,y_data_det,y_error_det,color_det,markers_arr_det):
 
-        for x_data,y_data,color in zip(x_data_ul,y_data_ul,color_ul):
-         
-            ax_lc_ew.errorbar(x_data,y_data,xerr=0.5,yerr=0.05*y_data,marker='.',color=color,uplims=True,markersize=2,elinewidth=1,capsize=2)
+            line_name=lines_std_names[3+np.argwhere(marker_style_lines==marker)[0][0]]
+            #not putting the time of the obs as an xerr to avoid display issues
+            ax_lc_ew.errorbar(x_data,y_data,xerr=0.,yerr=np.array([y_err]).T,color=color,marker=marker,markersize=4,elinewidth=1,label=lines_std[line_name] if marker not in markers_legend_done_list else '')
 
+            if marker not in markers_legend_done_list:
+                markers_legend_done_list+=[marker]
+
+        for x_data,y_data,color,marker in zip(x_data_ul,y_data_ul,color_ul,markers_arr_ul):
+
+            #not putting the time of the obs as an xerr to avoid display issues
+            ax_lc_ew.errorbar(x_data,y_data,xerr=0.,yerr=0.05*y_data,marker=marker,color=color,uplims=True,markersize=4,elinewidth=1,capsize=2,alpha=1.,label=lines_std[line_name] if marker not in markers_legend_done_list else '')
+
+            if marker not in markers_legend_done_list:
+                markers_legend_done_list+=[marker]
                 
     for i_obs,date_obs in enumerate(date_list):
         
@@ -567,7 +609,9 @@ def plot_lightcurve(dict_linevis,ctl_maxi_df,ctl_maxi_simbad,name,dict_rxte=dict
     for label in ax_lc.get_xticklabels(which='major'):
         label.set(rotation=45, horizontalalignment='right')
             
-    ax_lc.legend()
+    ax_lc.legend(loc='upper left')
+
+    ax_lc_ew.legend()
     
     return fig_lc
 

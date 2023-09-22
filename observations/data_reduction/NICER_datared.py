@@ -79,12 +79,12 @@ ap = argparse.ArgumentParser(description='Script to reduce NICER files.\n)')
 #the basics
 ap.add_argument("-dir", "--startdir", nargs='?', help="starting directory. Current by default", default='./', type=str)
 ap.add_argument("-l","--local",nargs=1,help='Launch actions directly in the current directory instead',
-                default=False,type=bool)
+                default=True,type=bool)
 ap.add_argument('-catch','--catch_errors',help='Catch errors while running the data reduction and continue',default=False,type=bool)
 
 #global choices
 ap.add_argument("-a","--action",nargs='?',help='Give which action(s) to proceed,separated by comas.',
-                default='1,gti,l,c,m',type=str)
+                default='fs',type=str)
 ap.add_argument("-over",nargs=1,help='overwrite computed tasks (i.e. with products in the batch, or merge directory\
                 if "m" is in the actions) in a folder',default=True,type=bool)
 
@@ -258,7 +258,7 @@ def select_detector(directory,detectors='-14,-34,-54'):
         bashproc.sendline('exit')
         select_detector_done.set()
 
-def create_gtis(directory,split='orbit+clip',band='3-15',binning=1,overwrite=True):
+def create_gtis(directory,split='orbit+clip',band='3-15',binning=1,overwrite=True,clip_method='median'):
     '''
     wrapper for a function to split nicer obsids into indivudal portions
 
@@ -270,6 +270,9 @@ def create_gtis(directory,split='orbit+clip',band='3-15',binning=1,overwrite=Tru
         -clip: isolates broad band flare/dip periods in each observation and creates individual
         note that all individual flare/dip periods in single orbits are grouped together
          gtis for them
+
+    clip_method:
+        -median or mean to clip from the mean or from the median
 
     NOTE: requires sas and a sasinit alias to initialize it (to use tabgtigen)
 
@@ -372,20 +375,26 @@ def create_gtis(directory,split='orbit+clip',band='3-15',binning=1,overwrite=Tru
                 clip_data = sigma_clip(data_lc_arr['RATE'][elem_gti_orbit], 3)
 
                 clip_std=clip_data.std()
-                clip_mean=clip_data.mean()
+
+                if clip_method=='mean':
+                    clip_base=clip_data.mean()
+                else:
+                    clip_sort=clip_data.copy()
+                    clip_sort.sort()
+                    clip_base=clip_sort[int(len(clip_sort)/2)]
 
                 #computing the gtis outside of the 3 sigma of the clipped distribution
                 #even with uncertainties
                 #note: inverted errors in the data on purpose
                 elem_id_gti=[elem for elem in elem_gti_orbit if \
-                             (data_lc_arr['RATE'][elem]+3*data_lc_arr['ERROR'][elem])>=clip_mean-3*clip_std\
-                             and (data_lc_arr['RATE'][elem]-3*data_lc_arr['ERROR'][elem])<=clip_mean+3*clip_std]
+                             (data_lc_arr['RATE'][elem]+3*data_lc_arr['ERROR'][elem])>=clip_base-3*clip_std\
+                             and (data_lc_arr['RATE'][elem]-3*data_lc_arr['ERROR'][elem])<=clip_base+3*clip_std]
 
                 elem_id_flares=[elem for elem in elem_gti_orbit if \
-                             (data_lc_arr['RATE'][elem]-3*data_lc_arr['ERROR'][elem])>clip_mean+3*clip_std]
+                             (data_lc_arr['RATE'][elem]-3*data_lc_arr['ERROR'][elem])>clip_base+3*clip_std]
 
                 elem_id_dips=[elem for elem in elem_gti_orbit if \
-                             (data_lc_arr['RATE'][elem]+3*data_lc_arr['ERROR'][elem])<clip_mean-3*clip_std]
+                             (data_lc_arr['RATE'][elem]+3*data_lc_arr['ERROR'][elem])<clip_base-3*clip_std]
 
                 id_gti+=[elem_id_gti]
                 id_flares+=[elem_id_flares]

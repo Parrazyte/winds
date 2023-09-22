@@ -3,6 +3,7 @@
 
 import os
 import sys
+import glob
 from astropy.io import ascii
 
 import numpy as np
@@ -132,3 +133,41 @@ def model_to_nuLnu(path):
 
     np.savetxt(path, save_arr, header='nu(Hz) Lnu(erg/s/Hz)', delimiter=' ')
 
+def gridmodel(gridpath, interp='log'):
+    '''
+    Fetches all final spectra in the gridpath arborescence,
+    and creates an xspec model using the
+    '''
+
+
+    final_sp_list=glob.glob('**/**sp_tr_rest_final**',recursive=True)
+
+    '''
+    here we convert the first part of the parameters, from the SED file description
+    the first parameter is the SED
+    the second is the mdot, converted from the xlum if needed through the Black Hole Mass
+    the third is the black hole mass itself
+    the fourth is the starting radius of the SAD rj
+    '''
+    param_list_1=[[elem.split('/')[0].split('mdot_')[0][:-1],
+                          (elem.split('/')[0].split('mdot_')[1].split('_')[0] if \
+                              elem.split('/')[0].split('mdot_')[1].split('_')[0]!='auto' else\
+                          float(elem.split('/')[0].split('xlum_')[1].split('_')[0])/ \
+                           (1.26*float(elem.split('/')[0].split('m_bh_')[1].split('_')[0]))),\
+                          float(elem.split('/')[0].split('m_bh_')[1].split('_')[0]),
+                          float(elem.split('/')[0].split('rj_')[1].split('_')[0])]\
+                  for elem in final_sp_list]
+
+    #here we convert the second part of the parameters, from the rest of the description
+    param_list_2=[[float(elem.split('/')[1].split('eps_')[1]),
+                   float(elem.split('/')[3].split('p_')[1].split('_')[0]),
+                   float(elem.split('/')[3].split('mu_')[1].split('_')[0]),
+                   float(elem.split('/')[4].split('angle_')[1])] for elem in final_sp_list]
+
+    param_list=np.array([param_list_1[i_sol]+ param_list_2[i_sol] for i_sol in range(len(final_sp_list))],dtype=object).T
+
+    #ensuring the mdot is in float, as it's still in string if we're using direct mdot values to avoid an error when
+    #that's not the case
+    param_list[1]=param_list[1].astype(float)
+
+    #listing the parameters in a tuple

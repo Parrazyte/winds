@@ -267,7 +267,8 @@ if len(selected_points)!=0:
     #doing this without direct transpositions because the arrays arent regular due to uneven angle sampling
     sol_z_over_r=np.array([selected_mhd_sol[i].T[7] for i in range(n_sel)],dtype=object)
 
-    sol_cyl_cst= np.array([np.sqrt(1 + sol_z_over_r[i].astype(float) ** 2) for i in range(n_sel)])
+    sol_cyl_cst= np.array([np.sqrt(1 + sol_z_over_r[i].astype(float) ** 2) for i in range(n_sel)],dtype=object)
+
 
     sol_angle=np.array([selected_mhd_sol[i].T[8] for i in range(n_sel)],dtype=object)
 

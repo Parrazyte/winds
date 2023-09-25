@@ -7,12 +7,12 @@ from tqdm import tqdm
 
 from matplotlib.gridspec import GridSpec
 
-from general_tools import ravel_ragged
+from general_tools import ravel_ragged,MinorSymLogLocator
 
 #fitting imports
 from xspec import AllData,Plot,AllModels,Fit,Xset
 
-from xspec_config_multisp import MinorSymLogLocator,xcolors_grp,addcomp,store_plot,allfreeze,xscorpeon,\
+from xspec_config_multisp import xcolors_grp,addcomp,store_plot,allfreeze,xscorpeon,\
                                 model_load
 from fitting_tools import sign_delchis_table,lines_std,lines_e_dict,lines_w_dict,lines_broad_w_dict,\
         link_groups,lines_std_names,def_ftest_threshold,def_ftest_leeway,ang2kev

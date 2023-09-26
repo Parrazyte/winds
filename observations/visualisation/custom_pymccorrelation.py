@@ -73,7 +73,9 @@ def perturb_values(x, y, dx, dy,xlim=None,ylim=None, Nperturb=10000):
     """
     For input points (x, y) with errors (dx, dy) return Nperturb sets of
     values draw from Gaussian distributions centered at x+-dx and y+-dy.
-    
+
+    dx/dy can be of dimension [x,2] to put non-symmetrical uncertainties
+
     ####EDIT: ylim added, will change the perturbation from gaussian to uniform in the interval
     """
 
@@ -86,8 +88,6 @@ def perturb_values(x, y, dx, dy,xlim=None,ylim=None, Nperturb=10000):
     Nvalues = len(x)
 
     rng = _np.random.default_rng()
-
-
 
     if _np.ndim(dx)==2:
         #drawing two independant samples with gaussian shape on each side (or None if there is no uncertainty)

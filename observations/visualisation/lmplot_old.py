@@ -15,6 +15,10 @@ from scipy.stats import linregress
 
 from custom_pymccorrelation import perturb_values
 
+'''
+DEPRECATED, USE LMPLOT_VITTORIA INSTEAD
+'''
+
 def lmplot_uncert(ax,x,y,dx,dy,data,data_d,percent=90,distrib='gaussian',nsim=1000,linecolor='blue',intercolor=None,
                   shade_regions=False,return_intercept=True):
     

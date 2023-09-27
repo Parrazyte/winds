@@ -99,12 +99,14 @@ ap.add_argument('-catch','--catch_errors',help='Catch errors while running the d
 
 #global choices
 ap.add_argument("-a","--action",nargs='?',help='Give which action(s) to proceed,separated by comas.',
-                default='gti,l',type=str)
+                default='1,gti,fs,l,g,m,c',type=str)
+#default: 1,gti,fs,l,g,m,c
+
 ap.add_argument("-over",nargs=1,help='overwrite computed tasks (i.e. with products in the batch, or merge directory\
                 if "m" is in the actions) in a folder',default=True,type=bool)
 
 #directory level overwrite (not active in local)
-ap.add_argument('-folder_over',nargs=1,help='relaunch action through folders with completed analysis',default=True,type=bool)
+ap.add_argument('-folder_over',nargs=1,help='relaunch action through folders with completed analysis',default=False,type=bool)
 ap.add_argument('-folder_cont',nargs=1,help='skip all but the last 2 directories in the summary folder file',default=False,type=bool)
 #note : we keep the previous 2 directories because bug or breaks can start actions on a directory following the initially stopped one
 
@@ -554,7 +556,7 @@ def create_gtis(directory,split='orbit+flare',band='3-15',binning=1,overwrite=Tr
                         '''
 
                         #first algo, restricted to peaks
-                        peak_finder = findpeaks(method='topology', interpolate=None,whitelist=['peak'],verbose=0)
+                        peak_finder = findpeaks(method='topology', interpolate=None,whitelist=['peak'])
 
                         results_topo = peak_finder.fit(X=array_arg)
 
@@ -562,7 +564,7 @@ def create_gtis(directory,split='orbit+flare',band='3-15',binning=1,overwrite=Tr
                         strong_peak_pos=results_topo['persistence']['y'][results_topo['persistence']['score']>topo_score_thresh]
 
                         #lookahead value manually adjusted, could become a parameter
-                        peak_finder = findpeaks(method='peakdetect', lookahead=5,verbose=0)
+                        peak_finder = findpeaks(method='peakdetect', lookahead=5)
 
                         results_peakdet = peak_finder.fit(X=array_arg)
 
@@ -743,21 +745,29 @@ def create_gtis(directory,split='orbit+flare',band='3-15',binning=1,overwrite=Tr
 
                 lc_mask_path = os.path.join(directory,'xti',obsid+'_gti_mask_'+('%3.f'%(id_orbit+1)).replace(' ','0')+suffix)+'.fits'
 
-                fits_gti.writeto(lc_mask_path, overwrite=True)
+                if os.path.isfile(lc_mask_path):
+                    os.remove(lc_mask_path)
+
+                fits_gti.writeto(lc_mask_path)
+
+                #waiting for the file to be created
+                while not os.path.isfile(lc_mask_path):
+                    time.sleep(0.1)
 
                 #creating the orbit gti expression
-
                 gti_path=os.path.join(directory,'xti',obsid+'_gti_'+
                 ('%3.f'%(id_orbit+1)).replace(' ','0')+suffix)+'.gti'
 
                 bashproc.sendline('tabgtigen table='+lc_mask_path+' expression="IS_GTI==1" gtiset='+gti_path)
 
-                #waiting time to let time for the file to be created
-                time.sleep(1)
+                #this shouldn't take too long so we keep the timeout
+                #two expects because there's one for the start and another for the end
+                bashproc.expect('tabgtigen:- tabgtigen')
+                bashproc.expect('tabgtigen:- tabgtigen')
 
                 '''
-                There seems to be an issue with the way tabgtigen creates the exposure, so we remake the contents
-                of the file and keep the header
+                There is an issue with the way tabgtigen creates the exposure due to a lacking keyword
+                To ensure things work correctly, we remake the contents of the file and keep the header
                 '''
 
                 #preparing the list of gtis to replace manually
@@ -1562,16 +1572,18 @@ def clean_all(directory):
 
     clean_files=product_files+other_files
 
-    print('Cleaning '+str(len(clean_files))+' elements in directory '+directory)
+    print('Cleaning ' + str(len(clean_files)) + ' elements in directory ' + directory)
 
-    for elem_product in clean_files:
-        if not elem_product.endswith('/'):
-            os.remove(elem_product)
+    if len(clean_files)>0:
 
-    #reasonable waiting time to make sure big files can be deleted
-    time.sleep(2)
+        for elem_product in clean_files:
+            if not elem_product.endswith('/'):
+                os.remove(elem_product)
 
-    print('Cleaning complete.')
+        #reasonable waiting time to make sure big files can be deleted
+        time.sleep(2)
+
+        print('Cleaning complete.')
 
     clean_all_done.set()
 

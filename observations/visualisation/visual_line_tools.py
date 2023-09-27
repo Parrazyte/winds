@@ -45,8 +45,9 @@ from copy import deepcopy
 import requests
 from bs4 import BeautifulSoup
 
-#correlation values and uncertainties with MC distribution from the uncertainties
+#correlation values and trend plots with MC distribution from the uncertainties
 from custom_pymccorrelation import pymccorrelation
+from lmplot_uncert import lmplot_uncert_a
 
 #Note : as of the writing of this code, the standard pymccorrelation doesn't accept differing +/- uncertainties, so I tweaked their 
 #'perturb values' function
@@ -90,8 +91,8 @@ incl_dic={
         '1H1659-487':[57.5,20.5,20.5],
         'GX339-4':[57.5,20.5,20.5],
         #grs with both ortographs to swap colors sometimes
-        'GRS1915+105':[60,5,5],
-        'GRS 1915+105':[60,5,5],
+        'GRS1915+105':[64,4,4],
+        'GRS 1915+105':[64,4,4],
         'MAXIJ1820+070':[74,7,7],
         'H1743-322':[75,3,3],
         '4U1630-472':[67.5,7.5,7.5],
@@ -146,8 +147,8 @@ dippers_list=['4U1543-475',
 #custom distande dictionnary for measurements which are not up to date in blackcat/watchdog
 dist_dic={
     'MAXIJ1535-571':[4.1,0.6,0.5],
-    'GRS 1915+105':[8.6,1.6,2],
-    'GRS1915+105':[8.6,1.6,2],
+    'GRS 1915+105':[9.4,1.4,1.4],
+    'GRS1915+105':[9.4,1.4,1.4],
     'MAXIJ1348-630':[3.39,0.385,0.382],
     'H1743-322':[8.5,0.8,0.8],
     'SwiftJ1357.2-0933':[8,0,0],
@@ -156,8 +157,8 @@ dist_dic={
 #note : only dynamical measurements for BHs
 mass_dic={
     '1H1659-487':[5.9,3.6,3.6],
-    'GRS 1915+105':[12.4,1.8,2],
-    'GRS1915+105':[12,2,2],
+    'GRS 1915+105':[11.2,1.8,2],
+    'GRS1915+105':[11.2,1.8,2],
     'MAXIJ1820+070':[6.9,1.2,1.2],
     'GROJ1655-40':[5.4,0.3,0.3],
     'SAXJ1819.3-2525':[6.4,0.6,0.6],
@@ -611,7 +612,8 @@ def plot_lightcurve(dict_linevis,ctl_maxi_df,ctl_maxi_simbad,name,dict_rxte=dict
             
     ax_lc.legend(loc='upper left')
 
-    ax_lc_ew.legend()
+    if superpose_ew:
+        ax_lc_ew.legend(loc='upper right')
     
     return fig_lc
 
@@ -2936,7 +2938,12 @@ def correl_graph(data_perinfo,infos,data_ener,dict_linevis,mode='intrinsic',mode
         display_nonsign=dict_linevis['display_nonsign']
         scale_log_hr=dict_linevis['scale_log_hr']
         scale_log_eqw=dict_linevis['scale_log_eqw']
+
+
         plot_trend=dict_linevis['plot_trend']
+        restrict_trend=dict_linevis['restrict_trend']
+        trend_lims=dict_linevis['trend_lims']
+
         lock_lims_det=dict_linevis['lock_lims_det']
         display_pearson=dict_linevis['display_pearson']
         display_abserr_bshift=dict_linevis['display_abserr_bshift']
@@ -2945,6 +2952,7 @@ def correl_graph(data_perinfo,infos,data_ener,dict_linevis,mode='intrinsic',mode
         cmap_color_det=dict_linevis['cmap_color_det']
         common_observ_bounds=dict_linevis['common_observ_bounds']
     else:
+
         display_nonsign=True
         scale_log_hr=True
         scale_log_eqw=True
@@ -4111,11 +4119,11 @@ def correl_graph(data_perinfo,infos,data_ener,dict_linevis,mode='intrinsic',mode
         
                         #checking if there is at least one upper limit:
                         #(a bit convoluted but we cannot concatenate 0 len arrays so we add a placeholder that'll never get recognized instead)
-                        
-                        col_concat=(color_arr_ul_x.tolist() if len(color_arr_ul_x)>0 and color_arr_ul_x!='black' else ['temp']+\
-                                         color_arr_ul_y.tolist() if len(color_arr_ul_y)>0 and color_arr_ul_y!='black' else ['temp'])\
-                                             if (ratio_mode or mode=='eqwratio') else color_arr_ul
-                                                 
+
+                        col_concat=(color_arr_ul_x.tolist() if type(color_arr_ul_x)!=str else []+\
+                                     color_arr_ul_y.tolist() if type(color_arr_ul_y)!=str  else [])\
+                                         if (ratio_mode or mode=='eqwratio') else color_arr_ul
+
                         no_ul_displayed=np.sum([tuple(elem)==label_dict[color_label] for elem in col_concat])==0
                                 
                         #not displaying color/labels that are not actually in the plot
@@ -4174,8 +4182,8 @@ def correl_graph(data_perinfo,infos,data_ener,dict_linevis,mode='intrinsic',mode
             
             #we cannot transpose the whole arrays since in eqwratio/HID mode they are most likely ragged due to having both
             #the significant and unsignificant data, so we create regular versions manually
-            x_error_sign_T=np.array([elem for elem in x_error[0]]).T
-            y_error_sign_T=np.array([elem for elem in y_error[0]]).T
+            x_error_sign_T=None if x_error is None else np.array([elem for elem in x_error[0]]).T
+            y_error_sign_T=None if y_error is None else np.array([elem for elem in y_error[0]]).T
                         
             r_pearson=np.array(pymccorrelation(x_data[0].astype(float),y_data[0].astype(float),dx=x_error_sign_T/1.65,
                                       dy=y_error_sign_T/1.65,ylim=uplims_mask,
@@ -4211,6 +4219,9 @@ def correl_graph(data_perinfo,infos,data_ener,dict_linevis,mode='intrinsic',mode
             legend_title=(str_pearson if display_pearson else'')+str_spearman
         
         else:
+            #placeholder to avoid activating the trends
+            r_spearman=[[],[1]]
+
             legend_title=None
             
         #adjusting the axis sizes for eqwratio mode to get the same scale
@@ -4218,29 +4229,7 @@ def correl_graph(data_perinfo,infos,data_ener,dict_linevis,mode='intrinsic',mode
             ax_scat.set_ylim(max(min(ax_scat.get_xlim()[0],ax_scat.get_ylim()[0]),0),max(ax_scat.get_xlim()[1],ax_scat.get_ylim()[1]))
             ax_scat.set_xlim(max(min(ax_scat.get_xlim()[0],ax_scat.get_ylim()[0]),0),max(ax_scat.get_xlim()[1],ax_scat.get_ylim()[1]))
             ax_scat.plot(ax_scat.get_xlim(),ax_scat.get_ylim(),ls='--',color='grey')
-                
-        #plotting the trend lines for both the significant sample and the whole sample
-        if len(x_data[0])>1 and mode!='source' and plot_trend:
-            try:
-                fit_sign=np.polyfit(x_data[0].astype(float),y_data[0].astype(float),1)
-                poly_sign=np.poly1d(fit_sign)
-    
-                ax_scat.plot(np.sort(x_data[0].astype(float)),poly_sign(np.sort(x_data[0].astype(float))),color=data_cols[0],linestyle='--',
-                              label='linear trend line for detections above '+str(conf_thresh*100)+'%')
-            except:
-                pass
-                
-                
-        if len(np.concatenate(x_data,axis=0))>1 and len(x_data[1])>0 and mode!='source' and plot_trend and display_nonsign:
-            
-            try:
-                fit_all=np.polyfit(np.concatenate(x_data,axis=0).astype(float),np.concatenate(y_data,axis=0).astype(float),1)
-                poly_all=np.poly1d(fit_all)
-                ax_scat.plot(np.sort(np.concatenate(x_data,axis=0).astype(float)),poly_all(np.sort(np.concatenate(x_data,axis=0).astype(float))),
-                              color=data_cols[1],linestyle='--',label='linear trend line for all detections')
-            except:
-                pass
-            
+
         #resizing for a square graph shape
         forceAspect(ax_scat,aspect=0.8)
         
@@ -4291,7 +4280,41 @@ def correl_graph(data_perinfo,infos,data_ener,dict_linevis,mode='intrinsic',mode
                 
                 ax_scat.get_xaxis().set_major_formatter(mpl.ticker.ScalarFormatter())
                                     
-                
+        if plot_trend and r_spearman[1][0]<1e-5:
+
+            #note: doesn't consider non-significant detections
+
+            #asserting which part of the data will build the dataset
+
+            restrict_trend_mask = np.repeat(True, len(x_data[0]))
+
+            if restrict_trend:
+                #each "non-applicability" condition is having the same upper and lower limit value
+                if trend_lims[0][0]!=trend_lims[0][1]:
+                    restrict_trend_mask= (restrict_trend_mask) & (x_data[0] >= trend_lims[0][0]) \
+                                     & (x_data[0] <= trend_lims[0][1])\
+
+                if trend_lims[1][0] != trend_lims[1][1]:
+                    restrict_trend_mask = (restrict_trend_mask) & (y_data[0] >= trend_lims[1][0]) \
+                                          & (y_data[0] <= trend_lims[1][1])
+
+            if sum(restrict_trend_mask)!=0:
+                x_data_trend=x_data[0][restrict_trend_mask]
+                y_data_trend=y_data[0][restrict_trend_mask]
+            else:
+                st.warning('No points remaining in trend bounds. Skipping bounds... ')
+                x_data_trend=x_data[0][restrict_trend_mask]
+                y_data_trend=y_data[0][restrict_trend_mask]
+
+            #note: this is the right shape for lmpplot_uncert
+            x_err_trend=(np.array([elem for elem in x_error[0]]).T)[restrict_trend_mask].T
+            y_err_trend=(np.array([elem for elem in y_error[0]]).T)[restrict_trend_mask].T
+
+            #since we can't easily change the lin to log type of the axes, we recreate a linear
+            with st.spinner('Computing linear trends'):
+                lmplot_intercept=lmplot_uncert_a(ax_scat,x_data_trend,y_data_trend,x_err_trend,y_err_trend,percent=90,
+                                                 nsim=1000,linecolor='black',return_intercept=True)
+
         ####forcing common observ bounds if asked 
         #computing the common bounds if necessary
         if common_observ_bounds:

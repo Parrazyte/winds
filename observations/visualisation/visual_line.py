@@ -1539,14 +1539,25 @@ with st.sidebar.expander('Parameter analysis'):
     display_abserr_bshift=st.checkbox('Display mean and std of Chandra velocity shift distribution',value=True)
     
     common_observ_bounds=st.checkbox('Use common observation parameter bounds for all lines',value=True)
-    
-    #plot_trend=st.checkbox('Display linear trend lines in the scatter plots',value=False)
-    plot_trend=False
-    
+
+    st.header('Trends')
+    plot_trend=st.checkbox('Display linear trends in strongly correlated graphs (p<1e-5)',value=False)
+
+    restrict_trend=st.checkbox('Restrict trend computation bounds',value=False)
+    if restrict_trend:
+        trend_xmin = st.number_input(r'$x_{min}$')
+        trend_xmax = st.number_input(r'$x_{max}$')
+        trend_ymin = st.number_input(r'$y_{min}$')
+        trend_ymax = st.number_input(r'$y_{max}$')
+    else:
+        trend_xmin=0
+        trend_xmax=0
+        trend_ymin=0
+        trend_ymax=0
+
     st.header('Upper limits')
     show_scatter_ul=st.checkbox('Display upper limits in EW plots',value=False)
     lock_lims_det=not(st.checkbox('Include upper limits in graph bounds computations',value=True))
-        
 
 if compute_only_withdet:
     
@@ -1795,8 +1806,9 @@ def streamlit_scat(mode):
         
         scat_ener+=[correl_graph(abslines_plot_restrict,'ener_inclin',abslines_ener_restrict,dict_linevis,mode_vals=incl_plot_restrict,mode='source',
                                  conf_thresh=slider_sign,streamlit=True,compute_correl=compute_correl,bigger_text=bigger_text,show_linked=show_linked)]
-        scat_width+=[correl_graph(abslines_plot_restrict,'width_inclin',abslines_ener_restrict,dict_linevis,mode_vals=incl_plot_restrict,mode='source',
-                                 conf_thresh=slider_sign,streamlit=True,compute_correl=compute_correl,bigger_text=bigger_text,show_linked=show_linked)]
+        if use_width:
+            scat_width+=[correl_graph(abslines_plot_restrict,'width_inclin',abslines_ener_restrict,dict_linevis,mode_vals=incl_plot_restrict,mode='source',
+                                     conf_thresh=slider_sign,streamlit=True,compute_correl=compute_correl,bigger_text=bigger_text,show_linked=show_linked)]
         if n_infos>=5:
             scat_lineflux=[correl_graph(abslines_plot_restrict,'lineflux_inclin',abslines_ener_restrict,dict_linevis,mode_vals=incl_plot_restrict,
                                         mode='source',conf_thresh=slider_sign,streamlit=True,compute_correl=compute_correl,bigger_text=bigger_text,
@@ -1853,7 +1865,10 @@ dict_linevis['abslines_ener']=abslines_ener
 dict_linevis['abslines_plot']=abslines_plot
 
 dict_linevis['lock_lims_det']=lock_lims_det
+
 dict_linevis['plot_trend']=plot_trend
+dict_linevis['restrict_trend']=restrict_trend
+dict_linevis['trend_lims']=[[trend_xmin,trend_xmax],[trend_ymin,trend_ymax]]
 
 dict_linevis['color_scatter']=radio_color_scatter
 dict_linevis['observ_list']=observ_list

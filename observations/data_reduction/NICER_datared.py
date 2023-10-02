@@ -95,11 +95,12 @@ ap.add_argument('-load_functions',nargs=1,help="Load functions but don't launch 
 ap.add_argument("-dir", "--startdir", nargs='?', help="starting directory. Current by default", default='./', type=str)
 ap.add_argument("-l","--local",nargs=1,help='Launch actions directly in the current directory instead',
                 default=False,type=bool)
-ap.add_argument('-catch','--catch_errors',help='Catch errors while running the data reduction and continue',default=False,type=bool)
+ap.add_argument('-catch','--catch_errors',help='Catch errors while running the data reduction and continue',
+                default=True,type=bool)
 
 #global choices
 ap.add_argument("-a","--action",nargs='?',help='Give which action(s) to proceed,separated by comas.',
-                default='1,gti,fs,l,g,m,c',type=str)
+                default='g,m',type=str)
 #default: 1,gti,fs,l,g,m,c
 
 ap.add_argument("-over",nargs=1,help='overwrite computed tasks (i.e. with products in the batch, or merge directory\
@@ -1449,8 +1450,6 @@ def regroup_spectral(directory,group='opt'):
 
             #raising an error to stop the process if the command has crashed for some reason
             if not os.path.isfile(directory+'/'+directory+gti_suffix+'_sr.pha'):
-                bashproc.sendline('exit')
-                regroup_spectral_done.set()
                 return 'Source spectrum missing'
 
             allfiles=glob.glob(os.path.join(directory,'xti/**'),recursive=True)
@@ -1485,6 +1484,11 @@ def regroup_spectral(directory,group='opt'):
             print(str(len(gti_files))+' gti files detected. Regrouping spectral products from individual gtis...')
 
         for elem_gti in gti_files:
+
+            if not os.path.isfile(elem_gti.replace('/xti','').replace('_gti_','-').replace('.gti','_sr.pha')):
+                print('\nNo spectrum created for gti '+elem_gti+'. Continuing...\n')
+                continue
+
             process_state=regroup_single_spectral(elem_gti)
 
             #stopping the loop in case of crash

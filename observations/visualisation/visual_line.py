@@ -249,7 +249,8 @@ choice_telescope=st.sidebar.multiselect('Telescopes', ['XMM','Chandra']+([] if o
 if online:
     radio_ignore_full=True
 else:
-    radio_ignore_full=st.sidebar.radio('Include problematic data (_full) folders',('No','Yes'))=='No'
+    with st.sidebar:
+        radio_ignore_full=not st.toggle('Include problematic data (_full) folders')
 
 if not online:
     os.system('mkdir -p glob_batch/visual_line_dumps/')
@@ -342,7 +343,8 @@ if update_dump or not os.path.isfile(dump_path):
             'args_cam':args.cameras,
             'args_line_search_e':args.line_search_e,
             'args_line_search_norm':args.line_search_norm,
-            'visual_line':True
+            'visual_line':True,
+
             }
         
         #### main arrays computation
@@ -358,14 +360,14 @@ if update_dump or not os.path.isfile(dump_path):
         
         #Reading the results files
         observ_list,lineval_list,flux_list,date_list,instru_list,exptime_list=obj_values(lineval_files,Edd_factor,dict_linevis)
-        
-        dict_linevis['flux_list']=flux_list
-        
+
         #the values here are for each observation
         abslines_infos,autofit_infos=abslines_values(abslines_files,dict_linevis)
-        
+
         #getting all the variations we need
-        abslines_infos_perline,abslines_infos_perobj,abslines_plot,abslines_ener,flux_plot,hid_plot,incl_plot,width_plot,nh_plot,kt_plot=values_manip(abslines_infos,dict_linevis,autofit_infos)
+        abslines_infos_perline,abslines_infos_perobj,abslines_plot,abslines_ener,\
+            flux_plot,hid_plot,incl_plot,width_plot,nh_plot,kt_plot=values_manip(abslines_infos,dict_linevis,autofit_infos,
+                                                                                 flux_list)
 
         ####(deprecated) deleting bad flags        
         # #taking of the bad files points from the HiD
@@ -417,21 +419,16 @@ if update_dump or not os.path.isfile(dump_path):
         dump_dict['bad_flags']=bad_flags
         dump_dict['obj_list']=obj_list
         dump_dict['date_list']=date_list
-        dump_dict['abslines_plot']=abslines_plot
-        dump_dict['hid_plot']=hid_plot
-        dump_dict['flux_plot']=flux_plot
-        dump_dict['nh_plot']=nh_plot
-        dump_dict['kt_plot']=kt_plot
-        dump_dict['incl_plot']=incl_plot
-        dump_dict['abslines_infos_perobj']=abslines_infos_perobj
+
+        dump_dict['abslines_infos']=abslines_infos
+        dump_dict['autofit_infos']=autofit_infos
         dump_dict['flux_list']=flux_list
-        dump_dict['abslines_ener']=abslines_ener
-        dump_dict['width_plot']=width_plot
         dump_dict['dict_linevis']=dict_linevis
+
         dump_dict['catal_maxi_df']=catal_maxi_df
         dump_dict['catal_maxi_simbad']=catal_maxi_simbad
         dump_dict['dict_lc_rxte']=dict_lc_rxte
-        
+
         with open(dump_path,'wb+') as dump_file:
             dill.dump(dump_dict,file=dump_file)
    
@@ -449,17 +446,12 @@ observ_list=dump_dict['observ_list']
 bad_flags=dump_dict['bad_flags']
 obj_list=dump_dict['obj_list']
 date_list=dump_dict['date_list']
-abslines_plot=dump_dict['abslines_plot']
-hid_plot=dump_dict['hid_plot']
-flux_plot=dump_dict['flux_plot']
-kt_plot=dump_dict['kt_plot']
-nh_plot=dump_dict['nh_plot']
-incl_plot=dump_dict['incl_plot']
-abslines_infos_perobj=dump_dict['abslines_infos_perobj']
+
+abslines_infos=dump_dict['abslines_infos']
+autofit_infos=dump_dict['autofit_infos']
 flux_list=dump_dict['flux_list']
-abslines_ener=dump_dict['abslines_ener']
-width_plot=dump_dict['width_plot']
 dict_linevis=dump_dict['dict_linevis']
+
 catal_maxi_df=dump_dict['catal_maxi_df']
 catal_maxi_simbad=dump_dict['catal_maxi_simbad']
 dict_lc_rxte=dump_dict['dict_lc_rxte']
@@ -511,10 +503,20 @@ if multi_obj:
     if display_multi:
         with st.sidebar.expander('Source'):
             choice_source=st.multiselect('',options=[elem for elem in obj_list if elem in sources_det_dic] if restrict_sources_detection else obj_list,default=[elem for elem in obj_list if elem in sources_det_dic] if restrict_sources_detection else obj_list)     
-        
+
     if display_single:
         #switching to array to keep the same syntax later on
         choice_source=[st.sidebar.selectbox('Source',obj_list)]
+
+    with st.sidebar.expander('Observation'):
+        obs_list_str=np.array([np.array([obj_list[i]+'_'+observ_list[i][j].replace('_-1','').replace('_auto','')\
+                               for j in range(len(observ_list[i]))]) for i in range(len(obj_list))],dtype=object)
+
+        choice_obs=st.multiselect('Exclude individual observations:',ravel_ragged(obs_list_str))
+
+        mask_included_selection=np.array([np.array([obj_list[i]+'_'+observ_list[i][j].replace('_-1','').replace('_auto','') not in\
+                                          choice_obs for j in range(len(observ_list[i]))]) for i in range(len(obj_list))],
+                                            dtype=object)
 
 ####Nickel display is turned off here
 with st.sidebar.expander('Absorption lines restriction'):
@@ -527,13 +529,13 @@ mask_lines=np.array([elem in selectbox_abstype for elem in line_display_str])
 with st.sidebar.expander('Inclination'):
     slider_inclin=st.slider('Inclination restriction (°)',min_value=0.,max_value=90.,step=0.5,value=[0.,90.])
     
-    include_noinclin=st.checkbox('Include Sources with no inclination information',value=True)
+    include_noinclin=st.toggle('Include Sources with no inclination information',value=True)
     
-    incl_inside=st.checkbox('Only include sources with uncertainties strictly compatible with the current limits',value=False)
+    incl_inside=st.toggle('Only include sources with uncertainties strictly compatible with the current limits',value=False)
     
-    display_incl_inside=st.checkbox('Display ULs differently for sources with uncertainties not strictly compatible with the current limits',value=False)
+    display_incl_inside=st.toggle('Display ULs differently for sources with uncertainties not strictly compatible with the current limits',value=False)
     
-    dash_noincl=st.checkbox('Display ULs differently for sources with no inclination information',value=False)
+    dash_noincl=st.toggle('Display ULs differently for sources with no inclination information',value=False)
     
     radio_dipper=st.radio('Dipping sources restriction',('Off','Add dippers','Restrict to dippers','Restrict to non-dippers'))
     
@@ -602,13 +604,29 @@ if radio_info_cmap=='EW ratio':
 else:
     selectbox_ratioeqw=''
     
-checkbox_zoom=st.sidebar.checkbox('Zoom around the displayed elements',value=False)
-            
+radio_zoom_hid=st.sidebar.radio('Zoom:',('Global sample','Current selection','manual bounds'),index=0)
+if radio_zoom_hid=='Global sample':
+    zoom_hid=False
+elif radio_zoom_hid=='Current selection':
+    zoom_hid='auto'
+elif radio_zoom_hid=='manual bounds':
+
+    def format_slider(x,val_decimal=3):
+        return ('%.'+str(val_decimal)+'e')%x
+
+    values_zoom_hr=st.sidebar.select_slider('Displayed HR range',options=np.logspace(-2,1,num=100),
+                                            value=[0.1,2.0092330025650478],format_func=format_slider)
+    values_zoom_lum = st.sidebar.select_slider('Displayed luminosity range', options=np.logspace(-5,0,num=100),
+                                        value=[1e-5, 1.],format_func=format_slider)
+    zoom_hid=[values_zoom_hr,values_zoom_lum]
+
+    st.text(zoom_hid)
+
 display_nondet=st.sidebar.checkbox('Display exposures with no detection',value=True)
 
 if display_nondet:
     with st.sidebar.expander('Upper limits'):
-        display_upper=st.checkbox('Display upper limits',value=True)    
+        display_upper=st.toggle('Display upper limits',value=True)    
         if display_upper:
                 selectbox_upperlines=st.multiselect('Lines selection for upper limit display:',
                                                             options=line_display_str[mask_lines],default=line_display_str[mask_lines][:2])
@@ -640,28 +658,28 @@ if not online:
         
 with st.sidebar.expander('Visualisation'):
     
-    display_dicho=st.checkbox('Display favourable zone',value=True)
+    display_dicho=st.toggle('Display favourable zone',value=True)
     
-    display_obj_zerodet=st.checkbox('Color sources with no detection',value=True)
+    display_obj_zerodet=st.toggle('Color sources with no detection',value=True)
     
-    display_hid_error=st.checkbox('Display errorbar for HID position',value=False)
+    display_hid_error=st.toggle('Display errorbar for HID position',value=False)
     
-    display_central_abs=st.checkbox('Display centers for absorption detections',value=False)
+    display_central_abs=st.toggle('Display centers for absorption detections',value=False)
 
-    alpha_abs=st.checkbox('Plot with transparency',value=False)
+    alpha_abs=st.toggle('Plot with transparency',value=False)
     
-    split_cmap_source=st.checkbox('Use different colormaps for detections and non-detections',value=True)
+    split_cmap_source=st.toggle('Use different colormaps for detections and non-detections',value=True)
     
-    global_colors=st.checkbox('Normalize colors/colormaps over the entire sample',value=False)
+    global_colors=st.toggle('Normalize colors/colormaps over the entire sample',value=False)
         
     if not online:
-        paper_look=st.checkbox('Paper look',value=False)
+        paper_look=st.toggle('Paper look',value=False)
 
-        bigger_text=st.checkbox('Bigger text size',value=True)
+        bigger_text=st.toggle('Bigger text size',value=True)
         
-        square_mode=st.checkbox('Square mode',value=True)
+        square_mode=st.toggle('Square mode',value=True)
     
-        show_linked=st.checkbox('Distinguish linked detections',value=False)
+        show_linked=st.toggle('Distinguish linked detections',value=False)
     else:
         paper_look=False
         bigger_text=True
@@ -675,20 +693,20 @@ else:
     
 with st.sidebar.expander('Monitoring'):
     
-    plot_lc_monit=st.checkbox('Plot monitoring lightcurve',value=False)
-    plot_hr_monit=st.checkbox('Plot monitoring HR',value=False)
+    plot_lc_monit=st.toggle('Plot monitoring lightcurve',value=False)
+    plot_hr_monit=st.toggle('Plot monitoring HR',value=False)
         
-    monit_highlight_hid=st.checkbox('Highlight HID coverage',value=False)
+    monit_highlight_hid=st.toggle('Highlight HID coverage',value=False)
     
     if plot_lc_monit or plot_hr_monit:
-        zoom_lc=st.checkbox('Zoom on the restricted time period in the lightcurve',value=False)
+        zoom_lc=st.toggle('Zoom on the restricted time period in the lightcurve',value=False)
     else:
         zoom_lc=False
         
     fig_lc_monit=None
     fig_hr_monit=None
     
-    plot_maxi_ew=st.checkbox('Superpose measured EW',value=False)
+    plot_maxi_ew=st.toggle('Superpose measured EW',value=False)
     
     def save_lc():
         
@@ -705,7 +723,7 @@ compute_only_withdet=st.sidebar.checkbox('Skip parameter analysis when no detect
 
 if not online:
     with st.sidebar.expander('Stacking'):
-        stack_det=st.checkbox('Stack detections')
+        stack_det=st.toggle('Stack detections')
         stack_flux_lim = st.number_input(r'Max ratio of fluxes to stack', value=2., min_value=1e-10, format='%.3e')
         stack_HR_lim=st.number_input(r'Max ratio of HR to stack',value=2.,min_value=1e-10,format='%.3e')
         stack_time_lim=st.number_input(r'Max time delta to stack',value=2.,min_value=1e-1,format='%.3e')
@@ -720,6 +738,21 @@ else:
     fig_hid,ax_hid=plt.subplots(1,1,figsize=(8,6))
 ax_hid.clear()
 
+
+'''RESTRICTION MASKING'''
+
+# getting all the variations we need
+abslines_infos_perline, abslines_infos_perobj, abslines_plot, abslines_ener, \
+    flux_plot, hid_plot, incl_plot, width_plot, nh_plot, kt_plot,flux_list = values_manip(abslines_infos, dict_linevis,
+                                                                                autofit_infos,
+                                                                                flux_list,
+                                                                                mask_include=mask_included_selection)
+n_obj_init=len(obj_list)
+
+
+instru_list = np.array([instru_list[i_obj][mask_included_selection[i_obj]] for i_obj in range(n_obj_init)], dtype=object)
+observ_list = np.array([observ_list[i_obj][mask_included_selection[i_obj]] for i_obj in range(n_obj_init)], dtype=object)
+date_list = np.array([date_list[i_obj][mask_included_selection[i_obj]] for i_obj in range(n_obj_init)], dtype=object)
 
 '''HID GRAPH'''
 
@@ -830,7 +863,7 @@ else:
 n_obj_withdet=sum(mask_obj_withdet & mask_obj_base)
 
 if not display_obj_zerodet:
-    mask_obj=mask_obj_base & mask_obj_withdet
+    mask_obj=mask_obj_base
 else:
     mask_obj=mask_obj_base
     
@@ -988,7 +1021,7 @@ hid_graph(ax_hid,dict_linevis,
           split_cmap_source=split_cmap_source,
           display_evol_single=display_evol_single, display_dicho=display_dicho,
           global_colors=global_colors, alpha_abs=alpha_abs,
-          paper_look=paper_look, bigger_text=bigger_text, square_mode=square_mode, zoom=checkbox_zoom)
+          paper_look=paper_look, bigger_text=bigger_text, square_mode=square_mode, zoom=zoom_hid)
 
 # fig_hid_html = mpld3.fig_to_html(fig_hid)
 # components.html(fig_hid_html, height=1000)
@@ -1486,17 +1519,17 @@ with tab_monitoring:
 
 with st.sidebar.expander('Parameter analysis'):
     
-    display_param_withdet=st.checkbox('Restrict parameter analysis to sources with significant detections',value=True)
+    display_param_withdet=st.toggle('Restrict parameter analysis to sources with significant detections',value=True)
     
     display_param=st.multiselect('Additional parameters',
                                  ('EW ratio (Line)','width (Line)','Line flux (Line)','Time (Observation)',
                                   'Line EW comparison'),default=None)
     
-    glob_col_source=st.checkbox('Normalize source colors over the entire sample',value=True)
+    glob_col_source=st.toggle('Normalize source colors over the entire sample',value=True)
     
     st.header('Distributions')
-    display_distrib=st.checkbox('Plot distributions',value=False)
-    use_distrib_lines=st.checkbox('Show line by line distribution',value=True)
+    display_distrib=st.toggle('Plot distributions',value=False)
+    use_distrib_lines=st.toggle('Show line by line distribution',value=True)
     split_distrib=st.radio('Split distributions:',('Off','Source','Instrument'),index=1)
     
     if split_distrib=='Source' and (display_single or sum(mask_obj)==1):
@@ -1523,27 +1556,27 @@ with st.sidebar.expander('Parameter analysis'):
         
     use_width='width (Line)' in display_param
     if use_width:
-        display_th_width_ew=st.checkbox('Display theoretical individual width vs EW evolution',value=False)
+        display_th_width_ew=st.toggle('Display theoretical individual width vs EW evolution',value=False)
     else:
         display_th_width_ew=False
         
     use_time='Time (Observation)' in display_param
     use_lineflux='Line flux (Line)' in display_param
     
-    compute_correl=st.checkbox('Compute Pearson/Spearman for the scatter plots',value=True)
-    display_pearson=st.checkbox('Display Pearson rank',value=False)
+    compute_correl=st.toggle('Compute Pearson/Spearman for the scatter plots',value=True)
+    display_pearson=st.toggle('Display Pearson rank',value=False)
     st.header('Visualisation')
     radio_color_scatter=st.radio('Scatter plot color options:',('None','Source','Instrument','Time','HR','width','nH'),index=1)
-    scale_log_eqw=st.checkbox('Use a log scale for the equivalent width and line fluxes')
-    scale_log_hr=st.checkbox('Use a log scale for the HID parameters',value=True)
-    display_abserr_bshift=st.checkbox('Display mean and std of Chandra velocity shift distribution',value=True)
+    scale_log_eqw=st.toggle('Use a log scale for the equivalent width and line fluxes')
+    scale_log_hr=st.toggle('Use a log scale for the HID parameters',value=True)
+    display_abserr_bshift=st.toggle('Display mean and std of Chandra velocity shift distribution',value=True)
     
-    common_observ_bounds=st.checkbox('Use common observation parameter bounds for all lines',value=True)
+    common_observ_bounds=st.toggle('Use common observation parameter bounds for all lines',value=True)
 
     st.header('Trends')
-    plot_trend=st.checkbox('Display linear trends in strongly correlated graphs (p<1e-5)',value=False)
+    plot_trend=st.toggle('Display linear trends in strongly correlated graphs (p<1e-5)',value=False)
 
-    restrict_trend=st.checkbox('Restrict trend computation bounds',value=False)
+    restrict_trend=st.toggle('Restrict trend computation bounds',value=False)
     if restrict_trend:
         trend_xmin = st.number_input(r'$x_{min}$')
         trend_xmax = st.number_input(r'$x_{max}$')
@@ -1556,8 +1589,8 @@ with st.sidebar.expander('Parameter analysis'):
         trend_ymax=0
 
     st.header('Upper limits')
-    show_scatter_ul=st.checkbox('Display upper limits in EW plots',value=False)
-    lock_lims_det=not(st.checkbox('Include upper limits in graph bounds computations',value=True))
+    show_scatter_ul=st.toggle('Display upper limits in EW plots',value=False)
+    lock_lims_det=not(st.toggle('Include upper limits in graph bounds computations',value=True))
 
 if compute_only_withdet:
     

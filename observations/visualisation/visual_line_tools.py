@@ -975,14 +975,26 @@ def abslines_values(file_paths,dict_linevis,only_abs=False,obsid=None):
 
 
 #@st.cache_data
-def values_manip(abslines_inf,dict_linevis,autofit_inf):
+def values_manip(abslines_infos,dict_linevis,autofit_infos,flux_list_infos,mask_include=None):
     
     range_absline=dict_linevis['range_absline']
     n_infos=dict_linevis['n_infos']
     obj_list=dict_linevis['obj_list']
     multi_obj=dict_linevis['multi_obj']
-    flux_list=dict_linevis['flux_list']
-    
+
+    n_obj=len(obj_list)
+
+    if mask_include is None:
+        #default ragged full True array
+        mask_include_use=np.array([np.array([True]*len(abslines_infos[i])) for i in range(n_obj)],dtype=object)
+    else:
+        mask_include_use=mask_include
+
+    #masking the values for the main arrays to avoid changing anything to the following
+    abslines_inf=np.array([abslines_infos[i_obj][mask_include_use[i_obj]] for i_obj in range(n_obj)],dtype=object)
+    autofit_inf = np.array([autofit_infos[i_obj][mask_include_use[i_obj]] for i_obj in range(n_obj)], dtype=object)
+    flux_list= np.array([flux_list_infos[i_obj][mask_include_use[i_obj]] for i_obj in range(n_obj)], dtype=object)
+
     #so we can translate these per lines instead
     abslines_inf_line=np.array([None]*len(range_absline))
     
@@ -1243,8 +1255,15 @@ def values_manip(abslines_inf,dict_linevis,autofit_inf):
                 width_plt[i_uncert][i_line][i_obj]=width_part_obj
                 nh_plt[i_uncert][i_obj]=nh_part_obj
                 kt_plt[i_uncert][i_obj]=kt_part_obj
-                
-    return abslines_inf_line,abslines_inf_obj,abslines_plt,abslines_e,flux_plt,hid_plt,incl_plt,width_plt,nh_plt,kt_plt
+
+    if mask_include is not None:
+        #also returning the updated flux_list
+        return abslines_inf_line,abslines_inf_obj,abslines_plt,abslines_e,\
+               flux_plt,hid_plt,incl_plt,width_plt,nh_plt,kt_plt,flux_list
+    else:
+        return abslines_inf_line, abslines_inf_obj, abslines_plt, abslines_e, \
+            flux_plt, hid_plt, incl_plt, width_plt, nh_plt, kt_plt
+
 def hid_graph(ax_hid,dict_linevis,
               display_single=False,display_nondet=True,display_upper=False,
               cyclic_cmap_nondet=False,cyclic_cmap_det=False,cyclic_cmap=False,
@@ -1427,12 +1446,16 @@ def hid_graph(ax_hid,dict_linevis,
                 max(flux_list_ravel.T[2][0] / flux_list_ravel.T[1][0])]
     bounds_y = [min(flux_list_ravel.T[4][0]), max(flux_list_ravel.T[4][0])]
 
-    if zoom:
+    if zoom=='auto':
         ax_hid.set_xlim(min(ravel_ragged(hid_plot_restrict[0][0])) * 0.9,
                         max(ravel_ragged(hid_plot_restrict[0][0])) * 1.1)
         ax_hid.set_ylim(min(ravel_ragged(hid_plot_restrict[1][0])) * 0.8,
                         max(ravel_ragged(hid_plot_restrict[1][0])) * 1.3)
-    else:
+    elif type(zoom)==list:
+        ax_hid.set_xlim(zoom[0][0],zoom[0][1])
+        ax_hid.set_ylim(zoom[1][0], zoom[1][1])
+
+    elif not zoom:
         ax_hid.set_xlim((min(bounds_x[0] * 0.9, 0.1), max(bounds_x[1] * 1.1, 2)))
         ax_hid.set_ylim((min(bounds_y[0] * 0.9, 1e-5), max(bounds_y[1] * 1.1, 1)))
 

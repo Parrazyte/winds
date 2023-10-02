@@ -295,7 +295,8 @@ class scorpeon_manager:
         
         if self.bgload_paths is not None:
             #making sure the file actually exists
-            assert np.array([elem is None or os.path.isfile(str(elem)) for elem in self.bgload_paths]).all(), 'One or more scorpeon load file path does not exist'
+            assert np.array([elem is None or os.path.isfile(str(elem)) for elem in self.bgload_paths]).all(),\
+                'One or more scorpeon load file path does not exist'
             
             #loading all of the models
             for i_bg,bg_path in enumerate(self.bgload_paths):
@@ -2060,7 +2061,7 @@ def calc_fit(timeout=30,logfile=None,iterations=None,delchi_tresh=0.1,nonew=Fals
                 break
         else:
             if not noprint:
-                print("\nLast fit iteration didn't improve the chi2 significantly.Stopping the process...")
+                print("\nLast fit iteration didn't improve the Stat significantly.Stopping the process...")
             fit_improve=False
         
     #changing back the fit parameters
@@ -2499,8 +2500,17 @@ class fitmod:
             
             #storing the chi2/dof before adding the component
             init_chi=Fit.statistic
-            init_dof=Fit.dof
-            
+
+            try:
+                #we do this to avoid issues when having a starting bg model such as scorpeon which gives values\
+                # of chi and dof
+                AllModels(1)
+                init_chi=Fit.statistic
+                init_dof=Fit.dof
+            except:
+                init_chi=0
+                init_dof=0
+
             #copy of the includedlist for rollback after testing the component significance
             prev_includedlist=copy(self.includedlist)
             
@@ -2612,11 +2622,11 @@ class fitmod:
             #storing the final fit in the component's save
             component.fitted_mod=allmodel_data()
             
-            self.print_xlog('\nlog:Chi2 before adding the component:'+str(init_chi))
-            self.print_xlog('\nlog:Chi2 after adding the component:'+str(new_chi))
+            self.print_xlog('\nlog:Stat before adding the component:'+str(init_chi))
+            self.print_xlog('\nlog:Stat after adding the component:'+str(new_chi))
             #testing the 99% significance of the comp with the associated number of d.o.f. added 
             #i.e. the number of parameters - the number of parameters we keep frozen
-            self.print_xlog('\nlog:Delta chi2 for this component: '+str(init_chi-new_chi))
+            self.print_xlog('\nlog:Delta Stat for this component: '+str(init_chi-new_chi))
             
             #we always accept the component when there is no model
             #-1 because our table starts at index 0 for 1 d.o.f.
@@ -2635,8 +2645,10 @@ class fitmod:
                 #at this stage there's no question of unlinking energies for absorption lines so we can use n_unlocked_pars_base
                     
                 if init_chi!=0:
-                    ftest_val=Fit.ftest(new_chi,new_dof,init_chi,init_dof)
-                    
+                    try:
+                        ftest_val=Fit.ftest(new_chi,new_dof,init_chi,init_dof)
+                    except:
+                        breakpoint()
                     ftest_condition=ftest_val<ftest_threshold+ftest_leeway
                     
                     delchi_condition=init_chi-new_chi>sign_delchis_table[max(0,init_dof-new_dof-1)]
@@ -4408,10 +4420,10 @@ def xPlot(types,axes_input=None,plot_saves_input=None,plot_arg=None,includedlist
         fig=plt.figure(figsize=(10,8))
         grid=GridSpec(len(types.split(',')),1,figure=fig,hspace=0.)
         axes=[plt.subplot(elem) for elem in grid]
-        
+
     else:
         axes=[axes_input] if type(axes_input) is not list else axes_input
-        
+
     if plot_saves_input is None:
         plot_saves=plot_saver(','.join([elem if '_' not in elem else elem.split('_')[1] for elem in types.split(',')]))
     else:
@@ -4485,31 +4497,34 @@ def xPlot(types,axes_input=None,plot_saves_input=None,plot_arg=None,includedlist
             if group_names=='auto':
                 #auto naming the group from header infos
 
-                try:
-                    with fits.open(AllData(id_grp+1).fileName) as hdul:
+                if 'sp' in AllData(id_grp+1).fileName:
+                    grp_name=AllData(id_grp+1).fileName.split('_sp')[0]
+                else:
+                    try:
+                        with fits.open(AllData(id_grp+1).fileName) as hdul:
 
-                        try:
-                            grp_tel=hdul[1].header['TELESCOP']
-                        except:
-                            grp_tel=''
-
-                        try:
-                            grp_instru=hdul[1].header['INSTRUME']
-                        except:
-                            grp_instru=''
-                        try:
-                            grp_obsid=hdul[1].header['OBS_ID']
-                        except:
                             try:
-                                grp_obsid=hdul[1].header['OGID']
+                                grp_tel=hdul[1].header['TELESCOP']
                             except:
-                                grp_obsid=''
-                except:
-                    grp_tel=''
-                    grp_instru=''
-                    grp_obsid=''
+                                grp_tel=''
 
-                grp_name=' '.join([elem for elem in [grp_tel,grp_obsid,grp_instru] if len(elem)>0])
+                            try:
+                                grp_instru=hdul[1].header['INSTRUME']
+                            except:
+                                grp_instru=''
+                            try:
+                                grp_obsid=hdul[1].header['OBS_ID']
+                            except:
+                                try:
+                                    grp_obsid=hdul[1].header['OGID']
+                                except:
+                                    grp_obsid=''
+                    except:
+                        grp_tel=''
+                        grp_instru=''
+                        grp_obsid=''
+
+                    grp_name=' '.join([elem for elem in [grp_tel,grp_obsid,grp_instru] if len(elem)>0])
             else:
                 breakpoint()
                 grp_name='' if group_names=='nolabel' else\
@@ -4602,8 +4617,9 @@ def xPlot(types,axes_input=None,plot_saves_input=None,plot_arg=None,includedlist
             if i_ax==0:
                 curr_ax.legend(loc=legend_position)
             if i_ax==len(types_split)-1:
+                bbox_yval=max(-0.3-0.2*np.ceil(AllData.nGroups/2),-0.5)
                 curr_ax.legend(loc='lower center',
-                               bbox_to_anchor=(0.5,-0.3-0.2*np.ceil(AllData.nGroups/3)),ncols=3)
+                               bbox_to_anchor=(0.5,bbox_yval),ncols=3+np.ceil(AllData.nGroups/5))
 
         else:
             curr_ax.legend(loc=legend_position)

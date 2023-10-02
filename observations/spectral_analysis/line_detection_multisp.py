@@ -179,12 +179,15 @@ ap.add_argument('-launch_cpd',nargs=1,help='launch cpd /xs window to be able to 
 ap.add_argument('-xspec_window',nargs=1,help='xspec window id (auto tries to pick it automatically)',default='auto',type=str)
 #note: bash command to see window ids: wmctrl -l
 
+'''NICER
+'''
 ap.add_argument('-NICER_bkg',nargs=1,help='NICER background type',default='scorpeon_mod',type=str)
 
 ap.add_argument('-pre_reduced_NICER',nargs=1,help='change NICER data format to pre-reduced obsids',default=False,type=bool)
 
 ap.add_argument('-NICER_lc_binning',nargs=1,help='NICER LC binning',default='1',type=str)
 
+'''MODELS'''
 #### Models and abslines lock
 ap.add_argument('-cont_model',nargs=1,help='model list to use for the autofit computation',default='cont',type=str)
 ap.add_argument('-autofit_model',nargs=1,help='model list to use for the autofit computation',default='lines_narrow',type=str)
@@ -202,7 +205,7 @@ ap.add_argument("-h_update",nargs=1,help='update the bg, rmf and arf file names 
 
 '''####ANALYSIS RESTRICTION'''
 
-ap.add_argument('-restrict',nargs=1,help='restrict the computation to a number of predefined exposures',default=True,type=bool)
+ap.add_argument('-restrict',nargs=1,help='restrict the computation to a number of predefined exposures',default=False,type=bool)
 #in this mode, the line detection function isn't wrapped in a try, and the summary isn't updasted
 
 observ_restrict=['5501010106-003F_sp_grp_opt.pha']
@@ -270,7 +273,13 @@ ap.add_argument('-skip_nongrating',nargs=1,help='skip non grating Chandra obs (u
 ap.add_argument('-write_pdf',nargs=1,help='overwrite finished pdf at the end of the line detection',
                 default=False,type=bool)
 
+ap.add_argument('-group_gti_time',nargs=1,help='maximum time delta for gti grouping in dd_hh_mm',default='01_00_00',type=str)
+
 '''MODES'''
+
+#in construction
+ap.add_argument('-reload_autofit',nargs=1,help='Reload existing autofit save files to gain time if a computation has crashed',
+                default=True,type=bool)
 
 ap.add_argument('-pdf_only',nargs=1,help='Updates the pdf with already existing elements but skips the line detection entirely',
                 default=False,type=bool)
@@ -280,7 +289,7 @@ ap.add_argument('-line_ul_only',nargs=1,help='Reloads the autofit computations a
                 default=False,type=bool)
 
 ap.add_argument('-hid_only',nargs=1,help='skip the line detection and directly plot the hid',
-                default=True,type=bool)
+                default=False,type=bool)
 
 ap.add_argument('-multi_obj',nargs=1,help='compute the hid for multiple obj directories inside the current directory',
                 default=False)
@@ -405,6 +414,10 @@ no_abslines=args.no_abslines
 NICER_bkg=args.NICER_bkg
 line_ul_only=args.line_ul_only
 NICER_lc_binning=args.NICER_lc_binning
+
+reload_autofit=args.reload_autofit
+
+group_gti_time=args.group_gti_time
 
 outdir=args.outdir
 pileup_lim=args.pileup_lim
@@ -1028,20 +1041,36 @@ def pdf_summary(epoch_observ,fit_ok=False,summary_epoch=None):
 
     #### XMM Data reduction display
     if sat=='NICER':
+
+        #adding the global flares curve for each obsid
+        for i_obsid,elem_obsid in enumerate(np.unique([elem.split('-')[0] for elem in epoch_observ])):
+            pdf.add_page()
+            pdf.set_font('helvetica', 'B', 16)
+            pdf.cell(1,10,'Orbits for obsid '+elem_obsid,align='C',center=True)
+            pdf.ln(10)
+            try:
+                pdf.image(elem_observ +'-global_flares.png',x=2,y=50,w=280)
+            except:
+                pass
+
+        #and adding each individual GTI's flare and lightcurves
         for i_obs,elem_observ in enumerate(epoch_observ):
             pdf.add_page()
             pdf.set_font('helvetica', 'B', 16)
-            pdf.cell(1,10,'Lightcurves for obsid '+elem_observ,align='C',center=True)
+            pdf.cell(1,10,'GTIS and lightcurves for gti '+elem_observ,align='C',center=True)
             pdf.ln(10)
             try:
-                pdf.image(elem_observ + '_lc_3-15_bin_' + NICER_lc_binning + '.png', x=200, y=50, w=90)
-                pdf.image(elem_observ+'_lc_3-6_bin_'+NICER_lc_binning+'.png',x=2,y=50,w=90)
-                pdf.image(elem_observ+'_lc_6-10_bin_'+NICER_lc_binning+'.png',x=100,y=50,w=90)
+                pdf.image(elem_observ+ '_flares.png',x=2,y=100,w=140)
 
-                pdf.cell(1,10,'HR evolution for obsid '+elem_observ,align='C',center=True)
-                pdf.image(elem_observ+'_hr_6-10_bin_'+NICER_lc_binning+'.png',x=100,y=150,w=90)
+                pdf.image(elem_observ + '_lc_3-10_bin_' + NICER_lc_binning + '.png', x=150, y=50, w=70)
+                pdf.image(elem_observ + '_hr_3-10_bin_' + NICER_lc_binning + '.png', x=220, y=50, w=70)
+
+                pdf.image(elem_observ + '_lc_3-6_bin_' + NICER_lc_binning + '.png', x=150, y=150, w=70)
+                pdf.image(elem_observ + '_lc_6-10_bin_' + NICER_lc_binning + '.png', x=220, y=150, w=70)
+
             except:
                 pass
+
     if sat=='XMM':
         for i_obs,elem_observ in enumerate(epoch_observ):
             if is_sp[i_obs]:
@@ -1122,9 +1151,15 @@ def pdf_summary(epoch_observ,fit_ok=False,summary_epoch=None):
 
     #naming differently for aborted and unaborted analysis
     if not fit_ok:
-        pdf.output(outdir+'/'+epoch_observ[0]+'_aborted_recap.pdf')
+        if sat=='NICER':
+            pdf.output(outdir + '/' + epoch_observ[0] + '_aborted_recap.pdf')
+        else:
+            pdf.output(outdir+'/'+('_'.join(epoch_observ))+'_aborted_recap.pdf')
     else:
-        pdf.output(outdir+'/'+epoch_observ[0]+'_recap.pdf')
+        if sat=='NICER':
+            pdf.output(outdir + '/' + ('_'.join(epoch_observ)) + '_recap.pdf')
+        else:
+            pdf.output(outdir+'/'+epoch_observ[0]+'_recap.pdf')
 
 def line_detect(epoch_id):
 
@@ -1396,103 +1431,6 @@ def line_detect(epoch_id):
         except:
             return fill_result('Missing elements to compute PDF.')
 
-    elif line_ul_only:
-
-        #loading the autofit model
-        Xset.restore(outdir+'/'+epoch_observ[0]+'_mod_autofit.xcm')
-
-        #reloading the fitlines class
-        fitlines=load_fitmod(outdir+'/'+epoch_observ[0]+'_fitmod_autofit.pkl')
-
-        #updating fitcomps
-        fitlines.update_fitcomps()
-
-        #recreating the no abs version
-
-        #deleting all absorption components (reversed so we don't have to update the fitcomps)
-        for comp in [elem for elem in fitlines.includedlist if elem is not None][::-1]:
-            if comp.named_absline:
-                #note that with no rollback we do not update the values of the component so it has still its included status and everything else
-                comp.delfrommod(rollback=False)
-
-        #storing the no abs line 'continuum' model
-        data_autofit_noabs=allmodel_data()
-
-        #reloading previously computed information
-        dict_linevis={'visual_line':False,
-                      'cameras':cameras,
-                      'expmodes':expmodes}
-
-        precomp_absline_vals,precomp_autofit_vals=abslines_values(autofit_store_path,dict_linevis,
-                                             obsid=epoch_observ[0])
-
-        #selecting object 0 and obs 0 aka this obs
-        precomp_absline_vals=precomp_absline_vals[0][0]
-        precomp_autofit_vals=precomp_autofit_vals[0][0]
-
-        abslines_eqw,abslines_bshift,abslines_delchi,abslines_flux,abslines_sign=precomp_absline_vals[:5]
-
-        abslines_eqw_upper=np.zeros(len(range_absline))
-
-        abslines_em_overlap,abslines_width,abslines_bshift_distinct=precomp_absline_vals[6:]
-
-        autofit_parerrors,autofit_parnames=precomp_autofit_vals
-
-        sign_widths_arr=np.array([elem[0] if elem[0]-elem[1]>1e-6 else 0 for elem in abslines_width])
-
-        #fetching the ID of this observation
-        # freezing the model to avoid it being affected by the missing absorption lines
-        # note : it would be better to let it free when no absorption lines are there but we keep the same procedure for
-        # consistency
-        allfreeze()
-
-        # computing a mask for significant lines
-        mask_abslines_sign = abslines_sign > sign_threshold
-
-        # computing the upper limits for the non significant lines
-        abslines_eqw_upper = fitlines.get_eqwidth_uls(mask_abslines_sign, abslines_bshift, sign_widths_arr,
-                                                      pre_delete=True)
-
-        # here will need to reload an accurate model before updating the fitcomps
-        '''HTML TABLE FOR the pdf summary'''
-
-        abslines_table_str = html_table_maker()
-
-        with open(outdir + '/' + epoch_observ[0] + '_abslines_table.txt', 'w+') as abslines_table_file:
-            abslines_table_file.write(abslines_table_str)
-
-            Xset.logChatter = 10
-
-        # storing line string
-        autofit_store_str = epoch_observ[0] + '\t' + \
-                            str(abslines_eqw.tolist()) + '\t' + str(abslines_bshift.tolist()) + '\t' + str(
-            abslines_delchi.tolist()) + '\t' + \
-                            str(abslines_flux.tolist()) + '\t' + str(abslines_sign.tolist()) + '\t' + str(
-            abslines_eqw_upper.tolist()) + '\t' + \
-                            str(abslines_em_overlap.tolist()) + '\t' + str(abslines_width.tolist()) + '\t' + str(
-            abslines_bshift_distinct.tolist()) + '\t' + \
-                            str(autofit_parerrors.tolist()) + '\t' + str(autofit_parnames.tolist()) + '\n'
-
-        '''Storing the results'''
-
-        autofit_store_header = 'Observ_id\tabslines_eqw\tabslines_bshift\tablines_delchi\tabslines_flux\t' + \
-                               'abslines_sign\tabslines_eqw_upper\tabslines_em_overlap\tabslines_width\tabslines_bshift_distinct' + \
-                               '\tautofit_parerrors\tautofit_parnames\n'
-
-        file_edit(path=autofit_store_path, line_id=epoch_observ[0], line_data=autofit_store_str,
-                  header=autofit_store_header)
-
-        '''PDF creation'''
-
-        if write_pdf:
-            pdf_summary(epoch_observ, fit_ok=True, summary_epoch=fill_result('Line detection complete.'))
-
-        # closing the logfile for both access and Xspec
-        curr_logfile.close()
-        Xset.closeLog()
-
-        return fill_result('Line detection complete.')
-
     '''
     normal behavior
     '''
@@ -1617,6 +1555,7 @@ def line_detect(epoch_id):
     if len(epoch_files_good)==0 and sat=='XMM':
         return epoch_result
 
+
     #### Data load
     if sat=='XMM':
         AllData(''.join([str(i_sp+1)+':'+str(i_sp+1)+' '+elem_sp.replace('.ds','_bgtested.ds')+' '\
@@ -1642,14 +1581,14 @@ def line_detect(epoch_id):
     elif sat=='NICER':
 
         #the grouped spectrum loads the rmf and the arf right away
-        AllData('1:1 '+epoch_files[0])
+        AllData(' '.join([str(i_sp+1)+':'+str(i_sp+1)+' '+elem_sp for i_sp,elem_sp in enumerate(epoch_files)]))
 
         if NICER_bkg=='scorpeon_mod':
-            #this is the number of the datagroup for which the script will be applied
-            nicer_bkgspect=1
 
             #loading the background and storing the bg python path in xscorpeon
-            xscorpeon.load(epoch_files[0].replace('_sp_grp_opt.pha','_bg.py'),frozen=True)
+            #note that here we assume that all files have a valid scorpeon background
+            xscorpeon.load([epoch_files[i].replace('_sp_grp_opt.pha','_bg.py') for i in range(len(epoch_files))],
+                           frozen=True)
 
 
     elif sat=='Suzaku':
@@ -1751,6 +1690,103 @@ def line_detect(epoch_id):
         return fill_result('Insufficient counts ('+str(round(glob_counts))+' < '+str(round(counts_min_HID))+\
                            ') in HID detection range.')
 
+    if line_ul_only:
+
+        #loading the autofit model
+        Xset.restore(outdir+'/'+epoch_observ[0]+'_mod_autofit.xcm')
+
+        #reloading the fitlines class
+        fitlines=load_fitmod(outdir+'/'+epoch_observ[0]+'_fitmod_autofit.pkl')
+
+        #updating fitcomps
+        fitlines.update_fitcomps()
+
+        #recreating the no abs version
+
+        #deleting all absorption components (reversed so we don't have to update the fitcomps)
+        for comp in [elem for elem in fitlines.includedlist if elem is not None][::-1]:
+            if comp.named_absline:
+                #note that with no rollback we do not update the values of the component so it has still its included status and everything else
+                comp.delfrommod(rollback=False)
+
+        #storing the no abs line 'continuum' model
+        data_autofit_noabs=allmodel_data()
+
+        #reloading previously computed information
+        dict_linevis={'visual_line':False,
+                      'cameras':cameras,
+                      'expmodes':expmodes}
+
+        precomp_absline_vals,precomp_autofit_vals=abslines_values(autofit_store_path,dict_linevis,
+                                             obsid=epoch_observ[0])
+
+        #selecting object 0 and obs 0 aka this obs
+        precomp_absline_vals=precomp_absline_vals[0][0]
+        precomp_autofit_vals=precomp_autofit_vals[0][0]
+
+        abslines_eqw,abslines_bshift,abslines_delchi,abslines_flux,abslines_sign=precomp_absline_vals[:5]
+
+        abslines_eqw_upper=np.zeros(len(range_absline))
+
+        abslines_em_overlap,abslines_width,abslines_bshift_distinct=precomp_absline_vals[6:]
+
+        autofit_parerrors,autofit_parnames=precomp_autofit_vals
+
+        sign_widths_arr=np.array([elem[0] if elem[0]-elem[1]>1e-6 else 0 for elem in abslines_width])
+
+        #fetching the ID of this observation
+        # freezing the model to avoid it being affected by the missing absorption lines
+        # note : it would be better to let it free when no absorption lines are there but we keep the same procedure for
+        # consistency
+        allfreeze()
+
+        # computing a mask for significant lines
+        mask_abslines_sign = abslines_sign > sign_threshold
+
+        # computing the upper limits for the non significant lines
+        abslines_eqw_upper = fitlines.get_eqwidth_uls(mask_abslines_sign, abslines_bshift, sign_widths_arr,
+                                                      pre_delete=True)
+
+        # here will need to reload an accurate model before updating the fitcomps
+        '''HTML TABLE FOR the pdf summary'''
+
+        abslines_table_str = html_table_maker()
+
+        with open(outdir + '/' + epoch_observ[0] + '_abslines_table.txt', 'w+') as abslines_table_file:
+            abslines_table_file.write(abslines_table_str)
+
+            Xset.logChatter = 10
+
+        # storing line string
+        autofit_store_str = epoch_observ[0] + '\t' + \
+                            str(abslines_eqw.tolist()) + '\t' + str(abslines_bshift.tolist()) + '\t' + str(
+            abslines_delchi.tolist()) + '\t' + \
+                            str(abslines_flux.tolist()) + '\t' + str(abslines_sign.tolist()) + '\t' + str(
+            abslines_eqw_upper.tolist()) + '\t' + \
+                            str(abslines_em_overlap.tolist()) + '\t' + str(abslines_width.tolist()) + '\t' + str(
+            abslines_bshift_distinct.tolist()) + '\t' + \
+                            str(autofit_parerrors.tolist()) + '\t' + str(autofit_parnames.tolist()) + '\n'
+
+        '''Storing the results'''
+
+        autofit_store_header = 'Observ_id\tabslines_eqw\tabslines_bshift\tablines_delchi\tabslines_flux\t' + \
+                               'abslines_sign\tabslines_eqw_upper\tabslines_em_overlap\tabslines_width\tabslines_bshift_distinct' + \
+                               '\tautofit_parerrors\tautofit_parnames\n'
+
+        file_edit(path=autofit_store_path, line_id=epoch_observ[0], line_data=autofit_store_str,
+                  header=autofit_store_header)
+
+        '''PDF creation'''
+
+        if write_pdf:
+            pdf_summary(epoch_observ, fit_ok=True, summary_epoch=fill_result('Line detection complete.'))
+
+        # closing the logfile for both access and Xspec
+        curr_logfile.close()
+        Xset.closeLog()
+
+        return fill_result('Line detection complete.')
+
     #creating the continuum model list
     comp_cont=model_list(cont_model)
 
@@ -1766,578 +1802,651 @@ def line_detect(epoch_id):
         except:
             isbg_grp+=[False]
 
-    '''Continuum fits'''
 
-    def high_fit(broad_absval=None):
+    abslines_table_str=None
 
-        '''
-        high energy fit and flux array computation
-        '''
+    #reload previously stored autofits to gain time if asked to
+    if reload_autofit and os.path.isfile(outdir+'/'+epoch_observ[0]+'_fitmod_autofit.pkl'):
 
-        AllModels.clear()
-        xscorpeon.load(scorpeon_save=data_broad.scorpeon,frozen=True)
 
-        print('\nComputing line continuum fit...')
-        AllData.notice('all')
-        AllData.ignore('bad')
+        #reloading the broad band fit and model and re-storing associed variables
+        fitlines_broad=load_fitmod(outdir + '/' + epoch_observ[0] + '_fitmod_broadband_post_auto.pkl')
+        Xset.restore(outdir+'/'+epoch_observ[0]+'_mod_broad_band_post_auto.xcm')
+        fitlines_broad.update_fitcomps()
+        data_broad=allmodel_data()
 
-        #limiting to the line search energy range
-        AllData.ignore('**-'+str(line_cont_range[0])+' '+str(line_cont_range[1])+'-**')
-
-        #if the stat is low we don't do the autofit anyway so we'd rather get the best fit possible
-        if not flag_lowSNR_line:
-            #ignoring the 6-8keV energy range for the fit to avoid contamination by lines
-            AllData.ignore(line_cont_ig)
-
-        #comparing different continuum possibilities with a broken powerlaw or a combination of diskbb and powerlaw
-
-        #creating the automatic fit class for the standard continuum
-        if broad_absval!=0:
-            fitcont_high=fitmod(comp_cont,curr_logfile,curr_logfile_write,absval=broad_absval)
+        # re fixing the absorption parameter and storing the value to retain it
+        # if the absorption gets taken off and tested again
+        if 'glob_phabs' in fitlines_broad.name_cont_complist and fitlines_broad.glob_phabs.included:
+            broad_absval = AllModels(1)(fitlines_broad.glob_phabs.parlist[0]).values[0]
+            AllModels(1)(fitlines_broad.glob_phabs.parlist[0]).frozen = True
         else:
-            #creating the fitcont without the absorption component if it didn't exist in the broad model
-            fitcont_high=fitmod([elem for elem in comp_cont if elem!='glob_phabs'],curr_logfile,curr_logfile_write)
+            broad_absval = 0
 
-        # try:
-            #fitting
-        fitcont_high.global_fit(split_fit=split_fit)
+        #reloading the hid band fit and model and re-storing associed variables
+        fitlines_broad=load_fitmod(outdir + '/' + epoch_observ[0] + '_fitmod_broadband_post_auto.pkl')
+        Xset.restore(outdir+'/'+epoch_observ[0]+'_mod_broadhid_post_auto.xcm')
+        fitlines_broad.update_fitcomps()
+        data_broad=allmodel_data()
 
-        # mod_fitcont=allmodel_data()
+        if os.path.isfile(outdir + '/' + epoch_observ[0] + '_fitmod_broadhid_post_auto.pkl'):
+            fitlines_hid=load_fitmod(outdir + '/' + epoch_observ[0] + '_fitmod_broadhid_post_auto.pkl')
+            Xset.restore(outdir+'/'+epoch_observ[0]+'_mod_broadhid_post_auto.xcm')
+            fitlines_hid.update_fitcomps()
+            data_broadhid=allmodel_data()
 
-        chi2_cont=Fit.statistic
-        # except:
-        #     pass
-        #     chi2_cont=0
-
-        # AllModels.clear()
-        # xscorpeon.load(scorpeon_save=data_broad.scorpeon,frozen=True)
-        #not used currently
-        # #with the broken powerlaw continuum
-        # fitcont_high_bkn=fitmod(comp_cont_bkn,curr_logfile)
-
-        # try:
-        #     #fitting
-        #     fitcont_high_bkn.global_fit(split_fit=split_fit))
-
-        #     chi2_cont_bkn=Fit.statistic
-        # except:
-        #     pass
-        chi2_cont_bkn=0
-
-        if chi2_cont==0 and chi2_cont_bkn==0:
-
-            print('\nProblem during line continuum fit. Skipping line detection for this exposure...')
-            return ['\nProblem during line continuum fit. Skipping line detection for this exposure...']
-        # else:
-        #     if chi2_cont<chi2_cont_bkn:
-        #         model_load(mod_fitcont)
-
-
-        #renoticing the line energy range
-        if line_cont_ig!='':
-            AllData.notice(line_cont_ig)
-
-        #saving the model data to reload it after the broad band fit if needed
-        mod_high_dat=allmodel_data()
-
-        fitcont_high.save()
-
-        #rescaling before the prints to avoid unecessary loggings in the screen
-        rescale(auto=True)
-
-        #screening the xspec plot and the model informations for future use
-        Plot_screen("ldata,ratio,delchi",outdir+'/'+epoch_observ[0]+"_screen_xspec_broadband_linecont",
-                    includedlist=fitcont_high.includedlist)
-
-        #saving the model str
-        catch_model_str(curr_logfile,savepath=outdir+'/'+epoch_observ[0]+'_mod_broadband_linecont.txt')
-
-        #deleting the model file since Xset doesn't have a built-in overwrite argument and crashes when asking manual input
-        if os.path.isfile(outdir+'/'+epoch_observ[0]+'_mod_broadband_linecont.xcm'):
-            os.remove(outdir+'/'+epoch_observ[0]+'_mod_broadband_linecont.xcm')
-
-        #storing the current configuration and model
-        Xset.save(outdir+'/'+epoch_observ[0]+'_mod_broadband_linecont.xcm',info='a')
-
-        #storing the class
-        fitcont_high.dump(outdir+'/'+epoch_observ[0]+'_fitmod_broadband_linecont.pkl')
-
-        return [mod_high_dat,fitcont_high]
-
-    def store_fit(mode='broadband',fitmod=None):
-
-        '''
-        plots and saves various informations about a fit
-        '''
-
-        #Since the automatic rescaling goes haywire when using the add command, we manually rescale (with our own custom command)
-        rescale(auto=True)
-
-        Plot_screen("ldata,ratio,delchi",outdir+'/'+epoch_observ[0]+'_screen_xspec_'+mode,
-                    includedlist=None if fitmod is None else fitmod.includedlist)
-
-        #saving the model str
-        catch_model_str(curr_logfile,savepath=outdir+'/'+epoch_observ[0]+'_mod_'+mode+'.txt')
-
-        if os.path.isfile(outdir+'/'+epoch_observ[0]+'_mod_'+mode+'.xcm'):
-            os.remove(outdir+'/'+epoch_observ[0]+'_mod_'+mode+'.xcm')
-
-        #storing the current configuration and model
-        Xset.save(outdir+'/'+epoch_observ[0]+'_mod_'+mode+'.xcm',info='a')
-
-    def hid_fit_infos(fitmodel,broad_absval,post_autofit=False):
-
-        '''
-        computes various informations about the fit
-        '''
-
-        if post_autofit:
-            add_str='_post_auto'
         else:
-            add_str=''
-        #freezing what needs to be to avoid problems with the Chain
-        calc_error(curr_logfile,param='1-'+str(AllModels(1).nParameters*AllData.nGroups),timeout=60,freeze_pegged=True,indiv=True)
+            fitlines_hid=fitlines_broad
+            # refitting in hid band for the HID values
+            AllData.notice('all')
+            AllData.ignore('bad')
+            AllData.ignore('**-' + str(hid_cont_range[0]) + ' ' + str(hid_cont_range[1]) + '-**')
 
-        Fit.perform()
+            # fitting the model to the new energy band first
+            calc_fit(logfile=fitlines_hid.logfile)
 
-        fitmodel.update_fitcomps()
+            # autofit
+            fitlines_hid.global_fit(chain=True, lock_lines=True, directory=outdir, observ_id=epoch_observ[0],
+                                split_fit=split_fit)
 
-        #storing the flux and HR with the absorption to store the errors
-        #We can only show one flux in the HID so we use the first one, which should be the most 'precise' with our order (pn first)
+            fitlines_hid.dump(outdir + '/' + epoch_observ[0] + '_fitmod_broadhid_post_auto.pkl')
 
-        AllChains.defLength=50000
-        AllChains.defBurn=20000
-        AllChains.defWalkers=10
-
-        #deleting the previous chain to avoid conflicts
         AllChains.clear()
+        main_spflux = hid_fit_infos(fitlines_hid, broad_absval, post_autofit=True)
 
-        if os.path.exists(outdir+'/'+epoch_observ[0]+'_chain_hid'+add_str+'.fits'):
-            os.remove(outdir+'/'+epoch_observ[0]+'_chain_hid'+add_str+'.fits')
 
-        try:
-            #Creating a chain to avoid problems when computing the errors
-            Chain(outdir+'/'+epoch_observ[0]+'_chain_hid'+add_str+'.fits')
-        except:
-            #trying to freeze pegged parameters again in case the very last fit created peggs
+        #reloading the continuum models to get the saves back and compute the continuum infos
+        Xset.restore(outdir+'/'+epoch_observ[0]+'_mod_autofit.xcm')
 
+        cont_abspeak,cont_peak_points,cont_peak_widths,cont_peak_delchis,cont_peak_eqws,chi_dict_init=\
+            narrow_line_search(data_mod_high,'cont',line_search_e=line_search_e,line_search_norm=line_search_norm,
+                               e_sat_low=e_sat_low,peak_thresh=peak_thresh,peak_clean=peak_clean,
+                               line_cont_range=line_cont_range,trig_interval=trig_interval,
+                               scorpeon_save=data_broad.scorpeon)
+
+        #loading the autofit model
+        Xset.restore(outdir+'/'+epoch_observ[0]+'_mod_autofit.xcm')
+
+        #reloading the fitlines class
+        fitlines=load_fitmod(outdir+'/'+epoch_observ[0]+'_fitmod_autofit.pkl')
+
+        #updating fitcomps
+        fitlines.update_fitcomps()
+
+    else:
+
+        '''Continuum fits'''
+        def high_fit(broad_absval=None):
+
+            '''
+            high energy fit and flux array computation
+            '''
+
+            AllModels.clear()
+            xscorpeon.load(scorpeon_save=data_broad.scorpeon,frozen=True)
+
+            print('\nComputing line continuum fit...')
+            AllData.notice('all')
+            AllData.ignore('bad')
+
+            #limiting to the line search energy range
+            AllData.ignore('**-'+str(line_cont_range[0])+' '+str(line_cont_range[1])+'-**')
+
+            #if the stat is low we don't do the autofit anyway so we'd rather get the best fit possible
+            if not flag_lowSNR_line:
+                #ignoring the 6-8keV energy range for the fit to avoid contamination by lines
+                AllData.ignore(line_cont_ig)
+
+            #comparing different continuum possibilities with a broken powerlaw or a combination of diskbb and powerlaw
+
+            #creating the automatic fit class for the standard continuum
+            if broad_absval!=0:
+                fitcont_high=fitmod(comp_cont,curr_logfile,curr_logfile_write,absval=broad_absval)
+            else:
+                #creating the fitcont without the absorption component if it didn't exist in the broad model
+                fitcont_high=fitmod([elem for elem in comp_cont if elem!='glob_phabs'],curr_logfile,curr_logfile_write)
+
+            # try:
+                #fitting
+            fitcont_high.global_fit(split_fit=split_fit)
+
+            # mod_fitcont=allmodel_data()
+
+            chi2_cont=Fit.statistic
+            # except:
+            #     pass
+            #     chi2_cont=0
+
+            # AllModels.clear()
+            # xscorpeon.load(scorpeon_save=data_broad.scorpeon,frozen=True)
+            #not used currently
+            # #with the broken powerlaw continuum
+            # fitcont_high_bkn=fitmod(comp_cont_bkn,curr_logfile)
+
+            # try:
+            #     #fitting
+            #     fitcont_high_bkn.global_fit(split_fit=split_fit))
+
+            #     chi2_cont_bkn=Fit.statistic
+            # except:
+            #     pass
+            chi2_cont_bkn=0
+
+            if chi2_cont==0 and chi2_cont_bkn==0:
+
+                print('\nProblem during line continuum fit. Skipping line detection for this exposure...')
+                return ['\nProblem during line continuum fit. Skipping line detection for this exposure...']
+            # else:
+            #     if chi2_cont<chi2_cont_bkn:
+            #         model_load(mod_fitcont)
+
+
+            #renoticing the line energy range
+            if line_cont_ig!='':
+                AllData.notice(line_cont_ig)
+
+            #saving the model data to reload it after the broad band fit if needed
+            mod_high_dat=allmodel_data()
+
+            fitcont_high.save()
+
+            #rescaling before the prints to avoid unecessary loggings in the screen
+            rescale(auto=True)
+
+            #screening the xspec plot and the model informations for future use
+            Plot_screen("ldata,ratio,delchi",outdir+'/'+epoch_observ[0]+"_screen_xspec_broadband_linecont",
+                        includedlist=fitcont_high.includedlist)
+
+            #saving the model str
+            catch_model_str(curr_logfile,savepath=outdir+'/'+epoch_observ[0]+'_mod_broadband_linecont.txt')
+
+            #deleting the model file since Xset doesn't have a built-in overwrite argument and crashes when asking manual input
+            if os.path.isfile(outdir+'/'+epoch_observ[0]+'_mod_broadband_linecont.xcm'):
+                os.remove(outdir+'/'+epoch_observ[0]+'_mod_broadband_linecont.xcm')
+
+            #storing the current configuration and model
+            Xset.save(outdir+'/'+epoch_observ[0]+'_mod_broadband_linecont.xcm',info='a')
+
+            #storing the class
+            fitcont_high.dump(outdir+'/'+epoch_observ[0]+'_fitmod_broadband_linecont.pkl')
+
+            return [mod_high_dat,fitcont_high]
+
+        def store_fit(mode='broadband',fitmod=None):
+
+            '''
+            plots and saves various informations about a fit
+            '''
+
+            #Since the automatic rescaling goes haywire when using the add command, we manually rescale (with our own custom command)
+            rescale(auto=True)
+
+            Plot_screen("ldata,ratio,delchi",outdir+'/'+epoch_observ[0]+'_screen_xspec_'+mode,
+                        includedlist=None if fitmod is None else fitmod.includedlist)
+
+            #saving the model str
+            catch_model_str(curr_logfile,savepath=outdir+'/'+epoch_observ[0]+'_mod_'+mode+'.txt')
+
+            if os.path.isfile(outdir+'/'+epoch_observ[0]+'_mod_'+mode+'.xcm'):
+                os.remove(outdir+'/'+epoch_observ[0]+'_mod_'+mode+'.xcm')
+
+            #storing the current configuration and model
+            Xset.save(outdir+'/'+epoch_observ[0]+'_mod_'+mode+'.xcm',info='a')
+
+        def hid_fit_infos(fitmodel,broad_absval,post_autofit=False):
+
+            '''
+            computes various informations about the fit
+            '''
+
+            if post_autofit:
+                add_str='_post_auto'
+            else:
+                add_str=''
+            #freezing what needs to be to avoid problems with the Chain
             calc_error(curr_logfile,param='1-'+str(AllModels(1).nParameters*AllData.nGroups),timeout=60,freeze_pegged=True,indiv=True)
 
             Fit.perform()
 
             fitmodel.update_fitcomps()
-            #Creating a chain to avoid problems when computing the errors
-            Chain(outdir+'/'+epoch_observ[0]+'_chain_hid'+add_str+'.fits')
 
-        #computing and storing the flux for the full luminosity and two bands for the HR
-        spflux_single=[None]*5
+            #storing the flux and HR with the absorption to store the errors
+            #We can only show one flux in the HID so we use the first one, which should be the most 'precise' with our order (pn first)
 
-        #we still only compute the flux of the first model even with NICER because the rest is BG
-        AllModels.calcFlux(str(hid_cont_range[0])+' '+str(hid_cont_range[1])+" err 1000 90")
-        spflux_single[0]=AllData(1).flux[0],AllData(1).flux[0]-AllData(1).flux[1],AllData(1).flux[2]-AllData(1).flux[0]
-        AllModels.calcFlux("3. 6. err 1000 90")
-        spflux_single[1]=AllData(1).flux[0],AllData(1).flux[0]-AllData(1).flux[1],AllData(1).flux[2]-AllData(1).flux[0]
-        AllModels.calcFlux("6. 10. err 1000 90")
-        spflux_single[2]=AllData(1).flux[0],AllData(1).flux[0]-AllData(1).flux[1],AllData(1).flux[2]-AllData(1).flux[0]
-        AllModels.calcFlux("1. 3. err 1000 90")
-        spflux_single[3]=AllData(1).flux[0],AllData(1).flux[0]-AllData(1).flux[1],AllData(1).flux[2]-AllData(1).flux[0]
-        AllModels.calcFlux("3. 10. err 1000 90")
-        spflux_single[4]=AllData(1).flux[0],AllData(1).flux[0]-AllData(1).flux[1],AllData(1).flux[2]-AllData(1).flux[0]
+            AllChains.defLength=50000
+            AllChains.defBurn=20000
+            AllChains.defWalkers=10
 
-        spflux_single=np.array(spflux_single)
+            #deleting the previous chain to avoid conflicts
+            AllChains.clear()
 
-        AllChains.clear()
+            if os.path.exists(outdir+'/'+epoch_observ[0]+'_chain_hid'+add_str+'.fits'):
+                os.remove(outdir+'/'+epoch_observ[0]+'_chain_hid'+add_str+'.fits')
 
-        if line_cont_ig!='':
-            AllData.notice(line_cont_ig)
+            try:
+                #Creating a chain to avoid problems when computing the errors
+                Chain(outdir+'/'+epoch_observ[0]+'_chain_hid'+add_str+'.fits')
+            except:
+                #trying to freeze pegged parameters again in case the very last fit created peggs
 
-        store_fit(mode='broadhid'+add_str,fitmod=fitmodel)
+                calc_error(curr_logfile,param='1-'+str(AllModels(1).nParameters*AllData.nGroups),timeout=60,freeze_pegged=True,indiv=True)
 
-        #storing the fitmod class into a file
-        fitmodel.dump(outdir+'/'+epoch_observ[0]+'_fitmod_broadhid'+add_str+'.pkl')
+                Fit.perform()
 
-        #taking off the absorption (if it is in the final components) before computing the flux
-        if broad_absval!=0:
-            if 'glob_phabs' in [elem.compname for elem in [comp for comp in fitmodel.includedlist if comp is not None]]:
-                if fitmodel.glob_phabs.included:
-                    fitmodel.glob_phabs.xcomps[0].nH=0
-            elif 'cont_phabs' in [elem.compname for elem in [comp for comp in fitmodel.includedlist if comp is not None]]:
-                if fitmodel.cont_phabs.included:
-                    fitmodel.cont_phabs.xcomps[0].nH=0
+                fitmodel.update_fitcomps()
+                #Creating a chain to avoid problems when computing the errors
+                Chain(outdir+'/'+epoch_observ[0]+'_chain_hid'+add_str+'.fits')
 
-        #and replacing the main values with the unabsorbed flux values
-        #(conservative choice since the other uncertainties are necessarily higher)
-        AllModels.calcFlux(str(hid_cont_range[0])+' '+str(hid_cont_range[1]))
-        spflux_single[0][0]=AllData(1).flux[0]
-        AllModels.calcFlux("3. 6.")
-        spflux_single[1][0]=AllData(1).flux[0]
-        AllModels.calcFlux("6. 10.")
-        spflux_single[2][0]=AllData(1).flux[0]
-        AllModels.calcFlux("1. 3.")
-        spflux_single[3][0]=AllData(1).flux[0]
-        AllModels.calcFlux("3. 10.")
-        spflux_single[4][0]=AllData(1).flux[0]
+            #computing and storing the flux for the full luminosity and two bands for the HR
+            spflux_single=[None]*5
 
-        spflux_single=spflux_single.T
+            #we still only compute the flux of the first model even with NICER because the rest is BG
+            AllModels.calcFlux(str(hid_cont_range[0])+' '+str(hid_cont_range[1])+" err 1000 90")
+            spflux_single[0]=AllData(1).flux[0],AllData(1).flux[0]-AllData(1).flux[1],AllData(1).flux[2]-AllData(1).flux[0]
+            AllModels.calcFlux("3. 6. err 1000 90")
+            spflux_single[1]=AllData(1).flux[0],AllData(1).flux[0]-AllData(1).flux[1],AllData(1).flux[2]-AllData(1).flux[0]
+            AllModels.calcFlux("6. 10. err 1000 90")
+            spflux_single[2]=AllData(1).flux[0],AllData(1).flux[0]-AllData(1).flux[1],AllData(1).flux[2]-AllData(1).flux[0]
+            AllModels.calcFlux("1. 3. err 1000 90")
+            spflux_single[3]=AllData(1).flux[0],AllData(1).flux[0]-AllData(1).flux[1],AllData(1).flux[2]-AllData(1).flux[0]
+            AllModels.calcFlux("3. 10. err 1000 90")
+            spflux_single[4]=AllData(1).flux[0],AllData(1).flux[0]-AllData(1).flux[1],AllData(1).flux[2]-AllData(1).flux[0]
 
-        #reloading the absorption values to avoid modifying the fit
-        if broad_absval!=0:
-            if 'glob_phabs' in [elem.compname for elem in [comp for comp in fitmodel.includedlist if comp is not None]]:
-                if fitmodel.glob_phabs.included:
-                    fitmodel.glob_phabs.xcomps[0].nH=broad_absval
-            elif 'cont_phabs' in [elem.compname for elem in [comp for comp in fitmodel.includedlist if comp is not None]]:
-                if fitmodel.cont_phabs.included:
-                    fitmodel.cont_phabs.xcomps[0].nH=broad_absval
-
-        return spflux_single
-
-    def broad_fit():
-
-        '''Broad band fit to get the HR ratio and Luminosity'''
-
-        #first broad band fit in e_sat_low-10 to see the spectral shape
-        print('\nComputing broad band fit for visualisation purposes...')
-        AllData.notice('all')
-        AllData.ignore('bad')
-        AllData.ignore('**-'+str(e_sat_low)+' '+str(e_sat_high)+'-**')
-
-        #if the stat is low we don't do the autofit anyway so we'd rather get the best fit possible
-        if not flag_lowSNR_line:
-            AllData.ignore(line_cont_ig)
-
-
-
-        #creating the automatic fit class for the standard continuum
-        fitcont_broad=fitmod(comp_cont,curr_logfile,curr_logfile_write)
-
-        # try:
-        #fitting
-        fitcont_broad.global_fit(split_fit=split_fit)
-
-        #unfreezing the scorpeon model by resetting it
-        xscorpeon.load()
-
-        #refitting
-        fitcont_broad.global_fit(split_fit=False)
-
-        mod_fitcont=allmodel_data()
-
-        chi2_cont=Fit.statistic
-        # except:
-        #     pass
-        #     chi2_cont=0
-
-        # AllModels.clear()
-        # xscorpeon.load()
-        # #with the broken powerlaw continuum
-        # fitcont_broad_bkn=fitmod(comp_cont_bkn,curr_logfile)
-
-        # try:
-        #     #fitting
-        #     fitcont_broad_bkn.global_fit(split_fit=split_fit))
-
-        #     chi2_cont_bkn=Fit.statistic
-        # except:
-        #     pass
-
-        chi2_cont_bkn=0
-
-        if chi2_cont==0 and chi2_cont_bkn==0:
-
-            print('\nProblem during broad band fit. Skipping line detection for this exposure...')
-            return ['\nProblem during broad band fit. Skipping line detection for this exposure...']
-        # else:
-        #     if chi2_cont<chi2_cont_bkn:
-        #         model_load(mod_fitcont)
-
-        #storing the absorption of the broad fit if there is absorption
-        if 'glob_phabs' in fitcont_broad.name_complist and fitcont_broad.glob_phabs.included:
-            broad_absval=AllModels(1)(fitcont_broad.glob_phabs.parlist[0]).values[0]
-        else:
-            broad_absval=0
-
-        if line_cont_ig!='':
-            AllData.notice(line_cont_ig)
-
-        store_fit(mode='broadband',fitmod=fitcont_broad)
-
-        #storing the class
-        fitcont_broad.dump(outdir+'/'+epoch_observ[0]+'_fitmod_broadband.pkl')
-
-        #saving the model
-        data_broad=allmodel_data()
-        print('\nComputing HID broad fit...')
-        AllModels.clear()
-
-        #reloading the scorpeon save from the broad fit and freezing it to avoid further variations
-        xscorpeon.load(scorpeon_save=data_broad.scorpeon,frozen=True)
-
-        AllData.notice('all')
-        AllData.ignore('**-'+str(hid_cont_range[0])+' '+str(hid_cont_range[1])+'-**')
-        AllData.ignore('bad')
-
-        #if the stat is low we don't do the autofit anyway so we'd rather get the best fit possible
-        if not flag_lowSNR_line:
-            AllData.ignore(line_cont_ig)
-
-        #creating the automatic fit class for the standard continuum
-        if broad_absval!=0:
-            fitcont_hid=fitmod(comp_cont,curr_logfile,curr_logfile_write,absval=broad_absval)
-        else:
-            #creating the fitcont without the absorption component if it didn't exist in the broad model
-            fitcont_hid=fitmod([elem for elem in comp_cont if elem!='glob_phabs'],curr_logfile,curr_logfile_write)
-
-        # try:
-        #fitting
-        fitcont_hid.global_fit(split_fit=split_fit)
-
-        mod_fitcont=allmodel_data()
-
-        chi2_cont=Fit.statistic
-        # except:
-        #     pass
-        #     chi2_cont=0
-
-        # AllModels.clear()
-        # xscorpeon.load()
-        # #with the broken powerlaw continuum
-        # fitcont_hid_bkn=fitmod(comp_cont_bkn,curr_logfile)
-
-        # try:
-        #     #fitting
-        #     fitcont_hid_bkn.global_fit(split_fit=split_fit))
-
-        #     chi2_cont_bkn=Fit.statistic
-        # except:
-        #     pass
-
-        chi2_cont_bkn=0
-
-        if chi2_cont==0 and chi2_cont_bkn==0:
-
-            print('\nProblem during hid band fit. Skipping line detection for this exposure...')
-            return ['\nProblem during hid band fit. Skipping line detection for this exposure...']
-        # else:
-        #     if chi2_cont<chi2_cont_bkn:
-        #         model_load(mod_fitcont)
-
-        spflux_single=hid_fit_infos(fitcont_hid,broad_absval)
-
-        return spflux_single,broad_absval,data_broad
-
-
-    AllModels.clear()
-    xscorpeon.load(frozen=True)
-
-    result_broad_fit=broad_fit()
-
-    if len(result_broad_fit)==1:
-        return fill_result(result_broad_fit)
-    else:
-        main_spflux,broad_absval,data_broad=result_broad_fit
-
-    result_high_fit=high_fit(broad_absval)
-
-    #if the function returns an array of length 1, it means it returned an error message
-    if len(result_high_fit)==1:
-        return fill_result(result_high_fit)
-    else:
-        data_mod_high,fitmod_cont=result_high_fit
-
-    #re-limiting to the line search energy range
-    AllData.notice('all')
-    AllData.ignore('bad')
-    AllData.ignore('**-'+str(line_cont_range[0])+' '+str(line_cont_range[1])+'-**')
-
-    #changing back to the auto rescale of xspec
-    Plot.commands=()
-    Plot.addCommand('rescale')
-
-    print('\nStarting line search...')
-
-
-    cont_abspeak,cont_peak_points,cont_peak_widths,cont_peak_delchis,cont_peak_eqws,chi_dict_init=\
-        narrow_line_search(data_mod_high,'cont',line_search_e=line_search_e,line_search_norm=line_search_norm,
-                           e_sat_low=e_sat_low,peak_thresh=peak_thresh,peak_clean=peak_clean,
-                           line_cont_range=line_cont_range,trig_interval=trig_interval,
-                           scorpeon_save=data_broad.scorpeon)
-
-    plot_line_search(chi_dict_init, outdir, sat,suffix='cont', epoch_observ=epoch_observ)
-
-    '''
-    Automatic line fitting
-    '''
-
-    #### Autofit
-
-    abslines_table_str=None
-
-    if autofit and (cont_abspeak or force_autofit) and not flag_lowSNR_line:
-
-        '''
-        See the fitmod code for a detailed description of the auto fit process
-        '''
-
-        #reloading the continuum fitcomp
-        fitmod_cont.reload()
-
-        #feching the list of components we're gonna use
-        comp_lines=model_list(autofit_model)
-
-        #creating a new logfile for the autofit
-        curr_logfile_write=Xset.openLog(outdir+'/'+epoch_observ[0]+'_xspec_log_autofit.log')
-        curr_logfile_write.reconfigure(line_buffering=True)
-        curr_logfile=open(curr_logfile_write.name,'r')
-
-        #creating the fitmod object with the desired componets (we currently do not use comp groups)
-        fitlines=fitmod(comp_lines,curr_logfile,curr_logfile_write,prev_fitmod=fitmod_cont)
-
-        #global fit
-        fitlines.global_fit(chain=True,directory=outdir,observ_id=epoch_observ[0],split_fit=split_fit,
-                            no_abslines=no_abslines)
-
-        #storing the final fit
-        data_autofit=allmodel_data()
-
-        '''
-        ####Refitting the continuum
-        
-        if refit_cont is set to True, we add a 3 step process to better estimate the continuum from the autofit lines.
-        
-        First, we relaunch a global fit iteration while blocking all line parameters in the broad band.
-        We then refreeze the absorption and relaunch two global fit iterations in 3-10 (for the HID) and 4-10 (for the autofit continuum)
-        '''
-
-        if refit_cont:
+            spflux_single=np.array(spflux_single)
 
             AllChains.clear()
 
-            #saving the initial autofit result for checking purposes
-            store_fit(mode='autofit_init',fitmod=fitlines)
+            if line_cont_ig!='':
+                AllData.notice(line_cont_ig)
+
+            store_fit(mode='broadhid'+add_str,fitmod=fitmodel)
 
             #storing the fitmod class into a file
-            fitlines.dump(outdir+'/'+epoch_observ[0]+'_fitmod_autofit_init.pkl')
+            fitmodel.dump(outdir+'/'+epoch_observ[0]+'_fitmod_broadhid'+add_str+'.pkl')
 
-            #updating the logfile for the second round of fitting
-            curr_logfile_write=Xset.openLog(outdir+'/'+epoch_observ[0]+'_xspec_log_autofit_recont.log')
-            curr_logfile_write.reconfigure(line_buffering=True)
-            curr_logfile=open(curr_logfile_write.name,'r')
+            #taking off the absorption (if it is in the final components) before computing the flux
+            if broad_absval!=0:
+                if 'glob_phabs' in [elem.compname for elem in [comp for comp in fitmodel.includedlist if comp is not None]]:
+                    if fitmodel.glob_phabs.included:
+                        fitmodel.glob_phabs.xcomps[0].nH=0
+                elif 'cont_phabs' in [elem.compname for elem in [comp for comp in fitmodel.includedlist if comp is not None]]:
+                    if fitmodel.cont_phabs.included:
+                        fitmodel.cont_phabs.xcomps[0].nH=0
 
-            #updating it in the fitmod
-            fitlines.logfile=curr_logfile
-            fitlines.logfile_write=curr_logfile_write
-            fitlines.update_fitcomps()
+            #and replacing the main values with the unabsorbed flux values
+            #(conservative choice since the other uncertainties are necessarily higher)
+            AllModels.calcFlux(str(hid_cont_range[0])+' '+str(hid_cont_range[1]))
+            spflux_single[0][0]=AllData(1).flux[0]
+            AllModels.calcFlux("3. 6.")
+            spflux_single[1][0]=AllData(1).flux[0]
+            AllModels.calcFlux("6. 10.")
+            spflux_single[2][0]=AllData(1).flux[0]
+            AllModels.calcFlux("1. 3.")
+            spflux_single[3][0]=AllData(1).flux[0]
+            AllModels.calcFlux("3. 10.")
+            spflux_single[4][0]=AllData(1).flux[0]
 
-            #freezing every line component
-            for comp in [elem for elem in fitlines.includedlist if elem is not None]:
-                if comp.line:
+            spflux_single=spflux_single.T
 
-                    freeze(parlist=comp.unlocked_pars)
+            #reloading the absorption values to avoid modifying the fit
+            if broad_absval!=0:
+                if 'glob_phabs' in [elem.compname for elem in [comp for comp in fitmodel.includedlist if comp is not None]]:
+                    if fitmodel.glob_phabs.included:
+                        fitmodel.glob_phabs.xcomps[0].nH=broad_absval
+                elif 'cont_phabs' in [elem.compname for elem in [comp for comp in fitmodel.includedlist if comp is not None]]:
+                    if fitmodel.cont_phabs.included:
+                        fitmodel.cont_phabs.xcomps[0].nH=broad_absval
 
-            #refitting in broad band for the nH
+            return spflux_single
+
+        def broad_fit():
+
+            '''Broad band fit to get the HR ratio and Luminosity'''
+
+            #first broad band fit in e_sat_low-10 to see the spectral shape
+            print('\nComputing broad band fit for visualisation purposes...')
             AllData.notice('all')
             AllData.ignore('bad')
             AllData.ignore('**-'+str(e_sat_low)+' '+str(e_sat_high)+'-**')
 
-            #thawing the absorption to allow improving its value
-            if 'glob_phabs' in fitlines.name_cont_complist and fitlines.glob_phabs.included:
-                AllModels(1)(fitlines.glob_phabs.parlist[0]).frozen=False
+            #if the stat is low we don't do the autofit anyway so we'd rather get the best fit possible
+            if not flag_lowSNR_line:
+                AllData.ignore(line_cont_ig)
 
-            #we reset the value of the fixed abs to allow it to be free if it gets deleted and put again
-            fitlines.fixed_abs=None
 
-            #fitting the model to the new energy band first
-            calc_fit(logfile=fitlines.logfile)
 
-            #autofit
-            fitlines.global_fit(chain=True,lock_lines=True,directory=outdir,observ_id=epoch_observ[0],split_fit=split_fit)
+            #creating the automatic fit class for the standard continuum
+            fitcont_broad=fitmod(comp_cont,curr_logfile,curr_logfile_write)
 
-            AllChains.clear()
+            # try:
+            #fitting
+            fitcont_broad.global_fit(split_fit=split_fit)
 
-            store_fit(mode='broadband_post_auto',fitmod=fitlines)
+            #unfreezing the scorpeon model by resetting it
+            xscorpeon.load()
 
-            #storing the class
-            fitlines.dump(outdir+'/'+epoch_observ[0]+'_fitmod_broadband_post_auto.pkl')
+            #refitting
+            fitcont_broad.global_fit(split_fit=False)
 
-            #re fixing the absorption parameter and storing the value to retain it if the absorption gets taken off and tested again
+            mod_fitcont=allmodel_data()
 
-            if 'glob_phabs' in fitlines.name_cont_complist and fitlines.glob_phabs.included:
-                broad_absval=AllModels(1)(fitlines.glob_phabs.parlist[0]).values[0]
-                AllModels(1)(fitlines.glob_phabs.parlist[0]).frozen=True
+            chi2_cont=Fit.statistic
+            # except:
+            #     pass
+            #     chi2_cont=0
+
+            # AllModels.clear()
+            # xscorpeon.load()
+            # #with the broken powerlaw continuum
+            # fitcont_broad_bkn=fitmod(comp_cont_bkn,curr_logfile)
+
+            # try:
+            #     #fitting
+            #     fitcont_broad_bkn.global_fit(split_fit=split_fit))
+
+            #     chi2_cont_bkn=Fit.statistic
+            # except:
+            #     pass
+
+            chi2_cont_bkn=0
+
+            if chi2_cont==0 and chi2_cont_bkn==0:
+
+                print('\nProblem during broad band fit. Skipping line detection for this exposure...')
+                return ['\nProblem during broad band fit. Skipping line detection for this exposure...']
+            # else:
+            #     if chi2_cont<chi2_cont_bkn:
+            #         model_load(mod_fitcont)
+
+            #storing the absorption of the broad fit if there is absorption
+            if 'glob_phabs' in fitcont_broad.name_complist and fitcont_broad.glob_phabs.included:
+                broad_absval=AllModels(1)(fitcont_broad.glob_phabs.parlist[0]).values[0]
             else:
                 broad_absval=0
 
-            fitlines.fixed_abs=broad_absval
+            if line_cont_ig!='':
+                AllData.notice(line_cont_ig)
 
-            #refitting in hid band for the HID values
+            store_fit(mode='broadband',fitmod=fitcont_broad)
+
+            #storing the class
+            fitcont_broad.dump(outdir+'/'+epoch_observ[0]+'_fitmod_broadband.pkl')
+
+            #saving the model
+            data_broad=allmodel_data()
+            print('\nComputing HID broad fit...')
+            AllModels.clear()
+
+            #reloading the scorpeon save from the broad fit and freezing it to avoid further variations
+            xscorpeon.load(scorpeon_save=data_broad.scorpeon,frozen=True)
+
             AllData.notice('all')
-            AllData.ignore('bad')
             AllData.ignore('**-'+str(hid_cont_range[0])+' '+str(hid_cont_range[1])+'-**')
-
-            #fitting the model to the new energy band first
-            calc_fit(logfile=fitlines.logfile)
-
-            #autofit
-            fitlines.global_fit(chain=True,lock_lines=True,directory=outdir,observ_id=epoch_observ[0],split_fit=split_fit)
-
-            AllChains.clear()
-            main_spflux=hid_fit_infos(fitlines,broad_absval,post_autofit=True)
-
-
-            '''
-            restoring the line freeze states
-            here we restore the INITIAL component freeze state, effectively thawing all components pegged during the first autofit
-            '''
-
-            for comp in [elem for elem in fitlines.includedlist if elem is not None]:
-
-                if comp.line:
-                    #unfreezing the parameter with the mask created at the first addition of the component
-                    unfreeze(parlist=np.array(comp.parlist)[comp.unlocked_pars_base_mask])
-
-            #refitting in the autofit range to get the newer version of the autofit and continuum
-            AllData.notice('all')
             AllData.ignore('bad')
-            AllData.ignore('**-'+str(line_cont_range[0])+' '+str(line_cont_range[1])+'-**')
 
-            #fitting the model to the new energy band first
-            calc_fit(logfile=fitlines.logfile)
+            #if the stat is low we don't do the autofit anyway so we'd rather get the best fit possible
+            if not flag_lowSNR_line:
+                AllData.ignore(line_cont_ig)
 
-            #autofit
+            #creating the automatic fit class for the standard continuum
+            if broad_absval!=0:
+                fitcont_hid=fitmod(comp_cont,curr_logfile,curr_logfile_write,absval=broad_absval)
+            else:
+                #creating the fitcont without the absorption component if it didn't exist in the broad model
+                fitcont_hid=fitmod([elem for elem in comp_cont if elem!='glob_phabs'],curr_logfile,curr_logfile_write)
+
+            # try:
+            #fitting
+            fitcont_hid.global_fit(split_fit=split_fit)
+
+            mod_fitcont=allmodel_data()
+
+            chi2_cont=Fit.statistic
+            # except:
+            #     pass
+            #     chi2_cont=0
+
+            # AllModels.clear()
+            # xscorpeon.load()
+            # #with the broken powerlaw continuum
+            # fitcont_hid_bkn=fitmod(comp_cont_bkn,curr_logfile)
+
+            # try:
+            #     #fitting
+            #     fitcont_hid_bkn.global_fit(split_fit=split_fit))
+
+            #     chi2_cont_bkn=Fit.statistic
+            # except:
+            #     pass
+
+            chi2_cont_bkn=0
+
+            if chi2_cont==0 and chi2_cont_bkn==0:
+
+                print('\nProblem during hid band fit. Skipping line detection for this exposure...')
+                return ['\nProblem during hid band fit. Skipping line detection for this exposure...']
+            # else:
+            #     if chi2_cont<chi2_cont_bkn:
+            #         model_load(mod_fitcont)
+
+            spflux_single=hid_fit_infos(fitcont_hid,broad_absval)
+
+            return spflux_single,broad_absval,data_broad
+
+
+        AllModels.clear()
+        xscorpeon.load(frozen=True)
+
+        result_broad_fit=broad_fit()
+
+        if len(result_broad_fit)==1:
+            return fill_result(result_broad_fit)
+        else:
+            main_spflux,broad_absval,data_broad=result_broad_fit
+
+        result_high_fit=high_fit(broad_absval)
+
+        #if the function returns an array of length 1, it means it returned an error message
+        if len(result_high_fit)==1:
+            return fill_result(result_high_fit)
+        else:
+            data_mod_high,fitmod_cont=result_high_fit
+
+        #re-limiting to the line search energy range
+        AllData.notice('all')
+        AllData.ignore('bad')
+        AllData.ignore('**-'+str(line_cont_range[0])+' '+str(line_cont_range[1])+'-**')
+
+        #changing back to the auto rescale of xspec
+        Plot.commands=()
+        Plot.addCommand('rescale')
+
+        print('\nStarting line search...')
+
+
+        cont_abspeak,cont_peak_points,cont_peak_widths,cont_peak_delchis,cont_peak_eqws,chi_dict_init=\
+            narrow_line_search(data_mod_high,'cont',line_search_e=line_search_e,line_search_norm=line_search_norm,
+                               e_sat_low=e_sat_low,peak_thresh=peak_thresh,peak_clean=peak_clean,
+                               line_cont_range=line_cont_range,trig_interval=trig_interval,
+                               scorpeon_save=data_broad.scorpeon)
+
+        plot_line_search(chi_dict_init, outdir, sat,suffix='cont', epoch_observ=epoch_observ)
+
+        '''
+        Automatic line fitting
+        '''
+
+        #### Autofit
+
+        if autofit and (cont_abspeak or force_autofit) and not flag_lowSNR_line:
+
+            '''
+            See the fitmod code for a detailed description of the auto fit process
+            '''
+
+            #reloading the continuum fitcomp
+            fitmod_cont.reload()
+
+            #feching the list of components we're gonna use
+            comp_lines=model_list(autofit_model)
+
+            #creating a new logfile for the autofit
+            curr_logfile_write=Xset.openLog(outdir+'/'+epoch_observ[0]+'_xspec_log_autofit.log')
+            curr_logfile_write.reconfigure(line_buffering=True)
+            curr_logfile=open(curr_logfile_write.name,'r')
+
+            #creating the fitmod object with the desired componets (we currently do not use comp groups)
+            fitlines=fitmod(comp_lines,curr_logfile,curr_logfile_write,prev_fitmod=fitmod_cont)
+
+            #global fit
             fitlines.global_fit(chain=True,directory=outdir,observ_id=epoch_observ[0],split_fit=split_fit,
                                 no_abslines=no_abslines)
 
             #storing the final fit
             data_autofit=allmodel_data()
 
-        #storing the final plot and parameters
-        #screening the xspec plot
-        Plot_screen("ldata,ratio,delchi",outdir+'/'+epoch_observ[0]+"_screen_xspec_autofit",
-                    includedlist=fitlines.includedlist)
+            '''
+            ####Refitting the continuum
+            
+            if refit_cont is set to True, we add a 3 step process to better estimate the continuum from the autofit lines.
+            
+            First, we relaunch a global fit iteration while blocking all line parameters in the broad band.
+            We then refreeze the absorption and relaunch two global fit iterations in 3-10 (for the HID) and 4-10 (for the autofit continuum)
+            '''
 
-        if sat=='Chandra':
+            if refit_cont:
 
-            #plotting a zoomed version for HETG spectra
-            AllData.ignore('**-6.5 '+str(float(min(9,e_sat_high)))+'-**')
+                AllChains.clear()
 
-            Plot_screen("ldata,ratio,delchi",outdir+'/'+epoch_observ[0]+"_screen_xspec_autofit_zoom",
+                #saving the initial autofit result for checking purposes
+                store_fit(mode='autofit_init',fitmod=fitlines)
+
+                #storing the fitmod class into a file
+                fitlines.dump(outdir+'/'+epoch_observ[0]+'_fitmod_autofit_init.pkl')
+
+                #updating the logfile for the second round of fitting
+                curr_logfile_write=Xset.openLog(outdir+'/'+epoch_observ[0]+'_xspec_log_autofit_recont.log')
+                curr_logfile_write.reconfigure(line_buffering=True)
+                curr_logfile=open(curr_logfile_write.name,'r')
+
+                #updating it in the fitmod
+                fitlines.logfile=curr_logfile
+                fitlines.logfile_write=curr_logfile_write
+                fitlines.update_fitcomps()
+
+                #freezing every line component
+                for comp in [elem for elem in fitlines.includedlist if elem is not None]:
+                    if comp.line:
+
+                        freeze(parlist=comp.unlocked_pars)
+
+                #refitting in broad band for the nH
+                AllData.notice('all')
+                AllData.ignore('bad')
+                AllData.ignore('**-'+str(e_sat_low)+' '+str(e_sat_high)+'-**')
+
+                #thawing the absorption to allow improving its value
+                if 'glob_phabs' in fitlines.name_cont_complist and fitlines.glob_phabs.included:
+                    AllModels(1)(fitlines.glob_phabs.parlist[0]).frozen=False
+
+                #we reset the value of the fixed abs to allow it to be free if it gets deleted and put again
+                fitlines.fixed_abs=None
+
+                #fitting the model to the new energy band first
+                calc_fit(logfile=fitlines.logfile)
+
+                #autofit
+                fitlines.global_fit(chain=True,lock_lines=True,directory=outdir,observ_id=epoch_observ[0],split_fit=split_fit)
+
+                AllChains.clear()
+
+                store_fit(mode='broadband_post_auto',fitmod=fitlines)
+
+                #storing the class
+                fitlines.dump(outdir+'/'+epoch_observ[0]+'_fitmod_broadband_post_auto.pkl')
+
+                #re fixing the absorption parameter and storing the value to retain it if the absorption gets taken off and tested again
+
+                if 'glob_phabs' in fitlines.name_cont_complist and fitlines.glob_phabs.included:
+                    broad_absval=AllModels(1)(fitlines.glob_phabs.parlist[0]).values[0]
+                    AllModels(1)(fitlines.glob_phabs.parlist[0]).frozen=True
+                else:
+                    broad_absval=0
+
+                fitlines.fixed_abs=broad_absval
+
+                #refitting in hid band for the HID values
+                AllData.notice('all')
+                AllData.ignore('bad')
+                AllData.ignore('**-'+str(hid_cont_range[0])+' '+str(hid_cont_range[1])+'-**')
+
+                #fitting the model to the new energy band first
+                calc_fit(logfile=fitlines.logfile)
+
+                #autofit
+                fitlines.global_fit(chain=True,lock_lines=True,directory=outdir,observ_id=epoch_observ[0],split_fit=split_fit)
+
+                fitlines.dump(outdir+'/'+epoch_observ[0]+'_fitmod_broadhid_post_auto.pkl')
+
+                AllChains.clear()
+                main_spflux=hid_fit_infos(fitlines,broad_absval,post_autofit=True)
+
+                '''
+                restoring the line freeze states
+                here we restore the INITIAL component freeze state, effectively thawing all components pegged during the first autofit
+                '''
+
+                for comp in [elem for elem in fitlines.includedlist if elem is not None]:
+
+                    if comp.line:
+                        #unfreezing the parameter with the mask created at the first addition of the component
+                        unfreeze(parlist=np.array(comp.parlist)[comp.unlocked_pars_base_mask])
+
+                #refitting in the autofit range to get the newer version of the autofit and continuum
+                AllData.notice('all')
+                AllData.ignore('bad')
+                AllData.ignore('**-'+str(line_cont_range[0])+' '+str(line_cont_range[1])+'-**')
+
+                #fitting the model to the new energy band first
+                calc_fit(logfile=fitlines.logfile)
+
+                #autofit
+                fitlines.global_fit(chain=True,directory=outdir,observ_id=epoch_observ[0],split_fit=split_fit,
+                                    no_abslines=no_abslines)
+
+                #storing the final fit
+                data_autofit=allmodel_data()
+
+            #storing the final plot and parameters
+            #screening the xspec plot
+            Plot_screen("ldata,ratio,delchi",outdir+'/'+epoch_observ[0]+"_screen_xspec_autofit",
                         includedlist=fitlines.includedlist)
 
-            #putting back the energy range
-            AllData.notice(str(line_cont_range[0])+'-'+str(line_cont_range[1]))
+            if sat=='Chandra':
 
-        #saving the model str
-        catch_model_str(curr_logfile,savepath=outdir+'/'+epoch_observ[0]+'_mod_autofit.txt')
+                #plotting a zoomed version for HETG spectra
+                AllData.ignore('**-6.5 '+str(float(min(9,e_sat_high)))+'-**')
 
-        if os.path.isfile(outdir+'/'+epoch_observ[0]+'_mod_autofit.xcm'):
-            os.remove(outdir+'/'+epoch_observ[0]+'_mod_autofit.xcm')
+                Plot_screen("ldata,ratio,delchi",outdir+'/'+epoch_observ[0]+"_screen_xspec_autofit_zoom",
+                            includedlist=fitlines.includedlist)
 
-        #storing the current configuration and model
-        Xset.save(outdir+'/'+epoch_observ[0]+'_mod_autofit.xcm',info='a')
+                #putting back the energy range
+                AllData.notice(str(line_cont_range[0])+'-'+str(line_cont_range[1]))
 
-        #storing the class
-        fitlines.dump(outdir+'/'+epoch_observ[0]+'_fitmod_autofit.pkl')
+            #saving the model str
+            catch_model_str(curr_logfile,savepath=outdir+'/'+epoch_observ[0]+'_mod_autofit.txt')
 
+            if os.path.isfile(outdir+'/'+epoch_observ[0]+'_mod_autofit.xcm'):
+                os.remove(outdir+'/'+epoch_observ[0]+'_mod_autofit.xcm')
+
+            #storing the current configuration and model
+            Xset.save(outdir+'/'+epoch_observ[0]+'_mod_autofit.xcm',info='a')
+
+            #storing the class
+            fitlines.dump(outdir+'/'+epoch_observ[0]+'_fitmod_autofit.pkl')
+
+
+    if autofit and (cont_abspeak or force_autofit) and not flag_lowSNR_line:
         '''
         Computing all the necessary info for the autofit plots and overlap tests
         Note: we only show the first (constant=1) model components because the others are identical modulo their respective constant factor 
@@ -3014,7 +3123,6 @@ def line_detect(epoch_id):
 #### Epoch matching
 '''
 
-
 if sat=='XMM':
     spfile_dates=np.array([[None,None]]*len(spfile_list))
 
@@ -3079,7 +3187,49 @@ elif sat=='Chandra':
     for obsid in obsid_list_started_chandra.tolist():
         epoch_list_started+=[[elem,elem.replace('-1','1')] for elem in started_expos if elem.startswith(obsid)]
 
-elif sat in ['NICER','Suzaku','Swift']:
+elif sat=='NICER':
+    epoch_list=[]
+    tstart_list=[]
+    for elem_file in spfile_list:
+        with fits.open(elem_file) as hdul:
+            start_obs_s = hdul[1].header['TSTART'] + hdul[1].header['TIMEZERO']
+            # saving for titles later
+            mjd_ref = Time(hdul[1].header['MJDREFI'] + hdul[1].header['MJDREFF'], format='mjd')
+
+            obs_start = mjd_ref + TimeDelta(start_obs_s, format='sec')
+
+        tstart_list+=[obs_start.to_value('jd')]
+
+    #max delta between gti starts in sec
+    max_delta=(TimeDelta(group_gti_time.split('_')[0],format='jd')+\
+              TimeDelta(group_gti_time.split('_')[1],format='sec')/60+ \
+              TimeDelta(group_gti_time.split('_')[2], format='sec')/3600).to_value('jd')
+
+    epoch_id_list_ravel=[]
+    epoch_id_list=[]
+
+    with tqdm(total=len(tstart_list)) as pbar:
+        for id_elem,elem_tstart in enumerate(tstart_list):
+
+            #skipping computation for already grouped elements
+            if id_elem in epoch_id_list_ravel:
+                continue
+
+            elem_delta=[(elem-elem_tstart) for elem in tstart_list]
+
+            elem_epoch_id=[id for id in range(len(tstart_list)) if\
+                                     id not in epoch_id_list_ravel and elem_delta[id]>=0 and elem_delta[id]<max_delta]
+
+            epoch_id_list_ravel+=elem_epoch_id
+
+            if len(elem_epoch_id)>0:
+                epoch_id_list+=[elem_epoch_id]
+
+            pbar.update(n=len(elem_epoch_id))
+
+    epoch_list=[np.array(spfile_list)[elem] for elem in epoch_id_list]
+
+elif sat in ['Suzaku','Swift']:
     epoch_list=[]
     epoch_list_started=[]
     if sat=='Swift':
@@ -3114,6 +3264,7 @@ for epoch_id,epoch_files in enumerate(epoch_list):
     #we use the id of the first file as an identifier
     firstfile_id=epoch_files[0].split('_sp')[0]
 
+    file_ids=[elem.split('_sp')[0] for elem in epoch_files]
 
     #skip start check
     if sat in ['Suzaku']:
@@ -3164,18 +3315,19 @@ for epoch_id,epoch_files in enumerate(epoch_list):
         if summary_lines is not None:
             #creating the text of the summary line for this observation
 
-            if '_' in firstfile_id:
-                obsid_id=firstfile_id[:firstfile_id.find('_')]
-                file_id=firstfile_id[firstfile_id.find('_')+1:]
-            else:
-                obsid_id=firstfile_id
-                file_id=obsid_id
 
-            summary_content=obsid_id+'\t'+file_id+'\t'+str(summary_lines.tolist())
+            # if '_' in firstfile_id:
+            #     obsid_id=firstfile_id[:firstfile_id.find('_')]
+            #     file_id=firstfile_id[firstfile_id.find('_')+1:]
+            # else:
+            #     obsid_id=firstfile_id
+            #     file_id=obsid_id
+
+            summary_content=str(epoch_id)+'\t'+str(epoch_files)+'\t'+str(summary_lines.tolist())
 
             #adding it to the summary file
             file_edit(outdir+'/'+'summary_line_det.log',
-                      obsid_id+'\t'+file_id,summary_content+'\n',summary_header)
+                      str(epoch_id)+'\t'+str(epoch_files),summary_content+'\n',summary_header)
 
     else:
         summary_lines=line_detect(epoch_id)

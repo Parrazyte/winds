@@ -13,7 +13,7 @@ import os
 import time
 import numpy as np
 
-def regroup_XMM_spectra(extension='sp_src.ds',group='opt',camera='pn',skip_started=True):
+def regroup_XMM_spectra(extension='sp_src.ds',group='opt',camera='mos1',skip_started=True):
     
     '''To be launched above the folders where to regroup'''
             
@@ -41,7 +41,8 @@ def regroup_XMM_spectra(extension='sp_src.ds',group='opt',camera='pn',skip_start
         
     allfiles=glob.glob('**',recursive=True)
     
-    XMM_spectra=[elem for elem in allfiles if elem.endswith(extension) and 'bigbatch' in elem and '_'+camera+'_' in elem]
+    XMM_spectra=[elem for elem in allfiles if elem.endswith(extension) and 'bigbatch' in elem and ('_'+camera+'_' in elem\
+                 if camera!='all' else True)]
     
     XMM_dirs=os.getcwd()+'/'+np.array([elem[:elem.rfind('/')+1] for elem in XMM_spectra]).astype(object)
 

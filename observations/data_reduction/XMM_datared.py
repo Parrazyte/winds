@@ -9,19 +9,19 @@ Data reduction Script for XMM ODFs
 
 Searches for all ODF type directories in the subdirectories and launches the process for each
 
-list of possible actions : 
-    
+list of possible actions :
+
 1. evt_build: IF not events are detected, builds the event lists for all cameras in specific subdirectories with em/epproc
 
-2. filter_evt: Filters any detected event files with manual input or standard flare limits. 
+2. filter_evt: Filters any detected event files with manual input or standard flare limits.
    Note: Creates products with standardised names
    submodes : 2n : mode 'nolim', no flare cut (max fixed at 1000 counts/s)
-              2a : mode 'auto', flare cuts according to src/bg 
+              2a : mode 'auto', flare cuts according to src/bg
               2std : mode 'std', flare cuts according to the std norms (given in argument)
               2snr : mode 'snr', flare cuts according to the best snr improvement (if at all)
-3. extract_reg: Extracts regions for the source/bg, performs pile-up computations. 
+3. extract_reg: Extracts regions for the source/bg, performs pile-up computations.
 
-sp. extract_sp: Extracts the spectrum with either manual region selection of automatic computation. 
+sp. extract_sp: Extracts the spectrum with either manual region selection of automatic computation.
                Also regroups the spectra after extraction.
                The products are copied into a "batch" directory
 
@@ -51,7 +51,7 @@ The log is both printed on terminal and copied into the log files of each main f
 
 Other arguments to be added
 
-CAREFUL : 
+CAREFUL :
 
 -cleaning the products (i.e. with -d) before relaunching overlapping/sequential actions in a directory is advised to avoid problems
 
@@ -61,7 +61,7 @@ If it is, overwrite checks if the products are in the global "mergedir" obsid
 
 -Don't use directories with '_EMOS' or 'E_PN' in them
 -the evt list which can be passed through with the -evtname argument must still contain _EMOS or _EPN
--The event list filtering caps at 12 keV, as such the spectrum will also be caped at 12 KeV max even though 
+-The event list filtering caps at 12 keV, as such the spectrum will also be caped at 12 KeV max even though
  the full channel interval is being used
 
 -The algorithm's spectrum computation is tailored to point sources
@@ -157,9 +157,9 @@ ap.add_argument("-evtname",nargs='?',help='substring present in previously proce
 
 #global choices
 ap.add_argument("-a","--action",nargs='?',help='Give which action(s) to proceed,separated by comas.'+
-                '\n1.evt_build\n2.filter_evt\n3.extract_reg...',default='3,l,s,m',type=str)
+                '\n1.evt_build\n2.filter_evt\n3.extract_reg...',default='2std,3,l,s,m',type=str)
 
-#std : '2n,3,l,s,m'
+#std : '1' puis '2n,3,l,s,m'
 
 ap.add_argument("-c","--cameras",nargs='?',help='Cameras to reduce',default='all',type=str)
 ap.add_argument("-e","--expmode",nargs=1,help='restrict the analysis to a single type of exposure (in caps)',default='all',type=str)
@@ -1307,10 +1307,11 @@ def extract_reg(directory,mode='manual',cams='all',expos_mode='all',use_file_coo
                         # warnings.filterwarnings('ignore','.*No known catalog could be found.*',)
                         # warnings.filterwarnings('ignore','.*Identifier not found.*',)
                         warnings.filterwarnings('ignore',category=UserWarning)
-                        elem_obj=Simbad.query_object(elem_dir)
-                        if elem_obj!=None:
-                            obj_list=elem_obj
+                        elem_obj = Simbad.query_object(elem_dir)
+                        if type(elem_obj) != type(None):
+                            obj_list = elem_obj
                 except:
+                    breakpoint()
                     print('\nProblem during the Simbad query. This is the current directory list:')
                     print(dir_list)
                     spawn.sendline('\ncd $currdir')

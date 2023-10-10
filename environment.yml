@@ -11,5 +11,6 @@ dependencies:
     - scipy==1.8
     - plotly==5.14.1
     - streamlit-plotly-events==0.0.6
+    - seaborn==0.12.2
     
 prefix: /home/parrama/Soft/Anaconda/anaconda3

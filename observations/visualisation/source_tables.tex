@@ -1,0 +1,932 @@
+%                                                                 aa.dem
+% AA vers. 9.1, LaTeX class for Astronomy & Astrophysics
+% demonstration file
+%                                                       (c) EDP Sciences
+%-----------------------------------------------------------------------
+%
+%\documentclass[referee]{aa} % for a referee version
+%\documentclass[onecolumn]{aa} % for a paper on 1 column  
+%\documentclass[longauth]{aa} % for the long lists of affiliations 
+%\documentclass[letter]{aa} % for the letters 
+%\documentclass[bibyear]{aa} % if the references are not structured 
+%                              according to the author-year natbib style
+
+%
+\documentclass{aa}  
+%\documentclass[onecolumn]{aa} 
+\usepackage{scrextend}
+\usepackage[dvipsnames]{xcolor}
+\usepackage{rotating}
+\usepackage{multirow}
+\usepackage{ulem}
+\usepackage{natbib,twoopt}
+\usepackage{anyfontsize}
+\usepackage{ccaption}
+\usepackage[breaklinks=true]{hyperref} %% to avoid \citeads line fills
+\bibpunct{(}{)}{;}{a}{}{,}             %% natbib format for A&A and ApJ
+\makeatletter
+  \newcommandtwoopt{\citeads}[3][][]{\href{http://adsabs.harvard.edu/abs/#3}%
+    {\def\hyper@linkstart##1##2{}%
+     \let\hyper@linkend\@empty\citealp[#1][#2]{#3}}}
+  \newcommandtwoopt{\citepads}[3][][]{\href{http://adsabs.harvard.edu/abs/#3}%
+    {\def\hyper@linkstart##1##2{}%
+     \let\hyper@linkend\@empty\citep[#1][#2]{#3}}}
+  \newcommandtwoopt{\citetads}[3][][]{\href{http://adsabs.harvard.edu/abs/#3}%
+    {\def\hyper@linkstart##1##2{}%
+     \let\hyper@linkend\@empty\citet[#1][#2]{#3}}}
+  \newcommandtwoopt{\citeyearads}[3][][]%
+    {\href{http://adsabs.harvard.edu/abs/#3}
+    {\def\hyper@linkstart##1##2{}%
+     \let\hyper@linkend\@empty\citeyear[#1][#2]{#3}}}
+\makeatother
+
+%%faster no italic command for formulas
+\newcommand{\nit}[1]{\textrm{#1}}
+%
+\usepackage{xcolor}
+\usepackage{pdflscape}
+\usepackage{multirow}
+\usepackage{hyperref}
+\usepackage{amsmath}
+\usepackage{txfonts}
+
+%%math in macros
+%integer computations
+\usepackage{xintcore}
+%non integer computations
+\usepackage{xintfrac}
+
+%%cleveref for Tab. indexing of references
+\usepackage{cleveref}
+\crefdefaultlabelformat{\textsubscript{\textbf{(#2#1#3.)}}}
+\usepackage[inline]{enumitem}
+
+% Required package
+\usepackage{tikz}
+\usetikzlibrary{shapes, arrows.meta, positioning}
+\usepackage{longtable}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\newcommand{\phabs}{\texttt{phabs}}
+\newcommand{\diskbb}{\texttt{diskbb}}
+\newcommand{\powerlaw}{\texttt{powerlaw}}
+\newcommand{\gaussian}{\texttt{gaussian}}
+
+\newcommand{\FeKav}{\ion{Fe}{xxv} K$\alpha$}
+\newcommand{\FeKavi}{\ion{Fe}{xxvi} K$\alpha$}
+\newcommand{\FeKan}{\ion{Fe} K$\alpha$}
+
+\newcommand{\FeKbv}{\ion{Fe}{xxv} K$\beta$}
+\newcommand{\FeKbvi}{\ion{Fe}{xxvi} K$\beta$}
+\newcommand{\FeKbn}{\ion{Fe} K$\beta$}
+
+\newcommand{\NiKavii}{\ion{Ni}{xxvii} K$\alpha$}
+
+\newcommand{\FeKgv}{\ion{Fe}{xxv} K$\gamma$}
+\newcommand{\FeKgvi}{\ion{Fe}{xxv} K$\gamma$}
+
+\newcommand{\CrKbiv}{\ion{Cr}{xxiv} K$\beta$}
+
+\newcommand{\blue}[1]{{\textcolor{blue}{#1}}}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\newcommand{\met}{$12 + \log(O/H)$}
+\newcommand{\nism}{$n_\text{ISM}$}
+\newcommand{\lx}{$L_{X}$}
+\newcommand{\mdot}{$\dot{m}$}
+\newcommand{\mout}{$\dot{m}_\text{ejec}$}
+\newcommand{\afunnel}{$\theta_f$}
+\newcommand{\msun}{$M_\odot$}
+\newcommand{\rschw}{R$_\text{S}$}
+\newcommand{\fcol}{$f_\text{col}$}
+\newcommand{\rmag}{R$\text{m}$}
+\newcommand{\risco}{R$_\text{isco}$}
+\newcommand{\rsph}{R$_{\text{sph}}$}
+\newcommand{\tsph}{T$_{\text{sph}}$}
+\newcommand{\nustar}{\textit{NuSTAR}}
+\newcommand{\chandra}{\textit{Chandra}}
+\newcommand{\xmm}{XMM-\textit{Newton}}
+
+\newcommand{\swift}{\textit{Swift}}
+\newcommand{\hubble}{\textit{Hubble Space Telescope}}
+\newcommand{\hst}{\textit{HST}}
+\newcommand{\epicpn}{EPIC-\textit{pn}}
+\newcommand{\epicmos}{EPIC-\textit{mos}}
+
+\newcommand{\cflux}{\texttt{cflux}}
+\newcommand{\simpl}{\texttt{simpl}}
+\newcommand{\compTT}{\texttt{compTT}}
+\newcommand{\cutoffpl}{\texttt{cutoffpl}}
+\newcommand{\mekal}{\texttt{mekal}}
+\newcommand{\xspec}{\textsc{XSPEC}}
+\newcommand{\stingray}{\textsc{Stingray}}
+\newcommand{\hendrics}{\textsc{HENDRICS}}
+\newcommand{\mappings}{\textsc{MAPPINGS III}}
+\newcommand{\chisq}{$\chi^2$}
+\newcommand{\chisqr}{$\chi^2_r$}
+\newcommand{\nh}{$n_{\text{H}}$}
+\newcommand{\odr}{\textit{odr}}
+\newcommand{\python}{PYTHON}
+\newcommand{\fscatt}{$f_{scat}$}
+\newcommand{\errors}[2]{$^{+#1}_{-#2}$}
+\newcommand{\ls}{Lomb--Scargle}
+\newcommand{\todo}[1]{\textcolor{blue}{#1}}
+\newcommand{\thought}[1]{\textcolor{green}{#1}}
+\newcommand{\toconsider}[1]{\textcolor{purple}{#1}}
+\newcommand{\tocheck}[1]{\textcolor{red}{#1}}
+
+\newcommand{\violet}{\color{violet}}
+\newcommand{\black}{\color{black}}
+
+\newcommand\T{\rule{0pt}{2.6ex}}       % Top strut
+\newcommand\B{\rule[-1.2ex]{0pt}{0pt}} % Bottom strut
+
+\newcommand{\ag}{\textcolor{blue}}
+\newcommand{\green}{\textcolor{green}}
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%
+% To add links in your PDF file, use the package "hyperref"
+% with options according to your LaTeX or PDFLaTeX drivers.
+%
+\begin{document} 
+
+\begin{table*}[h!]
+\scriptsize{
+\caption[blabla]{Sources included in our final sample, relevant physical parameters, and number of spectra of sufficient quality for our analysis.\label{table:sources}}
+\fontsize{8}{8}
+\begin{center}
+\begin{tabular}{c || c c c || c || c c }
+\hline
+\hline
+       \multirow{2}{*}{Name}
+     & \multirow{2}{*}{mass (\msun)}
+     & \multirow{2}{*}{distance (kpc)}
+     & \multirow{2}{*}{inclination (°)}
+     & absorption lines 
+     & \multicolumn{2}{c}{exposures in the sample}
+
+     \T \B \\
+     
+     &
+     & 
+     &
+     & reported in the iron band
+     & EPIC PN
+     & HETG
+     
+     \T \B \\
+\hline
+\hline
+
+1E 1740.7-2942 
+& 8
+& 8
+& $>50^R$\labelcref{ref_source:1E1740.7_i} 
+& X
+& 6 
+& 1 \T \B \\
+
+4U 1543-475$^D$\labelcref{ref_source:4U1543-475_D} 
+&$8.4\pm1$\labelcref{ref_source:4U1543-475_i_mass}
+& $7.5\pm0.5$ \labelcref{ref_source:4U1543-47_d}
+& \textbf{dips}\labelcref{ref_source:4U1543-47_dips},    $20.7\pm1.5^D$\labelcref{ref_source:4U1543-475_i_mass} 
+& X
+& 0 
+& 1 \T \B \\
+
+4U 1630-47 
+& 8
+& $8.1\pm3.4$\labelcref{ref_source:4U1630-47_d}
+& \textbf{dips}\labelcref{ref_source:4U1630-47_i}, $[60-75]^D$\labelcref{ref_source:4U1630-47_i} 
+& \checkmark
+& 8 
+& 12 \T \B \\
+
+4U 1957+115 
+& 8
+& 8
+& $\sim 13^D$\labelcref{ref_source:4U1957+115_i_2}/$77.6(+1.5-2.2)^R$\labelcref{ref_source:4U1957+115_i_1} 
+& X 
+& 2 
+& 4 \T \B \\
+
+AT 2019wey 
+& 8
+& 8
+& $<30^R$\labelcref{ref_source:AT2019wey_i} 
+& X
+& 0 
+& 1 \T \B \\
+
+EXO 1846-031 
+& 8
+& $\sim7$\labelcref{ref_source:EXO1846-031_d}
+& / $\sim73^R$\labelcref{ref_source:EXO1846-031_i_1}/$\sim40^R$\labelcref{ref_source:EXO1846-031_winds_hard_i} 
+& \checkmark
+& 2 
+& 6 \T \B \\
+
+ GRO J1655-40$^D$\labelcref{ref_source:GROJ1655-40_D} 
+& $5.4\pm0.3$\labelcref{ref_source:GROJ1655-40_i_mass}
+& $3.2\pm0.2$\labelcref{ref_source:GROJ1655-40_d}
+& \textbf{dips}\labelcref{ref_source:GROJ1655-40_dips} $69\pm2^D$\labelcref{ref_source:GROJ1655-40_i_mass} 
+& \checkmark
+& 6 
+& 2 \T \B \\
+
+GRS 1716-249 
+& 8
+& $2.4\pm0.4$\labelcref{ref_source:GRS1716-249_d}
+& $\sim 40-60^R$\labelcref{ref_source:GRS1716-249_i} 
+& X
+& 0 
+& 1 \T \B \\
+
+GRS 1739-278 
+& 8
+& $7.3\pm1.3$\labelcref{ref_source:GRS1739-278_d}
+& $\sim33^R$\labelcref{ref_source:GRS1739-278_i}
+& X
+& 0 
+& 1 \T \B \\
+
+GRS 1758-258 
+& 8
+& 8
+& / 
+& \checkmark
+& 3 
+& 1 \T \B \\
+
+GRS 1915+105$^D$\labelcref{ref_source:GRS1915+105_D_i_mass_d} 
+&$11.2_{-1.8}^{+2}$\labelcref{ref_source:GRS1915+105_dist_mass_i} 
+&$9.4_{-1.6}^{+1.6}$\labelcref{ref_source:GRS1915+105_dist_mass_i} 
+& \textbf{dips}\labelcref{ref_source:GRS1915+105_IGRJ17091_dips}$64\pm4^D$\labelcref{ref_source:GRS1915+105_dist_mass_i} 
+& \checkmark
+& 17 
+& 22 \T \B \\
+
+GS 1354-64$^D$\labelcref{ref_source:GS1354-64_D_d} 
+& 8
+& $\sim25$\labelcref{ref_source:GS1354-64_D_d}
+& $<79^D$\labelcref{ref_source:GS1354-64_D_d}/ $\sim 70^R$\labelcref{ref_source:GS1354-64_i} 
+& X
+& 2 
+& 0 \T \B \\
+
+GX 339-4$^D$\labelcref{ref_source:GX339-4_D_mass} 
+& $5.9\pm3.6$\labelcref{ref_source:GX339-4_D_mass} 
+& 8
+& $[37-78]^{D}$\labelcref{ref_source:GX339-4_D_mass} 
+& X
+& 21 
+& 4 \T \B \\
+
+
+H 1743-322 
+& 8
+& $8.5\pm0.8$\labelcref{ref_source:H1743-322_i_d}
+& \textbf{dips}\labelcref{ref_source:H1743-322_winds_dips}, $75\pm3^J$\labelcref{ref_source:H1743-322_i_d} 
+& \checkmark 
+& 8 
+& 9 \T \B \\
+
+IGR J17091-3624 
+& 8
+& 8
+& \textbf{dips}\labelcref{ref_source:GRS1915+105_IGRJ17091_dips}$\sim70^H$\labelcref{ref_source:IGRJ17091_i_high_1}\labelcref{ref_source:IGRJ17091_i_high_2}/$\sim30-40^R$\labelcref{ref_source:IGRJ17091_i_low}\labelcref{ref_source:IGRJ17091_winds_hard_i_low} 
+& \checkmark 
+& 6 
+& 9 \T \B \\
+
+IGR J17098-3628 
+& 8
+& $\sim10.5$\labelcref{ref_source:IGRJ17098-3628_d}
+& / 
+& X
+& 2 
+& 0 \T \B \\
+
+IGR J17285-2922 
+& 8
+& 8
+& / 
+& X
+& 1 
+& 0 \T \B \\
+
+IGR J17451-3022 
+& 8
+& 8
+& \textbf{dips}\labelcref{ref_source:IGRJ17451-3022_wind_dips_Suzaku_2014}$>70^D$\labelcref{ref_source:IGRJ17451-3022_wind_dips_Suzaku_2014} 
+& \checkmark
+& 1 
+& 0 \T \B \\
+
+IGR J17497-2821 
+& 8
+& 8
+& / 
+& X
+& 1 
+& 1 \T \B \\
+
+MAXI J0637-430 
+& 8
+& 8
+& $64\pm6^{R}$\labelcref{ref_source:MAXIJ0637-430_i} 
+& X
+& 1
+& 0 \T \B \\
+
+MAXI J1305-704$^D$\labelcref{ref_source:MAXIJ1305-704_D_i_mass_d} 
+&$8.9_{-1.}^{+1.6}$\labelcref{ref_source:MAXIJ1305-704_D_i_mass_d} 
+&$7.5_{-1.4}^{+1.8}$\labelcref{ref_source:MAXIJ1305-704_D_i_mass_d}
+& \textbf{dips}\labelcref{ref_source:MAXIJ1305-704_wind_soft_hard_soft+softX_dip},${72^{+5}_{-8}}^D$\labelcref{ref_source:MAXIJ1305-704_D_i_mass_d} 
+& \checkmark
+& 0 
+& 1 \T \B \\
+
+MAXI J1348-630 
+& 8
+& $3.4_{-0.4}^{+0.4}$ \labelcref{ref_source:MAXIJ1348-630_d}
+& $28\pm3^J$\labelcref{ref_source:MAXIJ1348-630_i_jet}/$65\pm7$ \labelcref{ref_source:MAXIJ1348-630_mass_i_scaling}/ $[30-45]^R$\labelcref{ref_source:MAXIJ1348-630_i_winds_soft_hard}
+& \checkmark
+& 2 & 3 \T \B \\
+
+MAXI J1535-571 
+& 8
+& $4.1_{-0.5}^{+0.6}$\labelcref{ref_source:MAXIJ1535-571_d}
+& $\leq 45^J$\labelcref{ref_source:MAXIJ1535-571_i_jet}/ $70-74^R$\labelcref{ref_source:MAXIJ1535-571_i_refl} 
+& X
+& 6 
+& 5 \T \B \\
+
+MAXI J1659-152 
+& 8
+& $8.6\pm3.7$\labelcref{ref_source:MAXIJ1659-152_i_d}
+& \textbf{dips}\labelcref{ref_source:MAXIJ1659-152_i_d},$70\pm10^D$\labelcref{ref_source:MAXIJ1659-152_i_d} 
+& X
+& 2 
+& 0 \T \B \\
+
+MAXI J1803-298 
+& 8
+& 8
+& \textbf{dips}\labelcref{ref_source:MAXIJ1803-298_i},$>70^D$\labelcref{ref_source:MAXIJ1803-298_i} 
+& \checkmark
+& 0 
+& 4 \T \B \\
+
+MAXI J1820+070 $^D$\labelcref{ref_source:MAXIJ1820+070_D} 
+& $6.9\pm1.2$\labelcref{ref_source:MAXIJ1820+070_i_mass}
+& $2.96\pm0.33$\labelcref{ref_source:MAXIJ1820+070_d}
+& \textbf{dips}\labelcref{ref_source:MAXIJ1820+070_dips},$[67-81]^D$\labelcref{ref_source:MAXIJ1820+070_i_mass} 
+& X
+& 14
+& 0 \T \B \\
+
+
+SAX J1711.6-3808 
+& 8
+& 8
+& / 
+& X 
+& 1 
+& 0 \T \B \\
+
+Swift J1357.2-0933
+& 8
+& 8
+& \textbf{dips}\labelcref{ref_source:Swiftj1357.2-0933_dips},$\geq 80^D$\labelcref{ref_source:SwiftJ1357.2-0933_i} 
+& X
+& 1 
+& 0 \T \B \\
+
+Swift J1658.2-4242 
+& 8
+& 8
+& \textbf{dips}\labelcref{ref_source:SwiftJ1658.2_4242_dips},$64(+2-3)^R$\labelcref{ref_source:SwiftJ1658.2_i_winds} 
+& \checkmark
+& 8 
+& 1 \T \B \\
+
+Swift J174510.8-262411 
+& 8
+& 8
+& / 
+& X
+& 1 
+& 0 \T \B \\
+
+Swift J1753.5-0127 
+& 8
+& $6\pm2$\labelcref{ref_source:SwiftJ1753.5-0127_d}
+& $55(+2-7)^R$\labelcref{ref_source:SwiftJ1753.5-0127_i} 
+& X
+& 6 
+& 1 \T \B \\
+
+Swift J1910.2-0546 
+& 8
+& 8
+& / 
+& X
+& 1  
+& 1 \T \B \\
+
+V404 Cyg$^D$\labelcref{ref_source:GS2023+338_D_i_mass} 
+&$9_{-0.6}^{+0.2}$\labelcref{ref_source:GS2023+338_D_i_mass} 
+& $2.4\pm0.2$\labelcref{ref_source:GS2023+338_d}
+& $67(+3-1)^D$\labelcref{ref_source:GS2023+338_D_i_mass}
+& \checkmark 
+& 0 
+& 2 \T \B \\
+
+V4641 Sgr$^D$\labelcref{ref_source:SAXJ1819.3_2525_D} 
+&$6.4\pm 0.6$\labelcref{ref_source:SAXJ1819.3-2525_i_mass_d}
+&$6.2\pm0.7$\labelcref{ref_source:SAXJ1819.3-2525_i_mass_d}
+& $72\pm4^D$\labelcref{ref_source:SAXJ1819.3-2525_i_mass_d} 
+& X
+& 0 
+& 2 \T \B \\
+
+XTE J1550-564$^D$\labelcref{ref_source:XTEJ1550-564_D_i_m_d} 
+&$11.7\pm3.9$\labelcref{ref_source:XTEJ1550-564_D_i_m_d} 
+&$4.4_{-0.4}^{+0.6}$\labelcref{ref_source:XTEJ1550-564_D_i_m_d}
+& $75\pm4^D$\labelcref{ref_source:XTEJ1550-564_D_i_m_d}/$\sim40^R$\labelcref{ref_source:XTEJ1550-564_i_2} 
+& X
+& 0 
+& 2 \T \B \\
+
+XTE J1650-500$^D$\labelcref{ref_source:XTEJ1650-500_D} 
+& 8
+& $2.6\pm0.7$\labelcref{ref_source:XTEJ1650-500_d}
+& $\geq47^D$\labelcref{ref_source:XTEJ1650-500_D} 
+& X
+& 1 
+& 2 \T \B \\
+
+XTE J1652-453 
+& 8
+& 8
+& $\leq32^R$\labelcref{ref_source:XTEJ1652-453_i_winds_sigma} 
+& \checkmark 
+& 1 
+& 0 \T \B \\
+
+XTE J1720-318 
+& 8
+& $6.5\pm3.5$\labelcref{ref_source:XTEJ1720-318_d}
+& /
+& X
+& 1 
+& 0 \T \B \\
+
+XTE J1752-223 
+& 8
+& $6\pm2$\labelcref{ref_source:XTEJ1752-223_d}
+& $<49^J$\labelcref{ref_source:XTEJ1752-223_i}/$35\pm4^R$\labelcref{ref_source:XTEJ1752-223_i_2} 
+& X
+& 2 
+& 2 \T \B \\
+
+XTE J1817-330 
+& 8
+& $5.5\pm4.5$\labelcref{ref_source:XTEJ1817-330_d}
+& \textbf{dips}\labelcref{ref_source:XTEJ1817-330_dips} 
+& X
+& 1
+& 4 \T \B \\
+
+XTE J1856+053 
+& 8
+& 8
+& / 
+& X
+& 1 
+& 0 \T \B \\
+
+XTE J1901+014 
+& 8
+& 8
+& / 
+& X
+& 1 
+& 0 \T \B \\
+
+\end{tabular}
+\end{center}
+\footnotesize
+Notes: The letter $D$ in the object name column identifies dynamically confirmed BHs. A fiducial mass of 8 \msun{} and distance of 8 kpc are used when not reliably known, including when dynamical constraints are only lower limits, according to the properties of the bulk of the Galactic BHLMXB population (see e.g. \citealt{Corral-Santana2016_blackcat}). For inclination measurements, we highlight dippers, and letters $D$, $J$, $H$, $R$ refer respectively to dynamical inclination measurements (dips/eclipses/modulations), jets, heartbeats, and reflection fits.
+Details and references for line detection reports are provided in Tab.~\ref{table:sources_det_states}.References:\\
+\scriptsize
+\begin{enumerate*}[label=\arabic{enumi}]
+    
+    %1E 1740.7-2942
+    \item \citep[][]{Stecchini2020_1E1740.7_i}\label{ref_source:1E1740.7_i}
+    
+    %4U 1543-475
+    \item \citep[][]{Orosz1998_4U1543-475_D}\label{ref_source:4U1543-475_D}
+    \item \citep[][]{Orosz2003_4U1543-475_i_mass}\label{ref_source:4U1543-475_i_mass}
+    \item \citep[][]{Jonker2004_4U1543-47_d}\label{ref_source:4U1543-47_d}
+    \item \citep[][]{Park2004_4U1543-47_dips}\label{ref_source:4U1543-47_dips}
+    
+    %4U 1630-47
+    \item \citep[][]{Kalemci2018_4U1630-47_d}\label{ref_source:4U1630-47_d}
+    \item \citep[][]{Tomsick1998_4U1630-47_i}\label{ref_source:4U1630-47_i}
+    
+    %4U 1957+115
+    \item \citep[][]{Gomez2015_4U1957+115_i_2}\label{ref_source:4U1957+115_i_2}
+    \item \citep[][]{Maitra2013_4U1957+115_i_1}\label{ref_source:4U1957+115_i_1}
+    
+    %AT 2019wey
+    \item \citep[][]{Yao2021_AT2019wey_i}\label{ref_source:AT2019wey_i}
+    
+    %EXO 1846-031
+    \item \citep[][]{Parmar1993_EXO1846-031_d}\label{ref_source:EXO1846-031_d}
+    \item \citep[][]{Draghis2020_EXO1846-031_i_1}\label{ref_source:EXO1846-031_i_1}
+    \item \citep[][]{Wang2020_EXO1846-031_winds_hard_i}\label{ref_source:EXO1846-031_winds_hard_i}
+    %GRO J1655-40
+    \item \citep[][]{VanDerHooft1998_GROJ1655-40_D}\label{ref_source:GROJ1655-40_D}
+    \item \citep[][]{Beer2002_GROJ1655-40_i_mass}\label{ref_source:GROJ1655-40_i_mass}
+    \item \citep[][]{Hjellming1995_GROJ1655-40_d}\label{ref_source:GROJ1655-40_d}
+    \item \citep[][]{Kuulkers1998_GROJ1655-40_dips}\label{ref_source:GROJ1655-40_dips}
+    
+    %GRS 1716-249
+    \item \citep[][]{DellaValle1994_GRS1716-249_d}\label{ref_source:GRS1716-249_d}
+    \item \citep[][]{Bharali2019_GRS1716-249_i}\label{ref_source:GRS1716-249_i}
+   
+    %GRS 1739-278
+    \item \citep[][]{Greiner1996_GRS1739-278_d}\label{ref_source:GRS1739-278_d}
+    \item \citep[][]{Miller2015_GRS1739-278_i}\label{ref_source:GRS1739-278_i}
+    
+    %GRS 1758-258
+
+    %GRS 1915+105
+    \item \citep[][]{Reid2014_GRS1915+105_D_i_mass_d}\label{ref_source:GRS1915+105_D_i_mass_d}
+    \item \citep[][]{Reid2023_GRS1915+105_dist_mass_i}\label{ref_source:GRS1915+105_dist_mass_i}
+    %dips
+    \item \citep[][]{Pahari2013_GRS1915+105_IGRJ17091-3624_dips_study}\label{ref_source:GRS1915+105_IGRJ17091_dips}
+
+    %GS 1354-64
+    \item \citep[][]{Casares2009_GS1354-64_D_d}\label{ref_source:GS1354-64_D_d}
+    \item \citep[][]{Pahari2017_GS1354-64_i}\label{ref_source:GS1354-64_i}
+    
+    %GX339-4
+    \item \citep[][]{Heida2017_GX339-4_D_mass}\label{ref_source:GX339-4_D_mass}
+    
+    %H1743-322
+    \item \citep[][]{Steiner2012_H1743-322_i_d}\label{ref_source:H1743-322_i_d}
+    \item \citep[][]{Miller2006_H1743-322_winds_dips}\label{ref_source:H1743-322_winds_dips}
+
+    %IGR J17091-3624
+    %high inclination estimates due to heartbeats
+    \item \citep[][]{Capitanio2012_IGRJ17091_i_high_1}\label{ref_source:IGRJ17091_i_high_1}
+    \item \citep[][]{Rao2012_IGRJ17091_i_high_2}\label{ref_source:IGRJ17091_i_high_2}
+    %low inclination estimate with reflection
+    \item \citep[][]{Xu2017_IGRJ17091_i_low}\label{ref_source:IGRJ17091_i_low}
+    \item \citep[][]{Wang2018_IGRJ17091_winds_hard_i_low}\label{ref_source:IGRJ17091_winds_hard_i_low}
+    
+    %IGR J17098-3628
+    \item \citep[][]{Grebenev2006_IGRJ17098-3628_d}\label{ref_source:IGRJ17098-3628_d}
+
+    %IGR J17285-2922
+    
+    %IGR J17451-3022
+    \item \citep[][]{Jaisawal2015_IGRJ17451-3022_wind_dips_Suzaku_2014}\label{ref_source:IGRJ17451-3022_wind_dips_Suzaku_2014}
+
+    %IGR J17497-2821
+
+    %MAXI J0637-430
+    \item \citep[][]{Lazar2021_MAXIJ0637_430_i}\label{ref_source:MAXIJ0637-430_i}
+
+    %MAXI J1305-704
+    \item \citep[][]{Sanchez2021_MAXIJ1305-704_D_i_mass_d}\label{ref_source:MAXIJ1305-704_D_i_mass_d}
+    \item \citep[][]{Shidatsu2013_MAXIJ1305-704_wind_soft_hard_Swift_Suzaku}\label{ref_source:MAXIJ1305-704_wind_soft_hard_soft+softX_dip}
+    
+    %MAXIJ1348-630
+    \item \citep[][]{Lamer2021_MAXIJ1348-630_distance}\label{ref_source:MAXIJ1348-630_d}
+    \item \citep[][]{Carotenuto2022_MAXIJ1348-630_i_jet}\label{ref_source:MAXIJ1348-630_i_jet}
+    \item \citep[][]{Titarchuk2022_MAXIJ1348-630_mass_i_scaling}\label{ref_source:MAXIJ1348-630_mass_i_scaling}
+    \item \citep[][]{Chakraborty2021_MAXIJ1348-630_i_winds_soft_hard}\label{ref_source:MAXIJ1348-630_i_winds_soft_hard}
+    
+    %MAXI J1535-571
+    \item \citep[][]{Chauhan2019_MAXIJ1535-571_d}\label{ref_source:MAXIJ1535-571_d}
+    \item \citep[][]{Russell2019_MAXIJ1535-571_i_jet}\label{ref_source:MAXIJ1535-571_i_jet}
+    \item \citep[][]{Dong2022_MAXIJ1535-571_i_refl}\label{ref_source:MAXIJ1535-571_i_refl}
+
+    %MAXIJ1659-152
+    \item \citep[][]{Kuulkers2013_MAXIJ1659-152_i_d}\label{ref_source:MAXIJ1659-152_i_d}
+    
+    %MAXI J1803-298
+    \item \citep[][]{Homan2021_MAXIJ1803-298_dips_NICER_hintwind_2021}\label{ref_source:MAXIJ1803-298_i}
+    
+    %MAXIJ1820+070
+    \item \citep[][]{Torres2019_MAXIJ1820+070_D}\label{ref_source:MAXIJ1820+070_D}
+    \item \citep[][]{Torres2020_MAXIJ1820+070_i_mass}\label{ref_source:MAXIJ1820+070_i_mass}
+    \item \citep[][]{Atri2020_MAXIJ1820+070_d}\label{ref_source:MAXIJ1820+070_d}
+    \item \citep[][]{Homan2018_MAXIJ1820-070_dips}\label{ref_source:MAXIJ1820+070_dips}
+
+    %SAX J1711.6-3808
+    
+    %Swift J1357.2-0933
+    \item \citep[][]{Corral-Santana2013_SwiftJ1357.2-0933_dips}\label{ref_source:Swiftj1357.2-0933_dips}
+    \item \citep[][]{Sanchez2015_SwiftJ1357.2-0933_i}\label{ref_source:SwiftJ1357.2-0933_i}
+
+    %Swift J1658.2-4242
+    \item \citep[][]{Xu2018_SwiftJ1658.2-4242_dips}\label{ref_source:SwiftJ1658.2_4242_dips}
+    \item \citep[][]{Xu2018_SwiftJ1658.2_i_winds}\label{ref_source:SwiftJ1658.2_i_winds}
+
+    %Swift J174510.8-262411
+    
+    %Swift J1753.5-0127
+    \item \citep[][]{CadolleBel2007_SwiftJ1753.5-0127_d}\label{ref_source:SwiftJ1753.5-0127_d}
+    \item \citep[][]{Reis2009_SwiftJ1753.5-0127_i}\label{ref_source:SwiftJ1753.5-0127_i}
+
+    %Swift J1910.2-0546
+
+    %V404 Cyg (GS 2023+338)
+    \item \citep[][]{Khargharia2010_GS2023+338_D_i_mass}\label{ref_source:GS2023+338_D_i_mass}
+    \item \citep[][]{Miller-Jones2009_GS2023+338_d}\label{ref_source:GS2023+338_d}
+    %V 4641 Sgr (SAX J1819.3-2525)
+    \item \citep[][]{Orosz2001_SAXJ1819.3_2525_D}\label{ref_source:SAXJ1819.3_2525_D}
+    \item \citep[][]{Macdonald2014_SAXJ1819.3-2525_i_mass_d}\label{ref_source:SAXJ1819.3-2525_i_mass_d}
+
+    %XTE J1550-564
+    \item \citep[][]{Orosz2011_XTEJ1550-564_D_i_m_d}\label{ref_source:XTEJ1550-564_D_i_m_d}
+    \item \citep[][]{Connors2019_XTEJ1550-564_i_2}\label{ref_source:XTEJ1550-564_i_2}
+
+    %XTE J1650-500
+    \item \citep[][]{Orosz2004_XTEJ1650-500_D}\label{ref_source:XTEJ1650-500_D}
+    \item \citep[][]{Homan2006_XTEJ1650-500_d}\label{ref_source:XTEJ1650-500_d}
+    
+    %XTE J1652-453
+    \item \citep[][]{Chiang2012_XTEJ1652-453_i_winds_2sigma}\label{ref_source:XTEJ1652-453_i_winds_sigma}
+
+    %XTE J1720-318
+    \item \citep[][]{Chaty2006_XTEJ1720-318_d}\label{ref_source:XTEJ1720-318_d}
+    
+    %XTE J1752-223
+    \item \citep[][]{Ratti2012_XTEJ1752-223_d}\label{ref_source:XTEJ1752-223_d}
+    \item \citep[][]{Miller-Jones2011_XTEJ1752-223_i}\label{ref_source:XTEJ1752-223_i}
+    \item \citep[][]{Garcia2018_XTEJ1752-223_i_2}\label{ref_source:XTEJ1752-223_i_2}
+
+    %XTE J1817-330
+    \item \citep[][]{Sala2007_XTEJ1817-330_d}\label{ref_source:XTEJ1817-330_d}
+    \item \citep[][]{Sriram2012_XTEJ1817-330_dips}\label{ref_source:XTEJ1817-330_dips}
+    
+    %XTE J1856+053
+    
+    %XTE J1901+014
+
+\end{enumerate*}}
+
+\end{table*}
+
+\newpage
+\;
+\begin{table*}[h!]
+\caption[blabla]{\raggedright Details of accretion states with reports of absorption line detection in both our work and the literature.}\label{table:sources_det_states}
+\fontsize{10}{10}
+\begin{center}
+\begin{tabular}{c || c || c | c }
+
+\hline
+\hline
+     Source
+     & \multicolumn{3}{c}{accretion states with absorption lines reported}
+     \T \B \\
+
+\hline
+
+     & this work
+     & \multicolumn{2}{c}{other works}
+     \T \B \\
+
+\hline
+     & iron band
+     & iron band 
+     & other energies 
+     \T \B \\
+\hline
+\hline
+
+\textbf{4U 1543-47} 
+& X
+& \textit{soft} \labelcref{ref_source_state:4U1543-47_winds_x_soft}
+& X  \T \B \\
+
+\textbf{4U 1630-47} 
+& soft 
+& soft \labelcref{ref_source_state:4U1630-47_winds} 
+& soft$^{X}$ \labelcref{ref_source_state:4U1630-47_winds_softX}  \T \B \\
+
+EXO 1846-031 
+& X
+& \textit{hard}\labelcref{ref_source_state:EXO1846-031_winds_hard_i} 
+& X \T \B \\
+
+\textbf{GRO J1655-40}
+& soft 
+& soft\labelcref{ref_source_state:GROJ1655-40_winds} 
+& soft$^X$\labelcref{ref_source_state:GROJ1655-40_winds_softX} \T \B \\
+
+GRS 1716-249 
+& X
+& X 
+& hard$^V$\labelcref{ref_source_state:GRS1716-249_winds_hard_optical} \T \B \\
+
+GRS 1758-258 
+& X
+& hard\labelcref{ref_source_state:GRS1758-258_winds_hard_COSPAR} 
+& X \T \B \\
+
+\textbf{GRS 1915+105}
+& soft,hard
+& soft:$\phi,\gamma,\rho,\beta$\labelcref{ref_source_state:GRS1915+105_wind_soft_phi_gamma_rho_beta},$\theta$\labelcref{ref_source_state:GRS1915+105_wind_soft_theta},$\kappa$\labelcref{ref_source_state:GRS1915+105_wind_soft_kappa},$\lambda$\labelcref{ref_source_state:GRS1915+105_wind_soft_lambda},$\psi$ \labelcref{ref_source_state:Shi2023_GRS1915+105_wind_soft_psi}hard:$\chi$\labelcref{ref_source_state:GRS1915+105_wind_hard_chi},obscured*\labelcref{ref_source_state:GRS1915+105_obscured_NICER_winds_hard}\labelcref{ref_source_state:Athulya2022_GRS1915+105_wind_obscured_hard_astrosat_NICER}
+
+& soft$^X$:$\phi$\labelcref{ref_source_state:GRS1915+105_wind_soft_phi_softX},obscured*:hard$^{IR}$\labelcref{ref_source_state:GRS1915+105_wind_obscured_IR} \T \B \\
+
+GX 339-4 
+& X
+& X 
+& soft$^V$\labelcref{ref_source_state:GX339-4_winds_hard_soft_visible},hard$^V$\labelcref{ref_source_state:GX339-4_winds_hard_soft_visible} \T \B \\
+
+\textbf{H 1743-322}
+& soft
+& soft\labelcref{ref_source_state:H1743-322_winds_dips} 
+& X \T \B \\
+
+\textbf{IGR J17091-3624}
+& X
+& soft \labelcref{ref_source_state:IGRJ17091_winds},\textit{hard}\labelcref{ref_source_state:IGRJ17091_winds_hard_i_low}$\dagger$ 
+& hard$^{X}$\labelcref{ref_source_state:IGRJ17091_absorber_static_hard_XMM_2016} \T \B \\
+
+\textbf{IGR J17451-3022}
+& soft 
+& soft\labelcref{ref_source_state:IGRJ17451-3022_wind_dips_Suzaku_2014} 
+& soft$^X$\labelcref{ref_source_state:IGRJ17451-3022_wind_dips_Suzaku_2014} \T \B \\
+
+\textbf{MAXI J1305-704}
+& X
+& \textit{soft}\labelcref{ref_source_state:MAXIJ1305-704_wind_soft_soft+softX}\labelcref{ref_source_state:MAXIJ1305-704_wind_soft_hard_soft+softX_dip},\textit{hard} \labelcref{ref_source_state:MAXIJ1305-704_wind_soft_hard_soft+softX_dip} 
+& soft$^X$\labelcref{ref_source_state:MAXIJ1305-704_wind_soft_soft+softX}\labelcref{ref_source_state:MAXIJ1305-704_wind_soft_hard_soft+softX_dip},hard$^X$\labelcref{ref_source_state:MAXIJ1305-704_wind_soft_hard_soft+softX_dip} \T \B \\
+
+MAXI J1348-630 
+& X
+& \textit{soft}\labelcref{ref_source_state:MAXIJ1348-630_i_winds_soft_hard}, \textit{hard}\labelcref{ref_source_state:MAXIJ1348-630_i_winds_soft_hard}
+& hard$^X$\labelcref{ref_source_state:MAXIJ1348-630_wind_hard_softX},soft$^{IR}$\labelcref{ref_source_state:MAXIJ1348-630_winds_optical},hard$^{V,IR}$\labelcref{ref_source_state:MAXIJ1348-630_winds_optical} \T \B \\
+
+\textbf{MAXI J1803-298}
+& X
+& soft\labelcref{ref_source_state:MAXIJ1803-298_winds_soft}\labelcref{ref_source_state:MAXIJ1803-298_winds_xray_soft_Nustar}
+& hard$^V$\labelcref{ref_source_state:MAXIJ1803-298_winds_hard_optical} \T \B \\
+
+\textbf{MAXI J1820+070}
+& X
+& soft\labelcref{ref_source_state:MAXIJ1820+070_wind_xray_soft} 
+& soft$^{IR}$\labelcref{ref_source_state:MAXIJ1820+070_winds_hard_visible},hard$^{V,IR}$\labelcref{ref_source_state:MAXIJ1820+070_winds_hard_visible} \T \B \\
+
+\textbf{Swift J1357.2-0933}
+& X
+& X 
+& hard$^V$\labelcref{ref_source_state:SwiftJ1357.2-0933_winds_visible_1}\labelcref{ref_source_state:SwiftJ1357.2-0933_winds_visible_2} \T \B \\
+
+\textbf{Swift J1658.2-4242}
+& X
+& \textit{hard}\labelcref{ref_source_state:SwiftJ1658.2_i_winds} 
+& X \T \B \\
+
+V404 Cyg
+& X
+& hard \labelcref{ref_source_state:GS2023+338_wind_hard} 
+& obscured*: hard$^X$ \labelcref{ref_source_state:GS2023+338_wind_hard_softX},hard$^V$\labelcref{ref_source_state:GS2023+338_wind_hard_visible} \T \B \\
+
+V4641 Sgr
+& X
+& X 
+& obscured*: hard$^V$\labelcref{ref_source_state:SAXJ1819.3-2525_winds_hard_optical}\T \B \\
+
+XTE J1652-453 
+& X
+& \textit{hard}$\dagger$\labelcref{ref_source_state:XTEJ1652-453_i_winds_sigma}  
+& X \T \B \\
+\end{tabular}
+\end{center}
+\small
+Notes: Bold source names indicate dippers. For "other" energies, $X$ superscripts indicate softer X-ray detections, $V$ visible and $IR$ infrared detections. Accretion states are reported in $italic$ for absorption lines embedded in reflection components. For all purposes, $\dagger$ indicates low significance detections. $\ast$ The observed HR value of the obscured state might not reflect the actual HR of the source. The list of reference papers is not exhaustive for objects with many wind detections. References:\\
+\tiny
+
+\begin{enumerate*}[label=\arabic{enumi}]
+
+    %4U 1543-47
+    \item \citep[][]{Prabhakar2023_4U1543_wind_x_soft_2021_nustar}\label{ref_source_state:4U1543-47_winds_x_soft}
+    
+    %4U 1630-47
+    \item \citep[][]{Kubota2007_4U1630-47_winds}\label{ref_source_state:4U1630-47_winds}
+    \item \citep[][]{Trueba2019_4U1630-47_wind_2012-13Chandra}\label{ref_source_state:4U1630-47_winds_softX}
+    
+    %EXO 1846-031
+    \item \citep[][]{Wang2020_EXO1846-031_winds_hard_i}\label{ref_source_state:EXO1846-031_winds_hard_i}
+    
+    %GRO J1655-40
+    \item \citep[][]{Miller2006_GROJ1655-40_winds}\label{ref_source_state:GROJ1655-40_winds}
+    \item \citep[][]{Miller2008_GROJ1655-40_wind_Chandra_2005_detailed} \label{ref_source_state:GROJ1655-40_winds_softX}
+    
+    %GRS 1716-249
+    \item \citep[][]{Cuneo2020_GRS1716-249_winds_hard_optical}\label{ref_source_state:GRS1716-249_winds_hard_optical}
+    
+    %GRS 1758-258
+    \item \citep[][]{Reynolds2018_GRS1758-258_winds_hard_COSPAR}\label{ref_source_state:GRS1758-258_winds_hard_COSPAR}
+
+    %GRS 1915+105
+    %wind detections
+    \item \citep[][]{Neilsen2009_GRS1915+105_wind_jet_connection}\label{ref_source_state:GRS1915+105_wind_soft_phi_gamma_rho_beta}
+    \item \citep[][]{Ueda2010_GRS1915+105_wind_suzaku_class_change}\label{ref_source_state:GRS1915+105_wind_soft_theta}
+    \item \citep[][]{Liu2022_GRS1915+105_HMXT_wind_soft_2017}\label{ref_source_state:GRS1915+105_wind_soft_kappa}
+    \item \citep[][]{Neilsen2018_GRS1915+105_wind_NICER}\label{ref_source_state:GRS1915+105_wind_soft_lambda}
+    \item \citep[][]{Shi2023_GRS1915+105_wind_soft_psi}\label{ref_source_state:Shi2023_GRS1915+105_wind_soft_psi}
+    \item \citep[][]{Lee2002_GRS1915+105_winds_first}\label{ref_source_state:GRS1915+105_wind_hard_chi}
+    \item \citep[][]{Ueda2009_GRS1915+105_wind_2007}\label{ref_source_state:GRS1915+105_wind_soft_phi_softX}
+    \item \citep[][]{Neilsen2020_GRS1915+105_obscured_NICER_winds_hard}\label{ref_source_state:GRS1915+105_obscured_NICER_winds_hard}
+    \item \citep[][]{Athulya2022_GRS1915+105_wind_obscured_hard_astrosat_NICER}\label{ref_source_state:Athulya2022_GRS1915+105_wind_obscured_hard_astrosat_NICER}
+    
+    \item \citep[][]{Sanchez-Sierras2023_GRS1915_winds_IR}
+    \label{ref_source_state:GRS1915+105_wind_obscured_IR}
+    %GX339-4
+    \item \citep[][]{Rahoui2014_GX339-4_wind_visible_soft_hard}\label{ref_source_state:GX339-4_winds_hard_soft_visible}
+    
+    %H1743-322
+    \item \citep[][]{Miller2006_H1743-322_winds_dips}\label{ref_source_state:H1743-322_winds_dips}
+
+    %IGR J17091-3624
+    %soft winds
+    \item \citep[][]{King2012_IGRJ17091_winds}\label{ref_source_state:IGRJ17091_winds}
+    %hard wind
+    \item \citep[][]{Wang2018_IGRJ17091_winds_hard_i_low}\label{ref_source_state:IGRJ17091_winds_hard_i_low}
+    \item \citep[][]{Gatuzz2020_IGRJ17091-3624_absorber_static_XMM_2016}\label{ref_source_state:IGRJ17091_absorber_static_hard_XMM_2016}
+    
+    %IGR J17451-3022
+    \item \citep[][]{Jaisawal2015_IGRJ17451-3022_wind_dips_Suzaku_2014}\label{ref_source_state:IGRJ17451-3022_wind_dips_Suzaku_2014}
+
+    %MAXI J1305-704
+    \item \citep[][]{Miller2014_MAXIJ1305-704_wind}\label{ref_source_state:MAXIJ1305-704_wind_soft_soft+softX}
+    \item \citep[][]{Shidatsu2013_MAXIJ1305-704_wind_soft_hard_Swift_Suzaku}\label{ref_source_state:MAXIJ1305-704_wind_soft_hard_soft+softX_dip}
+    
+    %MAXIJ1348-630
+    \item \citep[][]{Chakraborty2021_MAXIJ1348-630_i_winds_soft_hard}\label{ref_source_state:MAXIJ1348-630_i_winds_soft_hard}
+    \item \citep[][]{Saha2021_MAXIJ1348-630_wind_hard_softX_2021}\label{ref_source_state:MAXIJ1348-630_wind_hard_softX}
+    \item \citep[][]{Panizo-Espinar2022_MAXIJ1348-630-winds_optical}\label{ref_source_state:MAXIJ1348-630_winds_optical}
+    
+    %MAXI J1803-298
+    \item \citep[][]{Miller2021_MAXIJ1803-298_wind_Swift_2021}\label{ref_source_state:MAXIJ1803-298_winds_soft}
+    \item \citep[][]{Coughenour2023_MAXIJ1803-298_wind_xray_soft_Nustar}
+    \label{ref_source_state:MAXIJ1803-298_winds_xray_soft_Nustar}
+    \item \citep[][]{MataSanchez2022_MAXIJ1803-298_winds_hard_optical}\label{ref_source_state:MAXIJ1803-298_winds_hard_optical}
+    
+    %MAXIJ1820+070
+    \item \citep[][]{Fabian2021_MAXIJ1820+070_wind_xray_soft}\label{ref_source_state:MAXIJ1820+070_wind_xray_soft}
+    \item \citep[][]{Munoz-Darias2019_MAXIJ1820+070_winds_hard_visible}\label{ref_source_state:MAXIJ1820+070_winds_hard_visible}
+
+    %Swift J1357.2-0933
+    \item \citep[][]{Jimenez-Ibarra2019_SwiftJ1357.2-0933_winds_visible_1}\label{ref_source_state:SwiftJ1357.2-0933_winds_visible_1}
+    \item \citep[][]{Charles2019_SwiftJ1357.2-0933_winds_visible_2}\label{ref_source_state:SwiftJ1357.2-0933_winds_visible_2}
+    
+    %Swift J1658.2-4242
+    \item \citep[][]{Xu2018_SwiftJ1658.2_i_winds}\label{ref_source_state:SwiftJ1658.2_i_winds}
+
+    %V404 Cyg (GS 2023+338)
+    \item \citep[][]{Munoz-Darias2022_GS2023+338_wind_xray-optical_2015_details}\label{ref_source_state:GS2023+338_wind_hard}
+    \item \citep[][]{King2015_GS2023+338_wind_x}\label{ref_source_state:GS2023+338_wind_hard_softX}
+    \item \citep[][]{Munoz-Darias2016_GS2023+338_wind_hard_visible}\label{ref_source_state:GS2023+338_wind_hard_visible}
+
+    %V 4641 Sgr (SAX J1819.3-2525)
+    \item \citep[][]{Munoz-Darias2018_SAXJ1819.3-2525_winds_hard_optical}\label{ref_source_state:SAXJ1819.3-2525_winds_hard_optical}
+
+    %XTE J1652-453
+    \item \citep[][]{Chiang2012_XTEJ1652-453_i_winds_2sigma}\label{ref_source_state:XTEJ1652-453_i_winds_sigma}
+
+\end{enumerate*}
+
+\end{table*}
+
+\newpage
+\;
+\newpage
+\bibliographystyle{aas}
+\bibliography{bib_source_tables.bib}
+
+\end{document}
+
+%
+%-------------------------------------------------------------
+%          For the appendices, Tab. longer than a single page
+%-------------------------------------------------------------
+
+%-------------------------------------------------------------
+%                   For appendices and landscape, large table:
+%                    in the preamble, use: \usepackage{lscape}
+%-------------------------------------------------------------
+
+%%%% End of aa.dem

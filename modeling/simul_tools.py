@@ -531,6 +531,7 @@ def xstar_wind(solution,SED_path,xlum,outdir,
                mdot_obs='auto',p_mhd_input=None,m_BH=8,
                ro_init=6.,dr_r=0.05,stop_d_input=1e6,v_resol=85.7,
                chatter=0,reload=True,
+               eta='jed-sad',
                comput_mode='local',xstar_mode='standalone',xstar_loc='default',
                save_folder='',
                force_ro_init=False,no_turb=False,cap_dr_resol=True,no_write=False,
@@ -1008,13 +1009,20 @@ def xstar_wind(solution,SED_path,xlum,outdir,
     '''
 
     # ! From formula (rg/2.0*r_in), Equation (12) of Chakravorty et al. 2016. Here r_in is 6.0*r_g. eta_rad is assumed to be 1.0.
-    eta_s = (1.0/12.0)
+
+    if eta=='jed_sad':
+        eta_spec = (1.0/12.0)
+    elif eta=='diskbb':
+
+        #from Sudeb23 paper who cites bhat2020, but probably shouldn't be applied here because
+        #it makes the rest inconsistent
+        eta_spec=1/4
 
     if mdot_obs=='auto':
         #notes: Lum_Edd = 1.26e38 for a BH of 1 solar Mass)
-        mdot_mhd=xlum/(1.26*m_BH)/eta_s
+        mdot_mhd=xlum/(1.26*m_BH)/eta_spec
     else:
-        mdot_mhd = mdot_obs/eta_s
+        mdot_mhd = mdot_obs/eta_spec
 
     m_BH_SI = m_BH*Msol_SI
     Rs_SI = 2.0*G_SI*m_BH_SI/(c_SI*c_SI)

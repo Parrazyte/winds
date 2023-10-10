@@ -294,8 +294,10 @@ if update_online:
     for i in range(len(online_lines)):
         
         #trick to avoid replacing the markdown where we don't want to
-        #the last replace is to override this specific line (the following one) which gets fucked by the rest, the pass allows a line to remain in the if
-        #=#.replace(".markdown('''",'.markdown('''').replace("'''",''''').replace("###",'###').replace("'''","###").replace('#','#')
+        #the last replace is to override this specific line (the following one) which gets fucked by the rest,
+        # the pass allows a line to remain in the if
+        #here this line will be commented so that's why we keep it as a single line
+        #=#.replace(".markdown('''",'.markdown('''').replace("'''",''''').replace("'''","'''").replace("r'''",'r'''').replace("###",'###').replace("'''","###").replace('#','#')
         
         pass
             
@@ -733,7 +735,7 @@ with st.sidebar.expander('Monitoring'):
             if fig_hr_hard_monit is not None:
                 fig_hr_soft_monit.savefig(save_dir+'/'+'HR_hard_'+choice_source[0]+'_'+str(round(time.time()))+'.'+save_format,bbox_inches='tight')
 
-            if fig_bat_monit is not None:
+            if fig_lc_bat is not None:
                 fig_lc_bat.savefig(save_dir+'/'+'BAT_'+choice_source[0]+'_'+str(round(time.time()))+'.'+save_format,
                                    bbox_inches='tight')
     st.button('Save current MAXI curves',on_click=save_lc,key='save_lc_key')
@@ -1396,7 +1398,8 @@ with tab_source_df:
             state_table_latex = state_table_latex.replace('\\mathit{\\text{soft}}','\\textcolor{Goldenrod}{soft}')\
                                                  .replace('\\mathit{\\text{hard}}','\\textcolor{Goldenrod}{hard}')
 
-            source_table_header = r###
+            #using the ''' to avoid issues when switching to online
+            source_table_header = r'''
                     \def\arraystretch{2.5}
                     \begin{array}{c|c|c|c|c|ccc}
                     \hline
@@ -1419,9 +1422,9 @@ with tab_source_df:
                             \\
                     \hline
                     \hline
-                    ###
+                    '''
 
-            state_table_header = r###
+            state_table_header = r'''
                     \def\arraystretch{2.5}
                     \begin{array}{c || c || c | c }
                     
@@ -1445,9 +1448,9 @@ with tab_source_df:
                          \\
                     \hline
                     \hline
-                    ###
+                    '''
 
-            table_footer = r###\end{array}###
+            table_footer = r'''\end{array}'''
 
             # this allows to replace single line jumps into double line jumps with a horizontal dotted line in between
             # for better visibility
@@ -1554,7 +1557,7 @@ with tab_source_df:
             state_table_biblio_str = '\n'.join(
                 ['[[' + str(i_url + 1) + ']](' + state_bib_urls[i_url] + ')' for i_url in range(len(state_bib_urls))])
 
-            st.markdown('''References :###)
+            st.markdown('References:')
             st.markdown(source_table_biblio_str)
 
         with tab_csv:
@@ -1701,7 +1704,7 @@ with tab_source_df:
         st.markdown(state_table_footnotes)
         st.latex(state_table_latex_disp)
 
-        st.markdown('''References :###)
+        st.markdown('References :')
         st.markdown(state_table_biblio_str)
 
 #####################

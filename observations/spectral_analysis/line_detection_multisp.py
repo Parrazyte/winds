@@ -120,9 +120,6 @@ from linedet_utils import plot_line_comps,plot_line_search,plot_std_ener,coltour
 #custom script with a some lines and fit utilities and variables
 from fitting_tools import c_light,lines_std_names,lines_e_dict,n_absline,range_absline,model_list
 
-#importing some graph tools from the streamlit script
-from visual_line_tools import load_catalogs,dist_mass,obj_values,abslines_values,values_manip,n_infos,telescope_list,hid_graph
-
 from general_tools import file_edit,ravel_ragged
 
 # #importing the pileup evaluation function
@@ -144,8 +141,8 @@ ap = argparse.ArgumentParser(description='Script to detect lines in XMM Spectra.
 
 '''GENERAL OPTIONS'''
 
-ap.add_argument('-satellite',nargs=1,help='telescope to fetch spectra from',default='NICER',type=str)
-ap.add_argument("-cameras",nargs=1,help='Cameras to use for spectral analysis',default='std',type=str)
+ap.add_argument('-satellite',nargs=1,help='telescope to fetch spectra from',default='XMM',type=str)
+ap.add_argument("-cameras",nargs=1,help='Cameras to use for spectral analysis',default='mos2',type=str)
 ap.add_argument("-expmodes",nargs=1,help='restrict the analysis to a single type of exposure',default='all',type=str)
 ap.add_argument("-grouping",nargs=1,help='specfile grouping for XMM spectra in [5,10,20] cts/bin',default='opt',type=str)
 
@@ -261,7 +258,7 @@ ap.add_argument('-fit_lowSNR',nargs=1,help='fit the continuum of low quality dat
 ap.add_argument('-counts_min_HID',nargs=1,help='minimum counts for HID fitting in broad band',default=200,type=float)
 
 ap.add_argument('-skip_started',nargs=1,help='skip all exposures listed in the local summary_line_det file',
-                default=False,type=bool)
+                default=True,type=bool)
 #note : will skip exposures for which the exposure didn't compute or with errors
 
 ap.add_argument('-skip_complete',nargs=1,help='skip completed exposures listed in the local summary_line_det file',
@@ -500,8 +497,8 @@ def folder_state(folderpath='./'):
 started_expos,done_expos=folder_state()
 
 if sat=='NICER':
-    started_expos=[elem.split('_')[0] for elem in started_expos]
-    done_expos=[elem.split('_')[0] for elem in done_expos]
+    started_expos=[[elem.split('_')[0]] if not elem.startswith('[') else literal_eval(elem.split('_')[0]) for elem in started_expos]
+    done_expos=[[elem.split('_')[0]] if not elem.startswith('[') else literal_eval(elem.split('_')[0]) for elem in done_expos]
 
 #bad spectrum manually taken off
 bad_flags=[]
@@ -1717,6 +1714,10 @@ def line_detect(epoch_id):
                       'cameras':cameras,
                       'expmodes':expmodes}
 
+        #the goal here is to avoid importing streamlit if possible
+        from visual_line_tools import abslines_values
+
+
         precomp_absline_vals,precomp_autofit_vals=abslines_values(autofit_store_path,dict_linevis,
                                              obsid=epoch_observ[0])
 
@@ -1805,13 +1806,148 @@ def line_detect(epoch_id):
 
     abslines_table_str=None
 
+    def store_fit(mode='broadband', fitmod=None):
+
+        '''
+        plots and saves various informations about a fit
+        '''
+
+        # Since the automatic rescaling goes haywire when using the add command, we manually rescale (with our own custom command)
+        rescale(auto=True)
+
+        Plot_screen("ldata,ratio,delchi", outdir + '/' + epoch_observ[0] + '_screen_xspec_' + mode,
+                    includedlist=None if fitmod is None else fitmod.includedlist)
+
+        # saving the model str
+        catch_model_str(curr_logfile, savepath=outdir + '/' + epoch_observ[0] + '_mod_' + mode + '.txt')
+
+        if os.path.isfile(outdir + '/' + epoch_observ[0] + '_mod_' + mode + '.xcm'):
+            os.remove(outdir + '/' + epoch_observ[0] + '_mod_' + mode + '.xcm')
+
+        # storing the current configuration and model
+        Xset.save(outdir + '/' + epoch_observ[0] + '_mod_' + mode + '.xcm', info='a')
+    def hid_fit_infos(fitmodel, broad_absval, post_autofit=False):
+
+        '''
+        computes various informations about the fit
+        '''
+
+        if post_autofit:
+            add_str = '_post_auto'
+        else:
+            add_str = ''
+        # freezing what needs to be to avoid problems with the Chain
+        calc_error(curr_logfile, param='1-' + str(AllModels(1).nParameters * AllData.nGroups), timeout=60,
+                   freeze_pegged=True, indiv=True)
+
+        Fit.perform()
+
+        fitmodel.update_fitcomps()
+
+        # storing the flux and HR with the absorption to store the errors
+        # We can only show one flux in the HID so we use the first one, which should be the most 'precise' with our order (pn first)
+
+        AllChains.defLength = 50000
+        AllChains.defBurn = 20000
+        AllChains.defWalkers = 10
+
+        # deleting the previous chain to avoid conflicts
+        AllChains.clear()
+
+        if os.path.exists(outdir + '/' + epoch_observ[0] + '_chain_hid' + add_str + '.fits'):
+            os.remove(outdir + '/' + epoch_observ[0] + '_chain_hid' + add_str + '.fits')
+
+        try:
+            # Creating a chain to avoid problems when computing the errors
+            Chain(outdir + '/' + epoch_observ[0] + '_chain_hid' + add_str + '.fits')
+        except:
+            # trying to freeze pegged parameters again in case the very last fit created peggs
+
+            calc_error(curr_logfile, param='1-' + str(AllModels(1).nParameters * AllData.nGroups), timeout=60,
+                       freeze_pegged=True, indiv=True)
+
+            Fit.perform()
+
+            fitmodel.update_fitcomps()
+            # Creating a chain to avoid problems when computing the errors
+            Chain(outdir + '/' + epoch_observ[0] + '_chain_hid' + add_str + '.fits')
+
+        # computing and storing the flux for the full luminosity and two bands for the HR
+        spflux_single = [None] * 5
+
+        # we still only compute the flux of the first model even with NICER because the rest is BG
+        AllModels.calcFlux(str(hid_cont_range[0]) + ' ' + str(hid_cont_range[1]) + " err 1000 90")
+        spflux_single[0] = AllData(1).flux[0], AllData(1).flux[0] - AllData(1).flux[1], AllData(1).flux[2] - \
+                                               AllData(1).flux[0]
+        AllModels.calcFlux("3. 6. err 1000 90")
+        spflux_single[1] = AllData(1).flux[0], AllData(1).flux[0] - AllData(1).flux[1], AllData(1).flux[2] - \
+                                               AllData(1).flux[0]
+        AllModels.calcFlux("6. 10. err 1000 90")
+        spflux_single[2] = AllData(1).flux[0], AllData(1).flux[0] - AllData(1).flux[1], AllData(1).flux[2] - \
+                                               AllData(1).flux[0]
+        AllModels.calcFlux("1. 3. err 1000 90")
+        spflux_single[3] = AllData(1).flux[0], AllData(1).flux[0] - AllData(1).flux[1], AllData(1).flux[2] - \
+                                               AllData(1).flux[0]
+        AllModels.calcFlux("3. 10. err 1000 90")
+        spflux_single[4] = AllData(1).flux[0], AllData(1).flux[0] - AllData(1).flux[1], AllData(1).flux[2] - \
+                                               AllData(1).flux[0]
+
+        spflux_single = np.array(spflux_single)
+
+        AllChains.clear()
+
+        if line_cont_ig != '':
+            AllData.notice(line_cont_ig)
+
+        store_fit(mode='broadhid' + add_str, fitmod=fitmodel)
+
+        # storing the fitmod class into a file
+        fitmodel.dump(outdir + '/' + epoch_observ[0] + '_fitmod_broadhid' + add_str + '.pkl')
+
+        # taking off the absorption (if it is in the final components) before computing the flux
+        if broad_absval != 0:
+            if 'glob_phabs' in [elem.compname for elem in [comp for comp in fitmodel.includedlist if comp is not None]]:
+                if fitmodel.glob_phabs.included:
+                    fitmodel.glob_phabs.xcomps[0].nH = 0
+            elif 'cont_phabs' in [elem.compname for elem in
+                                  [comp for comp in fitmodel.includedlist if comp is not None]]:
+                if fitmodel.cont_phabs.included:
+                    fitmodel.cont_phabs.xcomps[0].nH = 0
+
+        # and replacing the main values with the unabsorbed flux values
+        # (conservative choice since the other uncertainties are necessarily higher)
+        AllModels.calcFlux(str(hid_cont_range[0]) + ' ' + str(hid_cont_range[1]))
+        spflux_single[0][0] = AllData(1).flux[0]
+        AllModels.calcFlux("3. 6.")
+        spflux_single[1][0] = AllData(1).flux[0]
+        AllModels.calcFlux("6. 10.")
+        spflux_single[2][0] = AllData(1).flux[0]
+        AllModels.calcFlux("1. 3.")
+        spflux_single[3][0] = AllData(1).flux[0]
+        AllModels.calcFlux("3. 10.")
+        spflux_single[4][0] = AllData(1).flux[0]
+
+        spflux_single = spflux_single.T
+
+        # reloading the absorption values to avoid modifying the fit
+        if broad_absval != 0:
+            if 'glob_phabs' in [elem.compname for elem in [comp for comp in fitmodel.includedlist if comp is not None]]:
+                if fitmodel.glob_phabs.included:
+                    fitmodel.glob_phabs.xcomps[0].nH = broad_absval
+            elif 'cont_phabs' in [elem.compname for elem in
+                                  [comp for comp in fitmodel.includedlist if comp is not None]]:
+                if fitmodel.cont_phabs.included:
+                    fitmodel.cont_phabs.xcomps[0].nH = broad_absval
+
+        return spflux_single
+
     #reload previously stored autofits to gain time if asked to
     if reload_autofit and os.path.isfile(outdir+'/'+epoch_observ[0]+'_fitmod_autofit.pkl'):
 
 
         #reloading the broad band fit and model and re-storing associed variables
         fitlines_broad=load_fitmod(outdir + '/' + epoch_observ[0] + '_fitmod_broadband_post_auto.pkl')
-        Xset.restore(outdir+'/'+epoch_observ[0]+'_mod_broad_band_post_auto.xcm')
+        Xset.restore(outdir+'/'+epoch_observ[0]+'_mod_broadband_post_auto.xcm')
         fitlines_broad.update_fitcomps()
         data_broad=allmodel_data()
 
@@ -1854,15 +1990,19 @@ def line_detect(epoch_id):
         AllChains.clear()
         main_spflux = hid_fit_infos(fitlines_hid, broad_absval, post_autofit=True)
 
+        # restoring the linecont save
+        Xset.restore(outdir + '/' + epoch_observ[0] + '_mod_broadband_linecont.xcm', info='a')
 
-        #reloading the continuum models to get the saves back and compute the continuum infos
-        Xset.restore(outdir+'/'+epoch_observ[0]+'_mod_autofit.xcm')
+        data_mod_high=allmodel_data()
 
         cont_abspeak,cont_peak_points,cont_peak_widths,cont_peak_delchis,cont_peak_eqws,chi_dict_init=\
             narrow_line_search(data_mod_high,'cont',line_search_e=line_search_e,line_search_norm=line_search_norm,
                                e_sat_low=e_sat_low,peak_thresh=peak_thresh,peak_clean=peak_clean,
                                line_cont_range=line_cont_range,trig_interval=trig_interval,
                                scorpeon_save=data_broad.scorpeon)
+
+        # reloading the continuum models to get the saves back and compute the continuum infos
+        Xset.restore(outdir + '/' + epoch_observ[0] + '_mod_autofit.xcm')
 
         #loading the autofit model
         Xset.restore(outdir+'/'+epoch_observ[0]+'_mod_autofit.xcm')
@@ -1971,133 +2111,6 @@ def line_detect(epoch_id):
             fitcont_high.dump(outdir+'/'+epoch_observ[0]+'_fitmod_broadband_linecont.pkl')
 
             return [mod_high_dat,fitcont_high]
-
-        def store_fit(mode='broadband',fitmod=None):
-
-            '''
-            plots and saves various informations about a fit
-            '''
-
-            #Since the automatic rescaling goes haywire when using the add command, we manually rescale (with our own custom command)
-            rescale(auto=True)
-
-            Plot_screen("ldata,ratio,delchi",outdir+'/'+epoch_observ[0]+'_screen_xspec_'+mode,
-                        includedlist=None if fitmod is None else fitmod.includedlist)
-
-            #saving the model str
-            catch_model_str(curr_logfile,savepath=outdir+'/'+epoch_observ[0]+'_mod_'+mode+'.txt')
-
-            if os.path.isfile(outdir+'/'+epoch_observ[0]+'_mod_'+mode+'.xcm'):
-                os.remove(outdir+'/'+epoch_observ[0]+'_mod_'+mode+'.xcm')
-
-            #storing the current configuration and model
-            Xset.save(outdir+'/'+epoch_observ[0]+'_mod_'+mode+'.xcm',info='a')
-
-        def hid_fit_infos(fitmodel,broad_absval,post_autofit=False):
-
-            '''
-            computes various informations about the fit
-            '''
-
-            if post_autofit:
-                add_str='_post_auto'
-            else:
-                add_str=''
-            #freezing what needs to be to avoid problems with the Chain
-            calc_error(curr_logfile,param='1-'+str(AllModels(1).nParameters*AllData.nGroups),timeout=60,freeze_pegged=True,indiv=True)
-
-            Fit.perform()
-
-            fitmodel.update_fitcomps()
-
-            #storing the flux and HR with the absorption to store the errors
-            #We can only show one flux in the HID so we use the first one, which should be the most 'precise' with our order (pn first)
-
-            AllChains.defLength=50000
-            AllChains.defBurn=20000
-            AllChains.defWalkers=10
-
-            #deleting the previous chain to avoid conflicts
-            AllChains.clear()
-
-            if os.path.exists(outdir+'/'+epoch_observ[0]+'_chain_hid'+add_str+'.fits'):
-                os.remove(outdir+'/'+epoch_observ[0]+'_chain_hid'+add_str+'.fits')
-
-            try:
-                #Creating a chain to avoid problems when computing the errors
-                Chain(outdir+'/'+epoch_observ[0]+'_chain_hid'+add_str+'.fits')
-            except:
-                #trying to freeze pegged parameters again in case the very last fit created peggs
-
-                calc_error(curr_logfile,param='1-'+str(AllModels(1).nParameters*AllData.nGroups),timeout=60,freeze_pegged=True,indiv=True)
-
-                Fit.perform()
-
-                fitmodel.update_fitcomps()
-                #Creating a chain to avoid problems when computing the errors
-                Chain(outdir+'/'+epoch_observ[0]+'_chain_hid'+add_str+'.fits')
-
-            #computing and storing the flux for the full luminosity and two bands for the HR
-            spflux_single=[None]*5
-
-            #we still only compute the flux of the first model even with NICER because the rest is BG
-            AllModels.calcFlux(str(hid_cont_range[0])+' '+str(hid_cont_range[1])+" err 1000 90")
-            spflux_single[0]=AllData(1).flux[0],AllData(1).flux[0]-AllData(1).flux[1],AllData(1).flux[2]-AllData(1).flux[0]
-            AllModels.calcFlux("3. 6. err 1000 90")
-            spflux_single[1]=AllData(1).flux[0],AllData(1).flux[0]-AllData(1).flux[1],AllData(1).flux[2]-AllData(1).flux[0]
-            AllModels.calcFlux("6. 10. err 1000 90")
-            spflux_single[2]=AllData(1).flux[0],AllData(1).flux[0]-AllData(1).flux[1],AllData(1).flux[2]-AllData(1).flux[0]
-            AllModels.calcFlux("1. 3. err 1000 90")
-            spflux_single[3]=AllData(1).flux[0],AllData(1).flux[0]-AllData(1).flux[1],AllData(1).flux[2]-AllData(1).flux[0]
-            AllModels.calcFlux("3. 10. err 1000 90")
-            spflux_single[4]=AllData(1).flux[0],AllData(1).flux[0]-AllData(1).flux[1],AllData(1).flux[2]-AllData(1).flux[0]
-
-            spflux_single=np.array(spflux_single)
-
-            AllChains.clear()
-
-            if line_cont_ig!='':
-                AllData.notice(line_cont_ig)
-
-            store_fit(mode='broadhid'+add_str,fitmod=fitmodel)
-
-            #storing the fitmod class into a file
-            fitmodel.dump(outdir+'/'+epoch_observ[0]+'_fitmod_broadhid'+add_str+'.pkl')
-
-            #taking off the absorption (if it is in the final components) before computing the flux
-            if broad_absval!=0:
-                if 'glob_phabs' in [elem.compname for elem in [comp for comp in fitmodel.includedlist if comp is not None]]:
-                    if fitmodel.glob_phabs.included:
-                        fitmodel.glob_phabs.xcomps[0].nH=0
-                elif 'cont_phabs' in [elem.compname for elem in [comp for comp in fitmodel.includedlist if comp is not None]]:
-                    if fitmodel.cont_phabs.included:
-                        fitmodel.cont_phabs.xcomps[0].nH=0
-
-            #and replacing the main values with the unabsorbed flux values
-            #(conservative choice since the other uncertainties are necessarily higher)
-            AllModels.calcFlux(str(hid_cont_range[0])+' '+str(hid_cont_range[1]))
-            spflux_single[0][0]=AllData(1).flux[0]
-            AllModels.calcFlux("3. 6.")
-            spflux_single[1][0]=AllData(1).flux[0]
-            AllModels.calcFlux("6. 10.")
-            spflux_single[2][0]=AllData(1).flux[0]
-            AllModels.calcFlux("1. 3.")
-            spflux_single[3][0]=AllData(1).flux[0]
-            AllModels.calcFlux("3. 10.")
-            spflux_single[4][0]=AllData(1).flux[0]
-
-            spflux_single=spflux_single.T
-
-            #reloading the absorption values to avoid modifying the fit
-            if broad_absval!=0:
-                if 'glob_phabs' in [elem.compname for elem in [comp for comp in fitmodel.includedlist if comp is not None]]:
-                    if fitmodel.glob_phabs.included:
-                        fitmodel.glob_phabs.xcomps[0].nH=broad_absval
-                elif 'cont_phabs' in [elem.compname for elem in [comp for comp in fitmodel.includedlist if comp is not None]]:
-                    if fitmodel.cont_phabs.included:
-                        fitmodel.cont_phabs.xcomps[0].nH=broad_absval
-
-            return spflux_single
 
         def broad_fit():
 
@@ -3229,6 +3242,19 @@ elif sat=='NICER':
 
     epoch_list=[np.array(spfile_list)[elem] for elem in epoch_id_list]
 
+    #not needed atm
+    # def str_to_epoch(str_epoch):
+    #     str_epoch_list=[]
+    #     for elem_obsid_str in str_epoch:
+    #         if '-' not in elem_obsid_str:
+    #             str_epoch_list+=elem_obsid_str
+    #         else:
+    #             str_epoch_list+=[elem_obsid_str.split('-')[0]+elem_obsid_str.split('-')[i]\
+    #                              for i in range(1,len(elem_obsid_str.split('-')))]
+
+    epoch_list_started=started_expos
+    epoch_list_done=done_expos
+
 elif sat in ['Suzaku','Swift']:
     epoch_list=[]
     epoch_list_started=[]
@@ -3248,6 +3274,27 @@ elif sat in ['Suzaku','Swift']:
 
     for obsid in obsid_list_started.tolist():
         epoch_list_started+=[[elem] for elem in started_expos if elem.startswith(obsid)]
+
+
+def shorten_epoch(file_ids):
+    # splitting obsids
+    obsids = np.unique([elem.split('-')[0] for elem in file_ids])
+
+    # returning the obsids directly if there's no gtis in the obsids
+    obsids_ravel = ''.join(file_ids)
+    if '-' not in obsids_ravel:
+        return file_ids
+
+    # according the gtis in a shortened way
+    epoch_str_list = []
+    for elem_obsid in obsids:
+        str_gti = '-'.join([elem.split('-')[1] for elem in file_ids if \
+                            elem.startswith(elem_obsid)])
+        if len(str_gti) > 0:
+            str_gti = '-' + str_gti
+        epoch_str_list += [elem_obsid + str_gti]
+
+    return epoch_str_list
 
 #### line detections for exposure with a spectrum
 for epoch_id,epoch_files in enumerate(epoch_list):
@@ -3276,10 +3323,17 @@ for epoch_id,epoch_files in enumerate(epoch_list):
              print('\nSpectrum analysis already performed. Skipping...')
              continue
 
-    elif sat in ['Chandra','NICER','XMM']:
+    elif sat in ['Chandra','XMM']:
 
         if (skip_started and len([elem_sp for elem_sp in epoch_files[:1] if elem_sp.split('_sp')[0] not in started_expos])==0) or \
            (skip_complete and len([elem_sp for elem_sp in epoch_files[:1] if elem_sp.split('_sp')[0] not in done_expos])==0):
+
+            print('\nSpectrum analysis already performed. Skipping...')
+            continue
+
+    elif sat=='NICER':
+        if (skip_started and len([elem_id for elem_id in shorten_epoch(file_ids) if elem_id not in started_expos])==0) or \
+           (skip_complete and len([elem_id for elem_id in shorten_epoch(file_ids) if elem_id not in started_expos])==0):
 
             print('\nSpectrum analysis already performed. Skipping...')
             continue
@@ -3323,11 +3377,20 @@ for epoch_id,epoch_files in enumerate(epoch_list):
             #     obsid_id=firstfile_id
             #     file_id=obsid_id
 
-            summary_content=str(epoch_id)+'\t'+str(epoch_files)+'\t'+str(summary_lines.tolist())
+            epoch_files_suffix=np.unique([elem.split('_sp')[-1]for elem in epoch_files])
+
+            epoch_files_str=epoch_files_suffix
+
+            if len(np.unique(summary_lines))==1:
+                summary_lines_use=summary_lines[0]
+            else:
+                summary_lines_use=summary_lines.tolist()
+
+            summary_content=str(shorten_epoch(file_ids))+'\t'+str(epoch_files_suffix)+'\t'+str(summary_lines_use)
 
             #adding it to the summary file
             file_edit(outdir+'/'+'summary_line_det.log',
-                      str(epoch_id)+'\t'+str(epoch_files),summary_content+'\n',summary_header)
+                      str(shorten_epoch(file_ids))+'\t'+str(epoch_files_suffix),summary_content+'\n',summary_header)
 
     else:
         summary_lines=line_detect(epoch_id)
@@ -3364,6 +3427,10 @@ if multi_obj==False:
 '''''''''''''''''''''''''''''''''''''''
 ''''''Hardness-Luminosity Diagrams''''''
 '''''''''''''''''''''''''''''''''''''''
+
+#importing some graph tools from the streamlit script
+from visual_line_tools import load_catalogs,dist_mass,obj_values,abslines_values,values_manip,n_infos,telescope_list,hid_graph
+
 
 'Distance and Mass determination'
 

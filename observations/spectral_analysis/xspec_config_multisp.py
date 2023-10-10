@@ -2129,7 +2129,8 @@ def calc_error(logfile,maxredchi=1e6,param='all',timeout=60,delchi_thresh=0.1,in
     log_lines=[]
     
     par_peg_ids=[]
-        
+
+    breakpoint()
     #loop on the parameter str list, enclosed in a break to reset it when a new model is found (for indiv mode)
     while is_newmodel:
         

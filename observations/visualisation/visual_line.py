@@ -8,7 +8,7 @@ Created on Sun Mar  6 00:11:45 2022
 
 #general imports
 import os,sys
-
+import re
 import glob
 
 import argparse
@@ -21,6 +21,8 @@ import streamlit as st
 
 import matplotlib as mpl
 import matplotlib.pyplot as plt
+import streamlit.components.v1
+
 #disabling the warning for many open figures because that's exactly the point of the code
 plt.rcParams.update({'figure.max_open_warning': 0})
 
@@ -94,6 +96,7 @@ args=ap.parse_args()
 #local
 sys.path.append('/home/parrama/Documents/Work/PhD/Scripts/Python/general/')
 sys.path.append('/home/parrama/Documents/Work/PhD/Scripts/Python/observations/spectral_analysis/')
+
 #online
 sys.path.append('/mount/src/winds/observations/spectral_analysis/')
 sys.path.append('/mount/src/winds/general/')
@@ -120,6 +123,10 @@ outdir=args.outdir
 
 #rough way of testing if online or not
 online='parrama' not in os.getcwd()
+if online:
+    project_dir='/mount/src/winds/'
+else:
+    project_dir='/home/parrama/Documents/Work/PhD/Scripts/Python/'
 
 
 line_cont_range=np.array(args.line_cont_range.split(' ')).astype(float)
@@ -240,7 +247,7 @@ if not online:
 
 #wrapped in a function to be cachable in streamlit
 if not online:
-    catal_blackcat,catal_watchdog,catal_blackcat_obj,catal_watchdog_obj,catal_maxi_df,catal_maxi_simbad=load_catalogs()
+    catal_blackcat,catal_watchdog,catal_blackcat_obj,catal_watchdog_obj,catal_maxi_df,catal_maxi_simbad,catal_bat_df,catal_bat_simbad=load_catalogs()
 
 st.sidebar.header('Sample selection')
 #We put the telescope option before anything else to filter which file will be used
@@ -693,19 +700,22 @@ else:
     
 with st.sidebar.expander('Monitoring'):
     
-    plot_lc_monit=st.toggle('Plot monitoring lightcurve',value=False)
+    plot_lc_monit=st.toggle('Plot MAXI/RXTE monitoring',value=False)
     plot_hr_monit=st.toggle('Plot monitoring HR',value=False)
-        
+    plot_lc_bat=st.toggle('Plot BAT monitoring',value=False)
+
     monit_highlight_hid=st.toggle('Highlight HID coverage',value=False)
     
-    if plot_lc_monit or plot_hr_monit:
+    if plot_lc_monit or plot_hr_monit or plot_lc_bat:
         zoom_lc=st.toggle('Zoom on the restricted time period in the lightcurve',value=False)
     else:
         zoom_lc=False
         
     fig_lc_monit=None
-    fig_hr_monit=None
-    
+    fig_hr_soft_monit=None
+    fig_hr_hard_monit=None
+
+    fig_lc_bat=None
     plot_maxi_ew=st.toggle('Superpose measured EW',value=False)
     
     def save_lc():
@@ -714,9 +724,18 @@ with st.sidebar.expander('Monitoring'):
         # Saves the current maxi_graph in a svg (i.e. with clickable points) format.
         '''
         if display_single:
-            fig_lc_monit.savefig(save_dir+'/'+'LC_'+choice_source[0]+'_'+str(round(time.time()))+'.'+save_format,bbox_inches='tight')
-            fig_hr_monit.savefig(save_dir+'/'+'HR_'+choice_source[0]+'_'+str(round(time.time()))+'.'+save_format,bbox_inches='tight')
-            
+
+            if fig_lc_monit is not None:
+                fig_lc_monit.savefig(save_dir+'/'+'LC_'+choice_source[0]+'_'+str(round(time.time()))+'.'+save_format,bbox_inches='tight')
+            if fig_hr_soft_monit is not None:
+                fig_hr_soft_monit.savefig(save_dir+'/'+'HR_soft_'+choice_source[0]+'_'+str(round(time.time()))+'.'+save_format,bbox_inches='tight')
+
+            if fig_hr_hard_monit is not None:
+                fig_hr_soft_monit.savefig(save_dir+'/'+'HR_hard_'+choice_source[0]+'_'+str(round(time.time()))+'.'+save_format,bbox_inches='tight')
+
+            if fig_bat_monit is not None:
+                fig_lc_bat.savefig(save_dir+'/'+'BAT_'+choice_source[0]+'_'+str(round(time.time()))+'.'+save_format,
+                                   bbox_inches='tight')
     st.button('Save current MAXI curves',on_click=save_lc,key='save_lc_key')
     
 compute_only_withdet=st.sidebar.checkbox('Skip parameter analysis when no detection remain with the current constraints',value=True)
@@ -1044,6 +1063,9 @@ with tab_about:
     
     with st.expander('I want an overview of the science behind this'):
         st.header('Outbursts')
+
+        #note: st.latex doesn't support non-math latex atm, and even trying to cheat it wih katex doesn't work very well
+        #see in the future if it's better
         st.markdown('''
         X-Ray Binaries are binary systems emitting mostly in the X-ray band, composed of a compact object (Neutron Star or Black Hole) and a companion star.  
         The subgroup we are focusing on here is restricted to **Black Holes** orbiting with a "low mass" star (generally in the main sequence), for which accretion happens through Robe Loche overflow and an **accretion disk**. 
@@ -1319,13 +1341,229 @@ source_df=pd.DataFrame(source_df_arr,columns=['source','distance (kpc)','mass (M
 with tab_source_df:
     
     with st.expander('Source parameters'):
-        
-        st.dataframe(source_df)
-    
-        csv_source = convert_df(source_df)
+
+        tab_latex,tab_csv=st.tabs(["Full Sample Latex table","Current Sample Array"])
+
+        with tab_latex:
+            ####PREPARING LATEX TABLES
+            source_table_tex = os.path.join(project_dir, 'observations/visualisation/source_tables.tex')
+
+            with open(source_table_tex) as tex_file:
+                tex_lines = tex_file.readlines()
+
+            tex_str = ''.join(tex_lines)
+
+            #first table
+            source_table_str = tex_str[tex_str.find('label{table:sources}'):tex_str.find('\end{table*}')]
+
+            #second table
+            state_table_str =  tex_str[tex_str.find('end{table*}')+10:]
+            state_table_str = state_table_str[state_table_str.find('label{table:sources_det_states}'):state_table_str.find('\end{table*}')]
+
+            # taking the main element of each table
+            source_table_latex = source_table_str[
+                                 source_table_str.find('1E 1740.7'):source_table_str.find('\end{tabular}')]
+
+            state_table_latex = state_table_str[state_table_str.find('4U 1543-47}')-10:state_table_str.find('\end{tabular}')]
+
+            # replacing all of the commands that do not work, and removing math text because we're already in math mode
+            source_table_latex = source_table_latex.replace('\T', '').replace('\B', '').replace('$', '').replace(
+                '\\textbf{dips}',
+                '\\bm{dips}')
+
+            state_table_latex=state_table_latex.replace('\T', '').replace('\B', '').replace('$', '')\
+                                               .replace('\\textbf{','\\bm{').replace('\\textit{','\\mathit{').replace('*','^*')
+
+
+            #fetching the occurences of refences
+            source_table_refs_str = np.unique(re.findall('labelcref{ref_source:.*?}', source_table_latex))
+            state_table_refs_str = np.unique(re.findall('labelcref{ref_source_state:.*?}', state_table_latex))
+
+            #and replacing with a fake reference in the latex text itself
+            for i_ref, ref_str in enumerate(source_table_refs_str):
+                source_table_latex = source_table_latex.replace("\\" + ref_str, '\\textcolor{RoyalBlue}{\\bm{[' + str(
+                    i_ref + 1) + ']}}')
+
+            for i_ref, ref_str in enumerate(state_table_refs_str):
+                state_table_latex = state_table_latex.replace("\\" + ref_str, '\\textcolor{RoyalBlue}{\\bm{[' + str(
+                    i_ref + 1) + ']}}')
+
+            #needs to be done after to avoid issues with } moving away in the loop before
+            state_table_latex=state_table_latex.replace('soft', '\\text{soft}').replace('hard', '\\text{hard}')\
+                                               .replace('obscured','\\text{obscured}')
+
+            #and after to reset to a good state to have the italics we want
+            state_table_latex = state_table_latex.replace('\\mathit{\\text{soft}}','\\textcolor{Goldenrod}{soft}')\
+                                                 .replace('\\mathit{\\text{hard}}','\\textcolor{Goldenrod}{hard}')
+
+            source_table_header = r'''
+                    \def\arraystretch{2.5}
+                    \begin{array}{c|c|c|c|c|ccc}
+                    \hline
+                    \hline
+                           \textrm{Name}
+                         & \textrm{mass} (M_\odot)
+                         & \textrm{distance} (kpc)
+                         & \textrm{inclination} (°)
+                         & \textrm{absorption lines}
+                         & \textrm{exposures in }
+                         &\textrm{the sample}
+                            \\
+
+                         &
+                         & 
+                         &
+                         & \textrm{reported in the iron band}
+                         & \textrm{EPIC PN}
+                         & \textrm{HETG}
+                            \\
+                    \hline
+                    \hline
+                    '''
+
+            state_table_header = r'''
+                    \def\arraystretch{2.5}
+                    \begin{array}{c || c || c | c }
+                    
+                    \hline
+                    \hline
+                         \textrm{Source}
+                         & \textrm{accretion states}
+                         & \textrm{with absorption lines reported}
+                         \\
+                    
+                    \hline
+                    
+                         & \textrm{this work}
+                         & \textrm{other works}
+                         & \textrm{other works}\\
+                    
+                    \hline
+                         & \textrm{iron band}
+                         & \textrm{iron band}
+                         & \textrm{other energies}
+                         \\
+                    \hline
+                    \hline
+                    '''
+
+            table_footer = r'''\end{array}'''
+
+            # this allows to replace single line jumps into double line jumps with a horizontal dotted line in between
+            # for better visibility
+            source_table_latex = source_table_latex.replace('\\\\', '\\\\\\hdashline')
+            state_table_latex=state_table_latex.replace('\\\\', '\\\\\\hdashline')
+
+            source_table_latex_disp = source_table_header + source_table_latex + table_footer
+            state_table_latex_disp = state_table_header + state_table_latex + table_footer
+
+            source_table_footnotes = source_table_str[
+                                     source_table_str.find('Notes'):source_table_str.find('References') - 36]
+
+            state_table_footnotes = state_table_str[
+                                     state_table_str.find('Notes'):state_table_str.find('References')]
+
+            source_table_footnotes += 'the second table below'
+            source_table_footnotes = source_table_footnotes.replace('\citealt{Corral-Santana2016_blackcat}',
+                                                                    '[Corral-Santana et al. 2016](https://doi.org/10.1051/0004-6361/201527130)') \
+                .replace('\\msun{}', '$M_{\odot}$')
+
+            state_table_footnotes=state_table_footnotes.replace('italic','\\textcolor{Goldenrod}{italic}')
+
+            st.markdown(source_table_footnotes)
+            st.latex(source_table_latex_disp)
+
+            #the second one will be displayed later
+
+            # REFERENCES
+
+            # fetching the actual paper names in the bib files from the references part of the table
+            source_table_references = source_table_str[source_table_str.find('References'):].split('citep[][]{')
+            state_table_references = state_table_str[state_table_str.find('References'):].split('citep[][]{')
+
+            # matching with the surnames of the table
+            source_table_refs_bibid = [[elem.split('}')[0] for elem in source_table_references \
+                                        if elem_source_ref.replace('labelcref', 'label') in elem] \
+                                       for elem_source_ref in source_table_refs_str]
+
+            state_table_refs_bibid = [[elem.split('}')[0] for elem in state_table_references \
+                                        if elem_state_ref.replace('labelcref', 'label') in elem] \
+                                       for elem_state_ref in state_table_refs_str]
+
+            # checking there's no reference missing
+            if not np.all([len(elem) == 1 for elem in source_table_refs_bibid+state_table_refs_bibid]):
+                st.error('Issue during bibliography reference matching')
+
+            # just removing the useless dimension
+            source_table_refs_bibid = ravel_ragged(source_table_refs_bibid)
+            state_table_refs_bibid = ravel_ragged(state_table_refs_bibid)
+
+            # loading the bib file
+            bib_path = os.path.join(project_dir, 'observations/visualisation/bib_source_tables.bib')
+
+            with open(bib_path) as bib_file:
+                bib_lines = bib_file.readlines()
+
+            # and transforming it into something more useful
+            bib_str = ''.join(bib_lines)
+
+            bib_list = bib_str.split('@')[1:]
+
+            # getting the list of lines of biblio of each matching item
+            source_bib_list = [[elem.split('\n') for elem in bib_list if elem_bib_item + ',' in elem.split('\n')[0]] \
+                               for elem_bib_item in source_table_refs_bibid]
+
+            state_bib_list = [[elem.split('\n') for elem in bib_list if elem_bib_item + ',' in elem.split('\n')[0]] \
+                               for elem_bib_item in state_table_refs_bibid]
+
+            if not np.all([len(elem) == 1 for elem in source_bib_list+state_bib_list]):
+                st.error('Issue during bibliography reference matching')
+
+            # removing the useless dimension
+            source_bib_list = [elem[0] for elem in source_bib_list]
+            state_bib_list = [elem[0] for elem in state_bib_list]
+
+            # assigning a link line to each element (by preference a doi, else an url, else an arxiv id url
+            # we also format the link line into an actual link for each link type
+            source_bib_urls = [['https://doi.org/' + elem[elem.find('{') + 1:elem.find('}')] for elem in elem_bib if
+                                elem.startswith('doi =')] + \
+                               [elem[elem.find('{') + 1:elem.find('}')].split()[0] for elem in elem_bib if
+                                elem.startswith('url =')] + \
+                               ['https://arxiv.org/abs/' + elem[elem.find('{') + 1:elem.find('}')] \
+                                for elem in elem_bib if elem.startswith('arxivId =')] for elem_bib in source_bib_list]
+
+            state_bib_urls = [['https://doi.org/' + elem[elem.find('{') + 1:elem.find('}')] for elem in elem_bib if
+                                elem.startswith('doi =')] + \
+                               [elem[elem.find('{') + 1:elem.find('}')].split()[0] for elem in elem_bib if
+                                elem.startswith('url =')] + \
+                               ['https://arxiv.org/abs/' + elem[elem.find('{') + 1:elem.find('}')] \
+                                for elem in elem_bib if elem.startswith('arxivId =')] for elem_bib in state_bib_list]
+
+
+            if not np.all([len(elem) >= 1 for elem in source_bib_urls+state_bib_urls]):
+                st.error('At least one bibliography reference used in the tables has no URL')
+
+            # selecting the "favorite" available url for each link
+            source_bib_urls = [elem[0] for elem in source_bib_urls]
+            state_bib_urls = [elem[0] for elem in state_bib_urls]
+
+            # and finally displaying the biblio
+            source_table_biblio_str = '\n'.join(
+                ['[[' + str(i_url + 1) + ']](' + source_bib_urls[i_url] + ')' for i_url in range(len(source_bib_urls))])
+
+            state_table_biblio_str = '\n'.join(
+                ['[[' + str(i_url + 1) + ']](' + state_bib_urls[i_url] + ')' for i_url in range(len(state_bib_urls))])
+
+            st.markdown('''References :''')
+            st.markdown(source_table_biblio_str)
+
+        with tab_csv:
+            st.dataframe(source_df)
+
+            csv_source = convert_df(source_df)
     
         st.download_button(
-            label="Download as CSV",
+            label="Download current sample array as CSV",
             data=csv_source,
             file_name='source_table.csv',
             mime='text/csv',
@@ -1457,7 +1695,14 @@ with tab_source_df:
             file_name='line_table.csv',
             mime='text/csv',
         )
-        
+
+    with st.expander('Absorption lines in the literature'):
+
+        st.markdown(state_table_footnotes)
+        st.latex(state_table_latex_disp)
+
+        st.markdown('''References :''')
+        st.markdown(state_table_biblio_str)
 
 '''''''''''''''''''''
  ####Monitoring
@@ -1471,7 +1716,9 @@ with tab_monitoring:
             
         else:
             with st.spinner('Building lightcurve...'):
-                fig_lc_monit=plot_lightcurve(dict_linevis,catal_maxi_df,catal_maxi_simbad,choice_source,display_hid_interval=monit_highlight_hid,
+                fig_lc_monit=plot_lightcurve(dict_linevis,catal_maxi_df,catal_maxi_simbad,choice_source,
+                                             catal_bat_df,catal_bat_simbad,
+                                             display_hid_interval=monit_highlight_hid,
                                                  superpose_ew=plot_maxi_ew,dict_rxte=dict_lc_rxte)
             
                 #wrapper to avoid streamlit trying to plot a None when resetting while loading
@@ -1486,6 +1733,7 @@ with tab_monitoring:
         else:
             with st.spinner('Building soft HR evolution...'):
                 fig_hr_soft_monit=plot_lightcurve(dict_linevis,catal_maxi_df,catal_maxi_simbad,choice_source,
+                                                  catal_bat_df, catal_bat_simbad,
                                              mode='HR_soft',display_hid_interval=monit_highlight_hid,
                                                  superpose_ew=plot_maxi_ew,dict_rxte=dict_lc_rxte)
                 # fig_maxi_lc_html = mpld3.fig_to_html(fig_maxi_lc)
@@ -1497,6 +1745,7 @@ with tab_monitoring:
 
             with st.spinner('Building hard HR evolution...'):
                 fig_hr_hard_monit = plot_lightcurve(dict_linevis, catal_maxi_df, catal_maxi_simbad, choice_source,
+                                                    catal_bat_df, catal_bat_simbad,
                                                mode='HR_hard',
                                                display_hid_interval=monit_highlight_hid,
                                                superpose_ew=plot_maxi_ew, dict_rxte=dict_lc_rxte)
@@ -1506,12 +1755,32 @@ with tab_monitoring:
                 # wrapper to avoid streamlit trying to plot a None when resetting while loading
                 if fig_hr_hard_monit is not None:
                     st.pyplot(fig_hr_hard_monit)
-    
-    if not plot_lc_monit and not plot_hr_monit:
+
+    if plot_lc_bat:
+
+        if not display_single:
+            st.info('BAT monitoring plots are restricted to single source mode.')
+
+        else:
+            with st.spinner('Building BAT lightcurve...'):
+                fig_lc_bat= plot_lightcurve(dict_linevis, catal_maxi_df, catal_maxi_simbad, choice_source,
+                                               catal_bat_df, catal_bat_simbad,mode='BAT',
+                                               display_hid_interval=monit_highlight_hid,
+                                               superpose_ew=plot_maxi_ew, dict_rxte=dict_lc_rxte)
+
+                # wrapper to avoid streamlit trying to plot a None when resetting while loading
+                if fig_lc_bat is not None:
+                    st.pyplot(fig_lc_bat)
+
+
+    if not plot_lc_monit and not plot_hr_monit and not plot_lc_bat:
         st.info('In single source mode, select a monitoring option in the sidebar to plot lightcurves and HR evolutions of the selected object')
     
     if ((plot_lc_monit and fig_lc_monit is None) or (plot_hr_monit and fig_hr_soft_monit is None)) and display_single:
         st.warning('No match in MAXI/RXTE source list found.')
+
+    if plot_lc_bat and fig_lc_bat is None:
+        st.warning('No match in BAT transient list found.')
         
 '''''''''''''''''''''
    #### Parameter analysis

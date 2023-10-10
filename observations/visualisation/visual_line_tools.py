@@ -36,7 +36,7 @@ import matplotlib.dates as mdates
 import pickle
 
 from astropy.io import fits
-from astropy.time import Time
+from astropy.time import Time, TimeDelta
 from astroquery.simbad import Simbad
 
 from copy import deepcopy
@@ -68,7 +68,7 @@ sys.path.append('/mount/src/winds/general/')
 #custom script with some lines and fit utilities and variables
 from fitting_tools import lines_std,c_light,lines_std_names,lines_e_dict,ang2kev
 
-from general_tools import ravel_ragged
+from general_tools import ravel_ragged,MinorSymLogLocator
 
 #Catalogs and manipulation
 from astroquery.vizier import Vizier
@@ -261,35 +261,142 @@ def load_catalogs():
     ctl_blackcat_obj=ctl_blackcat['Name (Counterpart)'].to_numpy()
     ctl_blackcat_obj=np.array([elem.replace(' ','') for elem in ctl_blackcat_obj])
 
-    print('\nLoading MAXI source list...')
-    
     '''Snippet adapted from https://stackoverflow.com/questions/65042243/adding-href-to-panda-read-html-df'''
-        
-    maxi_url = "http://maxi.riken.jp/top/slist.html"
-    maxi_r = requests.get(maxi_url)
-    
-    maxi_html_table = BeautifulSoup(maxi_r.text,features='lxml').find('table')
-    maxi_r.close()
-        
-    ctl_maxi_df = pd.read_html(str(maxi_html_table), header=0)[0] 
-    
-    #we create the request for the Simbad names of all MAXI sources here 
-    #so that it is done only once per script launch as it takes some time to run
-    
-    ctl_maxi_df['standard'] = [link.get('href').replace('..',maxi_url[:maxi_url.find('/top')]).replace('.html','_g_lc_1day_all.dat')\
-                           for link in [elem for elem in maxi_html_table.find_all('a') if 'star_data' in elem.get('href')]]
-    
-    ctl_maxi_simbad=silent_Simbad_query(ctl_maxi_df['source name'])
 
-    print('\nMAXI loading complete.')
-    
-    return ctl_blackcat,ctl_watchdog,ctl_blackcat_obj,ctl_watchdog_obj,ctl_maxi_df,ctl_maxi_simbad
+    with st.spinner('Loading MAXI sources...'):
+        maxi_url = "http://maxi.riken.jp/top/slist.html"
 
-def fetch_maxi_lightcurve(ctl_maxi_df,ctl_maxi_simbad,name):
+        with requests.get(maxi_url) as maxi_r:
+
+            maxi_html_table = BeautifulSoup(maxi_r.text,features='lxml').find('table')
+
+        ctl_maxi_df = pd.read_html(str(maxi_html_table), header=0)[0]
+
+        #we create the request for the Simbad names of all MAXI sources here
+        #so that it is done only once per script launch as it takes some time to run
+
+        ctl_maxi_df['standard'] = [link.get('href').replace('..',maxi_url[:maxi_url.find('/top')]).replace('.html','_g_lc_1day_all.dat')\
+                               for link in [elem for elem in maxi_html_table.find_all('a') if 'star_data' in elem.get('href')]]
+
+        ctl_maxi_simbad=silent_Simbad_query(ctl_maxi_df['source name'])
+
+    with st.spinner('Loading Swift-BAT transients...'):
+
+        bat_url = "https://swift.gsfc.nasa.gov/results/transients/"
+
+        with requests.get(bat_url) as bat_r:
+            bat_html_table = BeautifulSoup(bat_r.text, features='lxml').find('table')
+
+        ctl_bat_df = pd.read_html(str(bat_html_table), header=0)[0]
+
+        # we create the request for the Simbad names of all bat sources here
+        # so that it is done only once per script launch as it takes some time to run
+
+        #the links are much simpler
+        ctl_bat_df['standard'] = [
+            'https://swift.gsfc.nasa.gov/results/transients/weak/'+source_name.replace(' ','')+'.lc.txt' \
+            for source_name in ctl_bat_df['Source Name']]
+
+        ctl_bat_types=np.array(ctl_bat_df['Source Type'],dtype=str)
+        #note: the catalog is way too long to load each time, so we restrict the object categories
+        #to avoid that, we restrict the object in certain categories
+        excluded_types=['AGN', 'AXP', 'Algol type binary', 'BL Lac',
+           'BL Lac LPQ', 'BL Lac/HPQ', 'BL Radio galaxy', 'BY Dra variable',
+           'Be Star', 'Beta Lyra binary', 'Blazar', 'Blazar HP',
+           'Blazar/Sy1', 'Blazar?', 'CV', 'CV/AM Her', 'CV/DQ Her',
+           'CV/Dwarf N', 'CV?', 'Cluster of galaxies', 'Double star',
+           'Dwarf nova', 'FSRQ', 'Flare star', 'Galactic center', 'Galaxy',
+           'Galaxy cluster', 'Galaxy in group', 'Gamma-ray source',
+           'Globular cluster', 'HMXB', 'HMXB/BH', 'HMXB/BHC', 'HMXB/NS',
+           'HMXB/Pulsar', 'HMXB/SFXT', 'HMXB/SFXT candidate', 'HMXB/SFXT?',
+           'HPQ', 'HXMB/NS', 'HXMB/SFXT', 'Interacting galaxies',
+           'LMC source',
+           'LMXB/NS', 'LMXB/msPSR', 'LPQ', 'Liner', 'Mira Cet variable',
+           'Molecular cloud', 'Multiple star', 'Nova', 'PSR/PWN', 'Pulsar',
+           'QSO', 'QSO/FSRQ', 'Quasar', 'Quasar FS', 'RS CVn',
+           'RS CVn variable', 'Radio galaxy', 'Radio source', 'SGR', 'SN',
+           'SNR', 'SNR/PWN', 'SRC/Gamma', 'SRC/X-ray', 'SRC/gamma', 'Star',
+           'Star/Be', 'Sy', 'Sy1', 'Sy1 NL', 'Sy1.2', 'Sy1.5', 'Sy1.5/LPQ',
+           'Sy1.8', 'Sy1.9', 'Sy1/LINER', 'Sy1Sy2/Merger', 'Sy2', 'Sy2 HII',
+           'Sy2/LINER', 'Symb/WD', 'T Tauri star', 'TDF', 'Transient',
+           'Variable star', 'W UMa binary', 'X-ray source',
+           'X-ray transient', 'XRB/NS','uQUASAR']
+
+        included_mask=[str(elem) not in excluded_types for elem in ctl_bat_types]
+
+        ctl_bat_simbad = silent_Simbad_query(np.array(ctl_bat_df['Source Name'])[included_mask])
+
+        ctl_bat_df=ctl_bat_df[included_mask]
+
+        #resetting the index to avoid issues
+        ctl_bat_df=ctl_bat_df.reset_index()
+
+    return ctl_blackcat,ctl_watchdog,ctl_blackcat_obj,ctl_watchdog_obj,ctl_maxi_df,ctl_maxi_simbad,ctl_bat_df,\
+            ctl_bat_simbad
+
+@st.cache_data
+def fetch_bat_lightcurve(ctl_bat_df,_ctl_bat_simbad,name,binning='day'):
+    '''
+
+    note: arguments starting with _ are not hashed by st.cache_data
+
+    Attempt to identify a BAT source corresponding to the name given through Simbad identification
+    If the attempt is successful, loads a dataframe containing 
+    the 1 day or orbit BAT lightcurve for this object, from the BAT website ascii files
+
+    mode gives the type of lightcurve:
+        -day for the day average
+        -orbit for the individual orbits
+
+    see at https://swift.gsfc.nasa.gov/results/transients/Transient_synopsis.html for the info of each column
+
+    Note: it could be possible to go further using the 8 band snapshot lightcurves of
+    https://swift.gsfc.nasa.gov/results/bs157mon/
+    '''
+
+    simbad_query = silent_Simbad_query([name[0].split('_')[0]])
+
+    if simbad_query is None:
+        return None
+
+    if simbad_query['MAIN_ID'][0] not in _ctl_bat_simbad['MAIN_ID']:
+        return None
+
+
+    # we fetch the script id instead of the direct column number because Simbad erases the columns with no match
+    # (-1 because the id starts at 1)
+    source_id = _ctl_bat_simbad['SCRIPT_NUMBER_ID'][_ctl_bat_simbad['MAIN_ID'] == simbad_query['MAIN_ID'][0]][0] - 1
+
+    bat_link = ctl_bat_df['standard'][source_id]
+
+    if binning == 'day':
+        col_names=['TIME', 'RATE', 'ERROR', 'YEAR', 'DAY', 'STAT_ERR', 'SYS_ERR',
+       'DATA_FLAG', 'TIMEDEL_EXPO', 'TIMEDEL_CODED', 'TIMEDEL_DITHERED']
+    elif binning =='orbit':
+        col_names=['TIME', 'RATE', 'ERROR', 'YEAR', 'DAY', 'MJD', 'TIMEDEL',
+       'STAT_ERR', 'SYS_ERR', 'PCODEFR', 'DATA_FLAG', 'DITHER_FLAG']
+        bat_link = bat_link.replace('.lc.txt', '.orbit.lc.txt')
+    
+    source_lc = pd.read_csv(bat_link,
+                                 skiprows=[0,1,2,4],header=0,names=col_names,
+                                 delim_whitespace=True,usecols=range(len(col_names)))
+
+    return source_lc
+
+@st.cache_data
+def fetch_maxi_lightcurve(ctl_maxi_df,_ctl_maxi_simbad,name,binning='day'):
     
     '''
+
+    note: arguments starting with _ are not hashed by st.cache_data
+
     Attempt to identify a MAXI source corresponding to the name given through Simbad identification
     If the attempt is successful, loads a dataframe contaiting the 1 day MAXI lightcurve for this object, from the MAXI website
+
+    binning gives the type of lightcurve:
+        -day for the day average
+        -orbit for the individual orbits
+
     '''
 
     simbad_query=silent_Simbad_query([name[0].split('_')[0]])
@@ -297,18 +404,24 @@ def fetch_maxi_lightcurve(ctl_maxi_df,ctl_maxi_simbad,name):
     if simbad_query is None:
         return None
     
-    if simbad_query['MAIN_ID'] not in ctl_maxi_simbad['MAIN_ID']:
+    if simbad_query['MAIN_ID'][0] not in _ctl_maxi_simbad['MAIN_ID']:
         return None
     
     #we fetch the script id instead of the direct column number because Simbad erases the columns with no match 
     #(-1 because the id starts at 1)
-    source_id=ctl_maxi_simbad['SCRIPT_NUMBER_ID'][ctl_maxi_simbad['MAIN_ID']==simbad_query['MAIN_ID']][0]-1
-    
+    source_id=_ctl_maxi_simbad['SCRIPT_NUMBER_ID'][_ctl_maxi_simbad['MAIN_ID']==simbad_query['MAIN_ID']][0]-1
+
+    maxi_link=ctl_maxi_df['standard'][source_id]
+
+    if binning=='orbit':
+        maxi_link=maxi_link.replace('lc_1_day','lc_1orb')
+
     source_lc=pd.read_csv(ctl_maxi_df['standard'][source_id],names=['MJDcenter','2-20keV[ph/s/cm2]','err_2-20',
                                               '2-4keV','err_2-4','4-10keV','err_4-10','10-20keV','err_10-20'],sep=' ')
 
     return source_lc
 
+@st.cache_data
 def fetch_rxte_lightcurve(name,dict_rxte=dict_lc_rxte):
     
     '''
@@ -329,13 +442,24 @@ def fetch_rxte_lightcurve(name,dict_rxte=dict_lc_rxte):
     
     return dict_rxte[simbad_query[0]['MAIN_ID']]
 
-def plot_lightcurve(dict_linevis,ctl_maxi_df,ctl_maxi_simbad,name,dict_rxte=dict_lc_rxte,mode='full',display_hid_interval=True,superpose_ew=False):
+def plot_lightcurve(dict_linevis,ctl_maxi_df,ctl_maxi_simbad,name,ctl_bat_df,ctl_bat_simbad,dict_rxte=dict_lc_rxte,
+                    mode='full',display_hid_interval=True,superpose_ew=False,binning='day'):
 
     '''
-    plots various MAXI based lightcurve for sources in the Sample if a match is found in the MAXI source list
-    
+    plots various  lightcurves for sources in the Sample if a match is found in RXTE, MAXI or BAT source lists
+
+    mode
     full : full lightcurve in 2-20 keV
-    HR : HR in 4-10/2-4 bands
+    HR_soft : HR in 4-10/2-4 bands
+    HR_hard: HR in 10-20/2-4 bands
+    BAT: BAT-only high energy lightcurve
+
+    binning:
+    -day: daily averages
+    -orbit: orbit averages (only for MAXI and BAT), 1.5h for MAXI, and the column TIMDEL for BAT
+
+    BAT orbit lightcurve times have a TIME in seconds after 1/01/2001
+
     '''
     
     slider_date=dict_linevis['slider_date']
@@ -349,40 +473,50 @@ def plot_lightcurve(dict_linevis,ctl_maxi_df,ctl_maxi_simbad,name,dict_rxte=dict
     abslines_plot_restrict=dict_linevis['abslines_plot_restrict']
     mask_lines=dict_linevis['mask_lines']
     conf_thresh=dict_linevis['slider_sign']
-    
-    maxi_lc_df=fetch_maxi_lightcurve(ctl_maxi_df,ctl_maxi_simbad,name)
-    
+
+
+    maxi_lc_df=fetch_maxi_lightcurve(ctl_maxi_df,ctl_maxi_simbad,name,binning=binning)
     rxte_lc_df=fetch_rxte_lightcurve(name, dict_rxte)
-    
-    if maxi_lc_df is None and rxte_lc_df is None:
+    bat_lc_df =fetch_bat_lightcurve(ctl_bat_df, ctl_bat_simbad, name, binning=binning)
+
+
+    if mode=='BAT' and bat_lc_df is None:
+        return None
+
+    if mode!='BAT' and maxi_lc_df is None and rxte_lc_df is None:
         return None
     
     fig_lc,ax_lc=plt.subplots(figsize=(12,4))
-    
+
+    str_binning=' daily' if binning=='day' else ' individual orbit'
     #main axis definitions
     ax_lc.set_xlabel('Time')
     if mode=='full':
-        ax_lc.set_title(name[0]+' broad band monitoring')
+        ax_lc.set_title(name[0]+str_binning+' broad band monitoring')
         
         maxi_y_str='MAXI '+maxi_lc_df.columns[1] if maxi_lc_df is not None else ''
         rxte_y_str='RXTE '+rxte_lc_df.columns[1]+'/25' if rxte_lc_df is not None else ''
         ax_lc.set_ylabel(maxi_y_str+('/' if maxi_lc_df is not None and rxte_lc_df is not None else '')+rxte_y_str)
+
     elif mode=='HR_soft':
-        ax_lc.set_title(name[0]+' Soft Hardness Ratio monitoring')
-        ax_lc.set_ylabel('MAXI counts HR in [4-10]/[2-4] bands')
-        
+        ax_lc.set_title(name[0]+str_binning+' Soft Hardness Ratio monitoring')
+
         maxi_y_str='MAXI counts HR in [4-10]/[2-4] keV' if maxi_lc_df is not None else ''
         rxte_y_str='RXTE band C/(B+A) [5-12]/[1.5-5] keV' if rxte_lc_df is not None else ''
         ax_lc.set_ylabel(maxi_y_str+\
                          ("/" if maxi_lc_df is not None and rxte_lc_df is not None else '')+\
                          rxte_y_str,fontsize=8 if maxi_lc_df is not None and rxte_lc_df is not None else None)
-
     elif mode=='HR_hard':
-        ax_lc.set_title(name[0] + ' Hard Hardness Ratio monitoring')
-        ax_lc.set_ylabel('MAXI counts HR in [10-20]/[2-4] bands')
+        ax_lc.set_title(name[0]+str_binning+' Hard Hardness Ratio monitoring')
 
         maxi_y_str = 'MAXI counts HR in [10-20]/[2-4] keV' if maxi_lc_df is not None else ''
         ax_lc.set_ylabel(maxi_y_str)
+
+    elif mode=='BAT':
+        ax_lc.set_title(name[0]+str_binning+' BAT monitoring')
+        bat_y_str = 'BAT counts (15-50 keV)'
+        ax_lc.set_ylabel(bat_y_str)
+
         
     '''MAXI'''
     
@@ -443,12 +577,15 @@ def plot_lightcurve(dict_linevis,ctl_maxi_df,ctl_maxi_simbad,name,dict_rxte=dict
             
         #creating a variable for the dates
         num_maxi_dates=mdates.date2num(Time(maxi_lc_df[maxi_lc_df.columns[0]],format='mjd').datetime)
+
+        #note that in day binning, the maxi dates values are always a day+0.5 and so represent "actual" days
+        xerr_maxi=0.5 if binning=='day' else 1.5/24
         
         if mode=='full':    
             ax_lc.set_yscale('log')
-            
+
             #plotting the full lightcurve
-            ax_lc.errorbar(num_maxi_dates,maxi_lc_df[maxi_lc_df.columns[1]],xerr=0.5,yerr=maxi_lc_df[maxi_lc_df.columns[2]],
+            ax_lc.errorbar(num_maxi_dates,maxi_lc_df[maxi_lc_df.columns[1]],xerr=xerr_maxi,yerr=maxi_lc_df[maxi_lc_df.columns[2]],
                         linestyle='',color='black',marker='',elinewidth=0.5,label='MAXI standard counts')
             ax_lc.set_ylim(0.05,ax_lc.get_ylim()[1])
     
@@ -462,7 +599,7 @@ def plot_lightcurve(dict_linevis,ctl_maxi_df,ctl_maxi_simbad,name,dict_rxte=dict
             ax_lc.set_ylim(0.3,2)
             
             #plotting the full lightcurve
-            maxi_hr_errbar=ax_lc.errorbar(num_maxi_dates,maxi_hr,xerr=0.5,yerr=maxi_hr_err,
+            maxi_hr_errbar=ax_lc.errorbar(num_maxi_dates,maxi_hr,xerr=xerr_maxi,yerr=maxi_hr_err,
                         linestyle='',color='black',marker='',elinewidth=0.5,label='MAXI HR')
     
             #adapting the transparency to hide the noisy elements
@@ -484,7 +621,7 @@ def plot_lightcurve(dict_linevis,ctl_maxi_df,ctl_maxi_simbad,name,dict_rxte=dict
             ax_lc.set_ylim(0.03, 2)
 
             # plotting the full lightcurve
-            maxi_hr_errbar = ax_lc.errorbar(num_maxi_dates, maxi_hr, xerr=0.5, yerr=maxi_hr_err,
+            maxi_hr_errbar = ax_lc.errorbar(num_maxi_dates, maxi_hr, xerr=xerr_maxi, yerr=maxi_hr_err,
                                             linestyle='', color='black', marker='', elinewidth=0.5, label='MAXI HR')
 
             # adapting the transparency to hide the noisy elements
@@ -497,6 +634,43 @@ def plot_lightcurve(dict_linevis,ctl_maxi_df,ctl_maxi_simbad,name,dict_rxte=dict
 
         # ax_lc.set_ylim(0.1,ax_lc.get_ylim()[1])
         
+    if bat_lc_df is not None:
+        '''
+        creating a variable for the dates
+        The time construction is different for orbit and day lightcurves in swift
+        
+        In the day lightcurve, the first column ('TIME') simply gives the MJD and we just need to add .5 to get the full
+        day error range
+        
+        In the orbit lightcurve, the first column ('TIME') gives a number of seconds after 01-01-2001 (aka MJD 51910)
+        and the TIME_DEL is the exposure time and
+        '''
+
+        if binning=='day':
+            num_bat_dates = mdates.date2num(Time(bat_lc_df['TIME'], format='mjd').datetime)
+        elif binning=='orbit':
+
+            #base time value + TIME in seconds + half of the exposure to center the point
+            base_date=Time('51910',format='mjd')+Timedelta(bat_lc_df['TIME'],format='sec')+\
+                                                 Timedelta(bat_lc_df['TIMEDEL'],format='sec')/2
+            base_date=base_data.datetime
+            num_bat_dates=mdates.date2num(base_date)
+
+        if mode=='BAT':
+            # note that in day binning, the bat dates values are always a day+0.5 and so represent "actual" days
+            #in orbit we divide the exposure time by two
+            xerr_bat = 0.5 if binning == 'day' else bat_lc_df['TIMEDEL']/86400/2
+
+            ax_lc.set_yscale('symlog', linthresh=0.01, linscale=0.1)
+            ax_lc.yaxis.set_minor_locator(MinorSymLogLocator(linthresh=0.01))
+
+            # plotting the lightcurve
+            ax_lc.errorbar(num_bat_dates, bat_lc_df[bat_lc_df.columns[1]], xerr=xerr_bat,
+                           yerr=bat_lc_df[bat_lc_df.columns[2]],
+                           linestyle='', color='black', marker='', elinewidth=0.5, label='bat standard counts')
+
+            ax_lc.set_ylim(0,max(ax_lc.get_ylim()[1],1e-2))
+
     #displaying observations with other instruments
     
     label_tel_list=[]
@@ -581,7 +755,7 @@ def plot_lightcurve(dict_linevis,ctl_maxi_df,ctl_maxi_simbad,name,dict_rxte=dict
     tot_dates_list=[]
     tot_dates_list+=[] if maxi_lc_df is None else num_maxi_dates.tolist()
     tot_dates_list+=[] if rxte_lc_df is None else num_rxte_dates.tolist()
-    
+    tot_dates_list+=[] if bat_lc_df is None else  num_bat_dates.tolist()
     if zoom_lc:
         ax_lc.set_xlim(max(mdates.date2num(slider_date[0]),min(tot_dates_list)),
                                              min(mdates.date2num(slider_date[1]),max(tot_dates_list)))

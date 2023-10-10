@@ -8,7 +8,7 @@ Created on Sun Mar  6 00:11:45 2022
 
 #general imports
 import os,sys
-
+import re
 import glob
 
 import argparse
@@ -21,6 +21,8 @@ import streamlit as st
 
 import matplotlib as mpl
 import matplotlib.pyplot as plt
+import streamlit.components.v1
+
 #disabling the warning for many open figures because that's exactly the point of the code
 plt.rcParams.update({'figure.max_open_warning': 0})
 
@@ -94,6 +96,7 @@ args=ap.parse_args()
 #local
 sys.path.append('/home/parrama/Documents/Work/PhD/Scripts/Python/general/')
 sys.path.append('/home/parrama/Documents/Work/PhD/Scripts/Python/observations/spectral_analysis/')
+
 #online
 sys.path.append('/mount/src/winds/observations/spectral_analysis/')
 sys.path.append('/mount/src/winds/general/')
@@ -120,6 +123,10 @@ outdir=args.outdir
 
 #rough way of testing if online or not
 online='parrama' not in os.getcwd()
+if online:
+    project_dir='/mount/src/winds/'
+else:
+    project_dir='/home/parrama/Documents/Work/PhD/Scripts/Python/'
 
 
 line_cont_range=np.array(args.line_cont_range.split(' ')).astype(float)
@@ -240,7 +247,7 @@ if not online:
 
 #wrapped in a function to be cachable in streamlit
 if not online:
-    catal_blackcat,catal_watchdog,catal_blackcat_obj,catal_watchdog_obj,catal_maxi_df,catal_maxi_simbad=load_catalogs()
+    catal_blackcat,catal_watchdog,catal_blackcat_obj,catal_watchdog_obj,catal_maxi_df,catal_maxi_simbad,catal_bat_df,catal_bat_simbad=load_catalogs()
 
 st.sidebar.header('Sample selection')
 #We put the telescope option before anything else to filter which file will be used
@@ -249,7 +256,8 @@ choice_telescope=st.sidebar.multiselect('Telescopes', ['XMM','Chandra']+([] if o
 if online:
     radio_ignore_full=True
 else:
-    radio_ignore_full=st.sidebar.radio('Include problematic data (_full) folders',('No','Yes'))=='No'
+    with st.sidebar:
+        radio_ignore_full=not st.toggle('Include problematic data (_full) folders')
 
 if not online:
     os.system('mkdir -p glob_batch/visual_line_dumps/')
@@ -342,7 +350,8 @@ if update_dump or not os.path.isfile(dump_path):
             'args_cam':args.cameras,
             'args_line_search_e':args.line_search_e,
             'args_line_search_norm':args.line_search_norm,
-            'visual_line':True
+            'visual_line':True,
+
             }
         
         #### main arrays computation
@@ -358,14 +367,14 @@ if update_dump or not os.path.isfile(dump_path):
         
         #Reading the results files
         observ_list,lineval_list,flux_list,date_list,instru_list,exptime_list=obj_values(lineval_files,Edd_factor,dict_linevis)
-        
-        dict_linevis['flux_list']=flux_list
-        
+
         #the values here are for each observation
         abslines_infos,autofit_infos=abslines_values(abslines_files,dict_linevis)
-        
+
         #getting all the variations we need
-        abslines_infos_perline,abslines_infos_perobj,abslines_plot,abslines_ener,flux_plot,hid_plot,incl_plot,width_plot,nh_plot,kt_plot=values_manip(abslines_infos,dict_linevis,autofit_infos)
+        abslines_infos_perline,abslines_infos_perobj,abslines_plot,abslines_ener,\
+            flux_plot,hid_plot,incl_plot,width_plot,nh_plot,kt_plot=values_manip(abslines_infos,dict_linevis,autofit_infos,
+                                                                                 flux_list)
 
         ####(deprecated) deleting bad flags        
         # #taking of the bad files points from the HiD
@@ -417,21 +426,16 @@ if update_dump or not os.path.isfile(dump_path):
         dump_dict['bad_flags']=bad_flags
         dump_dict['obj_list']=obj_list
         dump_dict['date_list']=date_list
-        dump_dict['abslines_plot']=abslines_plot
-        dump_dict['hid_plot']=hid_plot
-        dump_dict['flux_plot']=flux_plot
-        dump_dict['nh_plot']=nh_plot
-        dump_dict['kt_plot']=kt_plot
-        dump_dict['incl_plot']=incl_plot
-        dump_dict['abslines_infos_perobj']=abslines_infos_perobj
+
+        dump_dict['abslines_infos']=abslines_infos
+        dump_dict['autofit_infos']=autofit_infos
         dump_dict['flux_list']=flux_list
-        dump_dict['abslines_ener']=abslines_ener
-        dump_dict['width_plot']=width_plot
         dump_dict['dict_linevis']=dict_linevis
+
         dump_dict['catal_maxi_df']=catal_maxi_df
         dump_dict['catal_maxi_simbad']=catal_maxi_simbad
         dump_dict['dict_lc_rxte']=dict_lc_rxte
-        
+
         with open(dump_path,'wb+') as dump_file:
             dill.dump(dump_dict,file=dump_file)
    
@@ -449,17 +453,12 @@ observ_list=dump_dict['observ_list']
 bad_flags=dump_dict['bad_flags']
 obj_list=dump_dict['obj_list']
 date_list=dump_dict['date_list']
-abslines_plot=dump_dict['abslines_plot']
-hid_plot=dump_dict['hid_plot']
-flux_plot=dump_dict['flux_plot']
-kt_plot=dump_dict['kt_plot']
-nh_plot=dump_dict['nh_plot']
-incl_plot=dump_dict['incl_plot']
-abslines_infos_perobj=dump_dict['abslines_infos_perobj']
+
+abslines_infos=dump_dict['abslines_infos']
+autofit_infos=dump_dict['autofit_infos']
 flux_list=dump_dict['flux_list']
-abslines_ener=dump_dict['abslines_ener']
-width_plot=dump_dict['width_plot']
 dict_linevis=dump_dict['dict_linevis']
+
 catal_maxi_df=dump_dict['catal_maxi_df']
 catal_maxi_simbad=dump_dict['catal_maxi_simbad']
 dict_lc_rxte=dump_dict['dict_lc_rxte']
@@ -511,10 +510,20 @@ if multi_obj:
     if display_multi:
         with st.sidebar.expander('Source'):
             choice_source=st.multiselect('',options=[elem for elem in obj_list if elem in sources_det_dic] if restrict_sources_detection else obj_list,default=[elem for elem in obj_list if elem in sources_det_dic] if restrict_sources_detection else obj_list)     
-        
+
     if display_single:
         #switching to array to keep the same syntax later on
         choice_source=[st.sidebar.selectbox('Source',obj_list)]
+
+    with st.sidebar.expander('Observation'):
+        obs_list_str=np.array([np.array([obj_list[i]+'_'+observ_list[i][j].replace('_-1','').replace('_auto','')\
+                               for j in range(len(observ_list[i]))]) for i in range(len(obj_list))],dtype=object)
+
+        choice_obs=st.multiselect('Exclude individual observations:',ravel_ragged(obs_list_str))
+
+        mask_included_selection=np.array([np.array([obj_list[i]+'_'+observ_list[i][j].replace('_-1','').replace('_auto','') not in\
+                                          choice_obs for j in range(len(observ_list[i]))]) for i in range(len(obj_list))],
+                                            dtype=object)
 
 ####Nickel display is turned off here
 with st.sidebar.expander('Absorption lines restriction'):
@@ -527,13 +536,13 @@ mask_lines=np.array([elem in selectbox_abstype for elem in line_display_str])
 with st.sidebar.expander('Inclination'):
     slider_inclin=st.slider('Inclination restriction (°)',min_value=0.,max_value=90.,step=0.5,value=[0.,90.])
     
-    include_noinclin=st.checkbox('Include Sources with no inclination information',value=True)
+    include_noinclin=st.toggle('Include Sources with no inclination information',value=True)
     
-    incl_inside=st.checkbox('Only include sources with uncertainties strictly compatible with the current limits',value=False)
+    incl_inside=st.toggle('Only include sources with uncertainties strictly compatible with the current limits',value=False)
     
-    display_incl_inside=st.checkbox('Display ULs differently for sources with uncertainties not strictly compatible with the current limits',value=False)
+    display_incl_inside=st.toggle('Display ULs differently for sources with uncertainties not strictly compatible with the current limits',value=False)
     
-    dash_noincl=st.checkbox('Display ULs differently for sources with no inclination information',value=False)
+    dash_noincl=st.toggle('Display ULs differently for sources with no inclination information',value=False)
     
     radio_dipper=st.radio('Dipping sources restriction',('Off','Add dippers','Restrict to dippers','Restrict to non-dippers'))
     
@@ -602,13 +611,29 @@ if radio_info_cmap=='EW ratio':
 else:
     selectbox_ratioeqw=''
     
-checkbox_zoom=st.sidebar.checkbox('Zoom around the displayed elements',value=False)
-            
+radio_zoom_hid=st.sidebar.radio('Zoom:',('Global sample','Current selection','manual bounds'),index=0)
+if radio_zoom_hid=='Global sample':
+    zoom_hid=False
+elif radio_zoom_hid=='Current selection':
+    zoom_hid='auto'
+elif radio_zoom_hid=='manual bounds':
+
+    def format_slider(x,val_decimal=3):
+        return ('%.'+str(val_decimal)+'e')%x
+
+    values_zoom_hr=st.sidebar.select_slider('Displayed HR range',options=np.logspace(-2,1,num=100),
+                                            value=[0.1,2.0092330025650478],format_func=format_slider)
+    values_zoom_lum = st.sidebar.select_slider('Displayed luminosity range', options=np.logspace(-5,0,num=100),
+                                        value=[1e-5, 1.],format_func=format_slider)
+    zoom_hid=[values_zoom_hr,values_zoom_lum]
+
+    st.text(zoom_hid)
+
 display_nondet=st.sidebar.checkbox('Display exposures with no detection',value=True)
 
 if display_nondet:
     with st.sidebar.expander('Upper limits'):
-        display_upper=st.checkbox('Display upper limits',value=True)    
+        display_upper=st.toggle('Display upper limits',value=True)    
         if display_upper:
                 selectbox_upperlines=st.multiselect('Lines selection for upper limit display:',
                                                             options=line_display_str[mask_lines],default=line_display_str[mask_lines][:2])
@@ -640,28 +665,28 @@ if not online:
         
 with st.sidebar.expander('Visualisation'):
     
-    display_dicho=st.checkbox('Display favourable zone',value=True)
+    display_dicho=st.toggle('Display favourable zone',value=True)
     
-    display_obj_zerodet=st.checkbox('Color sources with no detection',value=True)
+    display_obj_zerodet=st.toggle('Color sources with no detection',value=True)
     
-    display_hid_error=st.checkbox('Display errorbar for HID position',value=False)
+    display_hid_error=st.toggle('Display errorbar for HID position',value=False)
     
-    display_central_abs=st.checkbox('Display centers for absorption detections',value=False)
+    display_central_abs=st.toggle('Display centers for absorption detections',value=False)
 
-    alpha_abs=st.checkbox('Plot with transparency',value=False)
+    alpha_abs=st.toggle('Plot with transparency',value=False)
     
-    split_cmap_source=st.checkbox('Use different colormaps for detections and non-detections',value=True)
+    split_cmap_source=st.toggle('Use different colormaps for detections and non-detections',value=True)
     
-    global_colors=st.checkbox('Normalize colors/colormaps over the entire sample',value=False)
+    global_colors=st.toggle('Normalize colors/colormaps over the entire sample',value=False)
         
     if not online:
-        paper_look=st.checkbox('Paper look',value=False)
+        paper_look=st.toggle('Paper look',value=False)
 
-        bigger_text=st.checkbox('Bigger text size',value=True)
+        bigger_text=st.toggle('Bigger text size',value=True)
         
-        square_mode=st.checkbox('Square mode',value=True)
+        square_mode=st.toggle('Square mode',value=True)
     
-        show_linked=st.checkbox('Distinguish linked detections',value=False)
+        show_linked=st.toggle('Distinguish linked detections',value=False)
     else:
         paper_look=False
         bigger_text=True
@@ -675,20 +700,23 @@ else:
     
 with st.sidebar.expander('Monitoring'):
     
-    plot_lc_monit=st.checkbox('Plot monitoring lightcurve',value=False)
-    plot_hr_monit=st.checkbox('Plot monitoring HR',value=False)
-        
-    monit_highlight_hid=st.checkbox('Highlight HID coverage',value=False)
+    plot_lc_monit=st.toggle('Plot MAXI/RXTE monitoring',value=False)
+    plot_hr_monit=st.toggle('Plot monitoring HR',value=False)
+    plot_lc_bat=st.toggle('Plot BAT monitoring',value=False)
+
+    monit_highlight_hid=st.toggle('Highlight HID coverage',value=False)
     
-    if plot_lc_monit or plot_hr_monit:
-        zoom_lc=st.checkbox('Zoom on the restricted time period in the lightcurve',value=False)
+    if plot_lc_monit or plot_hr_monit or plot_lc_bat:
+        zoom_lc=st.toggle('Zoom on the restricted time period in the lightcurve',value=False)
     else:
         zoom_lc=False
         
     fig_lc_monit=None
-    fig_hr_monit=None
-    
-    plot_maxi_ew=st.checkbox('Superpose measured EW',value=False)
+    fig_hr_soft_monit=None
+    fig_hr_hard_monit=None
+
+    fig_lc_bat=None
+    plot_maxi_ew=st.toggle('Superpose measured EW',value=False)
     
     def save_lc():
         
@@ -696,16 +724,25 @@ with st.sidebar.expander('Monitoring'):
         # Saves the current maxi_graph in a svg (i.e. with clickable points) format.
         ###
         if display_single:
-            fig_lc_monit.savefig(save_dir+'/'+'LC_'+choice_source[0]+'_'+str(round(time.time()))+'.'+save_format,bbox_inches='tight')
-            fig_hr_monit.savefig(save_dir+'/'+'HR_'+choice_source[0]+'_'+str(round(time.time()))+'.'+save_format,bbox_inches='tight')
-            
+
+            if fig_lc_monit is not None:
+                fig_lc_monit.savefig(save_dir+'/'+'LC_'+choice_source[0]+'_'+str(round(time.time()))+'.'+save_format,bbox_inches='tight')
+            if fig_hr_soft_monit is not None:
+                fig_hr_soft_monit.savefig(save_dir+'/'+'HR_soft_'+choice_source[0]+'_'+str(round(time.time()))+'.'+save_format,bbox_inches='tight')
+
+            if fig_hr_hard_monit is not None:
+                fig_hr_soft_monit.savefig(save_dir+'/'+'HR_hard_'+choice_source[0]+'_'+str(round(time.time()))+'.'+save_format,bbox_inches='tight')
+
+            if fig_bat_monit is not None:
+                fig_lc_bat.savefig(save_dir+'/'+'BAT_'+choice_source[0]+'_'+str(round(time.time()))+'.'+save_format,
+                                   bbox_inches='tight')
     st.button('Save current MAXI curves',on_click=save_lc,key='save_lc_key')
     
 compute_only_withdet=st.sidebar.checkbox('Skip parameter analysis when no detection remain with the current constraints',value=True)
 
 if not online:
     with st.sidebar.expander('Stacking'):
-        stack_det=st.checkbox('Stack detections')
+        stack_det=st.toggle('Stack detections')
         stack_flux_lim = st.number_input(r'Max ratio of fluxes to stack', value=2., min_value=1e-10, format='%.3e')
         stack_HR_lim=st.number_input(r'Max ratio of HR to stack',value=2.,min_value=1e-10,format='%.3e')
         stack_time_lim=st.number_input(r'Max time delta to stack',value=2.,min_value=1e-1,format='%.3e')
@@ -720,6 +757,21 @@ else:
     fig_hid,ax_hid=plt.subplots(1,1,figsize=(8,6))
 ax_hid.clear()
 
+
+###RESTRICTION MASKING###
+
+# getting all the variations we need
+abslines_infos_perline, abslines_infos_perobj, abslines_plot, abslines_ener, \
+    flux_plot, hid_plot, incl_plot, width_plot, nh_plot, kt_plot,flux_list = values_manip(abslines_infos, dict_linevis,
+                                                                                autofit_infos,
+                                                                                flux_list,
+                                                                                mask_include=mask_included_selection)
+n_obj_init=len(obj_list)
+
+
+instru_list = np.array([instru_list[i_obj][mask_included_selection[i_obj]] for i_obj in range(n_obj_init)], dtype=object)
+observ_list = np.array([observ_list[i_obj][mask_included_selection[i_obj]] for i_obj in range(n_obj_init)], dtype=object)
+date_list = np.array([date_list[i_obj][mask_included_selection[i_obj]] for i_obj in range(n_obj_init)], dtype=object)
 
 ###HID GRAPH###
 
@@ -830,7 +882,7 @@ else:
 n_obj_withdet=sum(mask_obj_withdet & mask_obj_base)
 
 if not display_obj_zerodet:
-    mask_obj=mask_obj_base & mask_obj_withdet
+    mask_obj=mask_obj_base
 else:
     mask_obj=mask_obj_base
     
@@ -988,7 +1040,7 @@ hid_graph(ax_hid,dict_linevis,
           split_cmap_source=split_cmap_source,
           display_evol_single=display_evol_single, display_dicho=display_dicho,
           global_colors=global_colors, alpha_abs=alpha_abs,
-          paper_look=paper_look, bigger_text=bigger_text, square_mode=square_mode, zoom=checkbox_zoom)
+          paper_look=paper_look, bigger_text=bigger_text, square_mode=square_mode, zoom=zoom_hid)
 
 # fig_hid_html = mpld3.fig_to_html(fig_hid)
 # components.html(fig_hid_html, height=1000)
@@ -1011,6 +1063,9 @@ with tab_about:
     
     with st.expander('I want an overview of the science behind this'):
         st.header('Outbursts')
+
+        #note: st.latex doesn't support non-math latex atm, and even trying to cheat it wih katex doesn't work very well
+        #see in the future if it's better
         st.markdown('''
         X-Ray Binaries are binary systems emitting mostly in the X-ray band, composed of a compact object (Neutron Star or Black Hole) and a companion star.  
         The subgroup we are focusing on here is restricted to **Black Holes** orbiting with a "low mass" star (generally in the main sequence), for which accretion happens through Robe Loche overflow and an **accretion disk**. 
@@ -1075,7 +1130,7 @@ with tab_about:
                     
                     Figure references:  
                         [Petrucci et al. 2021](https://doi.org/10.1051/0004-6361/202039524)  
-                        [Done et al. 2007]((https://doi.org/10.1007/s00159-007-0006-1))  
+                        [Done et al. 2007](https://doi.org/10.1007/s00159-007-0006-1)  
                     ''')
                 
     with st.expander('I want to know how to use this tool'):
@@ -1088,7 +1143,7 @@ with tab_about:
                     
                     **The monitoring and parameter analysis plots take time to compute**, as the first one fetches data from the MAXI website in real time, and the second computes perturbative estimates of the correlation coefficient for each plot. As such, they are deactivated by default.  
                     
-                    It is worth noting that the current version of this tool has trouble performing too many actions in a short time. This is partially covered through internal failsafes, but if you modify several options at once and something crashes, or displays in a non-standard way, either resettoing an option (which reruns the script internally) or restarting the tool (either by pressing R or going in the top-right menu and clicking on Rerun) can fix the issue.
+                    It is worth noting that the current version of this tool has trouble performing too many actions in a short time. This is partially covered through internal failsafes, but if you modify several options at once and something crashes, or displays in a non-standard way, either resetting an option (which reruns the script internally) or restarting the tool (either by pressing R or going in the top-right menu and clicking on Rerun) can fix the issue.
                     
                     Moreover, to avoid too much issues for data management, the data is split between each combination of instrument, and the creation of subsequent widget depends on this data.
                     
@@ -1286,13 +1341,229 @@ source_df=pd.DataFrame(source_df_arr,columns=['source','distance (kpc)','mass (M
 with tab_source_df:
     
     with st.expander('Source parameters'):
-        
-        st.dataframe(source_df)
-    
-        csv_source = convert_df(source_df)
+
+        tab_latex,tab_csv=st.tabs(["Full Sample Latex table","Current Sample Array"])
+
+        with tab_latex:
+            ####PREPARING LATEX TABLES
+            source_table_tex = os.path.join(project_dir, 'observations/visualisation/source_tables.tex')
+
+            with open(source_table_tex) as tex_file:
+                tex_lines = tex_file.readlines()
+
+            tex_str = ''.join(tex_lines)
+
+            #first table
+            source_table_str = tex_str[tex_str.find('label{table:sources}'):tex_str.find('\end{table*}')]
+
+            #second table
+            state_table_str =  tex_str[tex_str.find('end{table*}')+10:]
+            state_table_str = state_table_str[state_table_str.find('label{table:sources_det_states}'):state_table_str.find('\end{table*}')]
+
+            # taking the main element of each table
+            source_table_latex = source_table_str[
+                                 source_table_str.find('1E 1740.7'):source_table_str.find('\end{tabular}')]
+
+            state_table_latex = state_table_str[state_table_str.find('4U 1543-47}')-10:state_table_str.find('\end{tabular}')]
+
+            # replacing all of the commands that do not work, and removing math text because we're already in math mode
+            source_table_latex = source_table_latex.replace('\T', '').replace('\B', '').replace('$', '').replace(
+                '\\textbf{dips}',
+                '\\bm{dips}')
+
+            state_table_latex=state_table_latex.replace('\T', '').replace('\B', '').replace('$', '')\
+                                               .replace('\\textbf{','\\bm{').replace('\\textit{','\\mathit{').replace('*','^*')
+
+
+            #fetching the occurences of refences
+            source_table_refs_str = np.unique(re.findall('labelcref{ref_source:.*?}', source_table_latex))
+            state_table_refs_str = np.unique(re.findall('labelcref{ref_source_state:.*?}', state_table_latex))
+
+            #and replacing with a fake reference in the latex text itself
+            for i_ref, ref_str in enumerate(source_table_refs_str):
+                source_table_latex = source_table_latex.replace("\\" + ref_str, '\\textcolor{RoyalBlue}{\\bm{[' + str(
+                    i_ref + 1) + ']}}')
+
+            for i_ref, ref_str in enumerate(state_table_refs_str):
+                state_table_latex = state_table_latex.replace("\\" + ref_str, '\\textcolor{RoyalBlue}{\\bm{[' + str(
+                    i_ref + 1) + ']}}')
+
+            #needs to be done after to avoid issues with } moving away in the loop before
+            state_table_latex=state_table_latex.replace('soft', '\\text{soft}').replace('hard', '\\text{hard}')\
+                                               .replace('obscured','\\text{obscured}')
+
+            #and after to reset to a good state to have the italics we want
+            state_table_latex = state_table_latex.replace('\\mathit{\\text{soft}}','\\textcolor{Goldenrod}{soft}')\
+                                                 .replace('\\mathit{\\text{hard}}','\\textcolor{Goldenrod}{hard}')
+
+            source_table_header = r###
+                    \def\arraystretch{2.5}
+                    \begin{array}{c|c|c|c|c|ccc}
+                    \hline
+                    \hline
+                           \textrm{Name}
+                         & \textrm{mass} (M_\odot)
+                         & \textrm{distance} (kpc)
+                         & \textrm{inclination} (°)
+                         & \textrm{absorption lines}
+                         & \textrm{exposures in }
+                         &\textrm{the sample}
+                            \\
+
+                         &
+                         & 
+                         &
+                         & \textrm{reported in the iron band}
+                         & \textrm{EPIC PN}
+                         & \textrm{HETG}
+                            \\
+                    \hline
+                    \hline
+                    ###
+
+            state_table_header = r###
+                    \def\arraystretch{2.5}
+                    \begin{array}{c || c || c | c }
+                    
+                    \hline
+                    \hline
+                         \textrm{Source}
+                         & \textrm{accretion states}
+                         & \textrm{with absorption lines reported}
+                         \\
+                    
+                    \hline
+                    
+                         & \textrm{this work}
+                         & \textrm{other works}
+                         & \textrm{other works}\\
+                    
+                    \hline
+                         & \textrm{iron band}
+                         & \textrm{iron band}
+                         & \textrm{other energies}
+                         \\
+                    \hline
+                    \hline
+                    ###
+
+            table_footer = r###\end{array}###
+
+            # this allows to replace single line jumps into double line jumps with a horizontal dotted line in between
+            # for better visibility
+            source_table_latex = source_table_latex.replace('\\\\', '\\\\\\hdashline')
+            state_table_latex=state_table_latex.replace('\\\\', '\\\\\\hdashline')
+
+            source_table_latex_disp = source_table_header + source_table_latex + table_footer
+            state_table_latex_disp = state_table_header + state_table_latex + table_footer
+
+            source_table_footnotes = source_table_str[
+                                     source_table_str.find('Notes'):source_table_str.find('References') - 36]
+
+            state_table_footnotes = state_table_str[
+                                     state_table_str.find('Notes'):state_table_str.find('References')]
+
+            source_table_footnotes += 'the second table below'
+            source_table_footnotes = source_table_footnotes.replace('\citealt{Corral-Santana2016_blackcat}',
+                                                                    '[Corral-Santana et al. 2016](https://doi.org/10.1051/0004-6361/201527130)') \
+                .replace('\\msun{}', '$M_{\odot}$')
+
+            state_table_footnotes=state_table_footnotes.replace('italic','\\textcolor{Goldenrod}{italic}')
+
+            st.markdown(source_table_footnotes)
+            st.latex(source_table_latex_disp)
+
+            #the second one will be displayed later
+
+            # REFERENCES
+
+            # fetching the actual paper names in the bib files from the references part of the table
+            source_table_references = source_table_str[source_table_str.find('References'):].split('citep[][]{')
+            state_table_references = state_table_str[state_table_str.find('References'):].split('citep[][]{')
+
+            # matching with the surnames of the table
+            source_table_refs_bibid = [[elem.split('}')[0] for elem in source_table_references \
+                                        if elem_source_ref.replace('labelcref', 'label') in elem] \
+                                       for elem_source_ref in source_table_refs_str]
+
+            state_table_refs_bibid = [[elem.split('}')[0] for elem in state_table_references \
+                                        if elem_state_ref.replace('labelcref', 'label') in elem] \
+                                       for elem_state_ref in state_table_refs_str]
+
+            # checking there's no reference missing
+            if not np.all([len(elem) == 1 for elem in source_table_refs_bibid+state_table_refs_bibid]):
+                st.error('Issue during bibliography reference matching')
+
+            # just removing the useless dimension
+            source_table_refs_bibid = ravel_ragged(source_table_refs_bibid)
+            state_table_refs_bibid = ravel_ragged(state_table_refs_bibid)
+
+            # loading the bib file
+            bib_path = os.path.join(project_dir, 'observations/visualisation/bib_source_tables.bib')
+
+            with open(bib_path) as bib_file:
+                bib_lines = bib_file.readlines()
+
+            # and transforming it into something more useful
+            bib_str = ''.join(bib_lines)
+
+            bib_list = bib_str.split('@')[1:]
+
+            # getting the list of lines of biblio of each matching item
+            source_bib_list = [[elem.split('\n') for elem in bib_list if elem_bib_item + ',' in elem.split('\n')[0]] \
+                               for elem_bib_item in source_table_refs_bibid]
+
+            state_bib_list = [[elem.split('\n') for elem in bib_list if elem_bib_item + ',' in elem.split('\n')[0]] \
+                               for elem_bib_item in state_table_refs_bibid]
+
+            if not np.all([len(elem) == 1 for elem in source_bib_list+state_bib_list]):
+                st.error('Issue during bibliography reference matching')
+
+            # removing the useless dimension
+            source_bib_list = [elem[0] for elem in source_bib_list]
+            state_bib_list = [elem[0] for elem in state_bib_list]
+
+            # assigning a link line to each element (by preference a doi, else an url, else an arxiv id url
+            # we also format the link line into an actual link for each link type
+            source_bib_urls = [['https://doi.org/' + elem[elem.find('{') + 1:elem.find('}')] for elem in elem_bib if
+                                elem.startswith('doi =')] + \
+                               [elem[elem.find('{') + 1:elem.find('}')].split()[0] for elem in elem_bib if
+                                elem.startswith('url =')] + \
+                               ['https://arxiv.org/abs/' + elem[elem.find('{') + 1:elem.find('}')] \
+                                for elem in elem_bib if elem.startswith('arxivId =')] for elem_bib in source_bib_list]
+
+            state_bib_urls = [['https://doi.org/' + elem[elem.find('{') + 1:elem.find('}')] for elem in elem_bib if
+                                elem.startswith('doi =')] + \
+                               [elem[elem.find('{') + 1:elem.find('}')].split()[0] for elem in elem_bib if
+                                elem.startswith('url =')] + \
+                               ['https://arxiv.org/abs/' + elem[elem.find('{') + 1:elem.find('}')] \
+                                for elem in elem_bib if elem.startswith('arxivId =')] for elem_bib in state_bib_list]
+
+
+            if not np.all([len(elem) >= 1 for elem in source_bib_urls+state_bib_urls]):
+                st.error('At least one bibliography reference used in the tables has no URL')
+
+            # selecting the "favorite" available url for each link
+            source_bib_urls = [elem[0] for elem in source_bib_urls]
+            state_bib_urls = [elem[0] for elem in state_bib_urls]
+
+            # and finally displaying the biblio
+            source_table_biblio_str = '\n'.join(
+                ['[[' + str(i_url + 1) + ']](' + source_bib_urls[i_url] + ')' for i_url in range(len(source_bib_urls))])
+
+            state_table_biblio_str = '\n'.join(
+                ['[[' + str(i_url + 1) + ']](' + state_bib_urls[i_url] + ')' for i_url in range(len(state_bib_urls))])
+
+            st.markdown('''References :###)
+            st.markdown(source_table_biblio_str)
+
+        with tab_csv:
+            st.dataframe(source_df)
+
+            csv_source = convert_df(source_df)
     
         st.download_button(
-            label="Download as CSV",
+            label="Download current sample array as CSV",
             data=csv_source,
             file_name='source_table.csv',
             mime='text/csv',
@@ -1424,7 +1695,14 @@ with tab_source_df:
             file_name='line_table.csv',
             mime='text/csv',
         )
-        
+
+    with st.expander('Absorption lines in the literature'):
+
+        st.markdown(state_table_footnotes)
+        st.latex(state_table_latex_disp)
+
+        st.markdown('''References :###)
+        st.markdown(state_table_biblio_str)
 
 #####################
  ####Monitoring
@@ -1438,7 +1716,9 @@ with tab_monitoring:
             
         else:
             with st.spinner('Building lightcurve...'):
-                fig_lc_monit=plot_lightcurve(dict_linevis,catal_maxi_df,catal_maxi_simbad,choice_source,display_hid_interval=monit_highlight_hid,
+                fig_lc_monit=plot_lightcurve(dict_linevis,catal_maxi_df,catal_maxi_simbad,choice_source,
+                                             catal_bat_df,catal_bat_simbad,
+                                             display_hid_interval=monit_highlight_hid,
                                                  superpose_ew=plot_maxi_ew,dict_rxte=dict_lc_rxte)
             
                 #wrapper to avoid streamlit trying to plot a None when resetting while loading
@@ -1451,21 +1731,56 @@ with tab_monitoring:
             st.info('HR monitoring plots are restricted to single source mode.')
             
         else:
-            with st.spinner('Building HR evolution...'):
-                fig_hr_monit=plot_lightcurve(dict_linevis,catal_maxi_df,catal_maxi_simbad,choice_source,mode='HR',display_hid_interval=monit_highlight_hid,
+            with st.spinner('Building soft HR evolution...'):
+                fig_hr_soft_monit=plot_lightcurve(dict_linevis,catal_maxi_df,catal_maxi_simbad,choice_source,
+                                                  catal_bat_df, catal_bat_simbad,
+                                             mode='HR_soft',display_hid_interval=monit_highlight_hid,
                                                  superpose_ew=plot_maxi_ew,dict_rxte=dict_lc_rxte)
                 # fig_maxi_lc_html = mpld3.fig_to_html(fig_maxi_lc)
                 # components.html(fig_maxi_lc_html,height=500,width=1000)
                 
                 #wrapper to avoid streamlit trying to plot a None when resetting while loading
-                if fig_hr_monit is not None:
-                    st.pyplot(fig_hr_monit)
-    
-    if not plot_lc_monit and not plot_hr_monit:
+                if fig_hr_soft_monit is not None:
+                    st.pyplot(fig_hr_soft_monit)
+
+            with st.spinner('Building hard HR evolution...'):
+                fig_hr_hard_monit = plot_lightcurve(dict_linevis, catal_maxi_df, catal_maxi_simbad, choice_source,
+                                                    catal_bat_df, catal_bat_simbad,
+                                               mode='HR_hard',
+                                               display_hid_interval=monit_highlight_hid,
+                                               superpose_ew=plot_maxi_ew, dict_rxte=dict_lc_rxte)
+                # fig_maxi_lc_html = mpld3.fig_to_html(fig_maxi_lc)
+                # components.html(fig_maxi_lc_html,height=500,width=1000)
+
+                # wrapper to avoid streamlit trying to plot a None when resetting while loading
+                if fig_hr_hard_monit is not None:
+                    st.pyplot(fig_hr_hard_monit)
+
+    if plot_lc_bat:
+
+        if not display_single:
+            st.info('BAT monitoring plots are restricted to single source mode.')
+
+        else:
+            with st.spinner('Building BAT lightcurve...'):
+                fig_lc_bat= plot_lightcurve(dict_linevis, catal_maxi_df, catal_maxi_simbad, choice_source,
+                                               catal_bat_df, catal_bat_simbad,mode='BAT',
+                                               display_hid_interval=monit_highlight_hid,
+                                               superpose_ew=plot_maxi_ew, dict_rxte=dict_lc_rxte)
+
+                # wrapper to avoid streamlit trying to plot a None when resetting while loading
+                if fig_lc_bat is not None:
+                    st.pyplot(fig_lc_bat)
+
+
+    if not plot_lc_monit and not plot_hr_monit and not plot_lc_bat:
         st.info('In single source mode, select a monitoring option in the sidebar to plot lightcurves and HR evolutions of the selected object')
     
-    if ((plot_lc_monit and fig_lc_monit is None) or (plot_hr_monit and fig_hr_monit is None)) and display_single:
+    if ((plot_lc_monit and fig_lc_monit is None) or (plot_hr_monit and fig_hr_soft_monit is None)) and display_single:
         st.warning('No match in MAXI/RXTE source list found.')
+
+    if plot_lc_bat and fig_lc_bat is None:
+        st.warning('No match in BAT transient list found.')
         
 #####################
    #### Parameter analysis
@@ -1473,17 +1788,17 @@ with tab_monitoring:
 
 with st.sidebar.expander('Parameter analysis'):
     
-    display_param_withdet=st.checkbox('Restrict parameter analysis to sources with significant detections',value=True)
+    display_param_withdet=st.toggle('Restrict parameter analysis to sources with significant detections',value=True)
     
     display_param=st.multiselect('Additional parameters',
                                  ('EW ratio (Line)','width (Line)','Line flux (Line)','Time (Observation)',
                                   'Line EW comparison'),default=None)
     
-    glob_col_source=st.checkbox('Normalize source colors over the entire sample',value=True)
+    glob_col_source=st.toggle('Normalize source colors over the entire sample',value=True)
     
     st.header('Distributions')
-    display_distrib=st.checkbox('Plot distributions',value=False)
-    use_distrib_lines=st.checkbox('Show line by line distribution',value=True)
+    display_distrib=st.toggle('Plot distributions',value=False)
+    use_distrib_lines=st.toggle('Show line by line distribution',value=True)
     split_distrib=st.radio('Split distributions:',('Off','Source','Instrument'),index=1)
     
     if split_distrib=='Source' and (display_single or sum(mask_obj)==1):
@@ -1510,30 +1825,41 @@ with st.sidebar.expander('Parameter analysis'):
         
     use_width='width (Line)' in display_param
     if use_width:
-        display_th_width_ew=st.checkbox('Display theoretical individual width vs EW evolution',value=False)
+        display_th_width_ew=st.toggle('Display theoretical individual width vs EW evolution',value=False)
     else:
         display_th_width_ew=False
         
     use_time='Time (Observation)' in display_param
     use_lineflux='Line flux (Line)' in display_param
     
-    compute_correl=st.checkbox('Compute Pearson/Spearman for the scatter plots',value=True)
-    display_pearson=st.checkbox('Display Pearson rank',value=False)
+    compute_correl=st.toggle('Compute Pearson/Spearman for the scatter plots',value=True)
+    display_pearson=st.toggle('Display Pearson rank',value=False)
     st.header('Visualisation')
     radio_color_scatter=st.radio('Scatter plot color options:',('None','Source','Instrument','Time','HR','width','nH'),index=1)
-    scale_log_eqw=st.checkbox('Use a log scale for the equivalent width and line fluxes')
-    scale_log_hr=st.checkbox('Use a log scale for the HID parameters',value=True)
-    display_abserr_bshift=st.checkbox('Display mean and std of Chandra velocity shift distribution',value=True)
+    scale_log_eqw=st.toggle('Use a log scale for the equivalent width and line fluxes')
+    scale_log_hr=st.toggle('Use a log scale for the HID parameters',value=True)
+    display_abserr_bshift=st.toggle('Display mean and std of Chandra velocity shift distribution',value=True)
     
-    common_observ_bounds=st.checkbox('Use common observation parameter bounds for all lines',value=True)
-    
-    #plot_trend=st.checkbox('Display linear trend lines in the scatter plots',value=False)
-    plot_trend=False
-    
+    common_observ_bounds=st.toggle('Use common observation parameter bounds for all lines',value=True)
+
+    st.header('Trends')
+    plot_trend=st.toggle('Display linear trends in strongly correlated graphs (p<1e-5)',value=False)
+
+    restrict_trend=st.toggle('Restrict trend computation bounds',value=False)
+    if restrict_trend:
+        trend_xmin = st.number_input(r'$x_{min}$')
+        trend_xmax = st.number_input(r'$x_{max}$')
+        trend_ymin = st.number_input(r'$y_{min}$')
+        trend_ymax = st.number_input(r'$y_{max}$')
+    else:
+        trend_xmin=0
+        trend_xmax=0
+        trend_ymin=0
+        trend_ymax=0
+
     st.header('Upper limits')
-    show_scatter_ul=st.checkbox('Display upper limits in EW plots',value=False)
-    lock_lims_det=not(st.checkbox('Include upper limits in graph bounds computations',value=True))
-        
+    show_scatter_ul=st.toggle('Display upper limits in EW plots',value=False)
+    lock_lims_det=not(st.toggle('Include upper limits in graph bounds computations',value=True))
 
 if compute_only_withdet:
     
@@ -1782,8 +2108,9 @@ def streamlit_scat(mode):
         
         scat_ener+=[correl_graph(abslines_plot_restrict,'ener_inclin',abslines_ener_restrict,dict_linevis,mode_vals=incl_plot_restrict,mode='source',
                                  conf_thresh=slider_sign,streamlit=True,compute_correl=compute_correl,bigger_text=bigger_text,show_linked=show_linked)]
-        scat_width+=[correl_graph(abslines_plot_restrict,'width_inclin',abslines_ener_restrict,dict_linevis,mode_vals=incl_plot_restrict,mode='source',
-                                 conf_thresh=slider_sign,streamlit=True,compute_correl=compute_correl,bigger_text=bigger_text,show_linked=show_linked)]
+        if use_width:
+            scat_width+=[correl_graph(abslines_plot_restrict,'width_inclin',abslines_ener_restrict,dict_linevis,mode_vals=incl_plot_restrict,mode='source',
+                                     conf_thresh=slider_sign,streamlit=True,compute_correl=compute_correl,bigger_text=bigger_text,show_linked=show_linked)]
         if n_infos>=5:
             scat_lineflux=[correl_graph(abslines_plot_restrict,'lineflux_inclin',abslines_ener_restrict,dict_linevis,mode_vals=incl_plot_restrict,
                                         mode='source',conf_thresh=slider_sign,streamlit=True,compute_correl=compute_correl,bigger_text=bigger_text,
@@ -1840,7 +2167,10 @@ dict_linevis['abslines_ener']=abslines_ener
 dict_linevis['abslines_plot']=abslines_plot
 
 dict_linevis['lock_lims_det']=lock_lims_det
+
 dict_linevis['plot_trend']=plot_trend
+dict_linevis['restrict_trend']=restrict_trend
+dict_linevis['trend_lims']=[[trend_xmin,trend_xmax],[trend_ymin,trend_ymax]]
 
 dict_linevis['color_scatter']=radio_color_scatter
 dict_linevis['observ_list']=observ_list

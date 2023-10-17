@@ -1418,12 +1418,14 @@ def delcomp(compname,modclass=AllModels,give_ndel=False):
         #or was a right product of a multiplicative component
         
         if (new_exp_bef[-1]=='(' and new_exp_aft[0]==')') or new_exp_bef[-1]=='*':
-            print('Last component in a multiplicative/convolutive component group removed. Removing the associated component...')
-            
+            print('Last component in a multiplicative/convolutive component group removed.')
+
             #identifying the name of the previous component
             #In case of multiple deleted components, we use the last element in the list of deleted components 
             del_asscomp=first_mod.componentNames[id_delcomp_list[-1]-1]
-            
+
+            print('Removing the associated component: '+del_asscomp)
+
             id_delcomp_list+=[id_delcomp_list[-1]-1]
             
             #removing the right parenthesis if it exists
@@ -1733,7 +1735,7 @@ def parse_xlog(log_lines,goal='lastmodel',no_display=False,replace_frozen=False,
     '''
     
     found_model=False
-    
+
     par_peg=[]
     #searching the last 'Model' line
     
@@ -1825,7 +1827,7 @@ def parse_xlog(log_lines,goal='lastmodel',no_display=False,replace_frozen=False,
         
         if freeze_pegged:
             
-            #this is jus
+            #this is just here to be returned to know what has been pegged
             par_peg_infos=[]
             
             for parameter in par_peg:
@@ -1848,8 +1850,11 @@ def parse_xlog(log_lines,goal='lastmodel',no_display=False,replace_frozen=False,
                     par_peg_infos+=[[par_grp,par_number,par_mod]]
                 
                 AllModels(par_grp,modName=par_mod)(par_number).frozen=1
-                
-            AllModels.show()
+
+            #in this case we will return an information because we need to know if something has been changed
+            # in the error computations in some cases
+            if len(par_peg)>0:
+                AllModels.show()
             
         #reshaping the error results array to get in correct shape for each data group
         error_pars=error_pars.reshape(AllData.nGroups,AllModels(1).nParameters,2)
@@ -2130,7 +2135,6 @@ def calc_error(logfile,maxredchi=1e6,param='all',timeout=60,delchi_thresh=0.1,in
     
     par_peg_ids=[]
 
-    breakpoint()
     #loop on the parameter str list, enclosed in a break to reset it when a new model is found (for indiv mode)
     while is_newmodel:
         
@@ -2147,10 +2151,15 @@ def calc_error(logfile,maxredchi=1e6,param='all',timeout=60,delchi_thresh=0.1,in
 
 
         for error_str in error_strlist:
-            
+
+            #skipping useless parameters in indiv mode
+            if indiv:
+                par_group,par_id=par_degroup(int(error_str))
+                if AllModels(par_group)(par_id).link!='' or AllModels(par_group)(par_id).frozen:
+                    continue
+
             #creating the process
             p_error=multiprocessing.Process(target=error_func,name='error_calc',args=(error_str,))
-        
             
             #launching it
             p_error.start()
@@ -2176,16 +2185,21 @@ def calc_error(logfile,maxredchi=1e6,param='all',timeout=60,delchi_thresh=0.1,in
             log_lines+=[logfile.readlines()]
                 
             print('\nError computation finished.')
-            
+
             if freeze_pegged:
                 curr_par_peg_ids=parse_xlog(log_lines[-1],goal='lasterrors',freeze_pegged=freeze_pegged)
+
                 #adding the pegged parameters to the list of pegged parameters at each error computation
                 if curr_par_peg_ids!=[]:
                     par_peg_ids+=curr_par_peg_ids
+
+                #adding the new lines since since if something has been pegged we will have a new model displayed
+                #which needs to be loaded to save this peg
+                log_lines[-1]+=logfile.readlines()
                 
             elif give_errors:
                 new_errors=parse_xlog(log_lines[-1],goal='lasterrors')
-                
+
                 #in indiv mode we only update the value of the parameter for which the error was just computed
                 if indiv:
 
@@ -2209,6 +2223,8 @@ def calc_error(logfile,maxredchi=1e6,param='all',timeout=60,delchi_thresh=0.1,in
                 AllModels.show()
                 Fit.show()
                 Xset.chatter=curr_chatter
+                #reading the newly created lines we don't care about
+                logfile.readlines()
 
                 if indiv and base_chi-Fit.statistic>delchi_thresh:
                     break
@@ -3239,15 +3255,19 @@ class fitmod:
                         (2*max(0,AllData.nGroups-1) if AllData.nGroups>1 and AllModels(1).componentNames[0]=='constant' else 0)
                         
             #computing the markov chain here since we will need it later anyway, it will allow better error definitions
-            AllChains.defLength=4000*n_free_pars
-            AllChains.defBurn=2000*n_free_pars
-            AllChains.defWalkers=2*n_free_pars
-            
+            # AllChains.defLength=4000*n_free_pars
+            # AllChains.defBurn=2000*n_free_pars
+            # AllChains.defWalkers=2*n_free_pars
+
+            AllChains.defLength=10000
+            AllChains.defBurn=5000
+            AllChains.defWalkers=3*n_free_pars
+
             #ensuring we recreate the chains
             if os.path.exists(directory+'/'+observ_id+'_chain_autofit.fits'):
                 os.remove(directory+'/'+observ_id+'_chain_autofit.fits')
                 
-            self.print_xlog('\nlog:Creating Markov Chain from the fit...')
+            self.print_xlog('\nlog:Creating Markov Chain from the fit with '+str(n_free_pars)+' free parameters...')
             
             try:
                 ####Note: should be replaced by emcee eventually
@@ -3365,10 +3385,10 @@ class fitmod:
         base_chi=Fit.statistic
         
         Fit.perform()
-        
+
         #computing how distinct the bshift distribution of the lines are in the same complex
         for i_line,line in enumerate(abs_lines):
-            
+
             #no meaning for lines in Ka
             if i_line<3:
                 continue
@@ -3410,13 +3430,13 @@ class fitmod:
         for i_line,line in enumerate(abs_lines):
             
             fitcomp_line=getattr(self,line)
-                        
+
             #storing the eqw (or the upper limit if there is no line)
             abslines_eqw[i_line]=fitcomp_line.get_eqwidth()
             
         #second loop since we modify the fit here and that affects the eqw computation
         for i_line,line in enumerate(abs_lines):
-            
+
             fitcomp_line=getattr(self,line)
             
             #skipping if the line is not in the final model
@@ -3444,12 +3464,16 @@ class fitmod:
             
             
             #getting the delchi of the line (we assume that the normalisation is the last parameter of the line component)
-            
+
             #deleting the component
             delcomp(fitcomp_line.xcompnames[-1])
         
             #fitting and computing errors
-            calc_fit(logfile=self.logfile)
+            #note: might need to be re-adjusted back to with a logfile if the fit gets stuck here
+            calc_fit()
+
+            #calc_fit(logfile=self.logfile)
+
             calc_error(self.logfile,param='1-'+str(AllModels(1).nParameters*AllData.nGroups),indiv=True)
             
             #storing the delta chi
@@ -3477,9 +3501,16 @@ class fitmod:
             flux_line_dist=np.zeros(len(par_draw))
             for i_sim in range(len(par_draw)):
                 #setting the parameters of the line according to the drawpar
-                for i_parcomp in range(len(fitcomp_line.parlist)):
-                    #we only draw from the first data group, hence the [0] index in par_draw
-                    AllModels(1)(i_parcomp+1).values=[par_draw[i_sim][0][fitcomp_line.parlist[i_parcomp]-1]]+AllModels(1)(i_parcomp+1).values[1:]
+                for id_parcomp,parcomp in enumerate(fitcomp_line.parlist):
+                    if AllModels(1).componentNames[0]=='constant':
+                        add_val=1
+                    else:
+                        add_val=0
+                    try:
+                        #we only draw from the first data group, hence the [0] index in par_draw
+                        AllModels(1)(id_parcomp+1+add_val).values=[par_draw[i_sim][0][parcomp-1]]+AllModels(1)(id_parcomp+1+add_val).values[1:]
+                    except:
+                        breakpoint()
 
                 #computing the flux of the line 
                 #(should be negligbly affected by the energy limits of instruments since we don't have lines close to these anyway)
@@ -4527,6 +4558,7 @@ def xPlot(types,axes_input=None,plot_saves_input=None,plot_arg=None,includedlist
 
                     grp_name=' '.join([elem for elem in [grp_tel,grp_obsid,grp_instru] if len(elem)>0])
             else:
+                #needs to be implemented
                 breakpoint()
                 grp_name='' if group_names=='nolabel' else\
                     ('group '+str(id_grp+1) if curr_save.nGroups>1 else '') if group_names is None else group_names_list[id_grp]

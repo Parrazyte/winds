@@ -8,7 +8,7 @@ Created on Wed Mar 29 15:59:26 2023
 
 import numpy as np
 from matplotlib.ticker import Locator
-
+import time
 import os
 
 # def ravel_ragged_test(array,mode=None):
@@ -118,16 +118,27 @@ def file_edit(path,line_id,line_data,header):
         header_eff=header
     else:
         header_eff=[header]
-    
-    with open(path,'w+') as file:
+
+    path_dir='/'.join(path.split('/')[:-1])
+    file_temp=path.split('/')[-1]
+
+    path_temp=os.path.join(path_dir,file_temp[:file_temp.rfind('.')]+'_temp'+file_temp[file_temp.rfind('.'):])
+
+    #doing this to ensure we don't edit several times at once
+    if os.path.isfile(path_temp):
+        time.sleep(1)
+        assert not os.path.isfile(path_temp),'File edition shouldnt take more than one second'
+
+    with open(path_temp,'w+') as file:
         #adding the header lines
         
         if lines[:len(header_eff)]==header_eff:
             file.writelines(lines)
         else:
-            
             file.writelines(header_eff+lines)
-            
+
+    os.remove(path)
+    os.system('mv '+path_temp+' '+path)
 def print_log(elem,logfile_io,silent=False):
 
     '''

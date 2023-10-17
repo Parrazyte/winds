@@ -91,6 +91,7 @@ import dill
 from tqdm import tqdm
 
 #pdf conversion with HTML parsin
+#install with fpdf2 NOT FPDF otherwise HTML won't work
 from fpdf import FPDF, HTMLMixin
 
 class PDF(FPDF, HTMLMixin):
@@ -108,11 +109,13 @@ from astropy.time import Time,TimeDelta
 #general astro importss
 from astropy.io import fits
 from astropy.time import Time
-from xspec import AllModels,AllData,Fit,Spectrum,Model,Plot,Xset,FakeitSettings,AllChains,Chain
+from xspec import AllModels,AllData,Fit,Spectrum,Model,Plot,Xset,FakeitSettings,Chain
+from xspec import AllChains
 
 #custom script with a few shorter xspec commands
 from xspec_config_multisp import allmodel_data,model_load,addcomp,Pset,Pnull,rescale,reset,Plot_screen,store_plot,freeze,allfreeze,unfreeze,\
-                         calc_error,delcomp,fitmod,fitcomp,calc_fit,xcolors_grp,xPlot,xscorpeon,catch_model_str,load_fitmod
+                         calc_error,delcomp,fitmod,fitcomp,calc_fit,xcolors_grp,xPlot,xscorpeon,catch_model_str,\
+                         load_fitmod
 
 from linedet_utils import plot_line_comps,plot_line_search,plot_std_ener,coltour_chi2map,narrow_line_search,\
                             plot_line_ratio
@@ -141,8 +144,8 @@ ap = argparse.ArgumentParser(description='Script to detect lines in XMM Spectra.
 
 '''GENERAL OPTIONS'''
 
-ap.add_argument('-satellite',nargs=1,help='telescope to fetch spectra from',default='XMM',type=str)
-ap.add_argument("-cameras",nargs=1,help='Cameras to use for spectral analysis',default='mos2',type=str)
+ap.add_argument('-satellite',nargs=1,help='telescope to fetch spectra from',default='NICER',type=str)
+ap.add_argument("-cameras",nargs=1,help='Cameras to use for spectral analysis',default='all',type=str)
 ap.add_argument("-expmodes",nargs=1,help='restrict the analysis to a single type of exposure',default='all',type=str)
 ap.add_argument("-grouping",nargs=1,help='specfile grouping for XMM spectra in [5,10,20] cts/bin',default='opt',type=str)
 
@@ -268,7 +271,7 @@ ap.add_argument('-skip_nongrating',nargs=1,help='skip non grating Chandra obs (u
                 default=False,type=bool)
 
 ap.add_argument('-write_pdf',nargs=1,help='overwrite finished pdf at the end of the line detection',
-                default=False,type=bool)
+                default=True,type=bool)
 
 ap.add_argument('-group_gti_time',nargs=1,help='maximum time delta for gti grouping in dd_hh_mm',default='01_00_00',type=str)
 
@@ -731,6 +734,11 @@ def pdf_summary(epoch_observ,fit_ok=False,summary_epoch=None):
     exposure_list=[]
     expmode_list=[]
     for i_obs,elem_observ in enumerate(epoch_observ):
+
+        #creating new pages regularly for many GTIs
+        if i_obs%5==0 and i_obs!=0:
+            pdf.add_page()
+
         if sat=='XMM':
             if os.path.isfile(elem_observ+'_sp_src_grp_20.ds'):
                 is_sp+=[True]
@@ -753,7 +761,7 @@ def pdf_summary(epoch_observ,fit_ok=False,summary_epoch=None):
             # else:
             filename_list+=[elem_observ+('_sp' if sat in ['NICER','Suzaku'] else '')+'_grp_opt'+('.pi' if sat=='Swift' else '.pha')]
 
-        with fits.open(filename_list[0]) as hdul:
+        with fits.open(filename_list[i_obs]) as hdul:
 
             try:
                 exposure_list+=[hdul[1].header['EXPOSURE']]
@@ -932,10 +940,11 @@ def pdf_summary(epoch_observ,fit_ok=False,summary_epoch=None):
 
                 pdf.cell(1,-5,fit_title+' ('+fit_ener+' keV):',align='C',center=True)
 
-                if fit_type=='broadband' and len(epoch_observ)>1 or sat=='Chandra':
-                    #displaying the colors for the upcoming plots in the first fit displayed
-                    pdf.cell(1,10,'        '.join([xcolors_grp[i_good_sp]+': '+'_'.join(good_sp[i_good_sp].split('_')[1:3])\
-                                                   for i_good_sp in range(len(good_sp))]),align='C',center=True)
+                #no need currently since we have that inside the graph now
+                # if fit_type=='broadband' and len(epoch_observ)>1 or sat=='Chandra':
+                #     #displaying the colors for the upcoming plots in the first fit displayed
+                #     pdf.cell(1,10,'        '.join([xcolors_grp[i_good_sp]+': '+'_'.join(good_sp[i_good_sp].split('_')[1:3])\
+                #                                    for i_good_sp in range(len(good_sp))]),align='C',center=True)
 
                 pdf.image(image_path,x=0,y=50,w=150)
 
@@ -1046,7 +1055,7 @@ def pdf_summary(epoch_observ,fit_ok=False,summary_epoch=None):
             pdf.cell(1,10,'Orbits for obsid '+elem_obsid,align='C',center=True)
             pdf.ln(10)
             try:
-                pdf.image(elem_observ +'-global_flares.png',x=2,y=50,w=280)
+                pdf.image(elem_obsid +'-global_flares.png',x=20,y=30,w=250)
             except:
                 pass
 
@@ -1057,13 +1066,13 @@ def pdf_summary(epoch_observ,fit_ok=False,summary_epoch=None):
             pdf.cell(1,10,'GTIS and lightcurves for gti '+elem_observ,align='C',center=True)
             pdf.ln(10)
             try:
-                pdf.image(elem_observ+ '_flares.png',x=2,y=100,w=140)
+                pdf.image(elem_observ+ '_flares.png',x=2,y=70,w=140)
 
-                pdf.image(elem_observ + '_lc_3-10_bin_' + NICER_lc_binning + '.png', x=150, y=50, w=70)
-                pdf.image(elem_observ + '_hr_3-10_bin_' + NICER_lc_binning + '.png', x=220, y=50, w=70)
+                pdf.image(elem_observ + '_lc_3-10_bin_' + NICER_lc_binning + '.png', x=150, y=30, w=70)
+                pdf.image(elem_observ + '_hr_3-10_bin_' + NICER_lc_binning + '.png', x=220, y=30, w=70)
 
-                pdf.image(elem_observ + '_lc_3-6_bin_' + NICER_lc_binning + '.png', x=150, y=150, w=70)
-                pdf.image(elem_observ + '_lc_6-10_bin_' + NICER_lc_binning + '.png', x=220, y=150, w=70)
+                pdf.image(elem_observ + '_lc_3-6_bin_' + NICER_lc_binning + '.png', x=150, y=120, w=70)
+                pdf.image(elem_observ + '_lc_6-10_bin_' + NICER_lc_binning + '.png', x=220, y=120, w=70)
 
             except:
                 pass
@@ -1148,15 +1157,9 @@ def pdf_summary(epoch_observ,fit_ok=False,summary_epoch=None):
 
     #naming differently for aborted and unaborted analysis
     if not fit_ok:
-        if sat=='NICER':
-            pdf.output(outdir + '/' + epoch_observ[0] + '_aborted_recap.pdf')
-        else:
-            pdf.output(outdir+'/'+('_'.join(epoch_observ))+'_aborted_recap.pdf')
+        pdf.output(outdir + '/' + ('_'.join(shorten_epoch(epoch_observ))) + '_aborted_recap.pdf')
     else:
-        if sat=='NICER':
-            pdf.output(outdir + '/' + ('_'.join(epoch_observ)) + '_recap.pdf')
-        else:
-            pdf.output(outdir+'/'+epoch_observ[0]+'_recap.pdf')
+        pdf.output(outdir+'/'+('_'.join(shorten_epoch(epoch_observ)))+'_recap.pdf')
 
 def line_detect(epoch_id):
 
@@ -1371,7 +1374,7 @@ def line_detect(epoch_id):
             <th width="9%">EW</th>
             <th width="9%">EW '''+str(sign_threshold)+''' UL</th>
             <th width="5%">MC sign.</th>
-            <th width="5%">delchi²</th>
+            <th width="5%">delstat</th>
           </tr>
         </thead>
         <tbody>
@@ -1416,17 +1419,29 @@ def line_detect(epoch_id):
 
     if pdf_only:
 
-        try:
+        if catch_errors:
 
-            pdf_summary(epoch_observ,fit_ok=True,summary_epoch=fill_result('Line detection complete.'))
+            try:
 
-            #closing the logfile for both access and Xspec
+                pdf_summary(epoch_observ,fit_ok=True,summary_epoch=fill_result('Line detection complete.'))
+
+                #closing the logfile for both access and Xspec
+                curr_logfile.close()
+                Xset.closeLog()
+
+                return fill_result('Line detection complete.')
+            except:
+                return fill_result('Missing elements to compute PDF.')
+
+        else:
+
+            pdf_summary(epoch_observ, fit_ok=True, summary_epoch=fill_result('Line detection complete.'))
+
+            # closing the logfile for both access and Xspec
             curr_logfile.close()
             Xset.closeLog()
 
             return fill_result('Line detection complete.')
-        except:
-            return fill_result('Missing elements to compute PDF.')
 
     '''
     normal behavior
@@ -1847,8 +1862,11 @@ def line_detect(epoch_id):
         # storing the flux and HR with the absorption to store the errors
         # We can only show one flux in the HID so we use the first one, which should be the most 'precise' with our order (pn first)
 
-        AllChains.defLength = 50000
-        AllChains.defBurn = 20000
+        #dont know why this causes an issue
+        from xspec import AllChains
+
+        AllChains.defLength = 10000
+        AllChains.defBurn = 5000
         AllChains.defWalkers = 10
 
         # deleting the previous chain to avoid conflicts
@@ -1944,7 +1962,6 @@ def line_detect(epoch_id):
     #reload previously stored autofits to gain time if asked to
     if reload_autofit and os.path.isfile(outdir+'/'+epoch_observ[0]+'_fitmod_autofit.pkl'):
 
-
         #reloading the broad band fit and model and re-storing associed variables
         fitlines_broad=load_fitmod(outdir + '/' + epoch_observ[0] + '_fitmod_broadband_post_auto.pkl')
         Xset.restore(outdir+'/'+epoch_observ[0]+'_mod_broadband_post_auto.xcm')
@@ -1987,11 +2004,14 @@ def line_detect(epoch_id):
 
             fitlines_hid.dump(outdir + '/' + epoch_observ[0] + '_fitmod_broadhid_post_auto.pkl')
 
+        from xspec import AllChains
+
         AllChains.clear()
+
         main_spflux = hid_fit_infos(fitlines_hid, broad_absval, post_autofit=True)
 
         # restoring the linecont save
-        Xset.restore(outdir + '/' + epoch_observ[0] + '_mod_broadband_linecont.xcm', info='a')
+        Xset.restore(outdir + '/' + epoch_observ[0] + '_mod_broadband_linecont.xcm')
 
         data_mod_high=allmodel_data()
 
@@ -2012,6 +2032,14 @@ def line_detect(epoch_id):
 
         #updating fitcomps
         fitlines.update_fitcomps()
+
+        #reloading the fit
+        calc_fit()
+
+        #reloading the chain
+        AllChains+=outdir+'/'+epoch_observ[0]+'_chain_autofit.fits'
+
+        data_autofit=allmodel_data()
 
     else:
 
@@ -2311,8 +2339,8 @@ def line_detect(epoch_id):
             #creating the fitmod object with the desired componets (we currently do not use comp groups)
             fitlines=fitmod(comp_lines,curr_logfile,curr_logfile_write,prev_fitmod=fitmod_cont)
 
-            #global fit
-            fitlines.global_fit(chain=True,directory=outdir,observ_id=epoch_observ[0],split_fit=split_fit,
+            #global fit, with MC only if no continuum refitting
+            fitlines.global_fit(chain=not refit_cont,directory=outdir,observ_id=epoch_observ[0],split_fit=split_fit,
                                 no_abslines=no_abslines)
 
             #storing the final fit
@@ -2328,6 +2356,9 @@ def line_detect(epoch_id):
             '''
 
             if refit_cont:
+
+                #don't know what's happening
+                from xspec import AllChains
 
                 AllChains.clear()
 
@@ -2369,7 +2400,7 @@ def line_detect(epoch_id):
                 calc_fit(logfile=fitlines.logfile)
 
                 #autofit
-                fitlines.global_fit(chain=True,lock_lines=True,directory=outdir,observ_id=epoch_observ[0],split_fit=split_fit)
+                fitlines.global_fit(chain=False,lock_lines=True,directory=outdir,observ_id=epoch_observ[0],split_fit=split_fit)
 
                 AllChains.clear()
 
@@ -2397,7 +2428,7 @@ def line_detect(epoch_id):
                 calc_fit(logfile=fitlines.logfile)
 
                 #autofit
-                fitlines.global_fit(chain=True,lock_lines=True,directory=outdir,observ_id=epoch_observ[0],split_fit=split_fit)
+                fitlines.global_fit(chain=False,lock_lines=True,directory=outdir,observ_id=epoch_observ[0],split_fit=split_fit)
 
                 fitlines.dump(outdir+'/'+epoch_observ[0]+'_fitmod_broadhid_post_auto.pkl')
 
@@ -2460,6 +2491,17 @@ def line_detect(epoch_id):
 
 
     if autofit and (cont_abspeak or force_autofit) and not flag_lowSNR_line:
+
+        # updating the logfile for the second round of fitting
+        curr_logfile_write = Xset.openLog(outdir + '/' + epoch_observ[0] + '_xspec_log_autofit_comput.log')
+        curr_logfile_write.reconfigure(line_buffering=True)
+        curr_logfile = open(curr_logfile_write.name, 'r')
+
+        # updating it in the fitmod
+        fitlines.logfile = curr_logfile
+        fitlines.logfile_write = curr_logfile_write
+        fitlines.update_fitcomps()
+
         '''
         Computing all the necessary info for the autofit plots and overlap tests
         Note: we only show the first (constant=1) model components because the others are identical modulo their respective constant factor 
@@ -2575,16 +2617,18 @@ def line_detect(epoch_id):
         #drawing parameters for the MC significance test later
         autofit_drawpars=np.array([None]*nfakes)
 
-        print('\nDrawing parameters from the Chain...')
-        for i_draw in range(nfakes):
+        try:
+            print('\nDrawing parameters from the Chain...')
+            for i_draw in range(nfakes):
 
-            curr_simpar=AllModels.simpars()
+                curr_simpar=AllModels.simpars()
 
-            #we restrict the simpar to the initial model because we don't really care about simulating the variations of the bg
-            #since it's currently frozen
-            autofit_drawpars[i_draw]=np.array(curr_simpar)[:AllData.nGroups*AllModels(1).nParameters]\
-                                     .reshape(AllData.nGroups,AllModels(1).nParameters)
-
+                #we restrict the simpar to the initial model because we don't really care about simulating the variations of the bg
+                #since it's currently frozen
+                autofit_drawpars[i_draw]=np.array(curr_simpar)[:AllData.nGroups*AllModels(1).nParameters]\
+                                         .reshape(AllData.nGroups,AllModels(1).nParameters)
+        except:
+            breakpoint()
         #turning it back into a regular array
         autofit_drawpars=np.array([elem for elem in autofit_drawpars])
 
@@ -2598,6 +2642,7 @@ def line_detect(epoch_id):
         #fetching informations about the absorption lines
         abslines_flux,abslines_eqw,abslines_bshift,abslines_delchi,abslines_bshift_distinct=fitlines.get_absline_info(autofit_drawpars)
 
+        from xspec import AllChains
         #clearing the chain before doing anything else
         AllChains.clear()
 
@@ -2650,7 +2695,7 @@ def line_detect(epoch_id):
         #plotting the combined autofit plot
 
 
-        def autofit_plot(fig):
+        def autofit_plot(fig,data,data_noabs,addcomps_cont,comp_pos):
 
             '''
             The goal here is to plot the autofit in a way that shows the different lines
@@ -2670,15 +2715,16 @@ def line_detect(epoch_id):
 
             '''second plot (ratio + abslines ratio)'''
 
-            plot_line_ratio(axes[1],data_autofit=data_autofit,data_autofit_noabs=data_autofit_noabs,
-                            n_addcomps_cont=len(addcomps_cont),line_position=comp_absline_position,
+            plot_line_ratio(axes[1],data_autofit=data,data_autofit_noabs=data_noabs,
+                            n_addcomps_cont=len(addcomps_cont),line_position=comp_pos,
                             line_search_e=line_search_e,line_cont_range=line_cont_range)
 
             plt.tight_layout()
 
         fig_autofit=plt.figure(figsize=(15,10))
 
-        autofit_plot(fig_autofit)
+        autofit_plot(fig_autofit,data=data_autofit,data_noabs=data_autofit_noabs,addcomps_cont=addcomps_cont,
+                     comp_pos=comp_absline_position)
 
         plt.savefig(outdir+'/'+epoch_observ[0]+'_autofit_components_plot_'+args.line_search_e.replace(' ','_')+'_'+args.line_search_norm.replace(' ','_')+'.png')
         plt.close(fig_autofit)
@@ -3296,6 +3342,21 @@ def shorten_epoch(file_ids):
 
     return epoch_str_list
 
+#not needed for now
+def expand_epoch(shortened_epoch):
+    #splitting obsids
+    file_ids=[]
+    for short_id in shortened_epoch:
+        if short_id.coun('-')<=1:
+            file_ids+=[short_id]
+        else:
+            obsid=short_id.split('-')[0]
+            gti_ids=short_id.split('-')[1:]
+
+            file_ids+=['-'.join(obsid,elem_gti) for elem_gti in gti_ids]
+
+    return file_ids
+
 #### line detections for exposure with a spectrum
 for epoch_id,epoch_files in enumerate(epoch_list):
 
@@ -3332,8 +3393,9 @@ for epoch_id,epoch_files in enumerate(epoch_list):
             continue
 
     elif sat=='NICER':
-        if (skip_started and len([elem_id for elem_id in shorten_epoch(file_ids) if elem_id not in started_expos])==0) or \
-           (skip_complete and len([elem_id for elem_id in shorten_epoch(file_ids) if elem_id not in started_expos])==0):
+
+        if (skip_started and shorten_epoch(file_ids) in started_expos) or \
+           (skip_complete and shorten_epoch(file_ids) in done_expos):
 
             print('\nSpectrum analysis already performed. Skipping...')
             continue
@@ -3394,6 +3456,7 @@ for epoch_id,epoch_files in enumerate(epoch_list):
 
     else:
         summary_lines=line_detect(epoch_id)
+
 
 if multi_obj==False:
     #loading the diagnostic messages after the analysis has been done
@@ -3476,15 +3539,15 @@ dist_factor=4*np.pi*(dist_obj_list*1e3*3.086e18)**2
 Edd_factor=dist_factor/(1.26e38*mass_obj_list)
 
 #Reading the results files
-observ_list,lineval_list,flux_list,date_list,instru_list,exptime_list=obj_values(lineval_files,Edd_factor,dict_linevis)
+observ_list,lineval_list,lum_list,date_list,instru_list,exptime_list=obj_values(lineval_files,Edd_factor,dict_linevis)
 
-dict_linevis['flux_list']=flux_list
+dict_linevis['lum_list']=lum_list
 
 #the values here are for each observation
 abslines_infos,autofit_infos=abslines_values(abslines_files,dict_linevis)
 
 # getting all the variations we need
-abslines_infos_perline, abslines_infos_perobj, abslines_plot, abslines_ener, flux_plot, hid_plot, incl_plot, width_plot, nh_plot, kt_plot = values_manip(
+abslines_infos_perline, abslines_infos_perobj, abslines_plot, abslines_ener, lum_plot, hid_plot, incl_plot, width_plot, nh_plot, kt_plot = values_manip(
     abslines_infos, dict_linevis, autofit_infos)
 
 '''
@@ -3512,7 +3575,7 @@ if multi_obj:
         #and delete the resulting indexes from the arrays
         observ_list[i]=np.delete(observ_list[i],bad_index)
         lineval_list[i]=np.delete(lineval_list[i],bad_index,axis=0)
-        flux_list[i]=np.delete(flux_list[i],bad_index,axis=0)
+        lum_list[i]=np.delete(lum_list[i],bad_index,axis=0)
         # link_list[i]=np.delete(link_list[i],bad_index)
 
 #same process for a single object
@@ -3528,7 +3591,7 @@ else:
         #and delete the resulting indexes from the arrays
         observ_list[0]=np.delete(observ_list[0],bad_index)
         lineval_list[0]=np.delete(lineval_list[0],bad_index,axis=0)
-        flux_list[0]=np.delete(flux_list[0],bad_index,axis=0)
+        lum_list[0]=np.delete(lum_list[0],bad_index,axis=0)
         # link_list[0]=np.delete(link_list[0],bad_index)
 
 #checking if the obsid identifiers of every index is in the bad flag list or if there's just no file
@@ -3715,7 +3778,7 @@ items_list=[
 abslines_infos_perobj,
 abslines_plot,nh_plot,kt_plot,hid_plot, incl_plot,
 mask_obj, mask_obj_base, mask_lines, mask_lines_ul,
-obj_list, date_list, instru_list, flux_list, choice_telescope, telescope_list,
+obj_list, date_list, instru_list, lum_list, choice_telescope, telescope_list,
 bool_incl_inside, bool_noincl,
 slider_date, slider_sign,
 radio_info_cmap, radio_cmap_i,
@@ -3738,7 +3801,7 @@ ax_hid.set_yscale('log')
 items_str_list=['abslines_infos_perobj',
 'abslines_plot','nh_plot','kt_plot','hid_plot','incl_plot',
 'mask_obj','mask_obj_base', 'mask_lines', 'mask_lines_ul',
-'obj_list', 'date_list', 'instru_list', 'flux_list', 'choice_telescope', 'telescope_list',
+'obj_list', 'date_list', 'instru_list', 'lum_list', 'choice_telescope', 'telescope_list',
 'bool_incl_inside', 'bool_noincl',
 'slider_date', 'slider_sign',
 'radio_info_cmap', 'radio_cmap_i',
@@ -3855,7 +3918,7 @@ def save_pdf(fig):
 
                     #identifying the exposure id for this point
                     #note : this won't work in multi object mode
-                    point_observ=observ_list[0][np.argwhere(flux_list[0].T[4][0]==single_point[1])[0][0]]
+                    point_observ=observ_list[0][np.argwhere(lum_list[0].T[4][0]==single_point[1])[0][0]]
 
                     pdf.image(save_dir+'/curr_hid_highlight_'+str(point_id)+'.png',x=1,w=280)
 
@@ -3896,7 +3959,7 @@ def save_pdf(fig):
         for point_id,single_point in enumerate(points_hid):
 
             #once again fetching the exposure identier
-            point_observ=observ_list[0][np.argwhere(flux_list[0].T[4][0]==single_point[1])[0][0]]
+            point_observ=observ_list[0][np.argwhere(lum_list[0].T[4][0]==single_point[1])[0][0]]
 
             #there should only be one element here
             point_recapfile=[elem for elem in save_dir_list if point_observ+'_recap.pdf' in elem][0]

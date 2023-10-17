@@ -375,11 +375,24 @@ def fetch_bat_lightcurve(ctl_bat_df,_ctl_bat_simbad,name,binning='day'):
     elif binning =='orbit':
         col_names=['TIME', 'RATE', 'ERROR', 'YEAR', 'DAY', 'MJD', 'TIMEDEL',
        'STAT_ERR', 'SYS_ERR', 'PCODEFR', 'DATA_FLAG', 'DITHER_FLAG']
+        
         bat_link = bat_link.replace('.lc.txt', '.orbit.lc.txt')
-    
-    source_lc = pd.read_csv(bat_link,
-                                 skiprows=[0,1,2,4],header=0,names=col_names,
-                                 delim_whitespace=True,usecols=range(len(col_names)))
+
+    #the urls are modified because they can't contain special characters
+    bat_link=bat_link.replace('+','p')
+
+    try:
+        source_lc = pd.read_csv(bat_link,
+                                     skiprows=[0,1,2,4],header=0,names=col_names,
+                                     delim_whitespace=True,usecols=range(len(col_names)))
+    except:
+        try:
+            source_lc = pd.read_csv(bat_link.replace('weak/',''),
+                                skiprows=[0, 1, 2, 4], header=0, names=col_names,
+                                delim_whitespace=True, usecols=range(len(col_names)))
+        except:
+            st.error('Issue when fetching BAT lightcurve at '+bat_link)
+            raise ValueError
 
     return source_lc
 
@@ -414,9 +427,10 @@ def fetch_maxi_lightcurve(ctl_maxi_df,_ctl_maxi_simbad,name,binning='day'):
     maxi_link=ctl_maxi_df['standard'][source_id]
 
     if binning=='orbit':
-        maxi_link=maxi_link.replace('lc_1_day','lc_1orb')
+        maxi_link=maxi_link.replace('lc_1day','lc_1orb')
 
-    source_lc=pd.read_csv(ctl_maxi_df['standard'][source_id],names=['MJDcenter','2-20keV[ph/s/cm2]','err_2-20',
+
+    source_lc=pd.read_csv(maxi_link,names=['MJDcenter','2-20keV[ph/s/cm2]','err_2-20',
                                               '2-4keV','err_2-4','4-10keV','err_4-10','10-20keV','err_10-20'],sep=' ')
 
     return source_lc
@@ -465,15 +479,20 @@ def plot_lightcurve(dict_linevis,ctl_maxi_df,ctl_maxi_simbad,name,ctl_bat_df,ctl
     slider_date=dict_linevis['slider_date']
     zoom_lc=dict_linevis['zoom_lc']
     mask_obj=dict_linevis['mask_obj']
-    #for the two variables below we fetch the first element because they are 1 size arrays containing the info for the only source displayed
-    date_list=dict_linevis['date_list'][mask_obj][0]
-    instru_list=dict_linevis['instru_list'][mask_obj][0]
+    no_obs=dict_linevis['no_obs']
+
+    if no_obs:
+        date_list=[]
+        instru_list=None
+    else:
+        #for the two variables below we fetch the first element because they are 1 size arrays containing the info for the only source displayed
+        date_list=dict_linevis['date_list'][mask_obj][0]
+        instru_list=dict_linevis['instru_list'][mask_obj][0]
     
     #for the EW superposition
     abslines_plot_restrict=dict_linevis['abslines_plot_restrict']
     mask_lines=dict_linevis['mask_lines']
     conf_thresh=dict_linevis['slider_sign']
-
 
     maxi_lc_df=fetch_maxi_lightcurve(ctl_maxi_df,ctl_maxi_simbad,name,binning=binning)
     rxte_lc_df=fetch_rxte_lightcurve(name, dict_rxte)
@@ -558,7 +577,7 @@ def plot_lightcurve(dict_linevis,ctl_maxi_df,ctl_maxi_simbad,name,ctl_bat_df,ctl
             
             ax_lc.set_yscale('log')
             
-            ax_lc.set_ylim(0.1,4)
+            ax_lc.set_ylim(0.1,2)
             
             #plotting the full lightcurve
             rxte_hr_errbar=ax_lc.errorbar(num_rxte_dates,rxte_hr,xerr=0.5,yerr=rxte_hr_err,
@@ -587,8 +606,13 @@ def plot_lightcurve(dict_linevis,ctl_maxi_df,ctl_maxi_simbad,name,ctl_bat_df,ctl
             #plotting the full lightcurve
             ax_lc.errorbar(num_maxi_dates,maxi_lc_df[maxi_lc_df.columns[1]],xerr=xerr_maxi,yerr=maxi_lc_df[maxi_lc_df.columns[2]],
                         linestyle='',color='black',marker='',elinewidth=0.5,label='MAXI standard counts')
-            ax_lc.set_ylim(0.05,ax_lc.get_ylim()[1])
-    
+
+            #ax_lc.set_ylim(0.05,ax_lc.get_ylim()[1])
+
+            ax_lc.set_yscale('symlog', linthresh=0.05, linscale=0.1)
+            ax_lc.yaxis.set_minor_locator(MinorSymLogLocator(linthresh=0.05))
+            ax_lc.set_ylim(0,max(ax_lc.get_ylim()[1],5e-2))
+
         if mode=='HR_soft':
             #computing the HR evolution and uncertainties
             maxi_hr=maxi_lc_df[maxi_lc_df.columns[5]]/maxi_lc_df[maxi_lc_df.columns[3]]
@@ -596,7 +620,7 @@ def plot_lightcurve(dict_linevis,ctl_maxi_df,ctl_maxi_simbad,name,ctl_bat_df,ctl
             maxi_hr_err=abs((maxi_lc_df[maxi_lc_df.columns[6]]/maxi_lc_df[maxi_lc_df.columns[5]]+maxi_lc_df[maxi_lc_df.columns[4]]/maxi_lc_df[maxi_lc_df.columns[3]])*maxi_hr)
             ax_lc.set_yscale('log')
             
-            ax_lc.set_ylim(0.3,2)
+            #ax_lc.set_ylim(0.3,2)
             
             #plotting the full lightcurve
             maxi_hr_errbar=ax_lc.errorbar(num_maxi_dates,maxi_hr,xerr=xerr_maxi,yerr=maxi_hr_err,
@@ -651,9 +675,9 @@ def plot_lightcurve(dict_linevis,ctl_maxi_df,ctl_maxi_simbad,name,ctl_bat_df,ctl
         elif binning=='orbit':
 
             #base time value + TIME in seconds + half of the exposure to center the point
-            base_date=Time('51910',format='mjd')+Timedelta(bat_lc_df['TIME'],format='sec')+\
-                                                 Timedelta(bat_lc_df['TIMEDEL'],format='sec')/2
-            base_date=base_data.datetime
+            base_date=Time('51910',format='mjd')+TimeDelta(bat_lc_df['TIME'],format='sec')+\
+                                                 TimeDelta(bat_lc_df['TIMEDEL'],format='sec')/2
+            base_date=base_date.datetime
             num_bat_dates=mdates.date2num(base_date)
 
         if mode=='BAT':
@@ -675,7 +699,7 @@ def plot_lightcurve(dict_linevis,ctl_maxi_df,ctl_maxi_simbad,name,ctl_bat_df,ctl
     
     label_tel_list=[]
         
-    if superpose_ew:
+    if superpose_ew and not no_obs:
         #creating a second y axis with common x axis
         ax_lc_ew=ax_lc.twinx()
         ax_lc_ew.set_yscale('log')
@@ -783,7 +807,7 @@ def plot_lightcurve(dict_linevis,ctl_maxi_df,ctl_maxi_simbad,name,ctl_bat_df,ctl
                     
     for label in ax_lc.get_xticklabels(which='major'):
         label.set(rotation=45, horizontalalignment='right')
-            
+
     ax_lc.legend(loc='upper left')
 
     if superpose_ew:
@@ -881,7 +905,7 @@ def obj_values(file_paths,E_factors,dict_linevis):
     
     obs_list=np.array([None]*len(obj_list))
     lval_list=np.array([None]*len(obj_list))
-    f_list=np.array([None]*len(obj_list))
+    l_list=np.array([None]*len(obj_list))
     
     date_list=np.array([None]*len(obj_list))
     instru_list=np.array([None]*len(obj_list))
@@ -925,7 +949,7 @@ def obj_values(file_paths,E_factors,dict_linevis):
         #and storing the observation ids and values 
         curr_obs_list=np.array([None]*len(store_lines))
         curr_lval_list=np.array([None]*len(store_lines))
-        curr_f_list=np.array([None]*len(store_lines))
+        curr_l_list=np.array([None]*len(store_lines))
         
         for l,line in enumerate(store_lines):
 
@@ -936,7 +960,7 @@ def obj_values(file_paths,E_factors,dict_linevis):
             curr_lval_list[l]=[literal_eval(elem.replace(',','').replace(' ',',')) if elem!='' else [] for elem in curr_line[1:]]
                 
             #separing the flux values for easier plotting
-            curr_f_list[l]=np.array(curr_lval_list[l][-1])*curr_E_factor
+            curr_l_list[l]=np.array(curr_lval_list[l][-1])*curr_E_factor
             
             #taking them off from the values lists
             curr_lval_list[l]=curr_lval_list[l][:-1]
@@ -944,7 +968,7 @@ def obj_values(file_paths,E_factors,dict_linevis):
         #creating indexes links
         obs_list[i]=curr_obs_list
         lval_list[i]=curr_lval_list
-        f_list[i]=np.array([elem for elem in curr_f_list])
+        l_list[i]=np.array([elem for elem in curr_l_list])
 
         curr_date_list=np.array([None]*len(obs_list[i]))
         curr_instru_list=np.array([None]*len(obs_list[i]))
@@ -1021,11 +1045,11 @@ def obj_values(file_paths,E_factors,dict_linevis):
         # ind_links[i]=os.path.join(os.getcwd(),obj_dir)+'/'+np.array(obs_list[i])+'_recap.pdf'
     
     if multi_obj:
-        f_list=np.array([elem for elem in f_list],dtype=object)
+        l_list=np.array([elem for elem in l_list],dtype=object)
     else:
-         f_list=np.array([elem for elem in f_list])
+         l_list=np.array([elem for elem in l_list])
     
-    return obs_list,lval_list,f_list,date_list,instru_list,exptime_list
+    return obs_list,lval_list,l_list,date_list,instru_list,exptime_list
 
 #@st.cache_data
 def abslines_values(file_paths,dict_linevis,only_abs=False,obsid=None):
@@ -1149,7 +1173,7 @@ def abslines_values(file_paths,dict_linevis,only_abs=False,obsid=None):
 
 
 #@st.cache_data
-def values_manip(abslines_infos,dict_linevis,autofit_infos,flux_list_infos,mask_include=None):
+def values_manip(abslines_infos,dict_linevis,autofit_infos,lum_list_infos,mask_include=None):
     
     range_absline=dict_linevis['range_absline']
     n_infos=dict_linevis['n_infos']
@@ -1167,7 +1191,7 @@ def values_manip(abslines_infos,dict_linevis,autofit_infos,flux_list_infos,mask_
     #masking the values for the main arrays to avoid changing anything to the following
     abslines_inf=np.array([abslines_infos[i_obj][mask_include_use[i_obj]] for i_obj in range(n_obj)],dtype=object)
     autofit_inf = np.array([autofit_infos[i_obj][mask_include_use[i_obj]] for i_obj in range(n_obj)], dtype=object)
-    flux_list= np.array([flux_list_infos[i_obj][mask_include_use[i_obj]] for i_obj in range(n_obj)], dtype=object)
+    lum_list= np.array([lum_list_infos[i_obj][mask_include_use[i_obj]] for i_obj in range(n_obj)], dtype=object)
 
     #so we can translate these per lines instead
     abslines_inf_line=np.array([None]*len(range_absline))
@@ -1299,8 +1323,8 @@ def values_manip(abslines_infos,dict_linevis,autofit_infos,flux_list_infos,mask_
     #creating a flux values variable with the same shape than the others
     if multi_obj:
 
-        flux_plt=np.array([None]*3)
-        for i_uncert in range(len(flux_plt)):
+        lum_plt=np.array([None]*3)
+        for i_uncert in range(len(lum_plt)):
             
             arr_part_band=np.array([None]*5)
             for i_band in range(len(arr_part_band)):
@@ -1311,7 +1335,7 @@ def values_manip(abslines_infos,dict_linevis,autofit_infos,flux_list_infos,mask_
                     arr_part_obs=np.array([None]*len(abslines_inf[i_obj]))
                     for i_obs in range(len(arr_part_obs)):
 
-                        arr_part_obs[i_obs]=flux_list[i_obj][i_obs][i_uncert][i_band]
+                        arr_part_obs[i_obs]=lum_list[i_obj][i_obs][i_uncert][i_band]
                          
                     #avoiding negative uncertainties (shouldn't happen)
                     if i_uncert!=0:
@@ -1321,37 +1345,40 @@ def values_manip(abslines_infos,dict_linevis,autofit_infos,flux_list_infos,mask_
                     
                 arr_part_band[i_band]=arr_part_obj
             
-            flux_plt[i_uncert]=arr_part_band
+            lum_plt[i_uncert]=arr_part_band
     else:
     
-        flux_plt=flux_list.transpose(2,3,0,1)
+        lum_plt=lum_list.transpose(2,3,0,1)
     
         #avoiding negative uncertainties
-        flux_plt[1:]=flux_plt[1:].clip(0)
+        lum_plt[1:]=lum_plt[1:].clip(0)
 
-        #restructuring the array
-        flux_plt_use=np.array([[[None]*len(abslines_inf)]*5]*3)
+    #restructuring the array
+    lum_plt_use=np.array([[[None]*len(abslines_inf)]*3]*5)
 
-        for i_1 in range(3):
-            for i_2 in range(5):
-                for i_3 in range(len(abslines_inf)):
-                    flux_plt_use[i_1][i_2][i_3]=flux_plt[i_1][i_2][i_3]
+    for i_1 in range(5):
+        for i_2 in range(3):
+            for i_3 in range(len(abslines_inf)):
+                lum_plt_use[i_1][i_2][i_3]=lum_plt[i_2][i_1][i_3]
 
-        flux_plt=flux_plt_use
-        
+    lum_plt=lum_plt_use
+
+    lum_plt=np.array([[[subsubelem for subsubelem in subelem] for subelem in elem]\
+                       for elem in lum_plt],dtype=object)
+
     #We then use uncertainty composition for the HID
 
-    hid_plt_vals=flux_plt[0][2]/flux_plt[0][1]
-    hid_errors=np.array([((flux_plt[i][2]/flux_plt[0][2])**2+(flux_plt[i][1]/flux_plt[0][1])**2)**(1/2)*hid_plt_vals for i in [1,2]])
+    hid_plt_vals=lum_plt[0][2]/lum_plt[0][1]
+    hid_errors=np.array([((lum_plt[i][2]/lum_plt[0][2])**2+(lum_plt[i][1]/lum_plt[0][1])**2)**(1/2)*hid_plt_vals for i in [1,2]])
     
     #capping the error lower limits proportions at 1
     for i_obj in range(len(hid_errors[0])):
         hid_errors[0][i_obj]=hid_errors[0][i_obj].clip(0,1)
-    
-    hid_plt=np.array([[hid_plt_vals,hid_errors[0],hid_errors[1]],[flux_plt[i][4] for i in range(3)]])
+
+    hid_plt=np.array([[hid_plt_vals,hid_errors[0],hid_errors[1]],[lum_plt[4][i] for i in range(3)]])
 
     # previous formula without uncertainties:
-    #     hid_plt=np.array([flux_plt[0][2]/flux_plt[0][1],flux_plt[0][4]])
+    #     hid_plt=np.array([lum_plt[0][2]/lum_plt[0][1],lum_plt[0][4]])
 
     #computing an array of the object inclinations
     incl_plt=np.array([[np.nan,np.nan,np.nan] if elem not in incl_dic else incl_dic[elem] for elem in obj_list])
@@ -1431,12 +1458,12 @@ def values_manip(abslines_infos,dict_linevis,autofit_infos,flux_list_infos,mask_
                 kt_plt[i_uncert][i_obj]=kt_part_obj
 
     if mask_include is not None:
-        #also returning the updated flux_list
+        #also returning the updated lum_list
         return abslines_inf_line,abslines_inf_obj,abslines_plt,abslines_e,\
-               flux_plt,hid_plt,incl_plt,width_plt,nh_plt,kt_plt,flux_list
+               lum_plt,hid_plt,incl_plt,width_plt,nh_plt,kt_plt,lum_list
     else:
         return abslines_inf_line, abslines_inf_obj, abslines_plt, abslines_e, \
-            flux_plt, hid_plt, incl_plt, width_plt, nh_plt, kt_plt
+            lum_plt, hid_plt, incl_plt, width_plt, nh_plt, kt_plt
 
 def hid_graph(ax_hid,dict_linevis,
               display_single=False,display_nondet=True,display_upper=False,
@@ -1465,7 +1492,7 @@ def hid_graph(ax_hid,dict_linevis,
     obj_list=dict_linevis['obj_list']
     date_list=dict_linevis['date_list']
     instru_list=dict_linevis['instru_list']
-    flux_list=dict_linevis['flux_list']
+    lum_list=dict_linevis['lum_list']
     choice_telescope=dict_linevis['choice_telescope']
     telescope_list=dict_linevis['telescope_list']
     bool_incl_inside=dict_linevis['bool_incl_inside']
@@ -1615,10 +1642,10 @@ def hid_graph(ax_hid,dict_linevis,
 
 
     # putting the axis limits at standard bounds or the points if the points extend further
-    flux_list_ravel = np.array([subelem for elem in flux_list for subelem in elem])
-    bounds_x = [min(flux_list_ravel.T[2][0] / flux_list_ravel.T[1][0]),
-                max(flux_list_ravel.T[2][0] / flux_list_ravel.T[1][0])]
-    bounds_y = [min(flux_list_ravel.T[4][0]), max(flux_list_ravel.T[4][0])]
+    lum_list_ravel = np.array([subelem for elem in lum_list for subelem in elem])
+    bounds_x = [min(lum_list_ravel.T[2][0] / lum_list_ravel.T[1][0]),
+                max(lum_list_ravel.T[2][0] / lum_list_ravel.T[1][0])]
+    bounds_y = [min(lum_list_ravel.T[4][0]), max(lum_list_ravel.T[4][0])]
 
     if zoom=='auto':
         ax_hid.set_xlim(min(ravel_ragged(hid_plot_restrict[0][0])) * 0.9,
@@ -1676,8 +1703,8 @@ def hid_graph(ax_hid,dict_linevis,
         '''
 
         # defining the hid positions of each point
-        x_hid = flux_list[mask_obj][i_obj].T[2][0] / flux_list[mask_obj][i_obj].T[1][0]
-        y_hid = flux_list[mask_obj][i_obj].T[4][0]
+        x_hid = lum_list[mask_obj][i_obj].T[2][0] / lum_list[mask_obj][i_obj].T[1][0]
+        y_hid = lum_list[mask_obj][i_obj].T[4][0]
 
         # defining the masks and shapes of the markers for the rest
 
@@ -2070,8 +2097,8 @@ def hid_graph(ax_hid,dict_linevis,
         '''
 
         # we use non-detection-masked arrays for non detection to plot them even while restricting the colors to a part of the sample 
-        x_hid_base = flux_list[mask_obj_base][i_obj_base].T[2][0] / flux_list[mask_obj_base][i_obj_base].T[1][0]
-        y_hid_base = flux_list[mask_obj_base][i_obj_base].T[4][0]
+        x_hid_base = lum_list[mask_obj_base][i_obj_base].T[2][0] / lum_list[mask_obj_base][i_obj_base].T[1][0]
+        y_hid_base = lum_list[mask_obj_base][i_obj_base].T[4][0]
 
         x_hid_incert = hid_plot.T[mask_obj_base][i_obj_base].T[0]
         y_hid_incert = hid_plot.T[mask_obj_base][i_obj_base].T[1]

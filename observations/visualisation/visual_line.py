@@ -631,8 +631,6 @@ elif radio_zoom_hid=='manual bounds':
                                         value=[1e-5, 1.],format_func=format_slider)
     zoom_hid=[values_zoom_hr,values_zoom_lum]
 
-    st.text(zoom_hid)
-
 display_nondet=st.sidebar.checkbox('Display exposures with no detection',value=True)
 
 if display_nondet:

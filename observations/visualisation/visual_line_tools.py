@@ -1368,17 +1368,16 @@ def values_manip(abslines_infos,dict_linevis,autofit_infos,lum_list_infos,mask_i
 
     #We then use uncertainty composition for the HID
 
-    hid_plt_vals=lum_plt[0][2]/lum_plt[0][1]
-    hid_errors=np.array([((lum_plt[i][2]/lum_plt[0][2])**2+(lum_plt[i][1]/lum_plt[0][1])**2)**(1/2)*hid_plt_vals for i in [1,2]])
+    hid_plt_vals=lum_plt[2][0]/lum_plt[1][0]
+
+    hid_errors=np.array([((lum_plt[2][i]/lum_plt[2][0])**2+\
+                          (lum_plt[1][i]/lum_plt[1][0])**2)**(1/2)*hid_plt_vals for i in [1,2]])
     
     #capping the error lower limits proportions at 1
     for i_obj in range(len(hid_errors[0])):
         hid_errors[0][i_obj]=hid_errors[0][i_obj].clip(0,1)
 
     hid_plt=np.array([[hid_plt_vals,hid_errors[0],hid_errors[1]],[lum_plt[4][i] for i in range(3)]])
-
-    # previous formula without uncertainties:
-    #     hid_plt=np.array([lum_plt[0][2]/lum_plt[0][1],lum_plt[0][4]])
 
     #computing an array of the object inclinations
     incl_plt=np.array([[np.nan,np.nan,np.nan] if elem not in incl_dic else incl_dic[elem] for elem in obj_list])
@@ -1648,15 +1647,16 @@ def hid_graph(ax_hid,dict_linevis,
     bounds_y = [min(lum_list_ravel.T[4][0]), max(lum_list_ravel.T[4][0])]
 
     if zoom=='auto':
-        ax_hid.set_xlim(min(ravel_ragged(hid_plot_restrict[0][0])) * 0.9,
-                        max(ravel_ragged(hid_plot_restrict[0][0])) * 1.1)
-        ax_hid.set_ylim(min(ravel_ragged(hid_plot_restrict[1][0])) * 0.8,
-                        max(ravel_ragged(hid_plot_restrict[1][0])) * 1.3)
-    elif type(zoom)==list:
+        ax_hid.set_xlim((min(ravel_ragged(hid_plot_restrict[0][0])) * 0.9,
+                        max(ravel_ragged(hid_plot_restrict[0][0])) * 1.1))
+        ax_hid.set_ylim((min(ravel_ragged(hid_plot_restrict[1][0])) * 0.8,
+                        max(ravel_ragged(hid_plot_restrict[1][0])) * 1.3))
+
+    if type(zoom)==list:
         ax_hid.set_xlim(zoom[0][0],zoom[0][1])
         ax_hid.set_ylim(zoom[1][0], zoom[1][1])
 
-    elif not zoom:
+    if not zoom:
         ax_hid.set_xlim((min(bounds_x[0] * 0.9, 0.1), max(bounds_x[1] * 1.1, 2)))
         ax_hid.set_ylim((min(bounds_y[0] * 0.9, 1e-5), max(bounds_y[1] * 1.1, 1)))
 
@@ -1956,8 +1956,6 @@ def hid_graph(ax_hid,dict_linevis,
                             elem_scatter.set_clim(vmin=min(global_sign_data), vmax=max(global_sign_data))
                     else:
                         elem_scatter.set_clim(vmin=min(plotted_colors_var), vmax=max(plotted_colors_var))
-
-                # breakpoint()
 
                 if len(elem_scatter.get_sizes()) > 0:
                     is_colored_scat = True

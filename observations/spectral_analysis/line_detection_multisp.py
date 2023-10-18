@@ -205,6 +205,9 @@ ap.add_argument("-h_update",nargs=1,help='update the bg, rmf and arf file names 
 
 '''####ANALYSIS RESTRICTION'''
 
+ap.add_argument('-spread_comput',nargs=1,help='spread sources in N subsamples to poorly parallelize on different consoles',
+                default=4,type=bool)
+
 ap.add_argument('-restrict',nargs=1,help='restrict the computation to a number of predefined exposures',default=False,type=bool)
 #in this mode, the line detection function isn't wrapped in a try, and the summary isn't updasted
 
@@ -269,6 +272,8 @@ ap.add_argument('-skip_complete',nargs=1,help='skip completed exposures listed i
 
 ap.add_argument('-skip_nongrating',nargs=1,help='skip non grating Chandra obs (used to reprocess with changes in the restrictions)',
                 default=False,type=bool)
+
+ap.add_argument('-skip_flares',nargs=1,help='skip flare GTIs',default=True,type=bool)
 
 ap.add_argument('-write_pdf',nargs=1,help='overwrite finished pdf at the end of the line detection',
                 default=True,type=bool)
@@ -414,8 +419,10 @@ no_abslines=args.no_abslines
 NICER_bkg=args.NICER_bkg
 line_ul_only=args.line_ul_only
 NICER_lc_binning=args.NICER_lc_binning
-
 reload_autofit=args.reload_autofit
+
+skip_flares=args.skip_flares
+spread_comput=args.spread_comput
 
 group_gti_time=args.group_gti_time
 
@@ -3288,6 +3295,14 @@ elif sat=='NICER':
 
     epoch_list=[np.array(spfile_list)[elem] for elem in epoch_id_list]
 
+
+    #skipping flares if asked for
+    if skip_flares:
+        epoch_list=[[subelem for subelem in elem if "F_sp" not in subelem] for elem in epoch_list]
+        epoch_list=[elem for elem in epoch_list if len(elem)>0]
+
+    epoch_list=np.array(epoch_list,dtype=object)
+
     #not needed atm
     # def str_to_epoch(str_epoch):
     #     str_epoch_list=[]
@@ -3357,9 +3372,26 @@ def expand_epoch(shortened_epoch):
 
     return file_ids
 
+if spread_comput!=1:
+
+    spread_epochs=np.array_split(epoch_list, spread_comput)
+
+    files_spread=glob.glob(os.path.join(outdir,'spread_epoch_*'),recursive=True)
+
+    assert len(files_spread)<spread_comput,'Computation already split over desired amount of elements'
+
+    for i in range(spread_comput):
+        file_spread=os.path.join(outdir,'spread_epoch_'+str(i+1)+'.txt')
+        if not os.path.isfile(file_spread):
+            with open(file_spread,'w+') as f:
+                f.writelines([str(elem)+'\n' for elem in spread_epochs[i]])
+            epoch_list=spread_epochs[i]
+            break
+
 #### line detections for exposure with a spectrum
 for epoch_id,epoch_files in enumerate(epoch_list):
 
+    breakpoint()
     if hid_only:
         continue
 
@@ -3457,6 +3489,8 @@ for epoch_id,epoch_files in enumerate(epoch_list):
     else:
         summary_lines=line_detect(epoch_id)
 
+#not creating the recap file in spread comput mode to avoid issues
+assert spread_comput==1, 'Stopping the computation here to avoid conflicts when making the summary'
 
 if multi_obj==False:
     #loading the diagnostic messages after the analysis has been done

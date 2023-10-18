@@ -39,7 +39,7 @@ def getoverlap(a, b):
 model_dir='/home/parrama/Soft/Xspec/Models'
 
 #custom model loads
-AllModels.lmod('relxill',dirPath=model_dir+'/relxill')
+#AllModels.lmod('relxill',dirPath=model_dir+'/relxill')
 
 #example of model loading
 # AllModels.initpackage('tbnew_mod',"lmodel_tbnew.dat",dirPath=model_dir+'/tbnew')

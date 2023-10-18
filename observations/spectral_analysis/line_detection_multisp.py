@@ -3391,7 +3391,6 @@ if spread_comput!=1:
 #### line detections for exposure with a spectrum
 for epoch_id,epoch_files in enumerate(epoch_list):
 
-    breakpoint()
     if hid_only:
         continue
 

@@ -3261,7 +3261,7 @@ class fitmod:
 
             AllChains.defLength=10000
             AllChains.defBurn=5000
-            AllChains.defWalkers=3*n_free_pars
+            AllChains.defWalkers=2*n_free_pars
 
             #ensuring we recreate the chains
             if os.path.exists(directory+'/'+observ_id+'_chain_autofit.fits'):

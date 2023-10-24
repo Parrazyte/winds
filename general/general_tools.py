@@ -29,6 +29,34 @@ import os
 #     else:
 #         return np.array([array[i][j] for i in range(len(array)) for j in range(len(array[i]))],dtype=mode)
 
+def rescale_log(ax,xlims,ylims,margin,std_x=None,std_y=None):
+
+    '''
+
+    std_x and std_y are bounds to use as default if the xlim/ylim values are smaller
+
+    variant for negative symlog (aka with 0 as max value) not implemented
+    '''
+
+    xrange=xlims[1]/(ax.get_xticks()[1] if ax.get_xscale()=='symlog' else xlims[0])
+
+    del_xrange=np.log10(xrange)*margin
+
+    if std_x is not None:
+        ax.set_xlim((min(xlims[0]*10**(-del_xrange),std_x[0]),max(xlims[1]*10**(del_xrange),std_x[1])))
+    else:
+        ax.set_xlim((xlims[0] * 10 ** (-del_xrange)), xlims[1] * 10 ** (del_xrange))
+
+
+    yrange=ylims[1]/(ax.get_yticks()[1] if ax.get_yscale()=='symlog' else ylims[0])
+
+    del_yrange=np.log10(yrange)*margin
+
+    if std_y is not None:
+        ax.set_ylim((min(ylims[0]*10**(-del_yrange),std_y[0]),max(ylims[1]*10**(del_yrange),std_y[1])))
+    else:
+        ax.set_ylim((ylims[0] * 10 ** (-del_yrange)), ylims[1] * 10 ** (del_yrange))
+
 def ravel_ragged(array,mode=None):
 
     '''ravels a multi dimensional ragged nested sequence'''
@@ -137,7 +165,8 @@ def file_edit(path,line_id,line_data,header):
         else:
             file.writelines(header_eff+lines)
 
-    os.remove(path)
+    if os.path.isfile(path):
+        os.remove(path)
     os.system('mv '+path_temp+' '+path)
 def print_log(elem,logfile_io,silent=False):
 

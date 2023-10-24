@@ -68,7 +68,7 @@ sys.path.append('/mount/src/winds/general/')
 #custom script with some lines and fit utilities and variables
 from fitting_tools import lines_std,c_light,lines_std_names,lines_e_dict,ang2kev
 
-from general_tools import ravel_ragged,MinorSymLogLocator
+from general_tools import ravel_ragged,MinorSymLogLocator,rescale_log
 
 #Catalogs and manipulation
 from astroquery.vizier import Vizier
@@ -172,6 +172,12 @@ mass_dic={
     'XTEJ1701-462':[1.4,0,0]
     }
 
+#BAT conversion factors for 1 cts/s in 15-50 keV counts to 15-50keV flux
+convert_BAT_count_flux={
+                        #this one assumes 13e22 nH and 2.5 gamma powerlaw
+                        '4U1630-47':3.603E-07
+                        }
+
 sources_det_dic=['GRS1915+105','GRS 1915+105','GROJ1655-40','H1743-322','4U1630-47','IGRJ17451-3022']
 
 rxte_lc_path='/media/parrama/SSD/Observ/BHLMXB/RXTE/RXTE_lc_dict.pickle'
@@ -252,8 +258,12 @@ def load_catalogs():
     #for the distance measurements, we import two black hole catalogs
     Vizier.ROW_LIMIT=-1
     ctl_watchdog=Vizier.get_catalogs('watchdog')[1]
-    ctl_blackcat=pd.read_html('https://www.astro.puc.cl/BlackCAT/transients.php')[0]
-    
+    try:
+        ctl_blackcat=pd.read_html('https://www.astro.puc.cl/BlackCAT/transients.php')[0]
+    except:
+        st.warning('BlackCAT webpage offline. Using saved equivalent from 03-2023...')
+        ctl_blackcat=pd.read_html('https://web.archive.org/web/20230311033338/https://astro.puc.cl/BlackCAT/transients.php')[1]
+
     print('\nBH catalogs loading complete.')
     ctl_watchdog_obj=np.array(ctl_watchdog['Name'])
     ctl_watchdog_obj=np.array([elem.replace(' ','') for elem in ctl_watchdog_obj])
@@ -497,7 +507,6 @@ def plot_lightcurve(dict_linevis,ctl_maxi_df,ctl_maxi_simbad,name,ctl_bat_df,ctl
     maxi_lc_df=fetch_maxi_lightcurve(ctl_maxi_df,ctl_maxi_simbad,name,binning=binning)
     rxte_lc_df=fetch_rxte_lightcurve(name, dict_rxte)
     bat_lc_df =fetch_bat_lightcurve(ctl_bat_df, ctl_bat_simbad, name, binning=binning)
-
 
     if mode=='BAT' and bat_lc_df is None:
         return None
@@ -796,7 +805,7 @@ def plot_lightcurve(dict_linevis,ctl_maxi_df,ctl_maxi_simbad,name,ctl_bat_df,ctl
         
     #creating an appropriate date axis
     #manually readjusting for small durations because the AutoDateLocator doesn't work well
-    if time_range<150:
+    if time_range<300:
         date_format=mdates.DateFormatter('%Y-%m-%d')
     else:
         date_format=mdates.DateFormatter('%Y-%m')
@@ -1336,7 +1345,7 @@ def values_manip(abslines_infos,dict_linevis,autofit_infos,lum_list_infos,mask_i
                     for i_obs in range(len(arr_part_obs)):
 
                         arr_part_obs[i_obs]=lum_list[i_obj][i_obs][i_uncert][i_band]
-                         
+
                     #avoiding negative uncertainties (shouldn't happen)
                     if i_uncert!=0:
                         arr_part_obs=arr_part_obs.clip(0)
@@ -1347,8 +1356,9 @@ def values_manip(abslines_infos,dict_linevis,autofit_infos,lum_list_infos,mask_i
             
             lum_plt[i_uncert]=arr_part_band
     else:
-    
-        lum_plt=lum_list.transpose(2,3,0,1)
+
+
+        lum_plt=deepcopy(lum_list.transpose(2,3,0,1))
     
         #avoiding negative uncertainties
         lum_plt[1:]=lum_plt[1:].clip(0)
@@ -1365,6 +1375,9 @@ def values_manip(abslines_infos,dict_linevis,autofit_infos,lum_list_infos,mask_i
 
     lum_plt=np.array([[[subsubelem for subsubelem in subelem] for subelem in elem]\
                        for elem in lum_plt],dtype=object)
+
+    #note that all these arrays are linked together through their elements so any modifications should be made on
+    #copy of their values and not on the arrays themselves
 
     #We then use uncertainty composition for the HID
 
@@ -1476,7 +1489,13 @@ def hid_graph(ax_hid,dict_linevis,
               display_hid_error=False,display_edgesource=False,split_cmap_source=True,
               display_evol_single=False,display_dicho=False,
               global_colors=True,alpha_abs=1,
-              paper_look=False,bigger_text=True,square_mode=True,zoom=False):
+              paper_look=False,bigger_text=True,square_mode=True,zoom=False,
+              broad_mode=False):
+
+    '''
+
+    in broad mode, replaces the standard HID axis by adding theoretical flues estimated from the bat catalog
+    '''
 
     abslines_infos_perobj=dict_linevis['abslines_infos_perobj']
     abslines_plot=dict_linevis['abslines_plot']
@@ -1504,6 +1523,14 @@ def hid_graph(ax_hid,dict_linevis,
     cmap_color_det=dict_linevis['cmap_color_det']
     cmap_color_nondet=dict_linevis['cmap_color_nondet']
 
+    if broad_mode:
+        catal_bat_df=dict_linevis['catal_bat_df']
+        catal_bat_simbad=dict_linevis['catal_bat_simbad']
+        Edd_factor_restrict=dict_linevis['Edd_factor_restrict']
+        lum_plot=dict_linevis['lum_plot']
+        HR_broad_bands=dict_linevis['HR_broad_bands']
+        lum_broad_bands=dict_linevis['lum_broad_bands']
+
     # global normalisations values for the points
     norm_s_lin = 5
     norm_s_pow = 1.15
@@ -1519,6 +1546,52 @@ def hid_graph(ax_hid,dict_linevis,
     type_1_colorcode = ['Source', 'Instrument']
 
     fig_hid=ax_hid.get_figure()
+
+    hid_plot_use = deepcopy(hid_plot)
+
+    if broad_mode:
+        #currently limited to 4U1630-47
+        bat_lc_df = fetch_bat_lightcurve(catal_bat_df, catal_bat_simbad,['4U1630-47'], binning='day')
+
+        bat_lc_mjd=np.array(bat_lc_df[bat_lc_df.columns[0]])
+
+        #converted to 15-50keV luminosity in Eddington units and removing negative values
+        bat_lc_lum=np.array([bat_lc_df[bat_lc_df.columns[1]],bat_lc_df[bat_lc_df.columns[2]]]).clip(0).T\
+                    *convert_BAT_count_flux['4U1630-47']*Edd_factor_restrict
+
+        obs_dates=Time(np.array([date_list[mask_obj][0] for i in range(sum(mask_lines))]).astype(str)).mjd.astype(int)
+
+
+        mask_withtime_BAT=[elem in bat_lc_mjd for elem in obs_dates[0]]
+
+        #getting an array with the bat flux of each observation date
+        lum_broad_single=np.array([np.array([0,0]) if obs_dates[0][i_obs] not in bat_lc_mjd else bat_lc_lum[bat_lc_mjd==obs_dates[0][i_obs]][0]\
+                                  for i_obs in range(len(obs_dates[0]))]).T
+
+        HR_broad_6_10=HR_broad_bands=='([6-10]+[15-50])/[3-6]'
+        lum_broad_soft=lum_broad_bands=='[3-10]+[15-50]'
+
+        #this is the quantity that needs to be added if the numerator is broad+6-10 and not just broad
+        hid_broad_add=lum_plot[2][0][mask_obj][0].astype(float) if HR_broad_6_10 else 0
+
+        hid_broad_vals = (lum_broad_single[0] + hid_broad_add)\
+                         / lum_plot[1][0][mask_obj][0].astype(float)
+
+        #here the numerator is the quadratic uncertainty addition and then the fraction is for the quadratic ratio uncertainty
+        #composition
+        hid_broad_err= np.array([(((lum_plot[2][i][mask_obj][0] if HR_broad_6_10 else 0)**2+lum_broad_single[1]**2)**(1/2)\
+                           /(lum_broad_single[0]+hid_broad_add) ** 2 + \
+                                (lum_plot[1][i][mask_obj][0] / lum_plot[1][0][mask_obj][0]) ** 2) ** (1 / 2) * hid_broad_vals\
+                               for i in [1, 2]])
+
+        #overwriting hid_plot's individual elements because overwriting the full obs array doesn't work
+        for i_obs in range(len(obs_dates[0])):
+            hid_plot_use[0][0][mask_obj][0][i_obs] = hid_broad_vals[i_obs]
+            hid_plot_use[0][1][mask_obj][0][i_obs] = hid_broad_err[0][i_obs]
+            hid_plot_use[0][2][mask_obj][0][i_obs] = hid_broad_err[1][i_obs]
+
+            if lum_broad_soft:
+                hid_plot_use[1][0][mask_obj][0][i_obs] += lum_broad_single[0][i_obs]
 
     #recreating some variables
 
@@ -1543,7 +1616,7 @@ def hid_graph(ax_hid,dict_linevis,
     kt_plot_restrict = deepcopy(kt_plot)
     kt_plot_restrict = kt_plot_restrict.T[mask_obj].T
 
-    hid_plot_restrict = hid_plot.T[mask_obj].T
+    hid_plot_restrict = hid_plot_use.T[mask_obj].T
     incl_plot_restrict = incl_plot[mask_obj]
 
     if display_nonsign:
@@ -1646,19 +1719,23 @@ def hid_graph(ax_hid,dict_linevis,
                 max(lum_list_ravel.T[2][0] / lum_list_ravel.T[1][0])]
     bounds_y = [min(lum_list_ravel.T[4][0]), max(lum_list_ravel.T[4][0])]
 
-    if zoom=='auto':
-        ax_hid.set_xlim((min(ravel_ragged(hid_plot_restrict[0][0])) * 0.9,
-                        max(ravel_ragged(hid_plot_restrict[0][0])) * 1.1))
-        ax_hid.set_ylim((min(ravel_ragged(hid_plot_restrict[1][0])) * 0.8,
-                        max(ravel_ragged(hid_plot_restrict[1][0])) * 1.3))
+    if zoom=='auto' or broad_mode:
+
+        xlims=(min(ravel_ragged(hid_plot_restrict[0][0])),
+                        max(ravel_ragged(hid_plot_restrict[0][0])))
+
+        ylims=(min(ravel_ragged(hid_plot_restrict[1][0])),
+                        max(ravel_ragged(hid_plot_restrict[1][0])))
+
+        rescale_log(ax_hid,xlims,ylims,0.05)
 
     if type(zoom)==list:
         ax_hid.set_xlim(zoom[0][0],zoom[0][1])
         ax_hid.set_ylim(zoom[1][0], zoom[1][1])
 
-    if not zoom:
-        ax_hid.set_xlim((min(bounds_x[0] * 0.9, 0.1), max(bounds_x[1] * 1.1, 2)))
-        ax_hid.set_ylim((min(bounds_y[0] * 0.9, 1e-5), max(bounds_y[1] * 1.1, 1)))
+    if not zoom and not broad_mode:
+
+        rescale_log(ax_hid,bounds_x,bounds_y,0.05,std_x=[0.1,2],std_y=[1e-5,1])
 
     # creating space for the colorbar
     if radio_info_cmap not in type_1_colorcode:
@@ -1703,8 +1780,19 @@ def hid_graph(ax_hid,dict_linevis,
         '''
 
         # defining the hid positions of each point
-        x_hid = lum_list[mask_obj][i_obj].T[2][0] / lum_list[mask_obj][i_obj].T[1][0]
-        y_hid = lum_list[mask_obj][i_obj].T[4][0]
+        if broad_mode:
+            x_hid=hid_plot_use[0][0][mask_obj][i_obj]
+
+            #we do it this way because a += on y_hid will overwite lum_list, which is extremely dangerous
+            if lum_broad_soft:
+                y_hid=lum_list[mask_obj][i_obj].T[4][0] + lum_broad_single[0]
+            else:
+                y_hid = lum_list[mask_obj][i_obj].T[4][0]
+        else:
+            x_hid = lum_list[mask_obj][i_obj].T[2][0] / lum_list[mask_obj][i_obj].T[1][0]
+            y_hid = lum_list[mask_obj][i_obj].T[4][0]
+
+            y_hid = lum_list[mask_obj][i_obj].T[4][0]
 
         # defining the masks and shapes of the markers for the rest
 
@@ -1712,6 +1800,8 @@ def hid_graph(ax_hid,dict_linevis,
         datelist_obj = Time(np.array([date_list[mask_obj][i_obj] for i in range(sum(mask_lines))]).astype(str))
         mask_intime = (datelist_obj >= Time(slider_date[0])) & (datelist_obj <= Time(slider_date[1]))
 
+        if broad_mode:
+            mask_intime=(mask_intime) & mask_withtime_BAT
 
         # defining the mask for detections and non detection        
         mask_det = (abslines_obj[0][4][mask_lines] > 0.) & (mask_intime)
@@ -2095,16 +2185,25 @@ def hid_graph(ax_hid,dict_linevis,
         '''
 
         # we use non-detection-masked arrays for non detection to plot them even while restricting the colors to a part of the sample 
+
         x_hid_base = lum_list[mask_obj_base][i_obj_base].T[2][0] / lum_list[mask_obj_base][i_obj_base].T[1][0]
         y_hid_base = lum_list[mask_obj_base][i_obj_base].T[4][0]
 
-        x_hid_incert = hid_plot.T[mask_obj_base][i_obj_base].T[0]
-        y_hid_incert = hid_plot.T[mask_obj_base][i_obj_base].T[1]
+        x_hid_incert = hid_plot_use.T[mask_obj_base][i_obj_base].T[0]
+        y_hid_incert = hid_plot_use.T[mask_obj_base][i_obj_base].T[1]
 
         # reconstructing standard arrays
         x_hid_incert = np.array([[subelem for subelem in elem] for elem in x_hid_incert])
         y_hid_incert = np.array([[subelem for subelem in elem] for elem in y_hid_incert])
-        # defining the masks and shapes of the markers for the rest
+
+        if broad_mode:
+
+            x_hid_base = hid_plot_use[0][0][mask_obj_base][i_obj_base]
+            x_hid_incert=hid_plot_use.T[mask_obj_base][i_obj_base].T[0]
+
+            #done this way to avoid overwriting lum_list if using += on y_hid_base
+            if lum_broad_soft:
+                y_hid_base=lum_list[mask_obj_base][i_obj_base].T[4][0]+lum_broad_single[0]
 
         # defining the non detection as strictly non detection or everything below the significance threshold
         if display_nonsign:
@@ -2415,7 +2514,7 @@ def hid_graph(ax_hid,dict_linevis,
         ax_cb.axis('off')
 
     #### Displaying arrow evolution if needed and if there are points
-    if display_single and display_evol_single and sum(global_mask_intime_norepeat) > 1:
+    if display_single and display_evol_single and sum(global_mask_intime_norepeat) > 1 and display_nondet:
 
         # odering the points depending on the observation date
         date_order = datelist_obj[0][mask_intime[0]].argsort()

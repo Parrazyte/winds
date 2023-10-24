@@ -106,7 +106,7 @@ sys.path.append('/mount/src/winds/general/')
 #custom script with some lines and fit utilities and variables
 from fitting_tools import lines_std,lines_std_names,range_absline
 
-from general_tools import ravel_ragged
+from general_tools import ravel_ragged,MinorSymLogLocator
 '''
 # Notes:
 # -Only works for the auto observations (due to prefix naming) for now
@@ -508,7 +508,7 @@ if multi_obj:
         display_multi=False
         
     if display_multi:
-        restrict_sources_detection=st.sidebar.checkbox('Restrict to sources with significant detection')
+        restrict_sources_detection=st.sidebar.toggle('Restrict to sources with significant detection')
         ####source with det restriction done manually as of now, should be changed
         
     if display_multi:
@@ -561,10 +561,10 @@ with st.sidebar.expander('Inclination'):
 #     radio_info_cmap=st.sidebar.radio('Color map options:',('Source','Peak Del-C'))
 #     slider_ener=st.sidebar.slider('Peak energy range',min_value=line_search_e[0],max_value=line_search_e[1],
 #                                   step=line_search_e[2],value=[6.,9.])
-#     display_abslines=st.sidebar.checkbox('Display absorption Lines')
-#     display_emlines=st.sidebar.checkbox('Display emission Lines')
+#     display_abslines=st.sidebar.toggle('Display absorption Lines')
+#     display_emlines=st.sidebar.toggle('Display emission Lines')
     
-restrict_time=st.sidebar.checkbox('Restrict time interval',value=True)
+restrict_time=st.sidebar.toggle('Restrict time interval',value=True)
         
 slider_sign=st.sidebar.slider('Detection significance treshold',min_value=0.9,max_value=1.,step=1e-3,value=0.997,format="%.3f")
 
@@ -577,11 +577,10 @@ st.sidebar.header('HID options')
 #     mask_lines=np.array(line_display_str!='')
             
 
-
-display_nonsign=st.sidebar.checkbox('Show detections below significance threshold',value=False)
+display_nonsign=st.sidebar.toggle('Show detections below significance threshold',value=False)
 
 if display_nonsign:
-    restrict_threshold=st.sidebar.checkbox('Prioritize showing maximal values of significant detections',value=True)
+    restrict_threshold=st.sidebar.toggle('Prioritize showing maximal values of significant detections',value=True)
 else:
     restrict_threshold=True
         
@@ -593,7 +592,7 @@ radio_info_index=np.argwhere(HID_options_str==radio_info_cmap_str)[0][0]
 radio_info_cmap=['Source','Velocity shift','Del-C','EW ratio','Inclination','Time','Instrument','nH','kT'][radio_info_index]
 
 if radio_info_cmap!='Source':
-    display_edgesource=st.sidebar.checkbox('Color code sources in marker edges',value=False)
+    display_edgesource=st.sidebar.toggle('Color code sources in marker edges',value=False)
 else:
     display_edgesource=False
 
@@ -631,11 +630,11 @@ elif radio_zoom_hid=='manual bounds':
                                         value=[1e-5, 1.],format_func=format_slider)
     zoom_hid=[values_zoom_hr,values_zoom_lum]
 
-display_nondet=st.sidebar.checkbox('Display exposures with no detection',value=True)
+display_nondet=st.sidebar.toggle('Display exposures with no detection',value=True)
 
 if display_nondet:
     with st.sidebar.expander('Upper limits'):
-        display_upper=st.toggle('Display upper limits',value=True)    
+        display_upper=st.toggle('Display upper limits',value=True)
         if display_upper:
                 selectbox_upperlines=st.multiselect('Lines selection for upper limit display:',
                                                             options=line_display_str[mask_lines],default=line_display_str[mask_lines][:2])
@@ -647,7 +646,7 @@ else:
     mask_lines_ul=False
     
 if display_single:
-    display_evol_single=st.sidebar.checkbox('Highlight time evolution in the HID',value=False)
+    display_evol_single=st.sidebar.toggle('Highlight time evolution in the HID',value=False)
 else:
     display_evol_single=False
     
@@ -669,7 +668,7 @@ with st.sidebar.expander('Visualisation'):
     
     display_dicho=st.toggle('Display favourable zone',value=True)
     
-    display_obj_zerodet=st.toggle('Color sources with no detection',value=True)
+    display_obj_zerodet=st.toggle('Color non-detections',value=True)
     
     display_hid_error=st.toggle('Display errorbar for HID position',value=False)
     
@@ -699,7 +698,15 @@ if alpha_abs:
     alpha_abs=0.5
 else:
     alpha_abs=1
-    
+
+with st.sidebar.expander('Broad band HID'):
+
+    display_broad_hid = st.toggle('Display broad band HID using BAT monitoring', value=False)
+
+    HR_broad_bands=st.radio('Hardness Ratio',('[15-50]/[3-6]','([6-10]+[15-50])/[3-6]'))
+
+    lum_broad_bands=st.radio('Luminosity',('[3-10]','[3-10]+[15-50]'))
+
 with st.sidebar.expander('Monitoring'):
     
     plot_lc_monit=st.toggle('Plot MAXI/RXTE monitoring',value=False)
@@ -744,7 +751,7 @@ with st.sidebar.expander('Monitoring'):
                                    bbox_inches='tight')
     st.button('Save current MAXI curves',on_click=save_lc,key='save_lc_key')
     
-compute_only_withdet=st.sidebar.checkbox('Skip parameter analysis when no detection remain with the current constraints',value=True)
+compute_only_withdet=st.sidebar.toggle('Skip parameter analysis when no detection remain with the current constraints',value=True)
 
 if not online:
     with st.sidebar.expander('Stacking'):
@@ -892,7 +899,15 @@ if not display_obj_zerodet:
     mask_obj=mask_obj_base
 else:
     mask_obj=mask_obj_base
-    
+
+# distance factor for the flux conversion later on
+dist_factor = 4 * np.pi * (dist_obj_list * 1e3 * 3.086e18) ** 2
+# L_Edd unit factor
+Edd_factor = dist_factor / (1.26e38 * mass_obj_list)
+
+Edd_factor_restrict=Edd_factor[mask_obj].astype(float)
+
+
 hid_plot_restrict=hid_plot.T[mask_obj].T
 incl_plot_restrict=incl_plot[mask_obj]
 lum_plot_restrict=lum_plot.T[mask_obj].T
@@ -1061,7 +1076,7 @@ else:
 # fig_hid_html = mpld3.fig_to_html(fig_hid)
 # components.html(fig_hid_html, height=1000)
 
-tab_hid, tab_monitoring, tab_param,tab_source_df,tab_about= st.tabs(["HID", "Monitoring", "Parameter analysis","Tables","About"])
+tab_hid, tab_broad_hid,tab_monitoring, tab_param,tab_source_df,tab_about= st.tabs(["Soft X HID", "Broad X HID","Monitoring", "Parameter analysis","Tables","About"])
 
 with tab_hid:
     
@@ -1069,8 +1084,73 @@ with tab_hid:
     try:
         st.pyplot(fig_hid)
     except:
-        st.experimental_rerun()
-        
+        st.rerun()
+
+broad_band_disp_ok=True
+
+with tab_broad_hid:
+
+        if not display_single:
+            st.info('Broad band HID currently restricted to single sources.')
+
+            broad_band_disp_ok=False
+        else:
+            if not choice_source[0]=='4U1630-47':
+                st.info('Broad band HID currently restricted to  4U 1630-47')
+
+                broad_band_disp_ok=False
+
+        if broad_band_disp_ok:
+
+            if not display_broad_hid:
+                st.info('Toggle broad band HID option in the sidebar to display.')
+
+            else:
+
+                if not square_mode:
+                    fig_hid_broad, ax_hid_broad = plt.subplots(1, 1, figsize=(8, 5) if bigger_text else (12, 6))
+                else:
+                    fig_hid_broad, ax_hid_broad = plt.subplots(1, 1, figsize=(8, 6))
+                ax_hid_broad.clear()
+
+                ax_hid_broad.set_yscale('log')
+                if HR_broad_bands=='[15-50]/[3-6]':
+                    ax_hid_broad.set_xscale('symlog', linthresh=0.01, linscale=0.1)
+                else:
+                    ax_hid_broad.set_xscale('log')
+                ax_hid_broad.xaxis.set_minor_locator(MinorSymLogLocator(linthresh=0.01))
+
+                dict_linevis['catal_bat_df']=catal_bat_df
+                dict_linevis['catal_bat_simbad']=catal_bat_simbad
+                dict_linevis['Edd_factor_restrict']=Edd_factor_restrict
+                dict_linevis['lum_plot']=lum_plot
+                dict_linevis['HR_broad_bands']=HR_broad_bands
+                dict_linevis['lum_broad_bands']=lum_broad_bands
+
+                hid_graph(ax_hid_broad, dict_linevis,
+                          display_single=display_single, display_nondet=display_nondet, display_upper=display_upper,
+                          cyclic_cmap_nondet=cyclic_cmap_nondet, cyclic_cmap_det=cyclic_cmap_det,
+                          cyclic_cmap=cyclic_cmap,
+                          cmap_incl_type=cmap_incl_type, cmap_incl_type_str=cmap_incl_type_str,
+                          radio_info_label=radio_info_label,
+                          eqw_ratio_ids=eqw_ratio_ids,
+                          display_obj_zerodet=display_obj_zerodet,
+                          restrict_threshold=restrict_threshold, display_nonsign=display_nonsign,
+                          display_central_abs=display_central_abs,
+                          display_incl_inside=display_incl_inside, dash_noincl=dash_noincl,
+                          display_hid_error=display_hid_error, display_edgesource=display_edgesource,
+                          split_cmap_source=split_cmap_source,
+                          display_evol_single=display_evol_single, display_dicho=display_dicho,
+                          global_colors=global_colors, alpha_abs=alpha_abs,
+                          paper_look=paper_look, bigger_text=bigger_text, square_mode=square_mode, zoom=zoom_hid,
+                          broad_mode=True)
+
+                try:
+                    st.pyplot(fig_hid_broad)
+                except:
+                    st.rerun()
+
+
 #### About tab
 with tab_about:
     st.markdown('**visual_line** is a visualisation and download tool for iron-band X-ray absorption lines signatures in Black Hole Low-Mass X-ray Binaries (BHLMXBs).')
@@ -1181,7 +1261,7 @@ with tab_about:
                    
                    The Main source display option conditions several elements further down the line:
                        
-                  -In Multi-Object mode, a checkbox allows to pre-restrict the choice of sources with the 5 main objects with significant detections in the paper. This is a manual restriction, which is not affected by the choice of lines or significance threshold.
+                  -In Multi-Object mode, a toggle allows to pre-restrict the choice of sources with the 5 main objects with significant detections in the paper. This is a manual restriction, which is not affected by the choice of lines or significance threshold.
                   
                   -The display of all monitoring plots is restricted to the **single object** mode. 
                   
@@ -1190,15 +1270,15 @@ with tab_about:
                   
                   The inclination restrictions is based on the results on the informations in Table 1 of the paper, which can be shown in the "Source parameters" table in the "Tables" tab. Since not all inclination measurements are created equal, the inclination measurement primarily includes dynamical estimates if any, then jet estimates, and finally reflection measurements.
                   
-                  -Dipping measurements are considered independantly, which means that a source with "only" dipping reports and no explicit inclination constraints will be ignored if the checkbox for including Sources with no information is not checked.
+                  -Dipping measurements are considered independantly, which means that a source with "only" dipping reports and no explicit inclination constraints will be ignored if the toggle for including Sources with no information is not checked.
                   
-                  -The second checkbox allows to disregard sources with uncertainties extending past the currently selected inclination range. Incompatible inclination measurements are considered similarly as a bigger interval.
+                  -The second toggle allows to disregard sources with uncertainties extending past the currently selected inclination range. Incompatible inclination measurements are considered similarly as a bigger interval.
                   
                   -The third option dashes the upper limit (hexagon) displays of sources incompatible with previous constrain.
                   
                   -The fourth option dashes all sources with no inclination measurements (including dippers with no proper inclination constraints).
                   
-                  -The dipper option choice overrides the primary inclination constrain and checkboxes
+                  -The dipper option choice overrides the primary inclination constrain and togglees
                   
                   **Date** 
                   
@@ -1617,13 +1697,6 @@ for i_obj_r in range(n_obj_r):
     
     #recreating an individual non ragged array (similar to abslines_perobj) in construction for each object
     hid_plot_indiv=np.array([[subelem for subelem in elem] for elem in hid_plot_restrict.transpose(2,0,1)[i_obj_r]],dtype=float)
-
-    # distance factor for the flux conversion later on
-    dist_factor = 4 * np.pi * (dist_obj_list * 1e3 * 3.086e18) ** 2
-    # L_Edd unit factor
-    Edd_factor = dist_factor / (1.26e38 * mass_obj_list)
-
-    Edd_factor_restrict=Edd_factor[mask_obj].astype(float)
     
     #this one is put back to non-Eddington values, and we remove the first flux measurement whose band can change between instruments or computations
     flux_plot_indiv=np.array([[subelem for subelem in elem] for elem in lum_plot_restrict[1:].transpose(2,0,1)[i_obj_r]],dtype=float)/Edd_factor_restrict[i_obj_r]

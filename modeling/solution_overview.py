@@ -159,6 +159,7 @@ with st.sidebar:
 
     with st.expander('visualisation'):
         latex_title=st.checkbox('Force latex whenever possible(unstable)')
+        visu_2D=st.checkbox('Plot 2D solution visualization (in progress)')
 
 #fetching the p/mu space of existing solutions
 p_mu_space=[]
@@ -772,7 +773,8 @@ if split_angle and n_sel==1:
                                            mdot_mhd,m_BH) for i in range(n_sol)])
 
         logxi_sampl=np.array([func_logxi_sol(r_sph_sampl[i],sol_sampl_z_over_r[i],val_L_source,sol_sampl_rho_mhd[i],
-                                             sol_p_mhd,mdot_mhd,sol_sampl_ur, sol_sampl_uphi, sol_sampl_uz,m_BH)\
+                                             sol_p_mhd,mdot_mhd,sol_sampl_ur[i], sol_sampl_uphi[i],
+                                             sol_sampl_uz[i],m_BH)\
                               for i in range(n_sol)])
 
         nh_sampl=np.array([func_nh_sol(r_sph_sampl[i],rj*cyl_cst_sampl[i],sol_sampl_z_over_r[i],
@@ -860,7 +862,7 @@ if split_angle and n_sel==1:
 
         with col_explo_a:
             radial_plot(r_sph_sampl,L_xi_6, sol_sampl_angle, log_x=True,
-                        log_y=True, xaxis_title=r'$R_{sph}\;$ (Rg)', yaxis_title=r'L/L$_{Edd}$')
+                        log_y=True, xaxis_title=r'$R_{sph}\;$ (Rg)', yaxis_title=r'L (cgs)$')
 
 
 # def polar2cartesian(rad_range, theta_range, grid, x, y, order=3):
@@ -942,7 +944,7 @@ def plot_2D(r_sampl_sol,angle_sampl_sol,data,r_j,r_max,n_rad,cmap='plasma',log_s
 
 with tab_2D:
 
-    if n_sel==1:
+    if n_sel==1 and visu_2D:
 
         '''
         Creating the full 2D mapping for the single solution to do quarter angle plotting
@@ -958,7 +960,9 @@ with tab_2D:
         # using a constant start value for now to avoid issues when interpolating back to cartesian grid
         r_sph_sol= np.logspace(np.log10(rj), 7, n_rad)
 
-        n_sol_map= np.array([[func_density_sol(r_sph_sol, sol_z_over_r[i][j], sol_rho_mhd[i][j], sol_p_mhd[i],
+        #see to replace the singular values with arrays if we use several solutions at once
+
+        n_sol_map= np.array([[func_density_sol(r_sph_sol, sol_z_over_r[i][j], sol_rho_mhd[i][j], sol_p_mhd,
                                              mdot_mhd, m_BH) for j in range(len(sol_z_over_r[i]))] for i in range(n_sel)])
 
         # logxi_sol_map = np.array([func_logxi_sol(r_sph_sol, sol_z_over_r[0][i], val_L_source, sol_rho_mhd[0][i],

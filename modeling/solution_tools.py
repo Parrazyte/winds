@@ -142,8 +142,13 @@ def func_vel_sol(coordinate,r_sph,z_over_r,vel_r,vel_phi,vel_z,m_BH):
     cyl_cst = np.sqrt(1.0 + (z_over_r * z_over_r))
     r_cyl = r_sph / cyl_cst
 
-    #nonrelat
-    u_r_nr=c_cgs * vel_r * ((r_cyl) ** (-0.5))
+    try:
+
+        #nonrelat
+        u_r_nr=c_cgs * vel_r * ((r_cyl) ** (-0.5))
+    except:
+        breakpoint()
+
     u_phi_nr = c_cgs * vel_phi * ((r_cyl) ** (-0.5))
     u_z_nr = c_cgs * vel_z * ((r_cyl) ** (-0.5))
 

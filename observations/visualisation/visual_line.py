@@ -786,15 +786,6 @@ instru_list = np.array([instru_list[i_obj][mask_included_selection[i_obj]] for i
 observ_list = np.array([observ_list[i_obj][mask_included_selection[i_obj]] for i_obj in range(n_obj_init)], dtype=object)
 date_list = np.array([date_list[i_obj][mask_included_selection[i_obj]] for i_obj in range(n_obj_init)], dtype=object)
 
-'''HID GRAPH'''
-
-#log x scale for an easier comparison with Ponti diagrams
-ax_hid.set_xscale('log')
-ax_hid.set_xlabel('Hardness Ratio ([6-10]/[3-6] keV bands)')
-ax_hid.set_ylabel(r'Luminosity in the [3-10] keV band in (L/L$_{Edd}$) units')
-ax_hid.set_yscale('log')
-
-
 '''Dichotomy'''
 
 #some warnings to avoid crashes
@@ -1112,13 +1103,6 @@ with tab_broad_hid:
                 else:
                     fig_hid_broad, ax_hid_broad = plt.subplots(1, 1, figsize=(8, 6))
                 ax_hid_broad.clear()
-
-                ax_hid_broad.set_yscale('log')
-                if HR_broad_bands=='[15-50]/[3-6]':
-                    ax_hid_broad.set_xscale('symlog', linthresh=0.01, linscale=0.1)
-                else:
-                    ax_hid_broad.set_xscale('log')
-                ax_hid_broad.xaxis.set_minor_locator(MinorSymLogLocator(linthresh=0.01))
 
                 dict_linevis['catal_bat_df']=catal_bat_df
                 dict_linevis['catal_bat_simbad']=catal_bat_simbad

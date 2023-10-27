@@ -1550,6 +1550,21 @@ def hid_graph(ax_hid,dict_linevis,
     hid_plot_use = deepcopy(hid_plot)
 
     if broad_mode:
+
+        HR_broad_6_10=HR_broad_bands=='([6-10]+[15-50])/[3-6]'
+        lum_broad_soft=lum_broad_bands=='[3-10]+[15-50]'
+
+        ax_hid.set_yscale('log')
+        if not HR_broad_6_10:
+            ax_hid.set_xscale('symlog', linthresh=0.01, linscale=0.1)
+        else:
+            ax_hid.set_xscale('log')
+        ax_hid.xaxis.set_minor_locator(MinorSymLogLocator(linthresh=0.01))
+
+        ax_hid.set_xlabel('Hardness Ratio in '+HR_broad_bands+' keV bands)')
+        ax_hid.set_ylabel(r'Luminosity in the '+lum_broad_bands+' keV band in (L/L$_{Edd}$) units')
+
+
         #currently limited to 4U1630-47
         bat_lc_df = fetch_bat_lightcurve(catal_bat_df, catal_bat_simbad,['4U1630-47'], binning='day')
 
@@ -1568,9 +1583,6 @@ def hid_graph(ax_hid,dict_linevis,
         lum_broad_single=np.array([np.array([0,0]) if obs_dates[0][i_obs] not in bat_lc_mjd else bat_lc_lum[bat_lc_mjd==obs_dates[0][i_obs]][0]\
                                   for i_obs in range(len(obs_dates[0]))]).T
 
-        HR_broad_6_10=HR_broad_bands=='([6-10]+[15-50])/[3-6]'
-        lum_broad_soft=lum_broad_bands=='[3-10]+[15-50]'
-
         #this is the quantity that needs to be added if the numerator is broad+6-10 and not just broad
         hid_broad_add=lum_plot[2][0][mask_obj][0].astype(float) if HR_broad_6_10 else 0
 
@@ -1579,8 +1591,8 @@ def hid_graph(ax_hid,dict_linevis,
 
         #here the numerator is the quadratic uncertainty addition and then the fraction is for the quadratic ratio uncertainty
         #composition
-        hid_broad_err= np.array([(((lum_plot[2][i][mask_obj][0] if HR_broad_6_10 else 0)**2+lum_broad_single[1]**2)**(1/2)\
-                           /(lum_broad_single[0]+hid_broad_add) ** 2 + \
+        hid_broad_err= np.array([((((lum_plot[2][i][mask_obj][0] if HR_broad_6_10 else 0)**2+lum_broad_single[1]**2)**(1/2)\
+                           /(lum_broad_single[0]+hid_broad_add)) ** 2 + \
                                 (lum_plot[1][i][mask_obj][0] / lum_plot[1][0][mask_obj][0]) ** 2) ** (1 / 2) * hid_broad_vals\
                                for i in [1, 2]])
 
@@ -1592,6 +1604,19 @@ def hid_graph(ax_hid,dict_linevis,
 
             if lum_broad_soft:
                 hid_plot_use[1][0][mask_obj][0][i_obs] += lum_broad_single[0][i_obs]
+
+                hid_plot_use[1][1][mask_obj][0][i_obs] = ((hid_plot_use[1][1][mask_obj][0][i_obs])**2+ \
+                                                         (lum_broad_single[1][i_obs])**2)**(1/2)
+                hid_plot_use[1][2][mask_obj][0][i_obs] = ((hid_plot_use[1][2][mask_obj][0][i_obs])**2+ \
+                                                         (lum_broad_single[1][i_obs])**2)**(1/2)
+
+    else:
+
+        # log x scale for an easier comparison with Ponti diagrams
+        ax_hid.set_xscale('log')
+        ax_hid.set_xlabel('Hardness Ratio ([6-10]/[3-6] keV bands)')
+        ax_hid.set_ylabel(r'Luminosity in the [3-10] keV band in (L/L$_{Edd}$) units')
+        ax_hid.set_yscale('log')
 
     #recreating some variables
 
@@ -2189,17 +2214,18 @@ def hid_graph(ax_hid,dict_linevis,
         x_hid_base = lum_list[mask_obj_base][i_obj_base].T[2][0] / lum_list[mask_obj_base][i_obj_base].T[1][0]
         y_hid_base = lum_list[mask_obj_base][i_obj_base].T[4][0]
 
-        x_hid_incert = hid_plot_use.T[mask_obj_base][i_obj_base].T[0]
-        y_hid_incert = hid_plot_use.T[mask_obj_base][i_obj_base].T[1]
+        x_hid_uncert = hid_plot_use.T[mask_obj_base][i_obj_base].T[0]
+        y_hid_uncert = hid_plot_use.T[mask_obj_base][i_obj_base].T[1]
+
+        #breakpoint()
 
         # reconstructing standard arrays
-        x_hid_incert = np.array([[subelem for subelem in elem] for elem in x_hid_incert])
-        y_hid_incert = np.array([[subelem for subelem in elem] for elem in y_hid_incert])
+        x_hid_uncert = np.array([[subelem for subelem in elem] for elem in x_hid_uncert])
+        y_hid_uncert = np.array([[subelem for subelem in elem] for elem in y_hid_uncert])
 
         if broad_mode:
 
             x_hid_base = hid_plot_use[0][0][mask_obj_base][i_obj_base]
-            x_hid_incert=hid_plot_use.T[mask_obj_base][i_obj_base].T[0]
 
             #done this way to avoid overwriting lum_list if using += on y_hid_base
             if lum_broad_soft:
@@ -2388,9 +2414,9 @@ def hid_graph(ax_hid,dict_linevis,
 
                         c_scat_nondet_rgba_clim = colors_func.to_rgba(c_scat_nondet)
 
-                    elem_err_nondet = ax_hid.errorbar(x_hid_incert[0][mask_nondet], y_hid_incert[0][mask_nondet],
-                                                      xerr=x_hid_incert[1:].T[mask_nondet].T,
-                                                      yerr=y_hid_incert[1:].T[mask_nondet].T, marker='None',
+                    elem_err_nondet = ax_hid.errorbar(x_hid_uncert[0][mask_nondet], y_hid_uncert[0][mask_nondet],
+                                                      xerr=x_hid_uncert[1:].T[mask_nondet].T,
+                                                      yerr=y_hid_uncert[1:].T[mask_nondet].T, marker='None',
                                                       linestyle='None', linewidth=0.5,
                                                       c=c_scat_nondet if radio_info_cmap not in type_1_cm else None,
                                                       label='', zorder=1000, alpha=1.)
@@ -2540,11 +2566,20 @@ def hid_graph(ax_hid,dict_linevis,
     ####displaying the thresholds if asked to
 
     if display_dicho:
-        # horizontal
-        ax_hid.axline((0.01, 1e-2), (10, 1e-2), ls='--', color='grey')
 
-        # vertical
-        ax_hid.axline((0.8, 1e-6), (0.8, 10), ls='--', color='grey')
+        if broad_mode:
+            if HR_broad_6_10:
+                # vertical
+                ax_hid.axline((1., 1e-6), (1., 10), ls='--', color='grey')
+            else:
+                # vertical
+                ax_hid.axline((0.8, 1e-6), (0.8, 10), ls='--', color='grey')
+        else:
+            # horizontal
+            ax_hid.axline((0.01, 1e-2), (10, 1e-2), ls='--', color='grey')
+
+            # vertical
+            ax_hid.axline((0.8, 1e-6), (0.8, 10), ls='--', color='grey')
 
         # restricting the graph to the portion inside the thrsesolds
         # ax_hid.set_xlim(ax_hid.get_xlim()[0],0.8)

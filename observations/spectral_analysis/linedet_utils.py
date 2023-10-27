@@ -470,14 +470,20 @@ def plot_line_ratio(axe,data_autofit,data_autofit_noabs,n_addcomps_cont,mode=Non
                   if elem in np.where(plot_ratio_autofit_noabs[i_grp][0][0] <= line_search_e_space[-1])[0]]) \
         for i_grp in range(AllData.nGroups)]
 
-    # rescaling with errorbars (which are not taken into account by normal rescaling)
-
-    plot_ratio_y_up = np.array(
-        [(plot_ratio_autofit_noabs[i_grp][1][0] + plot_ratio_autofit_noabs[i_grp][1][1])[plot_ratio_xind_rel[i_grp]]
-         for i_grp in range(AllData.nGroups)], dtype=object)
-
+    '''
+    rescaling with errorbars (which are not taken into account by normal rescaling)
+    we use 1 as a default value if nothing is in the correct range for a given datagroup so that it doesn't 
+    affect the rest
+    '''
+    try:
+        plot_ratio_y_up = np.array(
+            [1 if len(plot_ratio_xind_rel[i_grp])==0 else (plot_ratio_autofit_noabs[i_grp][1][0] + plot_ratio_autofit_noabs[i_grp][1][1])[plot_ratio_xind_rel[i_grp]]
+             for i_grp in range(AllData.nGroups)], dtype=object)
+    except:
+        breakpoint()
+        print('s')
     plot_ratio_y_dn = np.array(
-        [(plot_ratio_autofit_noabs[i_grp][1][0] - plot_ratio_autofit_noabs[i_grp][1][1])[plot_ratio_xind_rel[i_grp]]
+        [1 if len(plot_ratio_xind_rel[i_grp])==0 else (plot_ratio_autofit_noabs[i_grp][1][0] - plot_ratio_autofit_noabs[i_grp][1][1])[plot_ratio_xind_rel[i_grp]]
          for i_grp in range(AllData.nGroups)], dtype=object)
     axe.set_ylim(0.95 * np.min(ravel_ragged(plot_ratio_y_dn)), 1.05 * np.max(ravel_ragged(plot_ratio_y_up)))
 

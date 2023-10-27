@@ -78,6 +78,29 @@ xcolors_grp=['black','red','limegreen','blue','cyan','purple','yellow',
 
 #not used anymore now that we take the info directly from the log file
 
+def ignore_data_indiv(e_low_groups,e_high_groups,reset=False,sat_low_groups=None,sat_high_groups=None,
+                      glob_ignore_bands=None):
+
+    if reset:
+        AllData.notice('all')
+        AllData.ignore('bad')
+
+    if type(e_low_groups) in [float,np.float64] and type(e_high_groups) in [float,np.float64]:
+        AllData.ignore('**-'+str(e_low_groups)+' '+str(e_high_groups)+'-**')
+    else:
+        for i_grp,(e_low,e_high) in enumerate(zip(e_low_groups,e_high_groups)):
+            AllData(i_grp+1).ignore('**-'+str(e_low)+' '+str(e_high)+'-**')
+
+    if sat_low_groups is not None and sat_high_groups is not None:
+        #note: this will do nothing if e_sat_low indiv and e_sat_high_indiv are kept at their default values
+        #because this will always be the same or bigger than the bands interval
+        for i_grp, (e_sat_low, e_sat_high) in enumerate(zip(sat_low_groups, sat_high_groups)):
+            AllData(i_grp + 1).ignore('**-' + str(e_sat_low) + ' ' + str(e_sat_high) + '-**')
+
+    if glob_ignore_bands is not None:
+        for elem_ignore_band in glob_ignore_bands:
+            AllData.ignore(elem_ignore_band)
+
 def screen_term(screenfile,wind_type='Spyder',kill=False):
     
     '''
@@ -2662,10 +2685,9 @@ class fitmod:
                 #at this stage there's no question of unlinking energies for absorption lines so we can use n_unlocked_pars_base
                     
                 if init_chi!=0:
-                    try:
-                        ftest_val=Fit.ftest(new_chi,new_dof,init_chi,init_dof)
-                    except:
-                        breakpoint()
+
+                    ftest_val=Fit.ftest(new_chi,new_dof,init_chi,init_dof)
+
                     ftest_condition=ftest_val<ftest_threshold+ftest_leeway
                     
                     delchi_condition=init_chi-new_chi>sign_delchis_table[max(0,init_dof-new_dof-1)]
@@ -3149,13 +3171,12 @@ class fitmod:
         if not lock_lines:
             self.test_unlink_lines(chain=chain,ftest_threshold=ftest_threshold)        
 
-        try:
-            #testing if freezing the pegged parameters improves the fit
-            par_peg_ids=calc_error(self.logfile,param='1-'+str(AllModels(1).nParameters*AllData.nGroups),freeze_pegged=freeze_final_pegged,indiv=True,
-                                   test='FeKa26abs_agaussian' in self.name_complist and round(AllData(1).energies[0][0])==3)
 
-        except:
-            breakpoint()
+        #testing if freezing the pegged parameters improves the fit
+        par_peg_ids=calc_error(self.logfile,param='1-'+str(AllModels(1).nParameters*AllData.nGroups),freeze_pegged=freeze_final_pegged,indiv=True,
+                               test='FeKa26abs_agaussian' in self.name_complist and round(AllData(1).energies[0][0])==3)
+
+
 
         #computing the component position of the frozen parameter to allow to unfreeze them later even with modified component positions
         par_peg_comps=self.idtocomp(par_peg_ids)
@@ -3506,11 +3527,10 @@ class fitmod:
                         add_val=1
                     else:
                         add_val=0
-                    try:
-                        #we only draw from the first data group, hence the [0] index in par_draw
-                        AllModels(1)(id_parcomp+1+add_val).values=[par_draw[i_sim][0][parcomp-1]]+AllModels(1)(id_parcomp+1+add_val).values[1:]
-                    except:
-                        breakpoint()
+
+                    #we only draw from the first data group, hence the [0] index in par_draw
+                    AllModels(1)(id_parcomp+1+add_val).values=[par_draw[i_sim][0][parcomp-1]]+AllModels(1)(id_parcomp+1+add_val).values[1:]
+
 
                 #computing the flux of the line 
                 #(should be negligbly affected by the energy limits of instruments since we don't have lines close to these anyway)
@@ -4300,15 +4320,16 @@ class plot_save:
             for i_grp in range(1,max(1,AllData.nGroups)+1):
         
                 print('\nTesting number of additive components in the model...the following error is normal')
-                
+
                 n_addcomps=1
                 while 1:
                     try:
                         Plot.addComp(addCompNum=n_addcomps+1)
                         n_addcomps+=1
                     except:
+
                         break
-                    
+
                 group_addcomps=np.array([None]*n_addcomps)
                 
                 #the addCompNum start at 1 and count only the additive components
@@ -4565,10 +4586,11 @@ def xPlot(types,axes_input=None,plot_saves_input=None,plot_arg=None,includedlist
 
             if curr_save.y[id_grp] is not None:
                 #plotting each data group
-                curr_ax.errorbar(curr_save.x[id_grp],curr_save.y[id_grp],xerr=curr_save.xErr[id_grp],yerr=curr_save.yErr[id_grp],
+
+                curr_ax.errorbar(curr_save.x[id_grp],curr_save.y[id_grp],xerr=curr_save.xErr[id_grp],yerr=curr_save.yErr[id_grp].clip(0),
                                  color=xcolors_grp[id_grp],linestyle='None',elinewidth=0.75,
                                  label='' if group_names=='nolabel' or (no_name_data=='auto' and i_ax!=len(types_split)-1) else grp_name)
-            
+
             #plotting models
             if 'ratio' not in plot_type and curr_save.model[id_grp] is not None:
                 curr_ax.plot(curr_save.x[id_grp],curr_save.model[id_grp],color=xcolors_grp[id_grp],alpha=0.5,
@@ -4672,6 +4694,8 @@ def Plot_screen(datatype,path,mode='matplotlib',xspec_windid=None,includedlist=N
     
     if mode=='matplotlib':
         xPlot(datatype,includedlist=includedlist)
+
+
         if not path.endswith('.png') or path.endswith('.svg') or path.endswith('.pdf'):
             path_use=path+('.pdf')
             plt.savefig(path_use)
@@ -4679,10 +4703,11 @@ def Plot_screen(datatype,path,mode='matplotlib',xspec_windid=None,includedlist=N
             plt.savefig(path_use)
             path_use=path+('.png')
             plt.savefig(path_use)
+
         else:
             path_use=path
             plt.savefig(path_use)
-            
+
         time.sleep(0.1)
         plt.close()
         

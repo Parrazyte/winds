@@ -144,10 +144,10 @@ ap = argparse.ArgumentParser(description='Script to detect lines in XMM Spectra.
 
 '''GENERAL OPTIONS'''
 
-ap.add_argument('-satellite',nargs=1,help='telescope to fetch spectra from',default='Suzaku',type=str)
+ap.add_argument('-satellite',nargs=1,help='telescope to fetch spectra from',default='NICER',type=str)
 #note: use maj for first character
 
-ap.add_argument("-cameras",nargs=1,help='Cameras to use for spectral analysis',default='all',type=str)
+ap.add_argument("-cameras",nargs=1,help='Cameras to use for spectral analysis',default='xti',type=str)
 ap.add_argument("-expmodes",nargs=1,help='restrict the analysis to a single type of exposure',default='all',type=str)
 ap.add_argument("-grouping",nargs=1,help='specfile grouping for XMM spectra in [5,10,20] cts/bin',default='opt',type=str)
 
@@ -157,7 +157,7 @@ ap.add_argument("-prefix",nargs=1,help='restrict analysis to a specific prefix',
 
 ####output directory
 ap.add_argument("-outdir",nargs=1,help="name of output directory for line plots",
-                default="lineplots_opt_test",type=str)
+                default="lineplots_opt",type=str)
 
 #overwrite
 ap.add_argument('-overwrite',nargs=1,
@@ -201,7 +201,11 @@ ap.add_argument("-h_update",nargs=1,help='update the bg, rmf and arf file names 
 '''####ANALYSIS RESTRICTION'''
 
 ap.add_argument('-spread_comput',nargs=1,help='spread sources in N subsamples to poorly parallelize on different consoles',
-                default=1,type=bool)
+                default=4,type=bool)
+
+ap.add_argument('-reverse_spread',nargs=1,help='run the spread computation lists in reverse',default=True,type=bool)
+
+ap.add_argument('-spread_overwrite',nargs=1,help='consider already finished computations when creating the spreads',default=False,type=bool)
 
 ap.add_argument('-restrict',nargs=1,help='restrict the computation to a number of predefined exposures',default=False,type=bool)
 #in this mode, the line detection function isn't wrapped in a try, and the summary isn't updasted
@@ -282,7 +286,7 @@ ap.add_argument('-reload_autofit',nargs=1,help='Reload existing autofit save fil
                 default=True,type=bool)
 
 ap.add_argument('-pdf_only',nargs=1,help='Updates the pdf with already existing elements but skips the line detection entirely',
-                default=True,type=bool)
+                default=False,type=bool)
 
 #note: used mainly to recompute obs with bugged UL computations
 ap.add_argument('-line_ul_only',nargs=1,help='Reloads the autofit computations and re-computes the ULs',
@@ -440,7 +444,8 @@ NICER_bkg=args.NICER_bkg
 line_ul_only=args.line_ul_only
 NICER_lc_binning=args.NICER_lc_binning
 reload_autofit=args.reload_autofit
-
+reverse_spread=args.reverse_spread
+spread_overwrite=args.spread_overwrite
 force_ener_bounds=args.force_ener_bounds
 
 megumi_files=args.megumi_files
@@ -3427,16 +3432,23 @@ if spread_comput!=1:
 
     spread_epochs=np.array_split(epoch_list, spread_comput)
 
-    files_spread=glob.glob(os.path.join(outdir,'spread_epoch_*'),recursive=True)
+    files_spread=glob.glob(os.path.join(outdir,'spread_epoch_'+('rev_' if reverse_spread else '')+'*'),recursive=True)
 
     assert len(files_spread)<spread_comput,'Computation already split over desired amount of elements'
 
     for i in range(spread_comput):
-        file_spread=os.path.join(outdir,'spread_epoch_'+str(i+1)+'.txt')
+        file_spread=os.path.join(outdir,'spread_epoch_'+('rev_' if reverse_spread else '')+str(i+1)+'.txt')
         if not os.path.isfile(file_spread):
+
+            if not spread_overwrite:
+                split_epoch=[epoch for epoch in spread_epochs[i] if shorten_epoch([elem.split('_sp')[0]\
+                                                                              for elem in epoch]) not in started_expos]
+            else:
+                split_epoch=spread_epochs[i]
+
             with open(file_spread,'w+') as f:
-                f.writelines([str(elem)+'\n' for elem in spread_epochs[i]])
-            epoch_list=spread_epochs[i]
+                f.writelines([str(elem)+'\n' for elem in split_epoch[::(-1 if reverse_spread else 1)]])
+            epoch_list=split_epoch[::(-1 if reverse_spread else 1)]
             break
 
 #### line detections for exposure with a spectrum

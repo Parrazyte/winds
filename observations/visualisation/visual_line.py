@@ -529,6 +529,9 @@ if multi_obj:
                                           choice_obs for j in range(len(observ_list[i]))]) for i in range(len(obj_list))],
                                             dtype=object)
 
+        if len(mask_included_selection)==1:
+            #this is necessary to avoid issues when choosing a single telescope with a single object
+            mask_included_selection=mask_included_selection.astype(bool)
 ####Nickel display is turned off here
 with st.sidebar.expander('Absorption lines restriction'):
     selectbox_abstype=st.multiselect('',
@@ -873,6 +876,10 @@ mask_obj_base=mask_obj_base & mask_obj_intime
 mask_obs_intime_repeat=np.array([np.repeat(((np.array([Time(subelem) for subelem in elem])>=Time(slider_date[0])) &\
                   (np.array([Time(subelem) for subelem in elem])<=Time(slider_date[1]))),sum(mask_lines)) for elem in date_list],dtype=object)
 
+#forcing bool types for single sources
+if len(mask_obs_intime_repeat)==1:
+    mask_obs_intime_repeat=mask_obs_intime_repeat.astype(bool)
+
 #checking which sources have no detection in the current combination
 global_displayed_sign=np.array([ravel_ragged(elem)[mask] for elem,mask in zip(abslines_plot[4][0][mask_lines].T,mask_obs_intime_repeat)],dtype=object)
 
@@ -898,10 +905,20 @@ Edd_factor = dist_factor / (1.26e38 * mass_obj_list)
 
 Edd_factor_restrict=Edd_factor[mask_obj].astype(float)
 
+if np.ndim(hid_plot)==4:
+    flag_single_obj=True
+else:
+    flag_single_obj=False
 
-hid_plot_restrict=hid_plot.T[mask_obj].T
+if flag_single_obj:
+    hid_plot_restrict=hid_plot
+    lum_plot_restrict=lum_plot
+else:
+    hid_plot_restrict=hid_plot.T[mask_obj].T
+    lum_plot_restrict=lum_plot.T[mask_obj].T
+
 incl_plot_restrict=incl_plot[mask_obj]
-lum_plot_restrict=lum_plot.T[mask_obj].T
+
 
 #creating variables with values instead of uncertainties for the inclination and nh colormaps
 
@@ -1678,12 +1695,15 @@ line_rows=np.array(lines_std_names[3:9])[mask_lines]
 for i_obj_r in range(n_obj_r):
     
     n_obs_r=sum(mask_intime_plot[i_obj_r].astype(bool))
-    
+
+    #the transposer order is 3D regularly, and 4D if the array is more regular, aka if there's a single source
+    tr_order=(2,0,1,3) if flag_single_obj else (2,0,1)
+
     #recreating an individual non ragged array (similar to abslines_perobj) in construction for each object
-    hid_plot_indiv=np.array([[subelem for subelem in elem] for elem in hid_plot_restrict.transpose(2,0,1)[i_obj_r]],dtype=float)
-    
+    hid_plot_indiv=np.array([[subelem for subelem in elem] for elem in hid_plot_restrict.transpose(tr_order)[i_obj_r]],dtype=float)
+
     #this one is put back to non-Eddington values, and we remove the first flux measurement whose band can change between instruments or computations
-    flux_plot_indiv=np.array([[subelem for subelem in elem] for elem in lum_plot_restrict[1:].transpose(2,0,1)[i_obj_r]],dtype=float)/Edd_factor_restrict[i_obj_r]
+    flux_plot_indiv=np.array([[subelem for subelem in elem] for elem in lum_plot_restrict[1:].transpose(tr_order)[i_obj_r]],dtype=float)/Edd_factor_restrict[i_obj_r]
 
     line_plot_indiv=np.array([[[subsubelem for subsubelem in subelem] for subelem in elem] for elem in abs_plot_tr[i_obj_r]],dtype=float)
 
@@ -2020,7 +2040,13 @@ if display_param_withdet:
     width_plot_restrict = deepcopy(width_plot)
     width_plot_restrict = np.transpose(np.transpose(width_plot_restrict, (1, 0, 2))[mask_lines].T[mask_obj], (1, 2, 0))
 
-    hid_plot_restrict=hid_plot.T[mask_obj].T
+    if flag_single_obj:
+        hid_plot_restrict = hid_plot
+        lum_plot_restrict = lum_plot
+    else:
+        hid_plot_restrict = hid_plot.T[mask_obj].T
+        lum_plot_restrict = lum_plot.T[mask_obj].T
+
     incl_plot_restrict=incl_plot[mask_obj]
 
 

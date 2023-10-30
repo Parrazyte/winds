@@ -987,7 +987,7 @@ def obj_values(file_paths,E_factors,dict_linevis):
         if visual_line:
             
             for i_obs,obs in enumerate(obs_list[i]):
-                
+
                 if len(obs.split('_'))<=1:
                     
                     if 'source' in obs.split('_')[0]:
@@ -1020,7 +1020,13 @@ def obj_values(file_paths,E_factors,dict_linevis):
                         lineval_path=[elem for elem in curr_obj_paths if 'Chandra' in elem][0]
                         filepath='/'.join(lineval_path.split('/')[:-2])+'/'+obs+'_grp_opt.pha'
                         curr_instru_list[i_obs]='Chandra'
-                        
+
+                    elif 'xis' in obs:
+                        #we take the directory structure from the according file in curr_obj_paths
+                        lineval_path=[elem for elem in curr_obj_paths if 'Suzaku' in elem][0]
+                        filepath='/'.join(lineval_path.split('/')[:-2])+'/'+obs+'_gti_event_spec_src_grp_opt.pha'
+                        curr_instru_list[i_obs]='Suzaku'
+
                     elif obs.split('_')[1] in ['0','1']:
                         
                         #we take the directory structure from the according file in curr_obj_paths
@@ -1193,11 +1199,14 @@ def values_manip(abslines_infos,dict_linevis,autofit_infos,lum_list_infos,mask_i
 
     if mask_include is None:
         #default ragged full True array
-        mask_include_use=np.array([np.array([True]*len(abslines_infos[i])) for i in range(n_obj)],dtype=object)
+        mask_include_use=np.array([np.array([True]*len(abslines_infos[i])) for i in range(n_obj)],dtype=bool)
     else:
-        mask_include_use=mask_include
+        #this is necessary for cases with a single telescope and a single object to avoid issues
+        if len(mask_include)==1:
+            mask_include_use=mask_include.astype(bool)
+        else:
+            mask_include_use=mask_include
 
-    #masking the values for the main arrays to avoid changing anything to the following
     abslines_inf=np.array([abslines_infos[i_obj][mask_include_use[i_obj]] for i_obj in range(n_obj)],dtype=object)
     autofit_inf = np.array([autofit_infos[i_obj][mask_include_use[i_obj]] for i_obj in range(n_obj)], dtype=object)
     lum_list= np.array([lum_list_infos[i_obj][mask_include_use[i_obj]] for i_obj in range(n_obj)], dtype=object)
@@ -1636,12 +1645,17 @@ def hid_graph(ax_hid,dict_linevis,
     incl_cmap_restrict = incl_cmap[mask_obj]
 
     nh_plot_restrict = deepcopy(nh_plot)
+
     nh_plot_restrict = nh_plot_restrict.T[mask_obj].T
 
     kt_plot_restrict = deepcopy(kt_plot)
     kt_plot_restrict = kt_plot_restrict.T[mask_obj].T
 
-    hid_plot_restrict = hid_plot_use.T[mask_obj].T
+    if len(mask_obj) == 1 and np.ndim(hid_plot_use) == 4:
+        hid_plot_restrict=hid_plot_use
+    else:
+        hid_plot_restrict = hid_plot_use.T[mask_obj].T
+
     incl_plot_restrict = incl_plot[mask_obj]
 
     if display_nonsign:
@@ -2214,8 +2228,12 @@ def hid_graph(ax_hid,dict_linevis,
         x_hid_base = lum_list[mask_obj_base][i_obj_base].T[2][0] / lum_list[mask_obj_base][i_obj_base].T[1][0]
         y_hid_base = lum_list[mask_obj_base][i_obj_base].T[4][0]
 
-        x_hid_uncert = hid_plot_use.T[mask_obj_base][i_obj_base].T[0]
-        y_hid_uncert = hid_plot_use.T[mask_obj_base][i_obj_base].T[1]
+        if len(mask_obj)==1 and np.ndim(hid_plot)==4:
+            x_hid_uncert=hid_plot.transpose(2,0,1,3)[i_obj][0]
+            y_hid_uncert=hid_plot.transpose(2,0,1,3)[i_obj][1]
+        else:
+            x_hid_uncert = hid_plot_use.T[mask_obj_base][i_obj_base].T[0]
+            y_hid_uncert = hid_plot_use.T[mask_obj_base][i_obj_base].T[1]
 
         #breakpoint()
 
@@ -4682,7 +4700,7 @@ def correl_graph(data_perinfo,infos,data_ener,dict_linevis,mode='intrinsic',mode
         if show_linked or (compute_correl and mode!='source' and len(x_data[0])>1 and not time_mode) or color_scatter not in ['Time','HR','width','nH',None]:
             
             scat_legend=ax_scat.legend(fontsize=9 if infos=='eqw_width' and display_th_width_ew else 10,title=legend_title,
-                                   ncol=2 if display_th_width_ew and infos=='eqw_width' else 1,loc='upper right')
+                                   ncol=2 if display_th_width_ew and infos=='eqw_width' else 1,loc='upper right' if not ratio_mode else 'upper left')
             plt.setp(scat_legend.get_title(),fontsize='small')
                 
         if len(x_data_use)>0:

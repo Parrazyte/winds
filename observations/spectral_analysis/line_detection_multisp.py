@@ -157,7 +157,7 @@ ap.add_argument("-prefix",nargs=1,help='restrict analysis to a specific prefix',
 
 ####output directory
 ap.add_argument("-outdir",nargs=1,help="name of output directory for line plots",
-                default="lineplots_opt",type=str)
+                default="lineplots_opt_test",type=str)
 
 #overwrite
 ap.add_argument('-overwrite',nargs=1,
@@ -282,7 +282,7 @@ ap.add_argument('-reload_autofit',nargs=1,help='Reload existing autofit save fil
                 default=True,type=bool)
 
 ap.add_argument('-pdf_only',nargs=1,help='Updates the pdf with already existing elements but skips the line detection entirely',
-                default=False,type=bool)
+                default=True,type=bool)
 
 #note: used mainly to recompute obs with bugged UL computations
 ap.add_argument('-line_ul_only',nargs=1,help='Reloads the autofit computations and re-computes the ULs',
@@ -800,7 +800,7 @@ def pdf_summary(epoch_observ,fit_ok=False,summary_epoch=None):
                 is_sp+=[False]
                 is_cleanevt+=[False]
                 filename_list+=[elem_observ.replace('_screen.png','.ds')]
-        elif sat in ['Chandra','NICER','Suzaku','Swift']:
+        elif sat in ['Chandra','NICER','Swift']:
             is_sp+=[True]
             is_cleanevt+=[False]
 
@@ -808,6 +808,18 @@ def pdf_summary(epoch_observ,fit_ok=False,summary_epoch=None):
             #     filename_list+=[elem_observ]
             # else:
             filename_list+=[elem_observ+('_sp' if sat in ['NICER','Suzaku'] else '')+'_grp_opt'+('.pi' if sat=='Swift' else '.pha')]
+
+        elif sat=='Suzaku':
+            if megumi_files:
+
+                suffixes=['_src_dtcor_grp_opt.pha','_gti_event_spec_src_grp_opt.pha']
+
+                if os.path.isfile(elem_observ+suffixes[0]):
+                    filename_list+=[elem_observ+suffixes[0]]
+                    is_sp+=[True]
+                elif os.path.isfile(elem_observ+suffixes[1]):
+                    filename_list += [elem_observ + suffixes[1]]
+                    is_sp += [True]
 
         with fits.open(filename_list[i_obs]) as hdul:
 
@@ -823,14 +835,17 @@ def pdf_summary(epoch_observ,fit_ok=False,summary_epoch=None):
                 epoch_grating=hdul[1].header['GRATING']
                 expmode_list+=[hdul[1].header['DATAMODE']]
             else:
-                expmode_list+=[''] if pre_reduced_NICER else [hdul[0].header['DATAMODE']]
+                expmode_list += [''] if (pre_reduced_NICER or 'DATAMODE' not in hdul[0].header.keys())\
+                                else [hdul[0].header['DATAMODE']]
 
             if sat=='NICER' and pre_reduced_NICER:
                     pdf.cell(1,1,'Object: '+obj_name+' | Date: '+Time(hdul[1].header['MJDSTART'],format='mjd').isot+
                              ' | Obsid: '+epoch_inf[i_obs][0],align='C',center=True)
             else:
-                pdf.cell(1,1,'Object: '+obj_name+' | Date: '+hdul[0].header['DATE-OBS'].split('T')[0]+' | Obsid: '+epoch_inf[i_obs][0],
-                          align='C',center=True)
+                date_str=' ' if 'DATE-OBS' not in hdul[0].header.keys() else hdul[0].header['DATE-OBS'].split('T')[0]
+                pdf.cell(1,1,'Object: '+obj_name+' | Date: '+date_str+' | Obsid: '+epoch_inf[i_obs][0],
+                      align='C',center=True)
+
             pdf.ln(10)
             if sat=='XMM':
                 pdf.cell(1,1,'exposure: '+epoch_inf[i_obs][2]+' | camera: '+epoch_inf[i_obs][1]+' | mode: '+epoch_inf[i_obs][3]+
@@ -1228,7 +1243,12 @@ def line_detect(epoch_id):
 
     Xset.logChatter=10
 
-    epoch_observ=[elem.split('_sp')[0] if sat=='XMM' else elem.split('_grp_opt')[0] if sat in ['Chandra','Swift'] else elem.split('_sp_grp_opt')[0] if sat in ['NICER','Suzaku'] else '' for elem in epoch_files]
+    if sat=='Suzaku':
+        if megumi_files:
+            epoch_observ=[elem_file.split('_src')[0].split('_gti')[0] for elem_file in epoch_files]
+    else:
+        epoch_observ=[elem.split('_sp')[0] if sat=='XMM' else elem.split('_grp_opt')[0] if sat in ['Chandra','Swift']
+                      else elem.split('_sp_grp_opt')[0] if sat in ['NICER','Suzaku'] else '' for elem in epoch_files]
 
     print('\nStarting line detection for files ')
     print(epoch_files)
@@ -1289,7 +1309,8 @@ def line_detect(epoch_id):
                         epoch_dets+=['PIN']
 
                         #for megumi files we always update the header
-                        pin_rspfile=glob.glob(obsid+'_ae_hxd_**.rsp')[0]
+
+                        pin_rspfile=glob.glob(file_obsid+'_ae_hxd_**.rsp')[0]
                         hdul[1].header['RESPFILE']=pin_rspfile
                         hdul[1].header['BACKFILE']=elem_sp.replace('src_dtcor_grp_opt','nxb_cxb')
 
@@ -1672,6 +1693,7 @@ def line_detect(epoch_id):
             e_sat_high_indiv[i_obs]=40. if elem_det=='PIN' else 9.
             e_sat_low_indiv[i_obs]=12. if elem_det=='PIN' else 1.9
 
+            line_cont_range[1]=9.
     if max(e_sat_high_indiv)>12:
         Plot.xLog=True
     else:
@@ -3357,12 +3379,14 @@ elif sat in ['Suzaku','Swift']:
 
     if sat=='Swift':
         obsid_list_started=np.unique([elem.split('_')[0][:11] for elem in started_expos[1:]])
-    else:
-        obsid_list_started=np.unique([elem.split('_')[0] for elem in started_expos[1:]])
+        for obsid in obsid_list_started.tolist():
+            epoch_list_started+=[[elem] for elem in started_expos if elem.startswith(obsid)]
 
-    for obsid in obsid_list_started.tolist():
-        epoch_list_started+=[[elem] for elem in started_expos if elem.startswith(obsid)]
+    if sat=='Suzaku':
+        #reversing the order to have the FI xis first, then the BI xis, then pin instead of the opposite
+        epoch_list=[elem[::-1] for elem in epoch_list]
 
+        epoch_list_started=[literal_eval(elem.split(']')[0]+']') for elem in started_expos[1:]]
 
 def shorten_epoch(file_ids):
     # splitting obsids
@@ -3430,11 +3454,21 @@ for epoch_id,epoch_files in enumerate(epoch_list):
     #we use the id of the first file as an identifier
     firstfile_id=epoch_files[0].split('_sp')[0]
 
-    file_ids=[elem.split('_sp')[0] for elem in epoch_files]
+    if sat=='Suzaku' and megumi_files:
+        file_ids = [elem.split('_spec')[0].split('_src')[0] for elem in epoch_files]
+    else:
+        file_ids=[elem.split('_sp')[0] for elem in epoch_files]
+
 
     #skip start check
     if sat in ['Suzaku']:
-        if skip_started and epoch_files in epoch_list_started:
+        #breakpoint()
+
+        sp_epoch=[elem_sp.split('_spec')[0].split('_src')[0] for elem_sp in epoch_files]
+
+        started_epochs=[literal_eval(elem.split(']')[0]+(']')) for elem in started_expos[1:]]
+
+        if skip_started and sp_epoch in started_epochs:
              print('\nSpectrum analysis already performed. Skipping...')
              continue
     elif sat=='Swift':
@@ -3497,7 +3531,11 @@ for epoch_id,epoch_files in enumerate(epoch_list):
             #     obsid_id=firstfile_id
             #     file_id=obsid_id
 
-            epoch_files_suffix=np.unique([elem.split('_sp')[-1]for elem in epoch_files])
+            if sat=='Suzaku' and megumi_files:
+                epoch_files_suffix=np.unique([elem.split('_spec')[-1].split('_pin')[-1] for elem in epoch_files])
+                epoch_files_suffix=epoch_files_suffix[::-1]
+            else:
+                epoch_files_suffix=np.unique([elem.split('_src')[-1]for elem in epoch_files])
 
             epoch_files_str=epoch_files_suffix
 
@@ -3534,16 +3572,26 @@ if multi_obj==False:
         aborted_epochs=[[elem.replace('_grp_opt'+('.pi' if sat=='Swift' else '.pha'),'') for elem in epoch]\
                         for epoch in epoch_list if not epoch[0].split('_grp_opt'+('.pi' if sat=='Swift' else '.pha'))[0]+'_recap.pdf'\
                             in lineplots_files]
-    elif sat in ['NICER','Suzaku']:
+    elif sat=='NICER':
         aborted_epochs=[[elem.replace('_sp_grp_opt.pha','') for elem in epoch]\
                         for epoch in epoch_list if not epoch[0].split('_sp_grp_opt.pha')[0]+'_recap.pdf' in lineplots_files]
+    elif sat=='Suzaku':
+        aborted_epochs=[[elem.replace('_sp_grp_opt.pha','') for elem in epoch]\
+                        for epoch in epoch_list if not\
+                            '_'.join(elem.split('_gti')[0].split('_src')[0] for elem in epoch)+'_recap.pdf' in lineplots_files]
+
     for elem_epoch in aborted_epochs:
         if sat=='XMM':
             epoch_observ=[elem_file.split('_sp')[0] for elem_file in elem_epoch]
         elif sat in ['Chandra','Swift']:
             epoch_observ=[elem_file.split('_grp_opt')[0] for elem_file in elem_epoch]
-        elif sat in ['NICER','Suzaku']:
+        elif sat=='NICER':
             epoch_observ=[elem_file.split('_sp_grp_opt')[0] for elem_file in elem_epoch]
+
+        elif sat=='Suzaku':
+            if megumi_files:
+                epoch_observ=[elem_file.split('_src')[0].split('_gti')[0] for elem_file in elem_epoch]
+
         #list conversion since we use epochs as arguments
         pdf_summary(epoch_observ)
 
@@ -3557,7 +3605,8 @@ from visual_line_tools import load_catalogs,dist_mass,obj_values,abslines_values
 
 'Distance and Mass determination'
 
-catal_blackcat,catal_watchdog,catal_blackcat_obj,catal_watchdog_obj,catal_maxi_df,catal_maxi_simbad=load_catalogs()
+catal_blackcat,catal_watchdog,catal_blackcat_obj,catal_watchdog_obj,catal_maxi_df,catal_maxi_simbad,\
+    catal_bat_df,catal_bat_simbad=load_catalogs()
 
 all_files=glob.glob('**',recursive=True)
 lineval_id='line_values_'+args.line_search_e.replace(' ','_')+'_'+args.line_search_norm.replace(' ','_')+'.txt'
@@ -3607,8 +3656,12 @@ dict_linevis['lum_list']=lum_list
 abslines_infos,autofit_infos=abslines_values(abslines_files,dict_linevis)
 
 # getting all the variations we need
-abslines_infos_perline, abslines_infos_perobj, abslines_plot, abslines_ener, lum_plot, hid_plot, incl_plot, width_plot, nh_plot, kt_plot = values_manip(
-    abslines_infos, dict_linevis, autofit_infos)
+
+# getting all the variations we need
+abslines_infos_perline, abslines_infos_perobj, abslines_plot, abslines_ener, \
+    lum_plot, hid_plot, incl_plot, width_plot, nh_plot, kt_plot = values_manip(abslines_infos, dict_linevis,
+                                                                                autofit_infos,
+                                                                                lum_list)
 
 '''
 in this form, the order is:
@@ -3718,7 +3771,21 @@ mask_obj_withdet=np.array([(elem>sign_threshold).any() for elem in global_displa
 #storing the number of objects with detections
 n_obj_withdet=sum(mask_obj_withdet & mask_obj_base)
 
-hid_plot_restrict=hid_plot.T[mask_obj].T
+if len(mask_obj)==1 and np.ndim(hid_plot)==4:
+    #this means there's a single object and thus the arrays are built directly
+    #in this case the restrcited array are the same than the non-restricted one
+    hid_plot_restrict=deepcopy(hid_plot)
+    nh_plot_restrict=deepcopy(nh_plot)
+    kt_plot_restruct=deepcopy(kt_plot)
+else:
+    hid_plot_restrict=hid_plot.T[mask_obj].T
+
+    nh_plot_restrict = deepcopy(nh_plot)
+    nh_plot_restrict = nh_plot_restrict.T[mask_obj].T
+
+    kt_plot_restrict = deepcopy(kt_plot)
+    kt_plot_restrict = kt_plot_restrict.T[mask_obj].T
+
 
 incl_plot_restrict = incl_plot[mask_obj]
 
@@ -3733,11 +3800,7 @@ incl_cmap=None
 incl_cmap_base=None
 incl_cmap_restrict=None
 
-nh_plot_restrict = deepcopy(nh_plot)
-nh_plot_restrict = nh_plot_restrict.T[mask_obj].T
 
-kt_plot_restrict = deepcopy(kt_plot)
-kt_plot_restrict = kt_plot_restrict.T[mask_obj].T
 
 
 radio_info_cmap='Time'
@@ -4022,7 +4085,14 @@ def save_pdf(fig):
             point_observ=observ_list[0][np.argwhere(lum_list[0].T[4][0]==single_point[1])[0][0]]
 
             #there should only be one element here
-            point_recapfile=[elem for elem in save_dir_list if point_observ+'_recap.pdf' in elem][0]
+            try:
+                point_recapfile=[elem for elem in save_dir_list if point_observ+'_recap.pdf' in elem][0]
+            except:
+                try:
+                    point_recapfile=glob.glob(os.path.join(save_dir, point_observ + '**_recap.pdf'))[0]
+                except:
+                    breakpoint()
+                    print("Issue with finding individual pdf recap files")
 
             #adding the corresponding hid highlight page
             merger.add_outline_item(point_observ,len(merger.pages),parent=bkm_completed)

@@ -20,8 +20,23 @@ If using multi_obj, it is assumed the lineplots directory is outdirf
 
 Changelog:
 
+v 1.3 (11/23):
+many changes unlogged since may:
+    -Suzaku 'megumi files' mode implemented
+    -daily epoch matching for NICER
+    -NICER gti implementation
+    -spread computations with many options
+    -autofit reloading
+    -upper limit only mode
+    -new naming conventions for recap files and the summaries
+    -HID graph now in function and similar to what is used in visual_line
+    -individual data groups now can have individual energy ignore bands. Useful for Suzaku and to prepare for future
+     multi-instrument computations
+    -lot of smaller changes and fixes
+
 V 1.2 (06/23):
     -changed PDF summary to use visual_line tools
+
 V 1.1 (04/23):
     -added multi models to use NICER scorpeon background. Still debugging
 
@@ -140,7 +155,7 @@ from shapely.geometry import Polygon,Point
 #mask propagation for the peak detection
 from scipy.ndimage import binary_dilation
 
-ap = argparse.ArgumentParser(description='Script to detect lines in XMM Spectra.\n)')
+ap = argparse.ArgumentParser(description='Script to perform line detection in X-ray Spectra.\n)')
 
 '''GENERAL OPTIONS'''
 
@@ -160,13 +175,17 @@ ap.add_argument("-outdir",nargs=1,help="name of output directory for line plots"
                 default="lineplots_opt",type=str)
 
 #overwrite
+#global overwrite based on recap PDF
 ap.add_argument('-overwrite',nargs=1,
-            help='overwrite previously computed line detection products (if False, skips the computation if the recap PDF file exists)',
+            help='rerun individual computations even if individual recap PDF files already exists',
+            default=False,type=bool)
+
+#note : will skip exposures for which the exposure didn't compute or with logged errors
+ap.add_argument('-skip_started',nargs=1,help='skip all exposures listed in the local summary_line_det file',
                 default=True,type=bool)
 
-ap.add_argument("-skipbg_timing",nargs=1,help='do not use background for the -often contaminated- timing backgrounds',
-                default=True,type=bool)
-ap.add_argument('-max_bg_imaging',nargs=1,help='maximal imaging bg rate compared to standard bg values',default=100,type=float)
+ap.add_argument('-skip_complete',nargs=1,help='skip completed exposures listed in the local summary_line_det file',
+                default=False,type=bool)
 
 ap.add_argument('-see_search',nargs=1,help='plot every single iteration of the line search',default=False,type=bool)
 
@@ -198,17 +217,25 @@ ap.add_argument("-local",nargs=1,help='launch analysis in the current directory 
 ap.add_argument("-h_update",nargs=1,help='update the bg, rmf and arf file names in the grouped spectra headers',
                 default=True,type=bool)
 
-'''####ANALYSIS RESTRICTION'''
+'''ANALYSIS RESTRICTION'''
 
 ap.add_argument('-spread_comput',nargs=1,help='spread sources in N subsamples to poorly parallelize on different consoles',
                 default=4,type=bool)
 
 ap.add_argument('-reverse_spread',nargs=1,help='run the spread computation lists in reverse',default=True,type=bool)
 
-ap.add_argument('-spread_overwrite',nargs=1,help='consider already finished computations when creating the spreads',default=False,type=bool)
+#better when spread computations are not running
+ap.add_argument('-skip_started_spread',nargs=1,help='consider already finished computations when splitting the exposures',
+                default=True,type=bool)
 
-ap.add_argument('-restrict',nargs=1,help='restrict the computation to a number of predefined exposures',default=False,type=bool)
+#better when some spread computations are still running
+ap.add_argument('-spread_overwrite',nargs=1,help='consider already finished computations when creating the spreads',
+                default=False,type=bool)
+
+
 #in this mode, the line detection function isn't wrapped in a try, and the summary isn't updasted
+ap.add_argument('-restrict',nargs=1,help='restrict the computation to a number of predefined exposures',
+                default=False,type=bool)
 
 observ_restrict=['5501010106-003F_sp_grp_opt.pha']
 
@@ -261,13 +288,6 @@ ap.add_argument('-counts_min',nargs=1,help='minimum source counts in the source 
 ap.add_argument('-fit_lowSNR',nargs=1,help='fit the continuum of low quality data to get the HID values',default=False,type=str)
 
 ap.add_argument('-counts_min_HID',nargs=1,help='minimum counts for HID fitting in broad band',default=200,type=float)
-
-ap.add_argument('-skip_started',nargs=1,help='skip all exposures listed in the local summary_line_det file',
-                default=True,type=bool)
-#note : will skip exposures for which the exposure didn't compute or with errors
-
-ap.add_argument('-skip_complete',nargs=1,help='skip completed exposures listed in the local summary_line_det file',
-                default=False,type=bool)
 
 ap.add_argument('-skip_nongrating',nargs=1,help='skip non grating Chandra obs (used to reprocess with changes in the restrictions)',
                 default=False,type=bool)
@@ -332,6 +352,13 @@ ap.add_argument("-line_search_norm",nargs=1,help='min, max and nsteps (for one s
 
 #skips fakes testing at high energy to gain time
 ap.add_argument('-restrict_fakes',nargs=1,help='restrict range of fake computation to 8keV max',default=False,type=bool)
+
+'''XMM'''
+
+ap.add_argument("-skipbg_timing",nargs=1,help='do not use background for the -often contaminated- timing backgrounds',
+                default=True,type=bool)
+ap.add_argument('-max_bg_imaging',nargs=1,help='maximal imaging bg rate compared to standard bg values',default=100,type=float)
+
 
 '''SUZAKU'''
 
@@ -459,6 +486,7 @@ suzaku_pin_range=np.array(args.suzaku_pin_range.split(' ')).astype(float)
 
 skip_flares=args.skip_flares
 spread_comput=args.spread_comput
+skip_started_spread=args.skip_started_spread
 
 group_gti_time=args.group_gti_time
 
@@ -3430,6 +3458,13 @@ def expand_epoch(shortened_epoch):
 
 if spread_comput!=1:
 
+    epoch_list_save=epoch_list
+
+    if skip_started_spread:
+        epoch_list=np.array([elem_epoch for elem_epoch in epoch_list\
+                    if shorten_epoch([elem_sp.split('_sp')[0]  for elem_sp in elem_epoch]) not in started_expos],
+                            dtype=object)
+
     spread_epochs=np.array_split(epoch_list, spread_comput)
 
     files_spread=glob.glob(os.path.join(outdir,'spread_epoch_'+('rev_' if reverse_spread else '')+'*'),recursive=True)
@@ -3505,9 +3540,12 @@ for epoch_id,epoch_files in enumerate(epoch_list):
             continue
 
     #overwrite check
-    if overwrite==False and os.path.isfile(outdir+'/'+firstfile_id+'_recap.pdf'):
-        print('\nLine detection already computed for this exposure. Skipping...')
-        continue
+    if not overwrite:
+        pdf_name=os.path.join(outdir, ('_'.join(shorten_epoch(file_ids))) + '_recap.pdf')
+
+        if os.path.isfile(pdf_name):
+            print('\nLine detection already computed for this exposure (recap PDF exists). Skipping...')
+            continue
 
     #we don't use the error catcher/log file in restrict mode to avoid passing through bpoints
     if not restrict:
@@ -3545,9 +3583,9 @@ for epoch_id,epoch_files in enumerate(epoch_list):
 
             if sat=='Suzaku' and megumi_files:
                 epoch_files_suffix=np.unique([elem.split('_spec')[-1].split('_pin')[-1] for elem in epoch_files])
-                epoch_files_suffix=epoch_files_suffix[::-1]
+                epoch_files_suffix=epoch_files_suffix[::-1].tolist()
             else:
-                epoch_files_suffix=np.unique([elem.split('_src')[-1]for elem in epoch_files])
+                epoch_files_suffix=np.unique([elem.split('_sp')[-1]for elem in epoch_files]).tolist()
 
             epoch_files_str=epoch_files_suffix
 

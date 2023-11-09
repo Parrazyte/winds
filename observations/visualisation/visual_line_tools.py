@@ -3181,7 +3181,7 @@ def distrib_graph(data_perinfo,info,dict_linevis,data_ener=None,conf_thresh=0.99
                                                                                                                                                                                                                             
                         #changing the tick and tick names to the actual line names
                         ax_hist.set_xticks(np.array(range(len(list_id_lines))))
-                        ax_hist.set_xticklabels([lines_std[lines_std_names[i_line+3]] for i_line in list_id_lines],rotation='60')
+                        ax_hist.set_xticklabels([lines_std[lines_std_names[i_line+3]] for i_line in list_id_lines],rotation=60)
                     
                     elif split_instru:
                         #creating the range of bars (we don't use histograms here because our counting is made arbitrarily on a given axis
@@ -3192,7 +3192,7 @@ def distrib_graph(data_perinfo,info,dict_linevis,data_ener=None,conf_thresh=0.99
                                                                                                                                                                                                                             
                         #changing the tick and tick names to the actual line names
                         ax_hist.set_xticks(np.array(range(len(list_id_lines))))
-                        ax_hist.set_xticklabels([lines_std[lines_std_names[i_line+3]] for i_line in list_id_lines],rotation='60')
+                        ax_hist.set_xticklabels([lines_std[lines_std_names[i_line+3]] for i_line in list_id_lines],rotation=60)
                         
                 else:
                     

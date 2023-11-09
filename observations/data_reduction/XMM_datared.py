@@ -3090,7 +3090,7 @@ def extract_reg(directory,mode='manual',cams='all',expos_mode='all',use_file_coo
     set_var(bashproc,directory)
        
     #recensing the cleaned event files available for each camera
-    #camfilelist shape : [[pnfiles,pndirs],[mos1files,mos1dirs],[mos2files,mos2dirs]]
+    #clean_filelist shape : [[pnfiles,pndirs],[mos1files,mos1dirs],[mos2files,mos2dirs]]
     clean_filelist=file_selector(directory,'evt_clean')
     
     #summary file header

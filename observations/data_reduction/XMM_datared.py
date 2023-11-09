@@ -194,7 +194,7 @@ ap.add_argument("-mainfocus",nargs=1,help='only extracts spectra when the source
 ap.add_argument("-p", "--pileup_ctrl",nargs=1,
                 help='mitigates pile-up (if there is any) with a progressive excision of the central region',
                 default=True,type=str)
-ap.add_argument('-p_tresh','--pileup_treshold',nargs=1,
+ap.add_argument('-p_tresh','--pileup_threshold',nargs=1,
                 help='maximum acceptable pile-up value to stop the excision. Replaces other pile_up controls.'+
                 ' "None" shuts off this method',default=0.05)
 '''TIMING'''
@@ -266,7 +266,7 @@ timing_check=args.timing_check
 point_source=args.point_source
 maxrad_source=args.maxrad_source
 pileup_max_ex=args.pileup_max_ex
-pileup_treshold=args.pileup_treshold
+pileup_threshold=args.pileup_threshold
 use_file_coords_glob=args.use_file_coords
 
 '''''''''''''''''
@@ -2366,6 +2366,7 @@ def extract_reg(directory,mode='manual',cams='all',expos_mode='all',use_file_coo
 
                 #returning the error message if there is one instead of the expected values (directory change done in function)
                 if type(bg_coords_im)==str:
+                    spawn.sendline('\ncd $currdir')
                     return bg_coords_im
                 
                 #defining the xmm selection expression
@@ -2486,7 +2487,7 @@ def extract_reg(directory,mode='manual',cams='all',expos_mode='all',use_file_coo
                     
                     #else, we only increase it if the excision radius has been maxed out during the first iteration
                     
-                    if pileup_treshold==None:
+                    if pileup_threshold==None:
                         if (max(gfit.fwhm)*pileup_max_ex/2.355)**2>0.5*rad_crop_arg**2 or excis_rad==max(gfit.fwhm)*pileup_max_ex/2.355:
                             radlim_par=rad_crop
                         else:
@@ -2764,7 +2765,7 @@ def extract_reg(directory,mode='manual',cams='all',expos_mode='all',use_file_coo
             excised radii up to the chosen condition is satisfied.
             Then, returns the final pile-up values
 
-            IF there is no pile-up percentage limit setup (pileup_treshold set to None):
+            IF there is no pile-up percentage limit setup (pileup_threshold set to None):
                 -Stops excising when either the pileup is compatible with 0 or the last iteration didn't improve the pileup
                 -For timing, stops at most at half of the source area. 
                 -For imaging, stops at most at the 3 sigma radius of the PSF 
@@ -2812,7 +2813,7 @@ def extract_reg(directory,mode='manual',cams='all',expos_mode='all',use_file_coo
             
             #if we have a defined pileup limit, the pileup computation has to continue even if one or two iterations do not manage to improve the 
             #pileup
-            if pileup_treshold!=None:
+            if pileup_threshold!=None:
                 force_pileup=True
             else:
                 force_pileup=False
@@ -2827,7 +2828,7 @@ def extract_reg(directory,mode='manual',cams='all',expos_mode='all',use_file_coo
                     pileup_start_rad=3
                 
                 #if there is no pile-up percentage limit, we use a PSF distribution limit for the maximal radius
-                if pileup_treshold==None:
+                if pileup_threshold==None:
                     pileup_max_rad=int(max(gfit.fwhm)*pileup_max_ex/2.355)
                 else:
                     #we can go up to a single arcsecond of annulus remaining
@@ -2837,7 +2838,7 @@ def extract_reg(directory,mode='manual',cams='all',expos_mode='all',use_file_coo
                 p_max=len(pileup_rad_space)
                 
             elif expos_mode_single in ['TIMING','BURST']:
-                if pileup_treshold==None:
+                if pileup_threshold==None:
                     p_max=int(len(distrib_summary[1])*1/2)
                 else:
                     #we can go up to a single pixel remaining
@@ -2904,8 +2905,8 @@ def extract_reg(directory,mode='manual',cams='all',expos_mode='all',use_file_coo
                         is_pileup=False
                 
                 #testing the value itself when a treshold is given
-                if pileup_treshold!=None:
-                    if pileup_val_list[-1]<=pileup_treshold:
+                if pileup_threshold!=None:
+                    if pileup_val_list[-1]<=pileup_threshold:
                         print('\nPile-up value below the given treshold. Stopping the pileup improvement process...')
                         is_pileup=False
                                 

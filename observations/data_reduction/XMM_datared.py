@@ -3128,7 +3128,7 @@ def extract_reg(directory,mode='manual',cams='all',expos_mode='all',use_file_coo
                     StderrTee(clean_evtdir+'/'+clean_evtid+'_extract_reg.log',buff=1,file_filters=[_remove_control_chars]):
                 
                     bashproc.logfile_read=sys.stdout
-                    print('\nCreating spectrum of '+camlist[i]+' exposure '+clean_evtfile)
+                    print('\nExtracting region of '+camlist[i]+' exposure '+clean_evtfile)
                     
                     #launching the main extraction
                     summary_line=extract_reg_single(bashproc, clean_evtfile,clean_evtdir)

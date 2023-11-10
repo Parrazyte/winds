@@ -27,6 +27,7 @@ import matplotlib.pyplot as plt
 from matplotlib.collections import LineCollection
 
 # astro imports
+from astropy.time import Time
 from astropy.io import fits
 from astroquery.simbad import Simbad
 from mpdaf.obj import sexa2deg, Image
@@ -50,7 +51,7 @@ from rasterio.features import rasterize
 # shape merging
 from scipy.ndimage import binary_dilation
 
-from general_tools import file_edit, interval_extract
+from general_tools import file_edit, ravel_ragged
 
 """
 Created on 09-11-2023
@@ -227,6 +228,8 @@ camlist = ['FPM1', 'FPM2']
 
 process_obsdir_done = threading.Event()
 extract_reg_done=threading.Event()
+extract_lc_done=threading.Event()
+extract_sp_done=threading.Event()
 
 # function to remove (most) control chars
 def _remove_control_chars(message):
@@ -248,7 +251,7 @@ def set_var(spawn):
     spawn.sendline(caldbinit_init_alias)
 
 
-def file_evt_selector(filetype, camera='all', directory=''):
+def file_evt_selector(filetype, camera='all', bright=False):
     '''
     Searches for all of the files of a specific type (among the ones used in the data reduction),
     and asks for input if more than one are detected.
@@ -257,7 +260,7 @@ def file_evt_selector(filetype, camera='all', directory=''):
 
     Returns a single file + file path (not absolute) for each camera
 
-    if a directory is specified, requires it in the path of the event files
+    If the keyword bright is set to True, requires the "bright" keyword in the last directory of the event files
     '''
 
     # getting the list of files in the directory (note that file_evt_selector is launched while in the directory)
@@ -266,20 +269,17 @@ def file_evt_selector(filetype, camera='all', directory=''):
     cameras = ['FPMA', 'FPMB']
 
     # list of accepted filetypes
-    filetypes = ['evt_clean']
-    file_desc = ['clean event files']
+    filetypes = ['evt_clean','src_reg','bg_reg']
+    file_desc = ['clean event files','source region','background region']
 
     # getting the index of the file type for the keywords
     type_index = filetypes.index(filetype)
 
     # type keywords
-    keyword_types = ['_cl.evt']
+    keyword_types = ['_cl.evt','src_reg.reg','bg_reg.reg']
 
-    # camera keywords (3 for each type)
-    # for unfiltered event (direct results of emproc and epproc)
+    # camera keywords (1 for each type)
     camword_evt = ['A01', 'B01']
-
-    # for the other filetypes the camera keywords are just the camera names
     keyword_cams = [camword_evt]
 
     # cam_list is the list of cameras to use for the evt search
@@ -289,14 +289,15 @@ def file_evt_selector(filetype, camera='all', directory=''):
         cam_list = [camera]
 
     result_list = []
+
     for cam in cam_list:
         # getting the index of the camera for the camera keywords
         cam_index = cameras.index(cam)
 
-        cutlist = []
-        # reducing the list for the correct file type and camera
-        cutlist = [elem for elem in flist if keyword_types[type_index] in elem and directory in elem and elem.endswith(
-            keyword_cams[type_index][cam_index])]
+        # computing the list for the correct file type and camera
+        cutlist = [elem for elem in flist if keyword_cams[type_index][cam_index] in elem\
+                   and elem.endswith(keyword_types[type_index])\
+                   and (1 if not bright else 'bright' in elem.split('/')[-2])]
 
         if len(cutlist) == 0:
             print('\nWarning : No ' + file_desc[type_index] + ' found for camera ' + cam)
@@ -325,18 +326,20 @@ def file_evt_selector(filetype, camera='all', directory=''):
 
     return result_list
 
-
 def process_obsdir(directory, overwrite=True, bright=False):
     '''
     Processes a directory using the nupipeline script
 
     if the count rate is above 100 in lightcurves later, the 'bright' mode adds this keyword:
-    statusexpr="STATUS==b0000xxx00xxxx000"
+    statusexpr="(STATUS==b0000xxx00xxxx000)&&(SHIELD==0)"
 
-    (from https://heasarc.gsfc.nasa.gov/docs/nustar/analysis/)
+    if bright is set to 'noshield', uses only statusexpr="(STATUS==b0000xxx00xxxx000)"
+
+    (see https://heasarc.gsfc.nasa.gov/docs/nustar/nustar_faq.html#bright )
     '''
 
-    bright_str= ' statusexpr="STATUS==b0000xxx00xxxx000"' if bright else ''
+    bright_str= ' statusexpr="(STATUS==b0000xxx00xxxx000)&&(SHIELD==0)"' if bright else\
+                ' statusexpr="STATUS==b0000xxx00xxxx000"' if bright=='noshield' else ''
 
     bashproc = pexpect.spawn("/bin/bash", encoding='utf-8')
 
@@ -358,7 +361,8 @@ def process_obsdir(directory, overwrite=True, bright=False):
         bashproc.sendline('cd '+directory)
         #note: nupipeline requires explicit indir, steminputs and outdir arguments
         bashproc.sendline('nupipeline indir=' + "./" + ' steminputs=nu'+directory+
-                          ' outdir=./out clobber=' + ('YES' if overwrite else 'FALSE')+bright_str)
+                          ' outdir=./out'+('_bright' if bright!=False else '')+
+                          ' clobber=' + ('YES' if overwrite else 'FALSE')+bright_str)
 
         #will need to update this in case of updates
         process_state = bashproc.expect(['nupipeline_0.4.9: Exit'], timeout=None)
@@ -440,7 +444,6 @@ def disp_ds9(spawn, file, zoom='auto', scale='log', regfile='', screenfile='', g
 
     if give_pid:
         return ds9_pid
-
 
 def reg_optimiser(mask):
     # for the shapely method :
@@ -528,7 +531,6 @@ def reg_optimiser(mask):
     coords=(bg_ctr,bg_maxrad)
     '''
     return coords
-
 
 def imgarr_to_png(array, name, directory='./', astropy_wcs=None, mpdaf_wcs=None, title=None, imgtype=''):
     '''
@@ -655,9 +657,24 @@ def spatial_expression(coords):
 
     return 'circle(' + coords[0][0] + ',' + coords[0][1] + ',' + coords[1] + '")'
 
+def ds9_to_reg(ds9_regfile):
+    '''
+    Returns the coordinates of the circular regions listed in the ds9 file
+    '''
 
-def extract_reg(directory, mode='manual', cams='all', expos_mode='all', use_file_coords=False,
-                overwrite=True,e_low_img=3,e_high_img=79,rad_crop=rad_crop):
+    with open(ds9_regfile) as file:
+        ds9_lines=file.readlines()
+
+    reg_coords=[]
+    for line in ds9_lines:
+        if line.startswith('circle'):
+            indiv_coords=line.split('(')[1].split(')')[0].split(',')
+
+            reg_coords+=[[indiv_coords[0],indiv_coords[1]],indiv_coords[2]]
+    return reg_coords
+
+def extract_reg(directory, cams='all', use_file_coords=False,
+                overwrite=True,e_low_img=3,e_high_img=79,rad_crop=rad_crop,bright=False):
     '''
     Extracts the optimal source/bg regions for a given exposure
 
@@ -666,24 +683,19 @@ def extract_reg(directory, mode='manual', cams='all', expos_mode='all', use_file
     Only accepts circular regions (in manual mode)
     '''
 
-    # defining which mode are included with a variable instead of arguments in the functions
-    if expos_mode == 'all':
-        expos_mode_regex = 'IMAGING TIMING BURST'
-    else:
-        expos_mode_regex = expos_mode
-
     def extract_reg_single(spawn, file, filedir):
 
         '''
         Individual region extraction for a single exposure and event file
 
         Significantly simplified version of the XMM_datared equivalent, because here we don't need so many options
-        (only imaging, single CCD, no timing SNR optimisation, no pile-up,...)
+        (only imaging, single CCD, no timing SNR optimisation, no pile-up,...) so we can compute the SNR optimization
+        internally
 
         '''
 
         '''
-        required function 
+        required functions
         '''
         def source_catal(dirpath, use_file_coords=False):
 
@@ -770,178 +782,6 @@ def extract_reg(directory, mode='manual', cams='all', expos_mode='all', use_file
 
             return obj_catal
 
-        '''
-        MAIN BEHAVIOR
-        '''
-
-        if file == '':
-            print('\nNo evt to extract spectrum from for this camera in the obsid directory.')
-            return 'No evt to extract spectrum from for this camera in the obsid directory.'
-
-        fulldir = directory + '/' + filedir
-
-        #note: only the file here
-        file_id=file.replace('_cl.evt','')
-
-        img_file=file_id+'_img_'+str(e_low_img)+'_'+str(e_high_img)+'.ds'
-
-        #creating an image to load with mpdaf for image analysis
-        xsel_img(spawn,os.path.join(filedir,file),os.path.join(filedir,img_file),e_low=e_low_img,e_high=e_high_img)
-
-        spawn.sendline('\ncurrdir=$(pwd)')
-        spawn.sendline('\ncd '+filedir)
-
-        #opening the image file and saving it for verification purposes
-        ds9_pid_sp_start=disp_ds9(spawn,img_file,screenfile=fulldir+'/'+img_file.replace('.ds','_screen.png'),
-                        give_pid=True)
-
-        try:
-            fits_img = fits.open(fulldir + '/' + img_file)
-        except:
-            print("\nCould not load the image fits file. There must be a problem with the exposure." +
-                  "\nSkipping spectrum computation...")
-            spawn.sendline('\ncd $currdir')
-            return "Could not load the image fits file. There must be a problem with the exposure."
-
-        if ds9_pid_sp_start == 0:
-            print("\nCould not load the image file with ds9. There must be a problem with the exposure." +
-                  "\nSkipping spectrum computation...")
-            spawn.sendline('\ncd $currdir')
-            return "Could not load the image file with ds9. There must be a problem with the exposure."
-
-        #loading the IMG file with mpdaf
-        with fits.open(img_file) as hdul:
-            img_data=hdul[0].data
-            src_mpdaf_WCS=mpdaf_WCS(hdul[0].header)
-            src_astro_WCS=astroWCS(fits_img[0].header)
-            main_source_name=hdul[0].header['object']
-            main_source_ra=hdul[0].header['RA_OBJ']
-            main_source_dec=hdul[0].header['RA_DEC']
-
-        print('\nAuto mode.')
-        print('\nAutomatic search of the directory names in Simbad.')
-
-        prefix = '_auto'
-
-        obj_auto = source_catal(fulldir, use_file_coords=use_file_coords)
-
-        # checking if the function returned an error message (folder movement done in the function)
-        if type(obj_auto) == str:
-            if not use_file_coords:
-                return obj_auto
-            else:
-                obj_auto = {'MAIN_ID': main_source_name}
-                obj_deg = [main_source_ra,main_source_dec]
-        else:
-            # careful the output after the first line is in dec,ra not ra,dec
-            obj_deg = sexa2deg([obj_auto['DEC'].replace(' ', ':'), obj_auto['RA'].replace(' ', ':')])
-            obj_deg = [str(obj_deg[1]), str(obj_deg[0])]
-
-        img_obj_whole=Image(data=img_data,wcs=src_mpdaf_WCS)
-
-        # saving a screen of the image with the cropping zone around the catalog position highlighted
-        catal_reg_name = file_id + prefix+ '_catal_reg.reg'
-
-        with open(fulldir + '/' + catal_reg_name, 'w+') as regfile:
-            # standard ds9 format
-            regfile.write('# Region file format: DS9 version 4.1' +
-                          '\nglobal color=green dashlist=8 3 width=1 font="helvetica 10 normal roman" select=1' +
-                          ' highlite=1 dash=0 fixed=0 edit=1 move=1 delete=1 include=1 source=1' +
-                          '\nfk5' +
-                          '\n' + spatial_expression((obj_deg, str(rad_crop)), type='ds9')
-                          + ' # text={' + obj_auto['MAIN_ID'] + ' initial cropping zone}')
-
-        ds9_pid_sp_start = disp_ds9(spawn, img_file, regfile=catal_reg_name, zoom=1.2,
-                                    screenfile=fulldir + '/' +file_id + prefix + '_catal_reg_screen.png',
-                                    give_pid=True,
-                                    kill_last=ds9_pid_sp_start)
-
-        rad_crop_use=rad_crop
-
-        try:
-            imgcrop_src = img_obj_whole.copy().subimage(center=obj_deg[::-1], size=2 * rad_crop)
-        except:
-            print('\nCropping region entirely out of the image. Field of view issue. Skipping this exposure...')
-            spawn.sendline('\ncd $currdir')
-            return 'Cropping region entirely out of the image.'
-
-        # masking the desired region
-        imgcrop_src.mask_region(center=obj_deg[::-1], radius=rad_crop, inside=False)
-
-        # testing if the resulting image is empty
-        if len(imgcrop_src.data.nonzero()[0]) == 0:
-            print('\nEmpty image after cropping. Field of view Issue. Skipping this exposure...')
-            spawn.sendline('\ncd $currdir')
-            return 'Cropped image empty.'
-
-        # plotting and saving imgcrop for verification purposes (if the above has computed, it should mean the crop is in the image)
-        fig_catal_crop, ax_catal_crop = plt.subplots(1, 1, subplot_kw={'projection': src_astro_WCS}, figsize=(12, 10))
-        ax_catal_crop.set_title('Cropped region around the theoretical source position')
-        catal_plot = imgcrop_src.plot(cmap='plasma', scale='sqrt')
-        plt.colorbar(catal_plot, location='bottom', fraction=0.046, pad=0.04)
-        plt.savefig(fulldir + '/' + file_id + prefix + '_catal_crop_screen.png')
-        plt.close()
-
-        # testing if the resulting image contains a peak
-        if imgcrop_src.peak() == None:
-            print('\nNo peak detected in cropped image. Skipping this exposure...')
-            spawn.sendline('\ncd $currdir')
-            return 'No peak in cropped image.'
-
-        # fitting a gaussian on the source (which is assumed to be the brightest in the cropped region)
-        # the only objective here is to get the center, the radius will be computed from the SNR
-        print('\nExecuting gaussian fit...')
-
-        if point_source:
-            source_center = (imgcrop_src.peak()['y'], imgcrop_src.peak()['x'])
-        else:
-            source_center = None
-        gfit = imgcrop_src.gauss_fit(center=source_center)
-        gfit.print_param()
-        # defining various bad flags on the gfit
-        if np.isnan(gfit.fwhm[0]) or np.isnan(gfit.fwhm[1]) or np.isnan(
-                gfit.err_peak) or gfit.peak < 10 or gfit.err_peak >= gfit.peak:
-            print('\nGaussian fit failed. Positioning or Field of View issue. Skipping these Evts...')
-            spawn.sendline('\ncd $currdir')
-            return 'Gaussian fit failed. Positioning or Field of View issue.'
-
-        if not imgcrop_src.inside(gfit.center):
-            print('\nGaussian fit centroid out of the crop zone. Wrong fit expected. Skipping these Evts...')
-            spawn.sendline('\ncd $currdir')
-            return 'Gaussian fit centroid further than ' + str(rad_crop) + '" from catal source position.'
-
-        # if the source is bright and wide, the gaussian is probably going to be able to fit it even if we increase the cropping region
-        # And the fit might need a bigger image to compute correctly
-
-        if max(gfit.peak, imgcrop_src.data.max()) > 1000 and bigger_fit and max(gfit.fwhm) > 30:
-
-            rad_crop_use = 2 * rad_crop
-            # new, bigger cropping the image to avoid zoom in the future plots
-            # (size is double the radius since we crop at the edges of the previously cropped circle)
-            imgcrop_src = img_obj_whole.copy().subimage(center=obj_deg[::-1], size=2 * rad_crop)
-
-            # masking a bigger region
-            imgcrop_src.mask_region(center=obj_deg[::-1], radius=rad_crop, inside=False)
-
-            # fitting a gaussian on the source (which is assumed to be the brightest in the cropped region)
-            print('\nExecuting gaussian fit...')
-            gfit = imgcrop_src.gauss_fit()
-            gfit.print_param()
-
-            if np.isnan(gfit.fwhm[0]) or np.isnan(gfit.fwhm[1]):
-                print(
-                    '\nExtended (bright source) gaussian fit failed. Positioning or Field of View issue. Skipping these Evts...')
-                spawn.sendline('\ncd $currdir')
-                return 'Extended (bright source) gaussian fit failed. Positioning or Field of View issue.'
-
-            if not imgcrop_src.inside(gfit.center):
-                print('\nGaussian fit centroid out of the crop zone. Wrong fit expected. Skipping these Evts...')
-                spawn.sendline('\ncd $currdir')
-                return 'Gaussian fit centroid further than ' + str(2.5 * rad_crop) + '" from catal source position.'
-
-        # summary variable, first version which the background will be computed from, with a radius of 3sigmas of the gaussian fit
-        src_coords = [[str(gfit.center[1]), str(gfit.center[0])], str(round(max(gfit.fwhm) * (3 / 2.355) / 3600, 8))]
-
         def opti_bg_imaging():
             '''
             Now, we evaluate the background from the image
@@ -952,7 +792,7 @@ def extract_reg(directory, mode='manual', cams='all', expos_mode='all', use_file
 
             The process is as follow :
             1. Compute the alpha shape of the non-zero pixels (i.e. polygon that surrounds them) in the CCD with alphashape
-            2. Transform this polygon into a mask with rasterio 
+            2. Transform this polygon into a mask with rasterio
             3. delete the part outside of the ccd  (outlined by the polygon) by replacing the values outside with nans
                 ->This step is important because even in the base image, all of the pixels outside of the CCD have 0 cts/s
                   They have to be changed to avoid wrong sigma clipping
@@ -1068,6 +908,175 @@ def extract_reg(directory, mode='manual', cams='all', expos_mode='all', use_file
 
             return bg_max
 
+        '''
+        MAIN BEHAVIOR
+        '''
+
+        if file == '':
+            print('\nNo evt to extract spectrum from for this camera in the obsid directory.')
+            return 'No evt to extract spectrum from for this camera in the obsid directory.'
+
+        fulldir = directory + '/' + filedir
+
+        #note: only the file here
+        file_id=file.replace('_cl.evt','')
+
+        img_file=file_id+'_img_'+str(e_low_img)+'_'+str(e_high_img)+'.ds'
+
+        #creating an image to load with mpdaf for image analysis
+        xsel_img(spawn,os.path.join(filedir,file),os.path.join(filedir,img_file),e_low=e_low_img,e_high=e_high_img)
+
+        spawn.sendline('\ncurrdir=$(pwd)')
+        spawn.sendline('\ncd '+filedir)
+
+        #opening the image file and saving it for verification purposes
+        ds9_pid_sp_start=disp_ds9(spawn,img_file,screenfile=fulldir+'/'+img_file.replace('.ds','_screen.png'),
+                        give_pid=True)
+
+        try:
+            fits_img = fits.open(fulldir + '/' + img_file)
+        except:
+            print("\nCould not load the image fits file. There must be a problem with the exposure." +
+                  "\nSkipping spectrum computation...")
+            spawn.sendline('\ncd $currdir')
+            return "Could not load the image fits file. There must be a problem with the exposure."
+
+        if ds9_pid_sp_start == 0:
+            print("\nCould not load the image file with ds9. There must be a problem with the exposure." +
+                  "\nSkipping spectrum computation...")
+            spawn.sendline('\ncd $currdir')
+            return "Could not load the image file with ds9. There must be a problem with the exposure."
+
+        #loading the IMG file with mpdaf
+        with fits.open(img_file) as hdul:
+            img_data=hdul[0].data
+            src_mpdaf_WCS=mpdaf_WCS(hdul[0].header)
+            src_astro_WCS=astroWCS(fits_img[0].header)
+            main_source_name=hdul[0].header['object']
+            main_source_ra=hdul[0].header['RA_OBJ']
+            main_source_dec=hdul[0].header['RA_DEC']
+
+        print('\nAuto mode.')
+        print('\nAutomatic search of the directory names in Simbad.')
+
+        prefix = '_auto'
+
+        obj_auto = source_catal(fulldir, use_file_coords=use_file_coords)
+
+        # checking if the function returned an error message (folder movement done in the function)
+        if type(obj_auto) == str:
+            if not use_file_coords:
+                return obj_auto
+            else:
+                obj_auto = {'MAIN_ID': main_source_name}
+                obj_deg = [main_source_ra,main_source_dec]
+        else:
+            # careful the output after the first line is in dec,ra not ra,dec
+            obj_deg = sexa2deg([obj_auto['DEC'].replace(' ', ':'), obj_auto['RA'].replace(' ', ':')])
+            obj_deg = [str(obj_deg[1]), str(obj_deg[0])]
+
+        img_obj_whole=Image(data=img_data,wcs=src_mpdaf_WCS)
+
+        # saving a screen of the image with the cropping zone around the catalog position highlighted
+        reg_catal_name = file_id + prefix+ '_reg_catal.reg'
+
+        with open(os.path.join(fulldir,reg_catal_name), 'w+') as regfile:
+            # standard ds9 format
+            regfile.write('# Region file format: DS9 version 4.1' +
+                          '\nglobal color=green dashlist=8 3 width=1 font="helvetica 10 normal roman" select=1' +
+                          ' highlite=1 dash=0 fixed=0 edit=1 move=1 delete=1 include=1 source=1' +
+                          '\nfk5' +
+                          '\n' + spatial_expression((obj_deg, str(rad_crop)), type='ds9')
+                          + ' # text={' + obj_auto['MAIN_ID'] + ' initial cropping zone}')
+
+        ds9_pid_sp_start = disp_ds9(spawn, img_file, regfile=reg_catal_name, zoom=1.2,
+                                    screenfile=fulldir + '/' +file_id + prefix + '_reg_catal_screen.png',
+                                    give_pid=True,
+                                    kill_last=ds9_pid_sp_start)
+
+        rad_crop_use=rad_crop
+
+        try:
+            imgcrop_src = img_obj_whole.copy().subimage(center=obj_deg[::-1], size=2 * rad_crop)
+        except:
+            print('\nCropping region entirely out of the image. Field of view issue. Skipping this exposure...')
+            spawn.sendline('\ncd $currdir')
+            return 'Cropping region entirely out of the image.'
+
+        # masking the desired region
+        imgcrop_src.mask_region(center=obj_deg[::-1], radius=rad_crop, inside=False)
+
+        # testing if the resulting image is empty
+        if len(imgcrop_src.data.nonzero()[0]) == 0:
+            print('\nEmpty image after cropping. Field of view Issue. Skipping this exposure...')
+            spawn.sendline('\ncd $currdir')
+            return 'Cropped image empty.'
+
+        # plotting and saving imgcrop for verification purposes (if the above has computed, it should mean the crop is in the image)
+        fig_catal_crop, ax_catal_crop = plt.subplots(1, 1, subplot_kw={'projection': src_astro_WCS}, figsize=(12, 10))
+        ax_catal_crop.set_title('Cropped region around the theoretical source position')
+        catal_plot = imgcrop_src.plot(cmap='plasma', scale='sqrt')
+        plt.colorbar(catal_plot, location='bottom', fraction=0.046, pad=0.04)
+        plt.savefig(fulldir + '/' + file_id + prefix + '_catal_crop_screen.png')
+        plt.close()
+
+        # testing if the resulting image contains a peak
+        if imgcrop_src.peak() == None:
+            print('\nNo peak detected in cropped image. Skipping this exposure...')
+            spawn.sendline('\ncd $currdir')
+            return 'No peak in cropped image.'
+
+        # fitting a gaussian on the source (which is assumed to be the brightest in the cropped region)
+        # the only objective here is to get the center, the radius will be computed from the SNR
+        print('\nExecuting gaussian fit...')
+
+        if point_source:
+            source_center = (imgcrop_src.peak()['y'], imgcrop_src.peak()['x'])
+        else:
+            source_center = None
+        gfit = imgcrop_src.gauss_fit(center=source_center)
+        gfit.print_param()
+        # defining various bad flags on the gfit
+        if np.isnan(gfit.fwhm[0]) or np.isnan(gfit.fwhm[1]) or np.isnan(
+                gfit.err_peak) or gfit.peak < 10 or gfit.err_peak >= gfit.peak:
+            print('\nGaussian fit failed. Positioning or Field of View issue. Skipping these Evts...')
+            spawn.sendline('\ncd $currdir')
+            return 'Gaussian fit failed. Positioning or Field of View issue.'
+
+        if not imgcrop_src.inside(gfit.center):
+            print('\nGaussian fit centroid out of the crop zone. Wrong fit expected. Skipping these Evts...')
+            spawn.sendline('\ncd $currdir')
+            return 'Gaussian fit centroid further than ' + str(rad_crop) + '" from catal source position.'
+
+        # if the source is bright and wide, the gaussian is probably going to be able to fit it even if we increase the cropping region
+        # And the fit might need a bigger image to compute correctly
+
+        if max(gfit.peak, imgcrop_src.data.max()) > 1000 and bigger_fit and max(gfit.fwhm) > 30:
+
+            rad_crop_use = 2 * rad_crop
+            # new, bigger cropping the image to avoid zoom in the future plots
+            # (size is double the radius since we crop at the edges of the previously cropped circle)
+            imgcrop_src = img_obj_whole.copy().subimage(center=obj_deg[::-1], size=2 * rad_crop)
+
+            # masking a bigger region
+            imgcrop_src.mask_region(center=obj_deg[::-1], radius=rad_crop, inside=False)
+
+            # fitting a gaussian on the source (which is assumed to be the brightest in the cropped region)
+            print('\nExecuting gaussian fit...')
+            gfit = imgcrop_src.gauss_fit()
+            gfit.print_param()
+
+            if np.isnan(gfit.fwhm[0]) or np.isnan(gfit.fwhm[1]):
+                print(
+                    '\nExtended (bright source) gaussian fit failed. Positioning or Field of View issue. Skipping these Evts...')
+                spawn.sendline('\ncd $currdir')
+                return 'Extended (bright source) gaussian fit failed. Positioning or Field of View issue.'
+
+            if not imgcrop_src.inside(gfit.center):
+                print('\nGaussian fit centroid out of the crop zone. Wrong fit expected. Skipping these Evts...')
+                spawn.sendline('\ncd $currdir')
+                return 'Gaussian fit centroid further than ' + str(2.5 * rad_crop) + '" from catal source position.'
+
         bg_coords_im = opti_bg_imaging()
 
         # returning the error message if there is one instead of the expected values (directory change done in function)
@@ -1093,12 +1102,78 @@ def extract_reg(directory, mode='manual', cams='all', expos_mode='all', use_file
         '''
 
         #computing the encircled number of counts in the background region
-        counts_bg=img_obj_whole.ee((bg_coords_im[0][::-1]),radius=bg_coords_im[1])
+        counts_bg=img_obj_whole.ee((bg_coords_im[0][::-1]),radius=float(bg_coords_im[1]))
 
         #computing the SNR for a range of radiuses
 
         rad_test_arr=np.arange(5,min(rad_crop,max(gfit.fwhm)*max_rad_source*2.355),2)
 
+        snr_vals=np.repeat(0,len(rad_test_arr))
+
+        for id_rad,rad in enumerate(rad_test_arr):
+
+            counts_src=img_obj_whole.ee(gfit.center,radius=rad_test_arr)
+
+            backscale=(rad/float(bg_coords_im[1]))**2
+            snr_vals[id_rad] = (counts_src - counts_bg* backscale / (counts_src + counts_bg * backscale + 1e-10))\
+                                ** (1 / 2)
+
+        rad_max_snr=rad_test_arr[np.argmax(snr_vals)]
+
+        # summary variable, first version which the background will be computed from, with a radius of 3sigmas of the gaussian fit
+        src_coords = [[str(gfit.center[1]), str(gfit.center[0])], str(round(rad_max_snr,4))]
+
+        '''
+        Now we can put both of the regions in a ds9 file using the standard format, for visualisation
+        '''
+
+        reg_name = file_id+ prefix + '_reg.reg'
+
+        with open(os.path.join(fulldir,reg_name), 'w+') as regfile:
+
+            # standard ds9 format
+            regfile.write('# Region file format: DS9 version 4.1' +
+                          '\nglobal color=green dashlist=8 3 width=1 font="helvetica 10 normal roman" select=1' +
+                          ' highlite=1 dash=0 fixed=0 edit=1 move=1 delete=1 include=1 source=1' +
+                          '\nfk5' +
+                          '\n' + spatial_expression(src_coords)
+                          + ' # text={' + obj_auto['MAIN_ID'] + '}' +
+                          '\n' + spatial_expression(bg_coords_im)
+                          + ' # text={automatic background}' )
+
+        ds9_pid_sp_reg = disp_ds9(spawn, img_file, regfile=reg_name,
+                                    screenfile=fulldir + '/' +file_id + prefix + 'reg_screen.png',
+                                    give_pid=True,
+                                    kill_last=ds9_pid_sp_start)
+
+        '''
+        and in individual region files for the extraction
+        '''
+
+        reg_src_name=file_id+ prefix + '_reg_src.reg'
+        reg_bg_name=file_id+ prefix + '_reg_bg.reg'
+
+        with open(os.path.join(fulldir,reg_src_name), 'w+') as regfile:
+
+            # standard ds9 format
+            regfile.write('# Region file format: DS9 version 4.1' +
+                          '\nglobal color=green dashlist=8 3 width=1 font="helvetica 10 normal roman" select=1' +
+                          ' highlite=1 dash=0 fixed=0 edit=1 move=1 delete=1 include=1 source=1' +
+                          '\nfk5' +
+                          '\n' + spatial_expression(bg_coords_im)
+                          + ' # text={automatic background}' )
+
+        with open(os.path.join(fulldir,reg_bg_name), 'w+') as regfile:
+
+            # standard ds9 format
+            regfile.write('# Region file format: DS9 version 4.1' +
+                          '\nglobal color=green dashlist=8 3 width=1 font="helvetica 10 normal roman" select=1' +
+                          ' highlite=1 dash=0 fixed=0 edit=1 move=1 delete=1 include=1 source=1' +
+                          '\nfk5' +
+                          '\n' + spatial_expression(src_coords)
+                          + ' # text={' + obj_auto['MAIN_ID'] + '}')
+
+        return 'Region extraction complete.'
 
     '''MAIN BEHAVIOR'''
 
@@ -1120,22 +1195,25 @@ def extract_reg(directory, mode='manual', cams='all', expos_mode='all', use_file
 
     # recensing the cleaned event files available for each camera
     # clean_filelist shape : [[FPMA_files,FPMA_dirs],[FPMB_files,FPMB_dirs]]
-    clean_filelist = file_evt_selector('evt_clean',cameras=cams)
+    clean_filelist = file_evt_selector('evt_clean',cameras=cams,bright=bright)
 
     # summary file header
     if directory.endswith('/'):
         obsid = directory.split('/')[-2]
     else:
         obsid = directory.split('/')[-1]
+
     summary_header = 'Obsid\tFile identifier\tRegion extraction result\n'
 
+    bashproc.logfile_read = sys.stdout
+
     # filtering for the selected cameras
-    for i in camid_list:
+    for i_cam in camid_list:
 
-        for j in range(len(clean_filelist[i][0])):
+        for i_exp in range(len(clean_filelist[i_cam][0])):
 
-            clean_evtfile = clean_filelist[i][0][j]
-            clean_evtdir = clean_filelist[i][1][j]
+            clean_evtfile = clean_filelist[i_cam][0][i_exp]
+            clean_evtdir = clean_filelist[i_cam][1][i_exp]
 
             '''
             testing if the last file of the process (the ds9 screen file with the regions)
@@ -1145,10 +1223,10 @@ def extract_reg(directory, mode='manual', cams='all', expos_mode='all', use_file
             lastfile_extract_reg = clean_evtfile.replace('_cl.evt','_reg_screen.png')
 
             if clean_evtfile=='':
-                print('\nNo evt to extract region from for camera ' + camlist[i] + ' in the obsid directory.')
+                print('\nNo evt to extract region from for camera ' + camlist[i_cam] + ' in the obsid directory.')
 
-                summary_line = 'No evt to extract region from for camera ' + camlist[i] + ' in the obsid directory.'
-                clean_evtid = camlist[i]
+                summary_line = 'No evt to extract region from for camera ' + camlist[i_cam] + ' in the obsid directory.'
+                clean_evtid = camlist[i_cam]
 
             elif overwrite or not os.path.isfile(lastfile_extract_reg):
                 clean_evtid = clean_evtfile.split('.')[0].replace('clean', '')
@@ -1163,19 +1241,19 @@ def extract_reg(directory, mode='manual', cams='all', expos_mode='all', use_file
                                   file_filters=[_remove_control_chars]):
 
                     bashproc.logfile_read = sys.stdout
-                    print('\nComputing region of ' + camlist[i] + ' exposure ' + clean_evtfile)
+                    print('\nComputing region of ' + camlist[i_cam] + ' exposure ' + clean_evtfile)
 
                     # launching the main extraction
                     summary_line = extract_reg_single(bashproc, clean_evtfile, clean_evtdir)
 
             else:
-                print('\nRegion computation for the ' + camlist[i] + ' exposure ' + clean_evtfile +
+                print('\nRegion computation for the ' + camlist[i_cam] + ' exposure ' + clean_evtfile +
                       ' already done. Skipping...')
                 summary_line = ''
 
             if summary_line != '':
                 summary_content = obsid + '\t' + clean_evtid + '\t' + summary_line
-                file_edit(os.path.join(directory, 'batch', 'summary_extract_reg.log'), obsid + '\t' + clean_evtid,
+                file_edit(os.path.join(directory, 'summary_extract_reg.log'), obsid + '\t' + clean_evtid,
                           summary_content + '\n',
                           summary_header)
 
@@ -1189,6 +1267,335 @@ def extract_reg(directory, mode='manual', cams='all', expos_mode='all', use_file
     print('\nRegion extraction of the current obsid directory events finished.')
 
     extract_reg_done.set()
+
+def extract_lc(directory,binning='1',lc_bands='3-79',hr_bands='10-50/3-10',cams='all',bright=False):
+
+    '''
+    Wrapper for a version of nuproducts to computes only lightcurves in the desired bands,
+    with added matplotlib plotting of requested lightcurves and HRs
+
+    We follow the steps highlighted in https://heasarc.gsfc.nasa.gov/docs/nustar/analysis/nustar_swguide.pdf 5.3D
+    options:
+        -binning: binning of the LC in seconds
+
+        -bands: bands for each lightcurve to be created.
+                The numbers should be in keV, separated by "-", and different lightcurves by ","
+                ex: to create two lightcurves for, the 1-3 and 4-12 band, use '1-3,4-12'
+
+        -hr: bands to be used for the HR plot creation.
+             A single plot is possible for now. Creates its own lightcurve bands if necessary
+
+        -overwrite: overwrite products or not
+
+    NOTE THAT THE BACKSCALE CORRECTION IS APPLIED MANUALLY
+    '''
+
+    '''MAIN BEHAVIOR'''
+
+    def extract_lc_single(spawn, directory, binning, instru, steminput, src_reg, bg_reg, e_low, e_high,bright=False,backscale=1):
+
+        lc_src_name = steminput + '_' + instru + '_lc_src_' + e_low + '_' + e_high + '_bin_' + binning + '.lc'
+        lc_bg_name = steminput + '_' + instru + '_lc_bg_' + e_low + '_' + e_high + '_bin_' + binning + '.lc'
+
+        lc_src_path = os.path.join(directory,'products'+('_bright' if bright else ''), lc_src_name)
+        lc_bg_path = os.path.join(directory,'products'+('_bright' if bright else ''), lc_bg_name)
+
+        pi_low = str(kev_to_PI(float(e_low)))
+        pi_high = str(kev_to_PI(float(e_high)))
+
+        # building the lightcurve
+        spawn.sendline('nuproducts indir' + directory + ' instrument=' + instru + ' steminputs=' + steminput +
+                       ' lcfile=' + lc_src_name +  ' srcregionfile=' + src_reg +
+                       ' bkglcfile=' + lc_bg_name + ' bkgregionfile=' + bg_reg +
+                       ' pilow=' + pi_low + ' pihigh=' + pi_high + ' binsize=' + binning+
+                       ' outdir=./products'+('_bright' if bright else '')+
+                       ' phafile=NONE bkgphafile=NONE' + ' imagefile=NONE runmkarf=no runmkrmf=no ')
+
+        ####TODO: check what's the standard message here
+        spawn.expect('complete')
+
+        # loading the data of both lc
+        with fits.open(lc_src_path) as fits_lc:
+            # time zero of the lc file (different from the time zeros of the gti files)
+            time_zero = Time(fits_lc[1].header['MJDREFI'] + fits_lc[1].header['MJDREFF'], format='mjd')
+
+            # and offsetting the data array to match this
+            delta_lc_src = fits_lc[1].header['TIMEZERO']
+
+            fits_lc[1].data['TIME'] += delta_lc_src
+
+            # storing the shifted lightcurve
+            data_lc_src = fits_lc[1].data
+
+            time_zero_str = str(time_zero.to_datetime())
+
+        with fits.open(lc_bg_path) as fits_lc:
+            # and offsetting the data array to match this
+            delta_lc_bg = fits_lc[1].header['TIMEZERO']
+
+            fits_lc[1].data['TIME'] += delta_lc_bg
+
+            # storing the shifted lightcurve
+            data_lc_bg = fits_lc[1].data
+
+        # plotting the source and bg lightcurves together
+
+        fig_lc, ax_lc = plt.subplots(1, figsize=(10, 8))
+
+        ax_lc.errorbar(data_lc_src['TIME'], data_lc_src['RATE'], xerr=float(binning),
+                     yerr=data_lc_src['ERROR'], ls='-', lw=1, color='grey', ecolor='blue', label='raw source')
+
+        ax_lc.errorbar(data_lc_bg['TIME'], data_lc_bg['RATE']*backscale, xerr=float(binning),
+                     yerr=data_lc_bg['ERROR']*backscale, ls='-', lw=1, color='grey', ecolor='brown', label='scaled background')
+
+        plt.suptitle('NuSTAR ' + instru + ' lightcurve for observation ' + steminput +
+                     ' in the ' + e_low + '-' + e_high + ' keV band with ' + binning + ' s binning')
+
+        ax_lc.set_xlabel('Time (s) after ' + time_zero_str)
+        ax_lc.set_ylabel('RATE (counts/s)')
+        plt.legend()
+        plt.tight_layout()
+        plt.savefig(os.path.join(directory,'products'+('_bright' if bright else ''),
+                                 steminput + '_' + instru + '_lc_screen_' + e_low + '_' + e_high + '_bin_' + binning + '.png'))
+        plt.close()
+
+        return 'Lightcurve creation complete',[time_zero_str,data_lc_src['TIME'],data_lc_src['RATE']-data_lc_bg['RATE']*backscale,
+                                                data_lc_src['ERROR']+data_lc_bg['ERROR']*backscale]
+
+    if cams == 'all':
+        camid_list= [0, 1]
+    else:
+        camid_list = []
+        if 'FPMA' in [elem.upper() for elem in cams]:
+            camid_list.append(0)
+        if 'FPMB' in [elem.upper() for elem in cams]:
+            camid_list.append(1)
+
+    # recensing the reg files available for each camera
+    # clean_filelist shape : [[FPMA_files,FPMA_dirs],[FPMB_files,FPMB_dirs]]
+    src_reg = file_evt_selector('src_reg',cameras=cams,bright=bright)
+    bg_reg = file_evt_selector('src_reg',cameras=cams,bright=bright)
+
+    if len(src_reg[0][0])!=1 or len(src_reg[1][0])!=1 or len(bg_reg[0][0])!=1 or len(bg_reg[1][0])!=1:
+
+        print('Issue: missing/too many region files detected')
+        print(src_reg)
+        print(bg_reg)
+        return 'Issue: missing/too many region files detected'
+
+    bashproc = pexpect.spawn("/bin/bash", encoding='utf-8')
+
+    print('\n\n\nCreating lightcurves products...')
+
+    # defining the number of lightcurves to create
+
+    # decomposing for each band asked
+    lc_bands = ([] if hr_bands is None else ravel_ragged([elem.split('/') for elem in hr_bands.split(',')]).tolist())\
+               + lc_bands.split(',')
+
+    lc_bands = np.unique(lc_bands)[::-1]
+
+    # storing the ids for the HR bands
+    id_band_num_HR = np.argwhere(hr_bands.split('/')[0] == lc_bands)[0][0]
+    id_band_den_HR = np.argwhere(hr_bands.split('/')[1] == lc_bands)[0][0]
+
+    summary_header='Obsid\tcamera\tenergy band\tLightcurve extraction result\n'
+
+    set_var(bashproc)
+
+    if os.path.isfile(directory + '/extract_lc.log'):
+        os.system('rm ' + directory + '/extract_lc.log')
+
+    with StdoutTee(directory + '/extract_lc.log', mode="a", buff=1, file_filters=[_remove_control_chars]), \
+            StderrTee(directory + '/extract_lc.log', buff=1, file_filters=[_remove_control_chars]):
+
+        bashproc.logfile_read = sys.stdout
+
+        # filtering for the selected cameras
+        for i_cam in camid_list:
+
+            if directory.endswith('/'):
+                obsid = directory.split('/')[-2]
+            else:
+                obsid = directory.split('/')[-1]
+
+            bashproc.logfile_read = sys.stdout
+            print('\nComputing lightcurves of camera ' + camlist[i_cam])
+
+            #fetching region files for this camera
+            src_reg_indiv=src_reg[i_cam][0]
+            bg_reg_indiv=bg_reg[i_cam][0]
+
+            #computing the backscale
+            src_reg_coords=ds9_to_reg(os.path.join(src_reg_indiv))
+            bg_reg_coords=ds9_to_reg(os.path.join(bg_reg_indiv))
+
+            backscale=(float(src_reg_coords[1])/float(bg_reg_coords[1]))**2
+
+            # launching the main extraction
+
+            evt_dir=os.path.join(directory,'out'+('' if not bright else '_bright'))
+            lc_prods=[]
+            for band in lc_bands:
+
+                summary_line,lc_prods = extract_lc_single(bashproc,directory=evt_dir,binning=binning,instru=camlist[i_cam],
+                                                 steminput='nu'+obsid,src_reg=src_reg_indiv,
+                                                 bg_reg=bg_reg_indiv,e_low=band.split('-')[0],e_high=band.split('-')[1],
+                                                 bright=bright,backscale=backscale)
+
+                summary_content = obsid + '\t' + camlist[i_cam] +'\t'+ band + '\t' + summary_line
+                file_edit(os.path.join(directory, 'summary_extract_lc.log'), obsid + '\t' + camlist[i_cam] +'\t'+ band ,
+                          summary_content + '\n',
+                          summary_header)
+
+
+            assert lc_prods[id_band_den_HR][0]==lc_prods[id_band_num_HR][0], 'Differing timezero values between HR lightcurves'
+
+            time_zero_HR=lc_prods[id_band_num_HR][0]
+
+            #here we implicitely assume the time array is identical for both lightcurves and for source/bg
+            time_HR=lc_prods[id_band_num_HR][1]
+
+            rate_num_HR=lc_prods[id_band_num_HR][2]
+            rate_err_num_HR=lc_prods[id_band_num_HR][3]
+
+            rate_den_HR=lc_prods[id_band_den_HR][2]
+            rate_err_den_HR=lc_prods[id_band_den_HR][3]
+
+            fig_hr, ax_hr = plt.subplots(1, figsize=(10, 8))
+
+            hr_vals = rate_num_HR /rate_den_HR
+
+            hr_err = hr_vals * (((rate_err_num_HR / rate_num_HR) ** 2 +
+                                 (rate_err_den_HR / rate_den_HR) ** 2) ** (
+                                            1 / 2))
+
+            plt.errorbar(time_HR, hr_vals, xerr=binning, yerr=hr_err, ls='-', lw=1,
+                         color='grey', ecolor='blue')
+
+            plt.suptitle('NuSTAR '+camlist[i_cam]+' net HR evolution for observation ' + obsid +' in the ' + hr_bands + ' keV band'+
+                         'with '+binning+' s binning')
+
+            plt.xlabel('Time (s) after ' + time_zero_HR)
+            plt.ylabel('Hardness Ratio (' + hr_bands + ' keV)')
+
+            plt.tight_layout()
+            plt.savefig(os.path.join(directory,'products'+('_bright' if bright else ''),
+                        'nu'+obsid + '_' + camlist[i_cam]+ '_hr_screen_'+hr_bands.replace('/','_')+'_bin_' + binning + '.png'))
+            plt.close()
+
+    extract_lc_done.set()
+
+def extract_sp(directory,cams='all',e_low=None,e_high=None,bright=False):
+
+    '''
+    Wrapper for a version of nuproducts to computes only spectral products
+
+    We follow the steps highlighted in https://heasarc.gsfc.nasa.gov/docs/nustar/analysis/nustar_swguide.pdf 5.3B
+    options:
+        -binning: binning of the LC in seconds
+
+        -bands: bands for each lightcurve to be created.
+                The numbers should be in keV, separated by "-", and different lightcurves by ","
+                ex: to create two lightcurves for, the 1-3 and 4-12 band, use '1-3,4-12'
+
+        -hr: bands to be used for the HR plot creation.
+             A single plot is possible for now. Creates its own lightcurve bands if necessary
+
+        -overwrite: overwrite products or not
+
+    Note: can produce no output without error if no gti in the event file
+    '''
+
+    '''MAIN BEHAVIOR'''
+
+    def extract_sp_single(spawn, directory, instru, steminput, src_reg, bg_reg, e_low=None, e_high=None,bright=False):
+
+        if e_low!=None:
+            pi_low = str(kev_to_PI(float(e_low)))
+
+        if e_high!=None:
+            pi_high = str(kev_to_PI(float(e_high)))
+
+        # building the spectral products
+        spawn.sendline('nuproducts indir' + directory + ' instrument=' + instru + ' steminputs=' + steminput +
+                       ' srcregionfile=' + src_reg +' bkgregionfile=' + bg_reg +
+                       +('' if e_low==None else' pilow=' + pi_low)+
+                       +('' if e_high==None else' pihigh=' + pi_high)+
+                       ' outdir=./products'+('_bright' if bright else '')+
+                       ' lcfile=NONE bkglcfile=None imagefile=NONE')
+
+        ####TODO: check what's the standard message here
+        spawn.expect('complete')
+
+        return 'Spectral products creation complete'
+
+    if cams == 'all':
+        camid_list= [0, 1]
+    else:
+        camid_list = []
+        if 'FPMA' in [elem.upper() for elem in cams]:
+            camid_list.append(0)
+        if 'FPMB' in [elem.upper() for elem in cams]:
+            camid_list.append(1)
+
+    # recensing the reg files available for each camera
+    # clean_filelist shape : [[FPMA_files,FPMA_dirs],[FPMB_files,FPMB_dirs]]
+    src_reg = file_evt_selector('src_reg',cameras=cams,bright=bright)
+    bg_reg = file_evt_selector('src_reg',cameras=cams,bright=bright)
+
+    if len(src_reg[0][0]!=1) or len(src_reg[0][0]!=1):
+
+        print('Issue: missing/too many region files detected')
+        print(src_reg)
+        print(bg_reg)
+        return 'Issue: missing/too many region files detected'
+
+    bashproc = pexpect.spawn("/bin/bash", encoding='utf-8')
+
+    print('\n\n\nCreating spectral products...')
+
+    summary_header='Obsid\tcamera\tSpectrum extraction result\n'
+
+    set_var(bashproc)
+
+    if os.path.isfile(directory + '/extract_sp.log'):
+        os.system('rm ' + directory + '/extract_sp.log')
+
+    with StdoutTee(directory + '/extract_sp.log', mode="a", buff=1, file_filters=[_remove_control_chars]), \
+            StderrTee(directory + '/extract_sp.log', buff=1, file_filters=[_remove_control_chars]):
+
+        bashproc.logfile_read = sys.stdout
+
+        # filtering for the selected cameras
+        for i_cam in camid_list:
+
+            if directory.endswith('/'):
+                obsid = directory.split('/')[-2]
+            else:
+                obsid = directory.split('/')[-1]
+
+            bashproc.logfile_read = sys.stdout
+            print('\nComputing lightcurves of camera ' + camlist[i_cam])
+
+            #fetching region files for this camera
+            src_reg_indiv=src_reg[i_cam]
+            bg_reg_indiv=bg_reg[i_cam]
+
+            # launching the main extraction
+
+            evt_dir=os.path.join(directory,'out'+('' if not bright else '_bright'))
+
+            summary_line,lc_prods = extract_sp_single(bashproc,directory=evt_dir,instru=camlist[i_cam],
+                                             steminput='nu'+obsid,src_reg=src_reg_indiv,
+                                             bg_reg=bg_reg_indiv,e_low=e_low,e_high=e_high,bright=bright)
+
+            summary_content = obsid + '\t' + camlist[i_cam] +'\t'+ summary_line
+            file_edit(os.path.join(directory, 'summary_extract_lc.log'), obsid + '\t' + camlist[i_cam],
+                      summary_content + '\n',
+                      summary_header)
+
+    extract_sp_done.set()
 
 '''''''''''''''''''''
 ''''MAIN PROCESS'''''

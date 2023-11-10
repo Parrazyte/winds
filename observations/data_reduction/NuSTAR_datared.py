@@ -62,31 +62,19 @@ Searches for all NuSTAR Obs type directories in the subdirectories and launches 
 
 list of possible actions : 
 
-1. process_obsdir: run the nupipeline script to process an obsid folder
+build.      process_obsdir: run the nupipeline script to process an obsid folder.
 
-gti. create_gtis: create custom gtis files to be used later for lightcurve and spectrum creation
+reg.    extract_reg: compute an image and an optimized source/bg region automatically to maximize SNR, using the directory names or 
+                  the event file header as a base
 
-fs. extract_all_spectral: runs the nicerl3-spect script to compute spectral products of an obsid folder (aka s,b,r at the same time)
+lc.     extract_lc: computes the lightcurves and HR ratio evolution of the source and bg regions of extract_reg in different bands.
+                    Also flags for recomputation of the entire action list in bright mode if the source count rate is high enough
 
-l. extract_lightcurve: runs a set of nicerl3-lc scripts to compute a range of lightcurve and HR evolutions
+sp.     extract_sp: computes the spectral products of the source and bg regions of extract_reg in different bands.
 
-g. group_spectra: group spectra using the optimized Kastra et al. binning
+g.      regroup_spectral: regroups spectral products according to the requirements
 
-m.merge: merge all spectral products in the subdirectories to a bigbatch directory
-
-c. clean_products: clean event products in the observation's event_cl directory
-
-fc. clean_all: clean all files including standard products and products of this script from the directory
-
-DEPRECATED 
-2. select_detector: removes specific detectors from the event file (not tested)
-
-s. extract_spectrum: extract a pha spectrum from a process obsid folder using  Xselect
-
-b. extract_background: extract a bg spectrum from a process obsid folder using a specific method
-
-r. extract_response: extract a response from a processed obsid folder
-
+m.      batch_mover: copies all products to a global directory to prepare for large scale analysis
 
 
 """
@@ -124,11 +112,17 @@ ap.add_argument('-catch', '--catch_errors', help='Catch errors while running the
 # global choices
 ap.add_argument("-a", "--action", nargs='?', help='Give which action(s) to proceed,separated by comas.',
                 default='c', type=str)
-
-# default: 1,gti,fs,l,g,m,c
+# default: build,reg,lc,sp,g,m
 
 ap.add_argument("-over", nargs=1, help='overwrite computed tasks (i.e. with products in the batch, or merge directory\
                 if "m" is in the actions) in a folder', default=True, type=bool)
+
+ap.add_argument('-cameras',nargs=1,help='which cameras to restrict the analysis to. "all" takes both FPMA and FPMB',default='all',type='str')
+
+ap.add_argument('-bright_check',nargs=1,help='recompute the entire set of actions in bright mode if the source lightcurve'+
+                                             'is above the standard count limits',default=True,type=bool)
+
+ap.add_argument('-force_bright',help="Force bright mode for the tasks from the get go",default=False)
 
 # directory level overwrite (not active in local)
 ap.add_argument('-folder_over', nargs=1, help='relaunch action through folders with completed analysis', default=False,
@@ -137,16 +131,11 @@ ap.add_argument('-folder_cont', nargs=1, help='skip all but the last 2 directori
                 default=False, type=bool)
 # note : we keep the previous 2 directories because bug or breaks can start actions on a directory following the initially stopped one
 
-# action specific overwrite
-
-ap.add_argument('-gtype', "--grouptype", help='Give the group type to use in regroup_spectral', default='opt', type=str)
-
 ap.add_argument('-heasoft_init_alias', help="name of the heasoft initialisation script alias", default="heainit",
                 type=str)
 ap.add_argument('-caldbinit_init_alias', help="name of the caldbinit initialisation script alias", default="caldbinit",
                 type=str)
 
-# Should correspond to the most important energy band for subsequent science analysis. also used in the region computation
 
 '''region computation'''
 
@@ -157,7 +146,8 @@ ap.add_argument("-target_only", nargs=1,
                 help='only extracts spectra when the source is the main focus of the observation',
                 default=False, type=bool)
 
-ap.add_argument('-image_band',nargs=1,help='band in which to extract the image for region computation',default='3_79',
+# Should correspond to the most important energy band for subsequent science analysis.
+ap.add_argument('-image_band',nargs=1,help='band in which to extract the image for region computation',default='3-79',
                 type=str)
 
 ap.add_argument('-rad_crop', nargs=1,
@@ -187,9 +177,22 @@ ap.add_argument('-lc_bands_str', nargs=1, help='Gives the list of bands to creat
 ap.add_argument('-hr_bands_str', nargs=1, help='Gives the list of bands to create hrsfrom', default='10-50/3-10',
                 type=str)
 
+'''spectra'''
+
+ap.add_argument('-spectral_band',nargs=1,help='Energy band to compute the spectra in (format "x-y" in keV).'+
+                                               'if set to None, no restriction are applied',
+                default=None)
+
+'''regroup'''
+
+ap.add_argument('-gtype', "--grouptype", help='Group type to use in the regrouping function', default='opt', type=str)
+
+
 args = ap.parse_args()
 
 load_functions=args.load_functions
+
+cameras_glob=args.cameras
 
 startdir=args.startdir
 action_list=args.action.split(',')
@@ -198,11 +201,16 @@ folder_over=args.folder_over
 folder_cont=args.folder_cont
 overwrite_glob=args.over
 catch_errors=args.catch_errors
-image_band=args.image_band
+e_low_img,e_high_img=args.image_band.split('-')
+
+bright_check=args.bright_check
+force_bright=args.force_bright
 
 lc_bin=args.lc_bin
 lc_bands_str=args.lc_bands_str
 hr_bands_str=args.hr_bands_str
+
+e_low_sp,e_high_sp=args.spectral_band.split('-')
 
 grouptype=args.grouptype
 heasoft_init_alias=args.heasoft_init_alias
@@ -674,7 +682,7 @@ def ds9_to_reg(ds9_regfile):
     return reg_coords
 
 def extract_reg(directory, cams='all', use_file_coords=False,
-                overwrite=True,e_low_img=3,e_high_img=79,rad_crop=rad_crop,bright=False):
+                overwrite=True,e_low_img=3,e_high_img=79,rad_crop=120,bright=False):
     '''
     Extracts the optimal source/bg regions for a given exposure
 
@@ -1274,6 +1282,9 @@ def extract_lc(directory,binning='1',lc_bands='3-79',hr_bands='10-50/3-10',cams=
     Wrapper for a version of nuproducts to computes only lightcurves in the desired bands,
     with added matplotlib plotting of requested lightcurves and HRs
 
+    also flags an output if the source lightcurve in the 3-79 band goees above 100 cts/s for recomputing.
+    ONLY FLAGS if bright mode is not already activated
+
     We follow the steps highlighted in https://heasarc.gsfc.nasa.gov/docs/nustar/analysis/nustar_swguide.pdf 5.3D
     options:
         -binning: binning of the LC in seconds
@@ -1329,6 +1340,11 @@ def extract_lc(directory,binning='1',lc_bands='3-79',hr_bands='10-50/3-10',cams=
 
             time_zero_str = str(time_zero.to_datetime())
 
+        if float(binning)>='1' and e_low=='3' and e_high=='79' and not bright:
+            bright_flag=max(data_lc_src)>100
+        else:
+            bright_flag=False
+
         with fits.open(lc_bg_path) as fits_lc:
             # and offsetting the data array to match this
             delta_lc_bg = fits_lc[1].header['TIMEZERO']
@@ -1348,6 +1364,8 @@ def extract_lc(directory,binning='1',lc_bands='3-79',hr_bands='10-50/3-10',cams=
         ax_lc.errorbar(data_lc_bg['TIME'], data_lc_bg['RATE']*backscale, xerr=float(binning),
                      yerr=data_lc_bg['ERROR']*backscale, ls='-', lw=1, color='grey', ecolor='brown', label='scaled background')
 
+        ax_lc.axhline(0,1,100,color='red',ls='-',lw=1,label='bright obs threshold')
+
         plt.suptitle('NuSTAR ' + instru + ' lightcurve for observation ' + steminput +
                      ' in the ' + e_low + '-' + e_high + ' keV band with ' + binning + ' s binning')
 
@@ -1360,7 +1378,7 @@ def extract_lc(directory,binning='1',lc_bands='3-79',hr_bands='10-50/3-10',cams=
         plt.close()
 
         return 'Lightcurve creation complete',[time_zero_str,data_lc_src['TIME'],data_lc_src['RATE']-data_lc_bg['RATE']*backscale,
-                                                data_lc_src['ERROR']+data_lc_bg['ERROR']*backscale]
+                                                data_lc_src['ERROR']+data_lc_bg['ERROR']*backscale],bright_flag
 
     if cams == 'all':
         camid_list= [0, 1]
@@ -1403,6 +1421,8 @@ def extract_lc(directory,binning='1',lc_bands='3-79',hr_bands='10-50/3-10',cams=
 
     set_var(bashproc)
 
+    bright_flag_tot=False
+
     if os.path.isfile(directory + '/extract_lc.log'):
         os.system('rm ' + directory + '/extract_lc.log')
 
@@ -1438,7 +1458,7 @@ def extract_lc(directory,binning='1',lc_bands='3-79',hr_bands='10-50/3-10',cams=
             lc_prods=[]
             for band in lc_bands:
 
-                summary_line,lc_prods = extract_lc_single(bashproc,directory=evt_dir,binning=binning,instru=camlist[i_cam],
+                summary_line,lc_prods,bright_flag_single = extract_lc_single(bashproc,directory=evt_dir,binning=binning,instru=camlist[i_cam],
                                                  steminput='nu'+obsid,src_reg=src_reg_indiv,
                                                  bg_reg=bg_reg_indiv,e_low=band.split('-')[0],e_high=band.split('-')[1],
                                                  bright=bright,backscale=backscale)
@@ -1448,6 +1468,8 @@ def extract_lc(directory,binning='1',lc_bands='3-79',hr_bands='10-50/3-10',cams=
                           summary_content + '\n',
                           summary_header)
 
+                #updating the global bright flag if a flagged obs appears (note: the bright_flag is force to False when not in the 3-79 band)
+                bright_flag_tot=bright_flag_tot or bright_flag_single
 
             assert lc_prods[id_band_den_HR][0]==lc_prods[id_band_num_HR][0], 'Differing timezero values between HR lightcurves'
 
@@ -1485,6 +1507,10 @@ def extract_lc(directory,binning='1',lc_bands='3-79',hr_bands='10-50/3-10',cams=
             plt.close()
 
     extract_lc_done.set()
+
+    return bright_flag_tot
+
+
 
 def extract_sp(directory,cams='all',e_low=None,e_high=None,bright=False):
 
@@ -1647,6 +1673,9 @@ if not local:
     #checking them in search for ODF directories
     for directory in subdirs:
 
+        #bright flag to relaunch the analysis for bright sources if needed and asked
+        bright_flag_dir=False
+
         #continue check
         if directory in started_folders[:-2] and folder_cont:
             print('Directory '+directory+' is not among the last two directories. Skipping...')
@@ -1671,198 +1700,185 @@ if not local:
 
             os.chdir(above_obsdir)
 
-#             if catch_errors:
-#                 try:
-#                 #for loop to be able to use different orders if needed
-#                     for curr_action in action_list:
-#
-#                         #resetting the error string message
-#                         output_err=None
-#                         folder_state='Running '+curr_action
-#
-#                         if curr_action=='1':
-#                             process_obsdir(dirname,overwrite=overwrite_glob)
-#                             process_obsdir_done.wait()
-#
-#
-#                         if curr_action=='2':
-#                             select_detector(dirname,detectors=bad_detectors)
-#                             select_detector_done.wait()
-#
-#                         if curr_action=='gti':
-#                             output_err=create_gtis(dirname,split=gti_split,band=gti_lc_band,binning=lc_bin,
-#                                         overwrite=overwrite_glob,flare_method=flare_method)
-#                             if type(output_err)==str:
-#                                 raise ValueError
-#                             create_gtis_done.wait()
-#
-#                         if curr_action=='fs':
-#                             output_err=extract_all_spectral(dirname,bkgmodel=bgmodel,language=bglanguage,overwrite=overwrite_glob)
-#                             if type(output_err)==str:
-#                                 raise ValueError
-#                             extract_all_spectral_done.wait()
-#
-#                         if curr_action=='l':
-#                             output_err=extract_lc(dirname,binning=lc_bin,bands=lc_bands_str,HR=hr_bands_str,overwrite=overwrite_glob)
-#                             if type(output_err)==str:
-#                                 raise ValueError
-#                             extract_lc_done.wait()
-#
-#                         if curr_action=='s':
-#                             extract_spectrum(dirname)
-#                             extract_spectrum_done.wait()
-#
-#                         if curr_action=='b':
-#                             extract_background(dirname,model=bgmodel)
-#                             extract_background_done.wait()
-#                         if curr_action=='r':
-#                             extract_response(dirname)
-#                             extract_response_done.wait()
-#
-#                         if curr_action=='g':
-#                             output_err=regroup_spectral(dirname,group=grouptype)
-#                             if type(output_err)==str:
-#                                 raise ValueError
-#                             regroup_spectral_done.wait()
-#
-#                         if curr_action=='m':
-#                             batch_mover(dirname)
-#                             batch_mover_done.wait()
-#
-#                         if curr_action=='c':
-#                             clean_products(dirname)
-#                             clean_products_done.wait()
-#
-#                         if curr_action=='fc':
-#                             clean_all(dirname)
-#                             clean_all_done.wait()
-#
-#                         os.chdir(startdir)
-#                     folder_state='Done'
-#
-#                 except:
-#                     #signaling unknown errors if they happened
-#                     if 'Running' in folder_state:
-#                         print('\nError while '+folder_state)
-#                         folder_state=folder_state.replace('Running','Aborted at')+('' if output_err is None else ' --> '+output_err)
-#                     os.chdir(startdir)
-#             else:
-#                 #for loop to be able to use different orders if needed
-#                 for curr_action in action_list:
-#                     folder_state='Running '+curr_action
-#                     if curr_action=='1':
-#                         process_obsdir(dirname,overwrite=overwrite_glob)
-#                         process_obsdir_done.wait()
-#                     if curr_action=='2':
-#                         select_detector(dirname,detectors=bad_detectors)
-#                         select_detector_done.wait()
-#
-#                     if curr_action=='gti':
-#                         output_err=create_gtis(dirname,split=gti_split,band=gti_lc_band,binning=lc_bin,
-#                                     overwrite=overwrite_glob,flare_method=flare_method)
-#                         if type(output_err) == str:
-#                             folder_state=output_err
-#                         else:
-#                             pass
-#                         create_gtis_done.wait()
-#
-#                     if curr_action == 'fs':
-#                         output_err = extract_all_spectral(dirname, bkgmodel=bgmodel, language=bglanguage,
-#                                                           overwrite=overwrite_glob)
-#                         if type(output_err) == str:
-#                             folder_state=output_err
-#                         else:
-#                             pass
-#                         extract_all_spectral_done.wait()
-#
-#                     if curr_action == 'l':
-#                         output_err = extract_lc(dirname, binning=lc_bin, bands=lc_bands_str, HR=hr_bands_str,
-#                                                 overwrite=overwrite_glob)
-#                         if type(output_err) == str:
-#                             folder_state=output_err
-#                         else:
-#                             pass
-#                         extract_lc_done.wait()
-#
-#                     if curr_action=='s':
-#                         extract_spectrum(dirname)
-#                         extract_spectrum_done.wait()
-#                     if curr_action=='b':
-#                         extract_background(dirname,model=bgmodel)
-#                         extract_background_done.wait()
-#                     if curr_action=='r':
-#                         extract_response(dirname)
-#                         extract_response_done.wait()
-#
-#                     if curr_action=='g':
-#                         output_err=regroup_spectral(dirname,group=grouptype)
-#
-#                         if type(output_err) == str:
-#                             folder_state=output_err
-#                         else:
-#                             pass
-#                         regroup_spectral_done.wait()
-#
-#                     if curr_action=='m':
-#                         batch_mover(dirname)
-#                         batch_mover_done.wait()
-#
-#                     if curr_action=='c':
-#                         clean_products(dirname)
-#                         clean_products_done.wait()
-#
-#                     if curr_action=='fc':
-#                         clean_all(dirname)
-#                         clean_all_done.wait()
-#
-#                     os.chdir(startdir)
-#                 folder_state='Done'
-#
-#             #adding the directory to the list of already computed directories
-#             file_edit('summary_folder_analysis_'+args.action+'.log',directory,directory+'\t'+folder_state+'\n',summary_folder_header)
-#
-# else:
-#     #taking of the merge action if local is set since there is no point to merge in local (the batch directory acts as merge)
-#     action_list=[elem for elem in action_list if elem!='m']
-#
-#     absdir=os.getcwd()
-#
-#     #just to avoid an error but not used since there is not merging in local
-#     obsid=''
-#
-#     #for loop to be able to use different orders if needed
-#     for curr_action in action_list:
-#             if curr_action=='1':
-#                 process_obsdir(absdir,overwrite=overwrite_glob)
-#                 process_obsdir_done.wait()
-#             if curr_action=='2':
-#                 select_detector(absdir,detectors=bad_detectors)
-#                 select_detector_done.wait()
-#
-#             if curr_action=='gti':
-#                 output_err = create_gtis(absdir, split=gti_split, band=gti_lc_band, binning=lc_bin,
-#                                          overwrite=overwrite_glob,flare_method=flare_method)
-#                 create_gtis_done.wait()
-#
-#             if curr_action=='s':
-#                 extract_spectrum(absdir)
-#                 extract_spectrum_done.wait()
-#             if curr_action=='b':
-#                 extract_background(absdir,model=bgmodel)
-#                 extract_background_done.wait()
-#             if curr_action=='r':
-#                 extract_response(absdir)
-#                 extract_response_done.wait()
-#             if curr_action=='g':
-#                 regroup_spectral(absdir,group=grouptype)
-#                 regroup_spectral_done.wait()
-#             if curr_action=='m':
-#                 batch_mover(absdir)
-#                 batch_mover_done.wait()
-#             if curr_action == 'c':
-#                 clean_products(absdir)
-#                 clean_products_done.wait()
-#
-#             if curr_action == 'fc':
-#                 clean_all(absdir)
-#                 clean_all_done.wait()
+            # note: in this code we use a while loop with indexing to be able to reset the loop position if needed
+            id_action = 0
+
+            if catch_errors:
+                try:
+                    while id_action<len(action_list):
+                        curr_action=action_list[id_action]
+
+                        #resetting the error string message
+                        output_err=None
+                        folder_state='Running '+curr_action
+
+                        if curr_action=='build':
+                            process_obsdir(dirname,overwrite=overwrite_glob,bright=force_bright or bright_flag_dir)
+                            process_obsdir_done.wait()
+
+                        #note: the first actions are not performed with bright mode
+                        if curr_action=='reg':
+                            output_err=extract_reg(dirname,cams=cameras_glob,use_file_coords=use_file_coords,overwrite=overwrite_glob,
+                                                   e_low_img=e_low_img,e_high_img=e_high_img,rad_crop=rad_crop,bright=force_bright or bright_flag_dir)
+                            if type(output_err)==str:
+                                raise ValueError
+                            extract_reg_done.wait()
+
+                        if curr_action=='lc':
+                            output_lc=extract_lc(dirname,binning=lc_bin,lc_bands=lc_bands_str,hr_bands=hr_bands_str,cams=cameras_glob,
+                                                  bright=force_bright or bright_flag_dir)
+
+                            if type(output_err)==str:
+                                raise ValueError
+
+                            elif type(output_lc)==bool:
+
+                                #doing it this way to keep the bright flag to True on the second run when the output_lc
+                                #bright flag is set to false to avoid infinite computations
+                                bright_flag_dir=bright_flag_dir or output_lc
+
+                                if bright_check and output_lc==True:
+                                    #resetting the position to the start of the actions to relaunch the computations now that the bright flag has
+                                    #been updated
+                                    id_action=-1
+
+                            extract_lc_done.wait()
+
+
+                        if curr_action=='sp':
+                            output_err=extract_sp(dirname,cams=cameras_glob,e_low=e_low_sp,e_high=e_high_sp,bright=force_bright or bright_flag_dir)
+
+                            if type(output_err)==str:
+                                raise ValueError
+                            extract_sp_done.wait()
+
+                        os.chdir(startdir)
+
+                        id_action+=1
+
+                    folder_state='Done'
+
+                except:
+                    #signaling unknown errors if they happened
+                    if 'Running' in folder_state:
+                        print('\nError while '+folder_state)
+                        folder_state=folder_state.replace('Running','Aborted at')+('' if output_err is None else ' --> '+output_err)
+                    os.chdir(startdir)
+            else:
+
+                while id_action < len(action_list):
+
+                    curr_action = action_list[id_action]
+
+                    folder_state='Running '+curr_action
+
+                    if curr_action == 'build':
+                        process_obsdir(dirname, overwrite=overwrite_glob, bright=force_bright)
+                        process_obsdir_done.wait()
+
+                    # note: the first actions are not performed with bright mode
+                    if curr_action == 'reg':
+                        output_err = extract_reg(dirname, cams=cameras_glob, use_file_coords=use_file_coords,
+                                                 overwrite=overwrite_glob,
+                                                 e_low_img=e_low_img, e_high_img=e_high_img, rad_crop=rad_crop,
+                                                 bright=force_bright)
+                        if type(output_err) == str:
+                            raise ValueError
+                        extract_reg_done.wait()
+
+                    if curr_action == 'lc':
+                        output_lc = extract_lc(dirname, binning=lc_bin, lc_bands=lc_bands_str, hr_bands=hr_bands_str,
+                                               cams=cameras_glob,
+                                               bright=force_bright or bright_flag_dir)
+
+                        if type(output_err) == str:
+                            raise ValueError
+
+                        elif type(output_lc)==bool:
+
+                            #doing it this way to keep the bright flag to True on the second run when the output_lc
+                            #bright flag is set to false to avoid infinite computations
+                            bright_flag_dir=bright_flag_dir or output_lc
+
+                            if bright_check and output_lc==True:
+                                #resetting the position to the start of the actions to relaunch the computations now that the bright flag has
+                                #been updated
+                                id_action=-1
+
+
+                        extract_lc_done.wait()
+
+                    if curr_action == 'sp':
+                        output_err = extract_sp(dirname, cams=cameras_glob, e_low=e_low_sp, e_high=e_high_sp,
+                                                bright=force_bright)
+
+                        if type(output_err) == str:
+                            raise ValueError
+                        extract_sp_done.wait()
+
+                    os.chdir(startdir)
+
+                    id_action+=1
+
+                folder_state='Done'
+
+            #adding the directory to the list of already computed directories
+            file_edit('summary_folder_analysis_'+args.action+'.log',directory,directory+'\t'+folder_state+'\n',summary_folder_header)
+
+else:
+    #taking of the merge action if local is set since there is no point to merge in local (the batch directory acts as merge)
+    action_list=[elem for elem in action_list if elem!='m']
+
+    id_action=0
+
+    absdir=os.getcwd()
+
+    while id_action < len(action_list):
+        curr_action = action_list[id_action]
+
+        folder_state = 'Running ' + curr_action
+
+        if curr_action == 'build':
+            process_obsdir(absdir, overwrite=overwrite_glob, bright=force_bright)
+            process_obsdir_done.wait()
+
+        # note: the first actions are not performed with bright mode
+        if curr_action == 'reg':
+            output_err = extract_reg(absdir, cams=cameras_glob, use_file_coords=use_file_coords,
+                                     overwrite=overwrite_glob,
+                                     e_low_img=e_low_img, e_high_img=e_high_img, rad_crop=rad_crop,
+                                     bright=force_bright)
+            if type(output_err) == str:
+                raise ValueError
+            extract_reg_done.wait()
+
+        if curr_action == 'lc':
+            output_lc = extract_lc(absdir, binning=lc_bin, lc_bands=lc_bands_str, hr_bands=hr_bands_str,
+                                   cams=cameras_glob,
+                                   bright=force_bright or bright_flag_dir)
+
+            if type(output_err) == str:
+                raise ValueError
+
+            elif type(output_lc) == bool:
+
+                # doing it this way to keep the bright flag to True on the second run when the output_lc
+                # bright flag is set to false to avoid infinite computations
+                bright_flag_dir = bright_flag_dir or output_lc
+
+                if bright_check and output_lc == True:
+                    # resetting the position to the start of the actions to relaunch the computations now that the bright flag has
+                    # been updated
+                    id_action = -1
+
+            extract_lc_done.wait()
+
+        if curr_action == 'sp':
+            output_err = extract_sp(absdir, cams=cameras_glob, e_low=e_low_sp, e_high=e_high_sp,
+                                    bright=force_bright)
+
+            if type(output_err) == str:
+                raise ValueError
+            extract_sp_done.wait()
+
+        id_action+=1

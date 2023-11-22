@@ -21,13 +21,15 @@ import re
 import numpy as np
 import matplotlib as mpl
 import matplotlib.pyplot as plt
+from shapely.geometry import Polygon
+
 # note: might need to install opencv-python-headless to avoid dependancies issues with mpl
 
 # import matplotlib.cm as cm
 from matplotlib.collections import LineCollection
 
 # astro imports
-from astropy.time import Time
+from astropy.time import Time,TimeDelta
 from astropy.io import fits
 from astroquery.simbad import Simbad
 from mpdaf.obj import sexa2deg, Image
@@ -51,7 +53,7 @@ from rasterio.features import rasterize
 # shape merging
 from scipy.ndimage import binary_dilation
 
-from general_tools import file_edit, ravel_ragged
+from general_tools import file_edit, ravel_ragged,MinorSymLogLocator
 
 """
 Created on 09-11-2023
@@ -79,22 +81,6 @@ m.      batch_mover: copies all products to a global directory to prepare for la
 
 """
 
-# better errors : to test
-# import pretty_errors
-# pretty_errors.configure(
-#     separator_character = '*',
-#     filename_display    = pretty_errors.FILENAME_EXTENDED,
-#     line_number_first   = True,
-#     display_link        = True,
-#     lines_before        = 5,
-#     lines_after         = 2,
-#     line_color          = pretty_errors.RED + '> ' + pretty_errors.default_config.line_color,
-#     code_color          = '  ' + pretty_errors.default_config.line_color,
-#     truncate_code       = True,
-#     display_locals      = True
-# )
-
-
 '''~~~~~~~~~~ ARGUMENTS ~~~~~~~~~~'''
 
 ap = argparse.ArgumentParser(description='Script to reduce NICER files.\n)')
@@ -107,17 +93,17 @@ ap.add_argument("-dir", "--startdir", nargs='?', help="starting directory. Curre
 ap.add_argument("-l", "--local", nargs=1, help='Launch actions directly in the current directory instead',
                 default=False, type=bool)
 ap.add_argument('-catch', '--catch_errors', help='Catch errors while running the data reduction and continue',
-                default=True, type=bool)
+                default=False, type=bool)
 
 # global choices
 ap.add_argument("-a", "--action", nargs='?', help='Give which action(s) to proceed,separated by comas.',
-                default='c', type=str)
+                default='g,m', type=str)
 # default: build,reg,lc,sp,g,m
 
 ap.add_argument("-over", nargs=1, help='overwrite computed tasks (i.e. with products in the batch, or merge directory\
                 if "m" is in the actions) in a folder', default=True, type=bool)
 
-ap.add_argument('-cameras',nargs=1,help='which cameras to restrict the analysis to. "all" takes both FPMA and FPMB',default='all',type='str')
+ap.add_argument('-cameras',nargs=1,help='which cameras to restrict the analysis to. "all" takes both FPMA and FPMB',default='all',type=str)
 
 ap.add_argument('-bright_check',nargs=1,help='recompute the entire set of actions in bright mode if the source lightcurve'+
                                              'is above the standard count limits',default=True,type=bool)
@@ -125,7 +111,7 @@ ap.add_argument('-bright_check',nargs=1,help='recompute the entire set of action
 ap.add_argument('-force_bright',help="Force bright mode for the tasks from the get go",default=False)
 
 # directory level overwrite (not active in local)
-ap.add_argument('-folder_over', nargs=1, help='relaunch action through folders with completed analysis', default=False,
+ap.add_argument('-folder_over', nargs=1, help='relaunch action through folders with completed analysis', default=True,
                 type=bool)
 ap.add_argument('-folder_cont', nargs=1, help='skip all but the last 2 directories in the summary folder file',
                 default=False, type=bool)
@@ -168,7 +154,7 @@ ap.add_argument('-max_rad_source', nargs=1, help='maximum source radius for fain
                 default=5, type=float)
 
 '''lightcurve'''
-ap.add_argument('-lc_bin', nargs=1, help='Gives the binning of all lightcurces/HR evolutions (in s)', default=1,
+ap.add_argument('-lc_bin', nargs=1, help='Gives the binning of all lightcurces/HR evolutions (in s)', default='100',
                 type=str)
 # note: also defines the binning used for the gti definition
 
@@ -181,7 +167,7 @@ ap.add_argument('-hr_bands_str', nargs=1, help='Gives the list of bands to creat
 
 ap.add_argument('-spectral_band',nargs=1,help='Energy band to compute the spectra in (format "x-y" in keV).'+
                                                'if set to None, no restriction are applied',
-                default=None)
+                default=None,type=str)
 
 '''regroup'''
 
@@ -201,7 +187,7 @@ folder_over=args.folder_over
 folder_cont=args.folder_cont
 overwrite_glob=args.over
 catch_errors=args.catch_errors
-e_low_img,e_high_img=args.image_band.split('-')
+e_low_img,e_high_img=np.array(args.image_band.split('-'),dtype=float)
 
 bright_check=args.bright_check
 force_bright=args.force_bright
@@ -210,14 +196,14 @@ lc_bin=args.lc_bin
 lc_bands_str=args.lc_bands_str
 hr_bands_str=args.hr_bands_str
 
-e_low_sp,e_high_sp=args.spectral_band.split('-')
+e_low_sp,e_high_sp=[None,None] if args.spectral_band==None else args.spectral_band.split('-')
 
 grouptype=args.grouptype
 heasoft_init_alias=args.heasoft_init_alias
 caldbinit_init_alias=args.caldbinit_init_alias
 
 use_file_coords=args.use_file_coords
-target_only=args.mainfocus
+target_only=args.target_only
 rad_crop=args.rad_crop
 bigger_fit=args.bigger_fit
 point_source=args.point_source
@@ -232,12 +218,14 @@ max_rad_source=args.max_rad_source
 # switching off matplotlib plot displays unless with plt.show()
 plt.ioff()
 
-camlist = ['FPM1', 'FPM2']
+camlist = ['FPMA', 'FPMB']
 
 process_obsdir_done = threading.Event()
 extract_reg_done=threading.Event()
 extract_lc_done=threading.Event()
 extract_sp_done=threading.Event()
+regroup_spectral_done=threading.Event()
+batch_mover_done=threading.Event()
 
 # function to remove (most) control chars
 def _remove_control_chars(message):
@@ -249,7 +237,7 @@ def kev_to_PI(e_val):
     '''
     conversion from https://heasarc.gsfc.nasa.gov/docs/nustar/nustar_faq.html#pi_to_energy
     '''
-    return round(e_val-1.6)/0.04
+    return round((e_val-1.6)/0.04)
 
 def set_var(spawn):
     '''
@@ -259,7 +247,7 @@ def set_var(spawn):
     spawn.sendline(caldbinit_init_alias)
 
 
-def file_evt_selector(filetype, camera='all', bright=False):
+def file_evt_selector(filetype, cameras='all', bright=False):
     '''
     Searches for all of the files of a specific type (among the ones used in the data reduction),
     and asks for input if more than one are detected.
@@ -272,9 +260,9 @@ def file_evt_selector(filetype, camera='all', bright=False):
     '''
 
     # getting the list of files in the directory (note that file_evt_selector is launched while in the directory)
-    flist = glob.glob('**', recursive=True)
+    flist = glob.glob(os.path.join(directory,'**'), recursive=True)
 
-    cameras = ['FPMA', 'FPMB']
+    cameras_avail = ['FPMA', 'FPMB']
 
     # list of accepted filetypes
     filetypes = ['evt_clean','src_reg','bg_reg']
@@ -284,35 +272,37 @@ def file_evt_selector(filetype, camera='all', bright=False):
     type_index = filetypes.index(filetype)
 
     # type keywords
-    keyword_types = ['_cl.evt','src_reg.reg','bg_reg.reg']
+    keyword_types = ['_cl.evt','reg_src.reg','reg_bg.reg']
 
-    # camera keywords (1 for each type)
+    # camera keywords (always the same for NuSTAR)
     camword_evt = ['A01', 'B01']
-    keyword_cams = [camword_evt]
+    keyword_cams = camword_evt
 
     # cam_list is the list of cameras to use for the evt search
-    if camera == 'all':
-        cam_list = cameras
+    if cameras == 'all':
+        cam_list = cameras_avail
     else:
-        cam_list = [camera]
+        cam_list = [cameras]
 
     result_list = []
 
     for cam in cam_list:
         # getting the index of the camera for the camera keywords
-        cam_index = cameras.index(cam)
+        cam_index = cam_list.index(cam)
 
         # computing the list for the correct file type and camera
-        cutlist = [elem for elem in flist if keyword_cams[type_index][cam_index] in elem\
+        #with some safekeeps to ensure we don't pick out things we don't want
+        cutlist = [elem for elem in flist if keyword_cams[cam_index] in elem\
                    and elem.endswith(keyword_types[type_index])\
-                   and (1 if not bright else 'bright' in elem.split('/')[-2])]
+                   and (1 if not bright else 'bright' in elem.split('/')[-2])\
+                   and elem.split('/')[-1].startswith('nu')]
 
         if len(cutlist) == 0:
             print('\nWarning : No ' + file_desc[type_index] + ' found for camera ' + cam)
             camdir = ['']
             camfile = ['']
         else:
-            print('\n' + str(len(cutlist)) + ' exposure(s) found for ' + cam + ' ' + file_desc[type_index] + ' :')
+            print('\n' + str(len(cutlist)) + ' file found for ' + cam + ' ' + file_desc[type_index] + ' :')
             print(np.array(cutlist).transpose())
 
             # loop on all the events
@@ -368,7 +358,7 @@ def process_obsdir(directory, overwrite=True, bright=False):
 
         bashproc.sendline('cd '+directory)
         #note: nupipeline requires explicit indir, steminputs and outdir arguments
-        bashproc.sendline('nupipeline indir=' + "./" + ' steminputs=nu'+directory+
+        bashproc.sendline('nupipeline indir=' + "." + ' steminputs=nu'+directory+
                           ' outdir=./out'+('_bright' if bright!=False else '')+
                           ' clobber=' + ('YES' if overwrite else 'FALSE')+bright_str)
 
@@ -380,7 +370,7 @@ def process_obsdir(directory, overwrite=True, bright=False):
         process_obsdir_done.set()
 
         # raising an error to stop the process if the command has crashed for some reason
-        if process_state == 0:
+        if process_state != 0:
             raise ValueError
 def disp_ds9(spawn, file, zoom='auto', scale='log', regfile='', screenfile='', give_pid=False, kill_last=''):
     '''
@@ -455,7 +445,6 @@ def disp_ds9(spawn, file, zoom='auto', scale='log', regfile='', screenfile='', g
 
 def reg_optimiser(mask):
     # for the shapely method :
-    # from shapely.geometry import Polygon
     # from shapely.ops import polylabel as sh_polylabel
     # from shapely.validation import make_valid
     # Note: shapely.validation doesn't work with shapely 1.7.1, which is the standard version currently installed by conda/pip
@@ -486,9 +475,14 @@ def reg_optimiser(mask):
     # creating a digestible input for the polygons function of imantics
     int_mask = mask.astype(int)
 
+    #if need
+    # plt.figure(figsize=(10,10))
+    # plt.imshow(mask)
+    # plt.savefig('mask.png')
+
     # this function returns the set of polygons equivalent to the mask
     # the last polygon of the set should be the outer shell
-    polygons = Mask(int_mask).polygons()
+    polygons =Mask(int_mask).polygons()
 
     # since we don't know the position of the outer shell (and there is sometimes no outer shell)
     # we'll consider the biggest polygon as the "main one".
@@ -496,14 +490,31 @@ def reg_optimiser(mask):
     # (since they are identified on pixel by pixel basis, there seems to be no "long" lines)
 
     shell_length = 0
+
+    #if need
+    # #polygon figure
+    # plt.figure(figsize=(10,10))
+    # poly_plot_coords=[]
+    # for i in range(len(polygons.points)):
+    #     if len(polygons.points[i])>4:
+    #         poly_plot_coords+=[Polygon(polygons.points[i]).exterior.xy]
+    #         plt.plot(poly_plot_coords[-1][0],poly_plot_coords[-1][1],c='red')
+    # plt.savefig('testpoly.png')
+
+
     for i in range(len(polygons.points)):
+
         if len(polygons.points[i]) > shell_length:
             shell_id = i
             shell_length = len(polygons.points[i])
 
+
+
     # swapping the positions to have the shell as the first polygon in the array
     poly_args = polygons.points[:shell_id] + polygons.points[shell_id + 1:]
     poly_args.insert(0, polygons.points[shell_id])
+
+    test = [len(polygons.points[id]) for id in range(len(polygons.points))]
 
     coords = polylabel(poly_args, with_distance=True)
 
@@ -619,10 +630,11 @@ def xsel_img(bashproc,evt_path,save_path,e_low,e_high):
     evt_dir='./' if '/' not in evt_path else evt_path[:evt_path.rfind('/')]
     evt_file= evt_path[evt_path.rfind('/')+1:]
 
-    pha_low=kev_to_PI(e_low)
-    pha_high=kev_to_PI(e_high)
+    pha_low=str(kev_to_PI(e_low))
+    pha_high=str(kev_to_PI(e_high))
+
     bashproc.sendline('xselect')
-    bashproc.readline('XSELECT')
+    bashproc.expect('XSELECT')
 
     #session name
     bashproc.sendline('')
@@ -630,14 +642,14 @@ def xsel_img(bashproc,evt_path,save_path,e_low,e_high):
     #reading events
     bashproc.sendline('read events')
 
-    bashproc.readline('Event file dir')
+    bashproc.expect('Event file dir')
     bashproc.sendline(evt_dir)
 
-    bashproc.readline('Event file list')
-    bashproc.readline(evt_file)
+    bashproc.expect('Event file list')
+    bashproc.sendline(evt_file)
 
     #resetting mission
-    bashproc.readline('Reset')
+    bashproc.expect('Reset')
     bashproc.sendline('yes')
 
     #commands to prepare image creation
@@ -651,7 +663,16 @@ def xsel_img(bashproc,evt_path,save_path,e_low,e_high):
     bashproc.expect('Give output file name')
 
     bashproc.sendline(save_path)
-    bashproc.expect('Wrote image to ')
+
+    over_code=bashproc.expect(['File already exists','Wrote image to '])
+
+    if over_code==0:
+        bashproc.sendline('yes')
+        bashproc.expect(['Wrote image to '])
+
+    print('Letting some time to create the file...')
+    #giving some time to create the file
+    time.sleep(5)
 
     bashproc.sendline('exit')
     bashproc.sendline('no')
@@ -810,7 +831,7 @@ def extract_reg(directory, cams='all', use_file_coords=False,
             '''
 
             #currently using the first image file created
-            with fits.open(img_file) as hdul:
+            with fits.open(os.path.join(filedir,img_file)) as hdul:
                 CCD_data = hdul[0].data
 
             CCD_img_obj=Image(data=CCD_data,wcs=src_mpdaf_WCS)
@@ -823,7 +844,7 @@ def extract_reg(directory, cams='all', use_file_coords=False,
             print('\nSaving the corresponding image...')
             imgarr_to_png(CCD_data, file_id+'_vis_' + '_CCD_1_crop', astropy_wcs=src_astro_WCS,
                     mpdaf_wcs=src_mpdaf_WCS,
-                    directory=fulldir, title='Source image with CCDs cropped according to the region size and center')
+                    directory=filedir, title='Source image with CCDs cropped according to the region size and center')
 
             # listing non-zero pixels in the CCD
             CCD_on = np.argwhere(CCD_data != 0)
@@ -847,7 +868,7 @@ def extract_reg(directory, cams='all', use_file_coords=False,
             print('\nSaving the corresponding image...')
             imgarr_to_png(CCD_data, file_id+'vis_CCD_2_mask', astropy_wcs=src_astro_WCS,
                     mpdaf_wcs=src_mpdaf_WCS,
-                    directory=fulldir, title='Source image CCD(s) mask after clipping and filling of the holes')
+                    directory=filedir, title='Source image CCD(s) mask after clipping and filling of the holes')
 
             print('\nComputing the CCD masked image...')
             # array which we will have the outside of the CCD masked with nans
@@ -864,7 +885,7 @@ def extract_reg(directory, cams='all', use_file_coords=False,
             print('\nSaving the corresponding image...')
             imgarr_to_png(CCD_data_cut, file_id+'vis_CCD_3_cut', astropy_wcs=src_astro_WCS,
                     mpdaf_wcs=src_mpdaf_WCS,
-                    directory=fulldir, title='Source image after CCD masking', imgtype='ccd_crop')
+                    directory=filedir, title='Source image after CCD masking', imgtype='ccd_crop')
 
             # sigma cut, here at 0.95 (2 sigma) which seems to be a good compromise
             CCD_data_line.sort()
@@ -876,8 +897,8 @@ def extract_reg(directory, cams='all', use_file_coords=False,
             perval = '5'
 
             # sometimes for very bright sources there might be too much noise so we cut at 1 sigma instead
-            if cut_sig > 20:
-                cut_sig = CCD_data_line[int(0.68 * len(CCD_data_line))]
+            if cut_sig > 50:
+                cut_sig = CCD_data_line[int(0.90 * len(CCD_data_line))]
                 sigval = '1'
                 perval = '32'
 
@@ -895,7 +916,7 @@ def extract_reg(directory, cams='all', use_file_coords=False,
             print('\nSaving the corresponding image...')
             imgarr_to_png(CCD_bg, file_id+'vis_CCD_4_bg', astropy_wcs=src_astro_WCS,
                     mpdaf_wcs=src_mpdaf_WCS,
-                    directory=fulldir,
+                    directory=filedir,
                     title='Source image background mask remaining after ' + sigval + ' sigma (top ' + perval +
                           '% cts) counts removal', imgtype='ccd_crop_mask')
 
@@ -904,14 +925,18 @@ def extract_reg(directory, cams='all', use_file_coords=False,
             print('\nMaximal bg region coordinates in pixel units:')
             print(bg_max_pix)
 
-
             '''
-            finally, we convert the region coordinates and radius to angular values, using mpdaf.
+            finally, we convert the region coordinates and radius to angular values,
+            using mpdaf's wcs pix2sky method. No need to invert the coordinates because the polygon mask
+            axis have the same axe origins (lower left) than mpdaf
             '''
 
-            bg_center_radec=CCD_img_obj.get_start()+CCD_img_obj.get_axis_increments()*bg_max_pix[0]
+            bg_center_mpdaf=np.array([bg_max_pix[0][1],bg_max_pix[0][0]])
 
-            bg_max = [bg_center_radec.to_str(),
+            #first index because the result is wrapped in an array
+            bg_center_radec=src_mpdaf_WCS.pix2sky(bg_center_mpdaf)[0]
+
+            bg_max = [bg_center_radec.astype(str)[::-1],
                       str(round(bg_max_pix[1] * CCD_img_obj.get_axis_increments()[0]*3600, 4))]
 
             return bg_max
@@ -924,7 +949,8 @@ def extract_reg(directory, cams='all', use_file_coords=False,
             print('\nNo evt to extract spectrum from for this camera in the obsid directory.')
             return 'No evt to extract spectrum from for this camera in the obsid directory.'
 
-        fulldir = directory + '/' + filedir
+        #different directory structure since the spawn is already in the directory
+        spawndir = filedir.replace(directory,'.')
 
         #note: only the file here
         file_id=file.replace('_cl.evt','')
@@ -932,17 +958,24 @@ def extract_reg(directory, cams='all', use_file_coords=False,
         img_file=file_id+'_img_'+str(e_low_img)+'_'+str(e_high_img)+'.ds'
 
         #creating an image to load with mpdaf for image analysis
-        xsel_img(spawn,os.path.join(filedir,file),os.path.join(filedir,img_file),e_low=e_low_img,e_high=e_high_img)
+        xsel_img(spawn,os.path.join(spawndir,file),os.path.join(spawndir,img_file),e_low=e_low_img,e_high=e_high_img)
 
         spawn.sendline('\ncurrdir=$(pwd)')
         spawn.sendline('\ncd '+filedir)
 
+        #waiting for the file to be created if it hasn't loaded yet
+        try:
+            fits_img = fits.open(os.path.join(filedir,img_file))
+        except:
+            time.sleep(5)
+
         #opening the image file and saving it for verification purposes
-        ds9_pid_sp_start=disp_ds9(spawn,img_file,screenfile=fulldir+'/'+img_file.replace('.ds','_screen.png'),
-                        give_pid=True)
+        ds9_pid_sp_start=disp_ds9(spawn,os.path.join(spawndir,img_file),
+                                  screenfile=os.path.join(filedir,img_file).replace('.ds','_screen.png'),
+                                  give_pid=True)
 
         try:
-            fits_img = fits.open(fulldir + '/' + img_file)
+            fits_img = fits.open(os.path.join(filedir,img_file))
         except:
             print("\nCould not load the image fits file. There must be a problem with the exposure." +
                   "\nSkipping spectrum computation...")
@@ -956,20 +989,21 @@ def extract_reg(directory, cams='all', use_file_coords=False,
             return "Could not load the image file with ds9. There must be a problem with the exposure."
 
         #loading the IMG file with mpdaf
-        with fits.open(img_file) as hdul:
+        with fits.open(os.path.join(filedir,img_file)) as hdul:
             img_data=hdul[0].data
             src_mpdaf_WCS=mpdaf_WCS(hdul[0].header)
             src_astro_WCS=astroWCS(fits_img[0].header)
             main_source_name=hdul[0].header['object']
             main_source_ra=hdul[0].header['RA_OBJ']
-            main_source_dec=hdul[0].header['RA_DEC']
+            main_source_dec=hdul[0].header['DEC_OBJ']
 
         print('\nAuto mode.')
         print('\nAutomatic search of the directory names in Simbad.')
 
         prefix = '_auto'
 
-        obj_auto = source_catal(fulldir, use_file_coords=use_file_coords)
+        #using the full directory structure here
+        obj_auto = source_catal(os.path.join(os.getcwd(),filedir), use_file_coords=use_file_coords)
 
         # checking if the function returned an error message (folder movement done in the function)
         if type(obj_auto) == str:
@@ -988,17 +1022,17 @@ def extract_reg(directory, cams='all', use_file_coords=False,
         # saving a screen of the image with the cropping zone around the catalog position highlighted
         reg_catal_name = file_id + prefix+ '_reg_catal.reg'
 
-        with open(os.path.join(fulldir,reg_catal_name), 'w+') as regfile:
+        with open(os.path.join(filedir,reg_catal_name), 'w+') as regfile:
             # standard ds9 format
             regfile.write('# Region file format: DS9 version 4.1' +
                           '\nglobal color=green dashlist=8 3 width=1 font="helvetica 10 normal roman" select=1' +
                           ' highlite=1 dash=0 fixed=0 edit=1 move=1 delete=1 include=1 source=1' +
                           '\nfk5' +
-                          '\n' + spatial_expression((obj_deg, str(rad_crop)), type='ds9')
+                          '\n' + spatial_expression((obj_deg, str(rad_crop)))
                           + ' # text={' + obj_auto['MAIN_ID'] + ' initial cropping zone}')
 
-        ds9_pid_sp_start = disp_ds9(spawn, img_file, regfile=reg_catal_name, zoom=1.2,
-                                    screenfile=fulldir + '/' +file_id + prefix + '_reg_catal_screen.png',
+        ds9_pid_sp_start = disp_ds9(spawn, os.path.join(spawndir,img_file), regfile=os.path.join(spawndir,reg_catal_name), zoom=1.2,
+                                    screenfile=filedir + '/' +file_id + prefix + '_reg_catal_screen.png',
                                     give_pid=True,
                                     kill_last=ds9_pid_sp_start)
 
@@ -1025,7 +1059,7 @@ def extract_reg(directory, cams='all', use_file_coords=False,
         ax_catal_crop.set_title('Cropped region around the theoretical source position')
         catal_plot = imgcrop_src.plot(cmap='plasma', scale='sqrt')
         plt.colorbar(catal_plot, location='bottom', fraction=0.046, pad=0.04)
-        plt.savefig(fulldir + '/' + file_id + prefix + '_catal_crop_screen.png')
+        plt.savefig(filedir + '/' + file_id + prefix + '_catal_crop_screen.png')
         plt.close()
 
         # testing if the resulting image contains a peak
@@ -1092,6 +1126,11 @@ def extract_reg(directory, cams='all', use_file_coords=False,
             spawn.sendline('\ncd $currdir')
             return bg_coords_im
 
+        #capping the bg size to 1.5 times radcrop
+        bg_coords_im[1]=str(round(min(float(bg_coords_im[1]),rad_crop),4))
+
+        #bg_coords_im[0]=bg_coords_im[0].tolist()
+
         '''                   
         The SNR optimisation is very simple here since we don't optimize the LC binning.
          
@@ -1110,17 +1149,27 @@ def extract_reg(directory, cams='all', use_file_coords=False,
         '''
 
         #computing the encircled number of counts in the background region
-        counts_bg=img_obj_whole.ee((bg_coords_im[0][::-1]),radius=float(bg_coords_im[1]))
+
+        '''
+        Here I edited slightly the ee function in mpdaf.image because the current version does the conversion of
+        rad to physical and then slices the image accordingly before computing the ee
+        The issue is that it will try to slice with float index values because there's no conversion, 
+        so I added floors and ceils and int conversion before imin/jmin and imax/jmax to allow it to work
+        
+        Also need to convert to tuples or the ee won't accept the center 
+        '''
+
+        counts_bg=img_obj_whole.ee(center=tuple(bg_coords_im[0].astype(float))[::-1],radius=float(bg_coords_im[1]))
 
         #computing the SNR for a range of radiuses
 
-        rad_test_arr=np.arange(5,min(rad_crop,max(gfit.fwhm)*max_rad_source*2.355),2)
+        rad_test_arr=np.arange(4,min(rad_crop,max(gfit.fwhm)*max_rad_source*2.355),2)
 
         snr_vals=np.repeat(0,len(rad_test_arr))
 
         for id_rad,rad in enumerate(rad_test_arr):
 
-            counts_src=img_obj_whole.ee(gfit.center,radius=rad_test_arr)
+            counts_src=img_obj_whole.ee(center=tuple(gfit.center),radius=rad_test_arr[id_rad])
 
             backscale=(rad/float(bg_coords_im[1]))**2
             snr_vals[id_rad] = (counts_src - counts_bg* backscale / (counts_src + counts_bg * backscale + 1e-10))\
@@ -1137,7 +1186,7 @@ def extract_reg(directory, cams='all', use_file_coords=False,
 
         reg_name = file_id+ prefix + '_reg.reg'
 
-        with open(os.path.join(fulldir,reg_name), 'w+') as regfile:
+        with open(os.path.join(filedir,reg_name), 'w+') as regfile:
 
             # standard ds9 format
             regfile.write('# Region file format: DS9 version 4.1' +
@@ -1149,8 +1198,8 @@ def extract_reg(directory, cams='all', use_file_coords=False,
                           '\n' + spatial_expression(bg_coords_im)
                           + ' # text={automatic background}' )
 
-        ds9_pid_sp_reg = disp_ds9(spawn, img_file, regfile=reg_name,
-                                    screenfile=fulldir + '/' +file_id + prefix + 'reg_screen.png',
+        ds9_pid_sp_reg = disp_ds9(spawn,os.path.join(spawndir,img_file), regfile=os.path.join(spawndir,reg_name),
+                                    screenfile=filedir + '/' +file_id + prefix + 'reg_screen.png',
                                     give_pid=True,
                                     kill_last=ds9_pid_sp_start)
 
@@ -1161,17 +1210,7 @@ def extract_reg(directory, cams='all', use_file_coords=False,
         reg_src_name=file_id+ prefix + '_reg_src.reg'
         reg_bg_name=file_id+ prefix + '_reg_bg.reg'
 
-        with open(os.path.join(fulldir,reg_src_name), 'w+') as regfile:
-
-            # standard ds9 format
-            regfile.write('# Region file format: DS9 version 4.1' +
-                          '\nglobal color=green dashlist=8 3 width=1 font="helvetica 10 normal roman" select=1' +
-                          ' highlite=1 dash=0 fixed=0 edit=1 move=1 delete=1 include=1 source=1' +
-                          '\nfk5' +
-                          '\n' + spatial_expression(bg_coords_im)
-                          + ' # text={automatic background}' )
-
-        with open(os.path.join(fulldir,reg_bg_name), 'w+') as regfile:
+        with open(os.path.join(filedir,reg_src_name), 'w+') as regfile:
 
             # standard ds9 format
             regfile.write('# Region file format: DS9 version 4.1' +
@@ -1180,6 +1219,16 @@ def extract_reg(directory, cams='all', use_file_coords=False,
                           '\nfk5' +
                           '\n' + spatial_expression(src_coords)
                           + ' # text={' + obj_auto['MAIN_ID'] + '}')
+
+        with open(os.path.join(filedir,reg_bg_name), 'w+') as regfile:
+
+            # standard ds9 format
+            regfile.write('# Region file format: DS9 version 4.1' +
+                          '\nglobal color=green dashlist=8 3 width=1 font="helvetica 10 normal roman" select=1' +
+                          ' highlite=1 dash=0 fixed=0 edit=1 move=1 delete=1 include=1 source=1' +
+                          '\nfk5' +
+                          '\n' + spatial_expression(bg_coords_im)
+                          + ' # text={automatic background}')
 
         return 'Region extraction complete.'
 
@@ -1199,7 +1248,7 @@ def extract_reg(directory, cams='all', use_file_coords=False,
     print('\n\n\nRegion extraction...')
 
     bashproc.sendline('cd ' + directory)
-    set_var(bashproc, directory)
+    set_var(bashproc)
 
     # recensing the cleaned event files available for each camera
     # clean_filelist shape : [[FPMA_files,FPMA_dirs],[FPMB_files,FPMB_dirs]]
@@ -1308,6 +1357,8 @@ def extract_lc(directory,binning='1',lc_bands='3-79',hr_bands='10-50/3-10',cams=
         lc_src_name = steminput + '_' + instru + '_lc_src_' + e_low + '_' + e_high + '_bin_' + binning + '.lc'
         lc_bg_name = steminput + '_' + instru + '_lc_bg_' + e_low + '_' + e_high + '_bin_' + binning + '.lc'
 
+        #the spawn paths are different because in the spawn we cd in the obsid directory to avoid
+        #putting the temp files everywhere
         lc_src_path = os.path.join(directory,'products'+('_bright' if bright else ''), lc_src_name)
         lc_bg_path = os.path.join(directory,'products'+('_bright' if bright else ''), lc_bg_name)
 
@@ -1315,15 +1366,21 @@ def extract_lc(directory,binning='1',lc_bands='3-79',hr_bands='10-50/3-10',cams=
         pi_high = str(kev_to_PI(float(e_high)))
 
         # building the lightcurve
-        spawn.sendline('nuproducts indir' + directory + ' instrument=' + instru + ' steminputs=' + steminput +
+        spawn.sendline('nuproducts indir=./out'+('_bright' if bright else '')+
+                       ' instrument=' + instru + ' steminputs=' + steminput +
                        ' lcfile=' + lc_src_name +  ' srcregionfile=' + src_reg +
+                       ' bkgextract=yes'+
                        ' bkglcfile=' + lc_bg_name + ' bkgregionfile=' + bg_reg +
                        ' pilow=' + pi_low + ' pihigh=' + pi_high + ' binsize=' + binning+
                        ' outdir=./products'+('_bright' if bright else '')+
-                       ' phafile=NONE bkgphafile=NONE' + ' imagefile=NONE runmkarf=no runmkrmf=no ')
+                       ' barycorr=no phafile=NONE bkgphafile=NONE' + ' imagefile=NONE runmkarf=no runmkrmf=no'+
+                       ' clobber=YES cleanup=YES')
 
         ####TODO: check what's the standard message here
-        spawn.expect('complete')
+        err_code=spawn.expect(['nuproducts_0.3.3: Exit with success','nuproducts error'],timeout=None)
+
+        if err_code!=0:
+            return 'Nuproduct error','',''
 
         # loading the data of both lc
         with fits.open(lc_src_path) as fits_lc:
@@ -1333,15 +1390,13 @@ def extract_lc(directory,binning='1',lc_bands='3-79',hr_bands='10-50/3-10',cams=
             # and offsetting the data array to match this
             delta_lc_src = fits_lc[1].header['TIMEZERO']
 
-            fits_lc[1].data['TIME'] += delta_lc_src
-
-            # storing the shifted lightcurve
+            # storing the lightcurve
             data_lc_src = fits_lc[1].data
 
-            time_zero_str = str(time_zero.to_datetime())
+            time_zero_str = str((time_zero+TimeDelta(delta_lc_src,format='sec')).to_datetime())
 
-        if float(binning)>='1' and e_low=='3' and e_high=='79' and not bright:
-            bright_flag=max(data_lc_src)>100
+        if float(binning)>=1 and e_low=='3' and e_high=='79' and not bright:
+            bright_flag=max(data_lc_src['RATE'])>100
         else:
             bright_flag=False
 
@@ -1349,7 +1404,7 @@ def extract_lc(directory,binning='1',lc_bands='3-79',hr_bands='10-50/3-10',cams=
             # and offsetting the data array to match this
             delta_lc_bg = fits_lc[1].header['TIMEZERO']
 
-            fits_lc[1].data['TIME'] += delta_lc_bg
+            fits_lc[1].data['TIME'] += delta_lc_bg -delta_lc_src
 
             # storing the shifted lightcurve
             data_lc_bg = fits_lc[1].data
@@ -1358,19 +1413,24 @@ def extract_lc(directory,binning='1',lc_bands='3-79',hr_bands='10-50/3-10',cams=
 
         fig_lc, ax_lc = plt.subplots(1, figsize=(10, 8))
 
+        ax_lc.set_yscale('symlog', linthresh=0.1, linscale=0.1)
+        ax_lc.yaxis.set_minor_locator(MinorSymLogLocator(linthresh=0.1))
+
         ax_lc.errorbar(data_lc_src['TIME'], data_lc_src['RATE'], xerr=float(binning),
                      yerr=data_lc_src['ERROR'], ls='-', lw=1, color='grey', ecolor='blue', label='raw source')
 
         ax_lc.errorbar(data_lc_bg['TIME'], data_lc_bg['RATE']*backscale, xerr=float(binning),
                      yerr=data_lc_bg['ERROR']*backscale, ls='-', lw=1, color='grey', ecolor='brown', label='scaled background')
 
-        ax_lc.axhline(0,1,100,color='red',ls='-',lw=1,label='bright obs threshold')
+        ax_lc.axhline(100,0,1,color='red',ls='-',lw=1,label='bright obs threshold')
 
         plt.suptitle('NuSTAR ' + instru + ' lightcurve for observation ' + steminput +
                      ' in the ' + e_low + '-' + e_high + ' keV band with ' + binning + ' s binning')
 
         ax_lc.set_xlabel('Time (s) after ' + time_zero_str)
         ax_lc.set_ylabel('RATE (counts/s)')
+
+        ax_lc.set_ylim(0,ax_lc.get_ylim()[1])
         plt.legend()
         plt.tight_layout()
         plt.savefig(os.path.join(directory,'products'+('_bright' if bright else ''),
@@ -1392,7 +1452,7 @@ def extract_lc(directory,binning='1',lc_bands='3-79',hr_bands='10-50/3-10',cams=
     # recensing the reg files available for each camera
     # clean_filelist shape : [[FPMA_files,FPMA_dirs],[FPMB_files,FPMB_dirs]]
     src_reg = file_evt_selector('src_reg',cameras=cams,bright=bright)
-    bg_reg = file_evt_selector('src_reg',cameras=cams,bright=bright)
+    bg_reg = file_evt_selector('bg_reg',cameras=cams,bright=bright)
 
     if len(src_reg[0][0])!=1 or len(src_reg[1][0])!=1 or len(bg_reg[0][0])!=1 or len(bg_reg[1][0])!=1:
 
@@ -1431,6 +1491,9 @@ def extract_lc(directory,binning='1',lc_bands='3-79',hr_bands='10-50/3-10',cams=
 
         bashproc.logfile_read = sys.stdout
 
+        #putting the bashproc in the directory to compartiment the temporary files of the commands
+        bashproc.sendline('cd '+directory)
+
         # filtering for the selected cameras
         for i_cam in camid_list:
 
@@ -1443,25 +1506,42 @@ def extract_lc(directory,binning='1',lc_bands='3-79',hr_bands='10-50/3-10',cams=
             print('\nComputing lightcurves of camera ' + camlist[i_cam])
 
             #fetching region files for this camera
-            src_reg_indiv=src_reg[i_cam][0]
-            bg_reg_indiv=bg_reg[i_cam][0]
+            src_reg_indiv='/'.join(np.array(src_reg[i_cam]).T[0][::-1])
+            bg_reg_indiv='/'.join(np.array(bg_reg[i_cam]).T[0][::-1])
+
+            if src_reg_indiv=='/':
+                print('Source region file missing')
+                return 'Source region file missing'
 
             #computing the backscale
-            src_reg_coords=ds9_to_reg(os.path.join(src_reg_indiv))
-            bg_reg_coords=ds9_to_reg(os.path.join(bg_reg_indiv))
+            src_reg_coords=ds9_to_reg(src_reg_indiv)
+            bg_reg_coords=ds9_to_reg(bg_reg_indiv)
 
-            backscale=(float(src_reg_coords[1])/float(bg_reg_coords[1]))**2
+            #creating a path without the main directory for the spawn
+            src_reg_indiv_spawn=src_reg_indiv.replace(directory,'.',1)
+            bg_reg_indiv_spawn=bg_reg_indiv.replace(directory,'.',1)
+
+
+            #the last character of the radius is the arcsec " so we remove it
+            backscale=(float(src_reg_coords[1][:-1])/float(bg_reg_coords[1][:-1]))**2
 
             # launching the main extraction
 
-            evt_dir=os.path.join(directory,'out'+('' if not bright else '_bright'))
-            lc_prods=[]
-            for band in lc_bands:
+            lc_prods=np.array([None]*len(lc_bands))
+            for id_band,band in enumerate(lc_bands):
 
-                summary_line,lc_prods,bright_flag_single = extract_lc_single(bashproc,directory=evt_dir,binning=binning,instru=camlist[i_cam],
-                                                 steminput='nu'+obsid,src_reg=src_reg_indiv,
-                                                 bg_reg=bg_reg_indiv,e_low=band.split('-')[0],e_high=band.split('-')[1],
-                                                 bright=bright,backscale=backscale)
+                summary_line,lc_prods[id_band],bright_flag_single = extract_lc_single(bashproc,directory=directory,
+                                                binning=binning,instru=camlist[i_cam],steminput='nu'+obsid,
+                                                src_reg=src_reg_indiv_spawn,bg_reg=bg_reg_indiv_spawn,
+                                                e_low=band.split('-')[0],e_high=band.split('-')[1],
+                                                bright=bright,backscale=backscale)
+
+                #adding a flag to skip the computation of the HR if the lc computation crashed in at least
+                #one band
+                if type(lc_prods)==str:
+                    no_HR_flag=1
+                else:
+                    no_HR_flag=0
 
                 summary_content = obsid + '\t' + camlist[i_cam] +'\t'+ band + '\t' + summary_line
                 file_edit(os.path.join(directory, 'summary_extract_lc.log'), obsid + '\t' + camlist[i_cam] +'\t'+ band ,
@@ -1470,6 +1550,10 @@ def extract_lc(directory,binning='1',lc_bands='3-79',hr_bands='10-50/3-10',cams=
 
                 #updating the global bright flag if a flagged obs appears (note: the bright_flag is force to False when not in the 3-79 band)
                 bright_flag_tot=bright_flag_tot or bright_flag_single
+
+            #potentially skipping the HR computation
+            if no_HR_flag:
+               continue
 
             assert lc_prods[id_band_den_HR][0]==lc_prods[id_band_num_HR][0], 'Differing timezero values between HR lightcurves'
 
@@ -1492,8 +1576,8 @@ def extract_lc(directory,binning='1',lc_bands='3-79',hr_bands='10-50/3-10',cams=
                                  (rate_err_den_HR / rate_den_HR) ** 2) ** (
                                             1 / 2))
 
-            plt.errorbar(time_HR, hr_vals, xerr=binning, yerr=hr_err, ls='-', lw=1,
-                         color='grey', ecolor='blue')
+            plt.errorbar(time_HR, hr_vals, xerr=float(binning), yerr=hr_err.clip(0), ls='-', lw=1,
+                     color='grey', ecolor='blue')
 
             plt.suptitle('NuSTAR '+camlist[i_cam]+' net HR evolution for observation ' + obsid +' in the ' + hr_bands + ' keV band'+
                          'with '+binning+' s binning')
@@ -1544,17 +1628,22 @@ def extract_sp(directory,cams='all',e_low=None,e_high=None,bright=False):
             pi_high = str(kev_to_PI(float(e_high)))
 
         # building the spectral products
-        spawn.sendline('nuproducts indir' + directory + ' instrument=' + instru + ' steminputs=' + steminput +
+        spawn.sendline('nuproducts indir=./out'+('_bright' if bright else '')+
+                       ' instrument=' + instru + ' steminputs=' + steminput +
                        ' srcregionfile=' + src_reg +' bkgregionfile=' + bg_reg +
-                       +('' if e_low==None else' pilow=' + pi_low)+
-                       +('' if e_high==None else' pihigh=' + pi_high)+
+                       ('' if e_low==None else ' pilow=' + pi_low)+
+                       ('' if e_high==None else ' pihigh=' + pi_high)+
                        ' outdir=./products'+('_bright' if bright else '')+
-                       ' lcfile=NONE bkglcfile=None imagefile=NONE')
+                       ' lcfile=NONE bkglcfile=None imagefile=NONE'+
+                       ' clobber=yes')
 
         ####TODO: check what's the standard message here
-        spawn.expect('complete')
+        err_code=spawn.expect(['nuproducts_0.3.3: Exit with success','nuproducts error'],timeout=None)
 
-        return 'Spectral products creation complete'
+        if err_code!=0:
+            return 'Nuproducts error'
+        else:
+            return 'Spectral products creation complete'
 
     if cams == 'all':
         camid_list= [0, 1]
@@ -1568,9 +1657,9 @@ def extract_sp(directory,cams='all',e_low=None,e_high=None,bright=False):
     # recensing the reg files available for each camera
     # clean_filelist shape : [[FPMA_files,FPMA_dirs],[FPMB_files,FPMB_dirs]]
     src_reg = file_evt_selector('src_reg',cameras=cams,bright=bright)
-    bg_reg = file_evt_selector('src_reg',cameras=cams,bright=bright)
+    bg_reg = file_evt_selector('bg_reg',cameras=cams,bright=bright)
 
-    if len(src_reg[0][0]!=1) or len(src_reg[0][0]!=1):
+    if len(src_reg[0][0])!=1 or len(src_reg[0][0])!=1:
 
         print('Issue: missing/too many region files detected')
         print(src_reg)
@@ -1593,6 +1682,8 @@ def extract_sp(directory,cams='all',e_low=None,e_high=None,bright=False):
 
         bashproc.logfile_read = sys.stdout
 
+        bashproc.sendline('cd '+directory)
+
         # filtering for the selected cameras
         for i_cam in camid_list:
 
@@ -1604,17 +1695,24 @@ def extract_sp(directory,cams='all',e_low=None,e_high=None,bright=False):
             bashproc.logfile_read = sys.stdout
             print('\nComputing lightcurves of camera ' + camlist[i_cam])
 
-            #fetching region files for this camera
-            src_reg_indiv=src_reg[i_cam]
-            bg_reg_indiv=bg_reg[i_cam]
+            # fetching region files for this camera
+            src_reg_indiv = '/'.join(np.array(src_reg[i_cam]).T[0][::-1])
+            bg_reg_indiv = '/'.join(np.array(bg_reg[i_cam]).T[0][::-1])
+
+            if src_reg_indiv=='/':
+                print('Source region file missing')
+                return 'Source region file missing'
+
+            # creating a path without the main directory for the spawn
+            src_reg_indiv_spawn = src_reg_indiv.replace(directory, '.',1)
+            bg_reg_indiv_spawn = bg_reg_indiv.replace(directory, '.',1)
 
             # launching the main extraction
 
-            evt_dir=os.path.join(directory,'out'+('' if not bright else '_bright'))
-
-            summary_line,lc_prods = extract_sp_single(bashproc,directory=evt_dir,instru=camlist[i_cam],
-                                             steminput='nu'+obsid,src_reg=src_reg_indiv,
-                                             bg_reg=bg_reg_indiv,e_low=e_low,e_high=e_high,bright=bright)
+            summary_line = extract_sp_single(bashproc,directory=directory,instru=camlist[i_cam],
+                                            steminput='nu'+obsid,
+                                            src_reg=src_reg_indiv_spawn,bg_reg=bg_reg_indiv_spawn,
+                                            e_low=e_low,e_high=e_high,bright=bright)
 
             summary_content = obsid + '\t' + camlist[i_cam] +'\t'+ summary_line
             file_edit(os.path.join(directory, 'summary_extract_lc.log'), obsid + '\t' + camlist[i_cam],
@@ -1622,6 +1720,151 @@ def extract_sp(directory,cams='all',e_low=None,e_high=None,bright=False):
                       summary_header)
 
     extract_sp_done.set()
+
+
+def regroup_spectral(directory, group='opt'):
+    '''
+    Regroups NuSTAR spectram from an obsid directory using ftgrouppha
+
+    mode:
+        -opt: follows the Kastra and al. 2016 binning
+
+    note: will detect all bright and non-bright folders
+    '''
+
+    bashproc = pexpect.spawn("/bin/bash", encoding='utf-8')
+
+    print('\n\n\nRegrouping spectra in directory '+directory+'...')
+
+    set_var(bashproc)
+
+    currdir = os.getcwd()
+
+    def regroup_single_spectral(spfile, spfile_dir):
+
+        # note: the spawn is already in spfile dir to group without issues with the directories
+
+        print('Regrouping spectral file ' + spfile)
+
+        spfile_group = spfile.replace('_sr.pha', '_sp_src_grp_' + group + '.pha')
+        rmf_file = spfile.replace('.pha', '.rmf')
+
+        # print for saving in the log file since it doesn't show clearly otherwise
+        print('ftgrouppha infile=' + spfile + ' outfile=' + spfile_group +
+              ' grouptype=' + group + ' respfile=' + rmf_file)
+
+        bashproc.sendline('ftgrouppha infile=' + spfile + ' outfile=' + spfile_group +
+                          ' grouptype=' + group + ' respfile=' + rmf_file)
+
+        time.sleep(1)
+
+        while not os.path.isfile(os.path.join(spfile_dir, spfile_group)):
+            time.sleep(1)
+            print('Waiting for creation of file ' + os.path.join(os.path.join(spfile_dir, spfile_group)))
+
+        bashproc.sendline('echo done')
+
+        bashproc.expect('done')
+
+    if os.path.isfile(directory + '/regroup_spectral.log'):
+        os.system('rm ' + directory + '/regroup_spectral.log')
+
+    with StdoutTee(directory + '/regroup_spectral.log', mode="a", buff=1, file_filters=[_remove_control_chars]), \
+            StderrTee(directory + '/regroup_spectral.log', buff=1, file_filters=[_remove_control_chars]):
+
+        bashproc.logfile_read = sys.stdout
+
+        # listing spectral files in the folder
+        spfile_paths= np.array([elem for elem in glob.glob(os.path.join(directory,'**'), recursive=True) if
+                              elem.endswith('_sr.pha')])
+
+        if len(spfile_paths)==0:
+            print('No spectral file detected.')
+            return 'No spectral file detected.'
+        else:
+            print('\nFound spectral files: ')
+            print(spfile_paths)
+
+        for elem_path in spfile_paths:
+
+            # deleting previously existing grouped spectra to avoid problems when testing their existence
+            if os.path.isfile(os.path.join(directory,elem_path)):
+                os.remove(os.path.join(directory,elem_path))
+
+            elem_dir=elem_path[:elem_path.rfind('/')]
+            elem_file=elem_path.split('/')[-1]
+
+            bashproc.sendline('cd '+currdir)
+            bashproc.sendline('cd '+elem_dir)
+
+            process_state = regroup_single_spectral(elem_file,elem_dir)
+
+
+            # stopping the loop in case of crash
+            if process_state is not None:
+                # exiting the bashproc
+                bashproc.sendline('exit')
+                regroup_spectral_done.set()
+
+                # raising an error to stop the process if the command has crashed for some reason
+                return 'spfile ' + elem_path + ': ' + process_state
+
+        # exiting the bashproc
+        bashproc.sendline('exit')
+        regroup_spectral_done.set()
+
+
+def batch_mover(directory,bright_check=True,force_bright=False):
+
+    '''
+    copies all products in a directory to a bigbatch directory
+    above the obsid directory to prepare for spectrum analysis
+
+    can copy either the products_bright or the products folder depending on the bright keywords:
+        -if force_bright is set to True, copies ONLY the products_bright folder
+        -if bright_check is set to True and force_bright to False, copies products_bright if it's there else output
+        -if both are set to False, copies ONLY the products folder
+
+    '''
+
+    bashproc = pexpect.spawn("/bin/bash", encoding='utf-8')
+
+    bashproc.logfile_read = sys.stdout
+
+    print('\n\n\nCopying products to a merging directory...')
+
+    set_var(bashproc)
+
+    bashproc.sendline('mkdir -p bigbatch')
+
+    bashproc.sendline('cd ' + directory)
+
+    if force_bright or bright_check and os.path.isdir(os.path.join(directory,'products_bright')):
+        print('Copying bright mode products')
+        merge_dir='products_bright'
+    else:
+        print('Copying standard products')
+        merge_dir='products'
+
+    copy_files=[elem for elem in glob.glob(os.path.join(directory,merge_dir,'**')) if elem.endswith('.png') or \
+                elem.endswith('.pha') or elem.endswith('.rmf') or elem.endswith('.arf')]
+
+    for elem_file in copy_files:
+
+        print('Copying file '+elem_file)
+
+        print('cp --verbose ' + elem_file + ' bigbatch')
+        os.system('cp --verbose ' + elem_file + ' bigbatch')
+
+        while not os.path.isfile(os.path.join('bigbatch',elem_file.split('/')[-1])):
+            print('waiting for file '+elem_file+' to copy...')
+            time.sleep(1)
+
+    print('\nMerge complete')
+
+    bashproc.sendline('exit')
+    batch_mover_done.set()
+
 
 '''''''''''''''''''''
 ''''MAIN PROCESS'''''
@@ -1642,7 +1885,7 @@ else:
 startdir=os.getcwd()
 
 #listing all of the subdirectories
-subdirs=glob.glob('**/',recursive=True)
+subdirs=glob.glob('**/',recursive=False)
 subdirs.sort()
 
 #summary header for the previously computed directories file
@@ -1662,10 +1905,6 @@ def startdir_state(action):
         completed_folders=[]
 
     return launched_folders,completed_folders
-
-if load_functions:
-    breakpoint()
-
 
 started_folders,done_folders=startdir_state(args.action)
 
@@ -1691,7 +1930,7 @@ if not local:
 
         #checking if the directory has an obsid dir shape (10 numbers)
         #and not a general or subdirectory
-        if len(dirname)==10 and dirname.isdigit() and "odf" not in os.listdir(directory):
+        if len(dirname)==11 and dirname.isdigit() and "odf" not in os.listdir(directory):
 
             print('\nFound obsid directory '+dirname)
 
@@ -1728,18 +1967,25 @@ if not local:
                             output_lc=extract_lc(dirname,binning=lc_bin,lc_bands=lc_bands_str,hr_bands=hr_bands_str,cams=cameras_glob,
                                                   bright=force_bright or bright_flag_dir)
 
-                            if type(output_err)==str:
+                            if type(output_lc)==str:
                                 raise ValueError
 
-                            elif type(output_lc)==bool:
+                            elif output_lc:
 
                                 #doing it this way to keep the bright flag to True on the second run when the output_lc
                                 #bright flag is set to false to avoid infinite computations
                                 bright_flag_dir=bright_flag_dir or output_lc
 
-                                if bright_check and output_lc==True:
+                                if bright_check and output_lc:
+
+                                    print("bright obsd detected. Restarting the computations in bright mode...")
                                     #resetting the position to the start of the actions to relaunch the computations now that the bright flag has
-                                    #been updated
+                                    #and ensuring we rebuild first
+                                    if action_list[0]!='build':
+                                        action_list=['build']+action_list
+
+                                    if action_list[1]!='reg':
+                                        action_list=[action_list[0]]+['reg']+action_list[1:]
                                     id_action=-1
 
                             extract_lc_done.wait()
@@ -1751,6 +1997,16 @@ if not local:
                             if type(output_err)==str:
                                 raise ValueError
                             extract_sp_done.wait()
+
+                        if curr_action=='g':
+                            output_err=regroup_spectral(dirname,group=grouptype)
+                            if type(output_err)==str:
+                                raise ValueError
+                            regroup_spectral_done.wait()
+
+                        if curr_action=='m':
+                            batch_mover(dirname,bright_check=bright_check,force_bright=force_bright)
+                            batch_mover_done.wait()
 
                         os.chdir(startdir)
 
@@ -1773,7 +2029,7 @@ if not local:
                     folder_state='Running '+curr_action
 
                     if curr_action == 'build':
-                        process_obsdir(dirname, overwrite=overwrite_glob, bright=force_bright)
+                        process_obsdir(dirname, overwrite=overwrite_glob, bright=force_bright or bright_flag_dir)
                         process_obsdir_done.wait()
 
                     # note: the first actions are not performed with bright mode
@@ -1781,7 +2037,7 @@ if not local:
                         output_err = extract_reg(dirname, cams=cameras_glob, use_file_coords=use_file_coords,
                                                  overwrite=overwrite_glob,
                                                  e_low_img=e_low_img, e_high_img=e_high_img, rad_crop=rad_crop,
-                                                 bright=force_bright)
+                                                 bright=force_bright or bright_flag_dir)
                         if type(output_err) == str:
                             raise ValueError
                         extract_reg_done.wait()
@@ -1791,30 +2047,46 @@ if not local:
                                                cams=cameras_glob,
                                                bright=force_bright or bright_flag_dir)
 
-                        if type(output_err) == str:
+                        if type(output_lc) == str:
                             raise ValueError
 
-                        elif type(output_lc)==bool:
+                        elif output_lc:
 
                             #doing it this way to keep the bright flag to True on the second run when the output_lc
                             #bright flag is set to false to avoid infinite computations
                             bright_flag_dir=bright_flag_dir or output_lc
 
-                            if bright_check and output_lc==True:
-                                #resetting the position to the start of the actions to relaunch the computations now that the bright flag has
-                                #been updated
-                                id_action=-1
+                            if bright_check and output_lc:
 
+                                print("bright obsd detected. Restarting the computations in bright mode...")
+                                # resetting the position to the start of the actions to relaunch the computations now that the bright flag has
+                                # and ensuring we rebuild first
+                                if action_list[0] != 'build':
+                                    action_list = ['build'] + action_list
+
+                                if action_list[1] != 'reg':
+                                    action_list = [action_list[0]] + ['reg'] + action_list[1:]
+                                id_action = -1
 
                         extract_lc_done.wait()
 
                     if curr_action == 'sp':
                         output_err = extract_sp(dirname, cams=cameras_glob, e_low=e_low_sp, e_high=e_high_sp,
-                                                bright=force_bright)
+                                                bright=force_bright or bright_flag_dir)
 
                         if type(output_err) == str:
                             raise ValueError
                         extract_sp_done.wait()
+
+                    if curr_action=='g':
+                        output_err=regroup_spectral(dirname,group=grouptype)
+                        if type(output_err)==str:
+                            raise ValueError
+                        regroup_spectral_done.wait()
+
+                    if curr_action=='m':
+                        batch_mover(dirname,bright_check=bright_check,force_bright=force_bright)
+                        batch_mover_done.wait()
 
                     os.chdir(startdir)
 
@@ -1839,7 +2111,7 @@ else:
         folder_state = 'Running ' + curr_action
 
         if curr_action == 'build':
-            process_obsdir(absdir, overwrite=overwrite_glob, bright=force_bright)
+            process_obsdir(absdir, overwrite=overwrite_glob, bright=force_bright or bright_flag_dir)
             process_obsdir_done.wait()
 
         # note: the first actions are not performed with bright mode
@@ -1847,7 +2119,7 @@ else:
             output_err = extract_reg(absdir, cams=cameras_glob, use_file_coords=use_file_coords,
                                      overwrite=overwrite_glob,
                                      e_low_img=e_low_img, e_high_img=e_high_img, rad_crop=rad_crop,
-                                     bright=force_bright)
+                                     bright=force_bright or bright_flag_dir)
             if type(output_err) == str:
                 raise ValueError
             extract_reg_done.wait()
@@ -1857,28 +2129,44 @@ else:
                                    cams=cameras_glob,
                                    bright=force_bright or bright_flag_dir)
 
-            if type(output_err) == str:
+            if type(output_lc) == str:
                 raise ValueError
 
-            elif type(output_lc) == bool:
+            elif output_lc:
 
                 # doing it this way to keep the bright flag to True on the second run when the output_lc
                 # bright flag is set to false to avoid infinite computations
                 bright_flag_dir = bright_flag_dir or output_lc
 
                 if bright_check and output_lc == True:
+                    print("bright obsd detected. Restarting the computations in bright mode...")
                     # resetting the position to the start of the actions to relaunch the computations now that the bright flag has
-                    # been updated
+                    # and ensuring we rebuild first
+                    if action_list[0] != 'build':
+                        action_list = ['build'] + action_list
+
+                    if action_list[1] != 'reg':
+                        action_list = [action_list[0]] + ['reg'] + action_list[1:]
                     id_action = -1
 
             extract_lc_done.wait()
 
         if curr_action == 'sp':
             output_err = extract_sp(absdir, cams=cameras_glob, e_low=e_low_sp, e_high=e_high_sp,
-                                    bright=force_bright)
+                                    bright=force_bright or bright_flag_dir)
 
             if type(output_err) == str:
                 raise ValueError
             extract_sp_done.wait()
+
+        if curr_action == 'g':
+            output_err = regroup_spectral(absdir, group=grouptype)
+            if type(output_err) == str:
+                raise ValueError
+            regroup_spectral_done.wait()
+
+        if curr_action == 'm':
+            batch_mover(absdir, bright_check=bright_check, force_bright=force_bright)
+            batch_mover_done.wait()
 
         id_action+=1

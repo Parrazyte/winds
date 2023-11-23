@@ -319,14 +319,18 @@ if update_dump or not os.path.isfile(dump_path):
         all_files=glob.glob('**',recursive=True)
         lineval_id='line_values_'+args.line_search_e.replace(' ','_')+'_'+args.line_search_norm.replace(' ','_')+'.txt'
         lineval_files=[elem for elem in all_files if outdir+'/' in elem and lineval_id in elem and ('/Sample/' in elem or 'XTEJ1701-462/' in elem)]
-        
+
         abslines_id='autofit_values_'+args.line_search_e.replace(' ','_')+'_'+args.line_search_norm.replace(' ','_')+'.txt'
         abslines_files=[elem for elem in all_files if outdir+'/' in elem and abslines_id in elem and ('/Sample/' in elem or 'XTEJ1701-462/' in elem)]
         
         #telescope selection
         lineval_files=[elem for elem_telescope in choice_telescope for elem in lineval_files if elem_telescope+'/' in elem]
         abslines_files=[elem for elem_telescope in choice_telescope for elem in abslines_files if elem_telescope+'/' in elem]
-        
+
+        #some additional removals for in progress dirs
+        lineval_files = [elem for elem in lineval_files if '4U_mix' not in elem]
+        abslines_files = [elem for elem in abslines_files if '4U_mix' not in elem]
+
         if radio_ignore_full:
             lineval_files=[elem for elem in lineval_files if '_full' not in elem]
             abslines_files=[elem for elem in abslines_files if '_full' not in elem]

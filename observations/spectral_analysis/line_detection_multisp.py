@@ -7,18 +7,12 @@ Compute spectral analysis and attempts to detect absorption lines in the iron ba
 for all spectra in the current merge directory
 
 When finished or if asked to, computes a global PDF merging the result of the line detection process for each exposure
-with previous data reduction results if any
-
-Can also add very basic correlation/distribution of the line parameters
-(these should be looked at with visual_line)
+with previous data reduction results if any using the HID of visual_line
 
 If using multi_obj, it is assumed the lineplots directory is outdirf
 
 
-
-
-
-Changelog:
+Changelog (very lazily updated, better check github):
 
 v 1.3 (11/23):
 many changes unlogged since may:
@@ -38,7 +32,7 @@ V 1.2 (06/23):
     -changed PDF summary to use visual_line tools
 
 V 1.1 (04/23):
-    -added multi models to use NICER scorpeon background. Still debugging
+    -added multi models to use NICER scorpeon background.
 
 V 1.0(10:01:23):
     -strong line modeling implemented with laor
@@ -84,6 +78,7 @@ V X (22:12:22):
 import os,sys
 import glob
 import argparse
+import re as re
 
 import numpy as np
 
@@ -178,7 +173,7 @@ ap.add_argument("-outdir",nargs=1,help="name of output directory for line plots"
 #global overwrite based on recap PDF
 ap.add_argument('-overwrite',nargs=1,
             help='rerun individual computations even if individual recap PDF files already exists',
-            default=False,type=bool)
+            default=True,type=bool)
 
 #note : will skip exposures for which the exposure didn't compute or with logged errors
 ap.add_argument('-skip_started',nargs=1,help='skip all exposures listed in the local summary_line_det file',
@@ -220,7 +215,7 @@ ap.add_argument("-h_update",nargs=1,help='update the bg, rmf and arf file names 
 '''ANALYSIS RESTRICTION'''
 
 ap.add_argument('-spread_comput',nargs=1,help='spread sources in N subsamples to poorly parallelize on different consoles',
-                default=4,type=bool)
+                default=1,type=bool)
 
 ap.add_argument('-reverse_spread',nargs=1,help='run the spread computation lists in reverse',default=True,type=bool)
 
@@ -237,7 +232,7 @@ ap.add_argument('-spread_overwrite',nargs=1,help='consider already finished comp
 ap.add_argument('-restrict',nargs=1,help='restrict the computation to a number of predefined exposures',
                 default=False,type=bool)
 
-observ_restrict=['5501010106-003F_sp_grp_opt.pha']
+observ_restrict=['1130010141-001-002-003-004-005-006-007']
 
 ''' 
 
@@ -278,7 +273,6 @@ only one order:
      '6616_heg_-1_grp_opt.pha','6616_heg_1_grp_opt.pha',
      '6617_heg_-1_grp_opt.pha','6617_heg_1_grp_opt.pha']
 
-
 '''
 
 ap.add_argument('-SNR_min',nargs=1,help='minimum source Signal to Noise Ratio',default=50,type=float)
@@ -297,6 +291,10 @@ ap.add_argument('-skip_flares',nargs=1,help='skip flare GTIs',default=True,type=
 ap.add_argument('-write_pdf',nargs=1,help='overwrite finished pdf at the end of the line detection',
                 default=True,type=bool)
 
+#can be set to false to gain time when testing or if the aborted pdf were already done
+ap.add_argument('-write_aborted_pdf',nargs=1,help='create aborted pdfs at the end of the computation',default=True,
+                type=bool)
+
 ap.add_argument('-group_gti_time',nargs=1,help='maximum time delta for gti grouping in dd_hh_mm',default='01_00_00',type=str)
 
 '''MODES'''
@@ -306,14 +304,14 @@ ap.add_argument('-reload_autofit',nargs=1,help='Reload existing autofit save fil
                 default=True,type=bool)
 
 ap.add_argument('-pdf_only',nargs=1,help='Updates the pdf with already existing elements but skips the line detection entirely',
-                default=False,type=bool)
+                default=True,type=bool)
 
 #note: used mainly to recompute obs with bugged UL computations
 ap.add_argument('-line_ul_only',nargs=1,help='Reloads the autofit computations and re-computes the ULs',
                 default=False,type=bool)
 
 ap.add_argument('-hid_only',nargs=1,help='skip the line detection and directly plot the hid',
-                default=False,type=bool)
+                default=True,type=bool)
 
 ap.add_argument('-multi_obj',nargs=1,help='compute the hid for multiple obj directories inside the current directory',
                 default=False)
@@ -474,6 +472,7 @@ reload_autofit=args.reload_autofit
 reverse_spread=args.reverse_spread
 spread_overwrite=args.spread_overwrite
 force_ener_bounds=args.force_ener_bounds
+write_aborted_pdf=args.write_aborted_pdf
 
 megumi_files=args.megumi_files
 suzaku_hid_cont_range=np.array(args.suzaku_hid_cont_range.split(' ')).astype(float)
@@ -793,9 +792,17 @@ def pdf_summary(epoch_observ,fit_ok=False,summary_epoch=None):
         else:
             epoch_SNR+=['X']
 
+    epoch_inf = [elem_observ.split('_') for elem_observ in epoch_observ]
+
+    short_epoch_id= '_'.join(shorten_epoch([elem.split('_sp')[0] for elem in epoch_observ]))
+
+
     pdf=PDF(orientation="landscape")
     pdf.add_page()
     pdf.set_font('helvetica', 'B', 16)
+
+    pdf.cell(1,1,'Epoch name :'+short_epoch_id,align='C',center=True)
+    pdf.ln(10)
 
     pdf.cell(1,1,'Spectra informations:\n',align='C',center=True)
 
@@ -808,7 +815,7 @@ def pdf_summary(epoch_observ,fit_ok=False,summary_epoch=None):
 
         rate_name_list=[rate[:rate.rfind('_')]+'_screen.png' for rate in rate_name_list]
 
-    epoch_inf=[elem_observ.split('_') for elem_observ in epoch_observ]
+
     is_sp=[]
     is_cleanevt=[]
     filename_list=[]
@@ -817,7 +824,7 @@ def pdf_summary(epoch_observ,fit_ok=False,summary_epoch=None):
     for i_obs,elem_observ in enumerate(epoch_observ):
 
         #creating new pages regularly for many GTIs
-        if i_obs%5==0 and i_obs!=0:
+        if i_obs%8==0 and i_obs!=0:
             pdf.add_page()
 
         if sat=='XMM':
@@ -892,10 +899,12 @@ def pdf_summary(epoch_observ,fit_ok=False,summary_epoch=None):
                 pdf.cell(1,1,'mode: '+expmode_list[0]+
                          ' clean exposure time: '+str(round(exposure_list[i_obs]))+'s',align='C',center=True)
 
-            pdf.ln(10)
+            pdf.ln(2)
 
             #we only show the third line for XMM spectra with spectrum infos if there is an actual spectrum
             if epoch_SNR[i_obs]!='X':
+
+                pdf.ln(8)
 
                 grouping_str='SNR: '+str(round(epoch_SNR[i_obs],3))+' | Spectrum bin grouping: '+epoch_inf[i_obs][-1].split('.')[0]+' cts/bin | '
                 try:
@@ -904,6 +913,7 @@ def pdf_summary(epoch_observ,fit_ok=False,summary_epoch=None):
                 except:
                     pdf.cell(1,1,grouping_str+'no pile-up values for this exposure',align='C',center=True)
 
+                pdf.ln(2)
         pdf.ln(10)
 
         #turned off for now
@@ -915,10 +925,19 @@ def pdf_summary(epoch_observ,fit_ok=False,summary_epoch=None):
     if summary_epoch is None:
 
         #the replace avoid problems with using full chandra/NICER file names as epoch loggings in the summary files
-        result_epoch=literal_eval([elem.split('\t')[2] for elem in glob_summary_linedet \
-        if (elem.split('\t')[0] if sat in ['NICER','Swift'] else '_'.join(\
-            [elem.split('\t')[0],elem.split('\t')[1].replace('_grp_opt','').replace('sp_grp_opt','').replace('.pha','').replace('.pi','')]))==\
-           '_'.join(epoch_inf[0])][0])
+
+        logged_epochs=[(elem.split('\t')[0] if sat in ['NICER','Swift']\
+                        else '_'.join([elem.split('\t')[0],elem.split('\t')[1].replace('_grp_opt','')\
+                                      .replace('sp_grp_opt','').replace('.pha','').replace('.pi','')]))\
+                       for elem in glob_summary_linedet]
+        right_epoch_match=np.array(logged_epochs)==str(shorten_epoch(ravel_ragged(epoch_inf)))
+
+        #storing the message
+        result_epoch_val=np.array(glob_summary_linedet)[right_epoch_match][0].split('\t')[2]
+
+        # #and repeating it for all the individual sp
+        result_epoch=np.repeat(result_epoch_val,len(epoch_inf))
+
     else:
         result_epoch=summary_epoch
 
@@ -959,9 +978,11 @@ def pdf_summary(epoch_observ,fit_ok=False,summary_epoch=None):
 
         pdf.cell(1,1,'Line detection summary:',align='C',center=True)
         pdf.ln(10)
-        for i_elem,elem_result in enumerate(result_epoch):
-            pdf.cell(1,1,epoch_observ[i_elem]+': '+elem_result,align='C',center=True)
-            pdf.ln(10)
+        pdf.cell(1, 1, short_epoch_id + ': ' + result_epoch[0], align='C', center=True)
+
+        # for i_elem,elem_result in enumerate(result_epoch):
+        #     pdf.cell(1,1,epoch_observ[i_elem]+': '+elem_result,align='C',center=True)
+        #     pdf.ln(10)
 
         pdf.add_page()
 
@@ -977,32 +998,84 @@ def pdf_summary(epoch_observ,fit_ok=False,summary_epoch=None):
         good_sp=[epoch_observ[i_obs] for i_obs in range(len(epoch_observ)) if list(result_epoch)[i_obs]=='Line detection complete.']
 
         def disp_multigrp(lines):
+            def format_lines(lines):
+
+                '''
+                feat chatgpt, actually terrible I should have done this manually
+                '''
+                formatted_lines = []
+                datagroup_number = 0
+                in_datagroup = False
+
+                for line in lines:
+                    # Skip empty lines
+                    if line.strip() == '' or line.strip()=='\n':
+                        continue
+
+                    # Check if the line contains "Data group"
+                    data_group_match = re.match(r'\s*Data group:\s+(\d+)', line)
+                    if data_group_match:
+                        datagroup_number = int(data_group_match.group(1))
+                        in_datagroup = True
+                        formatted_lines.append('-' * 65+'\n')  # Add horizontal line
+                        continue
+
+                    # Check if the line contains "Warning" and skip it
+                    if "Warning: cstat statistic is only valid for Poisson data." in line:
+                        continue
+                    if "Source file is not Poisson" in line:
+                        continue
+
+                    # Add the Data group number as a vertical column
+                    if in_datagroup and re.match(r'\s+\d+\s+\d+\s+', line):
+                        line = f'{datagroup_number: >2}' + line
+
+                    # Add the column title near the left of "par comp"
+                    if "par  comp" in line:
+                        line = ' Dg  ' + line
+
+                    # Add the line to the formatted lines without line jumps
+                    formatted_lines.append(line)
+
+                return formatted_lines
 
             '''
             scans model lines for multiple data groups and displays only the first lines of each data group after the first
             (to show the constant factors)
             '''
-            lineid_grp_arr=np.argwhere(np.array(['Data group' in elem for elem in np.array(lines)])).T[0]
 
-            #no need to do anything for less than two datagroups
-            if len(lineid_grp_arr)<2:
-                return lines
+            # removing the bg models
+
+            model_sep_lines = np.argwhere(np.array([elem.startswith('_') for elem in lines])).T[0]
+            if len(model_sep_lines) == 1:
+                lines_nobg = lines
             else:
-                lines_cleaned=[]
-                #we display u to the second data group, then only 2 lines at a time
-                for i_grp,lineid_grp in enumerate(lineid_grp_arr):
-                    if i_grp==0:
-                        i_begin=0
-                        i_end=lineid_grp_arr[i_grp+1]
+                lines_nobg = lines[:model_sep_lines[0]] + lines[model_sep_lines[-1] + 1:]
+
+            lineid_grp_arr = np.argwhere(np.array(['Data group' in elem for elem in np.array(lines_nobg)])).T[0]
+
+            # no need to do anything for less than two datagroups
+            if len(lineid_grp_arr) < 2:
+                return lines_nobg
+            else:
+                lines_cleaned = []
+                # we display up to the second data group, then only 2 lines at a time
+                for i_grp, lineid_grp in enumerate(lineid_grp_arr):
+                    if i_grp == 0:
+                        i_begin = 0
+                        i_end = lineid_grp_arr[i_grp + 1]
                     else:
-                        i_begin=lineid_grp
-                        i_end=i_begin+2
-                    lines_cleaned+=lines[i_begin:i_end]
+                        i_begin = lineid_grp
+                        i_end = i_begin + 2
+                    lines_cleaned += lines_nobg[i_begin:i_end]
 
-                #adding everything after the end of the model (besides the last line which is just a 'model not fit yet' line)
-                lines_cleaned+=lines[i_begin+lineid_grp_arr[1]-lineid_grp_arr[0]:-1]
+                # adding everything after the end of the model (besides the last line which is just a 'model not fit yet' line)
+                lines_cleaned += lines_nobg[i_begin + lineid_grp_arr[1] - lineid_grp_arr[0]:-1]
 
-                return lines_cleaned
+                # formatting to change the position of the datagroup
+                lines_formatted = format_lines(lines_cleaned)
+
+                return lines_formatted
 
         def display_fit(fit_type):
 
@@ -1050,15 +1123,19 @@ def pdf_summary(epoch_observ,fit_ok=False,summary_epoch=None):
                     with open(outdir+'/'+epoch_observ[0]+'_mod_'+fit_type+'.txt') as mod_txt:
                         fit_lines=mod_txt.readlines()
 
-                        pdf.set_font('helvetica', 'B', 8-int(len(disp_multigrp(fit_lines))/15))
-                        pdf.multi_cell(150,2.4,'\n'*max(0,int(15-2*(len(disp_multigrp(fit_lines))**2/100)))+''.join(disp_multigrp(fit_lines)))
+                        cleaned_lines=disp_multigrp(fit_lines)
+
+                        pdf.set_font('helvetica', 'B',max(8,10-len(cleaned_lines)//15))
+                        pdf.multi_cell(150,2.6,'\n'*max(0,int((30 if 'auto' in fit_type else 30)\
+                                                              -1.5*len(cleaned_lines)**2/100))\
+                                                          +''.join(cleaned_lines))
 
                     #in some cases due to the images between some fit displays there's no need to add a page
                     if 'linecont' not in fit_type:
                         pdf.add_page()
                     else:
                         #restrictingthe addition of a new page to very long models
-                        if len(fit_lines)>35:
+                        if len(cleaned_lines)>35:
                             pdf.add_page()
                 else:
                     pass
@@ -1286,10 +1363,6 @@ def line_detect(epoch_id):
     print('\nStarting line detection for files ')
     print(epoch_files)
 
-    if restrict and observ_restrict!=[''] and len([elem_sp for elem_sp in epoch_files if elem_sp not in observ_restrict])>max(len(epoch_files)-len(observ_restrict),0):
-        print('\nRestrict mode activated and at least one spectrum not in the restrict array')
-        return ''
-
     #reset the xspec config
     reset()
 
@@ -1359,7 +1432,8 @@ def line_detect(epoch_id):
 
     '''Setting up a log file and testing the properties of each spectra'''
 
-    curr_logfile_write=Xset.openLog(outdir+'/'+epoch_observ[0]+'_xspec_log.log')
+    curr_logfile_write=Xset.openLog(outdir+'/'+epoch_observ[0]+'_xspec_log'+
+                ('_pdf' if pdf_only else '_ul' if line_ul_only else '_reload' if reload_autofit else '')+'.log')
     #ensuring the log information gets in the correct place in the log file by forcing line to line buffering
     curr_logfile_write.reconfigure(line_buffering=True)
 
@@ -1515,32 +1589,6 @@ def line_detect(epoch_id):
         </table>
         '''
         return html_summary
-
-    if pdf_only:
-
-        if catch_errors:
-
-            try:
-
-                pdf_summary(epoch_observ,fit_ok=True,summary_epoch=fill_result('Line detection complete.'))
-
-                #closing the logfile for both access and Xspec
-                curr_logfile.close()
-                Xset.closeLog()
-
-                return fill_result('Line detection complete.')
-            except:
-                return fill_result('Missing elements to compute PDF.')
-
-        else:
-
-            pdf_summary(epoch_observ, fit_ok=True, summary_epoch=fill_result('Line detection complete.'))
-
-            # closing the logfile for both access and Xspec
-            curr_logfile.close()
-            Xset.closeLog()
-
-            return fill_result('Line detection complete.')
 
     '''
     normal behavior
@@ -1806,6 +1854,32 @@ def line_detect(epoch_id):
               ') in HID detection range.')
         return fill_result('Insufficient counts ('+str(round(glob_counts))+' < '+str(round(counts_min_HID))+\
                            ') in HID detection range.')
+
+    if pdf_only:
+
+        if catch_errors:
+
+            try:
+
+                pdf_summary(epoch_observ,fit_ok=True,summary_epoch=fill_result('Line detection complete.'))
+
+                #closing the logfile for both access and Xspec
+                curr_logfile.close()
+                Xset.closeLog()
+
+                return fill_result('Line detection complete.')
+            except:
+                return fill_result('Missing elements to compute PDF.')
+
+        else:
+
+            pdf_summary(epoch_observ, fit_ok=True, summary_epoch=fill_result('Line detection complete.'))
+
+            # closing the logfile for both access and Xspec
+            curr_logfile.close()
+            Xset.closeLog()
+
+            return fill_result('Line detection complete.')
 
     if line_ul_only:
 
@@ -3486,6 +3560,17 @@ if spread_comput!=1:
             epoch_list=split_epoch[::(-1 if reverse_spread else 1)]
             break
 
+# breakpoint()
+
+#epoch_list=epoch_list[::-1]
+
+#just to be able to make a first summary earlier
+#first obs
+epoch_list=np.concatenate((epoch_list[:26],epoch_list[27:]))
+
+#second obs
+epoch_list=np.concatenate((epoch_list[:-51],epoch_list[-50:]))
+
 #### line detections for exposure with a spectrum
 for epoch_id,epoch_files in enumerate(epoch_list):
 
@@ -3506,10 +3591,23 @@ for epoch_id,epoch_files in enumerate(epoch_list):
     else:
         file_ids=[elem.split('_sp')[0] for elem in epoch_files]
 
+    short_epoch_id='_'.join(shorten_epoch(file_ids))
+
+    if restrict and observ_restrict!=['']:
+
+        if sat in ['NICER','Suzaku']:
+            if short_epoch_id not in observ_restrict:
+                print(short_epoch_id)
+                print('\nRestrict mode activated and at least one spectrum not in the restrict array')
+                continue
+        else:
+            if len([elem_sp for elem_sp in epoch_files if elem_sp not in observ_restrict])\
+                    >max(len(epoch_files)-len(observ_restrict),0):
+                print('\nRestrict mode activated and at least one spectrum not in the restrict array')
+                continue
 
     #skip start check
     if sat in ['Suzaku']:
-        #breakpoint()
 
         sp_epoch=[elem_sp.split('_spec')[0].split('_src')[0] for elem_sp in epoch_files]
 
@@ -3518,6 +3616,7 @@ for epoch_id,epoch_files in enumerate(epoch_list):
         if skip_started and sp_epoch in started_epochs:
              print('\nSpectrum analysis already performed. Skipping...')
              continue
+
     elif sat=='Swift':
         if skip_started and sum([[elem] in epoch_list_started for elem in epoch_files])>0:
              print('\nSpectrum analysis already performed. Skipping...')
@@ -3533,8 +3632,8 @@ for epoch_id,epoch_files in enumerate(epoch_list):
 
     elif sat=='NICER':
 
-        if (skip_started and shorten_epoch(file_ids) in started_expos) or \
-           (skip_complete and shorten_epoch(file_ids) in done_expos):
+        if (skip_started and short_epoch_id in started_expos) or \
+           (skip_complete and short_epoch_id in done_expos):
 
             print('\nSpectrum analysis already performed. Skipping...')
             continue
@@ -3570,7 +3669,8 @@ for epoch_id,epoch_files in enumerate(epoch_list):
             log_text.close()
 
         #0 is the default value for skipping overwriting the summary file
-        if summary_lines is not None:
+        #note: we don't overwrite the summary file in pdf_only for now
+        if summary_lines is not None and not pdf_only:
             #creating the text of the summary line for this observation
 
 
@@ -3603,6 +3703,7 @@ for epoch_id,epoch_files in enumerate(epoch_list):
     else:
         summary_lines=line_detect(epoch_id)
 
+
 #not creating the recap file in spread comput mode to avoid issues
 assert spread_comput==1, 'Stopping the computation here to avoid conflicts when making the summary'
 
@@ -3622,28 +3723,27 @@ if multi_obj==False:
         aborted_epochs=[[elem.replace('_grp_opt'+('.pi' if sat=='Swift' else '.pha'),'') for elem in epoch]\
                         for epoch in epoch_list if not epoch[0].split('_grp_opt'+('.pi' if sat=='Swift' else '.pha'))[0]+'_recap.pdf'\
                             in lineplots_files]
-    elif sat=='NICER':
-        aborted_epochs=[[elem.replace('_sp_grp_opt.pha','') for elem in epoch]\
-                        for epoch in epoch_list if not epoch[0].split('_sp_grp_opt.pha')[0]+'_recap.pdf' in lineplots_files]
-    elif sat=='Suzaku':
-        aborted_epochs=[[elem.replace('_sp_grp_opt.pha','') for elem in epoch]\
-                        for epoch in epoch_list if not\
-                            '_'.join(elem.split('_gti')[0].split('_src')[0] for elem in epoch)+'_recap.pdf' in lineplots_files]
+    elif sat in ['NICER','Suzaku']:
+        #updated with shorten_epoch
+        epoch_ids=[[elem.replace('_sp_grp_opt.pha','') for elem in epoch] for epoch in epoch_list]
+        aborted_epochs=[elem_epoch_id for elem_epoch_id in epoch_ids if\
+                        not '_'.join(shorten_epoch(elem_epoch_id))+'_recap.pdf' in lineplots_files]
 
-    for elem_epoch in aborted_epochs:
-        if sat=='XMM':
-            epoch_observ=[elem_file.split('_sp')[0] for elem_file in elem_epoch]
-        elif sat in ['Chandra','Swift']:
-            epoch_observ=[elem_file.split('_grp_opt')[0] for elem_file in elem_epoch]
-        elif sat=='NICER':
-            epoch_observ=[elem_file.split('_sp_grp_opt')[0] for elem_file in elem_epoch]
-
-        elif sat=='Suzaku':
-            if megumi_files:
-                epoch_observ=[elem_file.split('_src')[0].split('_gti')[0] for elem_file in elem_epoch]
-
-        #list conversion since we use epochs as arguments
-        pdf_summary(epoch_observ)
+    if write_aborted_pdf:
+        for elem_epoch in aborted_epochs:
+            if sat=='XMM':
+                epoch_observ=[elem_file.split('_sp')[0] for elem_file in elem_epoch]
+            elif sat in ['Chandra','Swift']:
+                epoch_observ=[elem_file.split('_grp_opt')[0] for elem_file in elem_epoch]
+            elif sat=='NICER':
+                epoch_observ=[elem_file.split('_sp_grp_opt')[0] for elem_file in elem_epoch]
+    
+            elif sat=='Suzaku':
+                if megumi_files:
+                    epoch_observ=[elem_file.split('_src')[0].split('_gti')[0] for elem_file in elem_epoch]
+    
+            #list conversion since we use epochs as arguments
+            pdf_summary(epoch_observ)
 
 '''''''''''''''''''''''''''''''''''''''
 ''''''Hardness-Luminosity Diagrams''''''
@@ -4138,11 +4238,14 @@ def save_pdf(fig):
             try:
                 point_recapfile=[elem for elem in save_dir_list if point_observ+'_recap.pdf' in elem][0]
             except:
-                try:
-                    point_recapfile=glob.glob(os.path.join(save_dir, point_observ + '**_recap.pdf'))[0]
-                except:
+                avail_recapfile=glob.glob(os.path.join(save_dir, point_observ + '**_recap.pdf'))
+                if len(avail_recapfile)!=1:
                     breakpoint()
                     print("Issue with finding individual pdf recap files")
+                else:
+                    point_recapfile=avail_recapfile[0]
+            if sat=='NICER':
+                point_observ=point_recapfile.split('/')[-1].split('_recap')[0]
 
             #adding the corresponding hid highlight page
             merger.add_outline_item(point_observ,len(merger.pages),parent=bkm_completed)
@@ -4164,8 +4267,14 @@ def save_pdf(fig):
     bkm_aborted=merger.add_outline_item('Aborted Analysis',len(merger.pages))
     for elem_epoch in aborted_epochs:
         curr_pages=len(merger.pages)
-        merger.append(save_dir+'/'+elem_epoch[0].split('_sp')[0]+'_aborted_recap.pdf')
-        bkm_completed=merger.add_outline_item(elem_epoch[0].split('_sp')[0],curr_pages,parent=bkm_aborted)
+
+        if sat=='NICER':
+            short_ep_id='_'.join(shorten_epoch(elem_epoch))
+            merger.append(save_dir + '/' + short_ep_id+ '_aborted_recap.pdf')
+            bkm_completed=merger.add_outline_item(short_ep_id,curr_pages,parent=bkm_aborted)
+        else:
+            merger.append(save_dir + '/' + elem_epoch[0].split('_sp')[0] + '_aborted_recap.pdf')
+            bkm_completed=merger.add_outline_item(elem_epoch[0].split('_sp')[0],curr_pages,parent=bkm_aborted)
 
     #overwriting the pdf with the merger, but not directly to avoid conflicts
     merger.write(save_dir+'/temp.pdf')

@@ -93,7 +93,7 @@ ap.add_argument("-dir", "--startdir", nargs='?', help="starting directory. Curre
 ap.add_argument("-l", "--local", nargs=1, help='Launch actions directly in the current directory instead',
                 default=False, type=bool)
 ap.add_argument('-catch', '--catch_errors', help='Catch errors while running the data reduction and continue',
-                default=False, type=bool)
+                default=True, type=bool)
 
 # global choices
 ap.add_argument("-a", "--action", nargs='?', help='Give which action(s) to proceed,separated by comas.',
@@ -1835,7 +1835,9 @@ def batch_mover(directory,bright_check=True,force_bright=False):
 
     set_var(bashproc)
 
-    bashproc.sendline('mkdir -p bigbatch')
+    os.system('mkdir -p bigbatch')
+
+    time.sleep(1)
 
     bashproc.sendline('cd ' + directory)
 

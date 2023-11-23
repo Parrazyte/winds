@@ -58,7 +58,7 @@ def lmplot_uncert_a(ax, x, y, dx, dy, percent=90, distrib='gaussian', nsim=1000,
     # plotting a first regression with no perturbations for the central line
     sns.regplot(x=x_arr, y=y_arr, ax=ax, truncate=False, ci=90)
 
-    # fetching the abscix of the intercept point we're gonna use
+    # fetching the absciss of the intercept point we're gonna use
     x_intercept = plt.gca().xaxis.get_ticklocs()
     x_intercept = x_intercept[int(len(x_intercept) / 2)]
 

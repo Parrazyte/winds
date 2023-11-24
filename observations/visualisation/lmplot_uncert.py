@@ -183,26 +183,28 @@ def lmplot_uncert_a(ax, x, y, dx, dy, xlim=None,ylim=None, percent=90, distrib='
     intercept_arr=uncert_arr[1]
 
     if xlim is None:
-        xlim_mask=np.repeat(True,len(x))
+        xlim_mask=np.repeat(False,len(x))
     else:
         xlim_mask=xlim
 
     if ylim is None:
-        ylim_mask=np.repeat(True,len(x))
+        ylim_mask=np.repeat(False,len(x))
     else:
         ylim_mask=ylim
 
-    tot_nonlin_mask=~ (xlim_mask) & (ylim_mask)
+    tot_nonlin_mask=~ ((xlim_mask) & (ylim_mask))
+
+    breakpoint()
     #computing the intrinsic scatter (standard deviation)
     sigma_vals=np.array([np.sqrt(np.nansum((y_pert[id][tot_nonlin_mask]-\
-                                   (x_pert[id][tot_nonlin_mask]*slope_vals[id][tot_nonlin_mask]+\
-                                    intercept_vals[id][tot_nonlin_mask]))**2))\
+                                   (x_pert[id][tot_nonlin_mask]*slope_vals[id]+\
+                                    intercept_vals[id]))**2))\
                             for id in range(nsim)])
 
     sigma_vals.sort()
     sigma_med=sigma_vals[round(nsim*0.5)]
     sigma_arr=np.array([sigma_med,sigma_med-sigma_vals[round(nsim * (1 - percent / 100))],
-                                  sigma_vals[round(nsim * (1 - percent / 100))]-sigma_med])
+                                  sigma_vals[round(nsim * percent / 100)]-sigma_med])
 
     #plotting the median line with the median value of the intercept and coefficient
 

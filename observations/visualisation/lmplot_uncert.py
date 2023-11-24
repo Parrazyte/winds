@@ -222,4 +222,4 @@ def lmplot_uncert_a(ax, x, y, dx, dy, xlim=None,ylim=None, percent=90, distrib='
     plt.plot(x_line_plot,y_line_plot,lw=lw,color=linecolor)
 
     if return_linreg:
-        return slope_arr,intercept_arr,sigma_vals
+        return slope_arr,intercept_arr,sigma_arr

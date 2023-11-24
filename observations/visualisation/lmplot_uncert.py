@@ -87,10 +87,14 @@ def lmplot_uncert_a(ax, x, y, dx, dy, xlim=None,ylim=None, percent=90, distrib='
     slope_vals = zeros(nsim)
     intercept_vals = zeros(nsim)
 
+    # dy_lims=np.array([elem if not np.nan(elem) else 0 for elem in dx_arr])
+    #
+    # dy_lims=np.array([elem if not np.nan(elem) else 0 for elem in dx_arr])
+
     # loop on nsim iterations
-    plt.xlim((np.nanmin(x-dx),np.nanmax(x+dx)))
-    plt.ylim((np.nanmin(y-dy),np.nanmax(y+dy)))
-    bound_inter = array([None] * nsim)
+    plt.xlim((np.nanmin(x_arr-dx_arr),np.nanmax(x_arr+dx_arr)))
+    plt.ylim((np.nanmin(y_arr-dy_arr),np.nanmax(y_arr+dy_arr)))
+
 
     with tqdm(total=nsim) as pbar:
         for i in range(nsim):

@@ -77,8 +77,10 @@ def lmplot_uncert_a(ax, x, y, dx, dy, xlim=None,ylim=None, percent=90, distrib='
     #we make this one in linear to ensure no issue for the sampling created from regplot
     fig_new,ax_new=plt.subplots()
 
-    ax_new.set_xlim(np.log10(ax.get_xlim()))
-    ax_new.set_ylim(np.log10(ax.get_ylim()))
+    if log_x:
+        ax_new.set_xlim(np.log10(ax.get_xlim()))
+    if log_y:
+        ax_new.set_ylim(np.log10(ax.get_ylim()))
 
     # updating the list of children to be preserved
     ax_children_init = ax_new.get_children()

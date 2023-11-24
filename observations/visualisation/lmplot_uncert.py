@@ -94,12 +94,11 @@ def lmplot_uncert_a(ax, x, y, dx, dy, xlim=None,ylim=None, percent=90, distrib='
     with tqdm(total=nsim) as pbar:
         for i in range(nsim):
 
-            # computing the intercept if asked to
-            if return_intercept:
-                mask_nonan = ~(isnan(x_pert[i]) | isnan(y_pert[i]))
-                curr_regress = linregress(x_pert[i][mask_nonan], y_pert[i][mask_nonan])
-                slope_vals[i] = curr_regress.slope
-                intercept_vals[i] = curr_regress.intercept
+            # computing the linreg values
+            mask_nonan = ~(isnan(x_pert[i]) | isnan(y_pert[i]))
+            curr_regress = linregress(x_pert[i][mask_nonan], y_pert[i][mask_nonan])
+            slope_vals[i] = curr_regress.slope
+            intercept_vals[i] = curr_regress.intercept
 
             # computing a dataframe set from an iteration of perturbed values
             df_pert = pd.DataFrame(data=array([x_pert[i], y_pert[i]]).T, columns=['x_pert', 'y_pert'])

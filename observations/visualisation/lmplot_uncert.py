@@ -10,17 +10,21 @@ from scipy.stats import linregress
 from custom_pymccorrelation import perturb_values
 
 
-def lmplot_uncert_a(ax, x, y, dx, dy, percent=90, distrib='gaussian', nsim=1000, linecolor='blue', lw=1.3,
+def lmplot_uncert_a(ax, x, y, dx, dy, xlim=None,ylim=None, percent=90, distrib='gaussian', nsim=1000, linecolor='blue', lw=1.3,
                     intercolor=None,
-                    shade_regions=False, return_intercept=True):
+                    shade_regions=False, return_linreg=False, infer_log_scale=False):
     # bandcolor variable
     if intercolor == None:
         bandcolor = 'lightgrey'
     else:
         bandcolor = intercolor
 
-    log_x=ax.get_xscale()=='log'
-    log_y=ax.get_yscale()=='log'
+    if infer_log_scale:
+        log_x=ax.get_xscale()=='log'
+        log_y=ax.get_yscale()=='log'
+    else:
+        log_x=False
+        log_y=False
 
     # switching the format to array to compute the perturbations
     x_arr = array(x)
@@ -49,7 +53,7 @@ def lmplot_uncert_a(ax, x, y, dx, dy, percent=90, distrib='gaussian', nsim=1000,
 
 
     # computing perturbations
-    x_pert, y_pert = perturb_values(x_arr, y_arr, dx_arr, dy_arr, Nperturb=nsim)[:2]
+    x_pert, y_pert = perturb_values(x_arr, y_arr, dx_arr, dy_arr, xlim=xlim,ylim=ylim,Nperturb=nsim)[:2]
     x_pert = x_pert.astype(float)
     y_pert = y_pert.astype(float)
     # storing the elements already in the axe children at the start
@@ -58,9 +62,10 @@ def lmplot_uncert_a(ax, x, y, dx, dy, percent=90, distrib='gaussian', nsim=1000,
     # plotting a first regression with no perturbations for the central line
     sns.regplot(x=x_arr, y=y_arr, ax=ax, truncate=False, ci=90)
 
-    # fetching the absciss of the intercept point we're gonna use
-    x_intercept = plt.gca().xaxis.get_ticklocs()
-    x_intercept = x_intercept[int(len(x_intercept) / 2)]
+    # # fetching the absciss of the intercept point we're gonna use
+    # x_intercept = plt.gca().xaxis.get_ticklocs()
+    # x_intercept = x_intercept[int(len(x_intercept) / 2)]
+    x_intercept=0
 
     # fetching the newly added elements to the axis list
     ax_children_regplot = [elem for elem in ax.get_children() if elem not in ax_children_init]
@@ -155,6 +160,7 @@ def lmplot_uncert_a(ax, x, y, dx, dy, percent=90, distrib='gaussian', nsim=1000,
 
     uncert_arr = array([[None, None, None]] * 2)
 
+    #in this case the linear regression actually computes the intercept at 0 because the pivot point is at 0
     intercept_at_x_vals = slope_vals * x_intercept + intercept_vals
 
     # sorting the values to pick out the percentiles
@@ -172,6 +178,18 @@ def lmplot_uncert_a(ax, x, y, dx, dy, percent=90, distrib='gaussian', nsim=1000,
     # upper uncertainties
     uncert_arr[0][2] = slope_vals[round(nsim * percent / 100)] - uncert_arr[0][0]
     uncert_arr[1][2] = intercept_at_x_vals[round(nsim * percent / 100)] - uncert_arr[1][0]
+
+    slope_arr=uncert_arr[0]
+    intercept_arr=uncert_arr[0]
+
+    #computing the intrinsic scatter (standard deviation)
+    sigma_vals=np.array([np.sqrt(((y_pert[id]-(x_pert[id]*slope_vals[id]+intercept_vals[id]))**2).sum())\
+                            for id in range(nsim)])
+
+    sigma_vals.sort()
+    sigma_med=sigma_vals[round(nsim*0.5)]
+    sigma_arr=np.array([sigma_med,sigma_med-sigma_vals[round(nsim * (1 - percent / 100))],
+                                  sigma_vals[round(nsim * (1 - percent / 100))]-sigma_med])
 
     #plotting the median line with the median value of the intercept and coefficient
 
@@ -202,5 +220,5 @@ def lmplot_uncert_a(ax, x, y, dx, dy, percent=90, distrib='gaussian', nsim=1000,
     #plotting the line
     plt.plot(x_line_plot,y_line_plot,lw=lw,color=linecolor)
 
-    if return_intercept:
-        return uncert_arr, x_intercept
+    if return_linreg:
+        return slope_arr,intercept_arr,sigma_vals

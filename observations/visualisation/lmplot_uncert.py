@@ -106,6 +106,7 @@ def lmplot_uncert_a(ax, x, y, dx, dy, xlim=None,ylim=None, percent=90, distrib='
     plt.xlim((np.nanmin(x_arr-dx_arr_lim),np.nanmax(x_arr+dx_arr_lim)))
     plt.ylim((np.nanmin(y_arr-dy_arr_lim),np.nanmax(y_arr+dy_arr_lim)))
 
+    bound_inter = array([None] * nsim)
 
     with tqdm(total=nsim) as pbar:
         for i in range(nsim):

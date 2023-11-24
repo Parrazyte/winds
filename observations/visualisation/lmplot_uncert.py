@@ -10,9 +10,8 @@ from scipy.stats import linregress
 from custom_pymccorrelation import perturb_values
 
 
-def lmplot_uncert_a(ax, x, y, dx, dy, xlim=None,ylim=None, percent=90, distrib='gaussian', nsim=1000, linecolor='blue', lw=1.3,
-                    intercolor=None,
-                    shade_regions=False, return_linreg=False, infer_log_scale=False):
+def lmplot_uncert_a(ax, x, y, dx, dy, xlim=None,ylim=None, percent=90, distrib='gaussian', nsim=1000, linecolor='blue',
+                    lw=1.3,intercolor=None,shade_regions=False, return_linreg=True, infer_log_scale=False):
     # bandcolor variable
     if intercolor == None:
         bandcolor = 'lightgrey'
@@ -181,10 +180,23 @@ def lmplot_uncert_a(ax, x, y, dx, dy, xlim=None,ylim=None, percent=90, distrib='
     uncert_arr[1][2] = intercept_at_x_vals[round(nsim * percent / 100)] - uncert_arr[1][0]
 
     slope_arr=uncert_arr[0]
-    intercept_arr=uncert_arr[0]
+    intercept_arr=uncert_arr[1]
 
+    if xlim is None:
+        xlim_mask=np.repeat(True,len(x))
+    else:
+        xlim_mask=xlim
+
+    if ylim is None:
+        ylim_mask=np.repeat(True,len(x))
+    else:
+        ylim_mask=ylim
+
+    tot_nonlin_mask=~ (xlim_mask) & (ylim_mask)
     #computing the intrinsic scatter (standard deviation)
-    sigma_vals=np.array([np.sqrt(((y_pert[id]-(x_pert[id]*slope_vals[id]+intercept_vals[id]))**2).sum())\
+    sigma_vals=np.array([np.sqrt(np.nansum((y_pert[id][tot_nonlin_mask]-\
+                                   (x_pert[id][tot_nonlin_mask]*slope_vals[id][tot_nonlin_mask]+\
+                                    intercept_vals[id][tot_nonlin_mask]))**2))\
                             for id in range(nsim)])
 
     sigma_vals.sort()

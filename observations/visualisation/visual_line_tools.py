@@ -1047,13 +1047,25 @@ def obj_values(file_paths,E_factors,dict_linevis):
                     with fits.open(filepath) as hdul:
 
                         curr_exptime_list[i_obs]=hdul[1].header['EXPOSURE']
-                        try:
-                            curr_date_list[i_obs]=hdul[0].header['DATE-OBS']
-                        except:
+
+                        if curr_instru_list[i_obs]=='NICER':
+
+                            start_obs_s = hdul[1].header['TSTART'] + hdul[1].header['TIMEZERO']
+                            # saving for titles later
+                            mjd_ref = Time(hdul[1].header['MJDREFI'] + hdul[1].header['MJDREFF'], format='mjd')
+
+                            obs_start = mjd_ref + TimeDelta(start_obs_s, format='sec')
+
+                            curr_date_list[i_obs] = str(obs_start.isot)
+
+                        else:
                             try:
-                                curr_date_list[i_obs]=hdul[1].header['DATE-OBS']
+                                curr_date_list[i_obs]=hdul[0].header['DATE-OBS']
                             except:
-                                curr_date_list[i_obs]=Time(hdul[1].header['MJDSTART'],format='mjd').isot
+                                try:
+                                    curr_date_list[i_obs]=hdul[1].header['DATE-OBS']
+                                except:
+                                    curr_date_list[i_obs]=Time(hdul[1].header['MJDSTART'],format='mjd').isot
                 except:
                     breakpoint()
 

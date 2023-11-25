@@ -523,11 +523,22 @@ if multi_obj:
         #switching to array to keep the same syntax later on
         choice_source=[st.sidebar.selectbox('Source',obj_list)]
 
+    #first mask here to limit the display of individual obs to exclude
+    if display_single or display_multi:
+        mask_obj_select = np.array([elem in choice_source for elem in obj_list])
+    else:
+        mask_obj_select = np.repeat(True, len(obj_list))
+
+    obj_list_select_id=np.argwhere(mask_obj_select).T[0]
+
     with st.sidebar.expander('Observation'):
         obs_list_str=np.array([np.array([obj_list[i]+'_'+observ_list[i][j].replace('_-1','').replace('_auto','')\
-                               for j in range(len(observ_list[i]))]) for i in range(len(obj_list))],dtype=object)
+                               for j in range(len(observ_list[i]))]) for i in obj_list_select_id],dtype=object)
 
-        choice_obs=st.multiselect('Exclude individual observations:',ravel_ragged(obs_list_str))
+        sorted_choice_obs=ravel_ragged(obs_list_str)
+        sorted_choice_obs.sort()
+
+        choice_obs=st.multiselect('Exclude individual observations:',sorted_choice_obs)
 
         mask_included_selection=np.array([np.array([obj_list[i]+'_'+observ_list[i][j].replace('_-1','').replace('_auto','') not in\
                                           choice_obs for j in range(len(observ_list[i]))]) for i in range(len(obj_list))],

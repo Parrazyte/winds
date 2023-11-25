@@ -94,12 +94,12 @@ def lmplot_uncert_a(ax, x, y, dx, dy, xlim=None,ylim=None, percent=90, distrib='
     # loop on nsim iterations
 
     if np.ndim(dx_arr)==2:
-        dx_arr_lim=dx_arr.max(0)
+        dx_arr_lim=dx_arr.max(1)
     else:
         dx_arr_lim=dx_arr
 
     if np.ndim(dy_arr)==2:
-        dy_arr_lim=dy_arr.max(0)
+        dy_arr_lim=dy_arr.max(1)
     else:
         dy_arr_lim=dy_arr
 

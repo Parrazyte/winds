@@ -210,7 +210,6 @@ def lmplot_uncert_a(ax, x, y, dx, dy, xlim=None,ylim=None, percent=90, distrib='
 
     tot_nonlin_mask=~ ((xlim_mask) & (ylim_mask))
 
-    breakpoint()
     #computing the intrinsic scatter (standard deviation)
     sigma_vals=np.array([np.sqrt(np.nansum((y_pert[id][tot_nonlin_mask]-\
                                    (x_pert[id][tot_nonlin_mask]*slope_vals[id]+\

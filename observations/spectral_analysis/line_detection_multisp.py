@@ -154,10 +154,10 @@ ap = argparse.ArgumentParser(description='Script to perform line detection in X-
 
 '''GENERAL OPTIONS'''
 
-ap.add_argument('-satellite',nargs=1,help='telescope to fetch spectra from',default='NICER',type=str)
+ap.add_argument('-satellite',nargs=1,help='telescope to fetch spectra from',default='Suzaku',type=str)
 #note: use maj for first character
 
-ap.add_argument("-cameras",nargs=1,help='Cameras to use for spectral analysis',default='xti',type=str)
+ap.add_argument("-cameras",nargs=1,help='Cameras to use for spectral analysis',default='all',type=str)
 ap.add_argument("-expmodes",nargs=1,help='restrict the analysis to a single type of exposure',default='all',type=str)
 ap.add_argument("-grouping",nargs=1,help='specfile grouping for XMM spectra in [5,10,20] cts/bin',default='opt',type=str)
 
@@ -217,7 +217,10 @@ ap.add_argument("-h_update",nargs=1,help='update the bg, rmf and arf file names 
 ap.add_argument('-spread_comput',nargs=1,help='spread sources in N subsamples to poorly parallelize on different consoles',
                 default=1,type=bool)
 
-ap.add_argument('-reverse_spread',nargs=1,help='run the spread computation lists in reverse',default=True,type=bool)
+ap.add_argument('-reverse_spread',nargs=1,help='run the spread computation lists in reverse',default=False,type=bool)
+
+#note: havign both reverse spread and reverse epoch with spread_comput>1 will give you back the normal order
+ap.add_argument('-reverse_epoch',nargs=1,help='reverse epoch list order',default=False,type=bool)
 
 #better when spread computations are not running
 ap.add_argument('-skip_started_spread',nargs=1,help='consider already finished computations when splitting the exposures',
@@ -292,10 +295,10 @@ ap.add_argument('-write_pdf',nargs=1,help='overwrite finished pdf at the end of 
                 default=True,type=bool)
 
 #can be set to false to gain time when testing or if the aborted pdf were already done
-ap.add_argument('-write_aborted_pdf',nargs=1,help='create aborted pdfs at the end of the computation',default=True,
+ap.add_argument('-write_aborted_pdf',nargs=1,help='create aborted pdfs at the end of the computation',default=False,
                 type=bool)
 
-ap.add_argument('-group_gti_time',nargs=1,help='maximum time delta for gti grouping in dd_hh_mm',default='01_00_00',type=str)
+ap.add_argument('-group_gti_time',nargs=1,help='maximum time delta for gti grouping in dd_hh_mm',default='00_01_00',type=str)
 
 '''MODES'''
 
@@ -304,14 +307,17 @@ ap.add_argument('-reload_autofit',nargs=1,help='Reload existing autofit save fil
                 default=True,type=bool)
 
 ap.add_argument('-pdf_only',nargs=1,help='Updates the pdf with already existing elements but skips the line detection entirely',
-                default=True,type=bool)
+                default=False,type=bool)
 
 #note: used mainly to recompute obs with bugged UL computations
 ap.add_argument('-line_ul_only',nargs=1,help='Reloads the autofit computations and re-computes the ULs',
                 default=False,type=bool)
 
 ap.add_argument('-hid_only',nargs=1,help='skip the line detection and directly plot the hid',
-                default=True,type=bool)
+                default=False,type=bool)
+
+#date or HR
+ap.add_argument('-hid_sort_method',nargs=1,help='HID summary observation sorting',default='date',type=str)
 
 ap.add_argument('-multi_obj',nargs=1,help='compute the hid for multiple obj directories inside the current directory',
                 default=False)
@@ -473,6 +479,8 @@ reverse_spread=args.reverse_spread
 spread_overwrite=args.spread_overwrite
 force_ener_bounds=args.force_ener_bounds
 write_aborted_pdf=args.write_aborted_pdf
+hid_sort_method=args.hid_sort_method
+reverse_epoch=args.reverse_epoch
 
 megumi_files=args.megumi_files
 suzaku_hid_cont_range=np.array(args.suzaku_hid_cont_range.split(' ')).astype(float)
@@ -878,9 +886,22 @@ def pdf_summary(epoch_observ,fit_ok=False,summary_epoch=None):
                 expmode_list += [''] if (pre_reduced_NICER or 'DATAMODE' not in hdul[0].header.keys())\
                                 else [hdul[0].header['DATAMODE']]
 
-            if sat=='NICER' and pre_reduced_NICER:
-                    pdf.cell(1,1,'Object: '+obj_name+' | Date: '+Time(hdul[1].header['MJDSTART'],format='mjd').isot+
-                             ' | Obsid: '+epoch_inf[i_obs][0],align='C',center=True)
+            if sat=='NICER':
+
+                if pre_reduced_NICER:
+                        pdf.cell(1,1,'Object: '+obj_name+' | Date: '+Time(hdul[1].header['MJDSTART'],format='mjd').isot+
+                                 ' | Obsid: '+epoch_inf[i_obs][0],align='C',center=True)
+                else:
+                    start_obs_s = hdul[1].header['TSTART'] + hdul[1].header['TIMEZERO']
+                    # saving for titles later
+                    mjd_ref = Time(hdul[1].header['MJDREFI'] + hdul[1].header['MJDREFF'], format='mjd')
+
+                    obs_start = mjd_ref + TimeDelta(start_obs_s, format='sec')
+
+                    date_str=str(obs_start.isot)
+                    pdf.cell(1,1,'Object: '+obj_name+' | Date: '+date_str+' | Obsid: '+epoch_inf[i_obs][0],
+                          align='C',center=True)
+
             else:
                 date_str=' ' if 'DATE-OBS' not in hdul[0].header.keys() else hdul[0].header['DATE-OBS'].split('T')[0]
                 pdf.cell(1,1,'Object: '+obj_name+' | Date: '+date_str+' | Obsid: '+epoch_inf[i_obs][0],
@@ -3560,16 +3581,15 @@ if spread_comput!=1:
             epoch_list=split_epoch[::(-1 if reverse_spread else 1)]
             break
 
-# breakpoint()
+if reverse_epoch:
+    epoch_list=epoch_list[::-1]
 
-#epoch_list=epoch_list[::-1]
-
-#just to be able to make a first summary earlier
-#first obs
-epoch_list=np.concatenate((epoch_list[:26],epoch_list[27:]))
-
-#second obs
-epoch_list=np.concatenate((epoch_list[:-51],epoch_list[-50:]))
+# #just to be able to make a first summary earlier
+# #first obs
+# epoch_list=np.concatenate((epoch_list[:26],epoch_list[27:]))
+#
+# #second obs
+# epoch_list=np.concatenate((epoch_list[:-51],epoch_list[-50:]))
 
 #### line detections for exposure with a spectrum
 for epoch_id,epoch_files in enumerate(epoch_list):
@@ -3723,9 +3743,15 @@ if multi_obj==False:
         aborted_epochs=[[elem.replace('_grp_opt'+('.pi' if sat=='Swift' else '.pha'),'') for elem in epoch]\
                         for epoch in epoch_list if not epoch[0].split('_grp_opt'+('.pi' if sat=='Swift' else '.pha'))[0]+'_recap.pdf'\
                             in lineplots_files]
-    elif sat in ['NICER','Suzaku']:
+    elif sat=='NICER':
         #updated with shorten_epoch
         epoch_ids=[[elem.replace('_sp_grp_opt.pha','') for elem in epoch] for epoch in epoch_list]
+        aborted_epochs=[elem_epoch_id for elem_epoch_id in epoch_ids if\
+                        not '_'.join(shorten_epoch(elem_epoch_id))+'_recap.pdf' in lineplots_files]
+    elif sat=='Suzaku':
+        #updated with shorten_epoch
+        epoch_ids=[[elem.replace('_grp_opt.pha','').replace('_src_dtcor','').replace('_gti_event_spec_src','')\
+                    for elem in epoch] for epoch in epoch_list]
         aborted_epochs=[elem_epoch_id for elem_epoch_id in epoch_ids if\
                         not '_'.join(shorten_epoch(elem_epoch_id))+'_recap.pdf' in lineplots_files]
 
@@ -4140,7 +4166,7 @@ def save_pdf(fig):
     pdf.add_page()
 
     pdf_path=save_dir+'/'+save_str_prefix+'HLD_cam_'+args.cameras+'_'+\
-                args.line_search_e.replace(' ','_')+'_'+args.line_search_norm.replace(' ','_')+'.pdf'
+                args.line_search_e.replace(' ','_')+'_'+args.line_search_norm.replace(' ','_')+'_'+hid_sort_method+'.pdf'
 
     #the main part of the summary creation is only gonna work if we have points in the graph
     if not flag_noexp:
@@ -4151,9 +4177,22 @@ def save_pdf(fig):
 
         #NOTE: bad idea + doesn't work
         #re-organizing the points according to the date
-        # hid_date_sort=np.argsort(ravel_ragged(date_list)[np.argsort(ravel_ragged(hid_plot[0][0]))])
 
-        hid_sort=np.array(range(len(ravel_ragged(date_list))),dtype=int)
+        #sorting the displayed HID values according to how they are stored initially
+
+        sort_hid_disp=np.array([np.argwhere(points_hid.T[1] == elem)[0][0] for elem in ravel_ragged(hid_plot[1][0])])
+
+        if hid_sort_method=='date':
+            hid_sort=ravel_ragged(date_list).argsort()
+            points_hid=points_hid[sort_hid_disp][hid_sort]
+
+        elif hid_sort_method=='hr':
+
+            #default sorting
+            pass
+            # hid_sort=np.array(range(len(ravel_ragged(date_list))),dtype=int)
+
+
 
         #saving the current graph in a pdf format
         plt.savefig(save_dir+'/curr_hid.png')
@@ -4178,7 +4217,7 @@ def save_pdf(fig):
             with tqdm(total=len(points_hid)) as pbar:
 
                 #first loop for the creation of section pages
-                for point_id,single_point in enumerate(points_hid[hid_sort]):
+                for point_id,single_point in enumerate(points_hid):
 
                     #drawing the circle around the point (ms is the marker size, mew it edge width, mfc its face color, mec its edge color)
                     outline_circles[point_id]=ax_hid.plot(single_point[0],single_point[1],color='white',\
@@ -4265,6 +4304,7 @@ def save_pdf(fig):
         # merger.append(pdf_path)
 
     bkm_aborted=merger.add_outline_item('Aborted Analysis',len(merger.pages))
+
     for elem_epoch in aborted_epochs:
         curr_pages=len(merger.pages)
 

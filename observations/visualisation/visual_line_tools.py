@@ -920,7 +920,7 @@ def obj_values(file_paths,E_factors,dict_linevis):
     instru_list=np.array([None]*len(obj_list))
     exptime_list=np.array([None]*len(obj_list))
     # ind_links=np.array([None]*len(obj_list))
-    
+
     for i in range(len(obj_list)):
         
         #matching the line paths corresponding to each object
@@ -932,6 +932,8 @@ def obj_values(file_paths,E_factors,dict_linevis):
         curr_E_factor=E_factors[i]
         
         store_lines=[]
+
+        lineval_paths_arr=[]
         
         for elem_path in curr_obj_paths:
             
@@ -950,16 +952,21 @@ def obj_values(file_paths,E_factors,dict_linevis):
                 
                     #checking if it's an XMM file and selecting exposures if so
                     if 'NICER' not in elem_path and store_lines_single[0].split('\t')[0].split('_')[1] in ['pn','mos1','mos2']:    
-                        store_lines+=[elem for elem in store_lines_single if elem.split('\t')[0].split('_')[3] in expmodes]
-       
+                        store_lines_single=[elem for elem in store_lines_single if elem.split('\t')[0].split('_')[3]\
+                                            in expmodes]
+                        store_lines+=store_lines_single
+                lineval_paths_arr+=[np.repeat(elem_path,len(store_lines_single))]
+
         store_lines=ravel_ragged(np.array(store_lines))
-        
-            
+
+        # used to allow separate observation folders at the bigbatch level
+        lineval_paths_arr=ravel_ragged(lineval_paths_arr)
+
         #and storing the observation ids and values 
         curr_obs_list=np.array([None]*len(store_lines))
         curr_lval_list=np.array([None]*len(store_lines))
         curr_l_list=np.array([None]*len(store_lines))
-        
+
         for l,line in enumerate(store_lines):
 
             curr_line=line.split('\t')
@@ -988,20 +995,18 @@ def obj_values(file_paths,E_factors,dict_linevis):
             
             for i_obs,obs in enumerate(obs_list[i]):
 
+                lineval_path=lineval_paths_arr[i_obs]
+                
                 if len(obs.split('_'))<=1:
                     
                     if 'source' in obs.split('_')[0]:
                         #this means a Swift observation
-                        lineval_path=[elem for elem in curr_obj_paths if 'Swift' in elem][0]
-                        
                         filepath='/'.join(lineval_path.split('/')[:-2])+'/'+obs+'_grp_opt.pi'
                         curr_instru_list[i_obs]='Swift'
                         
-                    else:  
+                    else:
                         #this means a NICER observation
                         #we take the directory structure from the according file in curr_obj_paths
-                        lineval_path=[elem for elem in curr_obj_paths if 'NICER' in elem][0]
-                        
                         filepath='/'.join(lineval_path.split('/')[:-2])+'/'+obs+'_sp_grp_opt.pha'
                         curr_instru_list[i_obs]='NICER'
     
@@ -1010,27 +1015,23 @@ def obj_values(file_paths,E_factors,dict_linevis):
                     if obs.split('_')[1] in ['pn','mos1','mos2']:
                         
                         #we take the directory structure from the according file in curr_obj_paths
-                        lineval_path=[elem for elem in curr_obj_paths if 'XMM' in elem][0]
                         filepath='/'.join(lineval_path.split('/')[:-2])+'/'+obs+'_sp_src_grp_20.ds'
                         curr_instru_list[i_obs]='XMM'
                         
                     elif obs.split('_')[1]=='heg':
                         
                         #we take the directory structure from the according file in curr_obj_paths
-                        lineval_path=[elem for elem in curr_obj_paths if 'Chandra' in elem][0]
                         filepath='/'.join(lineval_path.split('/')[:-2])+'/'+obs+'_grp_opt.pha'
                         curr_instru_list[i_obs]='Chandra'
 
                     elif 'xis' in obs:
                         #we take the directory structure from the according file in curr_obj_paths
-                        lineval_path=[elem for elem in curr_obj_paths if 'Suzaku' in elem][0]
                         filepath='/'.join(lineval_path.split('/')[:-2])+'/'+obs+'_gti_event_spec_src_grp_opt.pha'
                         curr_instru_list[i_obs]='Suzaku'
 
                     elif obs.split('_')[1] in ['0','1']:
                         
                         #we take the directory structure from the according file in curr_obj_paths
-                        lineval_path=[elem for elem in curr_obj_paths if 'Suzaku' in elem][0]
                         filepath='/'.join(lineval_path.split('/')[:-2])+'/'+obs+'_sp_grp_opt.pha'
                         curr_instru_list[i_obs]='Suzaku'
                         
@@ -1108,8 +1109,6 @@ def abslines_values(file_paths,dict_linevis,only_abs=False,obsid=None):
         obj_list=['current']
         abslines_inf=np.array([None])
         autofit_inf=np.array([None])
-
-
 
     for i in range(len(obj_list)):
             

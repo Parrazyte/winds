@@ -214,14 +214,14 @@ norm_nsteps=len(norm_par_space)
 
 if not online:
     if not multi_obj:
-        
+
         #assuming the last top directory is the object name
         obj_name=os.getcwd().split('/')[-2]
-    
+
         #listing the exposure ids in the bigbatch directory
         bigbatch_files=glob.glob('**')
-        
-        #tacking off 'spectrum' allows to disregard the failed combined lightcurve computations of some obsids as unique exposures compared to their 
+
+        #tacking off 'spectrum' allows to disregard the failed combined lightcurve computations of some obsids as unique exposures compared to their
         #spectra
         exposid_list=np.unique(['_'.join(elem.split('_')[:4]).replace('rate','').replace('.ds','')+'_auto' for elem in bigbatch_files\
                       if '/' not in elem and 'spectrum' not in elem and elem[:10].isdigit() and True in ['_'+elemcam+'_' in elem for elemcam in cameras]])
@@ -230,20 +230,17 @@ if not online:
             glob_summary_reg=sumfile.readlines()[1:]
         with open('glob_summary_extract_sp.log') as sumfile:
             glob_summary_sp=sumfile.readlines()[1:]
-    
+
         #loading the diagnostic messages after the analysis has been done
         if os.path.isfile(os.path.join(outdir,'summary_line_det.log')):
             with open(os.path.join(outdir,'summary_line_det.log')) as sumfile:
                 glob_summary_linedet=sumfile.readlines()[1:]
-        
+
         #creating summary files for the rest of the exposures
         lineplots_files=[elem.split('/')[1] for elem in glob.glob(outdir+'/*',recursive=True)]
-        
+
         aborted_exposid=[elem for elem in exposid_list if not elem+'_recap.pdf' in lineplots_files]
 
-'''''''''''''''''''''''''''''''''''''''
-''''''Hardness-Luminosity Diagrams''''''
-'''''''''''''''''''''''''''''''''''''''
 
 #Distance and Mass determination
 
@@ -252,8 +249,15 @@ if not online:
     catal_blackcat,catal_watchdog,catal_blackcat_obj,catal_watchdog_obj,catal_maxi_df,catal_maxi_simbad,catal_bat_df,catal_bat_simbad=load_catalogs()
 
 st.sidebar.header('Sample selection')
+
+radio_indiv_orbits=st.sidebar.radio('Observation type',('averaged obsids','individual orbits (NICER only)'))
+use_orbit_obs=radio_indiv_orbits=='individual orbits (NICER only)'
+use_orbit_obs_str='_indiv' if use_orbit_obs else ''
+
 #We put the telescope option before anything else to filter which file will be used
-choice_telescope=st.sidebar.multiselect('Telescopes', ['XMM','Chandra']+([] if online else ['NICER','Suzaku','Swift']),default=('XMM','Chandra'))
+choice_telescope=st.sidebar.multiselect('Telescopes', ['NICER'] if use_orbit_obs else\
+                 (['XMM','Chandra']+([] if online else ['NICER','Suzaku','Swift'])),
+                                        default=['NICER'] if use_orbit_obs else ('XMM','Chandra'))
 
 if online:
     radio_ignore_full=True
@@ -269,11 +273,13 @@ join_telescope_str.sort()
 join_telescope_str='_'.join(join_telescope_str.tolist())
 
 if online:
-    dump_path='/mount/src/winds/observations/visualisation/visual_line_dumps/dump_'+join_telescope_str+'_'+('no' if radio_ignore_full else '')+'full.pkl'
+    dump_path='/mount/src/winds/observations/visualisation/visual_line_dumps/dump_'+join_telescope_str+\
+              use_orbit_obs_str+'_'+('no' if radio_ignore_full else '')+'full.pkl'
     
     update_dump=False
 else:
-    dump_path='./glob_batch/visual_line_dumps/dump_'+join_telescope_str+'_'+('no' if radio_ignore_full else '')+'full.pkl'
+    dump_path='./glob_batch/visual_line_dumps/dump_'+join_telescope_str+\
+              use_orbit_obs_str+'_'+('no' if radio_ignore_full else '')+'full.pkl'
 
     update_dump=st.sidebar.button('Update dump')
 
@@ -318,10 +324,12 @@ if update_dump or not os.path.isfile(dump_path):
         
         all_files=glob.glob('**',recursive=True)
         lineval_id='line_values_'+args.line_search_e.replace(' ','_')+'_'+args.line_search_norm.replace(' ','_')+'.txt'
-        lineval_files=[elem for elem in all_files if outdir+'/' in elem and lineval_id in elem and ('/Sample/' in elem or 'XTEJ1701-462/' in elem)]
+        lineval_files=[elem for elem in all_files if outdir+use_orbit_obs_str+'/' in elem and lineval_id in elem\
+                       and ('/Sample/' in elem or 'XTEJ1701-462/' in elem)]
 
         abslines_id='autofit_values_'+args.line_search_e.replace(' ','_')+'_'+args.line_search_norm.replace(' ','_')+'.txt'
-        abslines_files=[elem for elem in all_files if outdir+'/' in elem and abslines_id in elem and ('/Sample/' in elem or 'XTEJ1701-462/' in elem)]
+        abslines_files=[elem for elem in all_files if outdir+use_orbit_obs_str+'/' in elem and abslines_id in elem\
+                        and ('/Sample/' in elem or 'XTEJ1701-462/' in elem)]
         
         #telescope selection
         lineval_files=[elem for elem_telescope in choice_telescope for elem in lineval_files if elem_telescope+'/' in elem]

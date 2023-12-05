@@ -93,7 +93,8 @@ def perturb_values(x, y, dx, dy,xlim=None,ylim=None, Nperturb=10000):
         #drawing two independant samples with gaussian shape on each side (or None if there is no uncertainty)
         #Note : we take the absolute values of the uncertainties to make sure they are valid scale parameters
         
-        xp_disjointed=_np.array([[((-1)**(j+1)*abs(rng.normal(loc=0,scale=abs(dx[i][j]),size=(Nperturb))) if (xlim is None or xlim[i]==0) else\
+        xp_disjointed=_np.array([[((-1)**(j+1)*abs(rng.normal(loc=0,scale=abs(dx[i][j]),size=(Nperturb)))\
+                                       if (xlim is None or xlim[i]==0) else\
                                    rng.uniform(low=x[i],high=x[i]+dx[i][1],size=Nperturb)) if dx[i][j]!=0  else None\
                                   for i in range(len(dx))] for j in [0,1]],dtype=object)
             
@@ -102,12 +103,20 @@ def perturb_values(x, y, dx, dy,xlim=None,ylim=None, Nperturb=10000):
             xp_disjointed=xp_disjointed.T
         else:
             xp_disjointed=_np.transpose(xp_disjointed,axes=(1,0,2))
-            
-        #concatenating each observation half to half, or entirely on the side which has uncertainties, or just putting zeros depending on 
-        #which value actually has uncertainties
+
+        '''    
+        concatenating each observation, or entirely on the side which has uncertainties,
+        or just putting zeros depending on which value actually has uncertainties
+        For concatening the two probability distributions, we randomly draw in each half-gaussian 
+        '''
+
+        gauss_draw=rng.integers(0,2,Nperturb)
+
+
         xp=_np.array([_np.repeat(0,Nperturb) if elem[0] is None and elem[1] is None else\
-            _np.concatenate((elem[0][:int(Nperturb/2)],elem[1][int(Nperturb/2):])) if elem[0] is not None and elem[1] is not None else\
-            elem[0] if elem[0] is not None else elem[1] for elem in xp_disjointed])
+            _np.array([elem.T[i_pert][gauss_draw[i_pert]] for i_pert in range(Nperturb)])\
+                if elem[0] is not None and elem[1] is not None else\
+            elem[0] if elem[0] is not None else elem[1] for i_pert,elem in enumerate(xp_disjointed)])
             
         xp=xp.T+x
     else:
@@ -130,11 +139,19 @@ def perturb_values(x, y, dx, dy,xlim=None,ylim=None, Nperturb=10000):
                 yp_disjointed=yp_disjointed.T
             else:
                 yp_disjointed=_np.transpose(yp_disjointed,axes=(1,0,2))
-                
-            #concatenating each observation half to half, or entirely on the side which has uncertainties if only one side has, or just putting zeros       
-            #depending on which value actually has uncertainties
+
+            '''    
+            concatenating each observation, or entirely on the side which has uncertainties,
+            or just putting zeros depending on which value actually has uncertainties
+            For concatening the two probability distributions, we randomly draw in each half-gaussian 
+            '''
+
+            #won't be the same as the previous one
+            gauss_draw = rng.integers(0, 2, Nperturb)
+
             yp=_np.array([_np.repeat(0,Nperturb) if elem[0] is None and elem[1] is None else\
-                _np.concatenate((elem[0][:int(Nperturb/2)],elem[1][int(Nperturb/2):])) if elem[0] is not None and elem[1] is not None else\
+                _np.array([elem.T[i_pert][gauss_draw[i_pert]] for i_pert in range(Nperturb)])\
+                    if elem[0] is not None and elem[1] is not None else\
                 elem[0] if elem[0] is not None else elem[1] for elem in yp_disjointed])
     
             yp=yp.T+y

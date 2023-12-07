@@ -10,13 +10,75 @@ from scipy.stats import linregress
 from custom_pymccorrelation import perturb_values
 
 
-def lmplot_uncert_a(ax, x, y, dx, dy, xlim=None,ylim=None, percent=90, distrib='gaussian', nsim=1000, linecolor='blue',
-                    lw=1.3,intercolor=None,shade_regions=False, return_linreg=True, infer_log_scale=False):
-    # bandcolor variable
-    if intercolor == None:
-        bandcolor = 'lightgrey'
-    else:
-        bandcolor = intercolor
+def lmplot_uncert_a(ax, x, y, dx, dy, xlim=None,ylim=None, percent=68.26, nsim=2000,
+                    intercept_pos='auto',
+                    return_linreg=True, infer_log_scale=False,nanzero_err=True,
+                    error_percent=90,
+                    xbounds=None,ybounds=None,
+                    line_color='blue',lw=1.3, inter_color='lightgrey'):
+
+    '''
+    Computes a linear regression, confidence bands and errors on its interval using bootstrapping
+    We use the perturbation from custom_pymmcorrelation to consider asymmetric uncertainties and upper limits
+
+    We are faced with a problem of lisibility: a "correct" (or close to it) mathematical description would
+    require returning the equation with the covariance between the slope and the intercept, which would also need
+    to be quoted with uncertainties due to the perturbation.
+     or most purposes this is not necessary, so we simply return the slope and intercept computed where desired
+
+    Notes:
+        -the "central" regression and scatter values are computed from the non-perturbated values
+        (and could differ from the median in case of non-symmetric uncertainties) and DO NOT consider upper limits
+
+    Method:
+
+    0) compute the central line from a linear regression without perturbation
+        (used for plot and the central values of the distribution)
+
+    1) compute nsim linear regression bootstraps with intercept at 0
+
+    2) get the confidence interval from these bootstraps from the distribution of y values of all individual LR lines
+       (and plot it)
+
+    3) compute the x value with the lowest ci errors (aka where best to shift the LR to get the intercept error value)
+
+    4) Choose an x_intercept value according to intercept_pos (see above) and recompute the LR at these values
+
+    5) extract the percentages of slope, intercept, and scatter and return them if necessary
+
+    ax: ax where the plots will be displayed
+
+    -x,y:        data
+
+    -dx,dy:      uncertainties. can be of size [2,N] for asymmetric
+
+    -xlim,ylim: upper limit information. Either None or a N-size mask with a 1 for upper/lower limits.
+                In this case, the values will be perturbated between x and xlim with a uniform distribution
+
+    -percent:   percent of the confidence interval used
+
+    -intercept_pos:     method of shifting x_value for the LR computation to get the info of the intercept error
+
+                        "auto": takes the closest xtick to the lowest intercept errors
+                        "best": takes the actual lowest intercept error
+                        value:  forced at that value
+
+    -return_linreg:     returns the slope, intercept,scatter, and x_intercept
+
+    -infer_log_scale:   automatically adjust the linear regression to log-linear or log-log linear depending on whether
+                        the axis are in log scale
+
+    -nanzero_err:       consider uncertainty values of nan as if there was no error
+
+    -error_percent:     the error range at which the dx and dy values are provided. Used to rescale the errors
+                        (assuming gaussianity) to 1 sigma to correctly perturbate the values afterwards
+                        (normalized to 68.26)
+
+    -xbounds,ybounds:   resizes the graph manually instead of automatically
+    -line_color, lw:     displays for the main plotted line
+    -inter_color:        confidence interval region color
+
+    '''
 
     if infer_log_scale:
         log_x=ax.get_xscale()=='log'
@@ -28,8 +90,27 @@ def lmplot_uncert_a(ax, x, y, dx, dy, xlim=None,ylim=None, percent=90, distrib='
     # switching the format to array to compute the perturbations
     x_arr = array(x)
     y_arr = array(y)
-    dx_arr = array(nan_to_num(dx)).T * (percent / 90)
-    dy_arr = array(nan_to_num(dy)).T * (percent / 90)
+
+    #replacing nans with zero if asked
+    if nanzero_err:
+        dx_arr = array(nan_to_num(dx)).T * (error_percent / 68.26)
+        dy_arr = array(nan_to_num(dy)).T * (error_percent / 68.26)
+    else:
+        dx_arr = array(dx).T * (error_percent / 68.26)
+        dy_arr = array(dy).T * (error_percent / 68.26)
+
+    #computing a mask of where upper limits are in at least one ax of the points
+    if xlim is None:
+        xlim_mask=np.repeat(False,len(x))
+    else:
+        xlim_mask=xlim
+
+    if ylim is None:
+        ylim_mask=np.repeat(False,len(x))
+    else:
+        ylim_mask=ylim
+
+    tot_nonlim_mask=~ ((xlim_mask) & (ylim_mask))
 
     if log_x:
         x_arr=np.log10(x_arr)
@@ -39,7 +120,6 @@ def lmplot_uncert_a(ax, x, y, dx, dy, xlim=None,ylim=None, percent=90, distrib='
 
         #and applying it
         dx_arr=np.array([dx_arr[0]-x_arr,x_arr-dx_arr[1]]).T
-
 
     if log_y:
         y_arr = np.log10(y_arr)
@@ -55,44 +135,31 @@ def lmplot_uncert_a(ax, x, y, dx, dy, xlim=None,ylim=None, percent=90, distrib='
     x_pert, y_pert = perturb_values(x_arr, y_arr, dx_arr, dy_arr, xlim=xlim,ylim=ylim,Nperturb=nsim)[:2]
     x_pert = x_pert.astype(float)
     y_pert = y_pert.astype(float)
+
+    #first regplot just to get the ax limits
+
     # storing the elements already in the axe children at the start
     ax_children_init = ax.get_children()
 
-    # plotting a first regression with no perturbations for the central line
-    sns.regplot(x=x_arr, y=y_arr, ax=ax, truncate=False, ci=90)
+    if intercept_pos=='auto':
+        # plotting a first regression with no perturbations for the central line
+        sns.regplot(x=x_arr, y=y_arr, ax=ax, truncate=False, ci=90)
 
-    # # fetching the absciss of the intercept point we're gonna use
-    # x_intercept = plt.gca().xaxis.get_ticklocs()
-    # x_intercept = x_intercept[int(len(x_intercept) / 2)]
-    x_intercept=0
+        # # fetching the absciss of the intercept ticks for late
+        x_intercept_ticks = plt.gca().xaxis.get_ticklocs()
 
-    # fetching the newly added elements to the axis list
-    ax_children_regplot = [elem for elem in ax.get_children() if elem not in ax_children_init]
+        # fetching the newly added elements to the axis list
+        ax_children_regplot = [elem for elem in ax.get_children() if elem not in ax_children_init]
 
-    # deleting the line interval and the points
-    for elem_children in ax_children_regplot:
-        elem_children.remove()
+        # deleting the line interval and the points
+        for elem_children in ax_children_regplot:
+            elem_children.remove()
 
-    #we make this one in linear to ensure no issue for the sampling created from regplot
-    fig_new,ax_new=plt.subplots()
-
-    if log_x:
-        ax_new.set_xlim(np.log10(ax.get_xlim()))
-    if log_y:
-        ax_new.set_ylim(np.log10(ax.get_ylim()))
-
-    # updating the list of children to be preserved
-    ax_children_init = ax_new.get_children()
-
+    #main array creation
     slope_vals = zeros(nsim)
     intercept_vals = zeros(nsim)
 
-    # dy_lims=np.array([elem if not np.nan(elem) else 0 for elem in dx_arr])
-    #
-    # dy_lims=np.array([elem if not np.nan(elem) else 0 for elem in dx_arr])
-
-    # loop on nsim iterations
-
+    #correctly preparing the graph size
     if np.ndim(dx_arr)==2:
         dx_arr_lim=dx_arr.max(1)
     else:
@@ -103,138 +170,126 @@ def lmplot_uncert_a(ax, x, y, dx, dy, xlim=None,ylim=None, percent=90, distrib='
     else:
         dy_arr_lim=dy_arr
 
-    plt.xlim((np.nanmin(x_arr-dx_arr_lim),np.nanmax(x_arr+dx_arr_lim)))
-    plt.ylim((np.nanmin(y_arr-dy_arr_lim),np.nanmax(y_arr+dy_arr_lim)))
+    if xbounds is None:
+        ax.set_xlim((np.nanmin(x_arr-dx_arr_lim),np.nanmax(x_arr+dx_arr_lim)))
+    else:
+        ax.set_xlim(np.log10(xbounds) if log_x else xbounds)
 
+    if ybounds is None:
+        ax.set_ylim((np.nanmin(y_arr-dy_arr_lim),np.nanmax(y_arr+dy_arr_lim)))
+    else:
+        ax.set_ylim(np.log10(ybounds) if log_y else ybounds)
+
+    #first loop with intercept at 0 on nsim iterations
     bound_inter = array([None] * nsim)
+    for i in range(nsim):
 
-    with tqdm(total=nsim) as pbar:
-        for i in range(nsim):
+        # computing the linreg values
+        mask_nonan = ~(isnan(x_pert[i]) | isnan(y_pert[i]))
+        curr_regress = linregress(x_pert[i][mask_nonan], y_pert[i][mask_nonan])
 
-            # computing the linreg values
-            mask_nonan = ~(isnan(x_pert[i]) | isnan(y_pert[i]))
-            curr_regress = linregress(x_pert[i][mask_nonan], y_pert[i][mask_nonan])
-            slope_vals[i] = curr_regress.slope
-            intercept_vals[i] = curr_regress.intercept
+        slope_vals[i] = curr_regress.slope
+        intercept_vals[i] = curr_regress.intercept
 
-            # computing a dataframe set from an iteration of perturbed values
-            df_pert = pd.DataFrame(data=array([x_pert[i], y_pert[i]]).T, columns=['x_pert', 'y_pert'])
-            # computing the regression plot on the current axis
-            sns.regplot(x=x_pert[i], y=y_pert[i], ax=ax_new, truncate=False, ci=90)
-            # fetching the newly added elements to the axis list
-            ax_children_regplot = [elem for elem in ax_new.get_children() if elem not in ax_children_init]
+    test=linregress(x_arr,y_arr)
 
-            for elem_children in ax_children_regplot:
-                # removing everything but the line interval
-                if type(elem_children) != mpl.collections.PolyCollection:
-                    elem_children.remove()
-                else:
-                    if shade_regions:
-                        # lowering the alpha of the line interval
-                        elem_children.set_alpha(1 / (min(nsim, 255)))
-                        elem_children.set_color(bandcolor)
-                    else:
-                        # storing the points of this interval
-                        points_inter = elem_children.get_paths()[0].to_polygons()[0].T
+    slope=test.slope
+    inter=test.intercept
 
-                        # computing the sampling fo the polygons (number of abscisses used as boundaries)
-                        # note: the start and finish point are doubled, so we need to take them off
-                        reg_sampling = int(len(points_inter[0]) / 2 - 1)
-                        # storing the abscisses of the interval at the first iteration
-                        if i == 0:
-                            abs_inter = points_inter[0][1:1 + reg_sampling]
-                        # storing the points for the top and bottom boundaries without repetitions and with the correct order
-                        bound_inter[i] = array([points_inter[1][1:1 + reg_sampling],
-                                                points_inter[1][2 + reg_sampling:][::-1]])
-                        # removing the unwanted children
-                        elem_children.remove()
-            pbar.update()
+    #main sigma value
+    sigma_main=np.sqrt(np.nansum((y_arr[tot_nonlim_mask]- \
+                                  ((x_arr[tot_nonlim_mask])*slope+\
+                                    inter))**2))
 
-    plt.close(fig_new)
-
-    if not shade_regions:
-        # now that we have the array, we re-organize it into something regular, then transpose and sort it to get the distribution
-        # of each boundary
-        bound_inter = array([elem for elem in bound_inter])
-        # transposing into #low-high curve / point / iteration
-        bound_inter = transpose(bound_inter, (1, 2, 0))
-        # and sorting on the iterations
-        bound_inter.sort(2)
-        # selecting the nth percentile of each (low percentile for the lower curve, upper percentile for the higher curve)
-        low_curve = array([bound_inter[0][i][round((1 - percent / 100) * nsim)] for i in range(reg_sampling)])
-        high_curve = array([bound_inter[1][i][round((percent / 100) * nsim)] for i in range(reg_sampling)])
-        # filling the region
-
-        if log_x:
-            abs_inter=10**abs_inter
-
-        if log_y:
-            low_curve=10**low_curve
-            high_curve=10**high_curve
-
-        ax.fill_between(abs_inter, low_curve, high_curve, color=bandcolor,zorder=0)
-
-    uncert_arr = array([[None, None, None]] * 2)
-
-    #in this case the linear regression actually computes the intercept at 0 because the pivot point is at 0
-    intercept_at_x_vals = slope_vals * x_intercept + intercept_vals
-
-    # sorting the values to pick out the percentiles
-    slope_vals.sort()
-    intercept_at_x_vals.sort()
-
-    # storing the main medians in the array
-    uncert_arr[0][0] = slope_vals[round(nsim * 0.5)]
-    uncert_arr[1][0] = intercept_at_x_vals[round(nsim * 0.5)]
-
-    # lower uncertainties
-    uncert_arr[0][1] = uncert_arr[0][0] - slope_vals[round(nsim * (1 - percent / 100))]
-    uncert_arr[1][1] = uncert_arr[1][0] - intercept_at_x_vals[round(nsim * (1 - percent / 100))]
-
-    # upper uncertainties
-    uncert_arr[0][2] = slope_vals[round(nsim * percent / 100)] - uncert_arr[0][0]
-    uncert_arr[1][2] = intercept_at_x_vals[round(nsim * percent / 100)] - uncert_arr[1][0]
-
-    slope_arr=uncert_arr[0]
-    intercept_arr=uncert_arr[1]
-
-    if xlim is None:
-        xlim_mask=np.repeat(False,len(x))
-    else:
-        xlim_mask=xlim
-
-    if ylim is None:
-        ylim_mask=np.repeat(False,len(x))
-    else:
-        ylim_mask=ylim
-
-    tot_nonlin_mask=~ ((xlim_mask) & (ylim_mask))
-
-    #computing the intrinsic scatter (standard deviation)
-    sigma_vals=np.array([np.sqrt(np.nansum((y_pert[id][tot_nonlin_mask]-\
-                                   (x_pert[id][tot_nonlin_mask]*slope_vals[id]+\
+    #computing the intrinsic scatter (standard deviation) (here because not affected by change in intercept
+    #main sigma from non perturbated values
+    sigma_vals=np.array([np.sqrt(np.nansum((y_pert[id][tot_nonlim_mask]-\
+                                   ((x_pert[id][tot_nonlim_mask])*slope_vals[id]+\
                                     intercept_vals[id]))**2))\
                             for id in range(nsim)])
 
-    sigma_vals.sort()
-    sigma_med=sigma_vals[round(nsim*0.5)]
-    sigma_arr=np.array([sigma_med,sigma_med-sigma_vals[round(nsim * (1 - percent / 100))],
-                                  sigma_vals[round(nsim * percent / 100)]-sigma_med])
-
-    #plotting the median line with the median value of the intercept and coefficient
-
-    #fetching a sample of points from the limits of the ax to create the line in between
-    #note
+    #fetching a sample of points from the limits of the ax to create the lines
     if log_x:
-        x_line=np.linspace(np.log10(ax.get_xlim()[0]),np.log10(ax.get_xlim()[1]),500)
+        x_line=np.linspace(np.log10(ax.get_xlim()[0]),np.log10(ax.get_xlim()[1]),2*nsim)
     else:
-        x_line=np.linspace(ax.get_xlim()[0],ax.get_xlim()[1],500)
+        x_line=np.linspace(ax.get_xlim()[0],ax.get_xlim()[1],2*nsim)
 
-    #locking the ax to avoid resizing when plotting the next line
-    ax.set_xlim(ax.get_xlim())
-    ax.set_ylim(ax.get_ylim())
+    #saving the first set of peturbated values to allow checks if needed
+    # the slope should be the same in the second perturbation round
+    slope_vals_save=slope_vals.copy()
+    intercept_vals_save=intercept_vals.copy()
 
-    y_line=(x_line-x_intercept)*uncert_arr[0][0]+uncert_arr[1][0]
+    #list of y position of all perturbated lines
+    y_line_pert=np.array([x_line*slope_vals_save[i]+intercept_vals_save[i] for i in range(nsim)]).T
+
+    y_line_pert.sort()
+
+    y_line_low=y_line_pert.T[round(nsim * (0.5-percent/200))]
+    y_line_high=y_line_pert.T[round(nsim* (0.5+percent/200))]
+
+    ax.fill_between(x_line, y_line_low, y_line_high, color=inter_color, zorder=0)
+
+    #computing the best possible intercept
+    x_intercept_best=x_line[(y_line_high-y_line_low).argsort()[0]]
+
+    if intercept_pos=='best':
+        x_intercept=x_intercept_best
+    elif intercept_pos=='auto':
+        x_intercept=x_intercept_ticks[abs(x_intercept_ticks-x_intercept_best).argsort()[0]]
+    else:
+        x_intercept=intercept_pos
+
+    #recomputing the LR with the intercept this time
+    #base regression without upper limits
+    base_regress=linregress(x_arr[tot_nonlim_mask]-x_intercept,y_arr[tot_nonlim_mask])
+
+    base_regress_slope=base_regress.slope
+    base_regress_intercept=base_regress.intercept
+
+    for i in range(nsim):
+
+        # computing the linreg values
+        mask_nonan = ~(isnan(x_pert[i]) | isnan(y_pert[i]))
+        curr_regress = linregress(x_pert[i][mask_nonan]-x_intercept, y_pert[i][mask_nonan])
+
+        slope_vals[i] = curr_regress.slope
+        intercept_vals[i] = curr_regress.intercept
+
+    uncert_arr = array([[None, None, None]] * 2)
+
+    # sorting the values to pick out the percentiles
+    slope_vals_copy=slope_vals.copy()
+    slope_vals.sort()
+
+    # storing the main values as the central position for the array
+    uncert_arr[0][0] = base_regress_slope
+
+    uncert_arr[0][1] = uncert_arr[0][0] - slope_vals[round(nsim * (0.5-percent/200))]
+    uncert_arr[0][2] = slope_vals[round(nsim * (0.5+percent/200))] - uncert_arr[0][0]
+
+    slope_arr=uncert_arr[0]
+
+    #re-centering the intercept array
+    intercept_vals_copy=intercept_vals.copy()
+    intercept_vals.sort()
+
+    #and same for the main non-perturbated value
+    uncert_arr[1][0] = base_regress_intercept
+
+    uncert_arr[1][1] = uncert_arr[1][0] - intercept_vals[round(nsim * (0.5-percent/200))]
+    uncert_arr[1][2] = intercept_vals[round(nsim * (0.5+percent/200))] - uncert_arr[1][0]
+
+    intercept_arr=uncert_arr[1]
+
+    #main sigma value
+
+    sigma_vals.sort()
+
+    #and the uncertainties
+    sigma_arr=np.array([sigma_main,max(sigma_main-sigma_vals[round(nsim * (0.5-percent/200))],0),
+                                  max(sigma_vals[round(nsim*(0.5+percent/200))]-sigma_main,0)])
+
+    base_regress_line=(x_line-x_intercept)*base_regress_slope+base_regress_intercept
 
     #converting to powers if in log space
     if log_x:
@@ -243,12 +298,13 @@ def lmplot_uncert_a(ax, x, y, dx, dy, xlim=None,ylim=None, percent=90, distrib='
         x_line_plot=x_line
 
     if log_y:
-        y_line_plot=10**y_line
+        y_line_plot=10**base_regress_line
     else:
-        y_line_plot=y_line
+        y_line_plot=base_regress_line
 
-    #plotting the line
-    plt.plot(x_line_plot,y_line_plot,lw=lw,color=linecolor)
+    #plotting the base line
+    plt.plot(x_line_plot,y_line_plot,lw=lw,color=line_color)
 
+    #output info
     if return_linreg:
-        return slope_arr,intercept_arr,sigma_arr
+        return slope_arr,intercept_arr,sigma_arr,x_intercept

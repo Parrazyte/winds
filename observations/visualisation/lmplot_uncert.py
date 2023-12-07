@@ -199,13 +199,13 @@ def lmplot_uncert_a(ax, x, y, dx, dy, xlim=None,ylim=None, percent=68.26, nsim=2
     #main sigma value
     sigma_main=np.sqrt(np.nansum((y_arr[tot_nonlim_mask]- \
                                   ((x_arr[tot_nonlim_mask])*slope+\
-                                    inter))**2))
+                                    inter))**2))/sum(tot_nonlim_mask)
 
     #computing the intrinsic scatter (standard deviation) (here because not affected by change in intercept
     #main sigma from non perturbated values
     sigma_vals=np.array([np.sqrt(np.nansum((y_pert[id][tot_nonlim_mask]-\
                                    ((x_pert[id][tot_nonlim_mask])*slope_vals[id]+\
-                                    intercept_vals[id]))**2))\
+                                    intercept_vals[id]))**2))/sum(tot_nonlim_mask)\
                             for id in range(nsim)])
 
     #fetching a sample of points from the limits of the ax to create the lines

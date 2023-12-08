@@ -95,7 +95,8 @@ def perturb_values(x, y, dx, dy,xlim=None,ylim=None, Nperturb=10000):
         
         xp_disjointed=_np.array([[((-1)**(j+1)*abs(rng.normal(loc=0,scale=abs(dx[i][j]),size=(Nperturb)))\
                                        if (xlim is None or xlim[i]==0) else\
-                                   rng.uniform(low=x[i],high=x[i]+dx[i][1],size=Nperturb)) if dx[i][j]!=0  else None\
+                                   rng.uniform(low=x[i],high=x[i]+dx[i][1],size=Nperturb)) if dx[i][j]!=0\
+                                      else _np.repeat(0,Nperturb)\
                                   for i in range(len(dx))] for j in [0,1]],dtype=object)
             
         #different transpositions depending on if the array ends up with Nones or not
@@ -112,11 +113,10 @@ def perturb_values(x, y, dx, dy,xlim=None,ylim=None, Nperturb=10000):
 
         gauss_draw=rng.integers(0,2,Nperturb)
 
-
         xp=_np.array([_np.repeat(0,Nperturb) if elem[0] is None and elem[1] is None else\
             _np.array([elem.T[i_pert][gauss_draw[i_pert]] for i_pert in range(Nperturb)])\
                 if elem[0] is not None and elem[1] is not None else\
-            elem[0] if elem[0] is not None else elem[1] for i_pert,elem in enumerate(xp_disjointed)])
+            elem[0] if elem[0] is not None else elem[1] for elem in xp_disjointed])
             
         xp=xp.T+x
     else:
@@ -131,7 +131,8 @@ def perturb_values(x, y, dx, dy,xlim=None,ylim=None, Nperturb=10000):
             #drawing two independant samples with gaussian shape on each side (or None if there is no uncertainty)
             #Note : we take the absolute values of the uncertainties to make sure they are valid scale parameters
             yp_disjointed=_np.array([[(((-1)**(j+1)*abs(rng.normal(loc=0,scale=abs(dy[i][j]),size=(Nperturb)))) if (ylim is None or ylim[i]==0) else\
-                                       rng.uniform(low=y[i],high=y[i]+dy[i][1],size=Nperturb)) if dy[i][j]!=0  else None\
+                                       rng.uniform(low=y[i],high=y[i]+dy[i][1],size=Nperturb)) if dy[i][j]!=0\
+                                         else _np.repeat(0,Nperturb)\
                                       for i in range(len(dy))] for j in [0,1]],dtype=object)
             
             #different transpositions depending on if the array ends up with Nones or not
@@ -153,6 +154,8 @@ def perturb_values(x, y, dx, dy,xlim=None,ylim=None, Nperturb=10000):
                 _np.array([elem.T[i_pert][gauss_draw[i_pert]] for i_pert in range(Nperturb)])\
                     if elem[0] is not None and elem[1] is not None else\
                 elem[0] if elem[0] is not None else elem[1] for elem in yp_disjointed])
+
+
     
             yp=yp.T+y
                 
@@ -439,9 +442,9 @@ normal " + coeff + " output.")
         import warnings as _warnings
         _warnings.warn("No bootstrapping or perturbation applied. Returning \
 regular " + coeff + " values.")
-        return compute_corr(xp, yp,
-                            xlim=xlim, ylim=ylim,
-                            coeff=coeff)
+        # return compute_corr(xp, yp,
+        #                     xlim=xlim, ylim=ylim,
+        #                     coeff=coeff)
 
     fcoeff = _np.percentile(coeffs, percentiles,interpolation='nearest')
     fpval = _np.percentile(pvals, percentiles,interpolation='nearest')

@@ -97,7 +97,7 @@ ap.add_argument('-catch', '--catch_errors', help='Catch errors while running the
 
 # global choices
 ap.add_argument("-a", "--action", nargs='?', help='Give which action(s) to proceed,separated by comas.',
-                default='g,m', type=str)
+                default='m', type=str)
 # default: build,reg,lc,sp,g,m
 
 ap.add_argument("-over", nargs=1, help='overwrite computed tasks (i.e. with products in the batch, or merge directory\
@@ -111,7 +111,7 @@ ap.add_argument('-bright_check',nargs=1,help='recompute the entire set of action
 ap.add_argument('-force_bright',help="Force bright mode for the tasks from the get go",default=False)
 
 # directory level overwrite (not active in local)
-ap.add_argument('-folder_over', nargs=1, help='relaunch action through folders with completed analysis', default=True,
+ap.add_argument('-folder_over', nargs=1, help='relaunch action through folders with completed analysis', default=False,
                 type=bool)
 ap.add_argument('-folder_cont', nargs=1, help='skip all but the last 2 directories in the summary folder file',
                 default=False, type=bool)
@@ -363,7 +363,7 @@ def process_obsdir(directory, overwrite=True, bright=False):
                           ' clobber=' + ('YES' if overwrite else 'FALSE')+bright_str)
 
         #will need to update this in case of updates
-        process_state = bashproc.expect(['nupipeline_0.4.9: Exit'], timeout=None)
+        process_state = bashproc.expect(['nupipeline_0.4.9: Exit','ERROR: Pipeline exit with error'], timeout=None)
 
         # exiting the bashproc
         bashproc.sendline('exit')
@@ -372,6 +372,7 @@ def process_obsdir(directory, overwrite=True, bright=False):
         # raising an error to stop the process if the command has crashed for some reason
         if process_state != 0:
             raise ValueError
+
 def disp_ds9(spawn, file, zoom='auto', scale='log', regfile='', screenfile='', give_pid=False, kill_last=''):
     '''
     Regfile is an input, screenfile is an output. Both can be paths
@@ -1841,15 +1842,21 @@ def batch_mover(directory,bright_check=True,force_bright=False):
 
     bashproc.sendline('cd ' + directory)
 
-    if force_bright or bright_check and os.path.isdir(os.path.join(directory,'products_bright')):
+    if force_bright or (bright_check and os.path.isdir(os.path.join(directory,'products_bright'))):
         print('Copying bright mode products')
         merge_dir='products_bright'
+        dr_dir='out_bright'
     else:
         print('Copying standard products')
         merge_dir='products'
+        dr_dir='out'
 
     copy_files=[elem for elem in glob.glob(os.path.join(directory,merge_dir,'**')) if elem.endswith('.png') or \
                 elem.endswith('.pha') or elem.endswith('.rmf') or elem.endswith('.arf')]
+
+    #also adding the region crops
+    copy_files+=[elem for elem in glob.glob(os.path.join(directory,dr_dir,'**')) if elem.endswith('.png')]
+
 
     for elem_file in copy_files:
 

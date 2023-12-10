@@ -154,12 +154,13 @@ ap = argparse.ArgumentParser(description='Script to perform line detection in X-
 
 '''GENERAL OPTIONS'''
 
-ap.add_argument('-satellite',nargs=1,help='telescope to fetch spectra from',default='Suzaku',type=str)
+ap.add_argument('-satellite',nargs=1,help='telescope to fetch spectra from',default='NICER',type=str)
 #note: use maj for first character
 
 ap.add_argument("-cameras",nargs=1,help='Cameras to use for spectral analysis',default='all',type=str)
 ap.add_argument("-expmodes",nargs=1,help='restrict the analysis to a single type of exposure',default='all',type=str)
-ap.add_argument("-grouping",nargs=1,help='specfile grouping for XMM spectra in [5,10,20] cts/bin',default='opt',type=str)
+ap.add_argument("-grouping",nargs=1,help='specfile grouping for spectra in Kaastra type or cts/bin',default='opt',
+                type=str)
 
 ap.add_argument('-fitstat',nargs=1,help='fit statistic to be used for the spectral analysis',default='cstat',type=str)
 
@@ -184,61 +185,70 @@ ap.add_argument('-skip_complete',nargs=1,help='skip completed exposures listed i
 
 ap.add_argument('-see_search',nargs=1,help='plot every single iteration of the line search',default=False,type=bool)
 
-ap.add_argument('-log_console',nargs=1,help='log console output instead of displaying it on the screen',default=False,type=bool)
+ap.add_argument('-log_console',nargs=1,help='log console output instead of displaying it on the screen',default=False,
+                type=bool)
 
-ap.add_argument('-catch_errors',nargs=1,help='catch errors when the line detection process crashes and continue for other exposures',
+ap.add_argument('-catch_errors',nargs=1,
+                help='catch errors when the line detection process crashes and continue for other exposures',
                 default=False,type=bool)
 
-ap.add_argument('-launch_cpd',nargs=1,help='launch cpd /xs window to be able to plot elements through xspec native commands',default=False,
+ap.add_argument('-launch_cpd',nargs=1,
+                help='launch cpd /xs window to be able to plot elements through xspec native commands',default=False,
                  type=bool)
 
-ap.add_argument('-xspec_window',nargs=1,help='xspec window id (auto tries to pick it automatically)',default='auto',type=str)
+ap.add_argument('-xspec_window',nargs=1,help='xspec window id (auto tries to pick it automatically)',
+                default='auto',type=str)
 #note: bash command to see window ids: wmctrl -l
 
 
 '''MODELS'''
 #### Models and abslines lock
 ap.add_argument('-cont_model',nargs=1,help='model list to use for the autofit computation',default='cont',type=str)
-ap.add_argument('-autofit_model',nargs=1,help='model list to use for the autofit computation',default='lines_narrow',type=str)
+ap.add_argument('-autofit_model',nargs=1,help='model list to use for the autofit computation',
+                default='lines_narrow',type=str)
 #narrow or resolved mainly
 
-ap.add_argument('-no_abslines',nargs=1,help='turn off absorption lines addition in the fit (still allows for UL computations)',
+ap.add_argument('-no_abslines',nargs=1,
+                help='turn off absorption lines addition in the fit (still allows for UL computations)',
                 default=False,type=str)
-
 
 '''DIRECTORY SPECIFICS'''
 
 ap.add_argument("-local",nargs=1,help='launch analysis in the current directory instead',default=True,type=bool)
+
 ap.add_argument("-h_update",nargs=1,help='update the bg, rmf and arf file names in the grouped spectra headers',
                 default=True,type=bool)
 
 '''ANALYSIS RESTRICTION'''
 
-ap.add_argument('-spread_comput',nargs=1,help='spread sources in N subsamples to poorly parallelize on different consoles',
+ap.add_argument('-spread_comput',nargs=1,
+                help='spread sources in N subsamples to poorly parallelize on different consoles',
                 default=1,type=bool)
 
 ap.add_argument('-reverse_spread',nargs=1,help='run the spread computation lists in reverse',default=False,type=bool)
 
 #note: havign both reverse spread and reverse epoch with spread_comput>1 will give you back the normal order
-ap.add_argument('-reverse_epoch',nargs=1,help='reverse epoch list order',default=False,type=bool)
+ap.add_argument('-reverse_epoch',nargs=1,help='reverse epoch list order',default=True,type=bool)
 
 #better when spread computations are not running
-ap.add_argument('-skip_started_spread',nargs=1,help='consider already finished computations when splitting the exposures',
+ap.add_argument('-skip_started_spread',nargs=1,
+                help='skip already finished computations when splitting the exposures',
                 default=True,type=bool)
 
 #better when some spread computations are still running
-ap.add_argument('-spread_overwrite',nargs=1,help='consider already finished computations when creating the spreads',
+ap.add_argument('-spread_overwrite',nargs=1,
+                help='consider already finished computations when creating the spreads',
                 default=False,type=bool)
 
 
 #in this mode, the line detection function isn't wrapped in a try, and the summary isn't updasted
-ap.add_argument('-restrict',nargs=1,help='restrict the computation to a number of predefined exposures',
+ap.add_argument('-restrict',nargs=1,
+                help='restrict the computation to a number of predefined exposures',
                 default=False,type=bool)
 
 observ_restrict=['1130010141-001-002-003-004-005-006-007']
 
 ''' 
-
 test:
 '5501010106-001_sp_grp_opt.pha'
                  '5501010106-002_sp_grp_opt.pha'
@@ -281,12 +291,16 @@ only one order:
 ap.add_argument('-SNR_min',nargs=1,help='minimum source Signal to Noise Ratio',default=50,type=float)
 #shouldn't be needed now that we have a counts min limit + sometimes false especially in timing when the bg is the source
 
-ap.add_argument('-counts_min',nargs=1,help='minimum source counts in the source region in the line continuum range',default=5000,type=float)
-ap.add_argument('-fit_lowSNR',nargs=1,help='fit the continuum of low quality data to get the HID values',default=False,type=str)
+ap.add_argument('-counts_min',nargs=1,
+                help='minimum source counts in the source region in the line continuum range',default=5000,type=float)
+ap.add_argument('-fit_lowSNR',nargs=1,
+                help='fit the continuum of low quality data to get the HID values',default=False,type=str)
 
-ap.add_argument('-counts_min_HID',nargs=1,help='minimum counts for HID fitting in broad band',default=200,type=float)
+ap.add_argument('-counts_min_HID',nargs=1,
+                help='minimum counts for HID fitting in broad band',default=200,type=float)
 
-ap.add_argument('-skip_nongrating',nargs=1,help='skip non grating Chandra obs (used to reprocess with changes in the restrictions)',
+ap.add_argument('-skip_nongrating',nargs=1,
+                help='skip non grating Chandra obs (used to reprocess with changes in the restrictions)',
                 default=False,type=bool)
 
 ap.add_argument('-skip_flares',nargs=1,help='skip flare GTIs',default=True,type=bool)
@@ -298,18 +312,25 @@ ap.add_argument('-write_pdf',nargs=1,help='overwrite finished pdf at the end of 
 ap.add_argument('-write_aborted_pdf',nargs=1,help='create aborted pdfs at the end of the computation',default=False,
                 type=bool)
 
-ap.add_argument('-group_gti_time',nargs=1,help='maximum time delta for gti grouping in dd_hh_mm',default='00_01_00',type=str)
+ap.add_argument('-group_gti_time',nargs=1,
+                help='maximum time delta for gti grouping in dd_hh_mm',default='01_00_00',type=str)
 
 '''MODES'''
 
-#in construction
-ap.add_argument('-reload_autofit',nargs=1,help='Reload existing autofit save files to gain time if a computation has crashed',
+ap.add_argument('-reload_autofit',nargs=1,
+                help='Reload existing autofit save files to gain time if a computation has crashed',
                 default=True,type=bool)
 
-ap.add_argument('-pdf_only',nargs=1,help='Updates the pdf with already existing elements but skips the line detection entirely',
+ap.add_argument('-reload_fakes',nargs=1,
+                help='Reload fake delchi array file to skip the fake computation if possible',
+                default=True,type=bool)
+
+ap.add_argument('-pdf_only',nargs=1,
+                help='Updates the pdf with already existing elements but skips the line detection entirely',
                 default=False,type=bool)
 
-#note: used mainly to recompute obs with bugged UL computations
+#note: used mainly to recompute obs with bugged UL computations. Needs FINISHED computations firsthand, else
+#use reload_autofit and reload_fakes
 ap.add_argument('-line_ul_only',nargs=1,help='Reloads the autofit computations and re-computes the ULs',
                 default=False,type=bool)
 
@@ -319,19 +340,26 @@ ap.add_argument('-hid_only',nargs=1,help='skip the line detection and directly p
 #date or HR
 ap.add_argument('-hid_sort_method',nargs=1,help='HID summary observation sorting',default='date',type=str)
 
-ap.add_argument('-multi_obj',nargs=1,help='compute the hid for multiple obj directories inside the current directory',
+ap.add_argument('-multi_obj',nargs=1,
+                help='compute the hid for multiple obj directories inside the current directory',
                 default=False)
 
-ap.add_argument('-autofit',nargs=1,help='enable auto fit with lines if the peak search detected at least one absorption',
+ap.add_argument('-autofit',nargs=1,
+                help='enable auto fit with lines if the peak search detected at least one absorption',
                 default=True,type=bool)
 
-ap.add_argument('-refit_cont',nargs=1,help='After the autofit, refit the continuum without excluding the iron region, using the lines found during the procedure, then re-estimate the fit parameters and HID.',default=True)
+ap.add_argument('-refit_cont',nargs=1,
+                help='After the autofit, refit the continuum without excluding the iron region, using the lines found during the procedure, then re-estimate the fit parameters and HID.',default=True)
 
 ####split fit
-ap.add_argument('-split_fit',nargs=1,help='Split fitting procedure between components instead of fitting the whole model directly',default=True)
+ap.add_argument('-split_fit',nargs=1,
+                help='Split fitting procedure between components instead of fitting the whole model directly',
+                default=True)
 
 #line significance assessment parameter
-ap.add_argument('-assess_line',nargs=1,help='use fakeit simulations to estimate the significance of each absorption line',default=True,type=bool)
+ap.add_argument('-assess_line',nargs=1,
+                help='use fakeit simulations to estimate the significance of each absorption line',
+                default=True,type=bool)
 
 '''SPECTRUM PARAMETERS'''
 
@@ -340,28 +368,37 @@ ap.add_argument("-plim","--pileup_lim",nargs=1,help='maximal pileup value',defau
 ap.add_argument("-pmiss",nargs=1,help='include spectra with no pileup info',default=True,type=bool)
 
 #note: these values are modified for higher energy instruments, like suzaku or NuSTAR
-ap.add_argument("-hid_cont_range",nargs=1,help='min and max energies of the hid band fit',default='3 10',type=str)
+ap.add_argument("-hid_cont_range",nargs=1,
+                help='min and max energies of the hid band fit',default='3 10',type=str)
 
-ap.add_argument("-line_cont_range",nargs=1,help='min and max energies of the line continuum broand band fit',default='4 10',type=str)
+ap.add_argument("-line_cont_range",nargs=1,
+                help='min and max energies of the line continuum broand band fit',default='4 10',type=str)
 
-ap.add_argument('-force_ener_bounds',nargs=1,help='force the energy limits above instead of resetting to standard bounds for each epoch',default=False,type=bool)
+ap.add_argument('-force_ener_bounds',nargs=1,
+                help='force the energy limits above instead of resetting to standard bounds for each epoch',
+                default=False,type=bool)
 #### line cont ig
-ap.add_argument("-line_cont_ig_arg",nargs=1,help='min and max energies of the ignore zone in the line continuum broand band fit',
+ap.add_argument("-line_cont_ig_arg",nargs=1,
+                help='min and max energies of the ignore zone in the line continuum broand band fit',
                 default='iron',type=str)
 
-ap.add_argument("-line_search_e",nargs=1,help='min, max and step of the line energy search',default='4 10 0.05',type=str)
+ap.add_argument("-line_search_e",nargs=1,
+                help='min, max and step of the line energy search',default='4 10 0.05',type=str)
 
-ap.add_argument("-line_search_norm",nargs=1,help='min, max and nsteps (for one sign)  of the line norm search (which operates in log scale)',
+ap.add_argument("-line_search_norm",nargs=1,
+                help='min, max and nsteps (for one sign)  of the line norm search (which operates in log scale)',
                 default='0.01 10 500',type=str)
 
 #skips fakes testing at high energy to gain time
-ap.add_argument('-restrict_fakes',nargs=1,help='restrict range of fake computation to 8keV max',default=False,type=bool)
+ap.add_argument('-restrict_fakes',nargs=1,
+                help='restrict range of fake computation to 8keV max',default=False,type=bool)
 
 '''XMM'''
 
 ap.add_argument("-skipbg_timing",nargs=1,help='do not use background for the -often contaminated- timing backgrounds',
                 default=True,type=bool)
-ap.add_argument('-max_bg_imaging',nargs=1,help='maximal imaging bg rate compared to standard bg values',default=100,type=float)
+ap.add_argument('-max_bg_imaging',nargs=1,
+                help='maximal imaging bg rate compared to standard bg values',default=100,type=float)
 
 
 '''SUZAKU'''
@@ -382,13 +419,16 @@ ap.add_argument('-suzaku_pin_range',nargs=1,help='range of energies usable for s
 '''NICER'''
 ap.add_argument('-NICER_bkg',nargs=1,help='NICER background type',default='scorpeon_mod',type=str)
 
-ap.add_argument('-pre_reduced_NICER',nargs=1,help='change NICER data format to pre-reduced obsids',default=False,type=bool)
+ap.add_argument('-pre_reduced_NICER',nargs=1,
+                help='change NICER data format to pre-reduced obsids',default=False,type=bool)
 
 ap.add_argument('-NICER_lc_binning',nargs=1,help='NICER LC binning',default='1',type=str)
 
 '''CHANDRA'''
 #Chandra issues
-ap.add_argument('-restrict_graded',nargs=1,help='restrict range of line analysis to 8keV max for old CC33_graded spectra',default=False,type=bool)
+ap.add_argument('-restrict_graded',nargs=1,
+                help='restrict range of line analysis to 8keV max for old CC33_graded spectra',
+                default=False,type=bool)
 
 #### restrict order
 ap.add_argument('-restrict_order',nargs=1,help='restrict HETG spectral analysis to the -1 order only',
@@ -398,27 +438,39 @@ ap.add_argument('-restrict_order',nargs=1,help='restrict HETG spectral analysis 
 
 ap.add_argument('-peak_thresh',nargs=1,help='chi difference threshold for the peak detection',default=9.21,type=float)
 
-ap.add_argument('-peak_clean',nargs=1,help='try to distinguish a width for every peak (experimental)',default=False,type=bool)
+ap.add_argument('-peak_clean',nargs=1,
+                help='try to distinguish a width for every peak (experimental)',default=False,type=bool)
 
-ap.add_argument('-nfakes',nargs=1,help='number of simulations used. Limits the maximal significance tested to >1-1/nfakes',default=1e3,type=int)
+ap.add_argument('-nfakes',nargs=1,
+                help='number of simulations used. Limits the maximal significance tested to >1-1/nfakes',
+                default=1e3,type=int)
 
-ap.add_argument('-sign_threshold',nargs=1,help='data significance used to start the upper limit procedure and estimate the detectability',default=0.997,
-                type=float)
+ap.add_argument('-sign_threshold',nargs=1,
+                help='data significance used to start the upper limit procedure and estimate the detectability',
+                default=0.997,type=float)
 
 '''AUTOFIT PARAMETERS'''
 
-ap.add_argument('-force_autofit',nargs=1,help='force autofit even when there are no abs peaks detected',default=True,type=bool)
-ap.add_argument('-trig_interval',nargs=1,help='interval restriction for the absorption peak to trigger the autofit process',default='6.5 9.1',
+ap.add_argument('-force_autofit',nargs=1,
+                help='force autofit even when there are no abs peaks detected',default=True,type=bool)
+
+ap.add_argument('-trig_interval',nargs=1,
+                help='interval restriction for the absorption peak to trigger the autofit process',default='6.5 9.1',
                 type=str)
 
-ap.add_argument('-overlap_flag',nargs=1,help='overlap value to trigger the overlap flag, in absorption line area fraction',default=0.5,
-                type=float)
+ap.add_argument('-overlap_flag',nargs=1,
+                help='overlap value to trigger the overlap flag, in absorption line area fraction',
+                default=0.5,type=float)
+
 #note: currently not used
 
 '''VISUALISATION'''
 
-ap.add_argument('-plot_mode',nargs=1,help='system used for the visualisation',default='matplotlib',type=str)
-ap.add_argument('-paper_look',nargs=1,help='changes some visual elements for a more official look',default=True,type=bool)
+ap.add_argument('-plot_mode',nargs=1,
+                help='system used for the visualisation',default='matplotlib',type=str)
+
+ap.add_argument('-paper_look',nargs=1,
+                help='changes some visual elements for a more official look',default=True,type=bool)
 
 '''GLOBAL PDF SUMMARY'''
 
@@ -430,12 +482,13 @@ args=ap.parse_args()
 Notes:
 -Only works for the auto observations (due to prefix naming) for now
 
--For now we fix the masses of all the objets at 8M_sol unless a good dynamical measurement exists
+-For the HID computation we fix the masses of all the objets at 8M_sol unless a good dynamical measurement exists
 
 -Due to the way the number of steps is computed, we explore one less value for the positive side of the normalisation
 
 -The norm_stepval argument is for a fixed flux band, and the value is scaled in the computation depending on the line energy step
 '''
+
 sat=args.satellite
 cameras=args.cameras
 expmodes=args.expmodes
@@ -481,6 +534,7 @@ force_ener_bounds=args.force_ener_bounds
 write_aborted_pdf=args.write_aborted_pdf
 hid_sort_method=args.hid_sort_method
 reverse_epoch=args.reverse_epoch
+reload_fakes=args.reload_fakes
 
 megumi_files=args.megumi_files
 suzaku_hid_cont_range=np.array(args.suzaku_hid_cont_range.split(' ')).astype(float)
@@ -3114,91 +3168,103 @@ def line_detect(epoch_id):
             #adding the index to the list of line indexes to be tested
             line_id_list+=[i_line]
 
+        loaded_fakes=False
+
         if is_absline and assess_line:
 
-            #now we compute the list of intervals that can be made from that
-            steppar_ind_unique=np.unique(steppar_ind_list)
+            # attempting to reload the fake delchi arr if allowed
+            if reload_fakes and os.path.isfile(outdir + '/' + epoch_observ[0] + '_delchi_arr_fake_line.npy'):
 
-            steppar_ind_inter=list(interval_extract(steppar_ind_unique))
+                print('Complete fake computation detected. Reloading...')
 
-            #fake loop
-            with tqdm(total=nfakes) as pbar:
-                for f_ind in range(nfakes):
+                delchi_arr_fake_line=np.load(outdir + '/' + epoch_observ[0] + '_delchi_arr_fake_line.npy')
+                loaded_fakes=True
 
-                    #reloading the high energy continuum
-                    mod_fake=data_autofit_noabs.load()
+            if not loaded_fakes:
 
-                    #Freezing it to ensure the fakeit doesn't make the parameters vary, and loading them from a steppar
-                    for i_grp in range(1,AllData.nGroups+1):
+                #now we compute the list of intervals that can be made from that
+                steppar_ind_unique=np.unique(steppar_ind_list)
 
-                        #freezing doesn't change anything for linked parameters
-                        freeze(AllModels(i_grp))
+                steppar_ind_inter=list(interval_extract(steppar_ind_unique))
 
-                        AllModels(i_grp).setPars(autofit_drawpars_cont[f_ind][i_grp-1].tolist())
+                #fake loop
+                with tqdm(total=nfakes) as pbar:
+                    for f_ind in range(nfakes):
 
-                    #replacing the current spectra with a fake with the same characteristics so this can be looped
-                    #applyStats is set to true but shouldn't matter for now since everything is frozen
+                        #reloading the high energy continuum
+                        mod_fake=data_autofit_noabs.load()
 
-                    AllData.fakeit(settings=fakeset,applyStats=True,noWrite=True)
+                        #Freezing it to ensure the fakeit doesn't make the parameters vary, and loading them from a steppar
+                        for i_grp in range(1,AllData.nGroups+1):
 
-                    # limiting to the line search energy range
-                    ignore_data_indiv(line_cont_range[0],line_cont_range[1], reset=True, sat_low_groups=e_sat_low_indiv,
-                                      sat_high_groups=e_sat_high_indiv, glob_ignore_bands=ignore_bands)
+                            #freezing doesn't change anything for linked parameters
+                            freeze(AllModels(i_grp))
 
-                    #adjusting the fit and storing the chi²
+                            AllModels(i_grp).setPars(autofit_drawpars_cont[f_ind][i_grp-1].tolist())
 
-                    for i_grp in range(1,AllData.nGroups+1):
-                        #unfreezing the model
-                        unfreeze(AllModels(i_grp))
+                        #replacing the current spectra with a fake with the same characteristics so this can be looped
+                        #applyStats is set to true but shouldn't matter for now since everything is frozen
 
-                        #keeping the initially frozen parameters frozen
-                        freeze(AllModels(i_grp),parlist=continuum_forcedpars)
+                        AllData.fakeit(settings=fakeset,applyStats=True,noWrite=True)
 
-                        #keeping the first constant factor frozen if necessary
-                        if i_grp>1 and AllModels(1).componentNames[0]=='constant':
-                            AllModels(i_grp)(1).frozen=False
+                        # limiting to the line search energy range
+                        ignore_data_indiv(line_cont_range[0],line_cont_range[1], reset=True, sat_low_groups=e_sat_low_indiv,
+                                          sat_high_groups=e_sat_high_indiv, glob_ignore_bands=ignore_bands)
 
-                    #no error computation to avoid humongus computation times
-                    calc_fit(nonew=True,noprint=True)
+                        #adjusting the fit and storing the chi²
 
-                    for i_grp in range(1,AllData.nGroups+1):
-                        #freezing the model again since we want to fit only specific parameters afterwards
-                        freeze(AllModels(i_grp))
+                        for i_grp in range(1,AllData.nGroups+1):
+                            #unfreezing the model
+                            unfreeze(AllModels(i_grp))
 
-                    '''
-                    Now we search for residual lines. We use an energy grid steppar with free normalisation set at 0 
-                    The steppar will fit the free parameter at each energy for us
-                    '''
+                            #keeping the initially frozen parameters frozen
+                            freeze(AllModels(i_grp),parlist=continuum_forcedpars)
 
-                    #adding a narrow gaussian
-                    mod_fake=addcomp('nagaussian')
+                            #keeping the first constant factor frozen if necessary
+                            if i_grp>1 and AllModels(1).componentNames[0]=='constant':
+                                AllModels(i_grp)(1).frozen=False
 
-                    #computing a steppar for each element of the list
-                    Xset.chatter=0
-                    Xset.logChatter=0
+                        #no error computation to avoid humongus computation times
+                        calc_fit(nonew=True,noprint=True)
 
-                    for steppar_inter in steppar_ind_inter:
+                        for i_grp in range(1,AllData.nGroups+1):
+                            #freezing the model again since we want to fit only specific parameters afterwards
+                            freeze(AllModels(i_grp))
 
-                        #giving the width value of the corresponding line before computing the steppar
-                        AllModels(1)(AllModels(1).nParameters-1).values=[sign_widths_arr[0]]+AllModels(1)(AllModels(1).nParameters-1).values[1:]
+                        '''
+                        Now we search for residual lines. We use an energy grid steppar with free normalisation set at 0 
+                        The steppar will fit the free parameter at each energy for us
+                        '''
 
-                        #exploring the parameters
-                        try:
-                            Fit.steppar('nolog '+str(mod_fake.nParameters-2)+' '+str(round(line_search_e_space[steppar_inter[0]],3))+\
-                                        ' '+str(round(line_search_e_space[steppar_inter[1]],3))+' '\
-                                       +str(steppar_inter[1]-steppar_inter[0]))
+                        #adding a narrow gaussian
+                        mod_fake=addcomp('nagaussian')
 
-                            #updating the delchi array with the part of the parameters that got updated
-                            delchi_arr_fake[f_ind][steppar_inter[0]:steppar_inter[1]+1]=\
-                                abs(np.array([min(elem,0) for elem in Fit.stepparResults('delstat')]))
-                        except:
-                            #can happen if there are issues in the data quality, we just don't consider the fakes then
-                            pass
+                        #computing a steppar for each element of the list
+                        Xset.chatter=0
+                        Xset.logChatter=0
 
-                    Xset.chatter=5
-                    Xset.logChatter=5
+                        for steppar_inter in steppar_ind_inter:
 
-                    pbar.update(1)
+                            #giving the width value of the corresponding line before computing the steppar
+                            AllModels(1)(AllModels(1).nParameters-1).values=[sign_widths_arr[0]]+AllModels(1)(AllModels(1).nParameters-1).values[1:]
+
+                            #exploring the parameters
+                            try:
+                                Fit.steppar('nolog '+str(mod_fake.nParameters-2)+' '+str(round(line_search_e_space[steppar_inter[0]],3))+\
+                                            ' '+str(round(line_search_e_space[steppar_inter[1]],3))+' '\
+                                           +str(steppar_inter[1]-steppar_inter[0]))
+
+                                #updating the delchi array with the part of the parameters that got updated
+                                delchi_arr_fake[f_ind][steppar_inter[0]:steppar_inter[1]+1]=\
+                                    abs(np.array([min(elem,0) for elem in Fit.stepparResults('delstat')]))
+                            except:
+                                #can happen if there are issues in the data quality, we just don't consider the fakes then
+                                pass
+
+                        Xset.chatter=5
+                        Xset.logChatter=5
+
+                        pbar.update(1)
 
             #assessing the significance of each line
             for i_line in range(len(abslines_sign)):
@@ -3223,10 +3289,12 @@ def line_detect(epoch_id):
                 line_lower_ind=int((line_lower_e-line_search_e_space[0])//line_search_e[2])
                 line_upper_ind=int((line_upper_e-line_search_e_space[0])//line_search_e[2]+1)
 
-                #restricting the array to those indexes
-                #we use max evaluation here because it could potentially lead to underestimating the significance
-                #if more than 1 delchi element in an iteration are above the chi threshold
-                delchi_arr_fake_line[i_line]=delchi_arr_fake.T[line_lower_ind:line_upper_ind+1].T.max(1)
+                #remaking delchi_arr_fake_line if it wasn't loaded
+                if not loaded_fakes:
+                    #restricting the array to those indexes
+                    #we use max evaluation here because it could potentially lead to underestimating the significance
+                    #if more than 1 delchi element in an iteration are above the chi threshold
+                    delchi_arr_fake_line[i_line]=delchi_arr_fake.T[line_lower_ind:line_upper_ind+1].T.max(1)
 
                 #we round to keep the precision to a logical value
                 #we also add a condition to keep the significance at 0 when there's no line in order to avoid problems
@@ -3246,8 +3314,9 @@ def line_detect(epoch_id):
         #reloading the initial spectra for any following computations
         Xset.restore(outdir+'/'+epoch_observ[0]+'_mod_autofit.xcm')
 
-        #and saving the delchi array
-        np.save(outdir+'/'+epoch_observ[0]+'_delchi_arr_fake_line.npy',delchi_arr_fake_line)
+        #and saving the delchi array if it wasn't already done previously
+        if not loaded_fakes:
+            np.save(outdir+'/'+epoch_observ[0]+'_delchi_arr_fake_line.npy',delchi_arr_fake_line)
 
         '''
         ####Line fit upper limits
@@ -3541,7 +3610,7 @@ def expand_epoch(shortened_epoch):
     #splitting obsids
     file_ids=[]
     for short_id in shortened_epoch:
-        if short_id.coun('-')<=1:
+        if short_id.count('-')<=1:
             file_ids+=[short_id]
         else:
             obsid=short_id.split('-')[0]
@@ -3652,15 +3721,15 @@ for epoch_id,epoch_files in enumerate(epoch_list):
 
     elif sat=='NICER':
 
-        if (skip_started and short_epoch_id in started_expos) or \
-           (skip_complete and short_epoch_id in done_expos):
+        if (skip_started and shorten_epoch(file_ids) in started_expos) or \
+           (skip_complete and shorten_epoch(file_ids) in done_expos):
 
             print('\nSpectrum analysis already performed. Skipping...')
             continue
 
     #overwrite check
     if not overwrite:
-        pdf_name=os.path.join(outdir, ('_'.join(shorten_epoch(file_ids))) + '_recap.pdf')
+        pdf_name=os.path.join(outdir, short_epoch_id+'_recap.pdf')
 
         if os.path.isfile(pdf_name):
             print('\nLine detection already computed for this exposure (recap PDF exists). Skipping...')

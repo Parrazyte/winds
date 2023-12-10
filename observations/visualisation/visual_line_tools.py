@@ -345,6 +345,43 @@ def load_catalogs():
             ctl_bat_simbad
 
 @st.cache_data
+def load_integral():
+
+    integral_files = glob.glob('INTEGRAL/Sample/**',recursive=True)
+
+    lc_sw_list=[elem for elem in integral_files if 'ibis_lc_sw.csv' in elem]
+
+    fit_revol_list=[elem for elem in integral_files if 'ibis_fit_revol.csv' in elem]
+
+    lc_sw_dict={}
+
+    #incremental addition to ensure we don't have several lightcurve files for each object
+    for elem_lc_sw in lc_sw_list:
+
+        source_name=elem_lc_sw.split('Sample/')[1].split('/')[0].split('/')[-1]
+
+        assert elem_lc_sw not in list(lc_sw_dict.keys()),\
+            'Error: several integral lc_sw files for single source'+source_name
+
+        lc_sw_dict[source_name]=pd.read_csv(elem_lc_sw, dtype={'scw': str})
+
+    fit_revol_dict = {}
+
+    # incremental addition to ensure we don't have several lightcurve files for each object
+    for elem_fit_revol in fit_revol_list:
+        source_name = elem_fit_revol.split('Sample/')[1].split('/')[0].split('/')[-1]
+
+        assert elem_fit_revol not in list(lc_sw_dict.keys()), \
+            'Error: several integral lc_sw files for single source' + source_name
+
+        fit_revol_dict[source_name]=pd.read_csv(elem_fit_revol,dtype={'revolution': str})
+
+    #not needed for now, maybe later
+    # ctl_integral_simbad=silent_Simbad_query(list(lc_sw_dict.keys()))
+
+    return lc_sw_dict,fit_revol_dict
+
+@st.cache_data
 def fetch_bat_lightcurve(ctl_bat_df,_ctl_bat_simbad,name,binning='day'):
     '''
 
@@ -466,7 +503,9 @@ def fetch_rxte_lightcurve(name,dict_rxte=dict_lc_rxte):
     
     return dict_rxte[simbad_query[0]['MAIN_ID']]
 
-def plot_lightcurve(dict_linevis,ctl_maxi_df,ctl_maxi_simbad,name,ctl_bat_df,ctl_bat_simbad,dict_rxte=dict_lc_rxte,
+def plot_lightcurve(dict_linevis,ctl_maxi_df,ctl_maxi_simbad,name,ctl_bat_df,ctl_bat_simbad,
+                    lc_integral_sw_dict,fit_integral_revol_dict,
+                    dict_rxte=dict_lc_rxte,
                     mode='full',display_hid_interval=True,superpose_ew=False,binning='day'):
 
     '''
@@ -477,11 +516,15 @@ def plot_lightcurve(dict_linevis,ctl_maxi_df,ctl_maxi_simbad,name,ctl_bat_df,ctl
     HR_soft : HR in 4-10/2-4 bands
     HR_hard: HR in 10-20/2-4 bands
     BAT: BAT-only high energy lightcurve
+    INTEGRAL_band: INTEGRAL, in the "band" band . Can be 30-100,30-50 or 50-100 for equivalent keV bands
 
     binning:
-    -day: daily averages
-    -orbit: orbit averages (only for MAXI and BAT), 1.5h for MAXI, and the column TIMDEL for BAT
-
+    for RXTE/MAXI/BAT:
+        -day: daily averages
+        -orbit: orbit averages (only for MAXI and BAT), 1.5h for MAXI, and the column TIMDEL for BAT
+    for INTEGRAL:
+        -sw: science window
+        -revol: revolution (2.X days)
     BAT orbit lightcurve times have a TIME in seconds after 1/01/2001
 
     '''
@@ -506,28 +549,31 @@ def plot_lightcurve(dict_linevis,ctl_maxi_df,ctl_maxi_simbad,name,ctl_bat_df,ctl
 
     maxi_lc_df=fetch_maxi_lightcurve(ctl_maxi_df,ctl_maxi_simbad,name,binning=binning)
     rxte_lc_df=fetch_rxte_lightcurve(name, dict_rxte)
-    bat_lc_df =fetch_bat_lightcurve(ctl_bat_df, ctl_bat_simbad, name, binning=binning)
 
-    if mode=='BAT' and bat_lc_df is None:
-        return None
+    bat_lc_df=None
+    if mode=='BAT':
+        bat_lc_df =fetch_bat_lightcurve(ctl_bat_df, ctl_bat_simbad, name, binning=binning)
+        if bat_lc_df is None:
+            return None
 
-    if mode!='BAT' and maxi_lc_df is None and rxte_lc_df is None:
+    if mode not in ['full','HR_soft','HR_hard','BAT'] and maxi_lc_df is None and rxte_lc_df is None:
         return None
     
     fig_lc,ax_lc=plt.subplots(figsize=(12,4))
 
-    str_binning=' daily' if binning=='day' else ' individual orbit'
+    str_binning_monit=' daily' if binning=='day' else ' individual orbit'
+    str_binning_int=' revolution' if binning=='revol' else 'science window ' if binning=='sw' else ''
     #main axis definitions
     ax_lc.set_xlabel('Time')
     if mode=='full':
-        ax_lc.set_title(name[0]+str_binning+' broad band monitoring')
+        ax_lc.set_title(name[0]+str_binning_monit+' broad band monitoring')
         
         maxi_y_str='MAXI '+maxi_lc_df.columns[1] if maxi_lc_df is not None else ''
         rxte_y_str='RXTE '+rxte_lc_df.columns[1]+'/25' if rxte_lc_df is not None else ''
         ax_lc.set_ylabel(maxi_y_str+('/' if maxi_lc_df is not None and rxte_lc_df is not None else '')+rxte_y_str)
 
     elif mode=='HR_soft':
-        ax_lc.set_title(name[0]+str_binning+' Soft Hardness Ratio monitoring')
+        ax_lc.set_title(name[0]+str_binning_monit+' Soft Hardness Ratio monitoring')
 
         maxi_y_str='MAXI counts HR in [4-10]/[2-4] keV' if maxi_lc_df is not None else ''
         rxte_y_str='RXTE band C/(B+A) [5-12]/[1.5-5] keV' if rxte_lc_df is not None else ''
@@ -535,17 +581,23 @@ def plot_lightcurve(dict_linevis,ctl_maxi_df,ctl_maxi_simbad,name,ctl_bat_df,ctl
                          ("/" if maxi_lc_df is not None and rxte_lc_df is not None else '')+\
                          rxte_y_str,fontsize=8 if maxi_lc_df is not None and rxte_lc_df is not None else None)
     elif mode=='HR_hard':
-        ax_lc.set_title(name[0]+str_binning+' Hard Hardness Ratio monitoring')
+        ax_lc.set_title(name[0]+str_binning_monit+' Hard Hardness Ratio monitoring')
 
         maxi_y_str = 'MAXI counts HR in [10-20]/[2-4] keV' if maxi_lc_df is not None else ''
         ax_lc.set_ylabel(maxi_y_str)
 
     elif mode=='BAT':
-        ax_lc.set_title(name[0]+str_binning+' BAT monitoring')
+        ax_lc.set_title(name[0]+str_binning_monit+' BAT monitoring')
         bat_y_str = 'BAT counts (15-50 keV)'
         ax_lc.set_ylabel(bat_y_str)
 
-        
+    elif 'INTEGRAL' in mode:
+        ax_lc.set_title(name[0]+str_binning_monit+(' science window' if binning=='sw' else ' revolution')\
+                               +' INTEGRAL monitoring')
+        int_y_str = 'INTEGRAL '+('Flux (erg/s)'if binning=='revol' else 'IBIS counts')+' ('+mode.split('_')[1]+' keV)'
+        ax_lc.set_ylabel(int_y_str)
+
+
     '''MAXI'''
     
     #empty list initialisation to append easily the dates list afterwards no matter 
@@ -703,6 +755,86 @@ def plot_lightcurve(dict_linevis,ctl_maxi_df,ctl_maxi_simbad,name,ctl_bat_df,ctl
                            linestyle='', color='black', marker='', elinewidth=0.5, label='bat standard counts')
 
             ax_lc.set_ylim(0,max(ax_lc.get_ylim()[1],1e-2))
+
+    lc_integral_sw_df=None
+    fit_integral_revol_df=None
+    if name[0] in list(lc_integral_sw_dict.keys()):
+        lc_integral_sw_df=lc_integral_sw_dict[name[0]]
+    if name[0] in list(fit_integral_revol_dict):
+        fit_integral_revol_df=fit_integral_revol_dict[name[0]]
+
+    if 'INTEGRAL' in mode:
+
+        int_band=mode.split('_')[1]
+
+        if binning=='sw' and lc_integral_sw_df is not None:
+            #fetching or computing the count rate values for the given band
+            if int_band=='30-100':
+                #need to sum two bands here
+                counts_int=np.nan_to_num(lc_integral_sw_df[lc_integral_sw_df.columns[1]])+\
+                           np.nan_to_num(lc_integral_sw_df[lc_integral_sw_df.columns[5]])
+
+                counts_err_int=np.nan_to_num(lc_integral_sw_df[lc_integral_sw_df.columns[2]])+\
+                               np.nan_to_num(lc_integral_sw_df[lc_integral_sw_df.columns[6]])
+
+            if int_band=='30-50':
+                counts_int=np.nan_to_num(lc_integral_sw_df[lc_integral_sw_df.columns[1]])
+                counts_err_int=np.nan_to_num(lc_integral_sw_df[lc_integral_sw_df.columns[2]])
+
+            if int_band=='50-100':
+                counts_int=np.nan_to_num(lc_integral_sw_df[lc_integral_sw_df.columns[5]])
+                counts_err_int=np.nan_to_num(lc_integral_sw_df[lc_integral_sw_df.columns[6]])
+
+            #creating a different variable for the times
+            integral_sw_dates=[Time(elem).datetime for elem in lc_integral_sw_df['ISOT']]
+            num_int_sw_dates=[mdates.date2num(elem) for elem in integral_sw_dates]
+
+            ax_lc.set_yscale('symlog', linthresh=1, linscale=0.1)
+            ax_lc.yaxis.set_minor_locator(MinorSymLogLocator(linthresh=1))
+
+            # plotting the lightcurve
+            ax_lc.errorbar(num_int_sw_dates, counts_int, yerr=counts_err_int,
+                           linestyle='', color='black', marker='', elinewidth=0.5, label='ibis standard counts')
+
+            ax_lc.set_ylim(0, max(ax_lc.get_ylim()[1], 1e-2))
+
+        if binning=='revol' and fit_integral_revol_df is not None:
+
+            # fetching or computing the count rate values for the given band
+            #note: here we use the same variable counts_int but we plot the FLUX
+
+            if int_band == '30-100':
+                # need to sum two bands here
+                counts_int = np.nan_to_num(fit_integral_revol_df[fit_integral_revol_df.columns[27]]) + \
+                             np.nan_to_num(fit_integral_revol_df[fit_integral_revol_df.columns[29]])
+
+                counts_err_int = np.nan_to_num(fit_integral_revol_df[fit_integral_revol_df.columns[28]]) + \
+                                 np.nan_to_num(fit_integral_revol_df[fit_integral_revol_df.columns[30]])
+
+            if int_band == '30-50':
+                counts_int = np.nan_to_num(fit_integral_revol_df[fit_integral_revol_df.columns[27]])
+                counts_err_int = np.nan_to_num(fit_integral_revol_df[fit_integral_revol_df.columns[28]])
+
+            if int_band == '50-100':
+                counts_int = np.nan_to_num(fit_integral_revol_df[fit_integral_revol_df.columns[29]])
+                counts_err_int = np.nan_to_num(fit_integral_revol_df[fit_integral_revol_df.columns[30]])
+
+            # creating a different variable for the times (centered on the middle of the revolution)
+            integral_revol_dates=[(Time(elem)+TimeDelta(1.5,format='jd')).datetime\
+                                  for elem in fit_integral_revol_df['ISOT']]
+            num_int_revol_dates=[mdates.date2num(elem) for elem in integral_revol_dates]
+
+            ax_lc.set_yscale('symlog', linthresh=1e-10, linscale=0.1)
+            ax_lc.yaxis.set_minor_locator(MinorSymLogLocator(linthresh=1e-10))
+
+            #see https://www.sciencedirect.com/science/article/pii/S1387647321000166 per new orbit duration
+            # plotting the lightcurve
+            ax_lc.errorbar(num_int_revol_dates, counts_int, xerr=1.35,yerr=counts_err_int,
+                           linestyle='', color='black', marker='', elinewidth=0.5, label='ibis flux')
+
+            #limiting the uncertainties
+            ax_lc.set_ylim(0, max(max(2*counts_int), 1e-10))
+
 
     #displaying observations with other instruments
     
@@ -1513,7 +1645,8 @@ def hid_graph(ax_hid,dict_linevis,
               display_evol_single=False,display_dicho=False,
               global_colors=True,alpha_abs=1,
               paper_look=False,bigger_text=True,square_mode=True,zoom=False,
-              broad_mode=False):
+              broad_mode=False,
+              restrict_match_INT=False):
 
     '''
 
@@ -1546,13 +1679,21 @@ def hid_graph(ax_hid,dict_linevis,
     cmap_color_det=dict_linevis['cmap_color_det']
     cmap_color_nondet=dict_linevis['cmap_color_nondet']
 
-    if broad_mode:
+    if not broad_mode==False:
+        HR_broad_bands=dict_linevis['HR_broad_bands']
+        lum_broad_bands= dict_linevis['lum_broad_bands']
+        Edd_factor_restrict=dict_linevis['Edd_factor_restrict']
+        lum_plot = dict_linevis['lum_plot']
+
+    if broad_mode=='BAT':
         catal_bat_df=dict_linevis['catal_bat_df']
         catal_bat_simbad=dict_linevis['catal_bat_simbad']
-        Edd_factor_restrict=dict_linevis['Edd_factor_restrict']
-        lum_plot=dict_linevis['lum_plot']
-        HR_broad_bands=dict_linevis['HR_broad_bands']
-        lum_broad_bands=dict_linevis['lum_broad_bands']
+
+    if broad_mode=='INTEGRAL' or restrict_match_INT:
+        lc_int_sw_dict = dict_linevis['lc_int_sw_dict']
+        fit_int_revol_dict = dict_linevis['fit_int_revol_dict']
+        HID_INT_band=dict_linevis['HID_INT_band']
+
 
     # global normalisations values for the points
     norm_s_lin = 5
@@ -1572,10 +1713,99 @@ def hid_graph(ax_hid,dict_linevis,
 
     hid_plot_use = deepcopy(hid_plot)
 
-    if broad_mode:
+    if restrict_match_INT:
+        #currently limited to 4U1630-47
+        int_lc_df = fit_int_revol_dict['4U1630-47']
 
-        HR_broad_6_10=HR_broad_bands=='([6-10]+[15-50])/[3-6]'
-        lum_broad_soft=lum_broad_bands=='[3-10]+[15-50]'
+        int_lc_mjd=np.array([Time(elem).mjd.astype(float) for elem in int_lc_df['ISOT']])
+
+        obs_dates=Time(np.array([date_list[mask_obj][0] for i in range(sum(mask_lines))]).astype(str)).mjd.astype(float)
+
+        #computing which observations are within the timeframe of an integral revolution (assuming 3days-long)
+        mask_withtime_INT=[min((int_lc_mjd-elem)[(int_lc_mjd-elem)>=0])<3 for elem in obs_dates[0]]
+
+    if broad_mode=='INTEGRAL':
+
+        HR_broad_6_10=HR_broad_bands=='([6-10]+[BAND])/[3-6]'
+        lum_broad_soft=lum_broad_bands=='[3-10]+[BAND]'
+
+        ax_hid.set_yscale('log')
+        if not HR_broad_6_10:
+            ax_hid.set_xscale('symlog', linthresh=1e-4, linscale=0.1)
+        else:
+            ax_hid.set_xscale('log')
+
+        ax_hid.xaxis.set_minor_locator(MinorSymLogLocator(linthresh=1e-4))
+
+        ax_hid.set_xlabel('Hardness Ratio in '+HR_broad_bands+' keV bands)')
+        ax_hid.set_ylabel(r'Luminosity in the '+lum_broad_bands+' keV band in (L/L$_{Edd}$) units')
+
+
+        #currently limited to 4U1630-47
+        int_lc_df = fit_int_revol_dict['4U1630-47']
+
+        int_lc_mjd=np.array([Time(elem).mjd.astype(float) for elem in int_lc_df['ISOT']])
+
+        #the negative values removal is just a precaution
+        if HID_INT_band=='30-50':
+            int_lc_lum = np.array([int_lc_df[int_lc_df.columns[-6]],
+                                   int_lc_df[int_lc_df.columns[-5]]]).clip(0).T \
+                                * Edd_factor_restrict
+        elif HID_INT_band=='50-100':
+            int_lc_lum = np.array([int_lc_df[int_lc_df.columns[-4]],
+                                   int_lc_df[int_lc_df.columns[-3]]]).clip(0).T \
+                                * Edd_factor_restrict
+        elif HID_INT_band=='30-100':
+            int_lc_lum = np.array([int_lc_df[int_lc_df.columns[-6]]+int_lc_df[int_lc_df.columns[-4]],
+                                   ((int_lc_df[int_lc_df.columns[-5]]).clip(0)**2+\
+                                    (int_lc_df[int_lc_df.columns[-3]]).clip(0)**2)**(1/2)]).clip(0).T \
+                                * Edd_factor_restrict
+
+        obs_dates=Time(np.array([date_list[mask_obj][0] for i in range(sum(mask_lines))]).astype(str)).mjd.astype(float)
+
+        #computing which observations are within the timeframe of an integral revolution (assuming 3days-long)
+        mask_withtime_INT=[min((int_lc_mjd-elem)[(int_lc_mjd-elem)>=0])<3 for elem in obs_dates[0]]
+
+        #matching each observation to the closest integral revolution that started before it
+        closest_time_INT=np.array([np.where((int_lc_mjd-elem_date)<0,10000,(int_lc_mjd-elem_date)).argsort()[0]\
+                          for elem_date in obs_dates[0]])
+
+        #getting an array with the bat flux of each observation date
+        lum_broad_single=np.array([np.array([0,0]) if not mask_withtime_INT[i_obs] else\
+                                   int_lc_lum[closest_time_INT[i_obs]]\
+                                  for i_obs in range(len(obs_dates[0]))]).T
+
+        #this is the quantity that needs to be added if the numerator is broad+6-10 and not just broad
+        hid_broad_add=lum_plot[2][0][mask_obj][0].astype(float) if HR_broad_6_10 else 0
+
+        hid_broad_vals = (lum_broad_single[0] + hid_broad_add)\
+                         / lum_plot[1][0][mask_obj][0].astype(float)
+
+        #here the numerator is the quadratic uncertainty addition and then the fraction is for the quadratic ratio uncertainty
+        #composition
+        hid_broad_err= np.array([((((lum_plot[2][i][mask_obj][0] if HR_broad_6_10 else 0)**2+lum_broad_single[1]**2)**(1/2)\
+                           /(lum_broad_single[0]+hid_broad_add)) ** 2 + \
+                                (lum_plot[1][i][mask_obj][0] / lum_plot[1][0][mask_obj][0]) ** 2) ** (1 / 2) * hid_broad_vals\
+                               for i in [1, 2]])
+
+        #overwriting hid_plot's individual elements because overwriting the full obs array doesn't work
+        for i_obs in range(len(obs_dates[0])):
+            hid_plot_use[0][0][mask_obj][0][i_obs] = hid_broad_vals[i_obs]
+            hid_plot_use[0][1][mask_obj][0][i_obs] = hid_broad_err[0][i_obs]
+            hid_plot_use[0][2][mask_obj][0][i_obs] = hid_broad_err[1][i_obs]
+
+            if lum_broad_soft:
+                hid_plot_use[1][0][mask_obj][0][i_obs] += lum_broad_single[0][i_obs]
+
+                hid_plot_use[1][1][mask_obj][0][i_obs] = ((hid_plot_use[1][1][mask_obj][0][i_obs])**2+ \
+                                                         (lum_broad_single[1][i_obs])**2)**(1/2)
+                hid_plot_use[1][2][mask_obj][0][i_obs] = ((hid_plot_use[1][2][mask_obj][0][i_obs])**2+ \
+                                                         (lum_broad_single[1][i_obs])**2)**(1/2)
+
+    elif broad_mode=='BAT':
+
+        HR_broad_6_10=HR_broad_bands=='([6-10]+[BAND])/[3-6]'
+        lum_broad_soft=lum_broad_bands=='[3-10]+[BAND]'
 
         ax_hid.set_yscale('log')
         if not HR_broad_6_10:
@@ -1772,7 +2002,7 @@ def hid_graph(ax_hid,dict_linevis,
                 max(lum_list_ravel.T[2][0] / lum_list_ravel.T[1][0])]
     bounds_y = [min(lum_list_ravel.T[4][0]), max(lum_list_ravel.T[4][0])]
 
-    if zoom=='auto' or broad_mode:
+    if zoom=='auto' or broad_mode!=False:
 
         xlims=(min(ravel_ragged(hid_plot_restrict[0][0])),
                         max(ravel_ragged(hid_plot_restrict[0][0])))
@@ -1833,19 +2063,29 @@ def hid_graph(ax_hid,dict_linevis,
         '''
 
         # defining the hid positions of each point
-        if broad_mode:
+        if broad_mode!=False:
             x_hid=hid_plot_use[0][0][mask_obj][i_obj]
+
+            #similar structure for the rest
+            x_hid_err=np.array([hid_plot_use[0][1][mask_obj][i_obj],hid_plot_use[0][2][mask_obj][i_obj]])
 
             #we do it this way because a += on y_hid will overwite lum_list, which is extremely dangerous
             if lum_broad_soft:
                 y_hid=lum_list[mask_obj][i_obj].T[4][0] + lum_broad_single[0]
+                y_hid_err=(lum_list[mask_obj][i_obj].T[4][1:]**2+lum_broad_single[1:]**2)**(1/2)
             else:
                 y_hid = lum_list[mask_obj][i_obj].T[4][0]
+                y_hid_err=lum_list[mask_obj][i_obj].T[4][1:]
         else:
             x_hid = lum_list[mask_obj][i_obj].T[2][0] / lum_list[mask_obj][i_obj].T[1][0]
-            y_hid = lum_list[mask_obj][i_obj].T[4][0]
+
+            x_hid_err=(((lum_list[mask_obj][i_obj].T[2][1:]/lum_list[mask_obj][i_obj].T[2][0])**2 + \
+                      (lum_list[mask_obj][i_obj].T[1][1:]/lum_list[mask_obj][i_obj].T[1][0])**2)**(1/2)*x_hid)
 
             y_hid = lum_list[mask_obj][i_obj].T[4][0]
+
+            y_hid_err=lum_list[mask_obj][i_obj].T[4][1:]
+
 
         # defining the masks and shapes of the markers for the rest
 
@@ -1853,8 +2093,10 @@ def hid_graph(ax_hid,dict_linevis,
         datelist_obj = Time(np.array([date_list[mask_obj][i_obj] for i in range(sum(mask_lines))]).astype(str))
         mask_intime = (datelist_obj >= Time(slider_date[0])) & (datelist_obj <= Time(slider_date[1]))
 
-        if broad_mode:
+        if broad_mode=='BAT':
             mask_intime=(mask_intime) & mask_withtime_BAT
+        if broad_mode=='INTEGRAL' or restrict_match_INT:
+            mask_intime = (mask_intime) & mask_withtime_INT
 
         # defining the mask for detections and non detection        
         mask_det = (abslines_obj[0][4][mask_lines] > 0.) & (mask_intime)
@@ -1925,10 +2167,21 @@ def hid_graph(ax_hid,dict_linevis,
         # plotting the detection centers if asked for
 
         if len(x_hid[obj_val_mask]) > 0 and display_central_abs:
-            ax_hid.scatter(x_hid[obj_val_mask], y_hid[obj_val_mask], marker=marker_abs,
+
+
+            if display_hid_error:
+
+                ax_hid.errorbar(x_hid[obj_val_mask], y_hid[obj_val_mask],
+                               xerr=x_hid_err.T[obj_val_mask].T,yerr=y_hid_err.T[obj_val_mask].T,
+                               marker='',ls='',
                            color=colors_obj.to_rgba(i_obj_glob) \
-                               if radio_info_cmap == 'Source' else 'grey', label='', zorder=1000, edgecolor='black',
-                           plotnonfinite=True)
+                               if radio_info_cmap == 'Source' else 'grey',
+                               label='', zorder=1000)
+
+            ax_hid.scatter(x_hid[obj_val_mask], y_hid[obj_val_mask], marker=marker_abs,
+                       color=colors_obj.to_rgba(i_obj_glob) \
+                           if radio_info_cmap == 'Source' else 'grey', label='', zorder=1000, edgecolor='black',
+                       plotnonfinite=True)
 
         #### detection scatters
         # plotting statistically significant absorptions before values
@@ -2249,13 +2502,11 @@ def hid_graph(ax_hid,dict_linevis,
             x_hid_uncert = hid_plot_use.T[mask_obj_base][i_obj_base].T[0]
             y_hid_uncert = hid_plot_use.T[mask_obj_base][i_obj_base].T[1]
 
-        #breakpoint()
-
         # reconstructing standard arrays
         x_hid_uncert = np.array([[subelem for subelem in elem] for elem in x_hid_uncert])
         y_hid_uncert = np.array([[subelem for subelem in elem] for elem in y_hid_uncert])
 
-        if broad_mode:
+        if broad_mode!=False:
 
             x_hid_base = hid_plot_use[0][0][mask_obj_base][i_obj_base]
 
@@ -2277,6 +2528,13 @@ def hid_graph(ax_hid,dict_linevis,
 
         mask_intime_norepeat = (Time(date_list[mask_obj_base][i_obj_base].astype(str)) >= Time(slider_date[0])) & (
                     Time(date_list[mask_obj_base][i_obj_base].astype(str)) <= Time(slider_date[1]))
+
+        if broad_mode=='BAT':
+            mask_intime=np.array([(elem) & mask_withtime_BAT for elem in mask_intime])
+            mask_intime_norepeat=(mask_intime_norepeat) & mask_withtime_BAT
+        if broad_mode=='INTEGRAL' or restrict_match_INT:
+            mask_intime=np.array([(elem) & mask_withtime_INT for elem in mask_intime])
+            mask_intime_norepeat=(mask_intime_norepeat) & mask_withtime_INT
 
         # defining the mask
         prev_mask_nondet = np.isnan(
@@ -2599,13 +2857,16 @@ def hid_graph(ax_hid,dict_linevis,
 
     if display_dicho:
 
-        if broad_mode:
+        if broad_mode=='BAT':
             if HR_broad_6_10:
                 # vertical
                 ax_hid.axline((1., 1e-6), (1., 10), ls='--', color='grey')
             else:
                 # vertical
                 ax_hid.axline((0.8, 1e-6), (0.8, 10), ls='--', color='grey')
+
+        elif broad_mode=='INTEGRAL':
+            pass
         else:
             # horizontal
             ax_hid.axline((0.01, 1e-2), (10, 1e-2), ls='--', color='grey')
@@ -4700,8 +4961,9 @@ def correl_graph(data_perinfo,infos,data_ener,dict_linevis,mode='intrinsic',mode
 
             #since we can't easily change the lin to log type of the axes, we recreate a linear
             with st.spinner('Computing linear trends'):
-                lmplot_intercept=lmplot_uncert_a(ax_scat,x_data_trend,y_data_trend,x_err_trend,y_err_trend,percent=90,
-                                                 nsim=1000,linecolor='black',return_intercept=True)
+                lmplot_uncert_a(ax_scat,x_data_trend,y_data_trend,x_err_trend,y_err_trend,percent=90,
+                                                 nsim=1000,linecolor='black',return_linreg=False,
+                                                 infer_log_scale=True,xlims=plt.xlim(),ylims=plt.ylim())
 
         ####forcing common observ bounds if asked 
         #computing the common bounds if necessary

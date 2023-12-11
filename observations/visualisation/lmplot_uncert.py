@@ -87,30 +87,46 @@ def lmplot_uncert_a(ax, x, y, dx, dy, xlim=None,ylim=None, percent=68.26, nsim=2
         log_x=False
         log_y=False
 
-    # switching the format to array to compute the perturbations
+    # switching the format to array to compute the perturbations and removing the nans
+
     x_arr = array(x)
     y_arr = array(y)
 
+    mask_values=(~np.isnan(y_arr)) & (~np.isnan(x_arr))
+
+    x_arr=x_arr[mask_values]
+    y_arr=y_arr[mask_values]
+
     #replacing nans with zero if asked
     if nanzero_err:
-        dx_arr = array(nan_to_num(dx)).T * (error_percent / 68.26)
-        dy_arr = array(nan_to_num(dy)).T * (error_percent / 68.26)
+        dx_arr = array(nan_to_num(dx)).T * (68.26/error_percent)
+        dy_arr = array(nan_to_num(dy)).T * (68.26/error_percent)
     else:
-        dx_arr = array(dx).T * (error_percent / 68.26)
-        dy_arr = array(dy).T * (error_percent / 68.26)
+        dx_arr = array(dx).T * (68.26/error_percent)
+        dy_arr = array(dy).T * (68.26/error_percent )
+
+    dx_arr=dx_arr[mask_values]
+    dy_arr=dy_arr[mask_values]
 
     #computing a mask of where upper limits are in at least one ax of the points
     if xlim is None:
         xlim_mask=np.repeat(False,len(x))
+        xlim_arr=None
     else:
         xlim_mask=xlim
+        xlim_arr = xlim[mask_values]
 
     if ylim is None:
         ylim_mask=np.repeat(False,len(x))
+        ylim_arr=None
     else:
         ylim_mask=ylim
+        ylim_arr = ylim[mask_values]
 
-    tot_nonlim_mask=~ ((xlim_mask) & (ylim_mask))
+    xlim_arr_mask=xlim_mask[mask_values]
+    ylim_arr_mask=ylim_mask[mask_values]
+
+    tot_nonlim_mask=~ ((xlim_arr_mask) & (ylim_arr_mask))
 
     if log_x:
         x_arr=np.log10(x_arr)
@@ -132,9 +148,14 @@ def lmplot_uncert_a(ax, x, y, dx, dy, xlim=None,ylim=None, percent=68.26, nsim=2
 
 
     # computing perturbations
-    x_pert, y_pert = perturb_values(x_arr, y_arr, dx_arr, dy_arr, xlim=xlim,ylim=ylim,Nperturb=nsim)[:2]
+    x_pert, y_pert = perturb_values(x_arr, y_arr, dx_arr, dy_arr, xlim=xlim_arr,ylim=ylim_arr,Nperturb=nsim)[:2]
     x_pert = x_pert.astype(float)
     y_pert = y_pert.astype(float)
+
+    # for i in range(x_pert):
+    #     plt.figure()
+    #
+    #     plt.plot()
 
     #first regplot just to get the ax limits
 
@@ -186,15 +207,26 @@ def lmplot_uncert_a(ax, x, y, dx, dy, xlim=None,ylim=None, percent=68.26, nsim=2
 
         # computing the linreg values
         mask_nonan = ~(isnan(x_pert[i]) | isnan(y_pert[i]))
+
         curr_regress = linregress(x_pert[i][mask_nonan], y_pert[i][mask_nonan])
 
         slope_vals[i] = curr_regress.slope
         intercept_vals[i] = curr_regress.intercept
 
-    test=linregress(x_arr,y_arr)
+    # for i in range(len(x_arr)):
+    #     fig,ax=plt.subplots()
+    #     ax.hist(x_pert.T[i])
+    #     ax.axvline(np.median(x_pert.T[i]),zorder=1000,color='red')
+    #
+    #     ax.errorbar(x_arr[i],nsim*0.5,xerr=dx_arr[i] if type(dx_arr[i])==np.float64 else [[dx_arr[i].T[0]],[dx_arr[i].T[1]]],
+    #                 marker='d')
+    #
+    # plt.figure()
 
-    slope=test.slope
-    inter=test.intercept
+
+    init_reg=linregress(x_arr,y_arr)
+    slope=init_reg.slope
+    inter=init_reg.intercept
 
     #main sigma value
     sigma_main=np.sqrt(np.nansum((y_arr[tot_nonlim_mask]- \
@@ -222,6 +254,14 @@ def lmplot_uncert_a(ax, x, y, dx, dy, xlim=None,ylim=None, percent=68.26, nsim=2
     #list of y position of all perturbated lines
     y_line_pert=np.array([x_line*slope_vals_save[i]+intercept_vals_save[i] for i in range(nsim)]).T
 
+    # plt.figure()
+    # plt.errorbar(x_arr, y_arr, xerr=dx_arr.T, yerr=dy_arr.T, linestyle='', marker='d', color='red')
+    # #to check the lines if needed
+    # for i in range(nsim//25):
+    #
+    #     plt.scatter(x_pert[i],y_pert[i])
+    #     plt.plot(x_line,y_line_pert.T[i],alpha=0.1)
+
     y_line_pert.sort()
 
     y_line_low=y_line_pert.T[round(nsim * (0.5-percent/200))]
@@ -241,6 +281,7 @@ def lmplot_uncert_a(ax, x, y, dx, dy, xlim=None,ylim=None, percent=68.26, nsim=2
 
     #recomputing the LR with the intercept this time
     #base regression without upper limits
+
     base_regress=linregress(x_arr[tot_nonlim_mask]-x_intercept,y_arr[tot_nonlim_mask])
 
     base_regress_slope=base_regress.slope

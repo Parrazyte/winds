@@ -76,7 +76,6 @@ xcolors_grp=['black','red','limegreen','blue','cyan','purple','yellow',
              'black','red','limegreen','blue','cyan','purple','yellow',
              'black','red','limegreen','blue','cyan','purple','yellow']
 
-#not used anymore now that we take the info directly from the log file
 
 def ignore_data_indiv(e_low_groups,e_high_groups,reset=False,sat_low_groups=None,sat_high_groups=None,
                       glob_ignore_bands=None):
@@ -100,6 +99,8 @@ def ignore_data_indiv(e_low_groups,e_high_groups,reset=False,sat_low_groups=None
     if glob_ignore_bands is not None:
         for elem_ignore_band in glob_ignore_bands:
             AllData.ignore(elem_ignore_band)
+
+#not used anymore now that we take the info directly from the log file
 
 def screen_term(screenfile,wind_type='Spyder',kill=False):
     
@@ -332,7 +333,10 @@ class scorpeon_manager:
         #(see https://heasarc.gsfc.nasa.gov/docs/nicer/analysis_threads/scorpeon-xspec/)
         
         for i_grp in range(AllData.nGroups):
-            
+
+            if self.bg_load_paths[i_grp] is None:
+                continue
+
             #assuming 1 spectrum per group here
             curr_grp_sp=AllData(i_grp+1)
             
@@ -368,24 +372,22 @@ class scorpeon_manager:
         if frozen:
             
             for i_grp in range(AllData.nGroups):
-                
-                try:
-                    mod_nxb=AllModels(i_grp+1,modName='nxb')
+
+                if self.bg_load_paths[i_grp] is None:
+                    continue
+
+                mod_nxb=AllModels(i_grp+1,modName='nxb')
                     
-                    for i_par in range(mod_nxb.nParameters):
-        
-                        mod_nxb(i_par+1).frozen=True
-                except:
-                    pass
-                
-                try:
-                    mod_sky=AllModels(i_grp+1,modName='sky')
-                    
-                    for i_par in range(mod_sky.nParameters):
-        
-                        mod_sky(i_par+1).frozen=True
-                except:
-                    pass
+                for i_par in range(mod_nxb.nParameters):
+
+                    mod_nxb(i_par+1).frozen=True
+
+                mod_sky=AllModels(i_grp+1,modName='sky')
+
+                for i_par in range(mod_sky.nParameters):
+
+                    mod_sky(i_par+1).frozen=True
+
                     
 
 class scorpeon_data:

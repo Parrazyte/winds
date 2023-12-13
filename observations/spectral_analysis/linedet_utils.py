@@ -29,8 +29,8 @@ from shapely.geometry import Polygon,Point
 #mask propagation for the peak detection
 from scipy.ndimage import binary_dilation
 
-def narrow_line_search(data_cont, suffix,line_search_e=[4,10,0.05],line_search_norm=[0.01,10,500],
-                       e_sat_low=0.3,peak_thresh=9.21,peak_clean=False,line_cont_range=[4,10],trig_interval=[6.5,9.1],
+def narrow_line_search(data_cont, suffix,e_sat_low_indiv,line_search_e=[4,10,0.05],line_search_norm=[0.01,10,500],
+                       peak_thresh=9.21,peak_clean=False,line_cont_range=[4,10],trig_interval=[6.5,9.1],
                        scorpeon_save=None,data_fluxcont=None):
 
     '''
@@ -125,7 +125,7 @@ def narrow_line_search(data_cont, suffix,line_search_e=[4,10,0.05],line_search_n
     comp_cfactor_2.factor.frozen = 0
 
     # adjusting the cflux to be sure we cover the entire flux of the gaussian component
-    comp_gauss_cflux.Emin = str(e_sat_low)
+    comp_gauss_cflux.Emin = str(min(e_sat_low_indiv))
     comp_gauss_cflux.Emax = 12.
 
     # narrow line locked

@@ -1803,7 +1803,7 @@ n_obj_r=sum(mask_obj)
 #creating an array for the intime observations
 mask_intime_plot=np.array([(Time(date_list[mask_obj][i_obj_r].astype(str))>=Time(slider_date[0])) & (Time(date_list[mask_obj][i_obj_r].astype(str))<=Time(slider_date[1])) for i_obj_r in range(n_obj_r)],dtype=object)
 
-if restrict_match_INT and display_single and choice_source[0]=='4U1630-47':
+if display_single and choice_source[0]=='4U1630-47':
 
     # currently limited to 4U1630-47
     int_lc_df = fit_int_revol_dict[choice_source[0]]
@@ -1822,7 +1822,8 @@ if restrict_match_INT and display_single and choice_source[0]=='4U1630-47':
     mask_intime_INT_withobs=[sum((elem - obs_dates[0]) >= 0)>0 and\
                               min((elem - obs_dates[0])[(elem - obs_dates[0]) >= 0]) < 3 for elem in int_lc_mjd]
 
-    mask_intime_plot[0]=(mask_intime_plot[0]) & mask_withtime_INT
+    if restrict_match_INT:
+        mask_intime_plot[0]=(mask_intime_plot[0]) & mask_withtime_INT
 
 #and an date order 
 order_intime_plot_restrict=np.array([np.array([Time(elem) for elem in date_list[mask_obj][i_obj_r][mask_intime_plot[i_obj_r].astype(bool)]]).argsort() for i_obj_r in range(n_obj_r)],dtype=object)
@@ -1875,25 +1876,30 @@ for i_obj_r in range(n_obj_r):
     line_plot_indiv=np.array([line_plot_indiv[elem[0]][elem[1]] for elem in used_indexes])
     
     #creating the row indexes (row: object, subrow: observation)    
-    observ_list_indiv=observ_list[mask_obj][i_obj_r][mask_intime_plot[i_obj_r].astype(bool)].tolist()
-    
+    observ_list_indiv=observ_list[mask_obj][i_obj_r][mask_intime_plot[i_obj_r].astype(bool)][order_intime_plot_restrict[i_obj_r].astype(int)].tolist()
+
+    instru_list_indiv=instru_list[mask_obj][i_obj_r][mask_intime_plot[i_obj_r].astype(bool)][order_intime_plot_restrict[i_obj_r].astype(int)].tolist()
+
     observ_list_indiv=[elem.replace('_Imaging_auto','').replace('_Timing_auto','').replace('_heg_-1','').replace('_heg_1','') for elem
                        in observ_list_indiv]
     
     iter_rows=[[obj_list[mask_obj][i_obj_r]],
+               instru_list_indiv,
                observ_list_indiv,
                date_list[mask_obj][i_obj_r][mask_intime_plot[i_obj_r].astype(bool)][order_intime_plot_restrict[i_obj_r].astype(int)].tolist()]
     
     
     #creating the iter index manually because we have two clumns (observ and time) not being dimensions of one another
-    row_index_arr_obs=np.array([[iter_rows[0][0],iter_rows[1][i_obs_r],iter_rows[2][i_obs_r]] for i_obs_r in range(n_obs_r)]).T
+    row_index_arr_obs=np.array([[iter_rows[0][0],iter_rows[1][i_obs_r],iter_rows[2][i_obs_r],iter_rows[3][i_obs_r]]\
+                                for i_obs_r in range(n_obs_r)]).T
     
-    row_index_arr_line=np.array([[iter_rows[0][0],iter_rows[1][i_obs_r],iter_rows[2][i_obs_r],line_rows[i_line_r]]\
+    row_index_arr_line=np.array([[iter_rows[0][0],iter_rows[1][i_obs_r],iter_rows[2][i_obs_r],iter_rows[3][i_obs_r],
+                                  line_rows[i_line_r]]\
                                 for i_obs_r in range(n_obs_r) for i_line_r in range(sum(mask_lines))]).T
     
-    row_index_obs=pd.MultiIndex.from_arrays(row_index_arr_obs,names=['Source','obsid','date'])
+    row_index_obs=pd.MultiIndex.from_arrays(row_index_arr_obs,names=['Source','Instrument','obsid','date'])
     
-    row_index_line=pd.MultiIndex.from_arrays(row_index_arr_line,names=['Source','obsid','date','line'])
+    row_index_line=pd.MultiIndex.from_arrays(row_index_arr_line,names=['Source','Instrument','obsid','date','line'])
     
     #you can use the standard way for columns for the observ df
     iter_columns=[['HR [6-10]/[3-10]','Lx/LEdd','flux_3-6','flux_6-10','flux_1-3','flux_3-10'],['main','err-','err+']]
@@ -1914,7 +1920,7 @@ for i_obj_r in range(n_obj_r):
     #creating both dataframes, with a reshape in 2 dimensions (one for the lines and one for the columns)
     #switching to str type allows to display low values correctly
     curr_df=produce_df(observ_col_reshaped,
-                                iter_rows,iter_columns,row_names=['Source','obsid','date'],
+                                iter_rows,iter_columns,row_names=['Source','Instrument','obsid','date'],
                                 column_names=['measure','value'],row_index=row_index_obs).astype(str)
 
     pd.set_option('display.float_format', lambda x: '%.3e' % x)
@@ -1942,7 +1948,7 @@ with tab_source_df:
         else:
             #the format is offset by 3 because we shift by the number of columns with row names
             st.dataframe(observ_df,use_container_width=True,column_config={\
-                         i:st.column_config.NumberColumn(format='%.3e') for i in range(3,len(observ_df.columns)+3)})
+                         i:st.column_config.NumberColumn(format='%.3e') for i in range(4,len(observ_df.columns)+4)})
 
             csv_observ= convert_df(observ_df)
 
@@ -1973,13 +1979,13 @@ with tab_source_df:
                                      for i in range(len(fit_int_revol_dict[choice_source[0]].columns)-5,\
                                                     len(fit_int_revol_dict[choice_source[0]].columns)+1)})
 
-                if choice_source[0] in lc_int_sw_dict.keys():
-                    lc_int_sw_revol=[elem[:4] for elem in np.array(lc_int_sw_dict[choice_source[0]]['scw'])]
-
-                    mask_intime_INT_sw=[elem in np.array(fit_int_revol_dict[choice_source[0]][mask_intime_INT_revol]['revolution'],
-                                      dtype='str') for elem in lc_int_sw_revol]
-
-                    st.dataframe(lc_int_sw_dict[choice_source[0]][mask_intime_INT_sw],use_container_width=True)
+                # if choice_source[0] in lc_int_sw_dict.keys():
+                #     lc_int_sw_revol=[elem[:4] for elem in np.array(lc_int_sw_dict[choice_source[0]]['scw'])]
+                #
+                #     mask_intime_INT_sw=[elem in np.array(fit_int_revol_dict[choice_source[0]][mask_intime_INT_revol]['revolution'],
+                #                       dtype='str') for elem in lc_int_sw_revol]
+                #
+                #     st.dataframe(lc_int_sw_dict[choice_source[0]][mask_intime_INT_sw],use_container_width=True)
 
 
     with st.expander('Line parameters'):
@@ -1990,7 +1996,7 @@ with tab_source_df:
         else:
             #the format is offset by 4 because we shift by the number of columns with row names
             st.dataframe(line_df,use_container_width=True,column_config={\
-                         i:st.column_config.NumberColumn(format='%.3e') for i in range(4,len(line_df.columns)+4)})
+                         i:st.column_config.NumberColumn(format='%.3e') for i in range(5,len(line_df.columns)+5)})
 
             csv_observ= convert_df(line_df)
 

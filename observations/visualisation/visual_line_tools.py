@@ -1077,7 +1077,7 @@ def obj_values(file_paths,E_factors,dict_linevis):
                 #only keeping the lines with selected cameras and exposures
                 #for NICER observation, there's no camera to check so we pass directly
                 
-                if len(store_lines_single[0].split('\t')[0].split('_')):
+                if cameras=='all':
                     store_lines+=store_lines_single
                 else:
                     store_lines_single=[elem for elem in store_lines_single if elem.split('\t')[0].split('_')[1] in cameras]
@@ -1266,7 +1266,7 @@ def abslines_values(file_paths,dict_linevis,only_abs=False,obsid=None):
                 if obsid is not None:
                     store_lines_single=[elem_line for elem_line in store_lines_single if obsid in elem_line]
 
-                if len(store_lines_single[0].split('\t')[0].split('_')):
+                if cameras=='all':
                     store_lines+=store_lines_single
                 else:
                     store_lines_single=[elem for elem in store_lines_single if elem.split('\t')[0].split('_')[1] in cameras]

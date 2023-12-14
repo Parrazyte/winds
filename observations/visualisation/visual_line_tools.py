@@ -80,8 +80,8 @@ telescope_colors={'XMM':'red',
                   'Chandra':'blue',
                   'NICER':'green',
                   'Suzaku':'magenta',
-                  'Swift':'orange'
-    }
+                  'Nustar':'orange',
+                  'Swift':'cyan'}
 
 #inclination, mass and other values
 
@@ -1162,7 +1162,7 @@ def obj_values(file_paths,E_factors,dict_linevis):
                         curr_instru_list[i_obs]='Suzaku'
 
                     elif obs.split('_')[1] in ['0','1']:
-                        
+                        #note that this only works for xis1 files as xis0_xis2 are merged and the header had been removed
                         #we take the directory structure from the according file in curr_obj_paths
                         filepath='/'.join(lineval_path.split('/')[:-2])+'/'+obs+'_sp_grp_opt.pha'
                         curr_instru_list[i_obs]='Suzaku'

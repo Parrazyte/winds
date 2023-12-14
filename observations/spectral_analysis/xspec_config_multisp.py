@@ -98,7 +98,8 @@ def ignore_data_indiv(e_low_groups,e_high_groups,reset=False,sat_low_groups=None
 
     if glob_ignore_bands is not None:
         for elem_ignore_band in glob_ignore_bands:
-            AllData.ignore(elem_ignore_band)
+            if elem_ignore_band is not None:
+                AllData.ignore(elem_ignore_band)
 
 #not used anymore now that we take the info directly from the log file
 
@@ -328,13 +329,13 @@ class scorpeon_manager:
                 if bg_path is not None:
                     nicer_bkgspect=i_bg+1
                     exec(open(bg_path).read())
-        
+
         #freezing parameters if the current data doesn't cover large enough ranges 
         #(see https://heasarc.gsfc.nasa.gov/docs/nicer/analysis_threads/scorpeon-xspec/)
         
         for i_grp in range(AllData.nGroups):
 
-            if self.bg_load_paths[i_grp] is None:
+            if self.bgload_paths is None or self.bgload_paths[i_grp] is None:
                 continue
 
             #assuming 1 spectrum per group here
@@ -373,7 +374,7 @@ class scorpeon_manager:
             
             for i_grp in range(AllData.nGroups):
 
-                if self.bg_load_paths[i_grp] is None:
+                if self.bgload_paths is None or self.bgload_paths[i_grp] is None:
                     continue
 
                 mod_nxb=AllModels(i_grp+1,modName='nxb')

@@ -159,7 +159,7 @@ ap = argparse.ArgumentParser(description='Script to perform line detection in X-
 
 '''GENERAL OPTIONS'''
 
-ap.add_argument('-satellite',nargs=1,help='telescope to fetch spectra from',default='NICER',type=str)
+ap.add_argument('-satellite',nargs=1,help='telescope to fetch spectra from',default='multi',type=str)
 #note: use maj for first character
 
 ap.add_argument("-cameras",nargs=1,help='Cameras to use for spectral analysis',default='all',type=str)
@@ -318,9 +318,12 @@ ap.add_argument('-write_pdf',nargs=1,help='overwrite finished pdf at the end of 
 ap.add_argument('-write_aborted_pdf',nargs=1,help='create aborted pdfs at the end of the computation',default=False,
                 type=bool)
 
-ap.add_argument('-group_gti_time',nargs=1,
-                help='maximum time delta for gti grouping in dd_hh_mm',default='01_00_00',type=str)
+#used for NICER and multi for now
+ap.add_argument('-group_max_timedelta',nargs=1,
+                help='maximum time delta for epoch/gti grouping in dd_hh_mm',default='01_00_00',type=str)
 
+ap.add_argument('-single_obsid_NuSTAR',nargs=1,
+                help='limit NuSTAR epoch grouping to single obsids',default=True,type=bool)
 '''MODES'''
 
 ap.add_argument('-reload_autofit',nargs=1,
@@ -555,7 +558,8 @@ skip_flares=args.skip_flares
 spread_comput=args.spread_comput
 skip_started_spread=args.skip_started_spread
 
-group_gti_time=args.group_gti_time
+group_max_timedelta=args.group_max_timedelta
+single_obsid_NuSTAR=args.single_obsid_NuSTAR
 
 outdir=args.outdir
 pileup_lim=args.pileup_lim
@@ -668,6 +672,8 @@ elif sat_glob=='Suzaku':
     cameras=['XIS','PIN']
 elif sat_glob=='Swift':
     cameras=['xrt']
+elif sat_glob=='NuSTAR':
+    cameras=['FMPA','FPMB']
 
 if expmodes=='all':
     expmodes=['Imaging','Timing']
@@ -678,17 +684,6 @@ else:
     if 'imaging' in expmodes[0] or 'Imaging' in expmodes[0]:
         expmodes=expmodes+['Imaging']
     expmodes=expmodes[1:]
-
-
-'''
-Computing the standard energy limits for individual instruments
-DO NOT USE INTS else it will be taken as channels instead of energies
-ignore_bands are bands that will be ignored on top of the rest, in ALL bands
-'''
-
-ignore_bands=None
-
-
 
 if not local:
     os.chdir('bigbatch')
@@ -728,7 +723,7 @@ if multi_obj==False:
                 spfile_list=spfile_list+glob.glob('*'+elem_cam+'*'+elem_exp+'_'+prefix+'_sp_src_grp_'+grouping+'.*')
                 #taking of modified spectra with background checked
                 spfile_list=[elem for elem in spfile_list if 'bgtested' not in elem]
-    elif sat_glob in ['Chandra','NICER','Suzaku','Swift']:
+    elif sat_glob in ['Chandra','NICER','Suzaku','Swift''NuSTAR']:
         # if pre_reduced_NICER and sat_glob=='NICER':
         #     spfile_list=glob.glob('*.grp')
         # else:
@@ -1415,7 +1410,16 @@ def pdf_summary(epoch_files,fit_ok=False,summary_epoch=None):
 def line_e_ranges(sat):
     '''
     Determines the energy range allowed, as well as the ignore energies for a given satellite
+
+    DO NOT USE INTS else it will be taken as channels instead of energies
+    ignore_bands are bands that will be ignored on top of the rest, in ALL bands
+
     '''
+    ignore_bands=None
+
+    if sat=='NuSTAR':
+        e_sat_low=3.
+        e_sat_high=79.
 
     if sat in ['XMM', 'NICER', 'Swift']:
 
@@ -1423,6 +1427,7 @@ def line_e_ranges(sat):
             e_sat_low = 2.5
         else:
             e_sat_low = 0.3
+
         if sat in ['XMM', 'Swift']:
             if sat == 'XMM':
                 e_sat_low = 2.
@@ -1724,7 +1729,9 @@ def line_detect(epoch_id):
     '''Setting up a log file and testing the properties of each spectra'''
 
     curr_logfile_write=Xset.openLog(outdir+'/'+epoch_observ[0]+'_xspec_log'+
-                ('_pdf' if pdf_only else '_ul' if line_ul_only else '_reload' if reload_autofit else '')+'.log')
+                ('_pdf' if pdf_only else '_ul' if line_ul_only\
+                else '_reload' if reload_autofit and os.path.isfile(outdir+'/'+epoch_observ[0]+'_fitmod_autofit.pkl')\
+                else '')+'.log')
     #ensuring the log information gets in the correct place in the log file by forcing line to line buffering
     curr_logfile_write.reconfigure(line_buffering=True)
 
@@ -1737,7 +1744,7 @@ def line_detect(epoch_id):
     e_sat_high_indiv=[]
     ignore_bands_indiv=[]
     line_cont_ig_indiv=[]
-
+    epoch_dets_good=[]
     '''
     Pile-up and bg tests for XMM spectra
     '''
@@ -1878,6 +1885,7 @@ def line_detect(epoch_id):
 
     #creating the file load str in the xspec format
     data_load_str=''
+
     for i_sp,(elem_sp,elem_sat) in enumerate(zip(epoch_files_good,sat_indiv_good)):
 
         index_str=str(i_sp+1)+':'+str(i_sp+1)
@@ -1889,9 +1897,9 @@ def line_detect(epoch_id):
             if 'heg_1' in elem_sp and restrict_order:
                 data_load_str=data_load_str[:-len(index_str)]
                 continue
-            data_load_str+=' '+elem_sp
-        if elem_sat in ['NICER','Suzaku','Swift']:
-            data_load_str+' '+elem_sp
+            data_load_str+=' '+elem_sp+' '
+        if elem_sat in ['NICER','Suzaku','Swift','NuSTAR']:
+            data_load_str+=' '+elem_sp+' '
 
     AllData(data_load_str)
 
@@ -1904,7 +1912,6 @@ def line_detect(epoch_id):
                 continue
             AllData(i_sp+1).response.arf=elem_sp.replace('_grp_opt.pha','.arf')
 
-
         if elem_sat =='NICER':
                 if NICER_bkg=='scorpeon_mod':
 
@@ -1916,8 +1923,8 @@ def line_detect(epoch_id):
             AllData(i_sp+1).response.arf=epoch_observ[0].replace('source','')+'.arf'
             AllData(i_sp+1).background=epoch_observ[0].replace('source','')+('back.pi')
 
-    xscorpeon.load(scorpeon_list_indiv,frozen=True)
-
+    if 'NICER' in sat_indiv_good:
+        xscorpeon.load(scorpeon_list_indiv,frozen=True)
 
     '''resetting the energy bands if needed'''
     if not force_ener_bounds:
@@ -1931,10 +1938,13 @@ def line_detect(epoch_id):
     # this one is here to avoid adding one point if incorrect roundings create problem
     line_search_e_space = line_search_e_space[line_search_e_space <= line_search_e[1]]
 
-    for i_obs,(elem_det,elem_sat) in enumerate(zip(epoch_dets,elem_sat)):
+    for i_obs,elem_sat in enumerate(sat_indiv_good):
+        #ad hoc way to only consider the suzaku detectors
+        i_det_suzaku=0
         if elem_sat == 'Suzaku':
-            e_sat_high_indiv[i_obs]=40. if elem_det=='PIN' else 9.
-            e_sat_low_indiv[i_obs]=12. if elem_det=='PIN' else 1.9
+            e_sat_high_indiv[i_obs]=40. if epoch_dets[i_det_suzaku]=='PIN' else 9.
+            e_sat_low_indiv[i_obs]=12. if epoch_dets[i_det_suzaku]=='PIN' else 1.9
+            i_det_suzaku+=1
 
     #in preparation for the raw counts test
     if sat_glob=='Suzaku':
@@ -1945,7 +1955,10 @@ def line_detect(epoch_id):
     else:
         Plot.xLog=False
 
-    #screening the spectra (note that we don't ignore the ignore bands here on purpose
+    if 'NuSTAR' in sat_indiv_good:
+        Plot.background = True
+
+    #Putting the right energy bands and screening the spectra (note that we don't ignore the ignore bands here on purpose)
     ignore_data_indiv(e_sat_low_indiv,e_sat_high_indiv)
 
     Plot_screen("ldata",outdir+'/'+epoch_observ[0]+"_screen_xspec_spectrum")
@@ -2006,7 +2019,7 @@ def line_detect(epoch_id):
         line_cont_range[1] = min(np.array(args.line_cont_range.split(' ')).astype(float)[1], max(e_sat_high_indiv))
 
     #limiting to the line search energy range
-    ignore_data_indiv(hid_cont_range[0],hid_cont_range[1],reset=True,sat_low_groups=e_sat_low_indiv,sat_high_groups=e_sat_high_indiv,glob_ignore_bands=ignore_bands)
+    ignore_data_indiv(hid_cont_range[0],hid_cont_range[1],reset=True,sat_low_groups=e_sat_low_indiv,sat_high_groups=e_sat_high_indiv,glob_ignore_bands=ignore_bands_indiv)
 
     glob_counts=0
     indiv_counts=[]
@@ -2275,7 +2288,7 @@ def line_detect(epoch_id):
 
         AllChains.clear()
 
-        for i_sp in range(epoch_files_good):
+        for i_sp in range(len(epoch_files_good)):
             if line_cont_ig_indiv[i_sp] != '':
                 AllData(i_sp+1).notice(line_cont_ig_indiv[i_sp])
 
@@ -2356,7 +2369,7 @@ def line_detect(epoch_id):
 
             # refitting in hid band for the HID values
             ignore_data_indiv(hid_cont_range[0], hid_cont_range[1], reset=True, sat_low_groups=e_sat_low_indiv,
-                              sat_high_groups=e_sat_high_indiv,glob_ignore_bands=ignore_bands)
+                              sat_high_groups=e_sat_high_indiv,glob_ignore_bands=ignore_bands_indiv)
 
             # fitting the model to the new energy band first
             calc_fit(logfile=fitlines_hid.logfile)
@@ -2380,7 +2393,7 @@ def line_detect(epoch_id):
 
         cont_abspeak,cont_peak_points,cont_peak_widths,cont_peak_delchis,cont_peak_eqws,chi_dict_init=\
             narrow_line_search(data_mod_high,'cont',line_search_e=line_search_e,line_search_norm=line_search_norm,
-                               e_sat_low=e_sat_low_indiv,peak_thresh=peak_thresh,peak_clean=peak_clean,
+                               e_sat_low_indiv=e_sat_low_indiv,peak_thresh=peak_thresh,peak_clean=peak_clean,
                                line_cont_range=line_cont_range,trig_interval=trig_interval,
                                scorpeon_save=data_broad.scorpeon)
 
@@ -2420,7 +2433,7 @@ def line_detect(epoch_id):
 
             #limiting to the line search energy range
             ignore_data_indiv(line_cont_range[0], line_cont_range[1], reset=True, sat_low_groups=e_sat_low_indiv,
-                              sat_high_groups=e_sat_high_indiv,glob_ignore_bands=ignore_bands)
+                              sat_high_groups=e_sat_high_indiv,glob_ignore_bands=ignore_bands_indiv)
 
             #if the stat is low we don't do the autofit anyway so we'd rather get the best fit possible
             if not flag_lowSNR_line:
@@ -2476,7 +2489,7 @@ def line_detect(epoch_id):
             #note: for now this is fine but might need to be udpated later with telescopes with global ignore bands
             #matching part of this
 
-            for i_sp in range(epoch_files_good):
+            for i_sp in range(len(epoch_files_good)):
                 if line_cont_ig_indiv[i_sp] != '':
                     AllData(i_sp+1).notice(line_cont_ig_indiv[i_sp])
 
@@ -2514,11 +2527,11 @@ def line_detect(epoch_id):
             #first broad band fit in e_sat_low-10 to see the spectral shape
             print('\nComputing broad band fit for visualisation purposes...')
 
-            ignore_data_indiv(e_sat_low_indiv, e_sat_high_indiv, reset=True, glob_ignore_bands=ignore_bands)
+            ignore_data_indiv(e_sat_low_indiv, e_sat_high_indiv, reset=True, glob_ignore_bands=ignore_bands_indiv)
 
             #if the stat is low we don't do the autofit anyway so we'd rather get the best fit possible
             if not flag_lowSNR_line:
-                for i_sp in range(epoch_files_good):
+                for i_sp in range(len(epoch_files_good)):
                     if line_cont_ig_indiv[i_sp] != '':
                         AllData(i_sp+1).ignore(line_cont_ig_indiv[i_sp])
 
@@ -2554,7 +2567,7 @@ def line_detect(epoch_id):
             else:
                 broad_absval=0
 
-            for i_sp in range(epoch_files_good):
+            for i_sp in range(len(epoch_files_good)):
                 if line_cont_ig_indiv[i_sp] != '':
                     AllData(i_sp+1).notice(line_cont_ig_indiv[i_sp])
 
@@ -2573,11 +2586,11 @@ def line_detect(epoch_id):
             xscorpeon.load(scorpeon_save=data_broad.scorpeon,frozen=True)
 
             ignore_data_indiv(hid_cont_range[0], hid_cont_range[1], reset=True, sat_low_groups=e_sat_low_indiv,
-                              sat_high_groups=e_sat_high_indiv,glob_ignore_bands=ignore_bands)
+                              sat_high_groups=e_sat_high_indiv,glob_ignore_bands=ignore_bands_indiv)
 
             #if the stat is low we don't do the autofit anyway so we'd rather get the best fit possible
             if not flag_lowSNR_line:
-                for i_sp in range(epoch_files_good):
+                for i_sp in range(len(epoch_files_good)):
                     if line_cont_ig_indiv[i_sp] != '':
                         AllData(i_sp+1).ignore(line_cont_ig_indiv[i_sp])
 
@@ -2646,7 +2659,7 @@ def line_detect(epoch_id):
 
         # re-limiting to the line search energy range
         ignore_data_indiv(line_cont_range[0], line_cont_range[1], reset=True, sat_low_groups=e_sat_low_indiv,
-                          sat_high_groups=e_sat_high_indiv,glob_ignore_bands=ignore_bands)
+                          sat_high_groups=e_sat_high_indiv,glob_ignore_bands=ignore_bands_indiv)
 
         #changing back to the auto rescale of xspec
         Plot.commands=()
@@ -2656,7 +2669,7 @@ def line_detect(epoch_id):
 
         cont_abspeak,cont_peak_points,cont_peak_widths,cont_peak_delchis,cont_peak_eqws,chi_dict_init=\
             narrow_line_search(data_mod_high,'cont',line_search_e=line_search_e,line_search_norm=line_search_norm,
-                               e_sat_low=e_sat_low_indiv,peak_thresh=peak_thresh,peak_clean=peak_clean,
+                               e_sat_low_indiv=e_sat_low_indiv,peak_thresh=peak_thresh,peak_clean=peak_clean,
                                line_cont_range=line_cont_range,trig_interval=trig_interval,
                                scorpeon_save=data_broad.scorpeon)
 
@@ -2734,7 +2747,7 @@ def line_detect(epoch_id):
                         freeze(parlist=comp.unlocked_pars)
 
                 #refitting in broad band for the nH
-                ignore_data_indiv(e_sat_low_indiv, e_sat_high_indiv, reset=True, glob_ignore_bands=ignore_bands)
+                ignore_data_indiv(e_sat_low_indiv, e_sat_high_indiv, reset=True, glob_ignore_bands=ignore_bands_indiv)
 
                 #thawing the absorption to allow improving its value
                 if 'glob_phabs' in fitlines.name_cont_complist and fitlines.glob_phabs.included:
@@ -2768,7 +2781,7 @@ def line_detect(epoch_id):
 
                 #refitting in hid band for the HID values
                 ignore_data_indiv(hid_cont_range[0], hid_cont_range[1], reset=True, sat_low_groups=e_sat_low_indiv,
-                                  sat_high_groups=e_sat_high_indiv, glob_ignore_bands=ignore_bands)
+                                  sat_high_groups=e_sat_high_indiv, glob_ignore_bands=ignore_bands_indiv)
 
                 #fitting the model to the new energy band first
                 calc_fit(logfile=fitlines.logfile)
@@ -2794,7 +2807,7 @@ def line_detect(epoch_id):
 
                 #refitting in the autofit range to get the newer version of the autofit and continuum
                 ignore_data_indiv(line_cont_range[0], line_cont_range[1], reset=True, sat_low_groups=e_sat_low_indiv,
-                                  sat_high_groups=e_sat_high_indiv, glob_ignore_bands=ignore_bands)
+                                  sat_high_groups=e_sat_high_indiv, glob_ignore_bands=ignore_bands_indiv)
 
                 #fitting the model to the new energy band first
                 calc_fit(logfile=fitlines.logfile)
@@ -3081,7 +3094,7 @@ def line_detect(epoch_id):
 
         chi_dict_autofit=narrow_line_search(data_autofit,'autofit',
                                             line_search_e=line_search_e,line_search_norm=line_search_norm,
-                           e_sat_low=e_sat_low_indiv,peak_thresh=peak_thresh,peak_clean=peak_clean,
+                           e_sat_low_indiv=e_sat_low_indiv,peak_thresh=peak_thresh,peak_clean=peak_clean,
                            line_cont_range=line_cont_range,trig_interval=trig_interval,
                            scorpeon_save=data_broad.scorpeon,data_fluxcont=data_autofit_noabs)
 
@@ -3306,7 +3319,7 @@ def line_detect(epoch_id):
 
                         # limiting to the line search energy range
                         ignore_data_indiv(line_cont_range[0],line_cont_range[1], reset=True, sat_low_groups=e_sat_low_indiv,
-                                          sat_high_groups=e_sat_high_indiv, glob_ignore_bands=ignore_bands)
+                                          sat_high_groups=e_sat_high_indiv, glob_ignore_bands=ignore_bands_indiv)
 
                         #adjusting the fit and storing the chi²
 
@@ -3601,7 +3614,9 @@ elif sat_glob=='NICER':
     tstart_list=[]
     for elem_file in spfile_list:
         with fits.open(elem_file) as hdul:
+
             start_obs_s = hdul[1].header['TSTART'] + hdul[1].header['TIMEZERO']
+
             # saving for titles later
             mjd_ref = Time(hdul[1].header['MJDREFI'] + hdul[1].header['MJDREFF'], format='mjd')
 
@@ -3610,9 +3625,9 @@ elif sat_glob=='NICER':
         tstart_list+=[obs_start.to_value('jd')]
 
     #max delta between gti starts in sec
-    max_delta=(TimeDelta(group_gti_time.split('_')[0],format='jd')+\
-              TimeDelta(group_gti_time.split('_')[1],format='sec')/60+ \
-              TimeDelta(group_gti_time.split('_')[2], format='sec')/3600).to_value('jd')
+    max_delta=(TimeDelta(group_max_timedelta.split('_')[0],format='jd')+\
+              TimeDelta(group_max_timedelta.split('_')[1],format='sec')/60+ \
+              TimeDelta(group_max_timedelta.split('_')[2], format='sec')/3600).to_value('jd')
 
     epoch_id_list_ravel=[]
     epoch_id_list=[]
@@ -3681,6 +3696,94 @@ elif sat_glob in ['Suzaku','Swift']:
         epoch_list=[elem[::-1] for elem in epoch_list]
 
         epoch_list_started=[literal_eval(elem.split(']')[0]+']') for elem in started_expos[1:]]
+
+elif sat_glob=='multi':
+    epoch_list=[]
+    tstart_list=[]
+    det_list=[]
+    for elem_file in spfile_list:
+
+        #for Suzaku this won't work for meugmi's xis0_xis3 files bc their header has been replaced
+        # so we replace them by the xis1 to be able to load the exposure
+        elem_file_load=elem_file.replace('xis0_xis3','xis1')
+
+        with fits.open(elem_file_load) as hdul:
+            if 'TELESCOP' in hdul[1].header:
+                det_list+=[hdul[1].header['TELESCOP']]
+            else:
+                if megumi_files:
+                    det_list+=['Suzaku']
+                else:
+                    breakpoint()
+                    print("Issue with detector handling")
+
+            if 'TIMEZERO' in hdul[1].header:
+                start_obs_s = hdul[1].header['TSTART'] + hdul[1].header['TIMEZERO']
+            else:
+                start_obs_s=hdul[1].header['TSTART']
+            # saving for titles later
+            mjd_ref = Time(hdul[1].header['MJDREFI'] + hdul[1].header['MJDREFF'], format='mjd')
+
+            obs_start = mjd_ref + TimeDelta(start_obs_s, format='sec')
+
+        tstart_list+=[obs_start.to_value('jd')]
+
+    #max delta between gti starts in sec
+    max_delta=(TimeDelta(group_max_timedelta.split('_')[0],format='jd')+\
+              TimeDelta(group_max_timedelta.split('_')[1],format='sec')/60+ \
+              TimeDelta(group_max_timedelta.split('_')[2], format='sec')/3600).to_value('jd')
+
+    epoch_id_list_ravel=[]
+    epoch_id_list=[]
+
+    with tqdm(total=len(tstart_list)) as pbar:
+        for id_elem,(elem_tstart,elem_det) in enumerate(zip(tstart_list,det_list)):
+
+            #skipping computation for already grouped elements
+            if id_elem in epoch_id_list_ravel:
+                continue
+
+            elem_delta=[(elem-elem_tstart) for elem in tstart_list]
+
+            elem_epoch_id=[id for id in range(len(tstart_list)) if\
+                                     id not in epoch_id_list_ravel and elem_delta[id]>=0 and elem_delta[id]<max_delta]
+
+            if single_obsid_NuSTAR:
+                elem_epoch_obsids_NuSTAR=np.unique([elem.split('_')[0][:-3] for elem in\
+                    np.array(spfile_list)[elem_epoch_id] if elem.startswith('nu')])
+                mask_obsid_restrict=[not elem.startswith('nu') or elem.startswith(elem_epoch_obsids_NuSTAR[0])
+                                     for elem in np.array(spfile_list)[elem_epoch_id]]
+                elem_epoch_id=np.array([elem_epoch_id])[[mask_obsid_restrict]].tolist()
+
+            epoch_id_list_ravel+=elem_epoch_id
+
+            if len(elem_epoch_id)>0:
+                epoch_id_list+=[elem_epoch_id]
+
+            pbar.update(n=len(elem_epoch_id))
+
+    epoch_list=[np.array(spfile_list)[elem] for elem in epoch_id_list]
+
+
+    #skipping flares if asked for
+    if skip_flares:
+        epoch_list=[[subelem for subelem in elem if "F_sp" not in subelem] for elem in epoch_list]
+        epoch_list=[elem for elem in epoch_list if len(elem)>0]
+
+    epoch_list=np.array(epoch_list,dtype=object)
+
+    #not needed atm
+    # def str_to_epoch(str_epoch):
+    #     str_epoch_list=[]
+    #     for elem_obsid_str in str_epoch:
+    #         if '-' not in elem_obsid_str:
+    #             str_epoch_list+=elem_obsid_str
+    #         else:
+    #             str_epoch_list+=[elem_obsid_str.split('-')[0]+elem_obsid_str.split('-')[i]\
+    #                              for i in range(1,len(elem_obsid_str.split('-')))]
+
+    epoch_list_started=started_expos
+    epoch_list_done=done_expos
 
 def shorten_epoch(file_ids):
     # splitting obsids

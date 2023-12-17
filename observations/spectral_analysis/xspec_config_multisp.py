@@ -97,9 +97,10 @@ def ignore_data_indiv(e_low_groups,e_high_groups,reset=False,sat_low_groups=None
             AllData(i_grp + 1).ignore('**-' + str(e_sat_low) + ' ' + str(e_sat_high) + '-**')
 
     if glob_ignore_bands is not None:
-        for elem_ignore_band in glob_ignore_bands:
-            if elem_ignore_band is not None:
-                AllData.ignore(elem_ignore_band)
+        for elem_ignore_bands in glob_ignore_bands:
+            if elem_ignore_bands is not None:
+                for ignore_band in elem_ignore_bands:
+                    AllData.ignore(ignore_band)
 
 #not used anymore now that we take the info directly from the log file
 

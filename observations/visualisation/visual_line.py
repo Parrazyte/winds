@@ -148,7 +148,9 @@ except:
                    
 #readjusting the variables in lists
 if cameras=='all':
-    cameras=['pn','mos1','mos2','heg']
+    #note: we use nu as the fpma/fpmb alias
+    cameras=['pn','mos1','mos2','heg','xis','pin','nu']
+
 else:
     cameras=[cameras]
     if 'pn' in cameras[0]:
@@ -258,7 +260,7 @@ use_orbit_obs_str='_indiv' if use_orbit_obs else ''
 
 #We put the telescope option before anything else to filter which file will be used
 choice_telescope=st.sidebar.multiselect('Telescopes', ['NICER'] if use_orbit_obs else\
-                 (['XMM','Chandra']+([] if online else ['NICER','Suzaku','Swift'])),
+                 (['XMM','Chandra']+([] if online else ['NICER','NuSTAR','Suzaku','Swift'])),
                                         default=['NICER'] if use_orbit_obs else ('XMM','Chandra'))
 
 if online:
@@ -336,6 +338,11 @@ if update_dump or not os.path.isfile(dump_path):
         #telescope selection
         lineval_files=[elem for elem_telescope in choice_telescope for elem in lineval_files if elem_telescope+'/' in elem]
         abslines_files=[elem for elem_telescope in choice_telescope for elem in abslines_files if elem_telescope+'/' in elem]
+
+        #removing multi if not asked for explicitely
+        if 'multi' not in choice_telescope:
+            lineval_files=[elem for elem in lineval_files if '/multi/' not in elem]
+            abslines_files=[elem for elem in abslines_files if '/multi/' not in elem]
 
         #some additional removals for in progress dirs
         lineval_files = [elem for elem in lineval_files if '4U_mix' not in elem]

@@ -74,13 +74,13 @@ from general_tools import ravel_ragged,MinorSymLogLocator,rescale_log
 from astroquery.vizier import Vizier
 
 
-telescope_list=('XMM','Chandra','NICER','Suzaku','Swift')
+telescope_list=('XMM','Chandra','NICER','Suzaku','NuSTAR','Swift')
 
 telescope_colors={'XMM':'red',
                   'Chandra':'blue',
                   'NICER':'green',
                   'Suzaku':'magenta',
-                  'Nustar':'orange',
+                  'NuSTAR':'orange',
                   'Swift':'cyan'}
 
 #inclination, mass and other values
@@ -1039,7 +1039,7 @@ def obj_values(file_paths,E_factors,dict_linevis):
     '''
     
     obj_list=dict_linevis['obj_list']
-    cameras=dict_linevis['cameras']
+    cameras=dict_linevis['args_cam']
     expmodes=dict_linevis['expmodes']
     multi_obj=dict_linevis['multi_obj']
     visual_line=True
@@ -1072,21 +1072,30 @@ def obj_values(file_paths,E_factors,dict_linevis):
             #opening the values file
             with open(elem_path) as store_file:
                     
-                store_lines_single=store_file.readlines()[1:]
+                store_lines_single_full=store_file.readlines()[1:]
 
                 #only keeping the lines with selected cameras and exposures
                 #for NICER observation, there's no camera to check so we pass directly
-                
+
                 if cameras=='all':
-                    store_lines+=store_lines_single
+                    store_lines_single=store_lines_single_full
+                    store_lines+=store_lines_single_full
                 else:
-                    store_lines_single=[elem for elem in store_lines_single if elem.split('\t')[0].split('_')[1] in cameras]
-                
-                    #checking if it's an XMM file and selecting exposures if so
-                    if 'NICER' not in elem_path and store_lines_single[0].split('\t')[0].split('_')[1] in ['pn','mos1','mos2']:    
-                        store_lines_single=[elem for elem in store_lines_single if elem.split('\t')[0].split('_')[3]\
-                                            in expmodes]
-                        store_lines+=store_lines_single
+                    #will need improvement for NuSTAR probably
+                    store_lines_single=[elem for elem in store_lines_single_full if\
+                                        '_' in elem.split('\t')[0] and \
+                                        np.any([elem_cam in elem.split('\t')[0].split('_')[1] for elem_cam in cameras])]
+
+                    try:
+                        #checking if it's an XMM file and selecting exposures if so
+                        if 'NICER' not in elem_path and store_lines_single[0].split('\t')[0].split('_')[1] in ['pn','mos1','mos2']:
+                            store_lines_single=[elem for elem in store_lines_single if elem.split('\t')[0].split('_')[3]\
+                                                in expmodes]
+                    except:
+                        breakpoint()
+
+                    store_lines+=store_lines_single
+
                 lineval_paths_arr+=[np.repeat(elem_path,len(store_lines_single))]
 
         store_lines=ravel_ragged(np.array(store_lines))
@@ -1136,6 +1145,11 @@ def obj_values(file_paths,E_factors,dict_linevis):
                         filepath='/'.join(lineval_path.split('/')[:-2])+'/'+obs+'_grp_opt.pi'
                         curr_instru_list[i_obs]='Swift'
                         
+                    elif obs.startswith('nu'):
+                        #this means a NICER observation
+                        #we take the directory structure from the according file in curr_obj_paths
+                        filepath='/'.join(lineval_path.split('/')[:-2])+'/'+obs+'_sp_src_grp_opt.pha'
+                        curr_instru_list[i_obs]='NuSTAR'
                     else:
                         #this means a NICER observation
                         #we take the directory structure from the according file in curr_obj_paths
@@ -1159,6 +1173,10 @@ def obj_values(file_paths,E_factors,dict_linevis):
                     elif 'xis' in obs:
                         #we take the directory structure from the according file in curr_obj_paths
                         filepath='/'.join(lineval_path.split('/')[:-2])+'/'+obs+'_gti_event_spec_src_grp_opt.pha'
+
+                        #getting non stacked files for megumi files to be able to read the header
+                        filepath=filepath.replace('xis0_xis3','xis_1')
+
                         curr_instru_list[i_obs]='Suzaku'
 
                     elif obs.split('_')[1] in ['0','1']:
@@ -1175,15 +1193,16 @@ def obj_values(file_paths,E_factors,dict_linevis):
                         if not os.path.isfile(filepath):
                             #should not happen
                             breakpoint()
-
+                            print('issue with identifying obs sp path')
                 try:
                     with fits.open(filepath) as hdul:
 
                         curr_exptime_list[i_obs]=hdul[1].header['EXPOSURE']
 
-                        if curr_instru_list[i_obs]=='NICER':
+                        if curr_instru_list[i_obs] in ['NICER','NuSTAR']:
 
-                            start_obs_s = hdul[1].header['TSTART'] + hdul[1].header['TIMEZERO']
+                            start_obs_s = hdul[1].header['TSTART'] +\
+                                          (hdul[1].header['TIMEZERO'] if curr_instru_list[i_obs]=='NICER' else 0)
                             # saving for titles later
                             mjd_ref = Time(hdul[1].header['MJDREFI'] + hdul[1].header['MJDREFF'], format='mjd')
 
@@ -1201,6 +1220,7 @@ def obj_values(file_paths,E_factors,dict_linevis):
                                     curr_date_list[i_obs]=Time(hdul[1].header['MJDSTART'],format='mjd').isot
                 except:
                     breakpoint()
+                    print('issue with obs fits handling')
 
         date_list[i]=curr_date_list
         instru_list[i]=curr_instru_list
@@ -1230,7 +1250,7 @@ def abslines_values(file_paths,dict_linevis,only_abs=False,obsid=None):
     else:
         file_paths_use=file_paths
 
-    cameras=dict_linevis['cameras']
+    cameras=dict_linevis['args_cam']
     expmodes=dict_linevis['expmodes']
     visual_line=dict_linevis['visual_line']
     if visual_line:
@@ -1257,25 +1277,35 @@ def abslines_values(file_paths,dict_linevis,only_abs=False,obsid=None):
             #opening the values file
             with open(elem_path) as store_file:
                 
-                store_lines_single=store_file.readlines()[1:]
+                store_lines_single_full=store_file.readlines()[1:]
                 
                 #only keeping the lines with selected cameras and exposures
                 #for NICER observation, there's no camera to check so we pass directly
 
                 #restricting to the given obsid if asked to
                 if obsid is not None:
-                    store_lines_single=[elem_line for elem_line in store_lines_single if obsid in elem_line]
+                    store_lines_single_full=[elem_line for elem_line in store_lines_single_full if obsid in elem_line]
 
                 if cameras=='all':
-                    store_lines+=store_lines_single
+                    store_lines_single=store_lines_single_full
+                    store_lines+=store_lines_single_full
                 else:
-                    store_lines_single=[elem for elem in store_lines_single if elem.split('\t')[0].split('_')[1] in cameras]
+                    #will need improvement for NuSTAR probably
+                    store_lines_single=[elem for elem in store_lines_single_full if\
+                                        '_' in elem.split('\t')[0] and \
+                                        np.any([elem_cam in elem.split('\t')[0].split('_')[1] for elem_cam in cameras])]
 
-                    #checking if it's an XMM file and selecting exposures if so
-                    if 'NICER' not in elem_path and store_lines_single[0].split('\t')[0].split('_')[1] in ['pn','mos1','mos2']:
-                        store_lines+=[elem for elem in store_lines_single if elem.split('\t')[0].split('_')[3] in expmodes]
+                    try:
+                        #checking if it's an XMM file and selecting exposures if so
+                        if 'NICER' not in elem_path and store_lines_single[0].split('\t')[0].split('_')[1] in ['pn','mos1','mos2']:
+                            store_lines_single=[elem for elem in store_lines_single if elem.split('\t')[0].split('_')[3]\
+                                                in expmodes]
+                    except:
+                        breakpoint()
 
-        
+                    store_lines+=store_lines_single
+
+
         store_lines=ravel_ragged(np.array(store_lines))
         
         #and storing the absline values and fit parameters

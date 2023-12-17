@@ -159,7 +159,7 @@ ap = argparse.ArgumentParser(description='Script to perform line detection in X-
 
 '''GENERAL OPTIONS'''
 
-ap.add_argument('-satellite',nargs=1,help='telescope to fetch spectra from',default='multi',type=str)
+ap.add_argument('-satellite',nargs=1,help='telescope to fetch spectra from',default='NICER',type=str)
 #note: use maj for first character
 
 ap.add_argument("-cameras",nargs=1,help='Cameras to use for spectral analysis',default='all',type=str)
@@ -233,7 +233,7 @@ ap.add_argument('-spread_comput',nargs=1,
 ap.add_argument('-reverse_spread',nargs=1,help='run the spread computation lists in reverse',default=False,type=bool)
 
 #note: havign both reverse spread and reverse epoch with spread_comput>1 will give you back the normal order
-ap.add_argument('-reverse_epoch',nargs=1,help='reverse epoch list order',default=True,type=bool)
+ap.add_argument('-reverse_epoch',nargs=1,help='reverse epoch list order',default=False,type=bool)
 
 #better when spread computations are not running
 ap.add_argument('-skip_started_spread',nargs=1,
@@ -315,7 +315,7 @@ ap.add_argument('-write_pdf',nargs=1,help='overwrite finished pdf at the end of 
                 default=True,type=bool)
 
 #can be set to false to gain time when testing or if the aborted pdf were already done
-ap.add_argument('-write_aborted_pdf',nargs=1,help='create aborted pdfs at the end of the computation',default=False,
+ap.add_argument('-write_aborted_pdf',nargs=1,help='create aborted pdfs at the end of the computation',default=True,
                 type=bool)
 
 #used for NICER and multi for now
@@ -369,6 +369,10 @@ ap.add_argument('-split_fit',nargs=1,
 ap.add_argument('-assess_line',nargs=1,
                 help='use fakeit simulations to estimate the significance of each absorption line',
                 default=True,type=bool)
+
+ap.add_argument('-assess_line_upper',nargs=1,help='compute upper limits of each absorption line',
+                default=True,type=bool)
+
 
 '''SPECTRUM PARAMETERS'''
 
@@ -510,6 +514,8 @@ line_cont_ig_arg=args.line_cont_ig_arg
 line_search_e=np.array(args.line_search_e.split(' ')).astype(float)
 line_search_norm=np.array(args.line_search_norm.split(' ')).astype(float)
 assess_line=args.assess_line
+assess_line_upper=args.assess_line_upper
+
 nfakes=int(args.nfakes)
 autofit=args.autofit
 force_autofit=args.force_autofit
@@ -641,7 +647,7 @@ def folder_state(folderpath='./'):
 #for the current directory:
 started_expos,done_expos=folder_state()
 
-if sat_glob=='NICER':
+if sat_glob in ['NICER','multi']:
     started_expos=[[elem.split('_')[0]] if not elem.startswith('[') else literal_eval(elem.split('_')[0]) for elem in started_expos]
     done_expos=[[elem.split('_')[0]] if not elem.startswith('[') else literal_eval(elem.split('_')[0]) for elem in done_expos]
 
@@ -813,15 +819,18 @@ def pdf_summary(epoch_files,fit_ok=False,summary_epoch=None):
         sat_indiv = np.repeat([None], len(epoch_files))
         for id_epoch, elem_file in enumerate(epoch_files):
             # fetching the instrument of the individual element
-            sat_indiv[id_epoch] = fits.open(elem_file)[1].header['TELESCOP']
-
-            e_sat_low_indiv[id_epoch], e_sat_high_indiv[id_epoch], line_cont_ig_indiv[id_epoch] = \
+            # note that we replace the megumi xis0_xis3 files by the xis1 because the merged xis0_xis3 have no header
+            #we also replace SUZAKU in caps by Suzaku to have a better time matching strings
+            sat_indiv[id_epoch] = fits.open(elem_file.replace('xis0_xis3','xis1'))[1].header['TELESCOP']\
+                .replace('SUZAKU','Suzaku')
+            e_sat_low_indiv[id_epoch], e_sat_high_indiv[id_epoch], temp,line_cont_ig_indiv[id_epoch], = \
                 line_e_ranges(sat_indiv[id_epoch])
     else:
-        e_sat_low_val, e_sat_high_val, line_cont_ig_val = line_e_ranges(sat_glob)
+        e_sat_low_val, e_sat_high_val, temp,line_cont_ig_val = line_e_ranges(sat_glob)
         e_sat_low_indiv = np.repeat(e_sat_low_val, len(epoch_files))
         e_sat_high_indiv = np.repeat(e_sat_high_val, len(epoch_files))
         line_cont_ig_indiv = np.repeat(line_cont_ig_val, len(epoch_files))
+        sat_indiv=np.repeat(sat_glob,len(epoch_files))
 
     if sat_glob == 'multi':
         epoch_observ = [file_to_obs(elem_file, elem_telescope) for elem_file, elem_telescope in \
@@ -883,37 +892,26 @@ def pdf_summary(epoch_files,fit_ok=False,summary_epoch=None):
             if os.path.isfile(elem_observ+'_sp_src_grp_20.ds'):
                 is_sp+=[True]
                 is_cleanevt+=[True]
-                filename_list+=[elem_observ+'_sp_src_grp_20.ds']
             elif os.path.isfile(elem_observ+'_evt_save.ds'):
                 is_sp+=[False]
                 is_cleanevt+=[True]
-                filename_list+=[elem_observ+'_evt_save.ds']
             else:
                 is_sp+=[False]
                 is_cleanevt+=[False]
-                filename_list+=[elem_observ.replace('_screen.png','.ds')]
-        elif elem_sat in ['Chandra','NICER','Swift']:
+        elif elem_sat in ['Chandra','NICER','Swift','NuSTAR']:
             is_sp+=[True]
             is_cleanevt+=[False]
 
             # if elem_sat=='NICER' and pre_reduced_NICER:
             #     filename_list+=[elem_observ]
             # else:
-            filename_list+=[elem_observ+('_sp' if elem_sat in ['NICER','Suzaku'] else '')+'_grp_opt'+('.pi' if elem_sat=='Swift' else '.pha')]
 
         elif elem_sat=='Suzaku':
             if megumi_files:
+                is_sp += [True]
 
-                suffixes=['_src_dtcor_grp_opt.pha','_gti_event_spec_src_grp_opt.pha']
 
-                if os.path.isfile(elem_observ+suffixes[0]):
-                    filename_list+=[elem_observ+suffixes[0]]
-                    is_sp+=[True]
-                elif os.path.isfile(elem_observ+suffixes[1]):
-                    filename_list += [elem_observ + suffixes[1]]
-                    is_sp += [True]
-
-        with fits.open(filename_list[i_obs]) as hdul:
+        with fits.open(epoch_files[i_obs]) as hdul:
 
             try:
                 exposure_list+=[hdul[1].header['EXPOSURE']]
@@ -1413,7 +1411,6 @@ def line_e_ranges(sat):
 
     DO NOT USE INTS else it will be taken as channels instead of energies
     ignore_bands are bands that will be ignored on top of the rest, in ALL bands
-
     '''
     ignore_bands=None
 
@@ -1647,7 +1644,10 @@ def line_detect(epoch_id):
         sat_indiv_init = np.repeat([None], len(epoch_files))
         for id_epoch, elem_file in enumerate(epoch_files):
             # fetching the instrument of the individual element
-            sat_indiv_init[id_epoch] = fits.open(elem_file)[1].header['TELESCOP']
+            # note that we replace the megumi xis0_xis3 files by the xis1 because the merged xis0_xis3 have no header
+            #we also replace SUZAKU in caps by Suzaku to have a better time matching strings
+            sat_indiv_init[id_epoch] = fits.open(elem_file.replace('xis0_xis3','xis1'))[1].header['TELESCOP']\
+                .replace('SUZAKU','Suzaku')
 
             e_sat_low_indiv_init[id_epoch], e_sat_high_indiv_init[id_epoch], ignore_bands_indiv_init[id_epoch],\
                 line_cont_ig_indiv_init[id_epoch] = line_e_ranges(sat_indiv_init[id_epoch])
@@ -1657,6 +1657,7 @@ def line_detect(epoch_id):
         e_sat_high_indiv_init = np.repeat(e_sat_high_val, len(epoch_files))
         ignore_bands_indiv_init = np.repeat(ignore_bands_val,len(epoch_files))
         line_cont_ig_indiv_init = np.repeat(line_cont_ig_val, len(epoch_files))
+        sat_indiv_init = np.repeat([sat_glob], len(epoch_files))
 
     if sat_glob == 'multi':
         epoch_observ = [file_to_obs(elem_file, elem_telescope) for elem_file, elem_telescope in \
@@ -1917,7 +1918,7 @@ def line_detect(epoch_id):
 
                     #loading the background and storing the bg python path in xscorpeon
                     #note that here we assume that all files have a valid scorpeon background
-                    scorpeon_list_indiv[i_sp]=elem_sp[i_sp].replace('_sp_grp_opt.pha','_bg.py')
+                    scorpeon_list_indiv[i_sp]=elem_sp.replace('_sp_grp_opt.pha','_bg.py')
         if elem_sat=='Swift':
 
             AllData(i_sp+1).response.arf=epoch_observ[0].replace('source','')+'.arf'
@@ -2040,7 +2041,7 @@ def line_detect(epoch_id):
 
             try:
 
-                pdf_summary(epoch_observ,fit_ok=True,summary_epoch=fill_result('Line detection complete.'))
+                pdf_summary(epoch_files,fit_ok=True,summary_epoch=fill_result('Line detection complete.'))
 
                 #closing the logfile for both access and Xspec
                 curr_logfile.close()
@@ -2052,7 +2053,7 @@ def line_detect(epoch_id):
 
         else:
 
-            pdf_summary(epoch_observ, fit_ok=True, summary_epoch=fill_result('Line detection complete.'))
+            pdf_summary(epoch_files, fit_ok=True, summary_epoch=fill_result('Line detection complete.'))
 
             # closing the logfile for both access and Xspec
             curr_logfile.close()
@@ -2153,7 +2154,7 @@ def line_detect(epoch_id):
         '''PDF creation'''
 
         if write_pdf:
-            pdf_summary(epoch_observ, fit_ok=True, summary_epoch=fill_result('Line detection complete.'))
+            pdf_summary(epoch_files, fit_ok=True, summary_epoch=fill_result('Line detection complete.'))
 
         # closing the logfile for both access and Xspec
         curr_logfile.close()
@@ -3425,7 +3426,7 @@ def line_detect(epoch_id):
         Xset.restore(outdir+'/'+epoch_observ[0]+'_mod_autofit.xcm')
 
         #and saving the delchi array if it wasn't already done previously
-        if not loaded_fakes:
+        if assess_line and not loaded_fakes:
             np.save(outdir+'/'+epoch_observ[0]+'_delchi_arr_fake_line.npy',delchi_arr_fake_line)
 
         '''
@@ -3443,8 +3444,9 @@ def line_detect(epoch_id):
         #computing a mask for significant lines
         mask_abslines_sign=abslines_sign>sign_threshold
 
-        #computing the upper limits for the non significant lines
-        abslines_eqw_upper=fitlines.get_eqwidth_uls(mask_abslines_sign,abslines_bshift,sign_widths_arr,pre_delete=True)
+        if assess_line_upper:
+            #computing the upper limits for the non significant lines
+            abslines_eqw_upper=fitlines.get_eqwidth_uls(mask_abslines_sign,abslines_bshift,sign_widths_arr,pre_delete=True)
 
         #here will need to reload an accurate model before updating the fitcomps
         '''HTML TABLE FOR the pdf summary'''
@@ -3533,7 +3535,7 @@ def line_detect(epoch_id):
 
     if write_pdf:
 
-        pdf_summary(epoch_observ,fit_ok=True,summary_epoch=fill_result('Line detection complete.'))
+        pdf_summary(epoch_files,fit_ok=True,summary_epoch=fill_result('Line detection complete.'))
 
     #closing the logfile for both access and Xspec
     curr_logfile.close()
@@ -3709,7 +3711,7 @@ elif sat_glob=='multi':
 
         with fits.open(elem_file_load) as hdul:
             if 'TELESCOP' in hdul[1].header:
-                det_list+=[hdul[1].header['TELESCOP']]
+                det_list+=[hdul[1].header['TELESCOP'].replace('SUZAKU','Suzaku')]
             else:
                 if megumi_files:
                     det_list+=['Suzaku']
@@ -3788,7 +3790,7 @@ elif sat_glob=='multi':
 def shorten_epoch(file_ids):
     # splitting obsids
     obsids = np.unique([elem.split('-')[0] for elem in file_ids])
-
+    obsids_list=[elem.split('-')[0] for elem in file_ids]
     # returning the obsids directly if there's no gtis in the obsids
     obsids_ravel = ''.join(file_ids)
     if '-' not in obsids_ravel:
@@ -3797,11 +3799,18 @@ def shorten_epoch(file_ids):
     # according the gtis in a shortened way
     epoch_str_list = []
     for elem_obsid in obsids:
-        str_gti = '-'.join([elem.split('-')[1] for elem in file_ids if \
-                            elem.startswith(elem_obsid)])
-        if len(str_gti) > 0:
-            str_gti = '-' + str_gti
-        epoch_str_list += [elem_obsid + str_gti]
+
+        str_gti_add=''
+
+        str_obsid = elem_obsid
+
+        if '-' in ''.join([elem for elem in file_ids if elem.startswith(elem_obsid)]):
+            try:
+                str_gti_add = '-'+ '-'.join([elem.split('-')[1] for elem in file_ids if \
+                                    elem.startswith(elem_obsid)])
+            except:
+                breakpoint()
+        epoch_str_list += [str_obsid+str_gti_add]
 
     return epoch_str_list
 
@@ -3919,7 +3928,7 @@ for epoch_id,epoch_files in enumerate(epoch_list):
             print('\nSpectrum analysis already performed. Skipping...')
             continue
 
-    elif sat_glob=='NICER':
+    elif sat_glob in ['NICER','multi']:
 
         if (skip_started and shorten_epoch(file_ids) in started_expos) or \
            (skip_complete and shorten_epoch(file_ids) in done_expos):
@@ -4038,7 +4047,7 @@ if multi_obj==False:
                     epoch_observ=[elem_file.split('_src')[0].split('_gti')[0] for elem_file in elem_epoch]
     
             #list conversion since we use epochs as arguments
-            pdf_summary(epoch_observ)
+            pdf_summary(elem_epoch)
 
 '''''''''''''''''''''''''''''''''''''''
 ''''''Hardness-Luminosity Diagrams''''''

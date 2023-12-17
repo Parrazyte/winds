@@ -159,7 +159,7 @@ ap = argparse.ArgumentParser(description='Script to perform line detection in X-
 
 '''GENERAL OPTIONS'''
 
-ap.add_argument('-satellite',nargs=1,help='telescope to fetch spectra from',default='NICER',type=str)
+ap.add_argument('-satellite',nargs=1,help='telescope to fetch spectra from',default='multi',type=str)
 #note: use maj for first character
 
 ap.add_argument("-cameras",nargs=1,help='Cameras to use for spectral analysis',default='all',type=str)
@@ -183,7 +183,7 @@ ap.add_argument('-overwrite',nargs=1,
 
 #note : will skip exposures for which the exposure didn't compute or with logged errors
 ap.add_argument('-skip_started',nargs=1,help='skip all exposures listed in the local summary_line_det file',
-                default=True,type=bool)
+                default=False,type=bool)
 
 ap.add_argument('-skip_complete',nargs=1,help='skip completed exposures listed in the local summary_line_det file',
                 default=False,type=bool)
@@ -233,7 +233,7 @@ ap.add_argument('-spread_comput',nargs=1,
 ap.add_argument('-reverse_spread',nargs=1,help='run the spread computation lists in reverse',default=False,type=bool)
 
 #note: havign both reverse spread and reverse epoch with spread_comput>1 will give you back the normal order
-ap.add_argument('-reverse_epoch',nargs=1,help='reverse epoch list order',default=False,type=bool)
+ap.add_argument('-reverse_epoch',nargs=1,help='reverse epoch list order',default=True,type=bool)
 
 #better when spread computations are not running
 ap.add_argument('-skip_started_spread',nargs=1,
@@ -336,7 +336,7 @@ ap.add_argument('-reload_fakes',nargs=1,
 
 ap.add_argument('-pdf_only',nargs=1,
                 help='Updates the pdf with already existing elements but skips the line detection entirely',
-                default=False,type=bool)
+                default=True,type=bool)
 
 #note: used mainly to recompute obs with bugged UL computations. Needs FINISHED computations firsthand, else
 #use reload_autofit and reload_fakes
@@ -637,6 +637,7 @@ def folder_state(folderpath='./'):
             #creating variable for completed analysis only
             completed_expos=['_'.join(elem.split('\t')[:-1]) for elem in launched_expos if 'Line detection complete.' in elem]
             launched_expos=['_'.join(elem.split('\t')[:-1]) for elem in launched_expos]
+            launched_expos=[elem for elem in launched_expos if not elem.startswith('Obsid')]
     except:
         launched_expos=[]
         completed_expos=[]
@@ -647,7 +648,12 @@ def folder_state(folderpath='./'):
 #for the current directory:
 started_expos,done_expos=folder_state()
 
-if sat_glob in ['NICER','multi']:
+if sat_glob=='multi':
+    started_expos = [[elem] if not elem.startswith('[') else literal_eval(elem.split(']')[0]+']') for elem in
+                     started_expos]
+    done_expos = [[elem] if not elem.startswith('[') else literal_eval(elem.split(']')[0]+']') for elem in
+                     done_expos]
+elif sat_glob in ['NICER']:
     started_expos=[[elem.split('_')[0]] if not elem.startswith('[') else literal_eval(elem.split('_')[0]) for elem in started_expos]
     done_expos=[[elem.split('_')[0]] if not elem.startswith('[') else literal_eval(elem.split('_')[0]) for elem in done_expos]
 
@@ -1311,93 +1317,126 @@ def pdf_summary(epoch_files,fit_ok=False,summary_epoch=None):
                 pdf.cell(1,10,'GTIS and lightcurves for gti '+elem_observ,align='C',center=True)
                 pdf.ln(10)
                 try:
-                    pdf.image(elem_observ+ '_flares.png',x=2,y=70,w=140)
+                    pdf.image(elem_epoch+ '_flares.png',x=2,y=70,w=140)
 
-                    pdf.image(elem_observ + '_lc_3-10_bin_' + NICER_lc_binning + '.png', x=150, y=30, w=70)
-                    pdf.image(elem_observ + '_hr_3-10_bin_' + NICER_lc_binning + '.png', x=220, y=30, w=70)
+                    pdf.image(elem_epoch + '_lc_3-10_bin_' + NICER_lc_binning + '.png', x=150, y=30, w=70)
+                    pdf.image(elem_epoch + '_hr_3-10_bin_' + NICER_lc_binning + '.png', x=220, y=30, w=70)
 
-                    pdf.image(elem_observ + '_lc_3-6_bin_' + NICER_lc_binning + '.png', x=150, y=120, w=70)
-                    pdf.image(elem_observ + '_lc_6-10_bin_' + NICER_lc_binning + '.png', x=220, y=120, w=70)
+                    pdf.image(elem_epoch + '_lc_3-6_bin_' + NICER_lc_binning + '.png', x=150, y=120, w=70)
+                    pdf.image(elem_epoch + '_lc_6-10_bin_' + NICER_lc_binning + '.png', x=220, y=120, w=70)
 
                 except:
                     pass
 
-    if elem_sat=='XMM':
-            if is_sp[i_obs]:
-                pdf.add_page()
-                pdf.set_font('helvetica', 'B', 16)
-                pdf.cell(1,10,'Data reduction for observation '+elem_observ,align='C',center=True)
-                pdf.ln(10)
-                pdf.cell(1,30,'Initial region definition                                        '+
-                          'Post pile-up excision (if any) region definition',align='C',center=True)
-                pdf.image(elem_observ+'_reg_screen.png',x=2,y=50,w=140)
+        if elem_sat=='NuSTAR':
 
-                if os.path.isfile(elem_observ+'_reg_excised_screen.png'):
-                    pdf.image(elem_observ+'_reg_excised_screen.png',x=155,y=50,w=140)
-
-                if expmode_list[i_obs]=='IMAGING':
-                    pdf.add_page()
-                    pdf.image(elem_observ+'_opti_screen.png',x=1,w=280)
-
-                    #adding a page for the post-pileup computation if there is one
-                    if os.path.isfile(elem_observ+'_opti_excised_screen.png'):
-                        pdf.add_page()
-                        pdf.image(elem_observ+'_opti_excised_screen.png',x=1,w=280)
-
-                elif expmode_list[i_obs]=='TIMING' or expmode_list[i_obs]=='BURST':
-                    pdf.add_page()
-                    pdf.cell(1,30,'SNR evolution for different source regions, first iteration',align='C',center=True)
-                    pdf.image(elem_observ+'_opti_screen.png',x=10,y=50,w=140)
-
-                    #adding a page for the post-pileup computation if there is one
-                    if os.path.isfile(elem_observ+'_opti_excised_screen.png'):
-                        pdf.image(elem_observ+'_opti_excised_screen.png',x=150,y=50,w=140)
-
-            elif is_cleanevt[i_obs]:
-                pdf.set_font('helvetica', 'B', 16)
-                if expmode_list[i_obs]=='IMAGING':
-                    pdf.add_page()
-                    pdf.cell(1,30,'Raw image                     '+'              position catalog cropping zone          '+
-                              '            cropped region zoom',align='C',center=True)
-                    try:
-                        pdf.image(elem_observ+'_img_screen.png',x=1,y=70,w=90)
-                        pdf.image(elem_observ+'_catal_reg_screen.png',x=100,y=70,w=90)
-                        pdf.image(elem_observ+'_catal_crop_screen.png',x=190,y=65,w=120)
-                    except:
-                        pass
-                if expmode_list[i_obs]=='TIMING' or expmode_list[i_obs]=='BURST':
-                    pdf.add_page()
-                    pdf.cell(1,30,'Raw image',align='C',center=True)
-                    try:
-                        pdf.image(elem_observ+'_img_screen.png',x=70,y=50,w=150)
-                    except:
-                        pass
-
-            '''flare curves'''
+            if 'A0' in elem_epoch.split('_')[0]:
+                nudet='FPMA'
+            elif 'B0' in elem_epoch.split('_')[0]:
+                nudet='FPMB'
 
             pdf.add_page()
-            try:
-                #source/bg flare "first iteration" lightcurves (no flare gti cut) with flares zones highlighted
-                pdf.image(elem_observ+'_lc_comb_snr_screen.png',x=10,y=10,w=130)
-            except:
-                pass
-            #corresponding flare rate curve and rate limit
-            try:
-                pdf.image(rate_name_list[i_obs],x=150,y=10,w=130)
-            except:
-                pass
+            pdf.set_font('helvetica', 'B', 16)
+            pdf.cell(1, 10, nudet+' Data reduction for observation ' + elem_epoch, align='C', center=True)
+            pdf.ln(10)
+            pdf.ln(10)
+            pdf.cell(1, 30, 'Region definition                                               ' +
+                     'BBG selection', align='C', center=True)
 
-            #source/bg flare "second iteration" lightcurve
-            try:
-                 pdf.image(elem_observ+'_lc_comb_snr_excised_screen.png',x=10,y=105,w=130)
-            except:
-                pass
+            pdf.image(elem_epoch + '_auto_reg_screen.png', x=2, y=50, w=140)
 
-            #broad band source/bg lightcurve
-            try:
-                pdf.image(elem_observ+'_lc_comb_broad_screen.png',x=150,y=105,w=130)
-            except:
-                pass
+            pdf.image(elem_epoch + '_vis_CCD_1_crop.png', x=150, y=50, w=70)
+            pdf.image(elem_epoch + '_vis_CCD_2_mask.png', x=220, y=50, w=70)
+            pdf.image(elem_epoch + '_vis_CCD_3_cut.png', x=150, y=120, w=70)
+            pdf.image(elem_epoch + '_vis_CCD_4_bg.png', x=220, y=120, w=70)
+
+            pdf.add_page()
+            pdf.set_font('helvetica', 'B', 16)
+            pdf.cell(1, 10, nudet+' Lightcurves for observation ' + elem_epoch, align='C', center=True)
+
+            pdf.image(elem_epoch[:-3] + '_'+nudet+'_lc_screen_3_79_bin_100.png', x=2, y=50, w=140)
+
+            pdf.image(elem_epoch[:-3] + '_'+nudet+'_hr_screen_10-50_3-10_bin_100.png', x=150, y=50, w=70)
+            pdf.image(elem_epoch[:-3] + '_'+nudet+'_lc_screen_3_10_bin_100.png', x=220, y=50, w=70)
+            pdf.image(elem_epoch[:-3] + '_'+nudet+'_lc_screen_10_50_bin_100.png', x=220, y=120, w=70)
+
+
+        if elem_sat=='XMM':
+                if is_sp[i_obs]:
+                    pdf.add_page()
+                    pdf.set_font('helvetica', 'B', 16)
+                    pdf.cell(1,10,'Data reduction for observation '+elem_epoch,align='C',center=True)
+                    pdf.ln(10)
+                    pdf.cell(1,30,'Initial region definition                                        '+
+                              'Post pile-up excision (if any) region definition',align='C',center=True)
+                    pdf.image(elem_epoch+'_reg_screen.png',x=2,y=50,w=140)
+
+                    if os.path.isfile(elem_epoch+'_reg_excised_screen.png'):
+                        pdf.image(elem_epoch+'_reg_excised_screen.png',x=155,y=50,w=140)
+
+                    if expmode_list[i_obs]=='IMAGING':
+                        pdf.add_page()
+                        pdf.image(elem_epoch+'_opti_screen.png',x=1,w=280)
+
+                        #adding a page for the post-pileup computation if there is one
+                        if os.path.isfile(elem_epoch+'_opti_excised_screen.png'):
+                            pdf.add_page()
+                            pdf.image(elem_epoch+'_opti_excised_screen.png',x=1,w=280)
+
+                    elif expmode_list[i_obs]=='TIMING' or expmode_list[i_obs]=='BURST':
+                        pdf.add_page()
+                        pdf.cell(1,30,'SNR evolution for different source regions, first iteration',align='C',center=True)
+                        pdf.image(elem_epoch+'_opti_screen.png',x=10,y=50,w=140)
+
+                        #adding a page for the post-pileup computation if there is one
+                        if os.path.isfile(elem_epoch+'_opti_excised_screen.png'):
+                            pdf.image(elem_epoch+'_opti_excised_screen.png',x=150,y=50,w=140)
+
+                elif is_cleanevt[i_obs]:
+                    pdf.set_font('helvetica', 'B', 16)
+                    if expmode_list[i_obs]=='IMAGING':
+                        pdf.add_page()
+                        pdf.cell(1,30,'Raw image                     '+'              position catalog cropping zone          '+
+                                  '            cropped region zoom',align='C',center=True)
+                        try:
+                            pdf.image(elem_epoch+'_img_screen.png',x=1,y=70,w=90)
+                            pdf.image(elem_epoch+'_catal_reg_screen.png',x=100,y=70,w=90)
+                            pdf.image(elem_epoch+'_catal_crop_screen.png',x=190,y=65,w=120)
+                        except:
+                            pass
+                    if expmode_list[i_obs]=='TIMING' or expmode_list[i_obs]=='BURST':
+                        pdf.add_page()
+                        pdf.cell(1,30,'Raw image',align='C',center=True)
+                        try:
+                            pdf.image(elem_epoch+'_img_screen.png',x=70,y=50,w=150)
+                        except:
+                            pass
+
+                '''flare curves'''
+
+                pdf.add_page()
+                try:
+                    #source/bg flare "first iteration" lightcurves (no flare gti cut) with flares zones highlighted
+                    pdf.image(elem_observ+'_lc_comb_snr_screen.png',x=10,y=10,w=130)
+                except:
+                    pass
+                #corresponding flare rate curve and rate limit
+                try:
+                    pdf.image(rate_name_list[i_obs],x=150,y=10,w=130)
+                except:
+                    pass
+
+                #source/bg flare "second iteration" lightcurve
+                try:
+                     pdf.image(elem_observ+'_lc_comb_snr_excised_screen.png',x=10,y=105,w=130)
+                except:
+                    pass
+
+                #broad band source/bg lightcurve
+                try:
+                    pdf.image(elem_observ+'_lc_comb_broad_screen.png',x=150,y=105,w=130)
+                except:
+                    pass
 
     #naming differently for aborted and unaborted analysis
     if not fit_ok:
@@ -3935,6 +3974,8 @@ for epoch_id,epoch_files in enumerate(epoch_list):
 
             print('\nSpectrum analysis already performed. Skipping...')
             continue
+
+    breakpoint()
 
     #overwrite check
     if not overwrite:

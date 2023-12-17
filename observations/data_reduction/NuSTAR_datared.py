@@ -1869,6 +1869,7 @@ def batch_mover(directory,bright_check=True,force_bright=False):
             print('waiting for file '+elem_file+' to copy...')
             time.sleep(1)
 
+    time.sleep(1)
     print('\nMerge complete')
 
     bashproc.sendline('exit')

@@ -843,7 +843,7 @@ def extract_reg(directory, cams='all', use_file_coords=False,
                 return "Empty bg image after CCD cropping."
 
             print('\nSaving the corresponding image...')
-            imgarr_to_png(CCD_data, file_id+'_vis_' + '_CCD_1_crop', astropy_wcs=src_astro_WCS,
+            imgarr_to_png(CCD_data, file_id+'_vis' + '_CCD_1_crop', astropy_wcs=src_astro_WCS,
                     mpdaf_wcs=src_mpdaf_WCS,
                     directory=filedir, title='Source image with CCDs cropped according to the region size and center')
 
@@ -867,7 +867,7 @@ def extract_reg(directory, cams='all', use_file_coords=False,
 
 
             print('\nSaving the corresponding image...')
-            imgarr_to_png(CCD_data, file_id+'vis_CCD_2_mask', astropy_wcs=src_astro_WCS,
+            imgarr_to_png(CCD_data, file_id+'_vis_CCD_2_mask', astropy_wcs=src_astro_WCS,
                     mpdaf_wcs=src_mpdaf_WCS,
                     directory=filedir, title='Source image CCD(s) mask after clipping and filling of the holes')
 
@@ -884,7 +884,7 @@ def extract_reg(directory, cams='all', use_file_coords=False,
                         CCD_data_line.append(CCD_data_cut[i][j])
 
             print('\nSaving the corresponding image...')
-            imgarr_to_png(CCD_data_cut, file_id+'vis_CCD_3_cut', astropy_wcs=src_astro_WCS,
+            imgarr_to_png(CCD_data_cut, file_id+'_vis_CCD_3_cut', astropy_wcs=src_astro_WCS,
                     mpdaf_wcs=src_mpdaf_WCS,
                     directory=filedir, title='Source image after CCD masking', imgtype='ccd_crop')
 
@@ -915,7 +915,7 @@ def extract_reg(directory, cams='all', use_file_coords=False,
                         CCD_bg[i][j] = 0
 
             print('\nSaving the corresponding image...')
-            imgarr_to_png(CCD_bg, file_id+'vis_CCD_4_bg', astropy_wcs=src_astro_WCS,
+            imgarr_to_png(CCD_bg, file_id+'_vis_CCD_4_bg', astropy_wcs=src_astro_WCS,
                     mpdaf_wcs=src_mpdaf_WCS,
                     directory=filedir,
                     title='Source image background mask remaining after ' + sigval + ' sigma (top ' + perval +
@@ -1200,7 +1200,7 @@ def extract_reg(directory, cams='all', use_file_coords=False,
                           + ' # text={automatic background}' )
 
         ds9_pid_sp_reg = disp_ds9(spawn,os.path.join(spawndir,img_file), regfile=os.path.join(spawndir,reg_name),
-                                    screenfile=filedir + '/' +file_id + prefix + 'reg_screen.png',
+                                    screenfile=filedir + '/' +file_id + prefix + '_reg_screen.png',
                                     give_pid=True,
                                     kill_last=ds9_pid_sp_start)
 

@@ -53,7 +53,7 @@ from rasterio.features import rasterize
 # shape merging
 from scipy.ndimage import binary_dilation
 
-from general_tools import file_edit, ravel_ragged,MinorSymLogLocator
+from general_tools import file_edit, ravel_ragged,MinorSymLogLocator,interval_extract,str_orbit
 
 """
 Created on 09-11-2023
@@ -72,8 +72,10 @@ reg.    extract_reg: compute an image and an optimized source/bg region automati
 lc.     extract_lc: computes the lightcurves and HR ratio evolution of the source and bg regions of extract_reg in different bands.
                     Also flags for recomputation of the entire action list in bright mode if the source count rate is high enough
 
+                    can also create gtis to cut the individual observations in orbits
+                    
 sp.     extract_sp: computes the spectral products of the source and bg regions of extract_reg in different bands.
-
+                    can use the gtis created in lc
 g.      regroup_spectral: regroups spectral products according to the requirements
 
 m.      batch_mover: copies all products to a global directory to prepare for large scale analysis
@@ -93,11 +95,11 @@ ap.add_argument("-dir", "--startdir", nargs='?', help="starting directory. Curre
 ap.add_argument("-l", "--local", nargs=1, help='Launch actions directly in the current directory instead',
                 default=False, type=bool)
 ap.add_argument('-catch', '--catch_errors', help='Catch errors while running the data reduction and continue',
-                default=True, type=bool)
+                default=False, type=bool)
 
 # global choices
 ap.add_argument("-a", "--action", nargs='?', help='Give which action(s) to proceed,separated by comas.',
-                default='m', type=str)
+                default='g,m', type=str)
 # default: build,reg,lc,sp,g,m
 
 ap.add_argument("-over", nargs=1, help='overwrite computed tasks (i.e. with products in the batch, or merge directory\
@@ -108,7 +110,7 @@ ap.add_argument('-cameras',nargs=1,help='which cameras to restrict the analysis 
 ap.add_argument('-bright_check',nargs=1,help='recompute the entire set of actions in bright mode if the source lightcurve'+
                                              'is above the standard count limits',default=True,type=bool)
 
-ap.add_argument('-force_bright',help="Force bright mode for the tasks from the get go",default=False)
+ap.add_argument('-force_bright',help="Force bright mode for the tasks from the get go",default=True)
 
 # directory level overwrite (not active in local)
 ap.add_argument('-folder_over', nargs=1, help='relaunch action through folders with completed analysis', default=False,
@@ -163,6 +165,9 @@ ap.add_argument('-lc_bands_str', nargs=1, help='Gives the list of bands to creat
 ap.add_argument('-hr_bands_str', nargs=1, help='Gives the list of bands to create hrsfrom', default='10-50/3-10',
                 type=str)
 
+#note: also makes the spectrum function create spectra uniquely from GTIs
+ap.add_argument('-make_gti_orbit',nargs=1,help='cut individual observations per orbits with gtis',default=True,
+                type=bool)
 '''spectra'''
 
 ap.add_argument('-spectral_band',nargs=1,help='Energy band to compute the spectra in (format "x-y" in keV).'+
@@ -195,6 +200,7 @@ force_bright=args.force_bright
 lc_bin=args.lc_bin
 lc_bands_str=args.lc_bands_str
 hr_bands_str=args.hr_bands_str
+make_gti_orbit=args.make_gti_orbit
 
 e_low_sp,e_high_sp=[None,None] if args.spectral_band==None else args.spectral_band.split('-')
 
@@ -1326,32 +1332,8 @@ def extract_reg(directory, cams='all', use_file_coords=False,
 
     extract_reg_done.set()
 
-def extract_lc(directory,binning='1',lc_bands='3-79',hr_bands='10-50/3-10',cams='all',bright=False):
 
-    '''
-    Wrapper for a version of nuproducts to computes only lightcurves in the desired bands,
-    with added matplotlib plotting of requested lightcurves and HRs
 
-    also flags an output if the source lightcurve in the 3-79 band goees above 100 cts/s for recomputing.
-    ONLY FLAGS if bright mode is not already activated
-
-    We follow the steps highlighted in https://heasarc.gsfc.nasa.gov/docs/nustar/analysis/nustar_swguide.pdf 5.3D
-    options:
-        -binning: binning of the LC in seconds
-
-        -bands: bands for each lightcurve to be created.
-                The numbers should be in keV, separated by "-", and different lightcurves by ","
-                ex: to create two lightcurves for, the 1-3 and 4-12 band, use '1-3,4-12'
-
-        -hr: bands to be used for the HR plot creation.
-             A single plot is possible for now. Creates its own lightcurve bands if necessary
-
-        -overwrite: overwrite products or not
-
-    NOTE THAT THE BACKSCALE CORRECTION IS APPLIED MANUALLY
-    '''
-
-    '''MAIN BEHAVIOR'''
 
     def extract_lc_single(spawn, directory, binning, instru, steminput, src_reg, bg_reg, e_low, e_high,bright=False,backscale=1):
 
@@ -1441,6 +1423,142 @@ def extract_lc(directory,binning='1',lc_bands='3-79',hr_bands='10-50/3-10',cams=
         return 'Lightcurve creation complete',[time_zero_str,data_lc_src['TIME'],data_lc_src['RATE']-data_lc_bg['RATE']*backscale,
                                                 data_lc_src['ERROR']+data_lc_bg['ERROR']*backscale],bright_flag
 
+def extract_lc_single(spawn, directory, binning, instru, steminput, src_reg, bg_reg, e_low, e_high,bright=False,
+                      backscale=1,gti_mode=False,gti=None,id_orbit=''):
+
+    id_orbit_str='-'+str_orbit(id_orbit) if gti is not None else ''
+
+    lc_src_name = steminput + id_orbit_str+ '_' + instru + '_lc_src_' + e_low + '_' + e_high + '_bin_' + binning + '.lc'
+    lc_bg_name = steminput + id_orbit_str+ '_' + instru + '_lc_bg_' + e_low + '_' + e_high + '_bin_' + binning + '.lc'
+
+    #the spawn paths are different because in the spawn we cd in the obsid directory to avoid
+    #putting the temp files everywhere
+    lc_src_path = os.path.join(directory,'products'+('_bright' if bright else ''), lc_src_name)
+    lc_bg_path = os.path.join(directory,'products'+('_bright' if bright else ''), lc_bg_name)
+
+    pi_low = str(kev_to_PI(float(e_low)))
+    pi_high = str(kev_to_PI(float(e_high)))
+
+    #removing the first directory to match the spawn cd
+    gti_spawn='' if gti is None else '/'.join(gti.split('/')[1:])
+
+    # building the lightcurve
+    spawn.sendline('nuproducts indir=./out'+('_bright' if bright else '')+
+                   ' instrument=' + instru + ' steminputs=' + steminput +
+                   ' lcfile=' + lc_src_name +  ' srcregionfile=' + src_reg +
+                   ' bkgextract=yes'+
+                   ' bkglcfile=' + lc_bg_name + ' bkgregionfile=' + bg_reg +
+                   ' pilow=' + pi_low + ' pihigh=' + pi_high + ' binsize=' + binning+
+                   ' outdir=./products'+('_bright' if bright else '')+
+                   ' barycorr=no phafile=NONE bkgphafile=NONE' + ' imagefile=NONE runmkarf=no runmkrmf=no'+
+                   ' clobber=YES cleanup=YES'+(' usrgtifile='+gti_spawn if gti is not None else ''))
+
+    ####TODO: check what's the standard message here
+    err_code=spawn.expect(['nuproducts_0.3.3: Exit with success','nuproducts error'],timeout=None)
+
+    if err_code!=0:
+        return 'Nuproduct error','',''
+
+    # loading the data of both lc
+    with fits.open(lc_src_path) as fits_lc:
+        # time zero of the lc file (different from the time zeros of the gti files)
+        time_zero = Time(fits_lc[1].header['MJDREFI'] + fits_lc[1].header['MJDREFF'], format='mjd')
+
+        # and offsetting the data array to match this
+        delta_lc_src = fits_lc[1].header['TIMEZERO']
+
+        # storing the lightcurve
+        data_lc_src = fits_lc[1].data
+
+        time_zero_str = str((time_zero+TimeDelta(delta_lc_src,format='sec')).to_datetime())
+
+    if float(binning)>=1 and e_low=='3' and e_high=='79' and not bright:
+        bright_flag=max(data_lc_src['RATE'])>100
+    else:
+        bright_flag=False
+
+    with fits.open(lc_bg_path) as fits_lc:
+        # and offsetting the data array to match this
+        delta_lc_bg = fits_lc[1].header['TIMEZERO']
+
+        fits_lc[1].data['TIME'] += delta_lc_bg -delta_lc_src
+
+        # storing the shifted lightcurve
+        data_lc_bg = fits_lc[1].data
+
+    # plotting the source and bg lightcurves together
+
+    fig_lc, ax_lc = plt.subplots(1, figsize=(10, 8))
+
+    if gti is None:
+        ax_lc.set_yscale('symlog', linthresh=0.1, linscale=0.1)
+        ax_lc.yaxis.set_minor_locator(MinorSymLogLocator(linthresh=0.1))
+
+        #plotting the background
+        ax_lc.errorbar(data_lc_bg['TIME'], data_lc_bg['RATE']*backscale, xerr=float(binning),
+                 yerr=data_lc_bg['ERROR']*backscale, ls='-', lw=1, color='grey', ecolor='brown', label='scaled background')
+
+
+    ax_lc.errorbar(data_lc_src['TIME'], data_lc_src['RATE'], xerr=float(binning),
+                 yerr=data_lc_src['ERROR'], ls='-', lw=1, color='grey', ecolor='blue', label='raw source')
+
+
+    ax_lc.axhline(100,0,1,color='red',ls='-',lw=1,label='bright obs threshold')
+
+    plt.suptitle('NuSTAR ' + instru + ' lightcurve for observation ' + steminput + id_orbit_str+
+                 ' in the ' + e_low + '-' + e_high + ' keV band with ' + binning + ' s binning')
+
+    ax_lc.set_xlabel('Time (s) after ' + time_zero_str)
+    ax_lc.set_ylabel('RATE (counts/s)')
+
+    ax_lc.set_ylim(0,ax_lc.get_ylim()[1])
+
+    # finishing the figure
+    plt.legend()
+    plt.tight_layout()
+    plt.savefig(os.path.join(directory, 'products' + ('_bright' if bright else ''),
+                             steminput + id_orbit_str + '_' + instru + '_lc_screen_' + e_low + '_' + e_high + '_bin_' + binning + '.png'))
+
+    if gti_mode:
+        #returning the figure to add the gti intervals later, and the lc path
+        return lc_src_path,fig_lc
+    if not gti_mode:
+        #closing the figure and returning the standard lc products
+        plt.close()
+        return 'Lightcurve creation complete',[time_zero_str,data_lc_src['TIME'],data_lc_src['RATE']-data_lc_bg['RATE']*backscale,
+                                            data_lc_src['ERROR']+data_lc_bg['ERROR']*backscale],bright_flag
+
+    else:
+        return lc_src_path
+
+def extract_lc(directory,binning='1',lc_bands_str='3-79',hr_bands='10-50/3-10',cams='all',bright=False,
+               make_gtis=False,gti_binning='1'):
+
+    '''
+    Wrapper for a version of nuproducts to computes only lightcurves in the desired bands,
+    with added matplotlib plotting of requested lightcurves and HRs
+
+    also flags an output if the source lightcurve in the 3-79 band goees above 100 cts/s for recomputing.
+    ONLY FLAGS if bright mode is not already activated
+
+    We follow the steps highlighted in https://heasarc.gsfc.nasa.gov/docs/nustar/analysis/nustar_swguide.pdf 5.3D
+    options:
+        -binning: binning of the LC in seconds
+
+        -bands: bands for each lightcurve to be created.
+                The numbers should be in keV, separated by "-", and different lightcurves by ","
+                ex: to create two lightcurves for, the 1-3 and 4-12 band, use '1-3,4-12'
+
+        -hr: bands to be used for the HR plot creation.
+             A single plot is possible for now. Creates its own lightcurve bands if necessary
+
+        -overwrite: overwrite products or not
+
+    NOTE THAT THE BACKSCALE CORRECTION IS APPLIED MANUALLY
+    '''
+
+    '''MAIN BEHAVIOR'''
+
     if cams == 'all':
         camid_list= [0, 1]
     else:
@@ -1470,7 +1588,7 @@ def extract_lc(directory,binning='1',lc_bands='3-79',hr_bands='10-50/3-10',cams=
 
     # decomposing for each band asked
     lc_bands = ([] if hr_bands is None else ravel_ragged([elem.split('/') for elem in hr_bands.split(',')]).tolist())\
-               + lc_bands.split(',')
+               + lc_bands_str.split(',')
 
     lc_bands = np.unique(lc_bands)[::-1]
 
@@ -1528,76 +1646,244 @@ def extract_lc(directory,binning='1',lc_bands='3-79',hr_bands='10-50/3-10',cams=
 
             # launching the main extraction
 
-            lc_prods=np.array([None]*len(lc_bands))
-            for id_band,band in enumerate(lc_bands):
-
-                summary_line,lc_prods[id_band],bright_flag_single = extract_lc_single(bashproc,directory=directory,
-                                                binning=binning,instru=camlist[i_cam],steminput='nu'+obsid,
+            if make_gtis:
+                lc_cut_path,lc_cut_fig=extract_lc_single(bashproc,directory=directory,
+                                                binning=gti_binning,instru=camlist[i_cam],steminput='nu'+obsid,
                                                 src_reg=src_reg_indiv_spawn,bg_reg=bg_reg_indiv_spawn,
-                                                e_low=band.split('-')[0],e_high=band.split('-')[1],
-                                                bright=bright,backscale=backscale)
+                                                e_low=lc_bands[0].split('-')[0],e_high=lc_bands[0].split('-')[1],
+                                                bright=bright,backscale=backscale,gti_mode=True)
 
-                #adding a flag to skip the computation of the HR if the lc computation crashed in at least
-                #one band
-                if type(lc_prods)==str:
-                    no_HR_flag=1
-                else:
-                    no_HR_flag=0
+                gti_list=create_gtis(bashproc,lc_cut_path,lc_cut_fig)
+            else:
+                gti_list=[]
 
-                summary_content = obsid + '\t' + camlist[i_cam] +'\t'+ band + '\t' + summary_line
-                file_edit(os.path.join(directory, 'summary_extract_lc.log'), obsid + '\t' + camlist[i_cam] +'\t'+ band ,
-                          summary_content + '\n',
-                          summary_header)
+            for id_orbit,elem_gti in enumerate(gti_list):
 
-                #updating the global bright flag if a flagged obs appears (note: the bright_flag is force to False when not in the 3-79 band)
-                bright_flag_tot=bright_flag_tot or bright_flag_single
+                lc_prods=np.array([None]*len(lc_bands))
 
-            #potentially skipping the HR computation
-            if no_HR_flag:
-               continue
+                for id_band,band in enumerate(lc_bands):
 
-            assert lc_prods[id_band_den_HR][0]==lc_prods[id_band_num_HR][0], 'Differing timezero values between HR lightcurves'
+                    summary_line,lc_prods[id_band],bright_flag_single = extract_lc_single(bashproc,directory=directory,
+                                                    binning=str(float(binning)//10),instru=camlist[i_cam],steminput='nu'+obsid,
+                                                    src_reg=src_reg_indiv_spawn,bg_reg=bg_reg_indiv_spawn,
+                                                    e_low=band.split('-')[0],e_high=band.split('-')[1],
+                                                    bright=bright,backscale=backscale,
+                                                    gti=elem_gti if make_gtis else None,id_orbit=id_orbit)
 
-            time_zero_HR=lc_prods[id_band_num_HR][0]
+                    #adding a flag to skip the computation of the HR if the lc computation crashed in at least
+                    #one band
+                    if type(lc_prods)==str:
+                        no_HR_flag=1
+                    else:
+                        no_HR_flag=0
 
-            #here we implicitely assume the time array is identical for both lightcurves and for source/bg
-            time_HR=lc_prods[id_band_num_HR][1]
+                    id_orbit_str = '-' + str_orbit(id_orbit) if elem_gti is not None else ''
 
-            rate_num_HR=lc_prods[id_band_num_HR][2]
-            rate_err_num_HR=lc_prods[id_band_num_HR][3]
+                    summary_content = obsid + '\t' + camlist[i_cam] +'\t'+ band + '\t' + summary_line
+                    file_edit(os.path.join(directory, 'summary_extract_lc.log'), obsid + id_orbit_str + '\t' + camlist[i_cam] +'\t'+ band ,
+                              summary_content + '\n',
+                              summary_header)
 
-            rate_den_HR=lc_prods[id_band_den_HR][2]
-            rate_err_den_HR=lc_prods[id_band_den_HR][3]
+                    #updating the global bright flag if a flagged obs appears (note: the bright_flag is force to False when not in the 3-79 band)
+                    bright_flag_tot=bright_flag_tot or bright_flag_single
 
-            fig_hr, ax_hr = plt.subplots(1, figsize=(10, 8))
+                #potentially skipping the HR computation
+                if no_HR_flag:
+                   continue
 
-            hr_vals = rate_num_HR /rate_den_HR
+                assert lc_prods[id_band_den_HR][0]==lc_prods[id_band_num_HR][0], 'Differing timezero values between HR lightcurves'
 
-            hr_err = hr_vals * (((rate_err_num_HR / rate_num_HR) ** 2 +
-                                 (rate_err_den_HR / rate_den_HR) ** 2) ** (
-                                            1 / 2))
+                time_zero_HR=lc_prods[id_band_num_HR][0]
 
-            plt.errorbar(time_HR, hr_vals, xerr=float(binning), yerr=hr_err.clip(0), ls='-', lw=1,
-                     color='grey', ecolor='blue')
+                #here we implicitely assume the time array is identical for both lightcurves and for source/bg
+                time_HR=lc_prods[id_band_num_HR][1]
 
-            plt.suptitle('NuSTAR '+camlist[i_cam]+' net HR evolution for observation ' + obsid +' in the ' + hr_bands + ' keV band'+
-                         'with '+binning+' s binning')
+                rate_num_HR=lc_prods[id_band_num_HR][2]
+                rate_err_num_HR=lc_prods[id_band_num_HR][3]
 
-            plt.xlabel('Time (s) after ' + time_zero_HR)
-            plt.ylabel('Hardness Ratio (' + hr_bands + ' keV)')
+                rate_den_HR=lc_prods[id_band_den_HR][2]
+                rate_err_den_HR=lc_prods[id_band_den_HR][3]
 
-            plt.tight_layout()
-            plt.savefig(os.path.join(directory,'products'+('_bright' if bright else ''),
-                        'nu'+obsid + '_' + camlist[i_cam]+ '_hr_screen_'+hr_bands.replace('/','_')+'_bin_' + binning + '.png'))
-            plt.close()
+                fig_hr, ax_hr = plt.subplots(1, figsize=(10, 8))
+
+                hr_vals = rate_num_HR /rate_den_HR
+
+                hr_err = hr_vals * (((rate_err_num_HR / rate_num_HR) ** 2 +
+                                     (rate_err_den_HR / rate_den_HR) ** 2) ** (
+                                                1 / 2))
+
+                plt.errorbar(time_HR, hr_vals, xerr=float(binning), yerr=hr_err.clip(0), ls='-', lw=1,
+                         color='grey', ecolor='blue')
+
+                plt.suptitle('NuSTAR '+camlist[i_cam]+' net HR evolution for observation ' + obsid + id_orbit_str+' in the ' + hr_bands + ' keV band'+
+                             'with '+binning+' s binning')
+
+                plt.xlabel('Time (s) after ' + time_zero_HR)
+                plt.ylabel('Hardness Ratio (' + hr_bands + ' keV)')
+
+                plt.tight_layout()
+                plt.savefig(os.path.join(directory,'products'+('_bright' if bright else ''),
+                            'nu'+obsid + id_orbit_str+'_' + camlist[i_cam]+ '_hr_screen_'+hr_bands.replace('/','_')+'_bin_' + binning + '.png'))
+                plt.close()
 
     extract_lc_done.set()
 
     return bright_flag_tot
 
+def create_gtis(spawn,cut_lc,fig_cut_lc):
 
+    '''
+    wrapper for a function to create gti files from an individual lightcurve nicer obsids into indivudal portions
 
-def extract_sp(directory,cams='all',e_low=None,e_high=None,bright=False):
+    before:
+    first creates a lightcurve with the chosen binning then uses it to define
+    individual gtis from orbits
+    '''
+
+    with fits.open(cut_lc) as fits_mkf:
+
+        data_cut_lc = fits_mkf[1].data
+
+        start_obs_s = fits_mkf[1].header['TSTART']
+        # saving for titles later
+        mjd_ref = Time(fits_mkf[1].header['MJDREFI'] + fits_mkf[1].header['MJDREFF'], format='mjd')
+
+        obs_start = mjd_ref + TimeDelta(start_obs_s, format='sec')
+
+        obs_start_str = str(obs_start.to_datetime())
+
+        time_obs = data_cut_lc['TIME']
+
+        # adding gaps of more than 100s as cuts in the gtis
+        # useful in all case to avoid inbetweens in the plot even if we don't cut the gtis
+
+        # first computing the gti where the jump happens
+        id_gti_split = [-1]
+        # adding gaps of more than 100s as cuts in the gtis
+        for i in range(len(time_obs) - 1):
+            if time_obs[i + 1] - time_obs[i] > 2000:
+                id_gti_split += [i]
+
+        id_gti_orbit = []
+        if len(id_gti_split) == 1:
+            id_gti_orbit += [range(len(time_obs))]
+        else:
+            for id_split in range(len(id_gti_split)):
+                # note:+1 at the end since we're using a range
+                id_gti_orbit += [list(range(id_gti_split[id_split] + 1, (len(time_obs) - 1 if \
+                                                                             id_split == len(id_gti_split) - 1 else
+                                                                         id_gti_split[id_split + 1]) + 1))]
+
+        n_orbit = len(id_gti_orbit)
+        orbit_bounds=[list(interval_extract(elem))[0] for elem in id_gti_orbit]
+
+        ax_cut_lc=fig_cut_lc.get_axes()[0]
+
+        for i_orbit in range(len(id_gti_orbit)):
+            ax_cut_lc.axvspan(time_obs[orbit_bounds[i_orbit][0]], time_obs[orbit_bounds[i_orbit][1]],
+                              color='green', alpha=0.2,
+                                label='standard gtis' if i_orbit == 0 else '')
+
+        fig_cut_lc.legend()
+        fig_cut_lc.savefig(cut_lc.split('_lc')[0]+'_lc_orbit_screen.png')
+
+        # creating the gti files for each part of the obsid
+        spawn.sendline('sasinit')
+
+        def create_gti_files(id_orbit,id_gti, data_lc):
+
+            if len(id_gti) > 0:
+
+                # Here we use the housekeeping file as the fits base for the gti mask file
+                fits_gti = fits.open(cut_lc)
+
+                # creating a custom gti 'mask' file
+                gti_column = fits.ColDefs([\
+                    fits.Column(name='IS_GTI', format='I',
+                                array=np.array([1 if i in id_gti else 0 for i in range(len(data_lc))]))])
+
+                # replacing the hdu with a hdu containing it
+                fits_gti[1] = fits.BinTableHDU.from_columns(fits_gti[1].columns[:2] + gti_column)
+                fits_gti[1].name = 'IS_GTI'
+
+                lc_mask_path=cut_lc.split('_lc')[0]+'_gti_mask_' + str_orbit(id_orbit)+ '.fits'
+
+                if os.path.isfile(lc_mask_path):
+                    os.remove(lc_mask_path)
+
+                fits_gti.writeto(lc_mask_path)
+
+                # waiting for the file to be created
+                while not os.path.isfile(lc_mask_path):
+                    time.sleep(0.1)
+
+                # creating the orbit gti expression
+                gti_path = lc_mask_path.split('_gti_mask')[0]+'_gti_' +str_orbit(id_orbit) + '.gti'
+
+                lc_mask_spawn_path='/'.join(lc_mask_path.split('/')[1:])
+                gti_spawn_path='/'.join(gti_path.split('/')[1:])
+
+                spawn.sendline('tabgtigen table=' + lc_mask_spawn_path +
+                               ' expression="IS_GTI==1" gtiset=' + gti_spawn_path)
+
+                # this shouldn't take too long so we keep the timeout
+                # two expects because there's one for the start and another for the end
+                spawn.expect('tabgtigen:- tabgtigen')
+                spawn.expect('tabgtigen:- tabgtigen')
+
+                '''
+                There is an issue with the way tabgtigen creates the exposure due to a lacking keyword
+                To ensure things work correctly, we remake the contents of the file and keep the header
+                '''
+
+                # preparing the list of gtis to replace manually
+                gti_intervals = np.array(list(interval_extract(id_gti))).T
+
+                # opening and modifying the content of the header in the gti file for NICER
+                with fits.open(gti_path, mode='update') as hdul:
+
+                    # for some reason we don't get the right values here so we recreate them
+                    # creating a custom gti 'mask' file
+
+                    # storing the current header
+                    prev_header = hdul[1].header
+
+                    # creating a START and a STOP column in "standard" GTI fashion
+                    # note: the 0.5 is there to allow the initial and final second bounds
+                    gti_column_start = fits.ColDefs([fits.Column(name='START', format='D',
+                                                                 array=np.array(
+                                                                     [time_obs[elem] + start_obs_s - 0.5 for elem in
+                                                                      gti_intervals[0]]))])
+                    gti_column_stop = fits.ColDefs([fits.Column(name='STOP', format='D',
+                                                                array=np.array(
+                                                                    [time_obs[elem] + start_obs_s + 0.5 for elem in
+                                                                     gti_intervals[1]]))])
+
+                    # replacing the hdu
+                    hdul[1] = fits.BinTableHDU.from_columns(gti_column_start + gti_column_stop)
+
+                    # replacing the header
+                    hdul[1].header = prev_header
+
+                    # and the gti keywords
+                    hdul[1].header['ONTIME'] = len(id_gti)
+                    hdul[1].header['TSTART'] = hdul[1].data['START'][0] - start_obs_s
+                    hdul[1].header['TSTOP'] = hdul[1].data['STOP'][-1] - start_obs_s
+
+                    hdul.flush()
+
+                return gti_path
+
+        gti_path_list=[]
+
+        for id_orbit in range(n_orbit):
+            gti_path_output=create_gti_files(id_orbit,id_gti_orbit[id_orbit], cut_lc)
+            if gti_path_output is not None:
+                gti_path_list+=[gti_path_output]
+
+        return gti_path_list
+
+def extract_sp(directory,cams='all',e_low=None,e_high=None,bright=False,gti_mode=False):
 
     '''
     Wrapper for a version of nuproducts to computes only spectral products
@@ -1620,7 +1906,10 @@ def extract_sp(directory,cams='all',e_low=None,e_high=None,bright=False):
 
     '''MAIN BEHAVIOR'''
 
-    def extract_sp_single(spawn, directory, instru, steminput, src_reg, bg_reg, e_low=None, e_high=None,bright=False):
+    def extract_sp_single(spawn, directory, instru, steminput, src_reg, bg_reg, e_low=None, e_high=None,bright=False,
+                          gti=None,id_orbit=''):
+
+        id_orbit_str = '-' + str_orbit(id_orbit) if gti is not None else ''
 
         if e_low!=None:
             pi_low = str(kev_to_PI(float(e_low)))
@@ -1628,15 +1917,20 @@ def extract_sp(directory,cams='all',e_low=None,e_high=None,bright=False):
         if e_high!=None:
             pi_high = str(kev_to_PI(float(e_high)))
 
+        # removing the first directory to match the spawn cd
+        gti_spawn = '' if gti is None else '/'.join(gti.split('/')[1:])
+
+        cam_suffix='A01' if instru=='FPMA' else 'B01' if instru=='FPMB' else ''
         # building the spectral products
         spawn.sendline('nuproducts indir=./out'+('_bright' if bright else '')+
                        ' instrument=' + instru + ' steminputs=' + steminput +
+                       ' stemout='+steminput+cam_suffix+id_orbit_str+
                        ' srcregionfile=' + src_reg +' bkgregionfile=' + bg_reg +
                        ('' if e_low==None else ' pilow=' + pi_low)+
                        ('' if e_high==None else ' pihigh=' + pi_high)+
                        ' outdir=./products'+('_bright' if bright else '')+
                        ' lcfile=NONE bkglcfile=None imagefile=NONE'+
-                       ' clobber=yes')
+                       ' clobber=yes'+(' usrgtifile='+gti_spawn if gti is not None else ''))
 
         ####TODO: check what's the standard message here
         err_code=spawn.expect(['nuproducts_0.3.3: Exit with success','nuproducts error'],timeout=None)
@@ -1693,8 +1987,18 @@ def extract_sp(directory,cams='all',e_low=None,e_high=None,bright=False):
             else:
                 obsid = directory.split('/')[-1]
 
+            # checking if gti files exist in the folder
+            gti_files = np.array([elem for elem in
+                        glob.glob(os.path.join(directory,'products_bright' if bright else 'products','**'),
+                                  recursive=True)\
+                                  if elem.endswith('.gti') and '_gti_' in elem\
+                                  and camlist[i_cam] in elem\
+                                  and '_gti_mask_' not in elem])
+
+            gti_files.sort()
+
             bashproc.logfile_read = sys.stdout
-            print('\nComputing lightcurves of camera ' + camlist[i_cam])
+            print('\nComputing spectral products of camera ' + camlist[i_cam])
 
             # fetching region files for this camera
             src_reg_indiv = '/'.join(np.array(src_reg[i_cam]).T[0][::-1])
@@ -1709,16 +2013,33 @@ def extract_sp(directory,cams='all',e_low=None,e_high=None,bright=False):
             bg_reg_indiv_spawn = bg_reg_indiv.replace(directory, '.',1)
 
             # launching the main extraction
+            if gti_mode:
+                for i_gti,elem_gti in enumerate(gti_files):
 
-            summary_line = extract_sp_single(bashproc,directory=directory,instru=camlist[i_cam],
-                                            steminput='nu'+obsid,
-                                            src_reg=src_reg_indiv_spawn,bg_reg=bg_reg_indiv_spawn,
-                                            e_low=e_low,e_high=e_high,bright=bright)
+                    id_orbit_str = '-' + str_orbit(i_gti)
 
-            summary_content = obsid + '\t' + camlist[i_cam] +'\t'+ summary_line
-            file_edit(os.path.join(directory, 'summary_extract_lc.log'), obsid + '\t' + camlist[i_cam],
-                      summary_content + '\n',
-                      summary_header)
+                    summary_line = extract_sp_single(bashproc,directory=directory,instru=camlist[i_cam],
+                                                    steminput='nu'+obsid,
+                                                    src_reg=src_reg_indiv_spawn,bg_reg=bg_reg_indiv_spawn,
+                                                    e_low=e_low,e_high=e_high,bright=bright,
+                                                     gti=elem_gti,id_orbit=i_gti)
+
+                    summary_content = obsid + '\t' + camlist[i_cam] +'\t'+ summary_line
+                    file_edit(os.path.join(directory, 'summary_extract_lc.log'), obsid +id_orbit_str+
+                              '\t' + camlist[i_cam],
+                              summary_content + '\n',
+                              summary_header)
+
+            else:
+                summary_line = extract_sp_single(bashproc,directory=directory,instru=camlist[i_cam],
+                                                steminput='nu'+obsid,
+                                                src_reg=src_reg_indiv_spawn,bg_reg=bg_reg_indiv_spawn,
+                                                e_low=e_low,e_high=e_high,bright=bright)
+
+                summary_content = obsid + '\t' + camlist[i_cam] +'\t'+ summary_line
+                file_edit(os.path.join(directory, 'summary_extract_lc.log'), obsid + '\t' + camlist[i_cam],
+                          summary_content + '\n',
+                          summary_header)
 
     extract_sp_done.set()
 
@@ -1974,8 +2295,8 @@ if not local:
                             extract_reg_done.wait()
 
                         if curr_action=='lc':
-                            output_lc=extract_lc(dirname,binning=lc_bin,lc_bands=lc_bands_str,hr_bands=hr_bands_str,cams=cameras_glob,
-                                                  bright=force_bright or bright_flag_dir)
+                            output_lc=extract_lc(dirname,binning=lc_bin,lc_bands_str=lc_bands_str,hr_bands=hr_bands_str,cams=cameras_glob,
+                                                  bright=force_bright or bright_flag_dir,make_gtis=make_gti_orbit)
 
                             if type(output_lc)==str:
                                 raise ValueError
@@ -2002,7 +2323,8 @@ if not local:
 
 
                         if curr_action=='sp':
-                            output_err=extract_sp(dirname,cams=cameras_glob,e_low=e_low_sp,e_high=e_high_sp,bright=force_bright or bright_flag_dir)
+                            output_err=extract_sp(dirname,cams=cameras_glob,e_low=e_low_sp,e_high=e_high_sp,
+                                                  bright=force_bright or bright_flag_dir,gti_mode=make_gti_orbit)
 
                             if type(output_err)==str:
                                 raise ValueError
@@ -2053,9 +2375,9 @@ if not local:
                         extract_reg_done.wait()
 
                     if curr_action == 'lc':
-                        output_lc = extract_lc(dirname, binning=lc_bin, lc_bands=lc_bands_str, hr_bands=hr_bands_str,
+                        output_lc = extract_lc(dirname, binning=lc_bin, lc_bands_str=lc_bands_str, hr_bands=hr_bands_str,
                                                cams=cameras_glob,
-                                               bright=force_bright or bright_flag_dir)
+                                               bright=force_bright or bright_flag_dir,make_gtis=make_gti_orbit)
 
                         if type(output_lc) == str:
                             raise ValueError
@@ -2082,7 +2404,7 @@ if not local:
 
                     if curr_action == 'sp':
                         output_err = extract_sp(dirname, cams=cameras_glob, e_low=e_low_sp, e_high=e_high_sp,
-                                                bright=force_bright or bright_flag_dir)
+                                                bright=force_bright or bright_flag_dir,gti_mode=make_gti_orbit)
 
                         if type(output_err) == str:
                             raise ValueError
@@ -2135,9 +2457,9 @@ else:
             extract_reg_done.wait()
 
         if curr_action == 'lc':
-            output_lc = extract_lc(absdir, binning=lc_bin, lc_bands=lc_bands_str, hr_bands=hr_bands_str,
+            output_lc = extract_lc(absdir, binning=lc_bin, lc_bands_str=lc_bands_str, hr_bands=hr_bands_str,
                                    cams=cameras_glob,
-                                   bright=force_bright or bright_flag_dir)
+                                   bright=force_bright or bright_flag_dir,make_gtis=make_gti_orbit)
 
             if type(output_lc) == str:
                 raise ValueError
@@ -2163,7 +2485,7 @@ else:
 
         if curr_action == 'sp':
             output_err = extract_sp(absdir, cams=cameras_glob, e_low=e_low_sp, e_high=e_high_sp,
-                                    bright=force_bright or bright_flag_dir)
+                                    bright=force_bright or bright_flag_dir,gti_mode=make_gti_orbit)
 
             if type(output_err) == str:
                 raise ValueError

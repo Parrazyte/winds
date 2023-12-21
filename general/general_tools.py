@@ -29,6 +29,11 @@ import os
 #     else:
 #         return np.array([array[i][j] for i in range(len(array)) for j in range(len(array[i]))],dtype=mode)
 
+def str_orbit(i_orbit):
+    '''
+    return regular str expression of orbit
+    '''
+    return ('%3.f' % (i_orbit + 1)).replace(' ', '0')
 def rescale_log(ax,xlims,ylims,margin,std_x=None,std_y=None):
 
     '''

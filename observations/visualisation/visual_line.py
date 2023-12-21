@@ -975,6 +975,7 @@ dist_factor = 4 * np.pi * (dist_obj_list * 1e3 * 3.086e18) ** 2
 Edd_factor = dist_factor / (1.26e38 * mass_obj_list)
 
 Edd_factor_restrict=Edd_factor[mask_obj].astype(float)
+dist_factor_restrict=dist_factor[mask_obj].astype(float)
 
 if np.ndim(hid_plot)==4:
     flag_single_obj=True
@@ -2110,6 +2111,7 @@ with tab_monitoring:
                 fig_lc_bat= plot_lightcurve(dict_linevis, catal_maxi_df, catal_maxi_simbad, choice_source,
                                                catal_bat_df, catal_bat_simbad,mode='INTEGRAL_'+radio_integral_band,
                                              lc_integral_sw_dict=lc_int_sw_dict,fit_integral_revol_dict=fit_int_revol_dict,
+                                            dist_factor=dist_factor_restrict[0],
                                                display_hid_interval=monit_highlight_hid,
                                                superpose_ew=plot_maxi_ew, dict_rxte=dict_lc_rxte,
                                              binning=integral_binning)
@@ -2244,6 +2246,9 @@ with st.sidebar.expander('Parameter analysis'):
     st.header('Upper limits')
     show_scatter_ul=st.toggle('Display upper limits in EW plots',value=False)
     lock_lims_det=not(st.toggle('Include upper limits in graph bounds computations',value=True))
+
+    st.header('High-energy')
+    plot_gamma_correl=st.toggle('Plot powerlaw index correlations',value=False)
 
 if compute_only_withdet:
 
@@ -2599,3 +2604,126 @@ if display_scat_inclin:
 if not (display_scat_intr or display_scat_eqwcomp or display_scat_hid or display_scat_inclin):
     with tab_param:
         st.info('Select parameters to compare or enable distributions to generate plots')
+
+if display_single and choice_source[0]=='4U1630-47' and plot_gamma_correl:
+
+
+    # integral gamma
+    mask_int_ok=~np.isnan(int_lc_df['RATE_30.0-50.0'])
+    int_fit_gamma = np.array(int_lc_df['powerlaw_PhoIndex'][mask_int_ok])
+    int_fit_gamma_low=np.array(int_lc_df['powerlaw_PhoIndex_lo'][mask_int_ok])
+    int_fit_gamma_high=np.array(int_lc_df['powerlaw_PhoIndex_hi'][mask_int_ok])
+
+    int_fit_flux=np.array(int_lc_df['FLUX_30.0-50.0'][mask_int_ok])
+    int_fit_flux_err=np.array(int_lc_df['FLUX_ERR_30.0-50.0'][mask_int_ok])
+
+    int_fit_gamma_err=np.array([[0 if elem_err==0 else elem_main-elem_err for elem_main,elem_err\
+                                in zip(int_fit_gamma,int_fit_gamma_low)],
+                               [0 if elem_err == 0 else elem_err - elem_main for elem_main, elem_err \
+                                in zip(int_fit_gamma, int_fit_gamma_high)]])
+
+    from visual_line_tools import fetch_bat_lightcurve
+    from decimal import Decimal
+
+    bat_lc_df = fetch_bat_lightcurve(catal_bat_df, catal_bat_simbad, choice_source, binning='day')
+
+    num_bat_dates =Time(bat_lc_df['TIME'], format='mjd').mjd
+
+    int_lc_mjd = np.array([Time(elem).mjd.astype(float) for elem in int_lc_df['ISOT']])
+
+    int_lc_mjd_int=int_lc_mjd.astype(int)[mask_int_ok]
+
+    mask_int_withbat=[elem in num_bat_dates for elem in int_lc_mjd_int]
+
+    match_int_bat=np.array([np.argwhere(num_bat_dates==elem)[0][0] for elem in int_lc_mjd_int[mask_int_withbat]])
+
+    count_bat_match_int=np.array(bat_lc_df[bat_lc_df.columns[1]][match_int_bat])
+    count_bat_err_match_int=np.array(bat_lc_df[bat_lc_df.columns[2]][match_int_bat])
+
+    #gamma-BAT rate figure
+    fig_gamma_bat,ax_gamma_bat=plt.subplots(figsize=(6,6))
+    ax_gamma_bat.set_xlim(1.5, 3.5)
+    ax_gamma_bat.set_ylim(1e-3, 0.25)
+    ax_gamma_bat.set_yscale('log')
+    ax_gamma_bat.set_xlabel('powerlaw index')
+    ax_gamma_bat.set_ylabel('BAT 15-50 keV rate')
+
+    #setting up alpha for the colors
+    int_fit_gamma_alpha=abs(int_fit_gamma[mask_int_withbat]/int_fit_gamma_err.T[mask_int_withbat].T.max(0))
+    int_fit_gamma_alpha = np.array([0.0001 if elem == np.inf else elem for elem in int_fit_gamma_alpha])
+    int_fit_gamma_alpha = int_fit_gamma_alpha / max(int_fit_gamma_alpha)
+    i_max_alpha_gamma=np.argmax(int_fit_gamma_alpha)
+
+    for i_int_withbat in range(sum(mask_int_withbat)):
+        ax_gamma_bat.errorbar(int_fit_gamma[mask_int_withbat][i_int_withbat],
+                              count_bat_match_int[i_int_withbat],
+                              xerr=np.array([[int_fit_gamma_err.T[mask_int_withbat][i_int_withbat].T[0]],
+                                             [int_fit_gamma_err.T[mask_int_withbat][i_int_withbat].T[1]]]),
+                              yerr=count_bat_err_match_int[i_int_withbat],
+                              alpha=int_fit_gamma_alpha[i_int_withbat],
+                              label='integral' if i_int_withbat==i_max_alpha_gamma else '',color='black',ls='')
+
+    r_spearman_gamma_bat= np.array(pymccorrelation(int_fit_gamma[mask_int_withbat], count_bat_match_int,
+                                          dx=int_fit_gamma_err.T[mask_int_withbat],
+                                          dy=count_bat_err_match_int,
+                                          Nperturb=1000, coeff='spearmanr', percentiles=(50, 5, 95)))
+
+    # switching back to uncertainties from quantile values
+    r_spearman_gamma_bat = np.array([[r_spearman_gamma_bat[ind_c][0],
+                            r_spearman_gamma_bat[ind_c][0] - r_spearman_gamma_bat[ind_c][1],
+                            r_spearman_gamma_bat[ind_c][2] - r_spearman_gamma_bat[ind_c][0]] \
+                           for ind_c in [0, 1]])
+
+    str_spearman_gamma_bat = r'$r_S \,=' + str(round(r_spearman_gamma_bat[0][0], 2)) +\
+                   '$\n$p_S=' + '%.1e' % Decimal(r_spearman_gamma_bat[1][0]) + '$'
+
+
+    ax_gamma_bat.legend(fontsize=10,title=str_spearman_gamma_bat)
+    fig_gamma_bat.tight_layout()
+
+    #integral gamma-flux figure
+    fig_gamma_flux,ax_gamma_flux=plt.subplots(figsize=(6,6))
+    ax_gamma_flux.set_xlim(1.5, 3.5)
+    ax_gamma_flux.set_ylim(3e-11, 5e-9)
+    ax_gamma_flux.set_yscale('log')
+    ax_gamma_flux.set_xlabel('gamma')
+    ax_gamma_bat.set_xlabel('powerlaw index')
+    plt.ylabel('30-50 keV flux (erg/s/cm²)')
+
+    #setting up alpha for the colors
+    int_fit_flux_alpha=abs(int_fit_flux/int_fit_flux_err)
+    int_fit_flux_alpha = np.array([0.0001 if elem == np.inf else elem for elem in int_fit_flux_alpha])
+    int_fit_flux_alpha = int_fit_flux_alpha / max(int_fit_flux_alpha)
+    i_max_alpha_flux=np.argmax(int_fit_flux_alpha)
+
+    for i_revol in range(len(int_fit_flux)):
+        ax_gamma_flux.errorbar(int_fit_gamma[i_revol],int_fit_flux[i_revol],
+                xerr=np.array([[int_fit_gamma_err.T[i_revol].T[0]],[int_fit_gamma_err.T[i_revol].T[1]]]),
+                yerr=int_fit_flux_err[i_revol],color='black',alpha=int_fit_flux_alpha[i_revol],
+                label='integral' if i_revol==i_max_alpha_flux else '',ls='')
+        
+    r_spearman_gamma_flux= np.array(pymccorrelation(int_fit_gamma, int_fit_flux,
+                                          dx=int_fit_gamma_err.T,
+                                          dy=int_fit_flux_err,
+                                          Nperturb=1000, coeff='spearmanr', percentiles=(50, 5, 95)))
+
+    # switching back to uncertainties from quantile values
+    r_spearman_gamma_flux = np.array([[r_spearman_gamma_flux[ind_c][0],
+                            r_spearman_gamma_flux[ind_c][0] - r_spearman_gamma_flux[ind_c][1],
+                            r_spearman_gamma_flux[ind_c][2] - r_spearman_gamma_flux[ind_c][0]] \
+                           for ind_c in [0, 1]])
+
+    str_spearman_gamma_flux = r'$r_S \,=' + str(round(r_spearman_gamma_flux[0][0], 2)) +\
+                   '$\n$p_S=' + '%.1e' % Decimal(r_spearman_gamma_flux[1][0]) + '$'
+
+
+    ax_gamma_flux.legend(fontsize=10,title=str_spearman_gamma_flux)
+
+    fig_gamma_flux.tight_layout()
+
+    with st.expander('High energy correlations'):
+        he_cols= st.columns(3)
+        with he_cols[0]:
+            st.pyplot(fig_gamma_bat)
+        with he_cols[1]:
+            st.pyplot(fig_gamma_flux)

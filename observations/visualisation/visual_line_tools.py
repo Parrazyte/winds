@@ -504,7 +504,7 @@ def fetch_rxte_lightcurve(name,dict_rxte=dict_lc_rxte):
     return dict_rxte[simbad_query[0]['MAIN_ID']]
 
 def plot_lightcurve(dict_linevis,ctl_maxi_df,ctl_maxi_simbad,name,ctl_bat_df,ctl_bat_simbad,
-                    lc_integral_sw_dict,fit_integral_revol_dict,
+                    lc_integral_sw_dict,fit_integral_revol_dict,dist_factor=None,
                     dict_rxte=dict_lc_rxte,
                     mode='full',display_hid_interval=True,superpose_ew=False,binning='day'):
 
@@ -592,7 +592,7 @@ def plot_lightcurve(dict_linevis,ctl_maxi_df,ctl_maxi_simbad,name,ctl_bat_df,ctl
         ax_lc.set_ylabel(bat_y_str)
 
     elif 'INTEGRAL' in mode:
-        ax_lc.set_title(name[0]+str_binning_monit+(' science window' if binning=='sw' else ' revolution')\
+        ax_lc.set_title(name[0]+(' science window' if binning=='sw' else ' revolution')\
                                +' INTEGRAL monitoring')
         int_y_str = 'INTEGRAL '+('Flux (erg/s)'if binning=='revol' else 'IBIS counts')+' ('+mode.split('_')[1]+' keV)'
         ax_lc.set_ylabel(int_y_str)
@@ -819,13 +819,19 @@ def plot_lightcurve(dict_linevis,ctl_maxi_df,ctl_maxi_simbad,name,ctl_bat_df,ctl
                 counts_int = np.nan_to_num(fit_integral_revol_df[fit_integral_revol_df.columns[29]])
                 counts_err_int = np.nan_to_num(fit_integral_revol_df[fit_integral_revol_df.columns[30]])
 
+            mask_int_ok = ~np.isnan(fit_integral_revol_df['RATE_30.0-50.'])
+
+            #multiplying by the Eddington factor to get the actual flux
+            counts_int=counts_int[mask_int_ok]*dist_factor
+            counts_err_int=counts_err_int[mask_int_ok]*dist_factor
+
             # creating a different variable for the times (centered on the middle of the revolution)
             integral_revol_dates=[(Time(elem)+TimeDelta(1.5,format='jd')).datetime\
                                   for elem in fit_integral_revol_df['ISOT']]
-            num_int_revol_dates=[mdates.date2num(elem) for elem in integral_revol_dates]
+            num_int_revol_dates=np.array([mdates.date2num(elem) for elem in integral_revol_dates])[mask_int_ok]
 
-            ax_lc.set_yscale('symlog', linthresh=1e-10, linscale=0.1)
-            ax_lc.yaxis.set_minor_locator(MinorSymLogLocator(linthresh=1e-10))
+            ax_lc.set_yscale('symlog', linthresh=float('%.1e'%(1e-10*dist_factor)), linscale=0.1)
+            ax_lc.yaxis.set_minor_locator(MinorSymLogLocator(linthresh=float('%.1e'%(1e-10*dist_factor))))
 
             #see https://www.sciencedirect.com/science/article/pii/S1387647321000166 per new orbit duration
             # plotting the lightcurve
@@ -845,7 +851,6 @@ def plot_lightcurve(dict_linevis,ctl_maxi_df,ctl_maxi_simbad,name,ctl_bat_df,ctl
         ax_lc_ew=ax_lc.twinx()
         ax_lc_ew.set_yscale('log')
         ax_lc_ew.set_ylabel('absorption line EW (eV)')
-        ax_lc_ew.set_ylim(2,100)
         
         #plotting the detection and upper limits following what we do for the scatter graphs
     
@@ -884,6 +889,9 @@ def plot_lightcurve(dict_linevis,ctl_maxi_df,ctl_maxi_simbad,name,ctl_bat_df,ctl
         color_det=[telescope_colors[elem] for elem in ravel_ragged(instru_list_repeat)[bool_detsign]]
         
         color_ul=[telescope_colors[elem] for elem in ravel_ragged(instru_list_repeat)[bool_nondetsign]]
+
+        ax_lc_ew.set_ylim(min(4,min(ravel_ragged(abslines_plot_restrict[0][0])[bool_detsign])),
+                          max(100,max(ravel_ragged(abslines_plot_restrict[0][0])[bool_detsign])))
 
         markers_legend_done_list=[]
         #zipping the errorbars to allow different colors
@@ -933,11 +941,14 @@ def plot_lightcurve(dict_linevis,ctl_maxi_df,ctl_maxi_simbad,name,ctl_bat_df,ctl
         #highlighting the time interval in the main HID
         
         if display_hid_interval:
-            plt.axvspan(mdates.date2num(slider_date[0]),mdates.date2num(slider_date[1]),0,1,color='grey',alpha=0.3,label='HID interval')
+            plt.axvspan(mdates.date2num(slider_date[0]),mdates.date2num(slider_date[1]),0,1,color='grey',alpha=0.3,
+                        label='HID interval')
         
     #creating an appropriate date axis
     #manually readjusting for small durations because the AutoDateLocator doesn't work well
-    if time_range<300:
+    if time_range<10:
+        date_format=mdates.DateFormatter('%Y-%m-%d %H:%M:%S')
+    elif time_range<365:
         date_format=mdates.DateFormatter('%Y-%m-%d')
     else:
         date_format=mdates.DateFormatter('%Y-%m')

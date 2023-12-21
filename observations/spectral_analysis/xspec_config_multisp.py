@@ -32,14 +32,19 @@ import dill
 
 from matplotlib.gridspec import GridSpec
 
-def getoverlap(a, b):
-    return max(0, min(a[1], b[1]) - max(a[0], b[0]))
+def getoverlap(a, b,distance=False):
+    #compute overlap between two intervals. if distance is set to true, returns the distance between the
+    #intervals if they are disjoint
+    if distance:
+        return min(a[1], b[1]) - max(a[0], b[0])
+    else:
+        return max(0, min(a[1], b[1]) - max(a[0], b[0]))
 
     
 model_dir='/home/parrama/Soft/Xspec/Models'
 
 #custom model loads
-#AllModels.lmod('relxill',dirPath=model_dir+'/relxill')
+AllModels.lmod('relxill',dirPath=model_dir+'/relxill')
 
 #example of model loading
 # AllModels.initpackage('tbnew_mod',"lmodel_tbnew.dat",dirPath=model_dir+'/tbnew')
@@ -244,18 +249,26 @@ class model_data:
         self.expression=xspec_model.expression
         self.npars=xspec_model.nParameters
         self.comps=xspec_model.componentNames
-        
-        values=np.zeros((self.npars,6))
+
+        #note: we do this because some models have length 1 values for choices (ex: dscat grain type)
+        #in which case we can't use a regular npars*6 type array
+        values=np.array([None]*self.npars)
+
         links=np.array([None]*self.npars)
         frozen=np.zeros(self.npars).astype(bool)
-        for  i in range(1,self.npars+1):
-            values[i-1]=xspec_model(i).values
 
-            # safeguard against linked parameters with values out of their bounds
-            if values[i-1][0] < values[i-1][2]:
-                values[i-1][2] = values[i-1][0]
-            if values[i-1][0] > values[i-1][5]:
-                values[i-1][5] = values[i-1][0]
+        for  i in range(1,self.npars+1):
+
+            #keeping length 1
+            values[i-1]=np.array(xspec_model(i).values)
+
+            #only for normal parameters
+            if len(values[i-1])>1:
+                # safeguard against linked parameters with values out of their bounds
+                if values[i-1][0] < values[i-1][2]:
+                    values[i-1][2] = values[i-1][0]
+                if values[i-1][0] > values[i-1][5]:
+                    values[i-1][5] = values[i-1][0]
 
             links[i-1]=xspec_model(i).link.replace('= ','')
             frozen[i-1]=xspec_model(i).frozen
@@ -313,12 +326,20 @@ class scorpeon_manager:
         
         #updating the bgload paths if an argument if prodivded
         if bgload_paths is not None:
-            #converting the input into an array like for easier manipulation
-            if type(bgload_paths) not in [list,np.ndarray,tuple]:
+            #auto loading with normal names
+            if type(bgload_paths)==str and bgload_paths=='auto':
+                bgloads_auto=np.array([None]*AllData.nGroups)
+                for id_grp in range(AllData.nGroups):
+                    if AllData(id_grp+1).fileinfo('TELESCOP')=='NICER':
+                        bgloads_auto[id_grp]=AllData(id_grp+1).fileName.replace('_sp_grp_opt.pha','_bg.py')
+                self.bgload_paths=bgloads_auto
+
+            # converting the input into an array like for easier manipulation
+            elif type(bgload_paths) not in [list,np.ndarray,tuple]:
                 self.bgload_paths=[bgload_paths]
             else:
                 self.bgload_paths=bgload_paths
-        
+
         if self.bgload_paths is not None:
             #making sure the file actually exists
             assert np.array([elem is None or os.path.isfile(str(elem)) for elem in self.bgload_paths]).all(),\
@@ -465,6 +486,7 @@ class scorpeon_group_save:
             
 xscorpeon=scorpeon_manager()
 
+
 class component_data:
     
     '''
@@ -596,8 +618,10 @@ def model_load(model_saves,mod_name='',mod_number=1,gap_par=None,in_add=False,ta
                     #we add 1 to the gap length since the lower bound is included in the gap                    
                     parload_grp[i_par]=str(save_grp.values[i_par-1-(gap_end-gap_start+1)])[1:-1]
 
-        xspec_mod_grp.setPars(parload_grp)
-
+        try:
+            xspec_mod_grp.setPars(parload_grp)
+        except:
+            breakpoint()
 
     #we load directly all the values dictionnaries before the rest to avoid problems with links if the intervals don't follow
     for i_grp,save_grp in enumerate(model_saves_arr):
@@ -1146,7 +1170,7 @@ def addcomp(compname,position='last',endmult=None,return_pos=False,modclass=AllM
             added_comps_numbers=np.arange(old_ncomps+1,len(AllModels(1).componentNames)+1).astype(int)
             
         gap_str=str(gap_start)+'-'+str(gap_end)
-        
+
         model_load(model_saves,gap_par=gap_str,in_add=True,table_dict=table_dict)
 
         #we need to recreate the variable name because the model load has overriden it

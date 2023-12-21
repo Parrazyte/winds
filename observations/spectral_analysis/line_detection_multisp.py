@@ -130,7 +130,7 @@ from xspec import AllChains
 #custom script with a few shorter xspec commands
 from xspec_config_multisp import allmodel_data,model_load,addcomp,Pset,Pnull,rescale,reset,Plot_screen,store_plot,freeze,allfreeze,unfreeze,\
                          calc_error,delcomp,fitmod,fitcomp,calc_fit,xcolors_grp,xPlot,xscorpeon,catch_model_str,\
-                         load_fitmod, ignore_data_indiv
+                         load_fitmod, ignore_data_indiv,getoverlap
 
 from linedet_utils import plot_line_comps,plot_line_search,plot_std_ener,coltour_chi2map,narrow_line_search,\
                             plot_line_ratio
@@ -183,7 +183,7 @@ ap.add_argument('-overwrite',nargs=1,
 
 #note : will skip exposures for which the exposure didn't compute or with logged errors
 ap.add_argument('-skip_started',nargs=1,help='skip all exposures listed in the local summary_line_det file',
-                default=False,type=bool)
+                default=True,type=bool)
 
 ap.add_argument('-skip_complete',nargs=1,help='skip completed exposures listed in the local summary_line_det file',
                 default=False,type=bool)
@@ -233,7 +233,7 @@ ap.add_argument('-spread_comput',nargs=1,
 ap.add_argument('-reverse_spread',nargs=1,help='run the spread computation lists in reverse',default=False,type=bool)
 
 #note: havign both reverse spread and reverse epoch with spread_comput>1 will give you back the normal order
-ap.add_argument('-reverse_epoch',nargs=1,help='reverse epoch list order',default=True,type=bool)
+ap.add_argument('-reverse_epoch',nargs=1,help='reverse epoch list order',default=False,type=bool)
 
 #better when spread computations are not running
 ap.add_argument('-skip_started_spread',nargs=1,
@@ -297,7 +297,7 @@ ap.add_argument('-SNR_min',nargs=1,help='minimum source Signal to Noise Ratio',d
 #shouldn't be needed now that we have a counts min limit + sometimes false especially in timing when the bg is the source
 
 ap.add_argument('-counts_min',nargs=1,
-                help='minimum source counts in the source region in the line continuum range',default=5000,type=float)
+                help='minimum source counts in the source region in the line continuum range',default=1000,type=float)
 ap.add_argument('-fit_lowSNR',nargs=1,
                 help='fit the continuum of low quality data to get the HID values',default=False,type=str)
 
@@ -312,18 +312,12 @@ ap.add_argument('-skip_nongrating',nargs=1,
 ap.add_argument('-skip_flares',nargs=1,help='skip flare GTIs',default=True,type=bool)
 
 ap.add_argument('-write_pdf',nargs=1,help='overwrite finished pdf at the end of the line detection',
-                default=True,type=bool)
+                default=False,type=bool)
 
 #can be set to false to gain time when testing or if the aborted pdf were already done
 ap.add_argument('-write_aborted_pdf',nargs=1,help='create aborted pdfs at the end of the computation',default=True,
                 type=bool)
 
-#used for NICER and multi for now
-ap.add_argument('-group_max_timedelta',nargs=1,
-                help='maximum time delta for epoch/gti grouping in dd_hh_mm',default='01_00_00',type=str)
-
-ap.add_argument('-single_obsid_NuSTAR',nargs=1,
-                help='limit NuSTAR epoch grouping to single obsids',default=True,type=bool)
 '''MODES'''
 
 ap.add_argument('-reload_autofit',nargs=1,
@@ -336,7 +330,7 @@ ap.add_argument('-reload_fakes',nargs=1,
 
 ap.add_argument('-pdf_only',nargs=1,
                 help='Updates the pdf with already existing elements but skips the line detection entirely',
-                default=True,type=bool)
+                default=False,type=bool)
 
 #note: used mainly to recompute obs with bugged UL computations. Needs FINISHED computations firsthand, else
 #use reload_autofit and reload_fakes
@@ -368,10 +362,10 @@ ap.add_argument('-split_fit',nargs=1,
 #line significance assessment parameter
 ap.add_argument('-assess_line',nargs=1,
                 help='use fakeit simulations to estimate the significance of each absorption line',
-                default=True,type=bool)
+                default=False,type=bool)
 
 ap.add_argument('-assess_line_upper',nargs=1,help='compute upper limits of each absorption line',
-                default=True,type=bool)
+                default=False,type=bool)
 
 
 '''SPECTRUM PARAMETERS'''
@@ -436,6 +430,28 @@ ap.add_argument('-pre_reduced_NICER',nargs=1,
                 help='change NICER data format to pre-reduced obsids',default=False,type=bool)
 
 ap.add_argument('-NICER_lc_binning',nargs=1,help='NICER LC binning',default='1',type=str)
+
+#used for NICER and multi for now
+ap.add_argument('-group_max_timedelta',nargs=1,
+                help='maximum time delta for epoch/gti grouping in dd_hh_mm',default='00_00_30',type=str)
+
+'''MULTI'''
+ap.add_argument('-plot_multi_overlap',nargs=1,help='plot overlap between different epochs',default=True)
+
+#in this case other epochs from other instruments are matched against the obs of this one
+ap.add_argument('-multi_focus',nargs=1,help='restricts epoch matching to having a specific telescope',
+                default='NuSTAR',type=str)
+
+#for multi focus
+ap.add_argument('-match_closest_NICER',nargs=1,help='only add the closest NICER obsid',default=True,type=bool)
+
+#off value is False
+ap.add_argument('-restrict_combination',nargs=1,help='restrict multi epochs a specific satellite combination',
+                default="NICER+NuSTAR")
+
+ap.add_argument('-single_obsid_NuSTAR',nargs=1,
+                help='limit NuSTAR epoch grouping to single obsids',default=True,type=bool)
+
 
 '''CHANDRA'''
 #Chandra issues
@@ -564,8 +580,12 @@ skip_flares=args.skip_flares
 spread_comput=args.spread_comput
 skip_started_spread=args.skip_started_spread
 
+multi_focus=args.multi_focus
 group_max_timedelta=args.group_max_timedelta
 single_obsid_NuSTAR=args.single_obsid_NuSTAR
+restrict_combination=args.restrict_combination
+match_closest_NICER=args.match_closest_NICER
+plot_multi_overlap=args.plot_multi_overlap
 
 outdir=args.outdir
 pileup_lim=args.pileup_lim
@@ -778,6 +798,7 @@ else:
     #switching off the spectral analysis
     hid_only=True
 
+spfile_list=np.array(spfile_list)
 spfile_list.sort()
 
 #we create these variables in any case because the multi_obj plots require them
@@ -1765,6 +1786,8 @@ def line_detect(epoch_id):
 
                 #saving changes
                 hdul.flush()
+
+
 
     '''Setting up a log file and testing the properties of each spectra'''
 
@@ -3620,7 +3643,7 @@ if sat_glob=='XMM':
         id_ep=0
         while id_ep<len(elem_epoch):
             curr_tested_epoch=elem_epoch[id_ep]
-            curr_tested_epoch_id=np.argwhere(np.array(spfile_list)==curr_tested_epoch)[0][0]
+            curr_tested_epoch_id=np.argwhere(spfile_list==curr_tested_epoch)[0][0]
             for elem_sp_id,elem_sp in [[i,spfile_list[i]] for i in range(len(spfile_list)) if
                                        (spfile_list[i] not in ravel_ragged(epoch_list) and spfile_list[i] not in elem_epoch)]:
                 #fetching the index of each
@@ -3666,9 +3689,9 @@ elif sat_glob=='NICER':
         tstart_list+=[obs_start.to_value('jd')]
 
     #max delta between gti starts in sec
-    max_delta=(TimeDelta(group_max_timedelta.split('_')[0],format='jd')+\
-              TimeDelta(group_max_timedelta.split('_')[1],format='sec')/60+ \
-              TimeDelta(group_max_timedelta.split('_')[2], format='sec')/3600).to_value('jd')
+    max_delta=(TimeDelta(group_max_timedelta.split('_')[0],format='mjd')+\
+              TimeDelta(group_max_timedelta.split('_')[1],format='mjd')/24+ \
+              TimeDelta(group_max_timedelta.split('_')[2], format='mjd')/(24*60)).to_value('jd')
 
     epoch_id_list_ravel=[]
     epoch_id_list=[]
@@ -3692,7 +3715,7 @@ elif sat_glob=='NICER':
 
             pbar.update(n=len(elem_epoch_id))
 
-    epoch_list=[np.array(spfile_list)[elem] for elem in epoch_id_list]
+    epoch_list=[spfile_list[elem] for elem in epoch_id_list]
 
 
     #skipping flares if asked for
@@ -3740,9 +3763,16 @@ elif sat_glob in ['Suzaku','Swift']:
 
 elif sat_glob=='multi':
     epoch_list=[]
-    tstart_list=[]
-    det_list=[]
-    for elem_file in spfile_list:
+
+    #skipping flares if asked for
+    if skip_flares:
+        spfile_list=np.array([elem for elem in spfile_list if "F_sp" not in elem])
+
+    tstart_list=np.array([None]*len(spfile_list))
+    det_list=np.array([None]*len(spfile_list))
+    tstop_list=np.array([None]*len(spfile_list))
+
+    for i_file,elem_file in enumerate(spfile_list):
 
         #for Suzaku this won't work for meugmi's xis0_xis3 files bc their header has been replaced
         # so we replace them by the xis1 to be able to load the exposure
@@ -3750,50 +3780,94 @@ elif sat_glob=='multi':
 
         with fits.open(elem_file_load) as hdul:
             if 'TELESCOP' in hdul[1].header:
-                det_list+=[hdul[1].header['TELESCOP'].replace('SUZAKU','Suzaku')]
+                det_list[i_file]=hdul[1].header['TELESCOP'].replace('SUZAKU','Suzaku')
             else:
                 if megumi_files:
-                    det_list+=['Suzaku']
+                    det_list[i_file]='Suzaku'
                 else:
                     breakpoint()
                     print("Issue with detector handling")
 
             if 'TIMEZERO' in hdul[1].header:
                 start_obs_s = hdul[1].header['TSTART'] + hdul[1].header['TIMEZERO']
+                stop_obs_s= hdul[1].header['TSTOP'] + hdul[1].header['TIMEZERO']
             else:
                 start_obs_s=hdul[1].header['TSTART']
+                stop_obs_s=hdul[1].header['TSTOP']
             # saving for titles later
             mjd_ref = Time(hdul[1].header['MJDREFI'] + hdul[1].header['MJDREFF'], format='mjd')
 
             obs_start = mjd_ref + TimeDelta(start_obs_s, format='sec')
+            obs_stop=mjd_ref+TimeDelta(stop_obs_s,format='sec')
 
-        tstart_list+=[obs_start.to_value('jd')]
+        tstart_list[i_file]=obs_start.to_value('jd')
+        tstop_list[i_file]=obs_stop.to_value('jd')
 
     #max delta between gti starts in sec
     max_delta=(TimeDelta(group_max_timedelta.split('_')[0],format='jd')+\
-              TimeDelta(group_max_timedelta.split('_')[1],format='sec')/60+ \
-              TimeDelta(group_max_timedelta.split('_')[2], format='sec')/3600).to_value('jd')
+              TimeDelta(group_max_timedelta.split('_')[1],format='jd')/24+ \
+              TimeDelta(group_max_timedelta.split('_')[2], format='jd')/(24*60)).to_value('jd')
 
     epoch_id_list_ravel=[]
     epoch_id_list=[]
 
+    if multi_focus!=False:
+        #restricting the match epochs to a specific satellite
+        mask_multi_focus=[elem==multi_focus for elem in det_list]
+        tstart_list_base=tstart_list[mask_multi_focus]
+        tstop_list_base=tstop_list[mask_multi_focus]
+        det_list_base=det_list[mask_multi_focus]
+        id_base=np.arange(len(spfile_list))[mask_multi_focus]
+    else:
+        tstart_list_base=tstart_list
+        tstop_list_base=tstop_list
+        det_list_base=det_list
+        id_base=np.arange(len(spfile_list))
+
     with tqdm(total=len(tstart_list)) as pbar:
-        for id_elem,(elem_tstart,elem_det) in enumerate(zip(tstart_list,det_list)):
+        for id_elem,(elem_tstart,elem_tstop,elem_det) in enumerate(zip(tstart_list_base,tstop_list_base,det_list_base)):
 
             #skipping computation for already grouped elements
-            if id_elem in epoch_id_list_ravel:
+            if id_base[id_elem] in epoch_id_list_ravel:
                 continue
 
-            elem_delta=[(elem-elem_tstart) for elem in tstart_list]
+            elem_delta=np.array([-getoverlap([elem_tstart,elem_tstop],[other_start,other_stop],distance=True) for other_start,other_stop in zip(tstart_list,tstop_list)])
 
-            elem_epoch_id=[id for id in range(len(tstart_list)) if\
-                                     id not in epoch_id_list_ravel and elem_delta[id]>=0 and elem_delta[id]<max_delta]
+            #list of matchable epochs
+            elem_epoch_id=np.array([id for id in range(len(tstart_list)) if\
+                                     id not in epoch_id_list_ravel and elem_delta[id]<max_delta])
+
+            #restricting match to single NICER epoch if required
+            if match_closest_NICER and len(elem_epoch_id)>0:
+                match_det_NICER=elem_epoch_id[det_list[elem_epoch_id]=='NICER']
+                #restricting to the observations with overlap AND the closest non-overlapping
+                match_valid_NICER=elem_delta[match_det_NICER]
+
+                if len(match_valid_NICER)>0:
+                    #computing NICER obs with some overlap
+                    mask_overlaps_NICER=match_valid_NICER<0
+
+                    #and the closest non-overlapping one
+                    if len(match_valid_NICER[match_valid_NICER>=0])>0:
+                        id_closest_NICER=match_valid_NICER[match_valid_NICER>=0].argmin()
+
+                        #merging both
+                        match_det_NICER_restrict=match_det_NICER[mask_overlaps_NICER].tolist()+\
+                                                 [match_det_NICER[id_closest_NICER]]
+                    else:
+                        match_det_NICER_restrict=match_det_NICER[mask_overlaps_NICER].tolist()
+
+                    #and replacing the initial NICER matches by this in the elem_epoch_id array
+                    elem_epoch_id=np.array([elem for elem in elem_epoch_id if elem not in match_det_NICER\
+                                            or elem in match_det_NICER_restrict])
 
             if single_obsid_NuSTAR:
-                elem_epoch_obsids_NuSTAR=np.unique([elem.split('_')[0][:-3] for elem in\
-                    np.array(spfile_list)[elem_epoch_id] if elem.startswith('nu')])
+                elem_epoch_obsids_NuSTAR=np.unique([elem.split('_')[0].split('-')[0][:-3] for elem in\
+                    spfile_list[elem_epoch_id] if elem.startswith('nu')])
+
                 mask_obsid_restrict=[not elem.startswith('nu') or elem.startswith(elem_epoch_obsids_NuSTAR[0])
-                                     for elem in np.array(spfile_list)[elem_epoch_id]]
+                                     for elem in spfile_list[elem_epoch_id]]
+
                 elem_epoch_id=np.array([elem_epoch_id])[[mask_obsid_restrict]].tolist()
 
             epoch_id_list_ravel+=elem_epoch_id
@@ -3803,25 +3877,70 @@ elif sat_glob=='multi':
 
             pbar.update(n=len(elem_epoch_id))
 
-    epoch_list=[np.array(spfile_list)[elem] for elem in epoch_id_list]
-
-
-    #skipping flares if asked for
-    if skip_flares:
-        epoch_list=[[subelem for subelem in elem if "F_sp" not in subelem] for elem in epoch_list]
-        epoch_list=[elem for elem in epoch_list if len(elem)>0]
+    epoch_list=[spfile_list[elem] for elem in epoch_id_list]
 
     epoch_list=np.array(epoch_list,dtype=object)
 
-    #not needed atm
-    # def str_to_epoch(str_epoch):
-    #     str_epoch_list=[]
-    #     for elem_obsid_str in str_epoch:
-    #         if '-' not in elem_obsid_str:
-    #             str_epoch_list+=elem_obsid_str
-    #         else:
-    #             str_epoch_list+=[elem_obsid_str.split('-')[0]+elem_obsid_str.split('-')[i]\
-    #                              for i in range(1,len(elem_obsid_str.split('-')))]
+    if restrict_combination:
+        epoch_list=[epoch_list[id_epoch] for id_epoch in range(len(epoch_list)) if (np.unique(det_list[epoch_id_list[id_epoch]])==restrict_combination.split('+')).all()]
+
+
+    if plot_multi_overlap:
+
+        '''
+        We plot both the initial telescope overlaps with colors for each instrument, 
+        then the final epochs as they end up, cycling through colors for each epoch
+        '''
+
+
+        fig_exp, ax_exp = plt.subplots(figsize=(17, 6))
+        from visual_line_tools import telescope_colors
+        import matplotlib.dates as mdates
+
+        # precise format because we might need it
+        date_format = mdates.DateFormatter('%Y-%m-%d %H:%M:%S')
+
+        tel_col_list = list(telescope_colors.keys())
+        mask_tel = np.array([np.array(det_list) == elem for elem in tel_col_list])
+
+        num_dates_start = mdates.date2num(Time(tstart_list.astype(float), format='jd').datetime)
+        num_dates_stop = mdates.date2num(Time(tstop_list.astype(float), format='jd').datetime)
+
+        #cylcing through each telescope and their respective epochs to get different colors
+        for i_det in range(len(tel_col_list)):
+
+            for i_exp in range(sum(mask_tel[i_det])):
+                ax_exp.axvspan(xmin=num_dates_start[mask_tel[i_det]][i_exp],
+                               xmax=num_dates_stop[mask_tel[i_det]][i_exp],
+                               ymin=0, ymax=0.5, color=telescope_colors[tel_col_list[i_det]],
+                               label=tel_col_list[i_det] if i_exp == 0 else '', alpha=0.2)
+
+        #and doing the same with the remaining elements of epoch_list
+        prop_cycle = plt.rcParams['axes.prop_cycle']
+        mpl_cycle_colors = prop_cycle.by_key()['color']
+
+        for i_epoch,elem_epoch in enumerate(epoch_list):
+
+            epoch_color=mpl_cycle_colors[i_epoch%len(mpl_cycle_colors)]
+
+            for elem_file in elem_epoch:
+                num_date_start_file=num_dates_start[spfile_list==elem_file][0]
+                num_date_stop_file=num_dates_stop[spfile_list==elem_file][0]
+
+                ax_exp.axvspan(xmin=num_date_start_file,
+                               xmax=num_date_stop_file,
+                               ymin=0.5, ymax=1, color=epoch_color,
+                               label='', alpha=0.2)
+
+        ax_exp.xaxis.set_major_formatter(date_format)
+        for label in ax_exp.get_xticklabels(which='major'):
+            label.set(rotation=45, horizontalalignment='right')
+
+        plt.tight_layout()
+        plt.legend()
+        plt.savefig(os.path.join(outdir,'multi_matching.png'))
+        plt.savefig(os.path.join(outdir,'multi_matching.pdf'))
+        plt.close()
 
     epoch_list_started=started_expos
     epoch_list_done=done_expos
@@ -3974,8 +4093,6 @@ for epoch_id,epoch_files in enumerate(epoch_list):
 
             print('\nSpectrum analysis already performed. Skipping...')
             continue
-
-    breakpoint()
 
     #overwrite check
     if not overwrite:

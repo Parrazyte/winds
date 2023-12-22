@@ -123,7 +123,11 @@ def model_to_nuLnu(path):
 
     Plot.xAxis = "Hz"
 
-    Plot('eeuf')
+    Plot('emo')
+
+    #note: it seems that plot eeuf will only show the data so will not show the rest of the model
+    # if extended to higher/lower energies
+    # Plot('eeuf')
 
     x_arr = Plot.x()
 

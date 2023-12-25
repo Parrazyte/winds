@@ -15,5 +15,5 @@ Visualisation:
 
 Simulations:
 
--fortran xstar custom version from Sudeb's pas work
--python-based libraries to convert JED-SAD/WED solutiosn to xspec models and then spectra
+-fortran xstar custom version from Sudeb's past work
+-python-based libraries to convert JED-SAD/WED solutions to xspec models and then spectra

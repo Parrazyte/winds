@@ -1,6 +1,9 @@
 # winds
 Main PhD project on BHLMXB wind signatures
 
+-If you're not me, better ask me about what's in this before any headache-
+
+
 Datared:
 
 -Various scripts for data download/arrangement/reduction with X-ray telescopes

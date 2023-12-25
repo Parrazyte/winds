@@ -1,3 +1,4 @@
+import os
 import numpy as np
 import matplotlib as mpl
 import matplotlib.pyplot as plt
@@ -386,8 +387,8 @@ def plot_line_search(chi_dict_plot,outdir,sat,save=True,suffix=None,epoch_observ
 
     if save==True:
         # saving it and closing it
-        plt.savefig(outdir + '/' + epoch_observ[0] + '_' + suffix + '_line_comb_plot_' +\
-                    line_search_e_str.replace(' ','_') + '_' + line_search_norm_str.replace(' ', '_') + '.png')
+        plt.savefig(os.path.join(outdir,epoch_observ[0] + '_' + suffix + '_line_comb_plot_' +\
+                    line_search_e_str.replace(' ','_') + '_' + line_search_norm_str.replace(' ', '_') + '.png'))
         plt.close(figure_comb)
 
     # putting the background plotting to its previous state

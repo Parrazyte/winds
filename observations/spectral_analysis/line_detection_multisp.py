@@ -159,7 +159,7 @@ ap = argparse.ArgumentParser(description='Script to perform line detection in X-
 
 '''GENERAL OPTIONS'''
 
-ap.add_argument('-satellite',nargs=1,help='telescope to fetch spectra from',default='multi',type=str)
+ap.add_argument('-satellite',nargs=1,help='telescope to fetch spectra from',default='NICER',type=str)
 #note: use maj for first character
 
 ap.add_argument("-cameras",nargs=1,help='Cameras to use for spectral analysis',default='all',type=str)
@@ -362,10 +362,10 @@ ap.add_argument('-split_fit',nargs=1,
 #line significance assessment parameter
 ap.add_argument('-assess_line',nargs=1,
                 help='use fakeit simulations to estimate the significance of each absorption line',
-                default=False,type=bool)
+                default=True,type=bool)
 
 ap.add_argument('-assess_line_upper',nargs=1,help='compute upper limits of each absorption line',
-                default=False,type=bool)
+                default=True,type=bool)
 
 
 '''SPECTRUM PARAMETERS'''
@@ -433,7 +433,7 @@ ap.add_argument('-NICER_lc_binning',nargs=1,help='NICER LC binning',default='1',
 
 #used for NICER and multi for now
 ap.add_argument('-group_max_timedelta',nargs=1,
-                help='maximum time delta for epoch/gti grouping in dd_hh_mm',default='00_00_30',type=str)
+                help='maximum time delta for epoch/gti grouping in dd_hh_mm_ss',default='00_00_00_10',type=str)
 
 '''MULTI'''
 ap.add_argument('-plot_multi_overlap',nargs=1,help='plot overlap between different epochs',default=True)
@@ -3689,9 +3689,10 @@ elif sat_glob=='NICER':
         tstart_list+=[obs_start.to_value('jd')]
 
     #max delta between gti starts in sec
-    max_delta=(TimeDelta(group_max_timedelta.split('_')[0],format='mjd')+\
-              TimeDelta(group_max_timedelta.split('_')[1],format='mjd')/24+ \
-              TimeDelta(group_max_timedelta.split('_')[2], format='mjd')/(24*60)).to_value('jd')
+    max_delta=(TimeDelta(group_max_timedelta.split('_')[0],format='jd')+\
+              TimeDelta(group_max_timedelta.split('_')[1],format='jd')/24+ \
+              TimeDelta(group_max_timedelta.split('_')[2], format='jd')/(24*60)+ \
+              TimeDelta(group_max_timedelta.split('_')[3], format='jd')/(24*3600)).to_value('jd')
 
     epoch_id_list_ravel=[]
     epoch_id_list=[]
@@ -3806,7 +3807,8 @@ elif sat_glob=='multi':
     #max delta between gti starts in sec
     max_delta=(TimeDelta(group_max_timedelta.split('_')[0],format='jd')+\
               TimeDelta(group_max_timedelta.split('_')[1],format='jd')/24+ \
-              TimeDelta(group_max_timedelta.split('_')[2], format='jd')/(24*60)).to_value('jd')
+              TimeDelta(group_max_timedelta.split('_')[2], format='jd')/(24*60)+ \
+              TimeDelta(group_max_timedelta.split('_')[3], format='jd')/(24*3600)).to_value('jd')
 
     epoch_id_list_ravel=[]
     epoch_id_list=[]

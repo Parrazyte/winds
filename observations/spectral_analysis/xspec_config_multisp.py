@@ -214,7 +214,7 @@ class allmodel_data:
         else:
             self.scorpeon=None
             
-    def load(self,verbose=False):
+    def load(self,verbose=False,load_scorpeon=True):
                                 
         for elem_mod,elem_key in zip(self.mod_list,self.mod_keys):
             model_load(getattr(self,elem_mod),mod_name='' if elem_mod=='default' else elem_mod,mod_number=elem_key,
@@ -227,7 +227,7 @@ class allmodel_data:
         Xset.chatter=10 if verbose else 0
         Xset.logChatter=10 if verbose else 0
         
-        if 'scorpeon' in dir(self):
+        if 'scorpeon' in dir(self) and load_scorpeon:
             xscorpeon.load(scorpeon_save=self.scorpeon)
 
         Xset.chatter=xchatter
@@ -486,6 +486,69 @@ class scorpeon_group_save:
             
 xscorpeon=scorpeon_manager()
 
+def save_broad_SED(e_low=0.1,e_high=100,nbins=1e3,path=None,retain_session=True,remove_abs=True,remove_gaussian=True,
+                   remove_scorpeon=True):
+
+    '''
+    Saves a version of the model with nbins log bins betwen e_low an e_high keV
+    either to path or to a returned array
+
+    three columns file to match stefano's code
+
+    -retain_session:    save the Xset session before modifying the model and energies array and reloads it once
+                        the model has been saved
+
+    -remove_abs:        remove the abs/xabs components before saving the model
+
+    -remove_gaussian:   remove the gaussian components in the model before saving the SED
+    '''
+
+    #saving the session and modifying the model if asked to
+    if retain_session:
+        if os.path.isfile('make_broad_mod_save.xcm'):
+            os.remove('make_broad_mod_save.xcm')
+
+        Xset.save('make_broad_mod_save.xcm')
+
+    if remove_abs:
+        for elem_abs_comp in ['phabs','tbabs','TBfeo','xabs','xscat']:
+            while elem_abs_comp in AllModels(1).componentNames:
+                delcomp(elem_abs_comp)
+                time.sleep(1)
+
+    if remove_gaussian:
+        for elem_gaussian in ['gaussian','gabs']:
+            while elem_gaussian in AllModels(1).componentNames:
+                delcomp(elem_gaussian)
+                time.sleep(1)
+
+    if remove_scorpeon:
+        mod_save=allmodel_data()
+        AllModels.clear()
+        mod_save.load(load_scorpeon=False)
+
+    cleaned_expression=AllModels(1).expression
+
+    AllModels.setEnergies(str(e_low)+' '+str(e_high)+' '+str(int(nbins))+" log")
+
+    Plot.xAxis='hz'
+
+    Plot('emo')
+    f_nu=Plot.model()
+    nu=Plot.x()
+    nu_err=Plot.xErr()
+
+    save_arr=np.array([nu,nu_err,f_nu]).T
+
+    if retain_session:
+        Xset.restore('make_broad_mod_save.xcm')
+        os.remove('make_broad_mod_save.xcm')
+
+    if path is not None:
+        np.savetxt(path, save_arr, header='save of '+cleaned_expression+'\nnu\tnuErr\tLnu\nHz\tHz\terg/s/Hz',
+                   delimiter=' ')
+    else:
+        return save_arr
 
 class component_data:
     
@@ -536,6 +599,7 @@ def reset():
     Fit.nIterations=1000
     Plot.xAxis='keV'
     Plot.add=True
+
 
 def model_load(model_saves,mod_name='',mod_number=1,gap_par=None,in_add=False,table_dict=None,modclass=AllModels,
                verbose=False):

@@ -100,21 +100,21 @@ ap.add_argument('-catch','--catch_errors',help='Catch errors while running the d
 
 #global choices
 ap.add_argument("-a","--action",nargs='?',help='Give which action(s) to proceed,separated by comas.',
-                default='1,gti,fs,l,g,m',type=str)
+                default='m',type=str)
 #default: 1,gti,fs,l,g,m,c
 
 ap.add_argument("-over",nargs=1,help='overwrite computed tasks (i.e. with products in the batch, or merge directory\
                 if "m" is in the actions) in a folder',default=True,type=bool)
 
 #directory level overwrite (not active in local)
-ap.add_argument('-folder_over',nargs=1,help='relaunch action through folders with completed analysis',default=False,type=bool)
+ap.add_argument('-folder_over',nargs=1,help='relaunch action through folders with completed analysis',default=True,type=bool)
 ap.add_argument('-folder_cont',nargs=1,help='skip all but the last 2 directories in the summary folder file',default=False,type=bool)
 #note : we keep the previous 2 directories because bug or breaks can start actions on a directory following the initially stopped one
 
 #action specific overwrite
 
 #gti
-ap.add_argument('-gti_split',nargs=1,help='GTI split method',default='orbit+flare+split_100',type=str)
+ap.add_argument('-gti_split',nargs=1,help='GTI split method',default='orbit+flare+split_30',type=str)
 ap.add_argument('-flare_method',nargs=1,help='Flare extraction method(s)',default='clip+peak',type=str)
 
 #note: not used currently
@@ -997,7 +997,7 @@ def extract_all_spectral(directory,bkgmodel='scorpeon_script',language='python',
             process_state=bashproc.expect(['DONE','ERROR: could not find UFA file','Task aborting due to zero EXPOSURE'],timeout=None)
 
             #raising an error to stop the process if the command has crashed for some reason
-            if process_state>1:
+            if process_state>2:
                 with open(directory+'/extract_all_spectral.log') as file:
                     lines=file.readlines()
 
@@ -1005,10 +1005,10 @@ def extract_all_spectral(directory,bkgmodel='scorpeon_script',language='python',
                 extract_all_spectral_done.set()
                 return lines[-1].replace('\n','')
 
-            if process_state==1:
+            if process_state in [1,2]:
 
                 #skipping the computation
-                return
+                return 'skip'
 
             allfiles=glob.glob(os.path.join(directory,'xti/**'),recursive=True)
 
@@ -1068,7 +1068,18 @@ def extract_all_spectral(directory,bkgmodel='scorpeon_script',language='python',
             print(str(len(gti_files))+' gti files detected. Computing spectral products from individual gtis...')
 
         for elem_gti in gti_files:
-            extract_single_spectral(elem_gti)
+            process_state=extract_single_spectral(elem_gti)
+
+            #stopping the loop in case of crash
+            if process_state not in [None,'skip']:
+
+                #exiting the bashproc
+                bashproc.sendline('exit')
+                extract_all_spectral_done.set()
+
+                #raising an error to stop the process if the command has crashed for some reason
+                return 'GTI '+elem_gti.split('_gti_')[1].replace('.gti','')+': '+process_state
+
 
         #exiting the bashproc
         bashproc.sendline('exit')
@@ -1496,25 +1507,22 @@ def regroup_spectral(directory,group='opt'):
     
     '''
 
-    bashproc=pexpect.spawn("/bin/bash",encoding='utf-8')
-    
+    currdir = os.getcwd()
+
     print('\n\n\nRegrouping spectrum...')
     
-    set_var(bashproc)
-    
-    currdir=os.getcwd()
-    
+
     if os.path.isfile(directory+'/regroup_spectral.log'):
         os.system('rm '+directory+'/regroup_spectral.log')
         
     #deleting previously existing grouped spectra to avoid problems when testing their existence
     if os.path.isfile(os.path.join(currdir,directory,directory+'_sp_grp_'+group+'.pha')):
         os.remove(os.path.join(currdir,directory,directory+'_sp_grp_'+group+'.pha'))
-            
+
     with StdoutTee(directory+'/regroup_spectral.log',mode="a",buff=1,file_filters=[_remove_control_chars]),\
         StderrTee(directory+'/regroup_spectral.log',buff=1,file_filters=[_remove_control_chars]):
 
-        bashproc.logfile_read=sys.stdout
+        # there seems to be an issue with too many groupings in one console so we recreate it every time
 
         #checking if gti files exist in the folder
         gti_files= np.array([elem for elem in glob.glob(os.path.join(directory ,'xti/**/*'), recursive=True) if
@@ -1522,7 +1530,7 @@ def regroup_spectral(directory,group='opt'):
 
         gti_files.sort()
 
-        def regroup_single_spectral(gtifile=None):
+        def regroup_single_spectral(spawn,gtifile=None):
 
             if gtifile is not None:
                 print('Regrouping spectral products with gti file '+gtifile)
@@ -1542,17 +1550,25 @@ def regroup_spectral(directory,group='opt'):
             print('ftgrouppha infile='+directory+'/'+directory+gti_suffix+'_sr.pha'+' outfile='+directory+'/'+directory+gti_suffix+'_sp_grp_'+group+
             '.pha grouptype='+group+' respfile='+directory+'/'+directory+gti_suffix+'.rmf')
 
-            bashproc.sendline('ftgrouppha infile='+directory+'/'+directory+gti_suffix+'_sr.pha'+' outfile='+directory+'/'+directory+gti_suffix+'_sp_grp_'+group+
+            spawn.sendline('ftgrouppha infile='+directory+'/'+directory+gti_suffix+'_sr.pha'+' outfile='+directory+'/'+directory+gti_suffix+'_sp_grp_'+group+
             '.pha grouptype='+group+' respfile='+directory+'/'+directory+gti_suffix+'.rmf')
 
             time.sleep(1)
 
-            while not os.path.isfile(os.path.join(currdir,directory+'/'+directory+gti_suffix+'_sp_grp_'+group+'.pha')):
-                time.sleep(2)
-                print('Waiting for creation of file '+os.path.join(currdir,directory+'/'+directory+gti_suffix+'_sp_grp_'+group+'.pha'))
+            if not os.path.isfile(os.path.join(currdir,directory+'/'+directory+gti_suffix+'_sp_grp_'+group+'.pha')):
+                print('Waiting for creation of file '+os.path.join(currdir,
+                      directory+'/'+directory+gti_suffix+'_sp_grp_'+group+'.pha'))
+                time.sleep(5)
+                spawn.sendline('echo done')
+                process_state = spawn.expect(['done', 'terminating with status -1'], timeout=30)
 
-            bashproc.sendline('echo done')
-            bashproc.expect('done')
+                assert process_state==0, 'Issue when regrouping'
+                return ''
+
+            spawn.sendline('echo done')
+            spawn.expect('done')
+
+            time.sleep(1)
 
             #updating the grouped file header with the correct file names
             with fits.open(directory+'/'+directory+gti_suffix+'_sp_grp_'+group+'.pha',mode='update') as hdul:
@@ -1573,7 +1589,11 @@ def regroup_spectral(directory,group='opt'):
                 print('\nNo spectrum created for gti '+elem_gti+'. Continuing...\n')
                 continue
 
-            process_state=regroup_single_spectral(elem_gti)
+            bashproc = pexpect.spawn("/bin/bash", encoding='utf-8')
+            set_var(bashproc)
+            bashproc.logfile_read = sys.stdout
+
+            process_state=regroup_single_spectral(bashproc,elem_gti)
 
             #stopping the loop in case of crash
             if process_state is not None:
@@ -1585,8 +1605,8 @@ def regroup_spectral(directory,group='opt'):
                 #raising an error to stop the process if the command has crashed for some reason
                 return 'GTI '+elem_gti.split('_gti_')[1].replace('.gti','')+': '+process_state
 
-        #exiting the bashproc
-        bashproc.sendline('exit')
+            #exiting the bashproc
+            bashproc.sendline('exit')
         regroup_spectral_done.set()
 
 def batch_mover(directory):

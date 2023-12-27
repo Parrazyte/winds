@@ -159,7 +159,7 @@ ap = argparse.ArgumentParser(description='Script to perform line detection in X-
 
 '''GENERAL OPTIONS'''
 
-ap.add_argument('-satellite',nargs=1,help='telescope to fetch spectra from',default='NICER',type=str)
+ap.add_argument('-satellite',nargs=1,help='telescope to fetch spectra from',default='multi',type=str)
 #note: use maj for first character
 
 ap.add_argument("-cameras",nargs=1,help='Cameras to use for spectral analysis',default='all',type=str)
@@ -208,7 +208,7 @@ ap.add_argument('-xspec_window',nargs=1,help='xspec window id (auto tries to pic
 
 '''MODELS'''
 #### Models and abslines lock
-ap.add_argument('-cont_model',nargs=1,help='model list to use for the autofit computation',default='cont',type=str)
+ap.add_argument('-cont_model',nargs=1,help='model list to use for the autofit computation',default='cont_lowe',type=str)
 ap.add_argument('-autofit_model',nargs=1,help='model list to use for the autofit computation',
                 default='lines_narrow',type=str)
 #narrow or resolved mainly
@@ -362,10 +362,10 @@ ap.add_argument('-split_fit',nargs=1,
 #line significance assessment parameter
 ap.add_argument('-assess_line',nargs=1,
                 help='use fakeit simulations to estimate the significance of each absorption line',
-                default=True,type=bool)
+                default=False,type=bool)
 
 ap.add_argument('-assess_line_upper',nargs=1,help='compute upper limits of each absorption line',
-                default=True,type=bool)
+                default=False,type=bool)
 
 
 '''SPECTRUM PARAMETERS'''
@@ -433,7 +433,7 @@ ap.add_argument('-NICER_lc_binning',nargs=1,help='NICER LC binning',default='1',
 
 #used for NICER and multi for now
 ap.add_argument('-group_max_timedelta',nargs=1,
-                help='maximum time delta for epoch/gti grouping in dd_hh_mm_ss',default='00_00_00_10',type=str)
+                help='maximum time delta for epoch/gti grouping in dd_hh_mm_ss',default='00_00_15_00',type=str)
 
 '''MULTI'''
 ap.add_argument('-plot_multi_overlap',nargs=1,help='plot overlap between different epochs',default=True)
@@ -452,6 +452,8 @@ ap.add_argument('-restrict_combination',nargs=1,help='restrict multi epochs a sp
 ap.add_argument('-single_obsid_NuSTAR',nargs=1,
                 help='limit NuSTAR epoch grouping to single obsids',default=True,type=bool)
 
+ap.add_argument('-diff_bands_NuSTAR_NICER',nargs=1,help='different energy bounds for multi NuSTAR/NICER combinations',
+                default=True,type=bool)
 
 '''CHANDRA'''
 #Chandra issues
@@ -580,6 +582,7 @@ skip_flares=args.skip_flares
 spread_comput=args.spread_comput
 skip_started_spread=args.skip_started_spread
 
+diff_bands_NuSTAR_NICER=args.diff_bands_NuSTAR_NICER
 multi_focus=args.multi_focus
 group_max_timedelta=args.group_max_timedelta
 single_obsid_NuSTAR=args.single_obsid_NuSTAR
@@ -1475,13 +1478,13 @@ def line_e_ranges(sat):
     ignore_bands=None
 
     if sat=='NuSTAR':
-        e_sat_low=3.
+        e_sat_low=8. if (sat_glob=='multi' and diff_bands_NuSTAR_NICER) else 3.
         e_sat_high=79.
 
     if sat in ['XMM', 'NICER', 'Swift']:
 
         if sat == 'NICER':
-            e_sat_low = 2.5
+            e_sat_low = 0.3 if (sat_glob=='multi' and diff_bands_NuSTAR_NICER) else 2.5
         else:
             e_sat_low = 0.3
 
@@ -1518,16 +1521,21 @@ def line_e_ranges(sat):
         if sat in ['XMM', 'Chandra', 'NICER', 'Swift', 'Suzaku', 'NuSTAR']:
 
             line_cont_ig = ''
-            if e_sat_high > 6.5:
 
-                line_cont_ig += '6.5-' + str(min(7.1, e_sat_high))
-
-                if e_sat_high > 7.7:
-                    line_cont_ig += ',7.7-' + str(min(8.3, e_sat_high))
+            if e_sat_low>6:
+                #not ignoring this band for high-E only NuSTAR fits
+                line_cont_ig=''
             else:
-                # failsafe in case the e_sat_high is too low, we ignore the very first channel of the spectrum
-                # which will be ignored anyway
-                line_cont_ig = str(1)
+                if e_sat_high > 6.5:
+
+                    line_cont_ig += '6.5-' + str(min(7.1, e_sat_high))
+
+                    if e_sat_high > 7.7:
+                        line_cont_ig += ',7.7-' + str(min(8.3, e_sat_high))
+                else:
+                    # failsafe in case the e_sat_high is too low, we ignore the very first channel of the spectrum
+                    # which will be ignored anyway
+                    line_cont_ig = str(1)
 
         else:
             line_cont_ig = '6.-8.'
@@ -2703,7 +2711,9 @@ def line_detect(epoch_id):
             return spflux_single,broad_absval,data_broad
 
         AllModels.clear()
-        xscorpeon.load(frozen=True)
+
+        #frozen Scorpeon for now
+        xscorpeon.load(frozen=not diff_bands_NuSTAR_NICER)
 
         result_broad_fit=broad_fit()
 
@@ -2712,6 +2722,9 @@ def line_detect(epoch_id):
         else:
             main_spflux,broad_absval,data_broad=result_broad_fit
 
+        #reloading the frozen scorpeon data\
+        # (which won't change anything if it hasn't been fitted but will help otherwise)
+        xscorpeon.load(data_broad.scorpeon,frozen=True)
         result_high_fit=high_fit(broad_absval)
 
         #if the function returns an array of length 1, it means it returned an error message

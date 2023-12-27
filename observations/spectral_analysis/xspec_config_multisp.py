@@ -411,7 +411,11 @@ class scorpeon_manager:
 
                     mod_sky(i_par+1).frozen=True
 
-                    
+    def clear(self):
+        mod_save=allmodel_data()
+        AllModels.clear()
+        mod_save.load(load_scorpeon=False)
+
 
 class scorpeon_data:
             
@@ -523,9 +527,7 @@ def save_broad_SED(e_low=0.1,e_high=100,nbins=1e3,path=None,retain_session=True,
                 time.sleep(1)
 
     if remove_scorpeon:
-        mod_save=allmodel_data()
-        AllModels.clear()
-        mod_save.load(load_scorpeon=False)
+        xscorpeon.clear()
 
     cleaned_expression=AllModels(1).expression
 
@@ -956,7 +958,7 @@ def addcomp(compname,position='last',endmult=None,return_pos=False,modclass=AllM
         
         'n' -> narrow (frozen Sigma=0) gaussian
         'a'-> absorption (locked <0 norm) gaussian
-        'g'-> broad (forced high width values) gaussian
+        'b'-> broad (forced high width values) gaussian
         
         named lines (to be included as prefix):
         
@@ -1299,7 +1301,7 @@ def addcomp(compname,position='last',endmult=None,return_pos=False,modclass=AllM
         
     #changing more infos for specific lines
     if gaussian_type is not None:
-        
+
         #selecting the corresponding energy
         ener_line=lines_e_dict[gaussian_type][0]
 

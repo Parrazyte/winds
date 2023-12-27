@@ -25,7 +25,7 @@ def_ftest_leeway=0.02
 ####Line informations
 '''Line informations'''
 
-lines_std={
+lines_std={         #don't change the first 8, there are explicit calls in the code
                     'FeKaem':r'Fe K$\alpha$',
                     'FeKbem':r'Fe K$\beta$',
                     'FeDiazem':'Fe Diaz',
@@ -42,7 +42,8 @@ lines_std={
                   #this are the narrow equivalent to FeKa and FeKb, but they are used as much more "physical" lines and as such 
                   #have restrained energy ranges compared to their broad counterparts
                   'FeKa0em':r'Fe K$\alpha$',
-                  'FeKb0em':r'Fe K$\beta$'}
+                  'FeKb0em':r'Fe K$\beta$',
+                  'nicercal0em':r'Nicer Cal'}
 
 lines_std_names=list(lines_std.keys())
 
@@ -70,7 +71,8 @@ lines_e_dict={
                   #this are the narrow equivalent to FeKa and FeKb, but they are used as much more "physical" lines and as such 
                   #have restrained energy ranges compared to their broad counterparts
                    'FeKa0em':[6.4,-10000,10000],
-                   'FeKb0em':[7.06,-10000,10000]}
+                   'FeKb0em':[7.06,-10000,10000],
+                   'nicercal0em':[1.7,-3000,3000]}
     
 #+ line resolved
 
@@ -120,6 +122,7 @@ lines_w_dict={
                   'FeKb0em':[1e-2,0.,0.05],
                   'FeKa25em':[1e-2,0.,0.05],
                   'FeKa26em':[1e-2,0.,0.05],
+                  'nicercal0em':[0.,0.,0.2],
                   }
 
 lines_broad_w_dict={
@@ -225,7 +228,17 @@ def model_list(model_id='lines',give_groups=False):
         avail_comps=['glob_constant','glob_phabs','cont_diskbb','cont_powerlaw','FeKa_laor']
         
         interact_groups=avail_comps
-    
+
+    if model_id=='cont_lowe':
+
+        '''
+        subset of continuum for NICER lowe spectra
+        '''
+
+        avail_comps = ['glob_constant', 'glob_TBabs', 'cont_diskbb', 'cont_powerlaw', 'nicercal0em_gaussian']
+
+        interact_groups = avail_comps
+
     if model_id=='cont':
         
         avail_comps=['glob_constant','glob_phabs','cont_diskbb','cont_powerlaw']

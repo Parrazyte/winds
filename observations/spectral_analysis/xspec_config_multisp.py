@@ -1633,7 +1633,7 @@ def delcomp(compname,modclass=AllModels,give_ndel=False):
     
         #shifting/deleting link values accordingly
         for par_id,link in enumerate(mod_data_grp.links):
-            
+
             #skipping empty links
             if link=='':
                 continue
@@ -1656,9 +1656,12 @@ def delcomp(compname,modclass=AllModels,give_ndel=False):
             # getting something that can be transformed back to an int
             link_par = link_par_str.replace('=', '').replace('p', '')
 
-            
-            if int(link_par)%AllModels(1).nParameters in np.concatenate((np.arange(skippar_start+1,skippar_start+skippar_n+1),
-                                                    np.array([0]) if skippar_start+skippar_n==AllModels(1).nParameters else np.array([]))).astype(int):
+            #computing the deleted parameter ids in the first datagroup
+            deleted_par_ids_single=np.concatenate((np.arange(skippar_start+1,skippar_start+skippar_n+1),
+                                                    np.array([0]) if skippar_start+skippar_n==AllModels(1).nParameters\
+                                                    else np.array([]))).astype(int)
+
+            if int(link_par)%AllModels(1).nParameters in deleted_par_ids_single:
                 print('\nParameter '+str(grp_id*AllModels(1).nParameters+par_id+1)+
                       ' was linked to one of the deleted components parameters. Deleting link.')
                 
@@ -1675,12 +1678,16 @@ def delcomp(compname,modclass=AllModels,give_ndel=False):
                     breakpoint()
 
                 continue
-                
+
             #shifting the link value if it points to a parameter originally after the deleted components
             #the 0 test accounts for the very last parameter, which will always need to be shifted if it wasn't in the deleted comps
-            elif int(link_par)%AllModels(1).nParameters>=skippar_start+skippar_n or int(link_par)%AllModels(1).nParameters==0:
+            elif int(link_par)>=skippar_start+skippar_n or int(link_par)%AllModels(1).nParameters==0:
 
-                new_link_par=str(int(link_par)-skippar_n)
+                #this value is the numer of times skippar_n parameters are deleted before the link_par parameter
+                link_shift_factor=1+(int(link_par)-(skippar_start+skippar_n))//AllModels(1).nParameters
+
+                #new link position, correctly accounting for additional skips in subsequent datagroups
+                new_link_par=str(int(link_par)-skippar_n*(link_shift_factor))
 
                 mod_data_grp.links[par_id]=link_par_str.replace(link_par_str,'p'+new_link_par)
 

@@ -1659,12 +1659,16 @@ def extract_lc(directory,binning='1',lc_bands_str='3-79',hr_bands='10-50/3-10',c
 
             for id_orbit,elem_gti in enumerate(gti_list):
 
+                if elem_gti is None:
+                    binning_use=binning
+                else:
+                    binning_use = str(int(binning) // 10)
                 lc_prods=np.array([None]*len(lc_bands))
 
                 for id_band,band in enumerate(lc_bands):
 
                     summary_line,lc_prods[id_band],bright_flag_single = extract_lc_single(bashproc,directory=directory,
-                                                    binning=str(float(binning)//10),instru=camlist[i_cam],steminput='nu'+obsid,
+                                                    binning=binning_use,instru=camlist[i_cam],steminput='nu'+obsid,
                                                     src_reg=src_reg_indiv_spawn,bg_reg=bg_reg_indiv_spawn,
                                                     e_low=band.split('-')[0],e_high=band.split('-')[1],
                                                     bright=bright,backscale=backscale,
@@ -1712,18 +1716,18 @@ def extract_lc(directory,binning='1',lc_bands_str='3-79',hr_bands='10-50/3-10',c
                                      (rate_err_den_HR / rate_den_HR) ** 2) ** (
                                                 1 / 2))
 
-                plt.errorbar(time_HR, hr_vals, xerr=float(binning), yerr=hr_err.clip(0), ls='-', lw=1,
+                plt.errorbar(time_HR, hr_vals, xerr=float(binning_use), yerr=hr_err.clip(0), ls='-', lw=1,
                          color='grey', ecolor='blue')
 
                 plt.suptitle('NuSTAR '+camlist[i_cam]+' net HR evolution for observation ' + obsid + id_orbit_str+' in the ' + hr_bands + ' keV band'+
-                             'with '+binning+' s binning')
+                             'with '+binning_use+' s binning')
 
                 plt.xlabel('Time (s) after ' + time_zero_HR)
                 plt.ylabel('Hardness Ratio (' + hr_bands + ' keV)')
 
                 plt.tight_layout()
                 plt.savefig(os.path.join(directory,'products'+('_bright' if bright else ''),
-                            'nu'+obsid + id_orbit_str+'_' + camlist[i_cam]+ '_hr_screen_'+hr_bands.replace('/','_')+'_bin_' + binning + '.png'))
+                            'nu'+obsid + id_orbit_str+'_' + camlist[i_cam]+ '_hr_screen_'+hr_bands.replace('/','_')+'_bin_' + binning_use + '.png'))
                 plt.close()
 
     extract_lc_done.set()

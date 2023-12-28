@@ -1043,9 +1043,7 @@ def addcomp(compname,position='last',endmult=None,return_pos=False,modclass=AllM
     if 'cal' in comp_custom:
 
         #note: gaussian calibration components are placed in lastin at the very end of the model
-        if comp_split=='gaussian':
-            start_position=-1
-        else:
+        if comp_split!='gaussian':
             start_position=1
             if multipl:
                 end_multipl=-1
@@ -1280,30 +1278,8 @@ def addcomp(compname,position='last',endmult=None,return_pos=False,modclass=AllM
         gap_start=1
         gap_end=AllModels(1).nParameters
         added_comps_numbers=np.arange(1,len(AllModels(1).componentNames)+1).astype(int)
-        
+
     '''continuum specifics'''
-    if 'cal' in comp_custom:
-        if comp_custom=='calNICERedge':
-            xspec_model(gap_end-2).values=2.42
-            xspec_model(gap_end - 2).frozen=True
-
-            #using the edge only for NICER datagroups, otherwise freezing the normalization at 0
-            for i_grp in range(1,AllData.nGroups):
-                with open(AllData(i_grp).fileName) as hdul:
-                    if 'TELESCOP' not in hdul[1].header or hdul[1].header['TELESCOP']!='NICER':
-                        AllModels(i_grp)(gap_end-1).values=0
-                        AllModels(i_grp)(gap_end-1).frozen=True
-
-        if comp_custom=='calNusTARedge':
-            xspec_model(gap_end-2).values=9.51
-            xspec_model(gap_end - 2).frozen=True
-
-            #using the edge only for NuSTAR datagroups, otherwise freezing the normalization at 0
-            for i_grp in range(1,AllData.nGroups):
-                with open(AllData(i_grp).fileName) as hdul:
-                    if 'TELESCOP' not in hdul[1].header or hdul[1].header['TELESCOP']!='NuSTAR':
-                        AllModels(i_grp)(gap_end-1).values=0
-                        AllModels(i_grp)(gap_end-1).frozen=True
 
     #restricting the continuum powerlaw's photon index to physical values
     if compname=='cont_powerlaw':
@@ -1526,7 +1502,61 @@ def addcomp(compname,position='last',endmult=None,return_pos=False,modclass=AllM
                 AllModels(i_grp)(gap_start).frozen=False
                 
         return_pars+=[1+AllModels(1).nParameters*i_grp for i_grp in range(1,AllData.nGroups)]
-        
+
+    '''
+    Calibration specifics
+    Done after the relink since they affect the linking between components
+    '''
+
+    if 'cal' in comp_custom:
+
+        #for the edges
+        if comp_custom=='calNICER':
+            xspec_model(gap_end-1).values=2.42
+            xspec_model(gap_end-1).frozen=True
+
+            first_group_use=True
+            #using the edge only for NICER datagroups, otherwise freezing the normalization at 0
+            for i_grp in range(1,AllData.nGroups+1):
+                with fits.open(AllData(i_grp).fileName) as hdul:
+                    if 'TELESCOP' not in hdul[1].header or hdul[1].header['TELESCOP']!='NICER':
+                        AllModels(i_grp)(gap_end).link=''
+                        AllModels(i_grp)(gap_end).values=0
+                        AllModels(i_grp)(gap_end).frozen=True
+
+                    else:
+                        if first_group_use:
+                            #allowing the normalization to vary freely
+                            AllModels(i_grp)(gap_end).values = 1
+                            AllModels(i_grp)(gap_end).link=''
+                            AllModels(i_grp)(gap_end).frozen = False
+                            par_tolink=(i_grp-1)*AllModels(1).nParameters+gap_end
+                            first_group_use=False
+                        else:
+                            AllModels(i_grp)(gap_end).link=str(par_tolink)
+
+        if comp_custom=='calNuSTAR':
+            xspec_model(gap_end-1).values=9.51
+            xspec_model(gap_end-1).frozen=True
+
+            first_group_use=True
+            #using the edge only for NuSTAR datagroups, otherwise freezing the normalization at 0
+            for i_grp in range(1,AllData.nGroups+1):
+                with fits.open(AllData(i_grp).fileName) as hdul:
+                    if 'TELESCOP' not in hdul[1].header or hdul[1].header['TELESCOP']!='NuSTAR':
+                        AllModels(i_grp)(gap_end).values=0
+                        AllModels(i_grp)(gap_end).frozen=True
+                    else:
+                        if first_group_use:
+                            #allowing the normalization to vary freely
+                            AllModels(i_grp)(gap_end).values=1
+                            AllModels(i_grp)(gap_end).link=''
+                            AllModels(i_grp)(gap_end).frozen = False
+                            par_tolink=(i_grp-1)*AllModels(1).nParameters+gap_end
+                            first_group_use=False
+                        else:
+                            AllModels(i_grp)(gap_end).link=str(par_tolink)
+
     AllModels.show()
         
     if return_pos:

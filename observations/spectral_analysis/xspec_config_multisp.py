@@ -918,7 +918,8 @@ def xModel(expression,table_dict=None,modclass=AllModels,mod_name='',mod_number=
     if return_mod:
         return AllModels(1,mod_name)
     
-def addcomp(compname,position='last',endmult=None,return_pos=False,modclass=AllModels,included_list=None,values=None,links=None,frozen=None):
+def addcomp(compname,position='last',endmult=None,return_pos=False,modclass=AllModels,
+            included_list=None,values=None,links=None,frozen=None):
     
     '''
     changes the default model to add a new component, by saving the old model parameters and thn loading a new model with the new 
@@ -933,7 +934,7 @@ def addcomp(compname,position='last',endmult=None,return_pos=False,modclass=AllM
     
     the "position" keyword refers to the position of the added component:
         -last: last component in the model
-        -lastin: last component, but inside all the last multiplication(s)
+        -lastin: last component, but inside the last multiplication
         -*xspec component name (with underscore numbering if its not the first)/associated number: BEFORE this component
         the numbering is considered actual component numbering (starting at 1) for positive numbers, 
         and array numberings (negatives up to 0) for negative numbers
@@ -951,7 +952,9 @@ def addcomp(compname,position='last',endmult=None,return_pos=False,modclass=AllM
         
         -glob_constant: global constant factor, frozen at 1 for the first data group and free for all others
             
-        -cont_+component: added inside a first/second component absorption if any
+        -cont_+component: added inside absorption and edge components
+                            NOTE: assumes that all currently existing absorption and edge components are at the
+                            beginning of the model
         
     Lines :
         use (Linetype)-(n/a/na/...)gaussian
@@ -978,7 +981,8 @@ def addcomp(compname,position='last',endmult=None,return_pos=False,modclass=AllM
             (old models) 
         'FeKa'->neutral Fe emission at 6.40
         'FeKb'->neutral Fe emission at 7.06
-        
+
+
         both of these have loose energy constraints instead of vashift ranges
         
         'FeDiaz' ->unphysical Fe emission line, replacing both FeKa and FeKb. Line energy only constrained to a range in [6.-8.] keV
@@ -991,7 +995,15 @@ def addcomp(compname,position='last',endmult=None,return_pos=False,modclass=AllM
         inclination between 50 and 90
         index free
         Rin and Rout frozen
-        
+
+    Calibration:
+        calNICERSiem_gaussian -> NICER Si absorption line at 1.74keV (see 10.1093/mnras/stac2038 for an exemple)
+        calNICER_edge -> NICER 2.42keV absorption edge. ONLY APPLIED TO NICER datagroups
+        calNuSTAR_edge -> NuSTAR 9.51keV absorption edge. ONLY APPLIED TO NuSTAR datagroups
+
+        calibration edge components are only applied to their respective telescope's datagroups.
+        The remainder have MaxTau fixed at 0
+
     all compnames must stay 'attribute'-valid else we won't be able to call them explicitely in fitcomps
     '''
         
@@ -1027,7 +1039,21 @@ def addcomp(compname,position='last',endmult=None,return_pos=False,modclass=AllM
         #staying inside the constant factor if there is one
         if AllModels(1).componentNames[0]=='constant':
             start_position+=1
-            
+
+    if 'cal' in comp_custom:
+
+        #note: gaussian calibration components are placed in lastin at the very end of the model
+        if comp_split=='gaussian':
+            start_position=-1
+        else:
+            start_position=1
+            if multipl:
+                end_multipl=-1
+            #staying inside the constant factor if there is one
+            if AllModels(1).componentNames[0]=='constant':
+                start_position+=1
+
+
     #continuum keyword
     if comp_custom=='cont':
         start_position=1
@@ -1035,9 +1061,16 @@ def addcomp(compname,position='last',endmult=None,return_pos=False,modclass=AllM
             #staying inside the constant factor if there is one
             if AllModels(1).componentNames[0]=='constant':
                 start_position+=1
-            #maintaining inside the absorption component if there is one
-            if 'abs' in AllModels(1).componentNames[0 if AllModels(1).componentNames[0]!='constant' else 1]:
-                start_position+=1
+
+            main_compnames=AllModels(1).componentNames[0 if AllModels(1).componentNames[0]!='constant' else 1]
+
+            #maintaining inside the absorption component if there are some
+            start_position+=sum([elem.startswith('TB') or ('abs' in elem and elem!='gabs')\
+                                 for elem in main_compnames])
+
+            #maiting inside the edge components if there are some
+            start_position+=sum(['edge' in elem for elem in main_compnames])
+
         except:
             pass
                 
@@ -1249,7 +1282,29 @@ def addcomp(compname,position='last',endmult=None,return_pos=False,modclass=AllM
         added_comps_numbers=np.arange(1,len(AllModels(1).componentNames)+1).astype(int)
         
     '''continuum specifics'''
-    
+    if 'cal' in comp_custom:
+        if comp_custom=='calNICERedge':
+            xspec_model(gap_end-2).values=2.42
+            xspec_model(gap_end - 2).frozen=True
+
+            #using the edge only for NICER datagroups, otherwise freezing the normalization at 0
+            for i_grp in range(1,AllData.nGroups):
+                with open(AllData(i_grp).fileName) as hdul:
+                    if 'TELESCOP' not in hdul[1].header or hdul[1].header['TELESCOP']!='NICER':
+                        AllModels(i_grp)(gap_end-1).values=0
+                        AllModels(i_grp)(gap_end-1).frozen=True
+
+        if comp_custom=='calNusTARedge':
+            xspec_model(gap_end-2).values=9.51
+            xspec_model(gap_end - 2).frozen=True
+
+            #using the edge only for NuSTAR datagroups, otherwise freezing the normalization at 0
+            for i_grp in range(1,AllData.nGroups):
+                with open(AllData(i_grp).fileName) as hdul:
+                    if 'TELESCOP' not in hdul[1].header or hdul[1].header['TELESCOP']!='NuSTAR':
+                        AllModels(i_grp)(gap_end-1).values=0
+                        AllModels(i_grp)(gap_end-1).frozen=True
+
     #restricting the continuum powerlaw's photon index to physical values
     if compname=='cont_powerlaw':
         xspec_model(gap_end-1).values=[1.0, 0.01, 1.0, 1.0, 3.0, 3.0]
@@ -1313,9 +1368,16 @@ def addcomp(compname,position='last',endmult=None,return_pos=False,modclass=AllM
             #restricting energies for emission lines
             if gaussian_type in ['FeDiaz']:
                 xspec_model(gap_end-2).values=[ener_line,ener_line/100,6.0,6.0,8.0,8.0]
-            else:                
-                #outputing the line values (delta of 1/100 of the line ener, no redshift, +0.4keV blueshift max)
-                xspec_model(gap_end-2).values=[ener_line,ener_line/100,ener_line-0.2,ener_line-0.2,ener_line+0.2,ener_line+0.2]
+            else:
+                if 'cal' in gaussian_type:
+                    xspec_model(gap_end - 2).values = [ener_line, ener_line / 100, ener_line, ener_line,
+                                                       ener_line,
+                                                       ener_line]
+                    xspec_model(gap_end - 2).frozen=True
+                else:
+                    #outputing the line values (delta of 1/100 of the line ener, no redshift, +0.4keV blueshift max)
+                    xspec_model(gap_end-2).values=[ener_line,ener_line/100,ener_line-0.2,ener_line-0.2,ener_line+0.2,
+                                                   ener_line+0.2]
 
 
         #resticting the with of broad lines
@@ -3825,10 +3887,15 @@ class fitcomp:
             comp_split=compname
             
         #defining if the component is an absorption component:
-        if 'abs' in comp_split or 'tbnew' in comp_split or 'tbnew_gas' in comp_split:
+        if 'abs' in comp_split or 'TB' in comp_split or 'tbnew' in comp_split or 'tbnew_gas' in comp_split:
             self.absorption=True
         else:
             self.absorption=False
+
+        if 'cal' in comp_prefix:
+            self.calibration=True
+        else:
+            self.calibration=False
             
         # or 'laor' in comp_split
         if 'gaussian' in comp_split:
@@ -3848,7 +3915,7 @@ class fitcomp:
             self.named_line=False
             self.named_absline=False
             
-        if 'constant' in comp_split:
+        if 'constant' in comp_split or 'cal' in comp_split:
             self.mandatory=True
         else:
             self.mandatory=False

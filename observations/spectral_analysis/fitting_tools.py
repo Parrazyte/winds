@@ -43,7 +43,7 @@ lines_std={         #don't change the first 8, there are explicit calls in the c
                   #have restrained energy ranges compared to their broad counterparts
                   'FeKa0em':r'Fe K$\alpha$',
                   'FeKb0em':r'Fe K$\beta$',
-                  'nicercal0em':r'Nicer Cal'}
+                  'calNICER0em':r'Nicer Cal'}
 
 lines_std_names=list(lines_std.keys())
 
@@ -72,7 +72,7 @@ lines_e_dict={
                   #have restrained energy ranges compared to their broad counterparts
                    'FeKa0em':[6.4,-10000,10000],
                    'FeKb0em':[7.06,-10000,10000],
-                   'nicercal0em':[1.7,-3000,3000]}
+                   'calNICERSiem':[1.74]}
     
 #+ line resolved
 
@@ -122,7 +122,7 @@ lines_w_dict={
                   'FeKb0em':[1e-2,0.,0.05],
                   'FeKa25em':[1e-2,0.,0.05],
                   'FeKa26em':[1e-2,0.,0.05],
-                  'nicercal0em':[0.,0.,0.2],
+                  'calNICERSiem':[0.,0.,0.2],
                   }
 
 lines_broad_w_dict={
@@ -229,13 +229,14 @@ def model_list(model_id='lines',give_groups=False):
         
         interact_groups=avail_comps
 
-    if model_id=='cont_lowe':
+    if model_id=='cont_detailed':
 
         '''
-        subset of continuum for NICER lowe spectra
+        subset of continuum with NICER and NuSTAR calibration components
         '''
 
-        avail_comps = ['glob_constant', 'glob_TBabs', 'cont_diskbb', 'cont_powerlaw', 'nicercal0em_gaussian']
+        avail_comps = ['glob_constant', 'glob_TBabs', 'cont_diskbb', 'cont_powerlaw', 
+                       'calNICERSiem_gaussian','calNuSTAR_edge','calNICER_edge']
 
         interact_groups = avail_comps
 

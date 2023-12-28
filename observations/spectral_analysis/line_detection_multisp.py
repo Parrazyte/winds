@@ -183,7 +183,7 @@ ap.add_argument('-overwrite',nargs=1,
 
 #note : will skip exposures for which the exposure didn't compute or with logged errors
 ap.add_argument('-skip_started',nargs=1,help='skip all exposures listed in the local summary_line_det file',
-                default=True,type=bool)
+                default=False,type=bool)
 
 ap.add_argument('-skip_complete',nargs=1,help='skip completed exposures listed in the local summary_line_det file',
                 default=False,type=bool)
@@ -208,7 +208,7 @@ ap.add_argument('-xspec_window',nargs=1,help='xspec window id (auto tries to pic
 
 '''MODELS'''
 #### Models and abslines lock
-ap.add_argument('-cont_model',nargs=1,help='model list to use for the autofit computation',default='cont_lowe',type=str)
+ap.add_argument('-cont_model',nargs=1,help='model list to use for the autofit computation',default='cont_detailed',type=str)
 ap.add_argument('-autofit_model',nargs=1,help='model list to use for the autofit computation',
                 default='lines_narrow',type=str)
 #narrow or resolved mainly
@@ -312,7 +312,7 @@ ap.add_argument('-skip_nongrating',nargs=1,
 ap.add_argument('-skip_flares',nargs=1,help='skip flare GTIs',default=True,type=bool)
 
 ap.add_argument('-write_pdf',nargs=1,help='overwrite finished pdf at the end of the line detection',
-                default=False,type=bool)
+                default=True,type=bool)
 
 #can be set to false to gain time when testing or if the aborted pdf were already done
 ap.add_argument('-write_aborted_pdf',nargs=1,help='create aborted pdfs at the end of the computation',default=True,
@@ -377,6 +377,9 @@ ap.add_argument("-pmiss",nargs=1,help='include spectra with no pileup info',defa
 #note: these values are modified for higher energy instruments, like suzaku or NuSTAR
 ap.add_argument("-hid_cont_range",nargs=1,
                 help='min and max energies of the hid band fit',default='3 10',type=str)
+
+ap.add_argument('-broad_HID_mode',nargs=1,
+                help='uses the broad fit in stead of the HID fit',default=True,type=str)
 
 ap.add_argument("-line_cont_range",nargs=1,
                 help='min and max energies of the line continuum broand band fit',default='4 10',type=str)
@@ -568,6 +571,7 @@ write_aborted_pdf=args.write_aborted_pdf
 hid_sort_method=args.hid_sort_method
 reverse_epoch=args.reverse_epoch
 reload_fakes=args.reload_fakes
+broad_HID_mode=args.broad_HID_mode
 
 megumi_files=args.megumi_files
 suzaku_hid_cont_range=np.array(args.suzaku_hid_cont_range.split(' ')).astype(float)
@@ -1354,6 +1358,9 @@ def pdf_summary(epoch_files,fit_ok=False,summary_epoch=None):
 
         if elem_sat=='NuSTAR':
 
+
+            elem_epoch_nogti=elem_epoch.split('-')[0]
+
             if 'A0' in elem_epoch.split('_')[0]:
                 nudet='FPMA'
             elif 'B0' in elem_epoch.split('_')[0]:
@@ -1361,28 +1368,43 @@ def pdf_summary(epoch_files,fit_ok=False,summary_epoch=None):
 
             pdf.add_page()
             pdf.set_font('helvetica', 'B', 16)
-            pdf.cell(1, 10, nudet+' Data reduction for observation ' + elem_epoch, align='C', center=True)
+            pdf.cell(1, 10, nudet+' Data reduction for observation ' + elem_epoch_nogti, align='C', center=True)
             pdf.ln(10)
             pdf.ln(10)
             pdf.cell(1, 30, 'Region definition                                               ' +
                      'BBG selection', align='C', center=True)
 
-            pdf.image(elem_epoch + '_auto_reg_screen.png', x=2, y=50, w=140)
 
-            pdf.image(elem_epoch + '_vis_CCD_1_crop.png', x=150, y=50, w=70)
-            pdf.image(elem_epoch + '_vis_CCD_2_mask.png', x=220, y=50, w=70)
-            pdf.image(elem_epoch + '_vis_CCD_3_cut.png', x=150, y=120, w=70)
-            pdf.image(elem_epoch + '_vis_CCD_4_bg.png', x=220, y=120, w=70)
+            pdf.image(elem_epoch_nogti + '_auto_reg_screen.png', x=2, y=50, w=140)
+
+            pdf.image(elem_epoch_nogti + '_vis_CCD_1_crop.png', x=150, y=50, w=70)
+            pdf.image(elem_epoch_nogti + '_vis_CCD_2_mask.png', x=220, y=50, w=70)
+            pdf.image(elem_epoch_nogti + '_vis_CCD_3_cut.png', x=150, y=120, w=70)
+            pdf.image(elem_epoch_nogti + '_vis_CCD_4_bg.png', x=220, y=120, w=70)
 
             pdf.add_page()
             pdf.set_font('helvetica', 'B', 16)
-            pdf.cell(1, 10, nudet+' Lightcurves for observation ' + elem_epoch, align='C', center=True)
+            pdf.cell(1, 10, nudet+' Obs Lightcurves for observation ' + elem_epoch, align='C', center=True)
 
-            pdf.image(elem_epoch[:-3] + '_'+nudet+'_lc_screen_3_79_bin_100.png', x=2, y=50, w=140)
+            elem_epoch_obsid = elem_epoch.split('-')[0][:-3]
 
-            pdf.image(elem_epoch[:-3] + '_'+nudet+'_hr_screen_10-50_3-10_bin_100.png', x=150, y=50, w=70)
-            pdf.image(elem_epoch[:-3] + '_'+nudet+'_lc_screen_3_10_bin_100.png', x=220, y=50, w=70)
-            pdf.image(elem_epoch[:-3] + '_'+nudet+'_lc_screen_10_50_bin_100.png', x=220, y=120, w=70)
+            pdf.image(elem_epoch_obsid + '_'+nudet+'_lc_screen_3_79_bin_100.png', x=2, y=50, w=140)
+            pdf.image(elem_epoch_obsid + '_'+nudet+'_hr_screen_10-50_3-10_bin_100.png', x=150, y=50, w=70)
+            pdf.image(elem_epoch_obsid + '_'+nudet+'_lc_screen_3_10_bin_100.png', x=220, y=50, w=70)
+            pdf.image(elem_epoch_obsid + '_'+nudet+'_lc_screen_10_50_bin_100.png', x=220, y=120, w=70)
+
+            #adding one page for individual orbits
+            if '-' in elem_epoch:
+                pdf.add_page()
+                pdf.set_font('helvetica', 'B', 16)
+                pdf.cell(1, 10, nudet+' GTI Lightcurves for observation ' + elem_epoch, align='C', center=True)
+
+                elem_epoch_gti=elem_epoch.split('-')[1]
+
+                pdf.image(elem_epoch_obsid + '-' + elem_epoch_gti + '_'+nudet+'_lc_screen_3_79_bin_10.png', x=2, y=50, w=140)
+                pdf.image(elem_epoch_obsid + '-' + elem_epoch_gti + '_'+nudet+'_hr_screen_10-50_3-10_bin_10.png', x=150, y=50, w=70)
+                pdf.image(elem_epoch_obsid + '-' + elem_epoch_gti + '_'+nudet+'_lc_screen_3_10_bin_10.png', x=220, y=50, w=70)
+                pdf.image(elem_epoch_obsid + '-' + elem_epoch_gti + '_'+nudet+'_lc_screen_10_50_bin_10.png', x=220, y=120, w=70)
 
 
         if elem_sat=='XMM':
@@ -2438,6 +2460,8 @@ def line_detect(epoch_id):
         else:
             fitlines_hid=fitlines_broad
 
+            assert not broad_HID_mode, "This failsafe is for older computation which shouldn't run broad_HID_mode"
+
             # refitting in hid band for the HID values
             ignore_data_indiv(hid_cont_range[0], hid_cont_range[1], reset=True, sat_low_groups=e_sat_low_indiv,
                               sat_high_groups=e_sat_high_indiv,glob_ignore_bands=ignore_bands_indiv)
@@ -2516,7 +2540,9 @@ def line_detect(epoch_id):
 
             #creating the automatic fit class for the standard continuum
             if broad_absval!=0:
-                fitcont_high=fitmod(comp_cont,curr_logfile,curr_logfile_write,absval=broad_absval)
+                fitcont_high=fitmod([elem for elem in comp_cont if elem not in ['calNICERSiem_gaussian',
+                                                                                'calNICER_edge']],
+                                    curr_logfile,curr_logfile_write,absval=broad_absval)
             else:
                 #creating the fitcont without the absorption component if it didn't exist in the broad model
                 fitcont_high=fitmod([elem for elem in comp_cont if elem!='glob_phabs'],curr_logfile,curr_logfile_write)
@@ -2650,33 +2676,38 @@ def line_detect(epoch_id):
             #saving the model
             data_broad=allmodel_data()
             print('\nComputing HID broad fit...')
-            AllModels.clear()
 
-            #reloading the scorpeon save (if there is one, aka if with NICER),
-            # from the broad fit and freezing it to avoid further variations
-            xscorpeon.load(scorpeon_save=data_broad.scorpeon,frozen=True)
+            if broad_HID_mode:
+                fitcont_hid=fitcont_broad
 
-            ignore_data_indiv(hid_cont_range[0], hid_cont_range[1], reset=True, sat_low_groups=e_sat_low_indiv,
-                              sat_high_groups=e_sat_high_indiv,glob_ignore_bands=ignore_bands_indiv)
-
-            #if the stat is low we don't do the autofit anyway so we'd rather get the best fit possible
-            if not flag_lowSNR_line:
-                for i_sp in range(len(epoch_files_good)):
-                    if line_cont_ig_indiv[i_sp] != '':
-                        AllData(i_sp+1).ignore(line_cont_ig_indiv[i_sp])
-
-            #creating the automatic fit class for the standard continuum
-            if broad_absval!=0:
-                fitcont_hid=fitmod(comp_cont,curr_logfile,curr_logfile_write,absval=broad_absval)
             else:
-                #creating the fitcont without the absorption component if it didn't exist in the broad model
-                fitcont_hid=fitmod([elem for elem in comp_cont if elem!='glob_phabs'],curr_logfile,curr_logfile_write)
+                AllModels.clear()
 
-            # try:
-            #fitting
-            fitcont_hid.global_fit(split_fit=split_fit)
+                #reloading the scorpeon save (if there is one, aka if with NICER),
+                # from the broad fit and freezing it to avoid further variations
+                xscorpeon.load(scorpeon_save=data_broad.scorpeon,frozen=True)
 
-            mod_fitcont=allmodel_data()
+                ignore_data_indiv(hid_cont_range[0], hid_cont_range[1], reset=True, sat_low_groups=e_sat_low_indiv,
+                                  sat_high_groups=e_sat_high_indiv,glob_ignore_bands=ignore_bands_indiv)
+
+                #if the stat is low we don't do the autofit anyway so we'd rather get the best fit possible
+                if not flag_lowSNR_line:
+                    for i_sp in range(len(epoch_files_good)):
+                        if line_cont_ig_indiv[i_sp] != '':
+                            AllData(i_sp+1).ignore(line_cont_ig_indiv[i_sp])
+
+                #creating the automatic fit class for the standard continuum
+                if broad_absval!=0:
+                    fitcont_hid=fitmod(comp_cont,curr_logfile,curr_logfile_write,absval=broad_absval)
+                else:
+                    #creating the fitcont without the absorption component if it didn't exist in the broad model
+                    fitcont_hid=fitmod([elem for elem in comp_cont if elem!='glob_phabs'],curr_logfile,curr_logfile_write)
+
+                # try:
+                #fitting
+                fitcont_hid.global_fit(split_fit=split_fit)
+
+                mod_fitcont=allmodel_data()
 
             chi2_cont=Fit.statistic
             # except:
@@ -2724,7 +2755,7 @@ def line_detect(epoch_id):
 
         #reloading the frozen scorpeon data\
         # (which won't change anything if it hasn't been fitted but will help otherwise)
-        xscorpeon.load(data_broad.scorpeon,frozen=True)
+        xscorpeon.load(scorpeon_save=data_broad.scorpeon,frozen=True)
         result_high_fit=high_fit(broad_absval)
 
         #if the function returns an array of length 1, it means it returned an error message
@@ -2855,15 +2886,16 @@ def line_detect(epoch_id):
 
                 fitlines.fixed_abs=broad_absval
 
-                #refitting in hid band for the HID values
-                ignore_data_indiv(hid_cont_range[0], hid_cont_range[1], reset=True, sat_low_groups=e_sat_low_indiv,
-                                  sat_high_groups=e_sat_high_indiv, glob_ignore_bands=ignore_bands_indiv)
+                if broad_HID_mode:
+                    #refitting in hid band for the HID values
+                    ignore_data_indiv(hid_cont_range[0], hid_cont_range[1], reset=True, sat_low_groups=e_sat_low_indiv,
+                                      sat_high_groups=e_sat_high_indiv, glob_ignore_bands=ignore_bands_indiv)
 
-                #fitting the model to the new energy band first
-                calc_fit(logfile=fitlines.logfile)
+                    #fitting the model to the new energy band first
+                    calc_fit(logfile=fitlines.logfile)
 
-                #autofit
-                fitlines.global_fit(chain=False,lock_lines=True,directory=outdir,observ_id=epoch_observ[0],split_fit=split_fit)
+                    #autofit
+                    fitlines.global_fit(chain=False,lock_lines=True,directory=outdir,observ_id=epoch_observ[0],split_fit=split_fit)
 
                 fitlines.dump(outdir+'/'+epoch_observ[0]+'_fitmod_broadhid_post_auto.pkl')
 
@@ -2877,7 +2909,7 @@ def line_detect(epoch_id):
 
                 for comp in [elem for elem in fitlines.includedlist if elem is not None]:
 
-                    if comp.line:
+                    if comp.line and not comp.calibration:
                         #unfreezing the parameter with the mask created at the first addition of the component
                         unfreeze(parlist=np.array(comp.parlist)[comp.unlocked_pars_base_mask])
 
@@ -4116,6 +4148,8 @@ for epoch_id,epoch_files in enumerate(epoch_list):
         if os.path.isfile(pdf_name):
             print('\nLine detection already computed for this exposure (recap PDF exists). Skipping...')
             continue
+
+    breakpoint()
 
     #we don't use the error catcher/log file in restrict mode to avoid passing through bpoints
     if not restrict:

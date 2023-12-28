@@ -2909,7 +2909,7 @@ def line_detect(epoch_id):
 
                 for comp in [elem for elem in fitlines.includedlist if elem is not None]:
 
-                    if comp.line and not comp.calibration:
+                    if comp.line:
                         #unfreezing the parameter with the mask created at the first addition of the component
                         unfreeze(parlist=np.array(comp.parlist)[comp.unlocked_pars_base_mask])
 

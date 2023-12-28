@@ -3898,7 +3898,7 @@ class fitcomp:
             self.calibration=False
             
         # or 'laor' in comp_split
-        if 'gaussian' in comp_split:
+        if 'gaussian' in comp_split and not self.calibration:
             self.line=True
         else:
             self.line=False

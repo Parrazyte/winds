@@ -411,6 +411,8 @@ class scorpeon_manager:
 
                     mod_sky(i_par+1).frozen=True
 
+                pass
+
     def clear(self):
         mod_save=allmodel_data()
         AllModels.clear()
@@ -684,10 +686,7 @@ def model_load(model_saves,mod_name='',mod_number=1,gap_par=None,in_add=False,ta
                     #we add 1 to the gap length since the lower bound is included in the gap                    
                     parload_grp[i_par]=str(save_grp.values[i_par-1-(gap_end-gap_start+1)])[1:-1]
 
-        try:
-            xspec_mod_grp.setPars(parload_grp)
-        except:
-            breakpoint()
+        xspec_mod_grp.setPars(parload_grp)
 
     #we load directly all the values dictionnaries before the rest to avoid problems with links if the intervals don't follow
     for i_grp,save_grp in enumerate(model_saves_arr):
@@ -1040,7 +1039,7 @@ def addcomp(compname,position='last',endmult=None,return_pos=False,modclass=AllM
         if AllModels(1).componentNames[0]=='constant':
             start_position+=1
 
-    if 'cal' in comp_custom:
+    if comp_custom is not None and 'cal' in comp_custom:
 
         #note: gaussian calibration components are placed in lastin at the very end of the model
         if comp_split!='gaussian':
@@ -1056,11 +1055,12 @@ def addcomp(compname,position='last',endmult=None,return_pos=False,modclass=AllM
     if comp_custom=='cont':
         start_position=1
         try:
+
+            main_compnames = AllModels(1).componentNames
+
             #staying inside the constant factor if there is one
             if AllModels(1).componentNames[0]=='constant':
                 start_position+=1
-
-            main_compnames=AllModels(1).componentNames[0 if AllModels(1).componentNames[0]!='constant' else 1]
 
             #maintaining inside the absorption component if there are some
             start_position+=sum([elem.startswith('TB') or ('abs' in elem and elem!='gabs')\
@@ -1756,19 +1756,12 @@ def delcomp(compname,modclass=AllModels,give_ndel=False):
             if int(link_par)%AllModels(1).nParameters in deleted_par_ids_single:
                 print('\nParameter '+str(grp_id*AllModels(1).nParameters+par_id+1)+
                       ' was linked to one of the deleted components parameters. Deleting link.')
-                
-                try:
-                    #Deleting links resets the values boundaries so we save and replace the values to make non-default bounds remain saved
-                    par_linked_vals=AllModels(grp_id+1)(par_id+1).values
-                except:
-                    breakpoint()
+
+                #Deleting links resets the values boundaries so we save and replace the values to make non-default bounds remain saved
+                par_linked_vals=AllModels(grp_id+1)(par_id+1).values
 
                 mod_data_grp.links[par_id]=''
-                try:
-                    AllModels(grp_id+1)(par_id+1).values=par_linked_vals
-                except:
-                    breakpoint()
-
+                AllModels(grp_id+1)(par_id+1).values=par_linked_vals
                 continue
 
             #shifting the link value if it points to a parameter originally after the deleted components
@@ -2658,7 +2651,176 @@ class fitmod:
                     comps_errlocked+=[allcomp]
                         
         return comps_errlocked
-    
+
+    def add_allcomps(self, chain=False, lock_lines=False, no_abslines=False, nomixline=True, split_fit=True):
+
+        '''
+        Adds all components from the excl_list in the order of the list
+
+        if nomixline is set to True,
+        the emission/absorption line components of the same type are mutually exclusive (aka including one deletes the other)
+
+        '''
+
+        # list of currently NOT included components (doesn't take into account continuum components not in the model list)
+        curr_exclist = [elem for elem in self.complist if elem not in self.includedlist]
+
+        if len(curr_exclist) == 0:
+            return True
+
+        self.print_xlog('\nlog:Adding all available components:\n')
+        self.print_xlog(str([curr_exclist[i].compname for i in range(len(curr_exclist))]))
+
+        for i_excomp, component in enumerate(curr_exclist):
+
+            # avoiding starting the model with a multiplicative component
+            assert not (component.multipl and len(self.includedlist) == 0), 'First component of the mod list is multipl. Order change required.'
+
+            # skipping adding lines in lines locked mode
+            if component.line and lock_lines:
+                continue
+
+            # skipping adding absorption lines in no abslines mode
+            if component.named_absline and no_abslines:
+                continue
+
+            # excluding addition of named components with pendants when not allowing mixing between emission and absorption of the same line
+            if component.named_line and nomixline:
+
+                # fetching the name of the pendant
+                if component.named_absline:
+                    line_pendant_prefix = component.compname.split('_')[0].replace('abs', 'em')
+                else:
+                    line_pendant_prefix = component.compname.split('_')[0].replace('em', 'abs')
+
+                # fetching the line pendant component
+                line_pendant_name_list = [elem for elem in self.name_complist if line_pendant_prefix in elem]
+
+                if len(line_pendant_name_list) != 0:
+                    if len(line_pendant_name_list) != 1:
+                        # should not happen
+                        breakpoint()
+
+                    line_pendant_name = line_pendant_name_list[0]
+
+                    line_pendant_comp = getattr(self, line_pendant_name)
+
+                    # skipping the component addition if the pendant is already included
+                    if line_pendant_comp.included:
+                        continue
+
+            self.includedlist = component.addtomod(fixed_vals=[self.fixed_abs] if component.absorption \
+                                                                                  and self.fixed_abs is not None else None,
+                                                   incl_list=self.includedlist)
+
+            # updating the fitcomps before anything else
+            self.update_fitcomps()
+
+            # fitting the component only
+            component.fit(split_fit=split_fit)
+
+            # fetching the interactive components from the list if it is provided
+            if self.interact_groups is not None:
+                # searching the component in the intervals
+                for group in self.interact_groups:
+                    if component.compname in group:
+                        comp_group = np.array(group)[np.array(group) != component.compname]
+                        break
+
+            '''
+            unfreezing the components previously added and fitting once more every time
+            we unfreeze them in reverse model order (i.e. ~increasing significance)
+            '''
+
+            if split_fit:
+                # list of components not in the same group as the currently tested component
+                comps_errlocked = self.list_comps_errlocked()
+
+                for i_comp, added_comp in enumerate(self.includedlist[::-1]):
+
+                    # skipping placeholders
+                    if added_comp is None:
+                        continue
+
+                    # if we arrived at the first (last) component of the initial continuum
+                    if added_comp in self.cont_complist:
+                        self.print_xlog('\nlog:Unfreezing the continuum')
+
+                        # we unfreeze all the remaining components (all from the continuum) and test them for absorption components
+                        # which we error_lock
+                        for cont_comp in self.includedlist[::-1][i_comp:]:
+                            # here we do check for placeholders directly in the test since i_comp can factor in some placeholders
+                            if cont_comp is not None and (not cont_comp.line or not lock_lines):
+                                cont_comp.unfreeze()
+
+                            # unfreezing constant factors for all but the first datagroup
+                            if AllModels(1).componentNames[0] == 'constant' and AllData.nGroups > 1:
+                                for i_grp in range(2, AllData.nGroups + 1):
+                                    AllModels(i_grp)(1).frozen = False
+
+                    elif not added_comp.line or not lock_lines:
+                        self.print_xlog('\nlog:Unfreezing ' + added_comp.compname + ' component.')
+                        added_comp.unfreeze()
+
+                    '''
+                    Note: In rare cases, the fit can get stuck and increase the fit value when decreasing components (probably a bug)
+                    To avoid this, we store the model and the chi² value at each unfreeze and reload the model at the end of each unfreezing
+                    if the fit value has not improved
+                    '''
+
+                    # storing the model and fit
+                    pre_unfreeze_mod = allmodel_data()
+                    pre_unfreeze_fit = Fit.statistic
+
+                    # fitting with the new freeze state
+                    calc_fit(logfile=self.logfile if chain else None)
+
+                    # this is only for non continuum components
+                    if self.interact_groups is not None:
+
+                        if added_comp.compname not in comp_group:
+                            self.print_xlog(
+                                '\nlog:Component ' + added_comp.compname + ' not in group of component ' + component.compname + '.\n' +
+                                'adding it to the error-locked list before interaction to avoid bogging the fit down...')
+                            comps_errlocked += [added_comp]
+                        else:
+                            self.print_xlog(
+                                '\nlog:Component ' + added_comp.compname + ' in the same group as component ' + component.compname + '.\n')
+
+                    # freezing the error locked components before the error computation
+                    for elem_comp in comps_errlocked:
+                        elem_comp.freeze()
+
+                    # if we reached the continuum step, we compute the errors starting at parameter 1 (i.e. all parameters)
+                    if added_comp.continuum:
+                        error_str = '1-' + str(AllModels(1).nParameters * AllData.nGroups)
+
+                    # in the other case, we start at the current component's first parameter index
+                    else:
+                        error_str = str(added_comp.parlist[0]) + '-' + str(AllModels(1).nParameters * AllData.nGroups)
+
+                    calc_error(self.logfile, param=error_str, indiv=True)
+
+                    # unfreezing everything back
+                    for elem_comp in comps_errlocked:
+                        elem_comp.unfreeze()
+
+                    # reloading the previous model iteration (aka not doing the fit with this combination of unfrozen components)
+                    if Fit.statistic > pre_unfreeze_fit:
+                        self.print_xlog('\nlog:Unfreezing ' + added_comp.compname + ' component worsens the fit.' + \
+                                        '\n Restoring previous iteration for next component.')
+                        pre_unfreeze_mod.load()
+
+                    # we can stop the loop after the continuum unfreezing iteration
+                    if added_comp in self.cont_complist:
+                        break
+
+            # storing the final fit in the component's save
+            component.fitted_mod = allmodel_data()
+
+        self.update_fitcomps()
+
+
     def test_addcomp(self,chain=False,lock_lines=False,no_abslines=False,nomixline=True,split_fit=True,
                      ftest_threshold=def_ftest_threshold,ftest_leeway=def_ftest_leeway):
         
@@ -2701,7 +2863,14 @@ class fitmod:
             #skipping adding absorption lines in no abslines mode
             if component.named_absline and no_abslines:
                 continue
-            
+
+            #only adding the calibration components if their relevant energies is inside what is currently noticed
+            if component.calibration:
+                Plot('ldata')
+                ener_bounds=[Plot.x()[0],Plot.x()[-1]]
+                if not component.cal_e>=ener_bounds[0] and component.cal_e<=ener_bounds[1]:
+                    continue
+
             #excluding addition of named components with pendants when not allowing mixing between emission and absorption of the same line
             if component.named_line and nomixline:
 
@@ -2726,8 +2895,7 @@ class fitmod:
                     #skipping the component addition if the pendant is already included
                     if line_pendant_comp.included:
                         continue
-                
-            
+
             #not adding continuum components already in the model
             self.print_xlog('\nlog:Testing significance of '+component.compname+' component.')                    
             
@@ -3319,10 +3487,12 @@ class fitmod:
         return par_peg_comps
     
     def global_fit(self,chain=False,directory=None,observ_id=None,freeze_final_pegged=True,no_abslines=False,lock_lines=False,nomixline=True,split_fit=True,
-                   ftest_threshold=def_ftest_threshold,ftest_leeway=def_ftest_leeway):
+                   ftest_threshold=def_ftest_threshold,ftest_leeway=def_ftest_leeway,method='opt'):
         
         '''
-        Fits components progressively in order of fit significance when being added 1 by 1
+        Fits components in diffrerent manners:
+         -'force_all'   : forces addition of all available component in the order of the list
+         -'opt'         : progressively in order of fit significance when being added 1 by 1
         
         Components are added by default at the end of the model and inside global multiplicative components,
         except when keywords like glob or cont change this.
@@ -3339,21 +3509,25 @@ class fitmod:
 
         #the main condition for stopping the fitting process is having added every possible component
         #of course we need to take off the placeholders to compare the lists
-        while [elem for elem in self.includedlist if elem is not None]!=self.complist:
-            
-            comp_finished=self.test_addcomp(chain=chain,lock_lines=lock_lines,no_abslines=no_abslines,nomixline=nomixline,split_fit=split_fit,
-                                            ftest_threshold=ftest_threshold,ftest_leeway=ftest_leeway)
-                      
-            if comp_finished:
-                break
-            
-            #we only do this for >2 components since the first one is necessarily significant and the second one too if it was just added
-            if len(self.includedlist)>2:
-                self.test_delcomp(chain,lock_lines,in_add=True,ftest_threshold=ftest_threshold,ftest_leeway=ftest_leeway)
 
-            #testing for line inversion when available
-            if not lock_lines and nomixline:
-                self.test_mix_lines(chain)
+        if method=='force_all':
+            self.add_allcomps(chain=chain,lock_lines=lock_lines,no_abslines=no_abslines,nomixline=nomixline,split_fit=split_fit)
+        elif method=='opt':
+            while [elem for elem in self.includedlist if elem is not None]!=self.complist:
+
+                comp_finished=self.test_addcomp(chain=chain,lock_lines=lock_lines,no_abslines=no_abslines,nomixline=nomixline,split_fit=split_fit,
+                                                ftest_threshold=ftest_threshold,ftest_leeway=ftest_leeway)
+
+                if comp_finished:
+                    break
+
+                #we only do this for >2 components since the first one is necessarily significant and the second one too if it was just added
+                if len(self.includedlist)>2:
+                    self.test_delcomp(chain,lock_lines,in_add=True,ftest_threshold=ftest_threshold,ftest_leeway=ftest_leeway)
+
+                #testing for line inversion when available
+                if not lock_lines and nomixline:
+                    self.test_mix_lines(chain)
 
         '''Checking if unlinking the energies of each absorption line is statistically significant'''
                             
@@ -3380,12 +3554,13 @@ class fitmod:
             calc_fit(logfile=self.logfile if chain else None)        
             calc_error(self.logfile,param='1-'+str(AllModels(1).nParameters*AllData.nGroups),indiv=True)
 
-        '''
-        last run of component deletion with the new minimum
-        '''
-        
-        #this test is not skipped even if the fit has not been modified in the unlinking/pegging etc because it uses a stricter threshold
-        self.test_delcomp(chain,lock_lines,in_add=False,ftest_threshold=ftest_threshold,ftest_leeway=ftest_leeway)
+        if method=='opt':
+            '''
+            last run of component deletion with the new minimum
+            '''
+
+            #this test is not skipped even if the fit has not been modified in the unlinking/pegging etc because it uses a stricter threshold
+            self.test_delcomp(chain,lock_lines,in_add=False,ftest_threshold=ftest_threshold,ftest_leeway=ftest_leeway)
         
         # currently disabled
         # if not (abs(Fit.statistic-chi_pre_unlink)<0.1 and Fit.dof==dof_pre_unlink):
@@ -3394,6 +3569,7 @@ class fitmod:
         #     self.print_xlog('\nNo modification after main component test loop. Skipping last component deletion test.')
         
         ####testing unpegging pegged parameters
+
         '''
         testing if unpegging pegged parameters 1 by 1 improves the latest version of the fit
         '''
@@ -3454,8 +3630,8 @@ class fitmod:
                     for par_peg_grp,par_peg_id in par_peg_ids:
                         AllModels(par_peg_grp)(par_peg_id).frozen=False
                     
-                
-                self.test_delcomp(chain,lock_lines,ftest_threshold=ftest_threshold,ftest_leeway=ftest_leeway)
+                if method=='opt':
+                    self.test_delcomp(chain,lock_lines,ftest_threshold=ftest_threshold,ftest_leeway=ftest_leeway)
                 
                 Fit.perform()
                 
@@ -3498,7 +3674,7 @@ class fitmod:
         #updating the fitcomps to have up to date links to the xspec components (since they break at each model_load)
         self.update_fitcomps()
         
-        self.print_xlog('\nlog:Progressive fit complete.')
+        self.print_xlog('\nlog:Global fit complete.')
         
     def get_usedpars_vals(self):
         
@@ -3924,6 +4100,14 @@ class fitcomp:
 
         if 'cal' in comp_prefix:
             self.calibration=True
+
+            #storing the energies of the components to see if they should be tested for
+            if comp_prefix=='calNICER':
+                cal_e=2.42
+            elif comp_prefix=='calNuSTAR':
+                cal_e=9.51
+            elif comp_prefix=='calNICERSiem':
+                cal_e=1.74
         else:
             self.calibration=False
             
@@ -3945,7 +4129,7 @@ class fitcomp:
             self.named_line=False
             self.named_absline=False
             
-        if 'constant' in comp_split or 'cal' in comp_split:
+        if 'constant' in comp_split or self.calibration:
             self.mandatory=True
         else:
             self.mandatory=False

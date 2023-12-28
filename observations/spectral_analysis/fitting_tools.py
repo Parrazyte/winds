@@ -233,12 +233,14 @@ def model_list(model_id='lines',give_groups=False):
 
         '''
         subset of continuum with NICER and NuSTAR calibration components
+        
+        NOTE: the order here matters because we force the use of all these components in this order
         '''
 
-        avail_comps = ['glob_constant', 'glob_TBabs', 'cont_diskbb', 'cont_powerlaw', 
-                       'calNICERSiem_gaussian','calNuSTAR_edge','calNICER_edge']
+        avail_comps = ['cont_diskbb', 'glob_TBabs','cont_powerlaw', 'glob_constant',
+                       'calNICERSiem_gaussian','calNICER_edge','calNuSTAR_edge']
 
-        interact_groups = avail_comps
+        interact_groups = None
 
     if model_id=='cont':
         

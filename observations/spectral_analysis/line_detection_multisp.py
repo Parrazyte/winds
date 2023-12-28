@@ -159,8 +159,14 @@ ap = argparse.ArgumentParser(description='Script to perform line detection in X-
 
 '''GENERAL OPTIONS'''
 
-ap.add_argument('-satellite',nargs=1,help='telescope to fetch spectra from',default='multi',type=str)
-#note: use maj for first character
+ap.add_argument('-satellite',nargs=1,help='telescope to fetch spectra from',default='NICER',type=str)
+
+#used for NICER and multi for now
+ap.add_argument('-group_max_timedelta',nargs=1,
+                help='maximum time delta for epoch/gti grouping in dd_hh_mm_ss',default='00_00_00_10',type=str)
+
+#00_00_00_10 for NICER TR
+#00_00_15_10 for NuSTAR individual orbits
 
 ap.add_argument("-cameras",nargs=1,help='Cameras to use for spectral analysis',default='all',type=str)
 ap.add_argument("-expmodes",nargs=1,help='restrict the analysis to a single type of exposure',default='all',type=str)
@@ -183,7 +189,7 @@ ap.add_argument('-overwrite',nargs=1,
 
 #note : will skip exposures for which the exposure didn't compute or with logged errors
 ap.add_argument('-skip_started',nargs=1,help='skip all exposures listed in the local summary_line_det file',
-                default=False,type=bool)
+                default=True,type=bool)
 
 ap.add_argument('-skip_complete',nargs=1,help='skip completed exposures listed in the local summary_line_det file',
                 default=False,type=bool)
@@ -209,6 +215,7 @@ ap.add_argument('-xspec_window',nargs=1,help='xspec window id (auto tries to pic
 '''MODELS'''
 #### Models and abslines lock
 ap.add_argument('-cont_model',nargs=1,help='model list to use for the autofit computation',default='cont_detailed',type=str)
+
 ap.add_argument('-autofit_model',nargs=1,help='model list to use for the autofit computation',
                 default='lines_narrow',type=str)
 #narrow or resolved mainly
@@ -320,6 +327,9 @@ ap.add_argument('-write_aborted_pdf',nargs=1,help='create aborted pdfs at the en
 
 '''MODES'''
 
+#options: "opt" (tests the significance of each components and add them accordingly) and "force_all" to force all components
+ap.add_argument('-cont_fit_method',nargs=1,help='fit logic for the broadband fits in multi',default='force_all')
+
 ap.add_argument('-reload_autofit',nargs=1,
                 help='Reload existing autofit save files to gain time if a computation has crashed',
                 default=True,type=bool)
@@ -330,7 +340,7 @@ ap.add_argument('-reload_fakes',nargs=1,
 
 ap.add_argument('-pdf_only',nargs=1,
                 help='Updates the pdf with already existing elements but skips the line detection entirely',
-                default=False,type=bool)
+                default=True,type=bool)
 
 #note: used mainly to recompute obs with bugged UL computations. Needs FINISHED computations firsthand, else
 #use reload_autofit and reload_fakes
@@ -358,6 +368,8 @@ ap.add_argument('-refit_cont',nargs=1,
 ap.add_argument('-split_fit',nargs=1,
                 help='Split fitting procedure between components instead of fitting the whole model directly',
                 default=True)
+
+ap.add_argument('-force_nosplit_fit_multi',nargs=1,help='force no split fit for multi satellites',default=True)
 
 #line significance assessment parameter
 ap.add_argument('-assess_line',nargs=1,
@@ -433,10 +445,6 @@ ap.add_argument('-pre_reduced_NICER',nargs=1,
                 help='change NICER data format to pre-reduced obsids',default=False,type=bool)
 
 ap.add_argument('-NICER_lc_binning',nargs=1,help='NICER LC binning',default='1',type=str)
-
-#used for NICER and multi for now
-ap.add_argument('-group_max_timedelta',nargs=1,
-                help='maximum time delta for epoch/gti grouping in dd_hh_mm_ss',default='00_00_15_00',type=str)
 
 '''MULTI'''
 ap.add_argument('-plot_multi_overlap',nargs=1,help='plot overlap between different epochs',default=True)
@@ -573,6 +581,9 @@ reverse_epoch=args.reverse_epoch
 reload_fakes=args.reload_fakes
 broad_HID_mode=args.broad_HID_mode
 
+cont_fit_method=args.cont_fit_method
+
+
 megumi_files=args.megumi_files
 suzaku_hid_cont_range=np.array(args.suzaku_hid_cont_range.split(' ')).astype(float)
 suzaku_line_cont_range=np.array(args.suzaku_line_cont_range.split(' ')).astype(float)
@@ -615,7 +626,9 @@ plot_mode=args.plot_mode
 log_console=args.log_console
 fitstat=args.fitstat
 cont_model=args.cont_model
-split_fit=args.split_fit
+
+force_nosplit_fit_multi=args.force_nosplit_fit_multi
+split_fit=args.split_fit and not (sat_glob=='multi' and force_nosplit_fit_multi)
 
 '''utility functions'''
 
@@ -1023,9 +1036,7 @@ def pdf_summary(epoch_files,fit_ok=False,summary_epoch=None):
 
         #the replace avoid problems with using full chandra/NICER file names as epoch loggings in the summary files
 
-        if sat_glob=='multi':
-            #what's below won't work, will need more thinking later
-            breakpoint()
+        assert sat_glob!='multi', 'This is not ready yet'
 
         logged_epochs=[(elem.split('\t')[0] if sat_glob in ['NICER','Swift']\
                         else '_'.join([elem.split('\t')[0],elem.split('\t')[1].replace('_grp_opt','')\
@@ -1344,8 +1355,12 @@ def pdf_summary(epoch_files,fit_ok=False,summary_epoch=None):
                 pdf.set_font('helvetica', 'B', 16)
                 pdf.cell(1,10,'GTIS and lightcurves for gti '+elem_observ,align='C',center=True)
                 pdf.ln(10)
+
+                #recognizing time-resolved spectra
+                elem_orbit=elem_epoch.split('S')[0]
+
                 try:
-                    pdf.image(elem_epoch+ '_flares.png',x=2,y=70,w=140)
+                    pdf.image(elem_orbit+ '_flares.png',x=2,y=70,w=140)
 
                     pdf.image(elem_epoch + '_lc_3-10_bin_' + NICER_lc_binning + '.png', x=150, y=30, w=70)
                     pdf.image(elem_epoch + '_hr_3-10_bin_' + NICER_lc_binning + '.png', x=220, y=30, w=70)
@@ -2341,20 +2356,24 @@ def line_detect(epoch_id):
         if os.path.exists(outdir + '/' + epoch_observ[0] + '_chain_hid' + add_str + '.fits'):
             os.remove(outdir + '/' + epoch_observ[0] + '_chain_hid' + add_str + '.fits')
 
-        try:
-            # Creating a chain to avoid problems when computing the errors
-            Chain(outdir + '/' + epoch_observ[0] + '_chain_hid' + add_str + '.fits')
-        except:
-            # trying to freeze pegged parameters again in case the very last fit created peggs
+        #we don't need to make a new chain if the broad fit has done it already
+        if not broad_HID_mode:
+            try:
+                # Creating a chain to avoid problems when computing the errors
+                Chain(outdir + '/' + epoch_observ[0] + '_chain_hid' + add_str + '.fits')
+            except:
 
-            calc_error(curr_logfile, param='1-' + str(AllModels(1).nParameters * AllData.nGroups), timeout=60,
-                       freeze_pegged=True, indiv=True)
+                breakpoint()
+                # trying to freeze pegged parameters again in case the very last fit created peggs
 
-            Fit.perform()
+                calc_error(curr_logfile, param='1-' + str(AllModels(1).nParameters * AllData.nGroups), timeout=60,
+                           freeze_pegged=True, indiv=True)
 
-            fitmodel.update_fitcomps()
-            # Creating a chain to avoid problems when computing the errors
-            Chain(outdir + '/' + epoch_observ[0] + '_chain_hid' + add_str + '.fits')
+                Fit.perform()
+
+                fitmodel.update_fitcomps()
+                # Creating a chain to avoid problems when computing the errors
+                Chain(outdir + '/' + epoch_observ[0] + '_chain_hid' + add_str + '.fits')
 
         # computing and storing the flux for the full luminosity and two bands for the HR
         spflux_single = [None] * 5
@@ -2390,15 +2409,16 @@ def line_detect(epoch_id):
         # storing the fitmod class into a file
         fitmodel.dump(outdir + '/' + epoch_observ[0] + '_fitmod_broadhid' + add_str + '.pkl')
 
-        # taking off the absorption (if it is in the final components) before computing the flux
-        if broad_absval != 0:
-            if 'glob_phabs' in [elem.compname for elem in [comp for comp in fitmodel.includedlist if comp is not None]]:
-                if fitmodel.glob_phabs.included:
-                    fitmodel.glob_phabs.xcomps[0].nH = 0
-            elif 'cont_phabs' in [elem.compname for elem in
-                                  [comp for comp in fitmodel.includedlist if comp is not None]]:
-                if fitmodel.cont_phabs.included:
-                    fitmodel.cont_phabs.xcomps[0].nH = 0
+        # taking off the absorption (if it is in the final included components) before computing the flux
+        abs_incl_comps = (np.array(fitmodel.complist)[[elem.absorption and elem.included for elem in \
+                                                       [elem_comp for elem_comp in fitmodel.complist if
+                                                        elem_comp is not None]]])
+        if len(abs_incl_comps)!=0:
+            main_abs_comp=abs_incl_comps[0]
+            main_abs_comp.xcomps[0].nH.values=0
+        else:
+            main_abs_comp=None
+
 
         # and replacing the main values with the unabsorbed flux values
         # (conservative choice since the other uncertainties are necessarily higher)
@@ -2416,14 +2436,8 @@ def line_detect(epoch_id):
         spflux_single = spflux_single.T
 
         # reloading the absorption values to avoid modifying the fit
-        if broad_absval != 0:
-            if 'glob_phabs' in [elem.compname for elem in [comp for comp in fitmodel.includedlist if comp is not None]]:
-                if fitmodel.glob_phabs.included:
-                    fitmodel.glob_phabs.xcomps[0].nH = broad_absval
-            elif 'cont_phabs' in [elem.compname for elem in
-                                  [comp for comp in fitmodel.includedlist if comp is not None]]:
-                if fitmodel.cont_phabs.included:
-                    fitmodel.cont_phabs.xcomps[0].nH = broad_absval
+        if main_abs_comp is not None:
+            main_abs_comp.xcomps[0].nH.values=broad_absval
 
         return spflux_single
 
@@ -2439,11 +2453,14 @@ def line_detect(epoch_id):
 
         # re fixing the absorption parameter and storing the value to retain it
         # if the absorption gets taken off and tested again
-        if 'glob_phabs' in fitlines_broad.name_cont_complist and fitlines_broad.glob_phabs.included:
-            broad_absval = AllModels(1)(fitlines_broad.glob_phabs.parlist[0]).values[0]
-            AllModels(1)(fitlines_broad.glob_phabs.parlist[0]).frozen = True
+        abs_incl_comps = (np.array(fitlines_broad.complist)[[elem.absorption and elem.included for elem in \
+                                                       [elem_comp for elem_comp in fitlines_broad.complist if
+                                                        elem_comp is not None]]])
+        if len(abs_incl_comps)!=0:
+            main_abs_comp=abs_incl_comps[0]
+            broad_absval=main_abs_comp.xcomps[0].nH.values[0]
         else:
-            broad_absval = 0
+            broad_absval=0
 
         #reloading the hid band fit and model and re-storing associed variables
         fitlines_broad=load_fitmod(outdir + '/' + epoch_observ[0] + '_fitmod_broadband_post_auto.pkl')
@@ -2515,7 +2532,7 @@ def line_detect(epoch_id):
     else:
 
         '''Continuum fits'''
-        def high_fit(broad_absval=None):
+        def high_fit(broad_absval,broad_abscomp):
 
             '''
             high energy fit and flux array computation
@@ -2540,16 +2557,15 @@ def line_detect(epoch_id):
 
             #creating the automatic fit class for the standard continuum
             if broad_absval!=0:
-                fitcont_high=fitmod([elem for elem in comp_cont if elem not in ['calNICERSiem_gaussian',
-                                                                                'calNICER_edge']],
+                fitcont_high=fitmod(comp_cont,
                                     curr_logfile,curr_logfile_write,absval=broad_absval)
             else:
-                #creating the fitcont without the absorption component if it didn't exist in the broad model
-                fitcont_high=fitmod([elem for elem in comp_cont if elem!='glob_phabs'],curr_logfile,curr_logfile_write)
 
-            # try:
-                #fitting
-            fitcont_high.global_fit(split_fit=split_fit)
+                #creating the fitcont without the absorption component if it didn't exist in the broad model
+                fitcont_high=fitmod([elem for elem in comp_cont if elem!=broad_abscomp],
+                                    curr_logfile,curr_logfile_write)
+
+            fitcont_high.global_fit(split_fit=split_fit,method=cont_fit_method if sat_glob=='multi' else 'opt')
 
             # mod_fitcont=allmodel_data()
 
@@ -2636,13 +2652,13 @@ def line_detect(epoch_id):
             fitcont_broad=fitmod(comp_cont,curr_logfile,curr_logfile_write)
 
             #fitting
-            fitcont_broad.global_fit(split_fit=split_fit)
+            fitcont_broad.global_fit(split_fit=split_fit,method=cont_fit_method if sat_glob=='multi' else 'opt')
 
             #unfreezing the scorpeon model by resetting it
             xscorpeon.load()
 
-            #refitting
-            fitcont_broad.global_fit(split_fit=False)
+            #refitting in case this allows something else to appear
+            fitcont_broad.global_fit(split_fit=False,method=cont_fit_method if sat_glob=='multi' else 'opt')
 
             mod_fitcont=allmodel_data()
 
@@ -2659,10 +2675,18 @@ def line_detect(epoch_id):
             #         model_load(mod_fitcont)
 
             #storing the absorption of the broad fit if there is absorption
-            if 'glob_phabs' in fitcont_broad.name_complist and fitcont_broad.glob_phabs.included:
-                broad_absval=AllModels(1)(fitcont_broad.glob_phabs.parlist[0]).values[0]
+
+            abs_incl_comps = (np.array(fitcont_broad.complist)[[elem.absorption and elem.included for elem in \
+                                                           [elem_comp for elem_comp in fitcont_broad.complist if
+                                                            elem_comp is not None]]])
+            if len(abs_incl_comps) != 0:
+                main_abs_comp = abs_incl_comps[0]
+                broad_absval=main_abs_comp.xcomps[0].nH.values[0]
+                broad_abscomp=main_abs_comp.compname
             else:
+                main_abs_comp = None
                 broad_absval=0
+                broad_abscomp=''
 
             for i_sp in range(len(epoch_files_good)):
                 if line_cont_ig_indiv[i_sp] != '':
@@ -2697,66 +2721,46 @@ def line_detect(epoch_id):
                             AllData(i_sp+1).ignore(line_cont_ig_indiv[i_sp])
 
                 #creating the automatic fit class for the standard continuum
+                # (without absorption if it didn't get included)
                 if broad_absval!=0:
                     fitcont_hid=fitmod(comp_cont,curr_logfile,curr_logfile_write,absval=broad_absval)
                 else:
                     #creating the fitcont without the absorption component if it didn't exist in the broad model
-                    fitcont_hid=fitmod([elem for elem in comp_cont if elem!='glob_phabs'],curr_logfile,curr_logfile_write)
+                    fitcont_hid=fitmod([elem for elem in comp_cont if elem!=broad_abscomp],
+                                       curr_logfile,curr_logfile_write)
 
-                # try:
                 #fitting
-                fitcont_hid.global_fit(split_fit=split_fit)
+                fitcont_hid.global_fit(split_fit=split_fit,method=cont_fit_method if sat_glob=='multi' else 'opt')
 
                 mod_fitcont=allmodel_data()
 
             chi2_cont=Fit.statistic
-            # except:
-            #     pass
-            #     chi2_cont=0
 
-            # AllModels.clear()
-            # xscorpeon.load()
-            # #with the broken powerlaw continuum
-            # fitcont_hid_bkn=fitmod(comp_cont_bkn,curr_logfile)
-
-            # try:
-            #     #fitting
-            #     fitcont_hid_bkn.global_fit(split_fit=split_fit))
-
-            #     chi2_cont_bkn=Fit.statistic
-            # except:
-            #     pass
-
-            chi2_cont_bkn=0
-
-            if chi2_cont==0 and chi2_cont_bkn==0:
+            if chi2_cont==0:
 
                 print('\nProblem during hid band fit. Skipping line detection for this exposure...')
                 return ['\nProblem during hid band fit. Skipping line detection for this exposure...']
-            # else:
-            #     if chi2_cont<chi2_cont_bkn:
-            #         model_load(mod_fitcont)
 
             spflux_single=hid_fit_infos(fitcont_hid,broad_absval)
 
-            return spflux_single,broad_absval,data_broad
+            return spflux_single,broad_absval,broad_abscomp,data_broad
 
         AllModels.clear()
 
-        #frozen Scorpeon for now
-        xscorpeon.load(frozen=not diff_bands_NuSTAR_NICER)
+        #frozen Scorpeon for now (unfreezed during the broad fit)
+        xscorpeon.load(frozen=True)
 
         result_broad_fit=broad_fit()
 
         if len(result_broad_fit)==1:
             return fill_result(result_broad_fit)
         else:
-            main_spflux,broad_absval,data_broad=result_broad_fit
+            main_spflux,broad_absval,broad_abscomp,data_broad=result_broad_fit
 
         #reloading the frozen scorpeon data\
         # (which won't change anything if it hasn't been fitted but will help otherwise)
         xscorpeon.load(scorpeon_save=data_broad.scorpeon,frozen=True)
-        result_high_fit=high_fit(broad_absval)
+        result_high_fit=high_fit(broad_absval,broad_abscomp)
 
         #if the function returns an array of length 1, it means it returned an error message
         if len(result_high_fit)==1:
@@ -2857,8 +2861,13 @@ def line_detect(epoch_id):
                 ignore_data_indiv(e_sat_low_indiv, e_sat_high_indiv, reset=True, glob_ignore_bands=ignore_bands_indiv)
 
                 #thawing the absorption to allow improving its value
-                if 'glob_phabs' in fitlines.name_cont_complist and fitlines.glob_phabs.included:
-                    AllModels(1)(fitlines.glob_phabs.parlist[0]).frozen=False
+                abs_incl_comps = (np.array(fitlines.complist)[[elem.absorption and elem.included for elem in \
+                                                                    [elem_comp for elem_comp in fitlines.complist
+                                                                     if
+                                                                     elem_comp is not None]]])
+                if len(abs_incl_comps)!=0:
+                    main_abscomp=abs_incl_comps[0]
+                    main_abscomp.xcomps[0].nH.frozen=False
 
                 #we reset the value of the fixed abs to allow it to be free if it gets deleted and put again
                 fitlines.fixed_abs=None
@@ -2867,7 +2876,8 @@ def line_detect(epoch_id):
                 calc_fit(logfile=fitlines.logfile)
 
                 #autofit
-                fitlines.global_fit(chain=False,lock_lines=True,directory=outdir,observ_id=epoch_observ[0],split_fit=split_fit)
+                fitlines.global_fit(chain=False,lock_lines=True,directory=outdir,observ_id=epoch_observ[0],
+                                    split_fit=split_fit)
 
                 AllChains.clear()
 
@@ -2876,11 +2886,18 @@ def line_detect(epoch_id):
                 #storing the class
                 fitlines.dump(outdir+'/'+epoch_observ[0]+'_fitmod_broadband_post_auto.pkl')
 
+                #remaking this list just in case there was some deletion and addition and the components changed
+                abs_incl_comps = (np.array(fitlines.complist)[[elem.absorption and elem.included for elem in \
+                                                                    [elem_comp for elem_comp in fitlines.complist
+                                                                     if
+                                                                     elem_comp is not None]]])
+
                 #re fixing the absorption parameter and storing the value to retain it if the absorption gets taken off and tested again
 
-                if 'glob_phabs' in fitlines.name_cont_complist and fitlines.glob_phabs.included:
-                    broad_absval=AllModels(1)(fitlines.glob_phabs.parlist[0]).values[0]
-                    AllModels(1)(fitlines.glob_phabs.parlist[0]).frozen=True
+                if len(abs_incl_comps)!=0:
+                    main_abscomp=abs_incl_comps[0]
+                    main_abscomp.xcomps[0].nH.frozen=True
+                    broad_absval=main_abscomp.xcomps[0].nH.values[0]
                 else:
                     broad_absval=0
 
@@ -3828,11 +3845,11 @@ elif sat_glob=='multi':
             if 'TELESCOP' in hdul[1].header:
                 det_list[i_file]=hdul[1].header['TELESCOP'].replace('SUZAKU','Suzaku')
             else:
-                if megumi_files:
-                    det_list[i_file]='Suzaku'
-                else:
-                    breakpoint()
-                    print("Issue with detector handling")
+                #the only files without TELESCOP in the header should be the fused megumi_files suzaku sp
+                assert megumi_files, 'Issue with detector handling'
+
+                det_list[i_file]='Suzaku'
+
 
             if 'TIMEZERO' in hdul[1].header:
                 start_obs_s = hdul[1].header['TSTART'] + hdul[1].header['TIMEZERO']
@@ -4010,11 +4027,9 @@ def shorten_epoch(file_ids):
         str_obsid = elem_obsid
 
         if '-' in ''.join([elem for elem in file_ids if elem.startswith(elem_obsid)]):
-            try:
-                str_gti_add = '-'+ '-'.join([elem.split('-')[1] for elem in file_ids if \
-                                    elem.startswith(elem_obsid)])
-            except:
-                breakpoint()
+            str_gti_add = '-'+ '-'.join([elem.split('-')[1] for elem in file_ids if \
+                                elem.startswith(elem_obsid)])
+
         epoch_str_list += [str_obsid+str_gti_add]
 
     return epoch_str_list
@@ -4149,8 +4164,6 @@ for epoch_id,epoch_files in enumerate(epoch_list):
             print('\nLine detection already computed for this exposure (recap PDF exists). Skipping...')
             continue
 
-    breakpoint()
-
     #we don't use the error catcher/log file in restrict mode to avoid passing through bpoints
     if not restrict:
 
@@ -4224,37 +4237,56 @@ if multi_obj==False:
     if sat_glob=='XMM':
         aborted_epochs=[epoch for epoch in epoch_list if not epoch[0].split('_sp')[0]+'_recap.pdf' in lineplots_files]
 
+        aborted_files=[epoch for epoch in epoch_list if not epoch[0].split('_sp')[0]+'_recap.pdf' in lineplots_files]
+
     elif sat_glob in ['Chandra','Swift']:
         aborted_epochs=[[elem.replace('_grp_opt'+('.pi' if sat_glob=='Swift' else '.pha'),'') for elem in epoch]\
                         for epoch in epoch_list if not epoch[0].split('_grp_opt'+('.pi' if sat_glob=='Swift' else '.pha'))[0]+'_recap.pdf'\
                             in lineplots_files]
+
+        aborted_files=[epoch for epoch in epoch_list if\
+                       not epoch[0].split('_grp_opt'+('.pi' if sat_glob=='Swift' else '.pha'))[0]+'_recap.pdf'\
+                            in lineplots_files]
     elif sat_glob=='NICER':
         #updated with shorten_epoch
         epoch_ids=[[elem.replace('_sp_grp_opt.pha','') for elem in epoch] for epoch in epoch_list]
+
         aborted_epochs=[elem_epoch_id for elem_epoch_id in epoch_ids if\
                         not '_'.join(shorten_epoch(elem_epoch_id))+'_recap.pdf' in lineplots_files]
+
+        aborted_files=[elem_epoch.tolist() for elem_epoch,elem_epoch_id in zip(epoch_list,epoch_ids) if\
+                        not '_'.join(shorten_epoch(elem_epoch_id))+'_recap.pdf' in lineplots_files]
+
     elif sat_glob=='Suzaku':
         #updated with shorten_epoch
         epoch_ids=[[elem.replace('_grp_opt.pha','').replace('_src_dtcor','').replace('_gti_event_spec_src','')\
                     for elem in epoch] for epoch in epoch_list]
+
         aborted_epochs=[elem_epoch_id for elem_epoch_id in epoch_ids if\
                         not '_'.join(shorten_epoch(elem_epoch_id))+'_recap.pdf' in lineplots_files]
 
+        aborted_files=[elem_epoch.tolist() for elem_epoch,elem_epoch_id in zip(epoch_list,epoch_ids) if\
+                        not '_'.join(shorten_epoch(elem_epoch_id))+'_recap.pdf' in lineplots_files]
+
     if write_aborted_pdf:
-        for elem_epoch in aborted_epochs:
-            if sat_glob=='XMM':
-                epoch_observ=[elem_file.split('_sp')[0] for elem_file in elem_epoch]
-            elif sat_glob in ['Chandra','Swift']:
-                epoch_observ=[elem_file.split('_grp_opt')[0] for elem_file in elem_epoch]
-            elif sat_glob=='NICER':
-                epoch_observ=[elem_file.split('_sp_grp_opt')[0] for elem_file in elem_epoch]
-    
-            elif sat_glob=='Suzaku':
-                if megumi_files:
-                    epoch_observ=[elem_file.split('_src')[0].split('_gti')[0] for elem_file in elem_epoch]
-    
+        for elem_epoch_files in aborted_files:
+
             #list conversion since we use epochs as arguments
-            pdf_summary(elem_epoch)
+            pdf_summary(elem_epoch_files)
+
+            #not used for now
+            # if sat_glob=='XMM':
+            #     epoch_observ=[elem_file.split('_sp')[0] for elem_file in elem_epoch]
+            # elif sat_glob in ['Chandra','Swift']:
+            #     epoch_observ=[elem_file.split('_grp_opt')[0] for elem_file in elem_epoch]
+            # elif sat_glob=='NICER':
+            #     epoch_observ=[elem_file.split('_sp_grp_opt')[0] for elem_file in elem_epoch]
+            #
+            # elif sat_glob=='Suzaku':
+            #     if megumi_files:
+            #         epoch_observ=[elem_file.split('_src')[0].split('_gti')[0] for elem_file in elem_epoch]
+
+
 
 '''''''''''''''''''''''''''''''''''''''
 ''''''Hardness-Luminosity Diagrams''''''
@@ -4763,11 +4795,11 @@ def save_pdf(fig):
                 point_recapfile=[elem for elem in save_dir_list if point_observ+'_recap.pdf' in elem][0]
             except:
                 avail_recapfile=glob.glob(os.path.join(save_dir, point_observ + '**_recap.pdf'))
-                if len(avail_recapfile)!=1:
-                    breakpoint()
-                    print("Issue with finding individual pdf recap files")
-                else:
-                    point_recapfile=avail_recapfile[0]
+
+                assert len(avail_recapfile)==1,"Issue with finding individual pdf recap files"
+
+                point_recapfile=avail_recapfile[0]
+
             if sat_glob=='NICER':
                 point_observ=point_recapfile.split('/')[-1].split('_recap')[0]
 
@@ -4795,6 +4827,7 @@ def save_pdf(fig):
 
         if sat_glob=='NICER':
             short_ep_id='_'.join(shorten_epoch(elem_epoch))
+            breakpoint()
             merger.append(save_dir + '/' + short_ep_id+ '_aborted_recap.pdf')
             bkm_completed=merger.add_outline_item(short_ep_id,curr_pages,parent=bkm_aborted)
         else:

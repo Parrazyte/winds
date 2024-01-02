@@ -7,11 +7,13 @@ Created on Sun Mar  6 00:11:45 2022
 """
 
 #general imports
+import io as io
 import os,sys
 import re
 import glob
 
 import argparse
+import zipfile
 
 import numpy as np
 import pandas as pd
@@ -51,7 +53,7 @@ from astroquery.vizier import Vizier
 
 #visualisation functions
 from visual_line_tools import load_catalogs,dist_mass,obj_values,abslines_values,values_manip,distrib_graph,correl_graph,incl_dic,\
-    n_infos, plot_lightcurve, hid_graph, sources_det_dic, dippers_list,telescope_list
+    n_infos, plot_lightcurve, hid_graph, sources_det_dic, dippers_list,telescope_list,load_integral
 
 
 # import mpld3
@@ -146,7 +148,9 @@ except:
                    
 #readjusting the variables in lists
 if cameras=='all':
-    cameras=['pn','mos1','mos2','heg']
+    #note: we use nu as the fpma/fpmb alias
+    cameras=['pn','mos1','mos2','heg','xis','pin','nu']
+
 else:
     cameras=[cameras]
     if 'pn' in cameras[0]:
@@ -214,14 +218,14 @@ norm_nsteps=len(norm_par_space)
 
 if not online:
     if not multi_obj:
-        
+
         #assuming the last top directory is the object name
         obj_name=os.getcwd().split('/')[-2]
-    
+
         #listing the exposure ids in the bigbatch directory
         bigbatch_files=glob.glob('**')
-        
-        #tacking off 'spectrum' allows to disregard the failed combined lightcurve computations of some obsids as unique exposures compared to their 
+
+        #tacking off 'spectrum' allows to disregard the failed combined lightcurve computations of some obsids as unique exposures compared to their
         #spectra
         exposid_list=np.unique(['_'.join(elem.split('_')[:4]).replace('rate','').replace('.ds','')+'_auto' for elem in bigbatch_files\
                       if '/' not in elem and 'spectrum' not in elem and elem[:10].isdigit() and True in ['_'+elemcam+'_' in elem for elemcam in cameras]])
@@ -230,20 +234,17 @@ if not online:
             glob_summary_reg=sumfile.readlines()[1:]
         with open('glob_summary_extract_sp.log') as sumfile:
             glob_summary_sp=sumfile.readlines()[1:]
-    
+
         #loading the diagnostic messages after the analysis has been done
         if os.path.isfile(os.path.join(outdir,'summary_line_det.log')):
             with open(os.path.join(outdir,'summary_line_det.log')) as sumfile:
                 glob_summary_linedet=sumfile.readlines()[1:]
-        
+
         #creating summary files for the rest of the exposures
         lineplots_files=[elem.split('/')[1] for elem in glob.glob(outdir+'/*',recursive=True)]
-        
+
         aborted_exposid=[elem for elem in exposid_list if not elem+'_recap.pdf' in lineplots_files]
 
-#######################################
-######Hardness-Luminosity Diagrams######
-#######################################
 
 #Distance and Mass determination
 
@@ -252,8 +253,15 @@ if not online:
     catal_blackcat,catal_watchdog,catal_blackcat_obj,catal_watchdog_obj,catal_maxi_df,catal_maxi_simbad,catal_bat_df,catal_bat_simbad=load_catalogs()
 
 st.sidebar.header('Sample selection')
+
+radio_indiv_orbits=st.sidebar.radio('Observation type',('averaged obsids','individual orbits (NICER only)'))
+use_orbit_obs=radio_indiv_orbits=='individual orbits (NICER only)'
+use_orbit_obs_str='_indiv' if use_orbit_obs else ''
+
 #We put the telescope option before anything else to filter which file will be used
-choice_telescope=st.sidebar.multiselect('Telescopes', ['XMM','Chandra']+([] if online else ['NICER','Suzaku','Swift']),default=('XMM','Chandra'))
+choice_telescope=st.sidebar.multiselect('Telescopes', ['NICER'] if use_orbit_obs else\
+                 (['XMM','Chandra']+([] if online else ['NICER','NuSTAR','Suzaku','Swift'])),
+                                        default=['NICER'] if use_orbit_obs else ('XMM','Chandra'))
 
 if online:
     radio_ignore_full=True
@@ -269,11 +277,13 @@ join_telescope_str.sort()
 join_telescope_str='_'.join(join_telescope_str.tolist())
 
 if online:
-    dump_path='/mount/src/winds/observations/visualisation/visual_line_dumps/dump_'+join_telescope_str+'_'+('no' if radio_ignore_full else '')+'full.pkl'
+    dump_path='/mount/src/winds/observations/visualisation/visual_line_dumps/dump_'+join_telescope_str+\
+              use_orbit_obs_str+'_'+('no' if radio_ignore_full else '')+'full.pkl'
     
     update_dump=False
 else:
-    dump_path='./glob_batch/visual_line_dumps/dump_'+join_telescope_str+'_'+('no' if radio_ignore_full else '')+'full.pkl'
+    dump_path='./glob_batch/visual_line_dumps/dump_'+join_telescope_str+\
+              use_orbit_obs_str+'_'+('no' if radio_ignore_full else '')+'full.pkl'
 
     update_dump=st.sidebar.button('Update dump')
 
@@ -318,14 +328,21 @@ if update_dump or not os.path.isfile(dump_path):
         
         all_files=glob.glob('**',recursive=True)
         lineval_id='line_values_'+args.line_search_e.replace(' ','_')+'_'+args.line_search_norm.replace(' ','_')+'.txt'
-        lineval_files=[elem for elem in all_files if outdir+'/' in elem and lineval_id in elem and ('/Sample/' in elem or 'XTEJ1701-462/' in elem)]
+        lineval_files=[elem for elem in all_files if outdir+use_orbit_obs_str+'/' in elem and lineval_id in elem\
+                       and ('/Sample/' in elem or 'XTEJ1701-462/' in elem)]
 
         abslines_id='autofit_values_'+args.line_search_e.replace(' ','_')+'_'+args.line_search_norm.replace(' ','_')+'.txt'
-        abslines_files=[elem for elem in all_files if outdir+'/' in elem and abslines_id in elem and ('/Sample/' in elem or 'XTEJ1701-462/' in elem)]
+        abslines_files=[elem for elem in all_files if outdir+use_orbit_obs_str+'/' in elem and abslines_id in elem\
+                        and ('/Sample/' in elem or 'XTEJ1701-462/' in elem)]
         
         #telescope selection
         lineval_files=[elem for elem_telescope in choice_telescope for elem in lineval_files if elem_telescope+'/' in elem]
         abslines_files=[elem for elem_telescope in choice_telescope for elem in abslines_files if elem_telescope+'/' in elem]
+
+        #removing multi if not asked for explicitely
+        if 'multi' not in choice_telescope:
+            lineval_files=[elem for elem in lineval_files if '/multi/' not in elem]
+            abslines_files=[elem for elem in abslines_files if '/multi/' not in elem]
 
         #some additional removals for in progress dirs
         lineval_files = [elem for elem in lineval_files if '4U_mix' not in elem]
@@ -339,6 +356,9 @@ if update_dump or not os.path.isfile(dump_path):
             obj_list=np.unique(np.array([elem.split('/')[-4] for elem in lineval_files]))
         else:
             obj_list=np.array([obj_name])
+
+        #loading integral elements
+        lc_int_sw_dict,fit_int_revol_dict=load_integral()
             
         #note: there's no need to order anymore since the file values are attributed for each object of object list in the visual_line functions
         
@@ -359,7 +379,6 @@ if update_dump or not os.path.isfile(dump_path):
             'args_line_search_e':args.line_search_e,
             'args_line_search_norm':args.line_search_norm,
             'visual_line':True,
-
             }
         
         #### main arrays computation
@@ -443,6 +462,8 @@ if update_dump or not os.path.isfile(dump_path):
         dump_dict['catal_maxi_df']=catal_maxi_df
         dump_dict['catal_maxi_simbad']=catal_maxi_simbad
         dump_dict['dict_lc_rxte']=dict_lc_rxte
+        dump_dict['lc_int_sw_dict']=lc_int_sw_dict
+        dump_dict['fit_int_revol_dict']=fit_int_revol_dict
 
         with open(dump_path,'wb+') as dump_file:
             dill.dump(dump_dict,file=dump_file)
@@ -470,6 +491,10 @@ dict_linevis=dump_dict['dict_linevis']
 catal_maxi_df=dump_dict['catal_maxi_df']
 catal_maxi_simbad=dump_dict['catal_maxi_simbad']
 dict_lc_rxte=dump_dict['dict_lc_rxte']
+
+lc_int_sw_dict=dump_dict['lc_int_sw_dict']
+fit_int_revol_dict=dump_dict['fit_int_revol_dict']
+
 
 ###
 # in the abslines_infos_perline form, the order is:
@@ -523,11 +548,24 @@ if multi_obj:
         #switching to array to keep the same syntax later on
         choice_source=[st.sidebar.selectbox('Source',obj_list)]
 
+    #first mask here to limit the display of individual obs to exclude
+    if display_single or display_multi:
+        mask_obj_select = np.array([elem in choice_source for elem in obj_list])
+    else:
+        mask_obj_select = np.repeat(True, len(obj_list))
+
+    obj_list_select_id=np.argwhere(mask_obj_select).T[0]
+
     with st.sidebar.expander('Observation'):
         obs_list_str=np.array([np.array([obj_list[i]+'_'+observ_list[i][j].replace('_-1','').replace('_auto','')\
-                               for j in range(len(observ_list[i]))]) for i in range(len(obj_list))],dtype=object)
+                               for j in range(len(observ_list[i]))]) for i in obj_list_select_id],dtype=object)
 
-        choice_obs=st.multiselect('Exclude individual observations:',ravel_ragged(obs_list_str))
+        sorted_choice_obs=ravel_ragged(obs_list_str)
+        sorted_choice_obs.sort()
+
+        restrict_match_INT=st.toggle('Restrict to Observations with INTEGRAL coverage',value=False)
+
+        choice_obs=st.multiselect('Exclude individual observations:',sorted_choice_obs)
 
         mask_included_selection=np.array([np.array([obj_list[i]+'_'+observ_list[i][j].replace('_-1','').replace('_auto','') not in\
                                           choice_obs for j in range(len(observ_list[i]))]) for i in range(len(obj_list))],
@@ -660,15 +698,15 @@ else:
 if not online:
     save_format=st.sidebar.radio('Graph format:',('pdf','svg','png'))
     
-    def save_hld():
+    def save_HID():
         ###
         # Saves the current graph in a svg (i.e. with clickable points) format.
         ###
     
-        fig_hid.savefig(save_dir+'/'+save_str_prefix+'HLD_cam_'+args.cameras+'_'+\
+        fig_hid.savefig(save_dir+'/'+save_str_prefix+'HID_cam_'+args.cameras+'_'+\
                     args.line_search_e.replace(' ','_')+'_'+args.line_search_norm.replace(' ','_')+'curr_'+str(round(time.time()))+'.'+save_format,bbox_inches='tight')
             
-    st.sidebar.button('Save current HID view',on_click=save_hld)
+    st.sidebar.button('Save current HID view',on_click=save_HID)
 
         
 with st.sidebar.expander('Visualisation'):
@@ -706,27 +744,49 @@ if alpha_abs:
 else:
     alpha_abs=1
 
+
+def make_zip(filebites_arr,filename_arr):
+    zip_buffer = io.BytesIO()
+
+    with zipfile.ZipFile(zip_buffer, "a",
+                         zipfile.ZIP_DEFLATED, False) as zip_file:
+        for file_name, data in zip(filename_arr,filebites_arr):
+            zip_file.writestr(file_name, data.getvalue())
+
+    return zip_buffer
+
+
 with st.sidebar.expander('Broad band HID'):
 
-    display_broad_hid = st.toggle('Display broad band HID using BAT monitoring', value=False)
+    HR_broad_bands=st.radio('HID Hardness Ratio',('[BAND]/[3-6]','([6-10]+[BAND])/[3-6]'))
+    lum_broad_bands=st.radio('HID Luminosity',('[3-10]','[3-10]+[BAND]'))
 
-    HR_broad_bands=st.radio('Hardness Ratio',('[15-50]/[3-6]','([6-10]+[15-50])/[3-6]'))
 
-    lum_broad_bands=st.radio('Luminosity',('[3-10]','[3-10]+[15-50]'))
+    display_broad_hid_BAT = st.toggle('Display broad band HID using BAT monitoring (HARD BAND=15-50)', value=False)
 
-with st.sidebar.expander('Monitoring'):
+    display_broad_hid_INT = st.toggle('Display broad band HID using INTEGRAL monitoring', value=False)
+
+    HID_INT_band=st.radio('INTEGRAL BAND',('30-50','50-100','30-100'))
+
+expander_monit=st.sidebar.expander('Monitoring')
+with expander_monit:
     
     plot_lc_monit=st.toggle('Plot MAXI/RXTE monitoring',value=False)
     plot_hr_monit=st.toggle('Plot monitoring HR',value=False)
     plot_lc_bat=st.toggle('Plot BAT monitoring',value=False)
 
+    radio_monit_binning=st.radio('MAXI/BAT binning',('daily','single orbit'))
+    monit_binning='day' if radio_monit_binning=='daily' else 'orbit' if radio_monit_binning=='single orbit' else None
+
+    plot_lc_integral=st.toggle('Plot INTEGRAL monitoring',value=False)
+    radio_integral_binning=st.radio('INTEGRAL binning',('revolution','science_window'))
+    integral_binning='revol' if radio_integral_binning=='revolution' else 'sw'
+    radio_integral_band=st.radio('INTEGRAL band',('30-100','30-50','50-100'),index=0)
+
     monit_highlight_hid=st.toggle('Highlight HID coverage',value=False)
 
-    monit_binning_radio=st.radio('MAXI/BAT binning',('daily','single orbit'))
 
-    monit_binning='day' if monit_binning_radio=='daily' else 'orbit' if monit_binning_radio=='single orbit' else None
-
-    if plot_lc_monit or plot_hr_monit or plot_lc_bat:
+    if plot_lc_monit or plot_hr_monit or plot_lc_bat or plot_lc_integral:
         zoom_lc=st.toggle('Zoom on the restricted time period in the lightcurve',value=False)
     else:
         zoom_lc=False
@@ -734,40 +794,46 @@ with st.sidebar.expander('Monitoring'):
     fig_lc_monit=None
     fig_hr_soft_monit=None
     fig_hr_hard_monit=None
-
     fig_lc_bat=None
+    fig_lc_int=None
+
     plot_maxi_ew=st.toggle('Superpose measured EW',value=False)
-    
-    def save_lc():
-        
-        ###
-        # Saves the current maxi_graph in a svg (i.e. with clickable points) format.
-        ###
-        if display_single:
 
-            if fig_lc_monit is not None:
-                fig_lc_monit.savefig(save_dir+'/'+'LC_'+choice_source[0]+'_'+str(round(time.time()))+'.'+save_format,bbox_inches='tight')
-            if fig_hr_soft_monit is not None:
-                fig_hr_soft_monit.savefig(save_dir+'/'+'HR_soft_'+choice_source[0]+'_'+str(round(time.time()))+'.'+save_format,bbox_inches='tight')
+    if not online:
+        def save_lc_local():
 
-            if fig_hr_hard_monit is not None:
-                fig_hr_soft_monit.savefig(save_dir+'/'+'HR_hard_'+choice_source[0]+'_'+str(round(time.time()))+'.'+save_format,bbox_inches='tight')
+            ###
+            # Saves the current maxi_graphs in a svg (i.e. with clickable points) format.
+            ###
+            if display_single:
 
-            if fig_lc_bat is not None:
-                fig_lc_bat.savefig(save_dir+'/'+'BAT_'+choice_source[0]+'_'+str(round(time.time()))+'.'+save_format,
-                                   bbox_inches='tight')
-    st.button('Save current MAXI curves',on_click=save_lc,key='save_lc_key')
-    
+                if fig_lc_monit is not None:
+                    fig_lc_monit.savefig(save_dir+'/'+'LC_'+choice_source[0]+'_'+str(round(time.time()))+'.'+save_format,bbox_inches='tight')
+                if fig_hr_soft_monit is not None:
+                    fig_hr_soft_monit.savefig(save_dir+'/'+'HR_soft_'+choice_source[0]+'_'+str(round(time.time()))+'.'+save_format,bbox_inches='tight')
+
+                if fig_hr_hard_monit is not None:
+                    fig_hr_hard_monit.savefig(save_dir+'/'+'HR_hard_'+choice_source[0]+'_'+str(round(time.time()))+'.'+save_format,bbox_inches='tight')
+
+                if fig_lc_bat is not None:
+                    fig_lc_bat.savefig(save_dir+'/'+'BAT_'+choice_source[0]+'_'+str(round(time.time()))+'.'+save_format,
+                                       bbox_inches='tight')
+
+                if fig_lc_int is not None:
+                    fig_lc_int.savefig(save_dir+'/'+'INT_'+choice_source[0]+'_'+str(round(time.time()))+'.'+save_format,
+                                       bbox_inches='tight')
+        st.button('Save current MAXI curves',on_click=save_lc_local,key='save_lc_key')
+
 compute_only_withdet=st.sidebar.toggle('Skip parameter analysis when no detection remain with the current constraints',value=True)
 
-if not online:
-    with st.sidebar.expander('Stacking'):
-        stack_det=st.toggle('Stack detections')
-        stack_flux_lim = st.number_input(r'Max ratio of fluxes to stack', value=2., min_value=1e-10, format='%.3e')
-        stack_HR_lim=st.number_input(r'Max ratio of HR to stack',value=2.,min_value=1e-10,format='%.3e')
-        stack_time_lim=st.number_input(r'Max time delta to stack',value=2.,min_value=1e-1,format='%.3e')
-else:
-    stack_det=False
+# if not online:
+#     with st.sidebar.expander('Stacking'):
+#         stack_det=st.toggle('Stack detections')
+#         stack_flux_lim = st.number_input(r'Max ratio of fluxes to stack', value=2., min_value=1e-10, format='%.3e')
+#         stack_HR_lim=st.number_input(r'Max ratio of HR to stack',value=2.,min_value=1e-10,format='%.3e')
+#         stack_time_lim=st.number_input(r'Max time delta to stack',value=2.,min_value=1e-1,format='%.3e')
+# else:
+#     stack_det=False
 
 mpl.rcParams.update({'font.size': 10+(3 if paper_look else 0)})
 
@@ -904,10 +970,12 @@ else:
 
 # distance factor for the flux conversion later on
 dist_factor = 4 * np.pi * (dist_obj_list * 1e3 * 3.086e18) ** 2
+
 # L_Edd unit factor
 Edd_factor = dist_factor / (1.26e38 * mass_obj_list)
 
 Edd_factor_restrict=Edd_factor[mask_obj].astype(float)
+dist_factor_restrict=dist_factor[mask_obj].astype(float)
 
 if np.ndim(hid_plot)==4:
     flag_single_obj=True
@@ -922,7 +990,6 @@ else:
     lum_plot_restrict=lum_plot.T[mask_obj].T
 
 incl_plot_restrict=incl_plot[mask_obj]
-
 
 #creating variables with values instead of uncertainties for the inclination and nh colormaps
 
@@ -1066,6 +1133,14 @@ items_str_list=['abslines_infos_perobj',
 for dict_key, dict_item in zip(items_str_list,items_list):
     dict_linevis[dict_key]=dict_item
 
+dict_linevis['lc_int_sw_dict'] = lc_int_sw_dict
+dict_linevis['fit_int_revol_dict'] = fit_int_revol_dict
+dict_linevis['HR_broad_bands'] = HR_broad_bands
+dict_linevis['lum_broad_bands'] = lum_broad_bands
+dict_linevis['HID_INT_band'] = HID_INT_band
+dict_linevis['Edd_factor_restrict'] = Edd_factor_restrict
+dict_linevis['lum_plot'] = lum_plot
+
 if len(global_plotted_datetime)==0:
     st.warning('No points remaining with current sample/date selection')
 else:
@@ -1083,47 +1158,51 @@ else:
               split_cmap_source=split_cmap_source,
               display_evol_single=display_evol_single, display_dicho=display_dicho,
               global_colors=global_colors, alpha_abs=alpha_abs,
-              paper_look=paper_look, bigger_text=bigger_text, square_mode=square_mode, zoom=zoom_hid)
+              paper_look=paper_look, bigger_text=bigger_text, square_mode=square_mode, zoom=zoom_hid,
+              restrict_match_INT=restrict_match_INT)
 
 # fig_hid_html = mpld3.fig_to_html(fig_hid)
 # components.html(fig_hid_html, height=1000)
 
-tab_hid, tab_broad_hid,tab_monitoring, tab_param,tab_source_df,tab_about= st.tabs(["Soft X HID", "Broad X HID","Monitoring", "Parameter analysis","Tables","About"])
+tab_hid, tab_monitoring, tab_param,tab_source_df,tab_about=\
+    st.tabs(["Hardness Luminosity Diagram","Monitoring", "Parameter analysis","Tables","About"])
 
 with tab_hid:
-    
-    #preventing some bugs when updating too many parameters at once
-    try:
-        st.pyplot(fig_hid)
-    except:
-        st.rerun()
 
-broad_band_disp_ok=True
+    tab_soft_hid,tab_BAT_hid,tab_INT_hid=st.tabs(['Soft X HID','BAT HID','INTEGRAL HID'])
+    with tab_soft_hid:
+        #preventing some bugs when updating too many parameters at once
+        try:
+            st.pyplot(fig_hid)
+        except:
+            st.rerun()
 
-with tab_broad_hid:
+    broad_band_disp_ok=True
+
+    with tab_BAT_hid:
 
         if not display_single:
-            st.info('Broad band HID currently restricted to single sources.')
+            st.info('Broad band BAT HIDs currently restricted to single sources.')
 
             broad_band_disp_ok=False
         else:
             if not choice_source[0]=='4U1630-47':
-                st.info('Broad band HID currently restricted to  4U 1630-47')
+                st.info('Broad band BAT HIDs currently restricted to  4U 1630-47')
 
                 broad_band_disp_ok=False
 
         if broad_band_disp_ok:
 
-            if not display_broad_hid:
-                st.info('Toggle broad band HID option in the sidebar to display.')
+            if not display_broad_hid_BAT:
+                st.info('Toggle BAT broad band HID option in the sidebar to display.')
 
             else:
 
                 if not square_mode:
-                    fig_hid_broad, ax_hid_broad = plt.subplots(1, 1, figsize=(8, 5) if bigger_text else (12, 6))
+                    fig_hid_bat, ax_hid_bat = plt.subplots(1, 1, figsize=(8, 5) if bigger_text else (12, 6))
                 else:
-                    fig_hid_broad, ax_hid_broad = plt.subplots(1, 1, figsize=(8, 6))
-                ax_hid_broad.clear()
+                    fig_hid_bat, ax_hid_bat = plt.subplots(1, 1, figsize=(8, 6))
+                ax_hid_bat.clear()
 
                 dict_linevis['catal_bat_df']=catal_bat_df
                 dict_linevis['catal_bat_simbad']=catal_bat_simbad
@@ -1132,7 +1211,7 @@ with tab_broad_hid:
                 dict_linevis['HR_broad_bands']=HR_broad_bands
                 dict_linevis['lum_broad_bands']=lum_broad_bands
 
-                hid_graph(ax_hid_broad, dict_linevis,
+                hid_graph(ax_hid_bat, dict_linevis,
                           display_single=display_single, display_nondet=display_nondet, display_upper=display_upper,
                           cyclic_cmap_nondet=cyclic_cmap_nondet, cyclic_cmap_det=cyclic_cmap_det,
                           cyclic_cmap=cyclic_cmap,
@@ -1148,12 +1227,61 @@ with tab_broad_hid:
                           display_evol_single=display_evol_single, display_dicho=display_dicho,
                           global_colors=global_colors, alpha_abs=alpha_abs,
                           paper_look=paper_look, bigger_text=bigger_text, square_mode=square_mode, zoom=zoom_hid,
-                          broad_mode=True)
+                          broad_mode='BAT',restrict_match_INT=restrict_match_INT)
 
                 try:
-                    st.pyplot(fig_hid_broad)
+                    st.pyplot(fig_hid_bat)
                 except:
                     st.rerun()
+
+    with tab_INT_hid:
+
+        if not display_single:
+            st.info('Broad band INTEGRAL HIDs currently restricted to single sources.')
+
+            broad_band_disp_ok=False
+        else:
+            if not choice_source[0]=='4U1630-47':
+                st.info('Broad band INTEGRAL HIDs currently restricted to  4U 1630-47')
+
+                broad_band_disp_ok=False
+
+        if broad_band_disp_ok:
+
+            if not display_broad_hid_INT:
+                st.info('Toggle INTEGRAL broad band HID option in the sidebar to display.')
+
+            else:
+
+                if not square_mode:
+                    fig_hid_int, ax_hid_int = plt.subplots(1, 1, figsize=(8, 5) if bigger_text else (12, 6))
+                else:
+                    fig_hid_int, ax_hid_int = plt.subplots(1, 1, figsize=(8, 6))
+                ax_hid_int.clear()
+
+                hid_graph(ax_hid_int, dict_linevis,
+                          display_single=display_single, display_nondet=display_nondet, display_upper=display_upper,
+                          cyclic_cmap_nondet=cyclic_cmap_nondet, cyclic_cmap_det=cyclic_cmap_det,
+                          cyclic_cmap=cyclic_cmap,
+                          cmap_incl_type=cmap_incl_type, cmap_incl_type_str=cmap_incl_type_str,
+                          radio_info_label=radio_info_label,
+                          eqw_ratio_ids=eqw_ratio_ids,
+                          display_obj_zerodet=display_obj_zerodet,
+                          restrict_threshold=restrict_threshold, display_nonsign=display_nonsign,
+                          display_central_abs=display_central_abs,
+                          display_incl_inside=display_incl_inside, dash_noincl=dash_noincl,
+                          display_hid_error=display_hid_error, display_edgesource=display_edgesource,
+                          split_cmap_source=split_cmap_source,
+                          display_evol_single=display_evol_single, display_dicho=display_dicho,
+                          global_colors=global_colors, alpha_abs=alpha_abs,
+                          paper_look=paper_look, bigger_text=bigger_text, square_mode=square_mode, zoom=zoom_hid,
+                          broad_mode='INTEGRAL')
+
+                try:
+                    st.pyplot(fig_hid_int)
+                except:
+                    st.rerun()
+
 
 
 #### About tab
@@ -1682,6 +1810,27 @@ n_obj_r=sum(mask_obj)
 #creating an array for the intime observations
 mask_intime_plot=np.array([(Time(date_list[mask_obj][i_obj_r].astype(str))>=Time(slider_date[0])) & (Time(date_list[mask_obj][i_obj_r].astype(str))<=Time(slider_date[1])) for i_obj_r in range(n_obj_r)],dtype=object)
 
+if display_single and choice_source[0]=='4U1630-47':
+
+    # currently limited to 4U1630-47
+    int_lc_df = fit_int_revol_dict[choice_source[0]]
+
+    int_lc_mjd = np.array([Time(elem).mjd.astype(float) for elem in int_lc_df['ISOT']])
+
+    obs_dates = Time(np.array([date_list[mask_obj][0] for i in range(sum(mask_lines))]).astype(str)).mjd.astype(float)
+
+    # computing which observations are within the timeframe of an integral revolution (assuming 3days-long)
+    mask_withtime_INT = [min((int_lc_mjd - elem)[(int_lc_mjd - elem) >= 0]) < 3 for elem in obs_dates[0]]
+
+    mask_intime_INT_revol=np.array([Time(elem,format='mjd')>=Time(slider_date[0]) \
+                                  and Time(elem,format='mjd')<=Time(slider_date[1])\
+                                    for elem in int_lc_mjd])
+
+    mask_intime_INT_withobs=[sum((elem - obs_dates[0]) >= 0)>0 and\
+                              min((elem - obs_dates[0])[(elem - obs_dates[0]) >= 0]) < 3 for elem in int_lc_mjd]
+
+    if restrict_match_INT:
+        mask_intime_plot[0]=(mask_intime_plot[0]) & mask_withtime_INT
 
 #and an date order 
 order_intime_plot_restrict=np.array([np.array([Time(elem) for elem in date_list[mask_obj][i_obj_r][mask_intime_plot[i_obj_r].astype(bool)]]).argsort() for i_obj_r in range(n_obj_r)],dtype=object)
@@ -1734,25 +1883,30 @@ for i_obj_r in range(n_obj_r):
     line_plot_indiv=np.array([line_plot_indiv[elem[0]][elem[1]] for elem in used_indexes])
     
     #creating the row indexes (row: object, subrow: observation)    
-    observ_list_indiv=observ_list[mask_obj][i_obj_r][mask_intime_plot[i_obj_r].astype(bool)].tolist()
-    
+    observ_list_indiv=observ_list[mask_obj][i_obj_r][mask_intime_plot[i_obj_r].astype(bool)][order_intime_plot_restrict[i_obj_r].astype(int)].tolist()
+
+    instru_list_indiv=instru_list[mask_obj][i_obj_r][mask_intime_plot[i_obj_r].astype(bool)][order_intime_plot_restrict[i_obj_r].astype(int)].tolist()
+
     observ_list_indiv=[elem.replace('_Imaging_auto','').replace('_Timing_auto','').replace('_heg_-1','').replace('_heg_1','') for elem
                        in observ_list_indiv]
     
     iter_rows=[[obj_list[mask_obj][i_obj_r]],
+               instru_list_indiv,
                observ_list_indiv,
                date_list[mask_obj][i_obj_r][mask_intime_plot[i_obj_r].astype(bool)][order_intime_plot_restrict[i_obj_r].astype(int)].tolist()]
     
     
     #creating the iter index manually because we have two clumns (observ and time) not being dimensions of one another
-    row_index_arr_obs=np.array([[iter_rows[0][0],iter_rows[1][i_obs_r],iter_rows[2][i_obs_r]] for i_obs_r in range(n_obs_r)]).T
+    row_index_arr_obs=np.array([[iter_rows[0][0],iter_rows[1][i_obs_r],iter_rows[2][i_obs_r],iter_rows[3][i_obs_r]]\
+                                for i_obs_r in range(n_obs_r)]).T
     
-    row_index_arr_line=np.array([[iter_rows[0][0],iter_rows[1][i_obs_r],iter_rows[2][i_obs_r],line_rows[i_line_r]]\
+    row_index_arr_line=np.array([[iter_rows[0][0],iter_rows[1][i_obs_r],iter_rows[2][i_obs_r],iter_rows[3][i_obs_r],
+                                  line_rows[i_line_r]]\
                                 for i_obs_r in range(n_obs_r) for i_line_r in range(sum(mask_lines))]).T
     
-    row_index_obs=pd.MultiIndex.from_arrays(row_index_arr_obs,names=['Source','obsid','date'])
+    row_index_obs=pd.MultiIndex.from_arrays(row_index_arr_obs,names=['Source','Instrument','obsid','date'])
     
-    row_index_line=pd.MultiIndex.from_arrays(row_index_arr_line,names=['Source','obsid','date','line'])
+    row_index_line=pd.MultiIndex.from_arrays(row_index_arr_line,names=['Source','Instrument','obsid','date','line'])
     
     #you can use the standard way for columns for the observ df
     iter_columns=[['HR [6-10]/[3-10]','Lx/LEdd','flux_3-6','flux_6-10','flux_1-3','flux_3-10'],['main','err-','err+']]
@@ -1773,7 +1927,7 @@ for i_obj_r in range(n_obj_r):
     #creating both dataframes, with a reshape in 2 dimensions (one for the lines and one for the columns)
     #switching to str type allows to display low values correctly
     curr_df=produce_df(observ_col_reshaped,
-                                iter_rows,iter_columns,row_names=['Source','obsid','date'],
+                                iter_rows,iter_columns,row_names=['Source','Instrument','obsid','date'],
                                 column_names=['measure','value'],row_index=row_index_obs).astype(str)
 
     pd.set_option('display.float_format', lambda x: '%.3e' % x)
@@ -1801,7 +1955,7 @@ with tab_source_df:
         else:
             #the format is offset by 3 because we shift by the number of columns with row names
             st.dataframe(observ_df,use_container_width=True,column_config={\
-                         i:st.column_config.NumberColumn(format='%.3e') for i in range(3,len(observ_df.columns)+3)})
+                         i:st.column_config.NumberColumn(format='%.3e') for i in range(4,len(observ_df.columns)+4)})
 
             csv_observ= convert_df(observ_df)
 
@@ -1811,7 +1965,36 @@ with tab_source_df:
                 file_name='observ_table.csv',
                 mime='text/csv',
             )
-        
+
+    if display_single:
+        with st.expander('Monitoring'):
+
+            if not choice_source[0] in lc_int_sw_dict.keys() and not choice_source[0] in fit_int_revol_dict.keys():
+                st.warning('No INTEGRAL Coverage for this source')
+
+            else:
+                radio_mask_INT_monit_withtime=st.toggle\
+                    ('Restrict table display to INTEGRAL revolutions simultaneous with observations')
+                if radio_mask_INT_monit_withtime:
+                    mask_intime_INT_revol=(mask_intime_INT_revol) & (mask_intime_INT_withobs)
+
+                if choice_source[0] in fit_int_revol_dict.keys():
+                    #note: here formatting the column is necessary to display the flux correctly
+                    st.dataframe(fit_int_revol_dict[choice_source[0]][mask_intime_INT_revol],use_container_width=True,
+                                 column_config={ \
+                                     i: st.column_config.NumberColumn(format='%.3e')\
+                                     for i in range(len(fit_int_revol_dict[choice_source[0]].columns)-5,\
+                                                    len(fit_int_revol_dict[choice_source[0]].columns)+1)})
+
+                # if choice_source[0] in lc_int_sw_dict.keys():
+                #     lc_int_sw_revol=[elem[:4] for elem in np.array(lc_int_sw_dict[choice_source[0]]['scw'])]
+                #
+                #     mask_intime_INT_sw=[elem in np.array(fit_int_revol_dict[choice_source[0]][mask_intime_INT_revol]['revolution'],
+                #                       dtype='str') for elem in lc_int_sw_revol]
+                #
+                #     st.dataframe(lc_int_sw_dict[choice_source[0]][mask_intime_INT_sw],use_container_width=True)
+
+
     with st.expander('Line parameters'):
 
         if no_obs:
@@ -1820,7 +2003,7 @@ with tab_source_df:
         else:
             #the format is offset by 4 because we shift by the number of columns with row names
             st.dataframe(line_df,use_container_width=True,column_config={\
-                         i:st.column_config.NumberColumn(format='%.3e') for i in range(4,len(line_df.columns)+4)})
+                         i:st.column_config.NumberColumn(format='%.3e') for i in range(5,len(line_df.columns)+5)})
 
             csv_observ= convert_df(line_df)
 
@@ -1855,6 +2038,7 @@ with tab_monitoring:
             with st.spinner('Building lightcurve...'):
                 fig_lc_monit=plot_lightcurve(dict_linevis,catal_maxi_df,catal_maxi_simbad,choice_source,
                                              catal_bat_df,catal_bat_simbad,
+                                             lc_integral_sw_dict=lc_int_sw_dict,fit_integral_revol_dict=fit_int_revol_dict,
                                              display_hid_interval=monit_highlight_hid,
                                                  superpose_ew=plot_maxi_ew,dict_rxte=dict_lc_rxte,
                                              binning=monit_binning)
@@ -1872,6 +2056,7 @@ with tab_monitoring:
             with st.spinner('Building soft HR evolution...'):
                 fig_hr_soft_monit=plot_lightcurve(dict_linevis,catal_maxi_df,catal_maxi_simbad,choice_source,
                                                   catal_bat_df, catal_bat_simbad,
+                                             lc_integral_sw_dict=lc_int_sw_dict,fit_integral_revol_dict=fit_int_revol_dict,
                                              mode='HR_soft',display_hid_interval=monit_highlight_hid,
                                                  superpose_ew=plot_maxi_ew,dict_rxte=dict_lc_rxte,
                                              binning=monit_binning)
@@ -1885,6 +2070,7 @@ with tab_monitoring:
             with st.spinner('Building hard HR evolution...'):
                 fig_hr_hard_monit = plot_lightcurve(dict_linevis, catal_maxi_df, catal_maxi_simbad, choice_source,
                                                     catal_bat_df, catal_bat_simbad,
+                                             lc_integral_sw_dict=lc_int_sw_dict,fit_integral_revol_dict=fit_int_revol_dict,
                                                mode='HR_hard',
                                                display_hid_interval=monit_highlight_hid,
                                                superpose_ew=plot_maxi_ew, dict_rxte=dict_lc_rxte,
@@ -1905,6 +2091,7 @@ with tab_monitoring:
             with st.spinner('Building BAT lightcurve...'):
                 fig_lc_bat= plot_lightcurve(dict_linevis, catal_maxi_df, catal_maxi_simbad, choice_source,
                                                catal_bat_df, catal_bat_simbad,mode='BAT',
+                                             lc_integral_sw_dict=lc_int_sw_dict,fit_integral_revol_dict=fit_int_revol_dict,
                                                display_hid_interval=monit_highlight_hid,
                                                superpose_ew=plot_maxi_ew, dict_rxte=dict_lc_rxte,
                                              binning=monit_binning)
@@ -1913,8 +2100,26 @@ with tab_monitoring:
                 if fig_lc_bat is not None:
                     st.pyplot(fig_lc_bat)
 
+    if plot_lc_integral:
 
-    if not plot_lc_monit and not plot_hr_monit and not plot_lc_bat:
+        if not display_single:
+            st.info('INTEGRAL monitoring plots are restricted to single source mode.')
+
+        else:
+            with st.spinner('Building Integral IBIS lightcurve...'):
+                fig_lc_bat= plot_lightcurve(dict_linevis, catal_maxi_df, catal_maxi_simbad, choice_source,
+                                               catal_bat_df, catal_bat_simbad,mode='INTEGRAL_'+radio_integral_band,
+                                             lc_integral_sw_dict=lc_int_sw_dict,fit_integral_revol_dict=fit_int_revol_dict,
+                                            dist_factor=dist_factor_restrict[0],
+                                               display_hid_interval=monit_highlight_hid,
+                                               superpose_ew=plot_maxi_ew, dict_rxte=dict_lc_rxte,
+                                             binning=integral_binning)
+
+                # wrapper to avoid streamlit trying to plot a None when resetting while loading
+                if fig_lc_bat is not None:
+                    st.pyplot(fig_lc_bat)
+
+    if not plot_lc_monit and not plot_hr_monit and not plot_lc_bat and not plot_lc_integral:
         st.info('In single source mode, select a monitoring option in the sidebar to plot lightcurves and HR evolutions of the selected object')
 
     if ((plot_lc_monit and fig_lc_monit is None) or (plot_hr_monit and fig_hr_soft_monit is None)) and display_single:
@@ -1922,7 +2127,46 @@ with tab_monitoring:
 
     if plot_lc_bat and fig_lc_bat is None:
         st.warning('No match in BAT transient list found.')
-        
+
+with expander_monit:
+
+    #global lc download
+    if display_single:
+
+        #creating a list of the lc plots objects
+        fig_list=[]
+        fig_name_list=[]
+        if fig_lc_monit is not None:
+            fig_list+=[fig_lc_monit]
+            fig_name_list+=[choice_source[0]+'fig_lc_monit.svg']
+        if fig_hr_soft_monit is not None:
+            fig_list+=[fig_hr_soft_monit]
+            fig_name_list+=[choice_source[0]+'fig_hr_soft_monit.svg']
+        if fig_hr_hard_monit is not None:
+            fig_list+=[fig_hr_hard_monit]
+            fig_name_list+=[choice_source[0]+'fig_hr_hard_monit.svg']
+        if fig_lc_bat is not None:
+            fig_list+=[fig_lc_bat]
+            fig_name_list += [choice_source[0]+'fig_lc_bat.svg']
+        if fig_lc_int is not None:
+            fig_list+=[fig_lc_int]
+            fig_name_list+=[choice_source[0]+'fig_lc_int.svg']
+
+        if len(fig_list)>=1:
+            #saving them into a list of byte objects
+            fig_io_list=[io.BytesIO() for i in range(len(fig_list))]
+            for elem_fig,elem_io in zip(fig_list,fig_io_list):
+                elem_fig.savefig(elem_io,format='svg')
+
+            #converting into a zip
+            zip_io=make_zip(fig_io_list,fig_name_list)
+
+            st.download_button(
+                label="Download ZIP of monitoring figures",
+                data=zip_io,
+                file_name=choice_source[0]+'_monit.zip',
+                mime='text/csv')
+
 #####################
    #### Parameter analysis
 #####################
@@ -2001,6 +2245,9 @@ with st.sidebar.expander('Parameter analysis'):
     st.header('Upper limits')
     show_scatter_ul=st.toggle('Display upper limits in EW plots',value=False)
     lock_lims_det=not(st.toggle('Include upper limits in graph bounds computations',value=True))
+
+    st.header('High-energy')
+    plot_gamma_correl=st.toggle('Plot powerlaw index correlations',value=False)
 
 if compute_only_withdet:
 
@@ -2356,3 +2603,126 @@ if display_scat_inclin:
 if not (display_scat_intr or display_scat_eqwcomp or display_scat_hid or display_scat_inclin):
     with tab_param:
         st.info('Select parameters to compare or enable distributions to generate plots')
+
+if display_single and choice_source[0]=='4U1630-47' and plot_gamma_correl:
+
+
+    # integral gamma
+    mask_int_ok=~np.isnan(int_lc_df['RATE_30.0-50.0'])
+    int_fit_gamma = np.array(int_lc_df['powerlaw_PhoIndex'][mask_int_ok])
+    int_fit_gamma_low=np.array(int_lc_df['powerlaw_PhoIndex_lo'][mask_int_ok])
+    int_fit_gamma_high=np.array(int_lc_df['powerlaw_PhoIndex_hi'][mask_int_ok])
+
+    int_fit_flux=np.array(int_lc_df['FLUX_30.0-50.0'][mask_int_ok])
+    int_fit_flux_err=np.array(int_lc_df['FLUX_ERR_30.0-50.0'][mask_int_ok])
+
+    int_fit_gamma_err=np.array([[0 if elem_err==0 else elem_main-elem_err for elem_main,elem_err\
+                                in zip(int_fit_gamma,int_fit_gamma_low)],
+                               [0 if elem_err == 0 else elem_err - elem_main for elem_main, elem_err \
+                                in zip(int_fit_gamma, int_fit_gamma_high)]])
+
+    from visual_line_tools import fetch_bat_lightcurve
+    from decimal import Decimal
+
+    bat_lc_df = fetch_bat_lightcurve(catal_bat_df, catal_bat_simbad, choice_source, binning='day')
+
+    num_bat_dates =Time(bat_lc_df['TIME'], format='mjd').mjd
+
+    int_lc_mjd = np.array([Time(elem).mjd.astype(float) for elem in int_lc_df['ISOT']])
+
+    int_lc_mjd_int=int_lc_mjd.astype(int)[mask_int_ok]
+
+    mask_int_withbat=[elem in num_bat_dates for elem in int_lc_mjd_int]
+
+    match_int_bat=np.array([np.argwhere(num_bat_dates==elem)[0][0] for elem in int_lc_mjd_int[mask_int_withbat]])
+
+    count_bat_match_int=np.array(bat_lc_df[bat_lc_df.columns[1]][match_int_bat])
+    count_bat_err_match_int=np.array(bat_lc_df[bat_lc_df.columns[2]][match_int_bat])
+
+    #gamma-BAT rate figure
+    fig_gamma_bat,ax_gamma_bat=plt.subplots(figsize=(6,6))
+    ax_gamma_bat.set_xlim(1.5, 3.5)
+    ax_gamma_bat.set_ylim(1e-3, 0.25)
+    ax_gamma_bat.set_yscale('log')
+    ax_gamma_bat.set_xlabel('powerlaw index')
+    ax_gamma_bat.set_ylabel('BAT 15-50 keV rate')
+
+    #setting up alpha for the colors
+    int_fit_gamma_alpha=abs(int_fit_gamma[mask_int_withbat]/int_fit_gamma_err.T[mask_int_withbat].T.max(0))
+    int_fit_gamma_alpha = np.array([0.0001 if elem == np.inf else elem for elem in int_fit_gamma_alpha])
+    int_fit_gamma_alpha = int_fit_gamma_alpha / max(int_fit_gamma_alpha)
+    i_max_alpha_gamma=np.argmax(int_fit_gamma_alpha)
+
+    for i_int_withbat in range(sum(mask_int_withbat)):
+        ax_gamma_bat.errorbar(int_fit_gamma[mask_int_withbat][i_int_withbat],
+                              count_bat_match_int[i_int_withbat],
+                              xerr=np.array([[int_fit_gamma_err.T[mask_int_withbat][i_int_withbat].T[0]],
+                                             [int_fit_gamma_err.T[mask_int_withbat][i_int_withbat].T[1]]]),
+                              yerr=count_bat_err_match_int[i_int_withbat],
+                              alpha=int_fit_gamma_alpha[i_int_withbat],
+                              label='integral' if i_int_withbat==i_max_alpha_gamma else '',color='black',ls='')
+
+    r_spearman_gamma_bat= np.array(pymccorrelation(int_fit_gamma[mask_int_withbat], count_bat_match_int,
+                                          dx=int_fit_gamma_err.T[mask_int_withbat],
+                                          dy=count_bat_err_match_int,
+                                          Nperturb=1000, coeff='spearmanr', percentiles=(50, 5, 95)))
+
+    # switching back to uncertainties from quantile values
+    r_spearman_gamma_bat = np.array([[r_spearman_gamma_bat[ind_c][0],
+                            r_spearman_gamma_bat[ind_c][0] - r_spearman_gamma_bat[ind_c][1],
+                            r_spearman_gamma_bat[ind_c][2] - r_spearman_gamma_bat[ind_c][0]] \
+                           for ind_c in [0, 1]])
+
+    str_spearman_gamma_bat = r'$r_S \,=' + str(round(r_spearman_gamma_bat[0][0], 2)) +\
+                   '$\n$p_S=' + '%.1e' % Decimal(r_spearman_gamma_bat[1][0]) + '$'
+
+
+    ax_gamma_bat.legend(fontsize=10,title=str_spearman_gamma_bat)
+    fig_gamma_bat.tight_layout()
+
+    #integral gamma-flux figure
+    fig_gamma_flux,ax_gamma_flux=plt.subplots(figsize=(6,6))
+    ax_gamma_flux.set_xlim(1.5, 3.5)
+    ax_gamma_flux.set_ylim(3e-11, 5e-9)
+    ax_gamma_flux.set_yscale('log')
+    ax_gamma_flux.set_xlabel('gamma')
+    ax_gamma_bat.set_xlabel('powerlaw index')
+    plt.ylabel('30-50 keV flux (erg/s/cm²)')
+
+    #setting up alpha for the colors
+    int_fit_flux_alpha=abs(int_fit_flux/int_fit_flux_err)
+    int_fit_flux_alpha = np.array([0.0001 if elem == np.inf else elem for elem in int_fit_flux_alpha])
+    int_fit_flux_alpha = int_fit_flux_alpha / max(int_fit_flux_alpha)
+    i_max_alpha_flux=np.argmax(int_fit_flux_alpha)
+
+    for i_revol in range(len(int_fit_flux)):
+        ax_gamma_flux.errorbar(int_fit_gamma[i_revol],int_fit_flux[i_revol],
+                xerr=np.array([[int_fit_gamma_err.T[i_revol].T[0]],[int_fit_gamma_err.T[i_revol].T[1]]]),
+                yerr=int_fit_flux_err[i_revol],color='black',alpha=int_fit_flux_alpha[i_revol],
+                label='integral' if i_revol==i_max_alpha_flux else '',ls='')
+        
+    r_spearman_gamma_flux= np.array(pymccorrelation(int_fit_gamma, int_fit_flux,
+                                          dx=int_fit_gamma_err.T,
+                                          dy=int_fit_flux_err,
+                                          Nperturb=1000, coeff='spearmanr', percentiles=(50, 5, 95)))
+
+    # switching back to uncertainties from quantile values
+    r_spearman_gamma_flux = np.array([[r_spearman_gamma_flux[ind_c][0],
+                            r_spearman_gamma_flux[ind_c][0] - r_spearman_gamma_flux[ind_c][1],
+                            r_spearman_gamma_flux[ind_c][2] - r_spearman_gamma_flux[ind_c][0]] \
+                           for ind_c in [0, 1]])
+
+    str_spearman_gamma_flux = r'$r_S \,=' + str(round(r_spearman_gamma_flux[0][0], 2)) +\
+                   '$\n$p_S=' + '%.1e' % Decimal(r_spearman_gamma_flux[1][0]) + '$'
+
+
+    ax_gamma_flux.legend(fontsize=10,title=str_spearman_gamma_flux)
+
+    fig_gamma_flux.tight_layout()
+
+    with st.expander('High energy correlations'):
+        he_cols= st.columns(3)
+        with he_cols[0]:
+            st.pyplot(fig_gamma_bat)
+        with he_cols[1]:
+            st.pyplot(fig_gamma_flux)

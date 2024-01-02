@@ -379,7 +379,6 @@ if update_dump or not os.path.isfile(dump_path):
             'args_line_search_e':args.line_search_e,
             'args_line_search_norm':args.line_search_norm,
             'visual_line':True,
-
             }
         
         #### main arrays computation
@@ -971,6 +970,7 @@ else:
 
 # distance factor for the flux conversion later on
 dist_factor = 4 * np.pi * (dist_obj_list * 1e3 * 3.086e18) ** 2
+
 # L_Edd unit factor
 Edd_factor = dist_factor / (1.26e38 * mass_obj_list)
 
@@ -990,7 +990,6 @@ else:
     lum_plot_restrict=lum_plot.T[mask_obj].T
 
 incl_plot_restrict=incl_plot[mask_obj]
-
 
 #creating variables with values instead of uncertainties for the inclination and nh colormaps
 
@@ -1821,7 +1820,8 @@ if display_single and choice_source[0]=='4U1630-47':
     obs_dates = Time(np.array([date_list[mask_obj][0] for i in range(sum(mask_lines))]).astype(str)).mjd.astype(float)
 
     # computing which observations are within the timeframe of an integral revolution (assuming 3days-long)
-    mask_withtime_INT = [min((int_lc_mjd - elem)[(int_lc_mjd - elem) >= 0]) < 3 for elem in obs_dates[0]]
+    mask_withtime_INT = [False if sum((int_lc_mjd - elem) >= 0)==0 else \
+                         min((int_lc_mjd - elem)[(int_lc_mjd - elem) >= 0]) < 3 for elem in obs_dates[0]]
 
     mask_intime_INT_revol=np.array([Time(elem,format='mjd')>=Time(slider_date[0]) \
                                   and Time(elem,format='mjd')<=Time(slider_date[1])\

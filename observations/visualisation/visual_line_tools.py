@@ -1772,11 +1772,13 @@ def hid_graph(ax_hid,dict_linevis,
 
         ax_hid.set_yscale('log')
         if not HR_broad_6_10:
-            ax_hid.set_xscale('symlog', linthresh=1e-4, linscale=0.1)
+            broad_x_linthresh=1e-4
+            ax_hid.set_xscale('symlog', linthresh=broad_x_linthresh, linscale=0.1)
         else:
+            broad_x_linthresh=0
             ax_hid.set_xscale('log')
 
-        ax_hid.xaxis.set_minor_locator(MinorSymLogLocator(linthresh=1e-4))
+        ax_hid.xaxis.set_minor_locator(MinorSymLogLocator(linthresh=broad_x_linthresh))
 
         ax_hid.set_xlabel('Hardness Ratio in '+HR_broad_bands+' keV bands)')
         ax_hid.set_ylabel(r'Luminosity in the '+lum_broad_bands+' keV band in (L/L$_{Edd}$) units')
@@ -1850,10 +1852,12 @@ def hid_graph(ax_hid,dict_linevis,
 
         ax_hid.set_yscale('log')
         if not HR_broad_6_10:
-            ax_hid.set_xscale('symlog', linthresh=0.01, linscale=0.1)
+            broad_x_linthresh=0.01
+            ax_hid.set_xscale('symlog', linthresh=broad_x_linthresh, linscale=0.1)
         else:
+            broad_x_linthresh=0
             ax_hid.set_xscale('log')
-        ax_hid.xaxis.set_minor_locator(MinorSymLogLocator(linthresh=0.01))
+        ax_hid.xaxis.set_minor_locator(MinorSymLogLocator(linthresh=broad_x_linthresh))
 
         ax_hid.set_xlabel('Hardness Ratio in '+HR_broad_bands+' keV bands)')
         ax_hid.set_ylabel(r'Luminosity in the '+lum_broad_bands+' keV band in (L/L$_{Edd}$) units')
@@ -2878,21 +2882,54 @@ def hid_graph(ax_hid,dict_linevis,
 
         # plotting the main line between all points
         ax_hid.plot(x_hid_base[mask_intime[0]][date_order], y_hid_base[mask_intime[0]][date_order], color='grey',
-                    linewidth=0.5)
+                    linewidth=0.5,alpha=0.5)
 
         # computing the position of the arrows to superpose to the lines
-        xarr_start = x_hid_base[mask_intime[0]][date_order][range(len(x_hid_base[mask_intime[0]][date_order]) - 1)]
-        xarr_end = x_hid_base[mask_intime[0]][date_order][range(1, len(x_hid_base[mask_intime[0]][date_order]))]
+        xarr_start = x_hid_base[mask_intime[0]][date_order][range(len(x_hid_base[mask_intime[0]][date_order]) - 1)].astype(float)
+        xarr_end = x_hid_base[mask_intime[0]][date_order][range(1, len(x_hid_base[mask_intime[0]][date_order]))].astype(float)
         yarr_start = y_hid_base[mask_intime[0]][date_order][range(len(y_hid_base[mask_intime[0]][date_order]) - 1)]
         yarr_end = y_hid_base[mask_intime[0]][date_order][range(1, len(y_hid_base[mask_intime[0]][date_order]))]
+
+        #mask to know if we can do a log computation of the arrow positions or not (aka not broad mode or
+        #x positions above the lintresh threshold
+        x_arr_log_ok=np.array([not broad_mode or \
+                                   (elem_x_s>=broad_x_linthresh and elem_x_e>=broad_x_linthresh)\
+                                   for (elem_x_s,elem_x_e) in zip(xarr_start,xarr_end)])
+
+        #linear version first
         xpos = (xarr_start + xarr_end) / 2
         ypos = (yarr_start + yarr_end) / 2
+
         xdir = xarr_end - xarr_start
         ydir = yarr_end - yarr_start
 
-        for X, Y, dX, dY in zip(xpos, ypos, xdir, ydir):
-            ax_hid.annotate("", xytext=(X, Y), xy=(X + 0.001 * dX, Y + 0.001 * dY),
-                            arrowprops=dict(arrowstyle='->', color='grey'), size=10)
+        #log version in the mask
+        xpos[x_arr_log_ok] = 10**((np.log10(xarr_start[x_arr_log_ok]) + np.log10(xarr_end[x_arr_log_ok])) / 2)
+        ypos[x_arr_log_ok] = 10**((np.log10(yarr_start[x_arr_log_ok]) + np.log10(yarr_end[x_arr_log_ok])) / 2)
+
+        xdir[x_arr_log_ok] = 10**(np.log10(xarr_end[x_arr_log_ok]) - np.log10(xarr_start[x_arr_log_ok]))
+        ydir[x_arr_log_ok] = 10**(np.log10(yarr_end[x_arr_log_ok]) - np.log10(yarr_start[x_arr_log_ok]))
+
+        arrow_size_frac=0.001
+
+        for X, Y, dX, dY,log_ok in zip(xpos, ypos, xdir, ydir,x_arr_log_ok):
+            if log_ok:
+                ax_hid.annotate("", xytext=(X, Y), xy=(10**(np.log10(X) + arrow_size_frac * np.log10(dX)),
+                                                       10**(np.log10(Y) + arrow_size_frac * np.log10(dY))),
+                                arrowprops=dict(arrowstyle='->', color='grey',alpha=0.5), size=10)
+            else:
+                ax_hid.annotate("", xytext=(X, Y), xy=(X+ arrow_size_frac *dX,
+                                                       Y+ arrow_size_frac *dY),
+                                arrowprops=dict(arrowstyle='->', color='grey',alpha=0.5), size=10)
+
+
+        # else:
+        #     xpos = (xarr_start + xarr_end) / 2
+        #     ypos = (yarr_start + yarr_end) / 2
+        # 
+        #     xdir = xarr_end - xarr_start
+        #     ydir = yarr_end - yarr_start
+
 
     ####displaying the thresholds if asked to
 

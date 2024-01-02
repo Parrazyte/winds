@@ -159,14 +159,14 @@ ap = argparse.ArgumentParser(description='Script to perform line detection in X-
 
 '''GENERAL OPTIONS'''
 
-ap.add_argument('-satellite',nargs=1,help='telescope to fetch spectra from',default='NICER',type=str)
+ap.add_argument('-satellite',nargs=1,help='telescope to fetch spectra from',default='multi',type=str)
 
 #used for NICER and multi for now
 ap.add_argument('-group_max_timedelta',nargs=1,
-                help='maximum time delta for epoch/gti grouping in dd_hh_mm_ss',default='00_00_00_10',type=str)
+                help='maximum time delta for epoch/gti grouping in dd_hh_mm_ss',default='00_00_15_00',type=str)
 
 #00_00_00_10 for NICER TR
-#00_00_15_10 for NuSTAR individual orbits
+#00_00_15_00 for NuSTAR individual orbits
 
 ap.add_argument("-cameras",nargs=1,help='Cameras to use for spectral analysis',default='all',type=str)
 ap.add_argument("-expmodes",nargs=1,help='restrict the analysis to a single type of exposure',default='all',type=str)
@@ -214,7 +214,8 @@ ap.add_argument('-xspec_window',nargs=1,help='xspec window id (auto tries to pic
 
 '''MODELS'''
 #### Models and abslines lock
-ap.add_argument('-cont_model',nargs=1,help='model list to use for the autofit computation',default='cont_detailed',type=str)
+ap.add_argument('-cont_model',nargs=1,help='model list to use for the autofit computation',
+                default='cont_detailed',type=str)
 
 ap.add_argument('-autofit_model',nargs=1,help='model list to use for the autofit computation',
                 default='lines_narrow',type=str)
@@ -232,6 +233,11 @@ ap.add_argument("-h_update",nargs=1,help='update the bg, rmf and arf file names 
                 default=True,type=bool)
 
 '''ANALYSIS RESTRICTION'''
+
+#this will prevent new analysis and can help for merged folders
+ap.add_argument('-rewind_epoch_list',nargs=1,
+                help='only uses the epoch already existing in the summary file instead of scanning',
+                default=False,type=bool)
 
 ap.add_argument('-spread_comput',nargs=1,
                 help='spread sources in N subsamples to poorly parallelize on different consoles',
@@ -322,13 +328,14 @@ ap.add_argument('-write_pdf',nargs=1,help='overwrite finished pdf at the end of 
                 default=True,type=bool)
 
 #can be set to false to gain time when testing or if the aborted pdf were already done
-ap.add_argument('-write_aborted_pdf',nargs=1,help='create aborted pdfs at the end of the computation',default=True,
-                type=bool)
+ap.add_argument('-write_aborted_pdf',nargs=1,help='create aborted pdfs at the end of the computation',
+                default=False,type=bool)
 
 '''MODES'''
 
 #options: "opt" (tests the significance of each components and add them accordingly) and "force_all" to force all components
-ap.add_argument('-cont_fit_method',nargs=1,help='fit logic for the broadband fits in multi',default='force_all')
+ap.add_argument('-cont_fit_multi_method',nargs=1,help='fit logic for the broadband fits FOR MULTI satellite',
+                default='force_all')
 
 ap.add_argument('-reload_autofit',nargs=1,
                 help='Reload existing autofit save files to gain time if a computation has crashed',
@@ -336,11 +343,11 @@ ap.add_argument('-reload_autofit',nargs=1,
 
 ap.add_argument('-reload_fakes',nargs=1,
                 help='Reload fake delchi array file to skip the fake computation if possible',
-                default=True,type=bool)
+                default=False,type=bool)
 
 ap.add_argument('-pdf_only',nargs=1,
                 help='Updates the pdf with already existing elements but skips the line detection entirely',
-                default=True,type=bool)
+                default=False,type=bool)
 
 #note: used mainly to recompute obs with bugged UL computations. Needs FINISHED computations firsthand, else
 #use reload_autofit and reload_fakes
@@ -581,8 +588,9 @@ reverse_epoch=args.reverse_epoch
 reload_fakes=args.reload_fakes
 broad_HID_mode=args.broad_HID_mode
 
-cont_fit_method=args.cont_fit_method
+cont_fit_multi_method=args.cont_fit_multi_method
 
+rewind_epoch_list=args.rewind_epoch_list
 
 megumi_files=args.megumi_files
 suzaku_hid_cont_range=np.array(args.suzaku_hid_cont_range.split(' ')).astype(float)
@@ -1337,9 +1345,8 @@ def pdf_summary(epoch_files,fit_ok=False,summary_epoch=None):
 
             #adding the global flares curve for each obsid
             elem_obsid=elem_epoch.split('-')[0]
-            if elem_obsid in shown_obsids_NICER:
-                continue
-            else:
+
+            if elem_obsid not in shown_obsids_NICER:
                 shown_obsids_NICER+=[elem_obsid]
                 pdf.add_page()
                 pdf.set_font('helvetica', 'B', 16)
@@ -1350,26 +1357,26 @@ def pdf_summary(epoch_files,fit_ok=False,summary_epoch=None):
                 except:
                     pass
 
-                #and adding the individual GTI's flare and lightcurves
-                pdf.add_page()
-                pdf.set_font('helvetica', 'B', 16)
-                pdf.cell(1,10,'GTIS and lightcurves for gti '+elem_observ,align='C',center=True)
-                pdf.ln(10)
+            #and adding the individual GTI's flare and lightcurves
+            pdf.add_page()
+            pdf.set_font('helvetica', 'B', 16)
+            pdf.cell(1,10,'GTIS and lightcurves for gti '+elem_observ,align='C',center=True)
+            pdf.ln(10)
 
-                #recognizing time-resolved spectra
-                elem_orbit=elem_epoch.split('S')[0]
+            #recognizing time-resolved spectra
+            elem_orbit=elem_epoch.split('S')[0]
 
-                try:
-                    pdf.image(elem_orbit+ '_flares.png',x=2,y=70,w=140)
+            try:
+                pdf.image(elem_orbit+ '_flares.png',x=2,y=70,w=140)
 
-                    pdf.image(elem_epoch + '_lc_3-10_bin_' + NICER_lc_binning + '.png', x=150, y=30, w=70)
-                    pdf.image(elem_epoch + '_hr_3-10_bin_' + NICER_lc_binning + '.png', x=220, y=30, w=70)
+                pdf.image(elem_epoch + '_lc_3-10_bin_' + NICER_lc_binning + '.png', x=150, y=30, w=70)
+                pdf.image(elem_epoch + '_hr_3-10_bin_' + NICER_lc_binning + '.png', x=220, y=30, w=70)
 
-                    pdf.image(elem_epoch + '_lc_3-6_bin_' + NICER_lc_binning + '.png', x=150, y=120, w=70)
-                    pdf.image(elem_epoch + '_lc_6-10_bin_' + NICER_lc_binning + '.png', x=220, y=120, w=70)
+                pdf.image(elem_epoch + '_lc_3-6_bin_' + NICER_lc_binning + '.png', x=150, y=120, w=70)
+                pdf.image(elem_epoch + '_lc_6-10_bin_' + NICER_lc_binning + '.png', x=220, y=120, w=70)
 
-                except:
-                    pass
+            except:
+                pass
 
         if elem_sat=='NuSTAR':
 
@@ -2509,6 +2516,9 @@ def line_detect(epoch_id):
                                line_cont_range=line_cont_range,trig_interval=trig_interval,
                                scorpeon_save=data_broad.scorpeon)
 
+        with open(outdir+'/'+epoch_observ[0]+'_chi_dict_init.pkl','wb') as file:
+            dill.dump(chi_dict_init,file)
+
         # reloading the continuum models to get the saves back and compute the continuum infos
         Xset.restore(outdir + '/' + epoch_observ[0] + '_mod_autofit.xcm')
 
@@ -2565,7 +2575,7 @@ def line_detect(epoch_id):
                 fitcont_high=fitmod([elem for elem in comp_cont if elem!=broad_abscomp],
                                     curr_logfile,curr_logfile_write)
 
-            fitcont_high.global_fit(split_fit=split_fit,method=cont_fit_method if sat_glob=='multi' else 'opt')
+            fitcont_high.global_fit(split_fit=split_fit,method=cont_fit_multi_method if sat_glob=='multi' else 'opt')
 
             # mod_fitcont=allmodel_data()
 
@@ -2652,13 +2662,13 @@ def line_detect(epoch_id):
             fitcont_broad=fitmod(comp_cont,curr_logfile,curr_logfile_write)
 
             #fitting
-            fitcont_broad.global_fit(split_fit=split_fit,method=cont_fit_method if sat_glob=='multi' else 'opt')
+            fitcont_broad.global_fit(split_fit=split_fit,method=cont_fit_multi_method if sat_glob=='multi' else 'opt')
 
             #unfreezing the scorpeon model by resetting it
             xscorpeon.load()
 
             #refitting in case this allows something else to appear
-            fitcont_broad.global_fit(split_fit=False,method=cont_fit_method if sat_glob=='multi' else 'opt')
+            fitcont_broad.global_fit(split_fit=False,method=cont_fit_multi_method if sat_glob=='multi' else 'opt')
 
             mod_fitcont=allmodel_data()
 
@@ -2730,7 +2740,7 @@ def line_detect(epoch_id):
                                        curr_logfile,curr_logfile_write)
 
                 #fitting
-                fitcont_hid.global_fit(split_fit=split_fit,method=cont_fit_method if sat_glob=='multi' else 'opt')
+                fitcont_hid.global_fit(split_fit=split_fit,method=cont_fit_multi_method if sat_glob=='multi' else 'opt')
 
                 mod_fitcont=allmodel_data()
 
@@ -2784,6 +2794,11 @@ def line_detect(epoch_id):
                                line_cont_range=line_cont_range,trig_interval=trig_interval,
                                scorpeon_save=data_broad.scorpeon)
 
+        with open(outdir+'/'+epoch_observ[0]+'_chi_dict_init.pkl','wb') as file:
+            dill.dump(chi_dict_init,file)
+
+        #same for autofit, then specific mode
+
         plot_line_search(chi_dict_init, outdir, sat_glob,suffix='cont', epoch_observ=epoch_observ)
 
         '''
@@ -2811,6 +2826,9 @@ def line_detect(epoch_id):
 
             #creating the fitmod object with the desired componets (we currently do not use comp groups)
             fitlines=fitmod(comp_lines,curr_logfile,curr_logfile_write,prev_fitmod=fitmod_cont)
+
+            # inputting the fixed abs value to avoid issues during component deletion
+            fitlines.fixed_abs = broad_absval
 
             #global fit, with MC only if no continuum refitting
             fitlines.global_fit(chain=not refit_cont,directory=outdir,observ_id=epoch_observ[0],split_fit=split_fit,
@@ -2869,6 +2887,10 @@ def line_detect(epoch_id):
                     main_abscomp=abs_incl_comps[0]
                     main_abscomp.xcomps[0].nH.frozen=False
 
+                    #releasing the n_unlocked_pars of the absorption component
+                    fitlines.update_fitcomps()
+                    main_abscomp.n_unlocked_pars_base=len(main_abscomp.unlocked_pars)
+
                 #we reset the value of the fixed abs to allow it to be free if it gets deleted and put again
                 fitlines.fixed_abs=None
 
@@ -2898,12 +2920,16 @@ def line_detect(epoch_id):
                     main_abscomp=abs_incl_comps[0]
                     main_abscomp.xcomps[0].nH.frozen=True
                     broad_absval=main_abscomp.xcomps[0].nH.values[0]
+
+                    fitlines.update_fitcomps()
+                    main_abscomp.n_unlocked_pars_base=len(main_abscomp.unlocked_pars)
+
                 else:
                     broad_absval=0
 
                 fitlines.fixed_abs=broad_absval
 
-                if broad_HID_mode:
+                if not broad_HID_mode:
                     #refitting in hid band for the HID values
                     ignore_data_indiv(hid_cont_range[0], hid_cont_range[1], reset=True, sat_low_groups=e_sat_low_indiv,
                                       sat_high_groups=e_sat_high_indiv, glob_ignore_bands=ignore_bands_indiv)
@@ -2920,17 +2946,21 @@ def line_detect(epoch_id):
                 main_spflux=hid_fit_infos(fitlines,broad_absval,post_autofit=True)
 
                 '''
-                restoring the line freeze states
+                Refitting in the autofit range to get the newer version of the autofit and continuum
+                
+                first: restoring the line freeze states
                 here we restore the INITIAL component freeze state, effectively thawing all components pegged during the first autofit
                 '''
 
                 for comp in [elem for elem in fitlines.includedlist if elem is not None]:
 
-                    if comp.line:
+                    if comp.line and not comp.calibration:
                         #unfreezing the parameter with the mask created at the first addition of the component
                         unfreeze(parlist=np.array(comp.parlist)[comp.unlocked_pars_base_mask])
 
-                #refitting in the autofit range to get the newer version of the autofit and continuum
+                    if comp.calibration and comp.compname not in ['calNuSTAR_edge']:
+                        fitlines.remove_comp(comp)
+
                 ignore_data_indiv(line_cont_range[0], line_cont_range[1], reset=True, sat_low_groups=e_sat_low_indiv,
                                   sat_high_groups=e_sat_high_indiv, glob_ignore_bands=ignore_bands_indiv)
 
@@ -3222,6 +3252,9 @@ def line_detect(epoch_id):
                            e_sat_low_indiv=e_sat_low_indiv,peak_thresh=peak_thresh,peak_clean=peak_clean,
                            line_cont_range=line_cont_range,trig_interval=trig_interval,
                            scorpeon_save=data_broad.scorpeon,data_fluxcont=data_autofit_noabs)
+
+        with open(outdir+'/'+epoch_observ[0]+'_chi_dict_autofit.pkl','wb') as file:
+            dill.dump(chi_dict_init,file)
 
         plot_line_search(chi_dict_autofit,outdir,sat_glob,suffix='autofit',epoch_observ=epoch_observ)
 
@@ -4045,7 +4078,7 @@ def expand_epoch(shortened_epoch):
             obsid=short_id.split('-')[0]
             gti_ids=short_id.split('-')[1:]
 
-            file_ids+=['-'.join(obsid,elem_gti) for elem_gti in gti_ids]
+            file_ids+=['-'.join([obsid,elem_gti]) for elem_gti in gti_ids]
 
     return file_ids
 
@@ -4088,6 +4121,10 @@ if reverse_epoch:
 #
 # #second obs
 # epoch_list=np.concatenate((epoch_list[:-51],epoch_list[-50:]))
+
+#replacing epoch list by what's in the summary folder if asked to
+if rewind_epoch_list:
+    epoch_list=[[elem+'_sp_grp_opt.pha' for elem in expand_epoch(started_expos[i])] for i in range(len(started_expos))]
 
 #### line detections for exposure with a spectrum
 for epoch_id,epoch_files in enumerate(epoch_list):
@@ -4221,7 +4258,6 @@ for epoch_id,epoch_files in enumerate(epoch_list):
     else:
         summary_lines=line_detect(epoch_id)
 
-
 #not creating the recap file in spread comput mode to avoid issues
 assert spread_comput==1, 'Stopping the computation here to avoid conflicts when making the summary'
 
@@ -4254,7 +4290,7 @@ if multi_obj==False:
         aborted_epochs=[elem_epoch_id for elem_epoch_id in epoch_ids if\
                         not '_'.join(shorten_epoch(elem_epoch_id))+'_recap.pdf' in lineplots_files]
 
-        aborted_files=[elem_epoch.tolist() for elem_epoch,elem_epoch_id in zip(epoch_list,epoch_ids) if\
+        aborted_files=[elem_epoch for elem_epoch,elem_epoch_id in zip(epoch_list,epoch_ids) if\
                         not '_'.join(shorten_epoch(elem_epoch_id))+'_recap.pdf' in lineplots_files]
 
     elif sat_glob=='Suzaku':
@@ -4285,8 +4321,6 @@ if multi_obj==False:
             # elif sat_glob=='Suzaku':
             #     if megumi_files:
             #         epoch_observ=[elem_file.split('_src')[0].split('_gti')[0] for elem_file in elem_epoch]
-
-
 
 '''''''''''''''''''''''''''''''''''''''
 ''''''Hardness-Luminosity Diagrams''''''
@@ -4827,7 +4861,7 @@ def save_pdf(fig):
 
         if sat_glob=='NICER':
             short_ep_id='_'.join(shorten_epoch(elem_epoch))
-            breakpoint()
+
             merger.append(save_dir + '/' + short_ep_id+ '_aborted_recap.pdf')
             bkm_completed=merger.add_outline_item(short_ep_id,curr_pages,parent=bkm_aborted)
         else:

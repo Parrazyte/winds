@@ -43,7 +43,7 @@ lines_std={         #don't change the first 8, there are explicit calls in the c
                   #have restrained energy ranges compared to their broad counterparts
                   'FeKa0em':r'Fe K$\alpha$',
                   'FeKb0em':r'Fe K$\beta$',
-                  'calNICER0em':r'Nicer Cal'}
+                  'calNICERSiem':r'Nicer Cal'}
 
 lines_std_names=list(lines_std.keys())
 
@@ -122,7 +122,7 @@ lines_w_dict={
                   'FeKb0em':[1e-2,0.,0.05],
                   'FeKa25em':[1e-2,0.,0.05],
                   'FeKa26em':[1e-2,0.,0.05],
-                  'calNICERSiem':[0.,0.,0.2],
+                  'calNICERSiem':[0.1,0.,0.2],
                   }
 
 lines_broad_w_dict={

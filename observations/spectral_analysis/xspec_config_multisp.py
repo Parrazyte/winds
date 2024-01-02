@@ -1039,16 +1039,17 @@ def addcomp(compname,position='last',endmult=None,return_pos=False,modclass=AllM
         if AllModels(1).componentNames[0]=='constant':
             start_position+=1
 
-    if comp_custom is not None and 'cal' in comp_custom:
+    if comp_custom is not None:
+        if 'cal' in comp_custom:
 
-        #note: gaussian calibration components are placed in lastin at the very end of the model
-        if comp_split!='gaussian':
-            start_position=1
-            if multipl:
-                end_multipl=-1
-            #staying inside the constant factor if there is one
-            if AllModels(1).componentNames[0]=='constant':
-                start_position+=1
+            #note: gaussian calibration components are placed in lastin at the very end of the model
+            if comp_split!='gaussian':
+                start_position=1
+                if multipl:
+                    end_multipl=-1
+                #staying inside the constant factor if there is one
+                if AllModels(1).componentNames[0]=='constant':
+                    start_position+=1
 
 
     #continuum keyword
@@ -1508,54 +1509,54 @@ def addcomp(compname,position='last',endmult=None,return_pos=False,modclass=AllM
     Done after the relink since they affect the linking between components
     '''
 
-    if 'cal' in comp_custom:
+    if comp_custom is not None:
+        if 'cal' in comp_custom:
+            #for the edges
+            if comp_custom=='calNICER':
+                xspec_model(gap_end-1).values=2.42
+                xspec_model(gap_end-1).frozen=True
 
-        #for the edges
-        if comp_custom=='calNICER':
-            xspec_model(gap_end-1).values=2.42
-            xspec_model(gap_end-1).frozen=True
-
-            first_group_use=True
-            #using the edge only for NICER datagroups, otherwise freezing the normalization at 0
-            for i_grp in range(1,AllData.nGroups+1):
-                with fits.open(AllData(i_grp).fileName) as hdul:
-                    if 'TELESCOP' not in hdul[1].header or hdul[1].header['TELESCOP']!='NICER':
-                        AllModels(i_grp)(gap_end).link=''
-                        AllModels(i_grp)(gap_end).values=0
-                        AllModels(i_grp)(gap_end).frozen=True
-
-                    else:
-                        if first_group_use:
-                            #allowing the normalization to vary freely
-                            AllModels(i_grp)(gap_end).values = 1
+                first_group_use=True
+                #using the edge only for NICER datagroups, otherwise freezing the normalization at 0
+                for i_grp in range(1,AllData.nGroups+1):
+                    with fits.open(AllData(i_grp).fileName) as hdul:
+                        if 'TELESCOP' not in hdul[1].header or hdul[1].header['TELESCOP']!='NICER':
                             AllModels(i_grp)(gap_end).link=''
-                            AllModels(i_grp)(gap_end).frozen = False
-                            par_tolink=(i_grp-1)*AllModels(1).nParameters+gap_end
-                            first_group_use=False
-                        else:
-                            AllModels(i_grp)(gap_end).link=str(par_tolink)
+                            AllModels(i_grp)(gap_end).values=0
+                            AllModels(i_grp)(gap_end).frozen=True
 
-        if comp_custom=='calNuSTAR':
-            xspec_model(gap_end-1).values=9.51
-            xspec_model(gap_end-1).frozen=True
-
-            first_group_use=True
-            #using the edge only for NuSTAR datagroups, otherwise freezing the normalization at 0
-            for i_grp in range(1,AllData.nGroups+1):
-                with fits.open(AllData(i_grp).fileName) as hdul:
-                    if 'TELESCOP' not in hdul[1].header or hdul[1].header['TELESCOP']!='NuSTAR':
-                        AllModels(i_grp)(gap_end).values=0
-                        AllModels(i_grp)(gap_end).frozen=True
-                    else:
-                        if first_group_use:
-                            #allowing the normalization to vary freely
-                            AllModels(i_grp)(gap_end).values=1
-                            AllModels(i_grp)(gap_end).link=''
-                            AllModels(i_grp)(gap_end).frozen = False
-                            par_tolink=(i_grp-1)*AllModels(1).nParameters+gap_end
-                            first_group_use=False
                         else:
-                            AllModels(i_grp)(gap_end).link=str(par_tolink)
+                            if first_group_use:
+                                #allowing the normalization to vary freely
+                                AllModels(i_grp)(gap_end).values = 1
+                                AllModels(i_grp)(gap_end).link=''
+                                AllModels(i_grp)(gap_end).frozen = False
+                                par_tolink=(i_grp-1)*AllModels(1).nParameters+gap_end
+                                first_group_use=False
+                            else:
+                                AllModels(i_grp)(gap_end).link=str(par_tolink)
+
+            if comp_custom=='calNuSTAR':
+                xspec_model(gap_end-1).values=9.51
+                xspec_model(gap_end-1).frozen=True
+
+                first_group_use=True
+                #using the edge only for NuSTAR datagroups, otherwise freezing the normalization at 0
+                for i_grp in range(1,AllData.nGroups+1):
+                    with fits.open(AllData(i_grp).fileName) as hdul:
+                        if 'TELESCOP' not in hdul[1].header or hdul[1].header['TELESCOP']!='NuSTAR':
+                            AllModels(i_grp)(gap_end).values=0
+                            AllModels(i_grp)(gap_end).frozen=True
+                        else:
+                            if first_group_use:
+                                #allowing the normalization to vary freely
+                                AllModels(i_grp)(gap_end).values=1
+                                AllModels(i_grp)(gap_end).link=''
+                                AllModels(i_grp)(gap_end).frozen = False
+                                par_tolink=(i_grp-1)*AllModels(1).nParameters+gap_end
+                                first_group_use=False
+                            else:
+                                AllModels(i_grp)(gap_end).link=str(par_tolink)
 
     AllModels.show()
         
@@ -1636,13 +1637,14 @@ def delcomp(compname,modclass=AllModels,give_ndel=False):
             print('Removing the associated component: '+del_asscomp)
 
             id_delcomp_list+=[id_delcomp_list[-1]-1]
-            
+
             #removing the right parenthesis if it exists
-            new_exp_aft=new_exp_aft[1:] if new_exp_aft[0]==')' and new_exp_bef[new_exp_bef.find(del_asscomp)]=='(' else new_exp_aft
-            
+            new_exp_aft=new_exp_aft[1:] if new_exp_aft[0]==')' and\
+                        new_exp_bef[new_exp_bef.find(del_asscomp)+len(del_asscomp)]=='(' else new_exp_aft
+
             #this removes both the component and the left parenthesis/multiplication
             new_exp_bef=new_exp_bef[:new_exp_bef.find(del_asscomp)]
-            
+
             #re-adding space if needed
             if new_exp_bef=='':
                 new_exp_bef+=' '
@@ -2684,6 +2686,13 @@ class fitmod:
             if component.named_absline and no_abslines:
                 continue
 
+            #only adding the calibration components if their relevant energies is inside what is currently noticed
+            if component.calibration:
+                Plot('ldata')
+                ener_bounds=[Plot.x()[0],Plot.x()[-1]]
+                if not component.cal_e>=ener_bounds[0] and component.cal_e<=ener_bounds[1]:
+                    continue
+
             # excluding addition of named components with pendants when not allowing mixing between emission and absorption of the same line
             if component.named_line and nomixline:
 
@@ -3117,7 +3126,20 @@ class fitmod:
         self.update_fitcomps()
         
         return False
-                
+
+    def remove_comp(self,component):
+
+        # here we don't use an enumerate in the loop itself since the positions can be modified when components are deleted
+        i_comp = np.argwhere(np.array(self.includedlist) == component)[0][0]
+
+        # deleting the component and storing how many components were deleted in the process
+        n_delcomp = component.delfrommod(rollback=False)
+
+        # updating the current includedlist to delete as many components as what was deleted in xspec
+        self.includedlist = self.includedlist[:i_comp + 1 - n_delcomp] + self.includedlist[i_comp + 1:]
+        # this time we need to update
+        self.update_fitcomps()
+
     def test_delcomp(self,chain=False,lock_lines=False,in_add=False,ftest_threshold=def_ftest_threshold,ftest_leeway=def_ftest_leeway):
 
         '''
@@ -3179,22 +3201,11 @@ class fitmod:
             
             #storing the current model iteration
             new_bestmod=allmodel_data()
-    
-            #here we don't use an enumerate in the loop itself since the positions can be modified when components are deleted
-            i_comp=np.argwhere(np.array(self.includedlist)==component)[0][0]
-            
+
             #storing the previous includedlist to come back to it at the end of the loop iteration
             prev_includedlist=self.includedlist
-            
 
-            #deleting the component and storing how many components were deleted in the process
-            n_delcomp=component.delfrommod(rollback=False)
-
-                
-            #updating the current includedlist to delete as many components as what was deleted in xspec
-            self.includedlist=self.includedlist[:i_comp+1-n_delcomp]+self.includedlist[i_comp+1:]
-            #this time we need to update
-            self.update_fitcomps()
+            self.remove_comp(component)
                 
             #refitting and recomputing the errors with everything free
             calc_fit(logfile=self.logfile if chain else None)
@@ -3203,8 +3214,11 @@ class fitmod:
             
             #restricting the test to components which are not 'very' significant
             #we fix the limit to 10 times the delchi for the significance threshold with their corresponding number of parameters
-            ftest_val=Fit.ftest(new_chi,new_dof,del_chi,new_dof+n_unlocked_pars_with_unlink)
-            
+            try:
+                ftest_val=Fit.ftest(new_chi,new_dof,del_chi,new_dof+n_unlocked_pars_with_unlink)
+            except:
+                breakpoint()
+
             if ftest_val<ftest_threshold/100 and ftest_val>0:
                 self.print_xlog('\nlog:Very significant component detected. Skipping deletion test.')
                 new_bestmod.load()
@@ -3884,9 +3898,13 @@ class fitmod:
                 #skipping the current component
                 if comp is fitcomp_line or comp.mandatory or (comp.absorption and comp.xcompnames[0] not in AllModels(1).componentNames):
                     continue
-                
-                comp.delfrommod(rollback=False)
-                           
+
+                try:
+                    comp.delfrommod(rollback=False)
+                except:
+                    breakpoint()
+                    pass
+
             #loop on the parameters        
             flux_line_dist=np.zeros(len(par_draw))
             for i_sim in range(len(par_draw)):
@@ -4103,11 +4121,11 @@ class fitcomp:
 
             #storing the energies of the components to see if they should be tested for
             if comp_prefix=='calNICER':
-                cal_e=2.42
+                self.cal_e=2.42
             elif comp_prefix=='calNuSTAR':
-                cal_e=9.51
+                self.cal_e=9.51
             elif comp_prefix=='calNICERSiem':
-                cal_e=1.74
+                self.cal_e=1.74
         else:
             self.calibration=False
             

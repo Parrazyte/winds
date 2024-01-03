@@ -1284,7 +1284,7 @@ def addcomp(compname,position='last',endmult=None,return_pos=False,modclass=AllM
 
     #restricting the continuum powerlaw's photon index to physical values
     if compname=='cont_powerlaw':
-        xspec_model(gap_end-1).values=[1.0, 0.01, 1.0, 1.0, 3.0, 3.0]
+        xspec_model(gap_end-1).values=[1.0, 0.01, 1.0, 1.0, 3.5, 3.5]
         
     #restricting the curvature bb/diskbb's kt to physical values
     if compname=='cont_diskbb':

@@ -1240,6 +1240,7 @@ def addcomp(compname,position='last',endmult=None,return_pos=False,modclass=AllM
             except:
                 print(new_expr)
                 breakpoint()
+                xspec_modelxspec_model = xModel(new_expr, table_dict, return_mod=True)
                 print(new_expr)
 
             added_ncomps=len(xspec_model.componentNames)-old_ncomps
@@ -5070,11 +5071,12 @@ def xPlot(types,axes_input=None,plot_saves_input=None,plot_arg=None,includedlist
         #plotting the legend in horizontal and below the main result if necessary
         if AllData.nGroups>=5 and no_name_data=='auto':
             if i_ax==0:
-                curr_ax.legend(loc=legend_position)
+                curr_ax.legend(loc=legend_position,ncols=3+np.ceil(AllData.nGroups/10))
+
             if i_ax==len(types_split)-1:
                 bbox_yval=max(-0.3-0.2*np.ceil(AllData.nGroups/2),-0.5)
                 curr_ax.legend(loc='lower center',
-                               bbox_to_anchor=(0.5,bbox_yval),ncols=3+np.ceil(AllData.nGroups/5))
+                               bbox_to_anchor=(0.5,bbox_yval),ncols=3+np.ceil(AllData.nGroups/10))
 
         else:
             curr_ax.legend(loc=legend_position)

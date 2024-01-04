@@ -242,6 +242,26 @@ def model_list(model_id='lines',give_groups=False):
 
         interact_groups = None
 
+    if model_id=='cont_NICER':
+        '''
+        subset of continuum with NICER calibration components
+        '''
+
+        avail_comps = ['cont_diskbb', 'glob_TBabs', 'cont_powerlaw', 'glob_constant',
+                       'calNICERSiem_gaussian','calNICER_edge']
+
+        interact_groups = None
+
+    if model_id == 'cont_NuSTAR':
+        '''
+        subset of continuum with NuSTAR calibration components
+        '''
+
+        avail_comps = ['cont_diskbb', 'glob_TBabs', 'cont_powerlaw', 'glob_constant',
+                       'calNuSTAR_edge']
+
+        interact_groups = None
+
     if model_id=='cont':
         
         avail_comps=['glob_constant','glob_phabs','cont_diskbb','cont_powerlaw']

@@ -159,14 +159,15 @@ ap = argparse.ArgumentParser(description='Script to perform line detection in X-
 
 '''GENERAL OPTIONS'''
 
-ap.add_argument('-satellite',nargs=1,help='telescope to fetch spectra from',default='multi',type=str)
+ap.add_argument('-satellite',nargs=1,help='telescope to fetch spectra from',default='NuSTAR',type=str)
 
 #used for NICER and multi for now
 ap.add_argument('-group_max_timedelta',nargs=1,
-                help='maximum time delta for epoch/gti grouping in dd_hh_mm_ss',default='00_00_15_00',type=str)
+                help='maximum time delta for epoch/gti grouping in dd_hh_mm_ss',default='0_00_15_00',type=str)
 
 #00_00_00_10 for NICER TR
 #00_00_15_00 for NuSTAR individual orbits
+#01_00_00_00 for dailies
 
 ap.add_argument("-cameras",nargs=1,help='Cameras to use for spectral analysis',default='all',type=str)
 ap.add_argument("-expmodes",nargs=1,help='restrict the analysis to a single type of exposure',default='all',type=str)
@@ -189,7 +190,7 @@ ap.add_argument('-overwrite',nargs=1,
 
 #note : will skip exposures for which the exposure didn't compute or with logged errors
 ap.add_argument('-skip_started',nargs=1,help='skip all exposures listed in the local summary_line_det file',
-                default=True,type=bool)
+                default=False,type=bool)
 
 ap.add_argument('-skip_complete',nargs=1,help='skip completed exposures listed in the local summary_line_det file',
                 default=False,type=bool)
@@ -215,7 +216,7 @@ ap.add_argument('-xspec_window',nargs=1,help='xspec window id (auto tries to pic
 '''MODELS'''
 #### Models and abslines lock
 ap.add_argument('-cont_model',nargs=1,help='model list to use for the autofit computation',
-                default='cont_detailed',type=str)
+                default='cont_NuSTAR',type=str)
 
 ap.add_argument('-autofit_model',nargs=1,help='model list to use for the autofit computation',
                 default='lines_narrow',type=str)
@@ -264,47 +265,30 @@ ap.add_argument('-restrict',nargs=1,
                 help='restrict the computation to a number of predefined exposures',
                 default=False,type=bool)
 
-observ_restrict=['1130010141-001-002-003-004-005-006-007']
-
-''' 
-test:
-'5501010106-001_sp_grp_opt.pha'
-                 '5501010106-002_sp_grp_opt.pha'
-                 '5501010106-003_sp_grp_opt.pha'
-                 '5501010106-003F_sp_grp_opt.pha'
-                 '5501010106-004_sp_grp_opt.pha'
-                 '5501010106-005_sp_grp_opt.pha'
-                 
-Chandra:
--GRS:
-Three semi-compton thick obs
-'23435_heg_-1_grp_opt.pha','23435_heg_1_grp_opt.pha',
- '24663_heg_-1_grp_opt.pha','24663_heg_1_grp_opt.pha',
- '22213_heg_-1_grp_opt.pha','22213_heg_1_grp_opt.pha'
-
-
-Low-E spectrum:
-    ['660_heg_-1_grp_opt.pha','660_heg_1_grp_opt.pha']
-Need no abs:
-    ['4587_heg_-1_grp_opt.pha','4587_heg_1_grp_opt.pha']
-
--4U1630-47:
-    ['22377_heg_-1_grp_opt.pha','22377_heg_1_grp_opt.pha',
-     '22378_heg_-1_grp_opt.pha','22378_heg_1_grp_opt.pha']
-
-MAXIJ1535:
-spectra with start at 2 keV to avoid issues issues with the continuum due to response errors + -1 order only
-'20203_heg_-1_grp_opt.pha','20203_heg_1_grp_opt.pha',
- '20204_heg_-1_grp_opt.pha','20204_heg_1_grp_opt.pha',
- '20205_heg_-1_grp_opt.pha','20205_heg_1_grp_opt.pha'
- 
-XTEJ1817-330:
-only one order:
-    ['6615_heg_-1_grp_opt.pha','6615_heg_1_grp_opt.pha',
-     '6616_heg_-1_grp_opt.pha','6616_heg_1_grp_opt.pha',
-     '6617_heg_-1_grp_opt.pha','6617_heg_1_grp_opt.pha']
+epoch_restrict=['1130010141-001-002-003-004-005-006-007']
 
 '''
+NICER no abslines: 4130010128-001_4130010129-001
+
+'''
+ap.add_argument('-force_epochs',nargs=1,help='force epochs to given set of spectra instead of auto matching',
+                default=False,type=bool)
+
+
+force_epochs_str=\
+'''
+['nu80801327002A01_sp_src_grp_opt.pha', 'nu80801327002B01_sp_src_grp_opt.pha'];
+'''
+
+
+force_epochs_str=\
+'''
+['4130010119-003_sp_grp_opt.pha','4130010120-001_sp_grp_opt.pha','4130010120-002_sp_grp_opt.pha','4130010120-003_sp_grp_opt.pha'];
+'''
+force_epochs_str_list=[literal_eval(elem.replace('\n','')) for elem in force_epochs_str.split(';')[:-1]]
+
+ap.add_argument('-force_epochs_list',nargs=1,help='force epochs list',default=force_epochs_str_list)
+
 
 ap.add_argument('-SNR_min',nargs=1,help='minimum source Signal to Noise Ratio',default=50,type=float)
 #shouldn't be needed now that we have a counts min limit + sometimes false especially in timing when the bg is the source
@@ -329,7 +313,7 @@ ap.add_argument('-write_pdf',nargs=1,help='overwrite finished pdf at the end of 
 
 #can be set to false to gain time when testing or if the aborted pdf were already done
 ap.add_argument('-write_aborted_pdf',nargs=1,help='create aborted pdfs at the end of the computation',
-                default=False,type=bool)
+                default=True,type=bool)
 
 '''MODES'''
 
@@ -343,7 +327,7 @@ ap.add_argument('-reload_autofit',nargs=1,
 
 ap.add_argument('-reload_fakes',nargs=1,
                 help='Reload fake delchi array file to skip the fake computation if possible',
-                default=False,type=bool)
+                default=True,type=bool)
 
 ap.add_argument('-pdf_only',nargs=1,
                 help='Updates the pdf with already existing elements but skips the line detection entirely',
@@ -368,23 +352,23 @@ ap.add_argument('-autofit',nargs=1,
                 help='enable auto fit with lines if the peak search detected at least one absorption',
                 default=True,type=bool)
 
+#using the lines found during the procedure to re-estimate the fit parameters and HID
 ap.add_argument('-refit_cont',nargs=1,
-                help='After the autofit, refit the continuum without excluding the iron region, using the lines found during the procedure, then re-estimate the fit parameters and HID.',default=True)
+                help='After the autofit, refit the continuum without excluding the iron region',
+                default=True)
 
 ####split fit
 ap.add_argument('-split_fit',nargs=1,
                 help='Split fitting procedure between components instead of fitting the whole model directly',
                 default=True)
 
-ap.add_argument('-force_nosplit_fit_multi',nargs=1,help='force no split fit for multi satellites',default=True)
-
 #line significance assessment parameter
 ap.add_argument('-assess_line',nargs=1,
                 help='use fakeit simulations to estimate the significance of each absorption line',
-                default=False,type=bool)
+                default=True,type=bool)
 
 ap.add_argument('-assess_line_upper',nargs=1,help='compute upper limits of each absorption line',
-                default=False,type=bool)
+                default=True,type=bool)
 
 
 '''SPECTRUM PARAMETERS'''
@@ -397,8 +381,10 @@ ap.add_argument("-pmiss",nargs=1,help='include spectra with no pileup info',defa
 ap.add_argument("-hid_cont_range",nargs=1,
                 help='min and max energies of the hid band fit',default='3 10',type=str)
 
+#this skips the HID fitmod fit procedure entirely and replaces it by the broad band fit
+#useful to get better broadband constrains for the HID
 ap.add_argument('-broad_HID_mode',nargs=1,
-                help='uses the broad fit in stead of the HID fit',default=True,type=str)
+                help='reuses the broad band fit for the HID computations',default=True,type=str)
 
 ap.add_argument("-line_cont_range",nargs=1,
                 help='min and max energies of the line continuum broand band fit',default='4 10',type=str)
@@ -422,37 +408,6 @@ ap.add_argument("-line_search_norm",nargs=1,
 ap.add_argument('-restrict_fakes',nargs=1,
                 help='restrict range of fake computation to 8keV max',default=False,type=bool)
 
-'''XMM'''
-
-ap.add_argument("-skipbg_timing",nargs=1,help='do not use background for the -often contaminated- timing backgrounds',
-                default=True,type=bool)
-ap.add_argument('-max_bg_imaging',nargs=1,
-                help='maximal imaging bg rate compared to standard bg values',default=100,type=float)
-
-
-'''SUZAKU'''
-
-ap.add_argument('-megumi_files',nargs=1,help='adapt suzaku file structure for megumi data reduction',
-                default=True,type=bool)
-
-ap.add_argument('-suzaku_hid_cont_range',nargs=1,help='min and max energies of the suzaku hid band fit',
-                default='1.9 40',type=str)
-ap.add_argument('-suzaku_line_cont_range',nargs=1,help='min and max energies of the suzaku line cont band fit',
-                default='4 40',type=str)
-ap.add_argument('-suzaku_xis_range',nargs=1,help='range of energies usable for suzaku xis',default='1.9 9',type=str)
-ap.add_argument('-suzaku_xis_ignore',nargs=1,help='range of energies to ignore for suzaku xis',default="['2.1 2.3','3.0 3.4']",type=str)
-
-ap.add_argument('-suzaku_pin_range',nargs=1,help='range of energies usable for suzaku pin',default='12 40',type=str)
-
-
-'''NICER'''
-ap.add_argument('-NICER_bkg',nargs=1,help='NICER background type',default='scorpeon_mod',type=str)
-
-ap.add_argument('-pre_reduced_NICER',nargs=1,
-                help='change NICER data format to pre-reduced obsids',default=False,type=bool)
-
-ap.add_argument('-NICER_lc_binning',nargs=1,help='NICER LC binning',default='1',type=str)
-
 '''MULTI'''
 ap.add_argument('-plot_multi_overlap',nargs=1,help='plot overlap between different epochs',default=True)
 
@@ -473,6 +428,9 @@ ap.add_argument('-single_obsid_NuSTAR',nargs=1,
 ap.add_argument('-diff_bands_NuSTAR_NICER',nargs=1,help='different energy bounds for multi NuSTAR/NICER combinations',
                 default=True,type=bool)
 
+ap.add_argument('-force_nosplit_fit_multi',nargs=1,help='force no split fit for multi satellites',default=True)
+
+
 '''CHANDRA'''
 #Chandra issues
 ap.add_argument('-restrict_graded',nargs=1,
@@ -483,6 +441,40 @@ ap.add_argument('-restrict_graded',nargs=1,
 ap.add_argument('-restrict_order',nargs=1,help='restrict HETG spectral analysis to the -1 order only',
                 default=False,type=bool)
 
+'''NICER'''
+ap.add_argument('-NICER_bkg',nargs=1,help='NICER background type',default='scorpeon_mod',type=str)
+
+ap.add_argument('-pre_reduced_NICER',nargs=1,
+                help='change NICER data format to pre-reduced obsids',default=False,type=bool)
+
+ap.add_argument('-NICER_lc_binning',nargs=1,help='NICER LC binning',default='1',type=str)
+
+'''NuSTAR'''
+
+ap.add_argument('-freeze_nH',nargs=1,help='Freeze main absorption to a fiducial value',default=True,type=bool)
+ap.add_argument('-freeze_nH_val',nargs=1,help='Frozen main absorption value (10^22 cm^-2)',default=14,type=bool)
+
+'''SUZAKU'''
+
+ap.add_argument('-megumi_files',nargs=1,help='adapt suzaku file structure for megumi data reduction',
+                default=True,type=bool)
+
+ap.add_argument('-suzaku_hid_cont_range',nargs=1,help='min and max energies of the suzaku hid band fit',
+                default='1.9 40',type=str)
+ap.add_argument('-suzaku_line_cont_range',nargs=1,help='min and max energies of the suzaku line cont band fit',
+                default='4 40',type=str)
+ap.add_argument('-suzaku_xis_range',nargs=1,help='range of energies usable for suzaku xis',default='1.9 9',type=str)
+ap.add_argument('-suzaku_xis_ignore',nargs=1,help='range of energies to ignore for suzaku xis',default="['2.1 2.3','3.0 3.4']",type=str)
+
+ap.add_argument('-suzaku_pin_range',nargs=1,help='range of energies usable for suzaku pin',default='12 40',type=str)
+
+'''XMM'''
+
+ap.add_argument("-skipbg_timing",nargs=1,help='do not use background for the -often contaminated- timing backgrounds',
+                default=True,type=bool)
+ap.add_argument('-max_bg_imaging',nargs=1,
+                help='maximal imaging bg rate compared to standard bg values',default=100,type=float)
+
 '''PEAK/MC DETECTION PARAMETERS'''
 
 ap.add_argument('-peak_thresh',nargs=1,help='chi difference threshold for the peak detection',default=9.21,type=float)
@@ -492,7 +484,7 @@ ap.add_argument('-peak_clean',nargs=1,
 
 ap.add_argument('-nfakes',nargs=1,
                 help='number of simulations used. Limits the maximal significance tested to >1-1/nfakes',
-                default=1e3,type=int)
+                default=1000,type=int)
 
 ap.add_argument('-sign_threshold',nargs=1,
                 help='data significance used to start the upper limit procedure and estimate the detectability',
@@ -538,6 +530,8 @@ Notes:
 -The norm_stepval argument is for a fixed flux band, and the value is scaled in the computation depending on the line energy step
 '''
 
+#attributing variables dynamically to avoid explicitely creating each variable
+
 sat_glob=args.satellite
 cameras=args.cameras
 expmodes=args.expmodes
@@ -552,7 +546,7 @@ line_search_norm=np.array(args.line_search_norm.split(' ')).astype(float)
 assess_line=args.assess_line
 assess_line_upper=args.assess_line_upper
 
-nfakes=int(args.nfakes)
+nfakes=args.nfakes
 autofit=args.autofit
 force_autofit=args.force_autofit
 autofit_model=args.autofit_model
@@ -587,10 +581,14 @@ hid_sort_method=args.hid_sort_method
 reverse_epoch=args.reverse_epoch
 reload_fakes=args.reload_fakes
 broad_HID_mode=args.broad_HID_mode
+freeze_nH=args.freeze_nH
+freeze_nH_val=args.freeze_nH_val
 
 cont_fit_multi_method=args.cont_fit_multi_method
 
 rewind_epoch_list=args.rewind_epoch_list
+force_epochs=args.force_epochs
+force_epochs_list=args.force_epochs_list
 
 megumi_files=args.megumi_files
 suzaku_hid_cont_range=np.array(args.suzaku_hid_cont_range.split(' ')).astype(float)
@@ -783,7 +781,7 @@ if multi_obj==False:
                 spfile_list=spfile_list+glob.glob('*'+elem_cam+'*'+elem_exp+'_'+prefix+'_sp_src_grp_'+grouping+'.*')
                 #taking of modified spectra with background checked
                 spfile_list=[elem for elem in spfile_list if 'bgtested' not in elem]
-    elif sat_glob in ['Chandra','NICER','Suzaku','Swift''NuSTAR']:
+    elif sat_glob in ['Chandra','NICER','Suzaku','Swift','NuSTAR']:
         # if pre_reduced_NICER and sat_glob=='NICER':
         #     spfile_list=glob.glob('*.grp')
         # else:
@@ -1360,7 +1358,7 @@ def pdf_summary(epoch_files,fit_ok=False,summary_epoch=None):
             #and adding the individual GTI's flare and lightcurves
             pdf.add_page()
             pdf.set_font('helvetica', 'B', 16)
-            pdf.cell(1,10,'GTIS and lightcurves for gti '+elem_observ,align='C',center=True)
+            pdf.cell(1,10,'GTIS and lightcurves for gti '+elem_epoch,align='C',center=True)
             pdf.ln(10)
 
             #recognizing time-resolved spectra
@@ -1522,7 +1520,7 @@ def line_e_ranges(sat):
     ignore_bands=None
 
     if sat=='NuSTAR':
-        e_sat_low=8. if (sat_glob=='multi' and diff_bands_NuSTAR_NICER) else 3.
+        e_sat_low=8. if (sat_glob=='multi' and diff_bands_NuSTAR_NICER) else 4.
         e_sat_high=79.
 
     if sat in ['XMM', 'NICER', 'Swift']:
@@ -2575,6 +2573,12 @@ def line_detect(epoch_id):
                 fitcont_high=fitmod([elem for elem in comp_cont if elem!=broad_abscomp],
                                     curr_logfile,curr_logfile_write)
 
+            # forcing the absorption component to be included for the broad band fit
+            if sat_glob == 'NuSTAR' and freeze_nH:
+                main_abscomp = (np.array(fitcont_high.complist)[[elem.absorption for elem in \
+                                                                fitcont_high.complist]])[0]
+                main_abscomp.mandatory = True
+
             fitcont_high.global_fit(split_fit=split_fit,method=cont_fit_multi_method if sat_glob=='multi' else 'opt')
 
             # mod_fitcont=allmodel_data()
@@ -2658,8 +2662,20 @@ def line_detect(epoch_id):
                     if line_cont_ig_indiv[i_sp] != '':
                         AllData(i_sp+1).ignore(line_cont_ig_indiv[i_sp])
 
+            #forcing an absorption value if asked to
+            if sat_glob=='NuSTAR' and freeze_nH:
+                broad_absval=freeze_nH_val
+            else:
+                broad_absval=None
+
             #creating the automatic fit class for the standard continuum
-            fitcont_broad=fitmod(comp_cont,curr_logfile,curr_logfile_write)
+            fitcont_broad=fitmod(comp_cont,curr_logfile,curr_logfile_write,absval=broad_absval)
+
+            # forcing the absorption component to be included for the broad band fit
+            if sat_glob == 'NuSTAR' and freeze_nH:
+                main_abscomp = (np.array(fitcont_broad.complist)[[elem.absorption for elem in \
+                                                                fitcont_broad.complist]])[0]
+                main_abscomp.mandatory = True
 
             #fitting
             fitcont_broad.global_fit(split_fit=split_fit,method=cont_fit_multi_method if sat_glob=='multi' else 'opt')
@@ -2738,6 +2754,12 @@ def line_detect(epoch_id):
                     #creating the fitcont without the absorption component if it didn't exist in the broad model
                     fitcont_hid=fitmod([elem for elem in comp_cont if elem!=broad_abscomp],
                                        curr_logfile,curr_logfile_write)
+
+                # forcing the absorption component to be included for the broad band fit
+                if sat_glob == 'NuSTAR' and freeze_nH:
+                    main_abscomp = (np.array(fitcont_hid.complist)[[elem.absorption for elem in \
+                                                                      fitcont_hid.complist]])[0]
+                    main_abscomp.mandatory = True
 
                 #fitting
                 fitcont_hid.global_fit(split_fit=split_fit,method=cont_fit_multi_method if sat_glob=='multi' else 'opt')
@@ -2883,7 +2905,7 @@ def line_detect(epoch_id):
                                                                     [elem_comp for elem_comp in fitlines.complist
                                                                      if
                                                                      elem_comp is not None]]])
-                if len(abs_incl_comps)!=0:
+                if len(abs_incl_comps)!=0 and not (sat_glob=='NuSTAR' and freeze_nH):
                     main_abscomp=abs_incl_comps[0]
                     main_abscomp.xcomps[0].nH.frozen=False
 
@@ -2891,8 +2913,9 @@ def line_detect(epoch_id):
                     fitlines.update_fitcomps()
                     main_abscomp.n_unlocked_pars_base=len(main_abscomp.unlocked_pars)
 
-                #we reset the value of the fixed abs to allow it to be free if it gets deleted and put again
-                fitlines.fixed_abs=None
+                if not (sat_glob=='NuSTAR' and freeze_nH):
+                    #we reset the value of the fixed abs to allow it to be free if it gets deleted and put again
+                    fitlines.fixed_abs=None
 
                 #fitting the model to the new energy band first
                 calc_fit(logfile=fitlines.logfile)
@@ -3857,6 +3880,91 @@ elif sat_glob in ['Suzaku','Swift']:
 
         epoch_list_started=[literal_eval(elem.split(']')[0]+']') for elem in started_expos[1:]]
 
+elif sat_glob=='NuSTAR':
+
+    epoch_list = []
+
+    # skipping flares if asked for
+    if skip_flares:
+        spfile_list = np.array([elem for elem in spfile_list if "F_sp" not in elem])
+
+    tstart_list = np.array([None] * len(spfile_list))
+    det_list = np.array([None] * len(spfile_list))
+    tstop_list = np.array([None] * len(spfile_list))
+
+    for i_file, elem_file in enumerate(spfile_list):
+
+        # for Suzaku this won't work for meugmi's xis0_xis3 files bc their header has been replaced
+        # so we replace them by the xis1 to be able to load the exposure
+        elem_file_load = elem_file.replace('xis0_xis3', 'xis1')
+
+        with fits.open(elem_file_load) as hdul:
+            if 'TELESCOP' in hdul[1].header:
+                det_list[i_file] = hdul[1].header['TELESCOP'].replace('SUZAKU', 'Suzaku')
+            else:
+                # the only files without TELESCOP in the header should be the fused megumi_files suzaku sp
+                assert megumi_files, 'Issue with detector handling'
+
+                det_list[i_file] = 'Suzaku'
+
+            if 'TIMEZERO' in hdul[1].header:
+                start_obs_s = hdul[1].header['TSTART'] + hdul[1].header['TIMEZERO']
+                stop_obs_s = hdul[1].header['TSTOP'] + hdul[1].header['TIMEZERO']
+            else:
+                start_obs_s = hdul[1].header['TSTART']
+                stop_obs_s = hdul[1].header['TSTOP']
+            # saving for titles later
+            mjd_ref = Time(hdul[1].header['MJDREFI'] + hdul[1].header['MJDREFF'], format='mjd')
+
+            obs_start = mjd_ref + TimeDelta(start_obs_s, format='sec')
+            obs_stop = mjd_ref + TimeDelta(stop_obs_s, format='sec')
+
+        tstart_list[i_file] = obs_start.to_value('jd')
+        tstop_list[i_file] = obs_stop.to_value('jd')
+
+    # max delta between gti starts in sec
+    max_delta = (TimeDelta(group_max_timedelta.split('_')[0], format='jd') + \
+                 TimeDelta(group_max_timedelta.split('_')[1], format='jd') / 24 + \
+                 TimeDelta(group_max_timedelta.split('_')[2], format='jd') / (24 * 60) + \
+                 TimeDelta(group_max_timedelta.split('_')[3], format='jd') / (24 * 3600)).to_value('jd')
+
+    epoch_id_list_ravel = []
+    epoch_id_list = []
+
+    tstart_list_base = tstart_list
+    tstop_list_base = tstop_list
+    det_list_base = det_list
+    id_base = np.arange(len(spfile_list))
+
+    with tqdm(total=len(tstart_list)) as pbar:
+        for id_elem, (elem_tstart, elem_tstop, elem_det) in enumerate(
+                zip(tstart_list_base, tstop_list_base, det_list_base)):
+
+            # skipping computation for already grouped elements
+            if id_base[id_elem] in epoch_id_list_ravel:
+                continue
+
+            elem_delta = np.array([-getoverlap([elem_tstart, elem_tstop], [other_start, other_stop], distance=True) for
+                                   other_start, other_stop in zip(tstart_list, tstop_list)])
+
+            # list of matchable epochs
+            elem_epoch_id = np.array([id for id in range(len(tstart_list)) if \
+                                      id not in epoch_id_list_ravel and elem_delta[id] < max_delta])
+
+            epoch_id_list_ravel += elem_epoch_id.tolist()
+
+            if len(elem_epoch_id) > 0:
+                epoch_id_list += [elem_epoch_id]
+
+            pbar.update(n=len(elem_epoch_id))
+
+    epoch_list = [spfile_list[elem] for elem in epoch_id_list]
+
+    epoch_list = np.array(epoch_list, dtype=object)
+
+    epoch_list_started = started_expos
+    epoch_list_done = done_expos
+
 elif sat_glob=='multi':
     epoch_list=[]
 
@@ -4082,6 +4190,9 @@ def expand_epoch(shortened_epoch):
 
     return file_ids
 
+if force_epochs:
+    epoch_list=force_epochs_list
+
 if spread_comput!=1:
 
     epoch_list_save=epoch_list
@@ -4124,6 +4235,7 @@ if reverse_epoch:
 
 #replacing epoch list by what's in the summary folder if asked to
 if rewind_epoch_list:
+    assert sat_glob=='NICER', 'rewind epoch list not implemented with sats other than NICER'
     epoch_list=[[elem+'_sp_grp_opt.pha' for elem in expand_epoch(started_expos[i])] for i in range(len(started_expos))]
 
 #### line detections for exposure with a spectrum
@@ -4148,16 +4260,16 @@ for epoch_id,epoch_files in enumerate(epoch_list):
 
     short_epoch_id='_'.join(shorten_epoch(file_ids))
 
-    if restrict and observ_restrict!=['']:
+    if restrict and epoch_restrict!=['']:
 
         if sat_glob in ['NICER','Suzaku']:
-            if short_epoch_id not in observ_restrict:
+            if short_epoch_id not in epoch_restrict:
                 print(short_epoch_id)
                 print('\nRestrict mode activated and at least one spectrum not in the restrict array')
                 continue
         else:
-            if len([elem_sp for elem_sp in epoch_files if elem_sp not in observ_restrict])\
-                    >max(len(epoch_files)-len(observ_restrict),0):
+            if len([elem_sp for elem_sp in epoch_files if elem_sp not in epoch_restrict])\
+                    >max(len(epoch_files)-len(epoch_restrict),0):
                 print('\nRestrict mode activated and at least one spectrum not in the restrict array')
                 continue
 

@@ -257,14 +257,24 @@ def model_list(model_id='lines',give_groups=False):
         subset of continuum with NuSTAR calibration components
         '''
 
-        avail_comps = ['cont_diskbb', 'glob_TBabs', 'cont_powerlaw', 'glob_constant',
+        avail_comps = ['cont_powerlaw','cont_diskbb','glob_TBabs', 'glob_constant',
                        'calNuSTAR_edge']
 
         interact_groups = None
 
+    if model_id=='nthcont_NuSTAR':
+
+        '''
+        subset of continuum with nthcomp for better NuSTAR work + NuSTAR calibration components
+        '''
+
+        avail_comps = ['cont_diskbb','disk_nthcomp','glob_TBabs', 'glob_constant',
+                       'calNuSTAR_edge']
+
+
     if model_id=='cont':
         
-        avail_comps=['glob_constant','glob_phabs','cont_diskbb','cont_powerlaw']
+        avail_comps=['cont_diskbb','cont_powerlaw','glob_constant','glob_phabs',]
         
         interact_groups=avail_comps      
 
@@ -284,8 +294,6 @@ def model_list(model_id='lines',give_groups=False):
         avail_comps=['FeKaem_gaussian','FeKbem_gaussian',
                       'FeKa25abs_nagaussian','FeKa26abs_nagaussian','NiKa27abs_nagaussian',
                       'FeKb25abs_nagaussian','FeKb26abs_nagaussian','FeKg26abs_nagaussian']
-        
-        
 
     if model_id=='lines_resolved_noem':
         avail_comps=['FeKa25abs_agaussian','FeKa26abs_agaussian','NiKa27abs_agaussian',

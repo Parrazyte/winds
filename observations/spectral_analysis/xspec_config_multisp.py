@@ -90,9 +90,12 @@ def ignore_data_indiv(e_low_groups,e_high_groups,reset=False,sat_low_groups=None
         AllData.ignore('bad')
 
     if type(e_low_groups) in [float,np.float64] and type(e_high_groups) in [float,np.float64]:
-        AllData.ignore('**-'+str(e_low_groups)+' '+str(e_high_groups)+'-**')
+        e_low_groups_indiv=np.repeat(e_low_groups,AllData.nGroups)
+        e_high_groups_indiv=np.repeat(e_high_groups,AllData.nGroups)
     else:
-        for i_grp,(e_low,e_high) in enumerate(zip(e_low_groups,e_high_groups)):
+        e_low_groups_indiv=e_low_groups
+        e_high_groups_indiv=e_high_groups
+    for i_grp,(e_low,e_high) in enumerate(zip(e_low_groups_indiv,e_high_groups_indiv)):
             AllData(i_grp+1).ignore('**-'+str(e_low)+' '+str(e_high)+'-**')
 
     if sat_low_groups is not None and sat_high_groups is not None:
@@ -106,6 +109,17 @@ def ignore_data_indiv(e_low_groups,e_high_groups,reset=False,sat_low_groups=None
             if elem_ignore_bands is not None:
                 for ignore_band in elem_ignore_bands:
                     AllData.ignore(ignore_band)
+
+    if sat_high_groups is not None:
+        max_e=max([min(elem_high,elem_sat_high) for (elem_high,elem_sat_high) in\
+                  zip(e_high_groups_indiv,sat_high_groups)])
+    else:
+        max_e=max(e_high_groups)
+
+    if max_e>12:
+        Plot.xLog=True
+    else:
+        Plot.xLog=False
 
 #not used anymore now that we take the info directly from the log file
 
@@ -1039,6 +1053,11 @@ def addcomp(compname,position='last',endmult=None,return_pos=False,modclass=AllM
         if AllModels(1).componentNames[0]=='constant':
             start_position+=1
 
+        main_compnames = AllModels(1).componentNames
+
+        #maiting inside the edge components (assumed to be from calibration if there are some
+        start_position+=sum(['edge' in elem for elem in main_compnames])
+
     if comp_custom is not None:
         if 'cal' in comp_custom:
 
@@ -1414,7 +1433,21 @@ def addcomp(compname,position='last',endmult=None,return_pos=False,modclass=AllM
         
         #high-inclination constraints
         xspec_model(gap_end-1).values=[70,1,50,50,90,90]
-        
+
+    '''nthcomp sepcifics'''
+
+    if comp_split=='nthcomp' and comp_custom is not None:
+        if comp_custom=='disk':
+            xspec_model(gap_end-4).frozen=True
+            xspec_model(gap_end - 3).frozen = False
+
+            disk_comp=[elem for elem in xspec_model.componentNames if 'diskbb' in elem][0]
+            disk_par_id=str(getattr(xspec_model,disk_comp).Tin.index)
+            xspec_model(gap_end-3).link=disk_par_id
+            xspec_model(gap_end-2).values=1
+
+        xspec_model(gap_end-5).values=[1.7,0.017,1.,1.,3.5,3.5]
+
     '''
     linking the vashifts from the same group IN FORWARD ORDER ONLY
     In order to do that, we parse the existing components to see if there are already existing components from the same link group. If so, 
@@ -2677,7 +2710,8 @@ class fitmod:
         for i_excomp, component in enumerate(curr_exclist):
 
             # avoiding starting the model with a multiplicative component
-            assert not (component.multipl and len(self.includedlist) == 0), 'First component of the mod list is multipl. Order change required.'
+            assert not (component.multipl and len(self.includedlist) == 0),\
+                'First component of the mod list is multipl. Order change required.'
 
             # skipping adding lines in lines locked mode
             if component.line and lock_lines:
@@ -2693,6 +2727,11 @@ class fitmod:
                 ener_bounds=[Plot.x()[0],Plot.x()[-1]]
                 if not component.cal_e>=ener_bounds[0] and component.cal_e<=ener_bounds[1]:
                     continue
+
+                #we add the edges after a first fit to avoid putting them to 0 immediately
+                if component.multipl:
+                    continue
+
 
             # excluding addition of named components with pendants when not allowing mixing between emission and absorption of the same line
             if component.named_line and nomixline:
@@ -3112,7 +3151,10 @@ class fitmod:
         #fetching the minimum component in the custom ftest values if they are some
         if sum(custom_ftest_mask)!=0:
             bestcomp_in_custom_id=component_ftest[custom_ftest_mask].argmin()
-            bestcomp=curr_exclist[np.argwhere(np.array(custom_ftest_mask))[0][bestcomp_in_custom_id]]
+            try:
+                bestcomp=curr_exclist[np.argwhere(np.array(custom_ftest_mask))[0][bestcomp_in_custom_id]]
+            except:
+                breakpoint()
         else:
             bestcomp=np.array(curr_exclist)[component_ftest==min(component_ftest[component_ftest.nonzero()])][0]
         

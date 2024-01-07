@@ -113,8 +113,13 @@ ap.add_argument('-folder_cont',nargs=1,help='skip all but the last 2 directories
 
 #action specific overwrite
 
+#1. process
+
+#should only be done in very extreme cases
+ap.add_argument('-keep_SAA',nargs=1,help='keep South Atlantic Anomaly (SAA) Periods',type=bool,default=True)
+
 #gti
-ap.add_argument('-gti_split',nargs=1,help='GTI split method',default='orbit+flare+split_30',type=str)
+ap.add_argument('-gti_split',nargs=1,help='GTI split method',default='orbit+flare',type=str)
 ap.add_argument('-flare_method',nargs=1,help='Flare extraction method(s)',default='clip+peak',type=str)
 
 #note: not used currently
@@ -131,7 +136,8 @@ ap.add_argument('-hr_bands_str',nargs=1,help='Gives the list of bands to create 
 
 #spectra
 ap.add_argument('-bg',"--bgmodel",help='Give the background model to use for the data reduction',default='scorpeon_script',type=str)
-ap.add_argument('-bg_lang',"--bg_language",help='Gives the language output for the script generated to load spectral data into either PyXspec or Xspec',
+ap.add_argument('-bg_lang',"--bg_language",
+        help='Gives the language output for the script generated to load spectral data into either PyXspec or Xspec',
                 default='python',type=str)
 
 ap.add_argument('-gtype',"--grouptype",help='Give the group type to use in regroup_spectral',default='opt',type=str)
@@ -157,6 +163,8 @@ overwrite_glob=args.over
 catch_errors=args.catch_errors
 bgmodel=args.bgmodel
 bglanguage=args.bg_language
+
+keep_SAA=args.keep_SAA
 
 gti_split=args.gti_split
 gti_lc_band=args.gti_lc_band
@@ -204,10 +212,17 @@ def _remove_control_chars(message):
     ansi_escape =re.compile(r'(\x9B|\x1B\[)[0-?]*[ -\/]*[@-~]')
     return ansi_escape.sub('', message)
 
-def process_obsdir(directory,overwrite=True):
+def process_obsdir(directory,overwrite=True,keep_SAA=False):
     
     '''
     Processes a directory using the nicerl2 script
+
+    options:
+
+    -keep_SAA: remove South Atlantic Anomaly filtering (default False).
+                Should only be done in specific cases, see
+                https://heasarc.gsfc.nasa.gov/docs/software/lheasoft/help/nimaketime.html
+
     '''
     
     bashproc=pexpect.spawn("/bin/bash",encoding='utf-8')
@@ -223,8 +238,10 @@ def process_obsdir(directory,overwrite=True):
         StderrTee(directory+'/process_obsdir.log',buff=1,file_filters=[_remove_control_chars]):
 
         bashproc.logfile_read=sys.stdout
-        bashproc.sendline('nicerl2 indir='+directory+' clobber='+('YES' if overwrite else 'FALSE'))
-        
+
+        bashproc.sendline('nicerl2 indir='+directory+' clobber='+('YES' if overwrite else 'FALSE')+' nicersaafilt='+
+                          ('NO' if keep_SAA else 'YES'))
+
         process_state=bashproc.expect(['terminating with status','Event files written'],timeout=None)
         
         #exiting the bashproc
@@ -1553,7 +1570,7 @@ def regroup_spectral(directory,group='opt'):
             spawn.sendline('ftgrouppha infile='+directory+'/'+directory+gti_suffix+'_sr.pha'+' outfile='+directory+'/'+directory+gti_suffix+'_sp_grp_'+group+
             '.pha grouptype='+group+' respfile='+directory+'/'+directory+gti_suffix+'.rmf')
 
-            time.sleep(1)
+            time.sleep(2)
 
             if not os.path.isfile(os.path.join(currdir,directory+'/'+directory+gti_suffix+'_sp_grp_'+group+'.pha')):
                 print('Waiting for creation of file '+os.path.join(currdir,
@@ -1776,7 +1793,7 @@ if not local:
                         folder_state='Running '+curr_action
                         
                         if curr_action=='1':
-                            process_obsdir(dirname,overwrite=overwrite_glob)
+                            process_obsdir(dirname,overwrite=overwrite_glob,keep_SAA=keep_SAA)
                             process_obsdir_done.wait()
                         if curr_action=='2':
                             select_detector(dirname,detectors=bad_detectors)
@@ -1844,7 +1861,7 @@ if not local:
                 for curr_action in action_list:
                     folder_state='Running '+curr_action
                     if curr_action=='1':
-                        process_obsdir(dirname,overwrite=overwrite_glob)
+                        process_obsdir(dirname,overwrite=overwrite_glob,keep_SAA=keep_SAA)
                         process_obsdir_done.wait()
                     if curr_action=='2':
                         select_detector(dirname,detectors=bad_detectors)
@@ -1926,7 +1943,7 @@ else:
     #for loop to be able to use different orders if needed
     for curr_action in action_list:
             if curr_action=='1':
-                process_obsdir(absdir,overwrite=overwrite_glob)
+                process_obsdir(absdir,overwrite=overwrite_glob,keep_SAA=keep_SAA)
                 process_obsdir_done.wait()
             if curr_action=='2':
                 select_detector(absdir,detectors=bad_detectors)

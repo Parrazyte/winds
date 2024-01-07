@@ -163,7 +163,7 @@ ap.add_argument('-satellite',nargs=1,help='telescope to fetch spectra from',defa
 
 #used for NICER and multi for now
 ap.add_argument('-group_max_timedelta',nargs=1,
-                help='maximum time delta for epoch/gti grouping in dd_hh_mm_ss',default='0_00_15_00',type=str)
+                help='maximum time delta for epoch/gti grouping in dd_hh_mm_ss',default='00_00_00_15',type=str)
 
 #00_00_00_10 for NICER TR
 #00_00_15_00 for NuSTAR individual orbits
@@ -180,7 +180,7 @@ ap.add_argument("-prefix",nargs=1,help='restrict analysis to a specific prefix',
 
 ####output directory
 ap.add_argument("-outdir",nargs=1,help="name of output directory for line plots",
-                default="lineplots_opt",type=str)
+                default="lineplots_opt_nth",type=str)
 
 #overwrite
 #global overwrite based on recap PDF
@@ -190,7 +190,7 @@ ap.add_argument('-overwrite',nargs=1,
 
 #note : will skip exposures for which the exposure didn't compute or with logged errors
 ap.add_argument('-skip_started',nargs=1,help='skip all exposures listed in the local summary_line_det file',
-                default=False,type=bool)
+                default=True,type=bool)
 
 ap.add_argument('-skip_complete',nargs=1,help='skip completed exposures listed in the local summary_line_det file',
                 default=False,type=bool)
@@ -216,7 +216,7 @@ ap.add_argument('-xspec_window',nargs=1,help='xspec window id (auto tries to pic
 '''MODELS'''
 #### Models and abslines lock
 ap.add_argument('-cont_model',nargs=1,help='model list to use for the autofit computation',
-                default='cont_NuSTAR',type=str)
+                default='nthcont_NuSTAR',type=str)
 
 ap.add_argument('-autofit_model',nargs=1,help='model list to use for the autofit computation',
                 default='lines_narrow',type=str)
@@ -317,8 +317,9 @@ ap.add_argument('-write_aborted_pdf',nargs=1,help='create aborted pdfs at the en
 
 '''MODES'''
 
-#options: "opt" (tests the significance of each components and add them accordingly) and "force_all" to force all components
-ap.add_argument('-cont_fit_multi_method',nargs=1,help='fit logic for the broadband fits FOR MULTI satellite',
+#options: "opt" (tests the significance of each components and add them accordingly)
+# and "force_all" to force all components
+ap.add_argument('-cont_fit_method',nargs=1,help='fit logic for the broadband fits',
                 default='force_all')
 
 ap.add_argument('-reload_autofit',nargs=1,
@@ -449,9 +450,12 @@ ap.add_argument('-pre_reduced_NICER',nargs=1,
 
 ap.add_argument('-NICER_lc_binning',nargs=1,help='NICER LC binning',default='1',type=str)
 
+#in this case the continuum components require the NICER calibration components to get a decent fit
+ap.add_argument('-low_E_NICER',nargs=1,help='NICER lower energy threshold for broadband fits',default=0.3,type=str)
+
 '''NuSTAR'''
 
-ap.add_argument('-freeze_nH',nargs=1,help='Freeze main absorption to a fiducial value',default=True,type=bool)
+ap.add_argument('-freeze_nH',nargs=1,help='Freeze main absorption to a fiducial value',default=False,type=bool)
 ap.add_argument('-freeze_nH_val',nargs=1,help='Frozen main absorption value (10^22 cm^-2)',default=14,type=bool)
 
 '''SUZAKU'''
@@ -584,7 +588,7 @@ broad_HID_mode=args.broad_HID_mode
 freeze_nH=args.freeze_nH
 freeze_nH_val=args.freeze_nH_val
 
-cont_fit_multi_method=args.cont_fit_multi_method
+cont_fit_method=args.cont_fit_method
 
 rewind_epoch_list=args.rewind_epoch_list
 force_epochs=args.force_epochs
@@ -598,6 +602,8 @@ suzaku_xis_range=np.array(args.suzaku_xis_range.split(' ')).astype(float)
 suzaku_xis_ignore=literal_eval(args.suzaku_xis_ignore)
 
 suzaku_pin_range=np.array(args.suzaku_pin_range.split(' ')).astype(float)
+
+low_E_NICER=args.low_E_NICER
 
 skip_flares=args.skip_flares
 spread_comput=args.spread_comput
@@ -699,7 +705,7 @@ if sat_glob=='multi':
                      started_expos]
     done_expos = [[elem] if not elem.startswith('[') else literal_eval(elem.split(']')[0]+']') for elem in
                      done_expos]
-elif sat_glob in ['NICER']:
+elif sat_glob in ['NICER','NuSTAR']:
     started_expos=[[elem.split('_')[0]] if not elem.startswith('[') else literal_eval(elem.split('_')[0]) for elem in started_expos]
     done_expos=[[elem.split('_')[0]] if not elem.startswith('[') else literal_eval(elem.split('_')[0]) for elem in done_expos]
 
@@ -1526,7 +1532,7 @@ def line_e_ranges(sat):
     if sat in ['XMM', 'NICER', 'Swift']:
 
         if sat == 'NICER':
-            e_sat_low = 0.3 if (sat_glob=='multi' and diff_bands_NuSTAR_NICER) else 2.5
+            e_sat_low = 0.3 if (sat_glob=='multi' and diff_bands_NuSTAR_NICER) else low_E_NICER
         else:
             e_sat_low = 0.3
 
@@ -2279,7 +2285,7 @@ def line_detect(epoch_id):
 
     #taking off the constant factor if there's only one data group
     if AllData.nGroups==1:
-        comp_cont=comp_cont[1:]
+        comp_cont=[elem for elem in comp_cont if elem!='glob_constant']
 
     #testing the presence of arf, rmf etc in the datasets
     isbg_grp=[]
@@ -2579,7 +2585,7 @@ def line_detect(epoch_id):
                                                                 fitcont_high.complist]])[0]
                 main_abscomp.mandatory = True
 
-            fitcont_high.global_fit(split_fit=split_fit,method=cont_fit_multi_method if sat_glob=='multi' else 'opt')
+            fitcont_high.global_fit(split_fit=split_fit,method=cont_fit_method)
 
             # mod_fitcont=allmodel_data()
 
@@ -2678,13 +2684,13 @@ def line_detect(epoch_id):
                 main_abscomp.mandatory = True
 
             #fitting
-            fitcont_broad.global_fit(split_fit=split_fit,method=cont_fit_multi_method if sat_glob=='multi' else 'opt')
+            fitcont_broad.global_fit(split_fit=split_fit,method=cont_fit_method)
 
             #unfreezing the scorpeon model by resetting it
             xscorpeon.load()
 
             #refitting in case this allows something else to appear
-            fitcont_broad.global_fit(split_fit=False,method=cont_fit_multi_method if sat_glob=='multi' else 'opt')
+            fitcont_broad.global_fit(split_fit=False,method=cont_fit_method)
 
             mod_fitcont=allmodel_data()
 
@@ -2762,7 +2768,7 @@ def line_detect(epoch_id):
                     main_abscomp.mandatory = True
 
                 #fitting
-                fitcont_hid.global_fit(split_fit=split_fit,method=cont_fit_multi_method if sat_glob=='multi' else 'opt')
+                fitcont_hid.global_fit(split_fit=split_fit,method=cont_fit_method)
 
                 mod_fitcont=allmodel_data()
 
@@ -2782,6 +2788,11 @@ def line_detect(epoch_id):
         #frozen Scorpeon for now (unfreezed during the broad fit)
         xscorpeon.load(frozen=True)
 
+        if os.path.isfile(outdir+'/'+epoch_observ[0]+'_baseload.xcm'):
+            os.remove(outdir+'/'+epoch_observ[0]+'_baseload.xcm')
+
+        Xset.save(outdir+'/'+epoch_observ[0]+'_baseload.xcm',info='a')
+
         result_broad_fit=broad_fit()
 
         if len(result_broad_fit)==1:
@@ -2792,6 +2803,7 @@ def line_detect(epoch_id):
         #reloading the frozen scorpeon data\
         # (which won't change anything if it hasn't been fitted but will help otherwise)
         xscorpeon.load(scorpeon_save=data_broad.scorpeon,frozen=True)
+
         result_high_fit=high_fit(broad_absval,broad_abscomp)
 
         #if the function returns an array of length 1, it means it returned an error message
@@ -4297,7 +4309,7 @@ for epoch_id,epoch_files in enumerate(epoch_list):
             print('\nSpectrum analysis already performed. Skipping...')
             continue
 
-    elif sat_glob in ['NICER','multi']:
+    elif sat_glob in ['NICER','NuSTAR','multi']:
 
         if (skip_started and shorten_epoch(file_ids) in started_expos) or \
            (skip_complete and shorten_epoch(file_ids) in done_expos):
@@ -4395,9 +4407,11 @@ if multi_obj==False:
         aborted_files=[epoch for epoch in epoch_list if\
                        not epoch[0].split('_grp_opt'+('.pi' if sat_glob=='Swift' else '.pha'))[0]+'_recap.pdf'\
                             in lineplots_files]
-    elif sat_glob=='NICER':
+    elif sat_glob in ['NICER','NuSTAR']:
+
+        sp_suffix='_sp_grp_opt.pha' if sat_glob=='NICER' else '_sp_src_grp_opt.pha'
         #updated with shorten_epoch
-        epoch_ids=[[elem.replace('_sp_grp_opt.pha','') for elem in epoch] for epoch in epoch_list]
+        epoch_ids=[[elem.replace(sp_suffix,'') for elem in epoch] for epoch in epoch_list]
 
         aborted_epochs=[elem_epoch_id for elem_epoch_id in epoch_ids if\
                         not '_'.join(shorten_epoch(elem_epoch_id))+'_recap.pdf' in lineplots_files]

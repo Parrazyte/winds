@@ -271,6 +271,18 @@ def model_list(model_id='lines',give_groups=False):
         avail_comps = ['cont_diskbb','disk_nthcomp','glob_TBabs', 'glob_constant',
                        'calNuSTAR_edge']
 
+        interact_groups = None
+
+    if model_id=='nthcont_detailed':
+
+        '''
+        subset of continuum with nthcomp for better NuSTAR work + NuSTAR/NICER calibration components
+        '''
+
+        avail_comps = ['cont_diskbb','disk_nthcomp','glob_TBabs', 'glob_constant',
+                       'calNICERSiem_gaussian','calNuSTAR_edge','calNICER_edge']
+
+        interact_groups = None
 
     if model_id=='cont':
         

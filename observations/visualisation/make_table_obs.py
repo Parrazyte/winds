@@ -14,6 +14,7 @@ import glob
 import argparse
 
 import numpy as np
+from astropy.time import Time,TimeDelta
 
 '''Astro'''
 
@@ -24,6 +25,7 @@ from fitting_tools import range_absline
 #visualisation functions
 from visual_line_tools import n_infos, obj_values,abslines_values,values_manip,load_catalogs,dist_mass
 
+from general_tools import ravel_ragged
 
 ap = argparse.ArgumentParser(description='Script to display lines in XMM Spectra.\n)')
 
@@ -32,14 +34,21 @@ ap = argparse.ArgumentParser(description='Script to display lines in XMM Spectra
 
 ap.add_argument("-cameras",nargs=1,help='Cameras to use for the spectral analysis',default='all',type=str)
 ap.add_argument("-expmodes",nargs=1,help='restrict the analysis to a single type of exposure',default='all',type=str)
-ap.add_argument("-grouping",nargs=1,help='specfile grouping to use in [5,10,20] cts/bin',default='20',type=str)
+ap.add_argument("-grouping",nargs=1,help='specfile grouping to use in [5,10,20] cts/bin',default='opt',type=str)
 ap.add_argument("-prefix",nargs=1,help='restrict analysis to a specific prefix',default='auto',type=str)
 ap.add_argument("-outdir",nargs=1,help="name of output directory for line plots",default="lineplots_opt",type=str)
 
+#null value is False
+ap.add_argument('-restrict_obj',nargs=1,help='restrict to single object',default='4U1630-47')
+
+ap.add_argument('-no_multi',nargs=1,help="remove multi satellite analysis",default=True)
 '''DIRECTORY SPECIFICS'''
 
 ap.add_argument("-local",nargs=1,help='launch analysis in the current directory instead',default=True,type=bool)
 
+ap.add_argument('-sign_threshold',nargs=1,
+                help='data significance used to start the upper limit procedure and estimate the detectability',
+                default=0.997,type=float)
 
 '''SPECTRUM PARAMETERS'''
 
@@ -74,10 +83,29 @@ prefix=args.prefix
 local=args.local
 outdir=args.outdir
 
+sign_threshold=args.sign_threshold
+
+restrict_obj=args.restrict_obj
+no_multi=args.no_multi
+
 line_cont_range=np.array(args.line_cont_range.split(' ')).astype(float)
 line_cont_ig=args.line_cont_ig
 line_search_e=np.array(args.line_search_e.split(' ')).astype(float)
 line_search_norm=np.array(args.line_search_norm.split(' ')).astype(float)
+
+outburst_split_dic={
+    '4U1630-47':
+       [[Time('2002-09-01'),Time('2004-11-30')],
+        [Time('2005-10-01'),Time('2006-05-31')],
+        [Time('2007-12-01'),Time('2008-06-30')],
+        [Time('2009-12-01'),Time('2010-06-30')],
+        [Time('2011-12-01'),Time('2013-12-31')],
+        [Time('2015-01-01'),Time('2015-04-30')],
+        [Time('2016-08-01'),Time('2017-01-31')],
+        [Time('2018-05-01'),Time('2019-09-30')],
+        [Time('2020-03-01'),Time('2020-06-30')],
+        [Time('2021-09-01'),Time('2022-03-31')],
+        [Time('2022-07-01'),Time('2024-02-28')]]}
 
 #readjusting the variables in lists
 if cameras=='all':
@@ -142,14 +170,15 @@ ignore_full=True
 
 #### file search
 
-catal_blackcat,catal_watchdog,catal_blackcat_obj,catal_watchdog_obj,catal_maxi_df,catal_maxi_simbad=load_catalogs()
+catal_blackcat,catal_watchdog,catal_blackcat_obj,catal_watchdog_obj,catal_maxi_df,catal_maxi_simbad,\
+    catal_bat_df,catal_bat_simbad=load_catalogs()
 
-telescope_list=('XMM','Chandra','NICER','Suzaku','Swift')
+telescope_list=('XMM','Chandra','NICER','Suzaku','Swift','NuSTAR')
 
-choice_telescope=('XMM','Chandra')
+choice_telescope=('XMM','Chandra','NICER','Suzaku','Swift','NuSTAR')
 
 #### current directory set to BHLMXB
-os.chdir('/media/parrama/6f58c7c3-ba85-45e6-b8b8-a8f0d564ec15/Observ/BHLMXB')
+os.chdir('/media/parrama/SSD/Observ/BHLMXB/')
 
 all_files=glob.glob('**',recursive=True)
 lineval_id='line_values_'+args.line_search_e.replace(' ','_')+'_'+args.line_search_norm.replace(' ','_')+'.txt'
@@ -165,9 +194,26 @@ abslines_files=[elem for elem_telescope in choice_telescope for elem in abslines
 if ignore_full:
     lineval_files=[elem for elem in lineval_files if '_full' not in elem]
     abslines_files=[elem for elem in abslines_files if '_full' not in elem]
-    
 
-obj_list=np.unique(np.array([elem.split('/')[-4] for elem in lineval_files]))
+# some additional removals for in progress dirs
+lineval_files = [elem for elem in lineval_files if '4U_mix' not in elem]
+abslines_files = [elem for elem in abslines_files if '4U_mix' not in elem]
+
+lineval_files = [elem for elem in lineval_files if outdir + '_old' not in elem]
+abslines_files = [elem for elem in abslines_files if outdir + '_old' not in elem]
+
+if restrict_obj!=False:
+    lineval_files=[elem for elem in lineval_files if restrict_obj+'/' in elem]
+    abslines_files=[elem for elem in abslines_files if restrict_obj+'/' in elem]
+
+if no_multi:
+    lineval_files=[elem for elem in lineval_files if '/multi/' not in elem]
+    abslines_files=[elem for elem in abslines_files if '/multi/' not in elem]
+
+if restrict_obj:
+    obj_list=[restrict_obj]
+else:
+    obj_list=np.unique(np.array([elem.split('/')[-4] for elem in lineval_files]))
 
     
 #note: there's no need to order anymore since the file values are attributed for each object of object list in the visual_line functions
@@ -203,31 +249,93 @@ dist_factor=4*np.pi*(dist_obj_list*1e3*3.086e18)**2
 Edd_factor=dist_factor/(1.26e38*mass_obj_list)
 
 #Reading the results files
-observ_list,lineval_list,flux_list,date_list,instru_list,exptime_list=obj_values(lineval_files,Edd_factor,dict_linevis)
+observ_list,lineval_list,lum_list,date_list,instru_list,exptime_list=obj_values(lineval_files,Edd_factor,dict_linevis)
 
-dict_linevis['flux_list']=flux_list
+dict_linevis['lum_list']=lum_list
 
 #the values here are for each observation
 abslines_infos,autofit_infos=abslines_values(abslines_files,dict_linevis)
 
-abslines_infos_perline,abslines_infos_perobj,abslines_plot,abslines_ener,flux_plot,hid_plot,incl_plot,width_plot,nh_plot=values_manip(abslines_infos,dict_linevis,autofit_infos)
+# getting all the variations we need
 
+# getting all the variations we need
+abslines_infos_perline, abslines_infos_perobj, abslines_plot, abslines_ener, \
+    lum_plot, hid_plot, incl_plot, width_plot, nh_plot, kt_plot = values_manip(abslines_infos, dict_linevis,
+                                                                                autofit_infos,
+                                                                                lum_list)
 #### creating the lines to be written
 line_list=[]
     
 det_line_list=[]
 
+#creating an outburst splitting for individual sources
+if restrict_obj:
+
+    time_sorted=[Time(elem) for elem in date_list[0]]
+    time_sorted.sort()
+
+    outburst_split=np.array([[i for i in range(len(time_sorted)) if\
+                              time_sorted[i]>outburst_split_dic[restrict_obj][j][0] and \
+                              time_sorted[i]<outburst_split_dic[restrict_obj][j][1] ]\
+                             for j in range(len(outburst_split_dic[restrict_obj]))],dtype='object')
+
+
+
 for i_obj,obj in enumerate(obj_list):
     
     #fetching the order of the exposures for the current obj
     date_order=date_list[i_obj].argsort()
-    
-    #writing the name of the object as a multi-row of the number of exposures
-    line_list+=['\multirow{'+str(len(date_order))+'}{*}{'+obj+'}']
+
+    if not restrict_obj:
+        #writing the name of the object as a multi-row of the number of exposures
+        line_list+=['\multirow{'+str(len(date_order))+'}{*}{'+obj+'}']
     
     #and parsing it as an index
     for ind_exp,i_exp in enumerate(date_list[i_obj].argsort()):
-        
+
+        if restrict_obj:
+
+            if ind_exp not in ravel_ragged(outburst_split):
+
+                # highlighting exposures out of outburst:
+                line_list += ['\hline Out of outburst']
+
+                #note: there's no line detection out of outburst currently
+                # det_line_list+=['\hline Out of outburst']
+
+            else:
+                #fetching the corresponding outburst
+                id_outburst=[i_out for i_out in range(len(outburst_split)) if ind_exp in outburst_split[i_out]][0]
+                curr_outburst=outburst_split[id_outburst]
+
+                if ind_exp==curr_outburst[0]:
+
+                    #too long
+                    # date_start_out=outburst_split_dic[restrict_obj][id_outburst][0].to_string()
+                    # month_start_out='-'.join(date_start_out.split('-')[:2])
+                    # date_end_out = outburst_split_dic[restrict_obj][id_outburst][1].to_string()
+                    # month_end_out = '-'.join(date_end_out.split('-')[:2])
+                    # month_out_str=month_start_out+'-'+month_end_out
+
+                    date_start_out=outburst_split_dic[restrict_obj][id_outburst][0].to_string()
+                    year_start_out='-'.join(date_start_out.split('-')[:1])
+                    date_end_out = outburst_split_dic[restrict_obj][id_outburst][1].to_string()
+                    year_end_out = '-'.join(date_end_out.split('-')[:1])
+                    year_out_str=year_start_out+('/'+year_end_out if year_start_out!=year_end_out else '')
+
+
+                    # writing the years of the outburst as a multi-row of the number of exposures in it
+                    line_list += ['\hline\multirow{' + str(len(curr_outburst)) + '}{*}{' + year_out_str + '}']
+
+                    #computing the amount of exposures with significant detections in the outburst
+                    n_curr_outburst_withlines=sum([(abslines_infos[i_obj][i_expos][4][:2] >= sign_threshold).any()\
+                                                    for i_expos in date_list[i_obj].argsort()[curr_outburst]])
+
+                    if n_curr_outburst_withlines>0:
+                        #writing the name of the object as a multi-row of the number of exposures
+                        det_line_list+=['\hline\multirow{'+str(n_curr_outburst_withlines)+'}{*}{'+year_out_str+'}']
+
+
         #writing the date's day
         line_list+=['&'+date_list[i_obj][i_exp].split('T')[0]+'']
         
@@ -237,16 +345,23 @@ for i_obj,obj in enumerate(obj_list):
         #writing the obsid and identifier
         #here we take off a few elements unneeded from the observ_list string
         observ_string=observ_list[i_obj][i_exp].replace('_pn','').replace('_Imaging','').replace('_Timing','').replace('_auto','')\
-                                             .replace('_heg','').replace('_-1','').replace('_','\_')
+                                             .replace('_heg','').replace('_-1','').replace('_xis1','')\
+                                             .replace('_','\_').replace('nu','').replace('A01','')
+
+        if instru_list[i_obj][i_exp]=='NICER':
+            observ_string=observ_string.split('-')[0]
+
         line_list+=['&'+observ_string+'']
         
         #writing the exposure
         line_list+=['&'+str(round(exptime_list[i_obj][i_exp]/1e3,2))+'']
         
         #flag for adding blueshift lines for when there is at least a Ka detection
-        if (abslines_infos[i_obj][i_exp][4][:2]>=0.997).any():
+        if (abslines_infos[i_obj][i_exp][4][:2]>=sign_threshold).any():
             det_obs=True
-            det_line_list+=[obj]
+
+            if not restrict_obj:
+                det_line_list+=[obj]
             det_line_list+=['&'+date_list[i_obj][i_exp].split('T')[0]+'']
             det_line_list+=['&'+observ_string+'']
             
@@ -323,15 +438,15 @@ for i_obj,obj in enumerate(obj_list):
             det_line_list+=['\n']
             
         #adding sources separations
-        if ind_exp==len(date_list[i_obj])-1:
+        if not restrict_obj and ind_exp==len(date_list[i_obj])-1:
             line_list+=['\hline\n']
             
         
-os.system('mkdir -p glob_batch')
+os.system('mkdir -p glob_batch/line_tables')
 
 #writing the list in a file
-with open('glob_batch/obs_table_'+outdir+'.txt','w+') as file:
+with open('glob_batch/line_tables/obs_table_'+outdir+'_'+('' if not restrict_obj else restrict_obj)+'.txt','w+') as file:
     file.writelines(line_list)
     
-with open('glob_batch/det_table_'+outdir+'.txt','w+') as file:
+with open('glob_batch/line_tables/det_table_'+outdir+'_'+('' if not restrict_obj else restrict_obj)+'.txt','w+') as file:
     file.writelines(det_line_list)

@@ -506,7 +506,8 @@ class scorpeon_group_save:
             
 xscorpeon=scorpeon_manager()
 
-def save_broad_SED(e_low=0.1,e_high=100,nbins=1e3,path=None,retain_session=True,remove_abs=True,remove_gaussian=True,
+def save_broad_SED(e_low=0.1,e_high=100,nbins=1e3,path=None,retain_session=True,
+                   remove_abs=True,remove_gaussian=True,remove_cal=True,
                    remove_scorpeon=True):
 
     '''
@@ -521,6 +522,8 @@ def save_broad_SED(e_low=0.1,e_high=100,nbins=1e3,path=None,retain_session=True,
     -remove_abs:        remove the abs/xabs components before saving the model
 
     -remove_gaussian:   remove the gaussian components in the model before saving the SED
+
+    -remove_cal:        remove the calibration edge components in the model before saving the SED
     '''
 
     #saving the session and modifying the model if asked to
@@ -531,7 +534,7 @@ def save_broad_SED(e_low=0.1,e_high=100,nbins=1e3,path=None,retain_session=True,
         Xset.save('make_broad_mod_save.xcm')
 
     if remove_abs:
-        for elem_abs_comp in ['phabs','tbabs','TBfeo','xabs','xscat']:
+        for elem_abs_comp in ['phabs','TBabs','TBfeo','xabs','xscat']:
             while elem_abs_comp in AllModels(1).componentNames:
                 delcomp(elem_abs_comp)
                 time.sleep(1)
@@ -540,6 +543,12 @@ def save_broad_SED(e_low=0.1,e_high=100,nbins=1e3,path=None,retain_session=True,
         for elem_gaussian in ['gaussian','gabs']:
             while elem_gaussian in AllModels(1).componentNames:
                 delcomp(elem_gaussian)
+                time.sleep(1)
+
+    if remove_cal:
+        for elem_edge in ['edge','smedge']:
+            while elem_edge in AllModels(1).componentNames:
+                delcomp(elem_edge)
                 time.sleep(1)
 
     if remove_scorpeon:
@@ -1309,6 +1318,7 @@ def addcomp(compname,position='last',endmult=None,return_pos=False,modclass=AllM
     #restricting the curvature bb/diskbb's kt to physical values
     if compname=='cont_diskbb':
         xspec_model(gap_end-1).values=[1.0, 0.01, 0.5, 0.5, 3.0, 3.0]
+
     #restricting the curvature bb's kt to physical values
     if compname=='cont_bb':
         xspec_model(gap_end-1).values=[1.0, 0.01, 0.1, 0.1, 4.0, 4.0]
@@ -1567,6 +1577,10 @@ def addcomp(compname,position='last',endmult=None,return_pos=False,modclass=AllM
                                 AllModels(i_grp)(gap_end).frozen = False
                                 par_tolink=(i_grp-1)*AllModels(1).nParameters+gap_end
                                 first_group_use=False
+
+                                #adding to the list of variable parameters
+                                return_pars += [par_tolink]
+
                             else:
                                 AllModels(i_grp)(gap_end).link=str(par_tolink)
 
@@ -1589,6 +1603,10 @@ def addcomp(compname,position='last',endmult=None,return_pos=False,modclass=AllM
                                 AllModels(i_grp)(gap_end).frozen = False
                                 par_tolink=(i_grp-1)*AllModels(1).nParameters+gap_end
                                 first_group_use=False
+
+                                #adding to the list of variable parameters
+                                return_pars += [par_tolink]
+
                             else:
                                 AllModels(i_grp)(gap_end).link=str(par_tolink)
 
@@ -2583,7 +2601,7 @@ class fitmod:
 
             #adding the continuum components not already in the model to the list of components to be added if there aren't in the 
             #current continuum
-            #here we assume there are no numbered continuum components (should be editing for more complex continuums)
+            #here we assume there are no numbered continuum components (should be edited for more complex continuums)
             #note : we keep this code part but it is not used anymore as long as we keep parenthood when creating new fitmods
             if self.name_complist[i].startswith('cont_'):
                 
@@ -2594,7 +2612,10 @@ class fitmod:
                     
                     self.complist+=[getattr(self,self.name_complist[i])]
             else:
-                setattr(self,self.name_complist[i],fitcomp(self.name_complist[i],self.logfile,self.logfile_write,self.idlist[i]))
+                setattr(self,self.name_complist[i],fitcomp(self.name_complist[i],
+                                                           self.logfile,self.logfile_write,
+                                                           self.idlist[i],
+                                                           fitcomp_names=self.name_complist))
                 
                 self.complist+=[getattr(self,self.name_complist[i])]
 
@@ -2725,13 +2746,11 @@ class fitmod:
             if component.calibration:
                 Plot('ldata')
                 ener_bounds=[Plot.x()[0],Plot.x()[-1]]
-                if not component.cal_e>=ener_bounds[0] and component.cal_e<=ener_bounds[1]:
-                    continue
 
-                #we add the edges after a first fit to avoid putting them to 0 immediately
-                if component.multipl:
+                #here we add a margin of 1 keV on each side to avoid having components at the very beginning/end
+                # of the model, which would be hard to constrain
+                if not component.cal_e-1>=ener_bounds[0] and component.cal_e+1<=ener_bounds[1]:
                     continue
-
 
             # excluding addition of named components with pendants when not allowing mixing between emission and absorption of the same line
             if component.named_line and nomixline:
@@ -4116,7 +4135,7 @@ class fitcomp:
     Warning: delfrommod with rollback set to True will reload the save made before the component was added for the last time !
     '''
     
-    def __init__(self,compname,logfile=None,logfile_write=None,identifier=None,continuum=False):
+    def __init__(self,compname,logfile=None,logfile_write=None,identifier=None,continuum=False,fitcomp_names=None):
         
         #component addcomp name
         self.compname=compname
@@ -4131,7 +4150,9 @@ class fitcomp:
         self.logfile=logfile
         
         self.logfile_write=logfile_write
-        
+
+        self.fitcomp_names=fitcomp_names
+
         #save of the model post component added + fit
         self.fitted_mod=None
         
@@ -4189,11 +4210,15 @@ class fitcomp:
         else:
             self.named_line=False
             self.named_absline=False
-            
+
+        self.mandatory=False
+
         if 'constant' in comp_split or self.calibration:
             self.mandatory=True
-        else:
-            self.mandatory=False
+        #ensuring we won't lose the diskbb if there is a nthcomp in the other proposed components
+        elif 'diskbb' in comp_split and fitcomp_names is not None:
+            if 'disk_nthcomp' in self.fitcomp_names:
+                self.mandatory=True
             
         if comp_split in xspec_multmods:
            self.multipl=True
@@ -4271,9 +4296,6 @@ class fitcomp:
             #computing a mask of base unlocked parameters to rethaw pegged parameters during the second round of autofit
             self.unlocked_pars_base_mask=[(not AllModels(par_degroup(i)[0])(par_degroup(i)[1]).frozen and\
                                                             AllModels(par_degroup(i)[0])(par_degroup(i)[1]).link=='') for i in self.parlist]
-            
-            if self.compname=='glob_constant' and AllData.nGroups>1:
-                self.unlocked_pars+=[1+AllModels(1).nParameters*i_grp for i_grp in range(1,AllData.nGroups)]
                 
             #this parameter is creating for the sole purpose of significance testing, to avoid using unlocked pars which is modified when
             #parameters are pegged (something which shouldn't affect the significance testing are pegged parameters were still variable initially)

@@ -956,9 +956,24 @@ def plot_lightcurve(dict_linevis,ctl_maxi_df,ctl_maxi_simbad,name,ctl_bat_df,ctl
     #     date_format=mdates.AutoDateFormatter(mdates.AutoDateLocator())
 
     ax_lc.xaxis.set_major_formatter(date_format)
+
+    #forcing 8 xticks along the ax
+
+    #putting an interval in minutes (to avoid imprecisions when zooming)
+    date_tick_inter=int((ax_lc.get_xlim()[1]-ax_lc.get_xlim()[0])*24*60/10)
+
+    ax_lc.xaxis.set_major_locator(mdates.MinuteLocator(interval=date_tick_inter))
+
+    #and offsetting them because otherwise the last tick is at the very end of the graph
+    ax_lc.set_xticks(ax_lc.get_xticks()-date_tick_inter/(2*24*60))
+
+    # ax_lc.set_xticks(ax_lc.get_xticks()[::2])
                     
     for label in ax_lc.get_xticklabels(which='major'):
-        label.set(rotation=45, horizontalalignment='right')
+        label.set(rotation=0, horizontalalignment='center')
+
+        #prettier but takes too much space
+        # label.set(rotation=45, horizontalalignment='right')
 
     ax_lc.legend(loc='upper left')
 
@@ -3271,9 +3286,9 @@ def distrib_graph(data_perinfo,info,dict_linevis,data_ener=None,conf_thresh=0.99
     #computing the range of the eqw bins from the global graph to get the same scale for all individual graphs)
     
     if scale_log_eqw:
-        bins_eqw=np.geomspace(1,max(100,(max(ravel_ragged(data_perinfo[0][0]))//5+1)*5),20)
+        bins_eqw=np.geomspace(1,min(100,(max(ravel_ragged(data_perinfo[0][0]))//5+1)*5),20)
     else:
-        bins_eqw=np.linspace(5,max(100,(max(ravel_ragged(data_perinfo[0][0]))//5+1)*5),20)
+        bins_eqw=np.linspace(5,min(100,(max(ravel_ragged(data_perinfo[0][0]))//5+1)*5),20)
         
     bins_eqwratio=np.linspace(0.2,4,20)
     
@@ -3451,24 +3466,29 @@ def distrib_graph(data_perinfo,info,dict_linevis,data_ener=None,conf_thresh=0.99
             if not split_off:
                 
                 if split_source:
-                    #source by source version
-                    
                     sign_det_ratio_split=[[ravel_ragged(data_perinfo[4][0][ratio_indexes_x[i]].T[j]).astype(float) for j in range(len(obj_disp_list))] for i in range(2)]
-                    
+
                     #creating the bool det and bool sign masks
                     # bool_det_split=np.array([(elem_num!=0.) & (~np.isnan(elem_num)) & (elem_denom!=0.) & (~np.isnan(elem_denom))\
                     #                              for elem_num,elem_denom in zip([elem for elem in sign_det_ratio_split])])
-                        
+
                     bool_sign_split=np.array([(elem_num>=conf_thresh) & (~np.isnan(elem_num)) & (elem_denom>=conf_thresh) & (~np.isnan(elem_denom))\
                                                  for elem_num,elem_denom in zip(sign_det_ratio_split[0],sign_det_ratio_split[1])],dtype=object)
-                
+
                     #computing the data array for the ratio (here we don't need to transpose because we select a single line with ratio_indexes_x
                     hist_data_split=np.array(
                           [ravel_ragged(data_plot[0][ratio_indexes_x[0]][i_obj])[bool_sign_split[i_obj]]/\
                            ravel_ragged(data_plot[0][ratio_indexes_x[1]][i_obj])[bool_sign_split[i_obj]]\
                                for i_obj in range(len(obj_disp_list))],dtype=object)
-                
 
+                elif split_instru:
+                    bool_sign_split=[(bool_sign_ratio) & ((ravel_ragged(instru_list)==instru_unique[i_instru])[bool_det_ratio])\
+                                      for i_instru in range(len(instru_unique))]
+
+                    hist_data_split=np.array(
+                          [ravel_ragged(data_plot[0][ratio_indexes_x[0]])[bool_det_ratio][bool_sign_split[i_instru]]/\
+                           ravel_ragged(data_plot[0][ratio_indexes_x[1]])[bool_det_ratio][bool_sign_split[i_instru]]\
+                               for i_instru in range(len(instru_unique))],dtype=object)
 
                     
         else:
@@ -3560,9 +3580,12 @@ def distrib_graph(data_perinfo,info,dict_linevis,data_ener=None,conf_thresh=0.99
                                      label=obj_disp_list[source_withdet_mask],bins=hist_bins,rwidth=0.8,align='left',stacked=True)
 
                     elif split_instru:
-                            
-                        ax_hist.hist(hist_data_split,color=[telescope_colors[instru_unique[i_instru]] for i_instru in range(len(instru_unique))],
+
+                        try:
+                            ax_hist.hist(hist_data_split,color=[telescope_colors[instru_unique[i_instru]] for i_instru in range(len(instru_unique))],
                                       label=instru_unique,bins=hist_bins,rwidth=0.8,align='left')
+                        except:
+                            breakpoint()
 
                         #if we want combined (not stacked) + transparent                        
                         # t=[ax_hist.hist(hist_data_split[i_instru],color=telescope_colors[instru_unique[i_instru]],

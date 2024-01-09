@@ -159,15 +159,16 @@ ap = argparse.ArgumentParser(description='Script to perform line detection in X-
 
 '''GENERAL OPTIONS'''
 
-ap.add_argument('-satellite',nargs=1,help='telescope to fetch spectra from',default='NuSTAR',type=str)
+ap.add_argument('-satellite',nargs=1,help='telescope to fetch spectra from',default='multi',type=str)
 
 #used for NICER and multi for now
 ap.add_argument('-group_max_timedelta',nargs=1,
-                help='maximum time delta for epoch/gti grouping in dd_hh_mm_ss',default='00_00_00_15',type=str)
+                help='maximum time delta for epoch/gti grouping in dd_hh_mm_ss',default='00_08_00_00',type=str)
 
 #00_00_00_10 for NICER TR
 #00_00_15_00 for NuSTAR individual orbits
 #01_00_00_00 for dailies
+#00_08_00_00 for NuSTAR multi
 
 ap.add_argument("-cameras",nargs=1,help='Cameras to use for spectral analysis',default='all',type=str)
 ap.add_argument("-expmodes",nargs=1,help='restrict the analysis to a single type of exposure',default='all',type=str)
@@ -216,7 +217,7 @@ ap.add_argument('-xspec_window',nargs=1,help='xspec window id (auto tries to pic
 '''MODELS'''
 #### Models and abslines lock
 ap.add_argument('-cont_model',nargs=1,help='model list to use for the autofit computation',
-                default='nthcont_NuSTAR',type=str)
+                default='nthcont_detailed',type=str)
 
 ap.add_argument('-autofit_model',nargs=1,help='model list to use for the autofit computation',
                 default='lines_narrow',type=str)
@@ -366,10 +367,10 @@ ap.add_argument('-split_fit',nargs=1,
 #line significance assessment parameter
 ap.add_argument('-assess_line',nargs=1,
                 help='use fakeit simulations to estimate the significance of each absorption line',
-                default=True,type=bool)
+                default=False,type=bool)
 
 ap.add_argument('-assess_line_upper',nargs=1,help='compute upper limits of each absorption line',
-                default=True,type=bool)
+                default=False,type=bool)
 
 
 '''SPECTRUM PARAMETERS'''
@@ -413,15 +414,20 @@ ap.add_argument('-restrict_fakes',nargs=1,
 ap.add_argument('-plot_multi_overlap',nargs=1,help='plot overlap between different epochs',default=True)
 
 #in this case other epochs from other instruments are matched against the obs of this one
+#useful to center epoch matching on a specific instrument
+#off value is False
 ap.add_argument('-multi_focus',nargs=1,help='restricts epoch matching to having a specific telescope',
-                default='NuSTAR',type=str)
+                default="NuSTAR",type=str)
+
+ap.add_argument('-skip_single_instru',nargs=1,help='skip epochs with a single instrument',
+                default=True,type=bool)
 
 #for multi focus
-ap.add_argument('-match_closest_NICER',nargs=1,help='only add the closest NICER obsid',default=True,type=bool)
+ap.add_argument('-match_closest_NICER',nargs=1,help='only add the closest NICER obsid',default=False,type=bool)
 
-#off value is False
-ap.add_argument('-restrict_combination',nargs=1,help='restrict multi epochs a specific satellite combination',
-                default="NICER+NuSTAR")
+#off value is False. ex: "NICER+NuSTAR"
+ap.add_argument('-restrict_combination',nargs=1,help='restrict multi epochs to a specific satellite combination',
+                default=False)
 
 ap.add_argument('-single_obsid_NuSTAR',nargs=1,
                 help='limit NuSTAR epoch grouping to single obsids',default=True,type=bool)
@@ -616,6 +622,7 @@ single_obsid_NuSTAR=args.single_obsid_NuSTAR
 restrict_combination=args.restrict_combination
 match_closest_NICER=args.match_closest_NICER
 plot_multi_overlap=args.plot_multi_overlap
+skip_single_instru=args.skip_single_instru
 
 outdir=args.outdir
 pileup_lim=args.pileup_lim
@@ -987,9 +994,9 @@ def pdf_summary(epoch_files,fit_ok=False,summary_epoch=None):
                 expmode_list += [''] if (pre_reduced_NICER or 'DATAMODE' not in hdul[0].header.keys())\
                                 else [hdul[0].header['DATAMODE']]
 
-            if elem_sat=='NICER':
+            if elem_sat in ['NICER','NuSTAR']:
 
-                if pre_reduced_NICER:
+                if elem_sat=='NICER' and pre_reduced_NICER:
                         pdf.cell(1,1,'Object: '+obj_name+' | Date: '+Time(hdul[1].header['MJDSTART'],format='mjd').isot+
                                  ' | Obsid: '+epoch_inf[i_obs][0],align='C',center=True)
                 else:
@@ -1017,7 +1024,7 @@ def pdf_summary(epoch_files,fit_ok=False,summary_epoch=None):
 
                 pdf.cell(1,1,'grating: '+epoch_grating+' | mode: '+expmode_list[0]+
                          ' clean exposure time: '+str(round(exposure_list[i_obs]))+'s',align='C',center=True)
-            elif elem_sat in ['NICER','Suzaku','Swift']:
+            elif elem_sat in ['NICER','Suzaku','Swift','NuSTAR']:
                 pdf.cell(1,1,'mode: '+expmode_list[0]+
                          ' clean exposure time: '+str(round(exposure_list[i_obs]))+'s',align='C',center=True)
 
@@ -1343,6 +1350,17 @@ def pdf_summary(epoch_files,fit_ok=False,summary_epoch=None):
 
     shown_obsids_NICER=[]
     '''Data reduction displays'''
+
+    if sat_glob=='multi':
+        pdf.add_page()
+        pdf.set_font('helvetica', 'B', 16)
+        pdf.cell(1, 10, 'Epoch matching', align='C', center=True)
+        pdf.ln(10)
+        try:
+            pdf.image(outdir +'/'+ short_epoch_id+'_multi_matching.pdf', x=20, y=30, w=250)
+        except:
+            pass
+
     for i_obs,(elem_epoch,elem_sat) in enumerate(zip(epoch_observ,sat_indiv)):
 
         if elem_sat=='NICER':
@@ -1591,6 +1609,47 @@ def line_e_ranges(sat):
         line_cont_ig = ''
 
     return e_sat_low,e_sat_high,ignore_bands,line_cont_ig
+
+
+def shorten_epoch(file_ids):
+    # splitting obsids
+    obsids = np.unique([elem.split('-')[0] for elem in file_ids])
+    obsids_list=[elem.split('-')[0] for elem in file_ids]
+    # returning the obsids directly if there's no gtis in the obsids
+    obsids_ravel = ''.join(file_ids)
+    if '-' not in obsids_ravel:
+        return file_ids
+
+    # according the gtis in a shortened way
+    epoch_str_list = []
+    for elem_obsid in obsids:
+
+        str_gti_add=''
+
+        str_obsid = elem_obsid
+
+        if '-' in ''.join([elem for elem in file_ids if elem.startswith(elem_obsid)]):
+            str_gti_add = '-'+ '-'.join([elem.split('-')[1] for elem in file_ids if \
+                                elem.startswith(elem_obsid)])
+
+        epoch_str_list += [str_obsid+str_gti_add]
+
+    return epoch_str_list
+
+#not needed for now
+def expand_epoch(shortened_epoch):
+    #splitting obsids
+    file_ids=[]
+    for short_id in shortened_epoch:
+        if short_id.count('-')<=1:
+            file_ids+=[short_id]
+        else:
+            obsid=short_id.split('-')[0]
+            gti_ids=short_id.split('-')[1:]
+
+            file_ids+=['-'.join([obsid,elem_gti]) for elem_gti in gti_ids]
+
+    return file_ids
 
 def line_detect(epoch_id):
 
@@ -2707,7 +2766,6 @@ def line_detect(epoch_id):
             #         model_load(mod_fitcont)
 
             #storing the absorption of the broad fit if there is absorption
-
             abs_incl_comps = (np.array(fitcont_broad.complist)[[elem.absorption and elem.included for elem in \
                                                            [elem_comp for elem_comp in fitcont_broad.complist if
                                                             elem_comp is not None]]])
@@ -2719,6 +2777,9 @@ def line_detect(epoch_id):
                 main_abs_comp = None
                 broad_absval=0
                 broad_abscomp=''
+
+            # #freezing the calibration components
+            # for elem in
 
             for i_sp in range(len(epoch_files_good)):
                 if line_cont_ig_indiv[i_sp] != '':
@@ -4087,6 +4148,9 @@ elif sat_glob=='multi':
 
                 elem_epoch_id=np.array([elem_epoch_id])[[mask_obsid_restrict]].tolist()
 
+            if skip_single_instru and len(np.unique(det_list[elem_epoch_id]))==1:
+                continue
+
             epoch_id_list_ravel+=elem_epoch_id
 
             if len(elem_epoch_id)>0:
@@ -4101,7 +4165,6 @@ elif sat_glob=='multi':
     if restrict_combination:
         epoch_list=[epoch_list[id_epoch] for id_epoch in range(len(epoch_list)) if (np.unique(det_list[epoch_id_list[id_epoch]])==restrict_combination.split('+')).all()]
 
-
     if plot_multi_overlap:
 
         '''
@@ -4109,98 +4172,95 @@ elif sat_glob=='multi':
         then the final epochs as they end up, cycling through colors for each epoch
         '''
 
-
-        fig_exp, ax_exp = plt.subplots(figsize=(17, 6))
         from visual_line_tools import telescope_colors
         import matplotlib.dates as mdates
 
-        # precise format because we might need it
-        date_format = mdates.DateFormatter('%Y-%m-%d %H:%M:%S')
+        for elem_epoch in epoch_list:
 
-        tel_col_list = list(telescope_colors.keys())
-        mask_tel = np.array([np.array(det_list) == elem for elem in tel_col_list])
+            fig_exp, ax_exp = plt.subplots(figsize=(17, 6))
 
-        num_dates_start = mdates.date2num(Time(tstart_list.astype(float), format='jd').datetime)
-        num_dates_stop = mdates.date2num(Time(tstop_list.astype(float), format='jd').datetime)
+            # precise format because we might need it
+            date_format = mdates.DateFormatter('%Y-%m-%d %H:%M:%S')
 
-        #cylcing through each telescope and their respective epochs to get different colors
-        for i_det in range(len(tel_col_list)):
+            epoch_mask=np.array([np.argwhere(spfile_list==elem)[0][0] for elem in elem_epoch])
 
-            for i_exp in range(sum(mask_tel[i_det])):
-                ax_exp.axvspan(xmin=num_dates_start[mask_tel[i_det]][i_exp],
-                               xmax=num_dates_stop[mask_tel[i_det]][i_exp],
-                               ymin=0, ymax=0.5, color=telescope_colors[tel_col_list[i_det]],
-                               label=tel_col_list[i_det] if i_exp == 0 else '', alpha=0.2)
 
-        #and doing the same with the remaining elements of epoch_list
-        prop_cycle = plt.rcParams['axes.prop_cycle']
-        mpl_cycle_colors = prop_cycle.by_key()['color']
+            tel_col_list = list(telescope_colors.keys())
+            mask_tel = np.array([np.array(det_list[epoch_mask]) == elem for elem in tel_col_list])
 
-        for i_epoch,elem_epoch in enumerate(epoch_list):
+            num_dates_start = mdates.date2num(Time(tstart_list.astype(float)[epoch_mask], format='jd').datetime)
+            num_dates_stop = mdates.date2num(Time(tstop_list.astype(float)[epoch_mask], format='jd').datetime)
 
-            epoch_color=mpl_cycle_colors[i_epoch%len(mpl_cycle_colors)]
+            #not needed now that we plot everything afterwards
+            # #cylcing through each telescope and their respective epochs to get different colors
+            # for i_det in range(len(tel_col_list)):
+            #
+            #     for i_exp in range(sum(mask_tel[i_det])):
+            #         ax_exp.axvspan(xmin=num_dates_start[mask_tel[i_det]][i_exp],
+            #                        xmax=num_dates_stop[mask_tel[i_det]][i_exp],
+            #                        ymin=0, ymax=0.5, color=telescope_colors[tel_col_list[i_det]],
+            #                        label=tel_col_list[i_det] if i_exp == 0 else '', alpha=0.2)
 
-            for elem_file in elem_epoch:
-                num_date_start_file=num_dates_start[spfile_list==elem_file][0]
-                num_date_stop_file=num_dates_stop[spfile_list==elem_file][0]
+            #and doing the same with the remaining elements of epoch_list
+            prop_cycle = plt.rcParams['axes.prop_cycle']
+            mpl_cycle_colors = prop_cycle.by_key()['color']
+
+            epoch_color = 'blue'
+            # epoch_color=mpl_cycle_colors[i_epoch%len(mpl_cycle_colors)]
+
+            for i_fome,elem_file in enumerate(elem_epoch):
+
+                num_date_start_file=num_dates_start[spfile_list[epoch_mask]==elem_file][0]
+                num_date_stop_file=num_dates_stop[spfile_list[epoch_mask]==elem_file][0]
 
                 ax_exp.axvspan(xmin=num_date_start_file,
                                xmax=num_date_stop_file,
                                ymin=0.5, ymax=1, color=epoch_color,
                                label='', alpha=0.2)
 
-        ax_exp.xaxis.set_major_formatter(date_format)
-        for label in ax_exp.get_xticklabels(which='major'):
-            label.set(rotation=45, horizontalalignment='right')
+            ax_exp.xaxis.set_major_formatter(date_format)
+            for label in ax_exp.get_xticklabels(which='major'):
+                label.set(rotation=45, horizontalalignment='right')
 
-        plt.tight_layout()
-        plt.legend()
-        plt.savefig(os.path.join(outdir,'multi_matching.png'))
-        plt.savefig(os.path.join(outdir,'multi_matching.pdf'))
-        plt.close()
+            #locking the x axis with a one day margin around the epoch
+            ax_exp.set_xlim(ax_exp.get_xlim()[0]-1, ax_exp.get_xlim()[1]+1)
+
+            #plotting the rest of the exposures (cheap way to show them without having to sort them
+            mask_tel = np.array([np.array(det_list) == elem for elem in tel_col_list])
+
+            num_dates_start = mdates.date2num(Time(tstart_list.astype(float), format='jd').datetime)
+            num_dates_stop = mdates.date2num(Time(tstop_list.astype(float), format='jd').datetime)
+
+            #cylcing through each telescope and their respective epochs to get different colors
+
+            tel_col_shown=[]
+
+            for i_det in range(len(tel_col_list)):
+
+                for i_exp in range(sum(mask_tel[i_det])):
+
+                    bar_in_plot=getoverlap([num_dates_start[mask_tel[i_det]][i_exp],num_dates_stop[mask_tel[i_det]][i_exp]],ax_exp.get_xlim())>0
+
+                    ax_exp.axvspan(xmin=num_dates_start[mask_tel[i_det]][i_exp],
+                                   xmax=num_dates_stop[mask_tel[i_det]][i_exp],
+                                   ymin=0, ymax=0.5, color=telescope_colors[tel_col_list[i_det]],
+                                   label=tel_col_list[i_det] if (bar_in_plot and tel_col_list[i_det] not in tel_col_shown) else '', alpha=0.2)
+
+                    if bar_in_plot:
+                        tel_col_shown+=[tel_col_list[i_det]]
+
+            plt.tight_layout()
+            plt.legend()
+
+            #short epoch id
+            short_ep_str=shorten_epoch([elem_sp.split('_gti')[0].split('_sp')[0].split('src')[0] for elem_sp in elem_epoch])
+            plt.savefig(os.path.join(outdir,'_'.join(short_ep_str)+'_multi_matching.png'))
+            plt.savefig(os.path.join(outdir,'_'.join(short_ep_str)+'_multi_matching.pdf'))
+            plt.close()
 
     epoch_list_started=started_expos
     epoch_list_done=done_expos
 
-def shorten_epoch(file_ids):
-    # splitting obsids
-    obsids = np.unique([elem.split('-')[0] for elem in file_ids])
-    obsids_list=[elem.split('-')[0] for elem in file_ids]
-    # returning the obsids directly if there's no gtis in the obsids
-    obsids_ravel = ''.join(file_ids)
-    if '-' not in obsids_ravel:
-        return file_ids
-
-    # according the gtis in a shortened way
-    epoch_str_list = []
-    for elem_obsid in obsids:
-
-        str_gti_add=''
-
-        str_obsid = elem_obsid
-
-        if '-' in ''.join([elem for elem in file_ids if elem.startswith(elem_obsid)]):
-            str_gti_add = '-'+ '-'.join([elem.split('-')[1] for elem in file_ids if \
-                                elem.startswith(elem_obsid)])
-
-        epoch_str_list += [str_obsid+str_gti_add]
-
-    return epoch_str_list
-
-#not needed for now
-def expand_epoch(shortened_epoch):
-    #splitting obsids
-    file_ids=[]
-    for short_id in shortened_epoch:
-        if short_id.count('-')<=1:
-            file_ids+=[short_id]
-        else:
-            obsid=short_id.split('-')[0]
-            gti_ids=short_id.split('-')[1:]
-
-            file_ids+=['-'.join([obsid,elem_gti]) for elem_gti in gti_ids]
-
-    return file_ids
 
 if force_epochs:
     epoch_list=force_epochs_list

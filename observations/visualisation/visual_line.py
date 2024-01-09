@@ -1822,21 +1822,24 @@ if display_single and choice_source[0]=='4U1630-47':
 
     int_lc_mjd = np.array([Time(elem).mjd.astype(float) for elem in int_lc_df['ISOT']])
 
-    obs_dates = Time(np.array([date_list[mask_obj][0] for i in range(sum(mask_lines))]).astype(str)).mjd.astype(float)
-
-    # computing which observations are within the timeframe of an integral revolution (assuming 3days-long)
-    mask_withtime_INT = [False if sum((int_lc_mjd - elem) >= 0)==0 else \
-                         min((int_lc_mjd - elem)[(int_lc_mjd - elem) >= 0]) < 3 for elem in obs_dates[0]]
-
     mask_intime_INT_revol=np.array([Time(elem,format='mjd')>=Time(slider_date[0]) \
                                   and Time(elem,format='mjd')<=Time(slider_date[1])\
                                     for elem in int_lc_mjd])
 
-    mask_intime_INT_withobs=[sum((elem - obs_dates[0]) >= 0)>0 and\
-                              min((elem - obs_dates[0])[(elem - obs_dates[0]) >= 0]) < 3 for elem in int_lc_mjd]
+    if sum(ravel_ragged(mask_intime_plot))>0:
+        obs_dates = Time(np.array([date_list[mask_obj][0] for i in range(sum(mask_lines))]).astype(str)).mjd.astype(
+            float)
 
-    if restrict_match_INT:
-        mask_intime_plot[0]=(mask_intime_plot[0]) & mask_withtime_INT
+        mask_intime_INT_withobs=[sum((elem - obs_dates[0]) >= 0)>0 and\
+                                  min((elem - obs_dates[0])[(elem - obs_dates[0]) >= 0]) < 3 for elem in int_lc_mjd]
+
+
+        # computing which observations are within the timeframe of an integral revolution (assuming 3days-long)
+        mask_withtime_INT = [False if sum((int_lc_mjd - elem) >= 0)==0 else \
+                             min((int_lc_mjd - elem)[(int_lc_mjd - elem) >= 0]) < 3 for elem in obs_dates[0]]
+
+        if restrict_match_INT:
+            mask_intime_plot[0]=(mask_intime_plot[0]) & mask_withtime_INT
 
 #and an date order 
 order_intime_plot_restrict=np.array([np.array([Time(elem) for elem in date_list[mask_obj][i_obj_r][mask_intime_plot[i_obj_r].astype(bool)]]).argsort() for i_obj_r in range(n_obj_r)],dtype=object)

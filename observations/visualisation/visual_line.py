@@ -1509,7 +1509,6 @@ flag_noabsline=False
 #bin values for all the histograms below
 #for the Velocity shift and energies the range is locked so we can use a global binning for all the diagrams
 
-
 bins_bshift=np.linspace(-8e3 if 'XMM' in choice_telescope or 'NuSTAR' in choice_telescope else -2e3,
                         3e3,num=26,endpoint=True)
 # bins_bshift=np.linspace(-1e4,5e3,num=31,endpoint=True)

@@ -68,7 +68,7 @@ sys.path.append('/mount/src/winds/general/')
 #custom script with some lines and fit utilities and variables
 from fitting_tools import lines_std,c_light,lines_std_names,lines_e_dict,ang2kev
 
-from general_tools import ravel_ragged,MinorSymLogLocator,rescale_log
+from general_tools import ravel_ragged,MinorSymLogLocator,rescale_log,expand_epoch
 
 #Catalogs and manipulation
 from astroquery.vizier import Vizier
@@ -958,14 +958,18 @@ def plot_lightcurve(dict_linevis,ctl_maxi_df,ctl_maxi_simbad,name,ctl_bat_df,ctl
     ax_lc.xaxis.set_major_formatter(date_format)
 
     #forcing 8 xticks along the ax
-
+    ax_lc.set_xlim(ax_lc.get_xlim())
     #putting an interval in minutes (to avoid imprecisions when zooming)
     date_tick_inter=int((ax_lc.get_xlim()[1]-ax_lc.get_xlim()[0])*24*60/10)
 
     ax_lc.xaxis.set_major_locator(mdates.MinuteLocator(interval=date_tick_inter))
 
-    #and offsetting them because otherwise the last tick is at the very end of the graph
-    ax_lc.set_xticks(ax_lc.get_xticks()-date_tick_inter/(2*24*60))
+    #and offsetting if they're too close to the bounds because otherwise the ticks can be missplaced
+    if ax_lc.get_xticks()[0]-ax_lc.get_xlim()[0]>date_tick_inter/(24*60)*3/4:
+        ax_lc.set_xticks(ax_lc.get_xticks()-date_tick_inter/(2*24*60))
+
+    if ax_lc.get_xticks()[0]-ax_lc.get_xlim()[0]<date_tick_inter/(24*60)*1/4:
+        ax_lc.set_xticks(ax_lc.get_xticks()+date_tick_inter/(2*24*60))
 
     # ax_lc.set_xticks(ax_lc.get_xticks()[::2])
                     
@@ -1181,6 +1185,17 @@ def obj_values(file_paths,E_factors,dict_linevis):
                         #we take the directory structure from the according file in curr_obj_paths
                         filepath='/'.join(lineval_path.split('/')[:-2])+'/'+obs+'_sp_grp_opt.pha'
                         curr_instru_list[i_obs]='NICER'
+
+                        #fetching the full list of epoch obs to get the exposure later
+                        with open('/'.join(lineval_path.split('/')[:-1]) + '/summary_line_det.log') as summary:
+                            summary_lines = summary.readlines()[1:]
+
+                        summary_obs_line = [elem for elem in summary_lines if obs in elem]
+
+                        assert len(summary_obs_line)==1, 'Error in observation summary matching'
+
+                        epoch_obs_list=expand_epoch(literal_eval(summary_obs_line[0].split('\t')[0]))
+                        epoch_sp_list=[elem+'_sp_grp_opt.pha' for elem in epoch_obs_list]
     
                 else:
                     
@@ -1220,10 +1235,22 @@ def obj_values(file_paths,E_factors,dict_linevis):
                             #should not happen
                             breakpoint()
                             print('issue with identifying obs sp path')
+
+                #summing the exposures for NICER
+                if curr_instru_list[i_obs]=='NICER':
+
+                    curr_exptime_list[i_obs] = 0
+
+                    for elem_file in epoch_sp_list:
+                        with fits.open('/'.join(lineval_path.split('/')[:-2]) + '/' + elem_file) as hdul:
+                            curr_exptime_list[i_obs] += hdul[1].header['EXPOSURE']
+
                 try:
                     with fits.open(filepath) as hdul:
 
-                        curr_exptime_list[i_obs]=hdul[1].header['EXPOSURE']
+                        if curr_instru_list[i_obs]!='NICER':
+
+                            curr_exptime_list[i_obs]=hdul[1].header['EXPOSURE']
 
                         if curr_instru_list[i_obs] in ['NICER','NuSTAR']:
 

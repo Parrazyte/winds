@@ -100,7 +100,7 @@ ap.add_argument('-catch','--catch_errors',help='Catch errors while running the d
 
 #global choices
 ap.add_argument("-a","--action",nargs='?',help='Give which action(s) to proceed,separated by comas.',
-                default='m',type=str)
+                default='gti,fs,l,g,m',type=str)
 #default: 1,gti,fs,l,g,m,c
 
 ap.add_argument("-over",nargs=1,help='overwrite computed tasks (i.e. with products in the batch, or merge directory\
@@ -119,7 +119,7 @@ ap.add_argument('-folder_cont',nargs=1,help='skip all but the last 2 directories
 ap.add_argument('-keep_SAA',nargs=1,help='keep South Atlantic Anomaly (SAA) Periods',type=bool,default=True)
 
 #gti
-ap.add_argument('-gti_split',nargs=1,help='GTI split method',default='orbit+flare',type=str)
+ap.add_argument('-gti_split',nargs=1,help='GTI split method',default='orbit+flare+split_100',type=str)
 ap.add_argument('-flare_method',nargs=1,help='Flare extraction method(s)',default='clip+peak',type=str)
 
 #note: not used currently
@@ -706,9 +706,10 @@ def create_gtis(directory,split='orbit+flare',band='3-15',binning=1,overwrite=Tr
                 id_flares += [elem_id_flares]
 
                 if 'split' in split:
-                    #restricting the gtis in each split to the non-flaring parts
-                    for i_split in range(len(split_gti_orbit[i_orbit])):
-                        split_gti_orbit[i_orbit]=[elem for elem in split_gti_orbit[i_orbit] if elem not in id_flares]
+                    for i_split in range(len(split_gti_arr[i_orbit])):
+                        split_gti_arr[i_orbit][i_split]=[elem for elem in split_gti_arr[i_orbit][i_split]\
+                                                     if elem not in id_flares[i_orbit]]
+
 
         else:
             id_gti=id_gti_orbit

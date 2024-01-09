@@ -138,7 +138,7 @@ from linedet_utils import plot_line_comps,plot_line_search,plot_std_ener,coltour
 #custom script with a some lines and fit utilities and variables
 from fitting_tools import c_light,lines_std_names,lines_e_dict,n_absline,range_absline,model_list
 
-from general_tools import file_edit,ravel_ragged
+from general_tools import file_edit,ravel_ragged,shorten_epoch,expand_epoch
 
 # #importing the pileup evaluation function
 # from XMM_datared import pileup_val
@@ -1610,46 +1610,6 @@ def line_e_ranges(sat):
 
     return e_sat_low,e_sat_high,ignore_bands,line_cont_ig
 
-
-def shorten_epoch(file_ids):
-    # splitting obsids
-    obsids = np.unique([elem.split('-')[0] for elem in file_ids])
-    obsids_list=[elem.split('-')[0] for elem in file_ids]
-    # returning the obsids directly if there's no gtis in the obsids
-    obsids_ravel = ''.join(file_ids)
-    if '-' not in obsids_ravel:
-        return file_ids
-
-    # according the gtis in a shortened way
-    epoch_str_list = []
-    for elem_obsid in obsids:
-
-        str_gti_add=''
-
-        str_obsid = elem_obsid
-
-        if '-' in ''.join([elem for elem in file_ids if elem.startswith(elem_obsid)]):
-            str_gti_add = '-'+ '-'.join([elem.split('-')[1] for elem in file_ids if \
-                                elem.startswith(elem_obsid)])
-
-        epoch_str_list += [str_obsid+str_gti_add]
-
-    return epoch_str_list
-
-#not needed for now
-def expand_epoch(shortened_epoch):
-    #splitting obsids
-    file_ids=[]
-    for short_id in shortened_epoch:
-        if short_id.count('-')<=1:
-            file_ids+=[short_id]
-        else:
-            obsid=short_id.split('-')[0]
-            gti_ids=short_id.split('-')[1:]
-
-            file_ids+=['-'.join([obsid,elem_gti]) for elem_gti in gti_ids]
-
-    return file_ids
 
 def line_detect(epoch_id):
 

@@ -254,14 +254,14 @@ if not online:
 
 st.sidebar.header('Sample selection')
 
-radio_indiv_orbits=st.sidebar.radio('Observation type',('averaged obsids','individual orbits (NICER only)'))
-use_orbit_obs=radio_indiv_orbits=='individual orbits (NICER only)'
+radio_indiv_orbits=st.sidebar.radio('Observation type',('averaged obsids','individual orbits'))
+use_orbit_obs=radio_indiv_orbits=='individual orbits'
 use_orbit_obs_str='_indiv' if use_orbit_obs else ''
 
 #We put the telescope option before anything else to filter which file will be used
-choice_telescope=st.sidebar.multiselect('Telescopes', ['NICER'] if use_orbit_obs else\
+choice_telescope=st.sidebar.multiselect('Telescopes', ['NICER','NuSTAR'] if use_orbit_obs else\
                  (['XMM','Chandra']+([] if online else ['NICER','NuSTAR','Suzaku','Swift'])),
-                                        default=['NICER'] if use_orbit_obs else ('XMM','Chandra'))
+                                        default=['NICER','NuSTAR'] if use_orbit_obs else ('XMM','Chandra'))
 
 if online:
     radio_ignore_full=True
@@ -348,6 +348,8 @@ if update_dump or not os.path.isfile(dump_path):
         lineval_files = [elem for elem in lineval_files if '4U_mix' not in elem]
         abslines_files = [elem for elem in abslines_files if '4U_mix' not in elem]
 
+        lineval_files=[elem for elem in lineval_files if outdir+'_old' not in elem]
+        abslines_files = [elem for elem in abslines_files if outdir+'_old' not in elem]
         if radio_ignore_full:
             lineval_files=[elem for elem in lineval_files if '_full' not in elem]
             abslines_files=[elem for elem in abslines_files if '_full' not in elem]
@@ -565,7 +567,8 @@ if multi_obj:
 
         restrict_match_INT=st.toggle('Restrict to Observations with INTEGRAL coverage',value=False)
 
-        choice_obs=st.multiselect('Exclude individual observations:',sorted_choice_obs)
+        choice_obs=st.multiselect('Exclude individual observations:',sorted_choice_obs,
+                                  default=None if '4U1630-47_405051010_xis1' not in sorted_choice_obs else ['4U1630-47_405051010_xis1'])
 
         mask_included_selection=np.array([np.array([obj_list[i]+'_'+observ_list[i][j].replace('_-1','').replace('_auto','') not in\
                                           choice_obs for j in range(len(observ_list[i]))]) for i in range(len(obj_list))],
@@ -1505,7 +1508,10 @@ flag_noabsline=False
 
 #bin values for all the histograms below
 #for the Velocity shift and energies the range is locked so we can use a global binning for all the diagrams
-bins_bshift=np.linspace(-2e3,3e3,num=26,endpoint=True)
+
+
+bins_bshift=np.linspace(-8e3 if 'XMM' in choice_telescope or 'NuSTAR' in choice_telescope else -2e3,
+                        3e3,num=26,endpoint=True)
 # bins_bshift=np.linspace(-1e4,5e3,num=31,endpoint=True)
 bins_ener=np.arange(6.,9.,2*line_search_e[2])
 
@@ -1845,7 +1851,7 @@ line_df_list=[]
 abs_plot_tr=np.array([[subelem for subelem in elem] for elem in abslines_plot_restrict]).transpose(3,2,0,1)
 
 line_rows=np.array(lines_std_names[3:9])[mask_lines]
-    
+
 for i_obj_r in range(n_obj_r):
     
     n_obs_r=sum(mask_intime_plot[i_obj_r].astype(bool))
@@ -1869,7 +1875,8 @@ for i_obj_r in range(n_obj_r):
     flux_plot_indiv=flux_plot_indiv.transpose(2,0,1)[mask_intime_plot[i_obj_r].astype(bool)][order_intime_plot_restrict[i_obj_r].astype(int)].transpose(1,2,0)
         
     line_plot_indiv=line_plot_indiv.transpose(3,0,1,2)[mask_intime_plot[i_obj_r].astype(bool)][order_intime_plot_restrict[i_obj_r].astype(int)].transpose(2,3,0,1)
-    
+
+
     '''
     # splitting information to take off 1 dimension and only take specific information    
     # EW, bshift, width, flux, sign, upper
@@ -1924,11 +1931,10 @@ for i_obj_r in range(n_obj_r):
     observ_col=np.concatenate([hid_plot_indiv,flux_plot_indiv]).transpose(2,0,1)
     observ_col_reshaped=observ_col.reshape(n_obs_r,len(iter_columns[0])*len(iter_columns[1]))
 
-
     #creating both dataframes, with a reshape in 2 dimensions (one for the lines and one for the columns)
     #switching to str type allows to display low values correctly
     curr_df=produce_df(observ_col_reshaped,
-                                iter_rows,iter_columns,row_names=['Source','Instrument','obsid','date'],
+                                iter_rows,iter_columns,row_names=['Source','Instrument','ObsID','date'],
                                 column_names=['measure','value'],row_index=row_index_obs).astype(str)
 
     pd.set_option('display.float_format', lambda x: '%.3e' % x)

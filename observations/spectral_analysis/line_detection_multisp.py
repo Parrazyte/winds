@@ -159,11 +159,11 @@ ap = argparse.ArgumentParser(description='Script to perform line detection in X-
 
 '''GENERAL OPTIONS'''
 
-ap.add_argument('-satellite',nargs=1,help='telescope to fetch spectra from',default='multi',type=str)
+ap.add_argument('-satellite',nargs=1,help='telescope to fetch spectra from',default='NICER',type=str)
 
 #used for NICER and multi for now
 ap.add_argument('-group_max_timedelta',nargs=1,
-                help='maximum time delta for epoch/gti grouping in dd_hh_mm_ss',default='00_08_00_00',type=str)
+                help='maximum time delta for epoch/gti grouping in dd_hh_mm_ss',default='00_00_00_10',type=str)
 
 #00_00_00_10 for NICER TR
 #00_00_15_00 for NuSTAR individual orbits
@@ -181,7 +181,7 @@ ap.add_argument("-prefix",nargs=1,help='restrict analysis to a specific prefix',
 
 ####output directory
 ap.add_argument("-outdir",nargs=1,help="name of output directory for line plots",
-                default="lineplots_opt_nth",type=str)
+                default="lineplots_opt_rerun",type=str)
 
 #overwrite
 #global overwrite based on recap PDF
@@ -239,7 +239,7 @@ ap.add_argument("-h_update",nargs=1,help='update the bg, rmf and arf file names 
 #this will prevent new analysis and can help for merged folders
 ap.add_argument('-rewind_epoch_list',nargs=1,
                 help='only uses the epoch already existing in the summary file instead of scanning',
-                default=False,type=bool)
+                default=True,type=bool)
 
 ap.add_argument('-spread_comput',nargs=1,
                 help='spread sources in N subsamples to poorly parallelize on different consoles',
@@ -333,7 +333,7 @@ ap.add_argument('-reload_fakes',nargs=1,
 
 ap.add_argument('-pdf_only',nargs=1,
                 help='Updates the pdf with already existing elements but skips the line detection entirely',
-                default=False,type=bool)
+                default=True,type=bool)
 
 #note: used mainly to recompute obs with bugged UL computations. Needs FINISHED computations firsthand, else
 #use reload_autofit and reload_fakes
@@ -341,7 +341,7 @@ ap.add_argument('-line_ul_only',nargs=1,help='Reloads the autofit computations a
                 default=False,type=bool)
 
 ap.add_argument('-hid_only',nargs=1,help='skip the line detection and directly plot the hid',
-                default=False,type=bool)
+                default=True,type=bool)
 
 #date or HR
 ap.add_argument('-hid_sort_method',nargs=1,help='HID summary observation sorting',default='date',type=str)
@@ -457,7 +457,7 @@ ap.add_argument('-pre_reduced_NICER',nargs=1,
 ap.add_argument('-NICER_lc_binning',nargs=1,help='NICER LC binning',default='1',type=str)
 
 #in this case the continuum components require the NICER calibration components to get a decent fit
-ap.add_argument('-low_E_NICER',nargs=1,help='NICER lower energy threshold for broadband fits',default=0.3,type=str)
+ap.add_argument('-low_E_NICER',nargs=1,help='NICER lower energy threshold for broadband fits',default=2.5,type=str)
 
 '''NuSTAR'''
 
@@ -2253,7 +2253,7 @@ def line_detect(epoch_id):
         allfreeze()
 
         # computing a mask for significant lines
-        mask_abslines_sign = abslines_sign > sign_threshold
+        mask_abslines_sign = abslines_sign >= sign_threshold
 
         # computing the upper limits for the non significant lines
         abslines_eqw_upper = fitlines.get_eqwidth_uls(mask_abslines_sign, abslines_bshift, sign_widths_arr,
@@ -3655,7 +3655,7 @@ def line_detect(epoch_id):
         allfreeze()
 
         #computing a mask for significant lines
-        mask_abslines_sign=abslines_sign>sign_threshold
+        mask_abslines_sign=abslines_sign>=sign_threshold
 
         if assess_line_upper:
             #computing the upper limits for the non significant lines
@@ -4270,6 +4270,8 @@ if rewind_epoch_list:
     assert sat_glob=='NICER', 'rewind epoch list not implemented with sats other than NICER'
     epoch_list=[[elem+'_sp_grp_opt.pha' for elem in expand_epoch(started_expos[i])] for i in range(len(started_expos))]
 
+breakpoint()
+
 #### line detections for exposure with a spectrum
 for epoch_id,epoch_files in enumerate(epoch_list):
 
@@ -4639,7 +4641,7 @@ else:
 # (or at least one significant detections if we don't consider non significant detections)
 mask_obj = mask_obj_base
 
-mask_obj_withdet=np.array([(elem>sign_threshold).any() for elem in global_displayed_sign])
+mask_obj_withdet=np.array([(elem>=sign_threshold).any() for elem in global_displayed_sign])
 
 #storing the number of objects with detections
 n_obj_withdet=sum(mask_obj_withdet & mask_obj_base)
@@ -4736,7 +4738,7 @@ if not multi_obj:
 else:
     global_det_mask = (np.array([subelem for elem in global_plotted_sign for subelem in elem]) > 0) & (global_mask_intime)
 
-    global_sign_mask = (np.array([subelem for elem in global_plotted_sign for subelem in elem]) > sign_threshold) & (
+    global_sign_mask = (np.array([subelem for elem in global_plotted_sign for subelem in elem]) >= sign_threshold) & (
         global_mask_intime)
 
     global_det_data = np.array([subelem for elem in global_plotted_data for subelem in elem])[global_det_mask]

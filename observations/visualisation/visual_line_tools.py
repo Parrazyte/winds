@@ -1196,6 +1196,7 @@ def obj_values(file_paths,E_factors,dict_linevis):
 
                         epoch_obs_list=expand_epoch(literal_eval(summary_obs_line[0].split('\t')[0]))
                         epoch_sp_list=[elem+'_sp_grp_opt.pha' for elem in epoch_obs_list]
+
     
                 else:
                     
@@ -1992,7 +1993,7 @@ def hid_graph(ax_hid,dict_linevis,
     if display_nonsign:
         mask_obj_withdet = np.array([(elem > 0).any() for elem in global_displayed_sign])
     else:
-        mask_obj_withdet = np.array([(elem > slider_sign).any() for elem in global_displayed_sign])
+        mask_obj_withdet = np.array([(elem >= slider_sign).any() for elem in global_displayed_sign])
 
     # storing the number of objects with detections
     n_obj_withdet = sum(mask_obj_withdet & mask_obj_base)
@@ -2053,12 +2054,12 @@ def hid_graph(ax_hid,dict_linevis,
         global_mask_intime_norepeat = (Time(ravel_ragged(date_list[mask_obj])) >= Time(slider_date[0])) & \
                                       (Time(ravel_ragged(date_list[mask_obj])) <= Time(slider_date[1]))
 
-    # global_nondet_mask=(np.array([subelem for elem in global_plotted_sign for subelem in elem])<=slider_sign) & (global_mask_intime)
+    # global_nondet_mask=(np.array([subelem for elem in global_plotted_sign for subelem in elem])<slider_sign) & (global_mask_intime)
 
     global_det_mask = (np.array([subelem for elem in global_plotted_sign for subelem in elem]) > 0) & (
         global_mask_intime)
 
-    global_sign_mask = (np.array([subelem for elem in global_plotted_sign for subelem in elem]) > slider_sign) & (
+    global_sign_mask = (np.array([subelem for elem in global_plotted_sign for subelem in elem]) >= slider_sign) & (
         global_mask_intime)
 
     global_det_data = np.array([subelem for elem in global_plotted_data for subelem in elem])[global_det_mask]
@@ -2189,7 +2190,7 @@ def hid_graph(ax_hid,dict_linevis,
         mask_det = (abslines_obj[0][4][mask_lines] > 0.) & (mask_intime)
 
         # defining the mask for significant detections
-        mask_sign = (abslines_obj[0][4][mask_lines] > slider_sign) & (mask_intime)
+        mask_sign = (abslines_obj[0][4][mask_lines] >= slider_sign) & (mask_intime)
 
         # these ones will only be used if the restrict values chexbox is checked
 
@@ -2606,7 +2607,7 @@ def hid_graph(ax_hid,dict_linevis,
             mask_det = abslines_obj_base[0][4][mask_lines] > 0.
 
         else:
-            mask_det = abslines_obj_base[0][4][mask_lines] > slider_sign
+            mask_det = abslines_obj_base[0][4][mask_lines] >= slider_sign
 
         # defining the mask for the time interval restriction
         datelist_obj = Time(np.array([date_list[mask_obj_base][i_obj_base] \
@@ -2663,7 +2664,7 @@ def hid_graph(ax_hid,dict_linevis,
                 # upper limits if necessary
 
                 mask_det_ul = (abslines_obj_base[0][4][mask_lines_ul] > 0.) & (mask_intime)
-                mask_det_ul = (abslines_obj_base[0][4][mask_lines_ul] > slider_sign) & (mask_intime)
+                mask_det_ul = (abslines_obj_base[0][4][mask_lines_ul] >= slider_sign) & (mask_intime)
 
                 mask_nondet_ul = np.isnan(np.array( \
                     [np.nan if len(abslines_obj_base[0][0][mask_lines_ul].T[i_obs][mask_det_ul.T[i_obs]]) == 0 else \
@@ -3776,7 +3777,7 @@ def correl_graph(data_perinfo,infos,data_ener,dict_linevis,mode='intrinsic',mode
     observ_list=dict_linevis['observ_list'][mask_obj]
     
     #This considers all the lines
-    mask_obs_sign=np.array([ravel_ragged(abslines_plot[4][0].T[mask_obj].T[i]).astype(float)>conf_thresh\
+    mask_obs_sign=np.array([ravel_ragged(abslines_plot[4][0].T[mask_obj].T[i]).astype(float)>=conf_thresh\
                                       for i in range(len(mask_lines))]).any(0)
         
     #note: quantities here are already restricted
@@ -3998,9 +3999,9 @@ def correl_graph(data_perinfo,infos,data_ener,dict_linevis,mode='intrinsic',mode
 
                 
             #masks for upper limits (needs at least one axis to have detection and significance)
-            bool_nondetsign_x=np.array(((bool_sign_x<=conf_thresh).tolist() or (np.isnan(bool_sign_x).tolist()))) &\
+            bool_nondetsign_x=np.array(((bool_sign_x<conf_thresh).tolist() or (np.isnan(bool_sign_x).tolist()))) &\
                               (np.array((bool_sign_y>=conf_thresh).tolist()) & np.array((~np.isnan(bool_sign_y)).tolist())) & mask_intime_norepeat
-            bool_nondetsign_y=np.array(((bool_sign_y<=conf_thresh).tolist() or (np.isnan(bool_sign_y).tolist()))) &\
+            bool_nondetsign_y=np.array(((bool_sign_y<conf_thresh).tolist() or (np.isnan(bool_sign_y).tolist()))) &\
                               (np.array((bool_sign_x>=conf_thresh).tolist()) & np.array((~np.isnan(bool_sign_x)).tolist())) & mask_intime_norepeat
                         
             #the boool sign and det are only used for the ratio in ratio_mode, but are global in eqwratio mode
@@ -4054,7 +4055,7 @@ def correl_graph(data_perinfo,infos,data_ener,dict_linevis,mode='intrinsic',mode
             bool_det=(bool_sign!=0.) & (~np.isnan(bool_sign)) & (mask_intime)
             
             #mask used for upper limits only
-            bool_nondetsign=((bool_sign<=conf_thresh) | (np.isnan(bool_sign))) & (mask_intime)
+            bool_nondetsign=((bool_sign<conf_thresh) | (np.isnan(bool_sign))) & (mask_intime)
             
             #restricted significant mask, to be used in conjunction with bool_det
             bool_sign=bool_sign[bool_det]>=conf_thresh
@@ -5090,8 +5091,10 @@ def correl_graph(data_perinfo,infos,data_ener,dict_linevis,mode='intrinsic',mode
             #since we can't easily change the lin to log type of the axes, we recreate a linear
             with st.spinner('Computing linear trends'):
                 lmplot_uncert_a(ax_scat,x_data_trend,y_data_trend,x_err_trend,y_err_trend,percent=90,
-                                                 nsim=1000,linecolor='black',return_linreg=False,
-                                                 infer_log_scale=True,xlims=plt.xlim(),ylims=plt.ylim())
+                                                 nsim=100,return_linreg=False,
+                                                 intercept_pos='auto',
+                                                 infer_log_scale=False,xbounds=plt.xlim(),ybounds=plt.ylim(),
+                                                 line_color='black')
 
         ####forcing common observ bounds if asked 
         #computing the common bounds if necessary
@@ -5104,7 +5107,7 @@ def correl_graph(data_perinfo,infos,data_ener,dict_linevis,mode='intrinsic',mode
         if show_linked or (compute_correl and mode!='source' and len(x_data[0])>1 and not time_mode) or color_scatter not in ['Time','HR','width','nH',None]:
             
             scat_legend=ax_scat.legend(fontsize=9 if infos=='eqw_width' and display_th_width_ew else 10,title=legend_title,
-                                   ncol=2 if display_th_width_ew and infos=='eqw_width' else 1,loc='upper right' if not ratio_mode else 'upper left')
+                                   ncol=2 if display_th_width_ew and infos=='eqw_width' else 1,loc='upper right' if not ratio_mode else 'upper right')
             plt.setp(scat_legend.get_title(),fontsize='small')
                 
         if len(x_data_use)>0:

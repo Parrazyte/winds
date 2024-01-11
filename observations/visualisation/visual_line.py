@@ -961,7 +961,7 @@ global_displayed_sign=np.array([ravel_ragged(elem)[mask] for elem,mask in zip(ab
 if display_nonsign:
     mask_obj_withdet=np.array([(elem>0).any() for elem in global_displayed_sign])
 else:
-    mask_obj_withdet=np.array([(elem>slider_sign).any() for elem in global_displayed_sign])
+    mask_obj_withdet=np.array([(elem>=slider_sign).any() for elem in global_displayed_sign])
 
 #storing the number of objects with detections
 n_obj_withdet=sum(mask_obj_withdet & mask_obj_base)
@@ -1086,11 +1086,11 @@ else:
         global_mask_intime_norepeat=(Time(ravel_ragged(date_list[mask_obj]))>=Time(slider_date[0])) &\
             (Time(ravel_ragged(date_list[mask_obj]))<=Time(slider_date[1]))
 
-#global_nondet_mask=(np.array([subelem for elem in global_plotted_sign for subelem in elem])<=slider_sign) & (global_mask_intime)
+#global_nondet_mask=(np.array([subelem for elem in global_plotted_sign for subelem in elem])<slider_sign) & (global_mask_intime)
 
 global_det_mask=(np.array([subelem for elem in global_plotted_sign for subelem in elem])>0) & (global_mask_intime)
 
-global_sign_mask=(np.array([subelem for elem in global_plotted_sign for subelem in elem])>slider_sign) & (global_mask_intime)
+global_sign_mask=(np.array([subelem for elem in global_plotted_sign for subelem in elem])>=slider_sign) & (global_mask_intime)
 
 global_det_data=np.array([subelem for elem in global_plotted_data for subelem in elem])[global_det_mask]
 

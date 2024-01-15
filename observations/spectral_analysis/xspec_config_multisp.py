@@ -2052,6 +2052,12 @@ def parse_xlog(log_lines,goal='lastmodel',no_display=False,replace_frozen=False,
                     #storing the parameter if it is not already in the list of stored pegged parameters
                     if line.split()[1] not in par_peg:
                         par_peg+=[line.split()[1]]
+
+                if line.startswith(' Due to zero model norms') and 'fit parameters are temporarily frozen' in line:
+                    frozen_pars=line.split(':')[1].replace('\n','')
+                    for elem_par_frozen in frozen_pars.split():
+                        if elem_par_frozen not in par_peg:
+                            par_peg+=[elem_par_frozen]
                         
             #error lines start with 5 blank spaces
             if line.startswith('    '):
@@ -2366,16 +2372,21 @@ def calc_error(logfile,maxredchi=1e6,param='all',timeout=60,delchi_thresh=0.1,in
         glob_string_par='1-'+str(AllModels(1).nParameters*AllData.nGroups)
     else:
         glob_string_par=param    
-    
-    if indiv:
-        #allowing computations of error for single parameters (thus with no - in the string)
-        if len(glob_string_par)<=2:
-            error_strlist=[glob_string_par]
+
+    try:
+        if indiv:
+            #allowing computations of error for single parameters (thus with no - in the string)
+            if type(glob_string_par)==str and '-' not in glob_string_par:
+                error_strlist=[glob_string_par]
+            else:
+                print(glob_string_par)
+                error_strlist=np.arange(int(glob_string_par.split('-')[0]),int(glob_string_par.split('-')[1])+1).astype(str).tolist()
+
         else:
-            error_strlist=np.arange(int(glob_string_par.split('-')[0]),int(glob_string_par.split('-')[1])+1).astype(str).tolist()
-    else:
-        error_strlist=[glob_string_par]
-    
+            error_strlist=[glob_string_par]
+    except:
+        breakpoint()
+        pass
     #defining the error function
     def error_func(string_par):
         try:
@@ -3668,10 +3679,13 @@ class fitmod:
                         
                     #computing the parameter position in all groups values    
                     par_peg_allgrp=(par_peg_ids[i_par_peg][0]-1)*AllModels(1).nParameters+par_peg_ids[i_par_peg][1]
-                    
-                    #no need for indiv mode here since we compute the error for a single parameter
-                    calc_error(self.logfile,param=str(par_peg_allgrp))
-                    
+
+                    try:
+                        #no need for indiv mode here since we compute the error for a single parameter
+                        calc_error(self.logfile,param=str(par_peg_allgrp))
+                    except:
+                        breakpoint()
+
                     #re-freezing the parameter
                     AllModels(par_peg_ids[i_par_peg][0])(pegged_par_index).frozen=False
         

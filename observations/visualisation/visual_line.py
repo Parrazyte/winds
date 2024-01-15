@@ -254,14 +254,24 @@ if not online:
 
 st.sidebar.header('Sample selection')
 
-radio_indiv_orbits=st.sidebar.radio('Observation type',('averaged obsids','individual orbits'))
-use_orbit_obs=radio_indiv_orbits=='individual orbits'
+radio_epoch_split=st.sidebar.radio('Observation type',('averaged ObsID','individual orbits','Time Resolved'))
+use_obsids=radio_epoch_split=='averaged ObsID'
+use_orbit_obs=radio_epoch_split=='individual orbits'
+use_time_resolved=radio_epoch_split=='Time Resolved'
+
+if use_time_resolved:
+    time_resolved_split_avail=['100','30']
+    time_resolved_split=st.sidebar.radio('Temporal Resolution (s)',time_resolved_split_avail)
+    time_resolved_dump_str='_TR_'+time_resolved_split
+else:
+    time_resolved_dump_str=''
+
 use_orbit_obs_str='_indiv' if use_orbit_obs else ''
 
 #We put the telescope option before anything else to filter which file will be used
-choice_telescope=st.sidebar.multiselect('Telescopes', ['NICER','NuSTAR'] if use_orbit_obs else\
+choice_telescope=st.sidebar.multiselect('Telescopes', ['NICER','NuSTAR'] if use_orbit_obs or use_time_resolved else\
                  (['XMM','Chandra']+([] if online else ['NICER','NuSTAR','Suzaku','Swift'])),
-                                        default=['NICER','NuSTAR'] if use_orbit_obs else ('XMM','Chandra'))
+                                        default=['NICER','NuSTAR'] if use_orbit_obs or use_time_resolved else ('XMM','Chandra'))
 
 if online:
     radio_ignore_full=True
@@ -278,12 +288,13 @@ join_telescope_str='_'.join(join_telescope_str.tolist())
 
 if online:
     dump_path='/mount/src/winds/observations/visualisation/visual_line_dumps/dump_'+join_telescope_str+\
-              use_orbit_obs_str+'_'+('no' if radio_ignore_full else '')+'full.pkl'
+              use_orbit_obs_str+time_resolved_dump_str+'_'+('no' if radio_ignore_full else '')+'full.pkl'
+
     
     update_dump=False
 else:
     dump_path='./glob_batch/visual_line_dumps/dump_'+join_telescope_str+\
-              use_orbit_obs_str+'_'+('no' if radio_ignore_full else '')+'full.pkl'
+              use_orbit_obs_str+time_resolved_dump_str+'_'+('no' if radio_ignore_full else '')+'full.pkl'
 
     update_dump=st.sidebar.button('Update dump')
 
@@ -329,11 +340,15 @@ if update_dump or not os.path.isfile(dump_path):
         all_files=glob.glob('**',recursive=True)
         lineval_id='line_values_'+args.line_search_e.replace(' ','_')+'_'+args.line_search_norm.replace(' ','_')+'.txt'
         lineval_files=[elem for elem in all_files if outdir+use_orbit_obs_str+'/' in elem and lineval_id in elem\
-                       and ('/Sample/' in elem or 'XTEJ1701-462/' in elem)]
+                       and ('/Sample/' in elem or 'XTEJ1701-462/' in elem)\
+                       and ('/'+time_resolved_split+'s/' in elem if use_time_resolved else\
+                            np.all(['/'+elem_split+'s/' not in elem for elem_split in time_resolved_split_avail]))]
 
         abslines_id='autofit_values_'+args.line_search_e.replace(' ','_')+'_'+args.line_search_norm.replace(' ','_')+'.txt'
         abslines_files=[elem for elem in all_files if outdir+use_orbit_obs_str+'/' in elem and abslines_id in elem\
-                        and ('/Sample/' in elem or 'XTEJ1701-462/' in elem)]
+                        and ('/Sample/' in elem or 'XTEJ1701-462/' in elem) \
+                        and ('/' + time_resolved_split + 's/' in elem if use_time_resolved else \
+                                 np.all(['/' + elem_split + 's/' not in elem for elem_split in time_resolved_split_avail]))]
         
         #telescope selection
         lineval_files=[elem for elem_telescope in choice_telescope for elem in lineval_files if elem_telescope+'/' in elem]
@@ -922,13 +937,28 @@ mask_obj_base=(mask_obj_select) & (mask_inclin)
 #time delta to add some leeway to the limits available and avoid directly cropping at the observations
 delta_1y=TimeDelta(365,format='jd')
 delta_1m=TimeDelta(30,format='jd')
-
+delta_1w=TimeDelta(7,format='jd')
+delta_1h=TimeDelta(3600,format='sec')
 if restrict_time:
-    slider_date=st.slider('Dates restriction',min_value=(Time(min(ravel_ragged(date_list[mask_obj_base])))-delta_1y).datetime,
-                          max_value=max((Time(max(ravel_ragged(date_list[mask_obj_base])))+delta_1y),
-                                    Time(str(date.today()))).datetime,
-                          value=[(Time(min(ravel_ragged(date_list[mask_obj_base])))-delta_1m).datetime,
-                                 (Time(max(ravel_ragged(date_list[mask_obj_base])))+delta_1m).datetime])
+
+    slider_date=st.slider('Dates restriction',min_value=(Time(min(ravel_ragged(date_list[mask_obj_base])))-\
+                                                         (delta_1y if use_obsids else delta_1m)).datetime,
+                          max_value=max((Time(max(ravel_ragged(date_list[mask_obj_base])))+\
+                                         (delta_1y if use_obsids else delta_1m)),
+                                        (Time(str(date.today())) if use_obsids else \
+                                        Time(max(ravel_ragged(date_list[mask_obj_base]))) + delta_1m)).datetime,
+                          value=[(Time(min(ravel_ragged(date_list[mask_obj_base])))-\
+                                  (delta_1m if use_obsids else delta_1w)).datetime,
+                                 (Time(max(ravel_ragged(date_list[mask_obj_base])))+ \
+                                  (delta_1m if use_obsids else delta_1w)).datetime],
+                          step=delta_1h.datetime,
+                          format='YYYY-MM-DD HH:MM:SS')
+
+    # slider_date=st.slider('Dates restriction',min_value=(Time(min(ravel_ragged(date_list[mask_obj_base])))-delta_1y).datetime,
+    #                       max_value=max((Time(max(ravel_ragged(date_list[mask_obj_base])))+delta_1y),
+    #                                 Time(str(date.today()))).datetime,
+    #                       value=[(Time(min(ravel_ragged(date_list[mask_obj_base])))-delta_1m).datetime,
+    #                              (Time(max(ravel_ragged(date_list[mask_obj_base])))+delta_1m).datetime])
 else:
     slider_date=[Time(min(ravel_ragged(date_list[mask_obj_base]))).datetime,
                                  Time(max(ravel_ragged(date_list[mask_obj_base]))).datetime]

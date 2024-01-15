@@ -659,7 +659,7 @@ def plot_lightcurve(dict_linevis,ctl_maxi_df,ctl_maxi_simbad,name,ctl_bat_df,ctl
         num_maxi_dates=mdates.date2num(Time(maxi_lc_df[maxi_lc_df.columns[0]],format='mjd').datetime)
 
         #note that in day binning, the maxi dates values are always a day+0.5 and so represent "actual" days
-        xerr_maxi=0.5 if binning=='day' else 1.5/24
+        xerr_maxi=0.5 if binning=='day' else 1.5/24/2
         
         if mode=='full':    
             ax_lc.set_yscale('log')

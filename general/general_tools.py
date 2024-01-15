@@ -63,10 +63,14 @@ def expand_epoch(shortened_epochs):
     Takes an array as argument so split the '_' joined short_id beforehand
     '''
 
+    if type(shortened_epochs) in (str,int):
+        shorten_list=[str(shortened_epochs)]
+    else:
+        shorten_list=shortened_epochs
     # splitting obsids
     file_ids = []
 
-    for short_id in shortened_epochs:
+    for short_id in shorten_list:
         if short_id.count('-') <= 1:
             file_ids += [short_id]
         else:

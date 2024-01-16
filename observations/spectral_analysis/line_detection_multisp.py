@@ -130,7 +130,7 @@ from xspec import AllChains
 #custom script with a few shorter xspec commands
 from xspec_config_multisp import allmodel_data,model_load,addcomp,Pset,Pnull,rescale,reset,Plot_screen,store_plot,freeze,allfreeze,unfreeze,\
                          calc_error,delcomp,fitmod,fitcomp,calc_fit,xcolors_grp,xPlot,xscorpeon,catch_model_str,\
-                         load_fitmod, ignore_data_indiv,getoverlap
+                         load_fitmod, ignore_data_indiv
 
 from linedet_utils import plot_line_comps,plot_line_search,plot_std_ener,coltour_chi2map,narrow_line_search,\
                             plot_line_ratio
@@ -138,7 +138,7 @@ from linedet_utils import plot_line_comps,plot_line_search,plot_std_ener,coltour
 #custom script with a some lines and fit utilities and variables
 from fitting_tools import c_light,lines_std_names,lines_e_dict,n_absline,range_absline,model_list
 
-from general_tools import file_edit,ravel_ragged,shorten_epoch,expand_epoch
+from general_tools import file_edit,ravel_ragged,shorten_epoch,expand_epoch,get_overlap
 
 # #importing the pileup evaluation function
 # from XMM_datared import pileup_val
@@ -159,11 +159,11 @@ ap = argparse.ArgumentParser(description='Script to perform line detection in X-
 
 '''GENERAL OPTIONS'''
 
-ap.add_argument('-satellite',nargs=1,help='telescope to fetch spectra from',default='NICER',type=str)
+ap.add_argument('-satellite',nargs=1,help='telescope to fetch spectra from',default='multi',type=str)
 
 #used for NICER and multi for now
 ap.add_argument('-group_max_timedelta',nargs=1,
-                help='maximum time delta for epoch/gti grouping in dd_hh_mm_ss',default='00_00_00_10',type=str)
+                help='maximum time delta for epoch/gti grouping in dd_hh_mm_ss',default='00_08_00_00',type=str)
 
 #00_00_00_10 for NICER TR
 #00_00_15_00 for NuSTAR individual orbits
@@ -181,7 +181,7 @@ ap.add_argument("-prefix",nargs=1,help='restrict analysis to a specific prefix',
 
 ####output directory
 ap.add_argument("-outdir",nargs=1,help="name of output directory for line plots",
-                default="lineplots_opt_rerun",type=str)
+                default="lineplots_opt_nth",type=str)
 
 #overwrite
 #global overwrite based on recap PDF
@@ -191,7 +191,7 @@ ap.add_argument('-overwrite',nargs=1,
 
 #note : will skip exposures for which the exposure didn't compute or with logged errors
 ap.add_argument('-skip_started',nargs=1,help='skip all exposures listed in the local summary_line_det file',
-                default=True,type=bool)
+                default=False,type=bool)
 
 ap.add_argument('-skip_complete',nargs=1,help='skip completed exposures listed in the local summary_line_det file',
                 default=False,type=bool)
@@ -239,7 +239,7 @@ ap.add_argument("-h_update",nargs=1,help='update the bg, rmf and arf file names 
 #this will prevent new analysis and can help for merged folders
 ap.add_argument('-rewind_epoch_list',nargs=1,
                 help='only uses the epoch already existing in the summary file instead of scanning',
-                default=True,type=bool)
+                default=False,type=bool)
 
 ap.add_argument('-spread_comput',nargs=1,
                 help='spread sources in N subsamples to poorly parallelize on different consoles',
@@ -333,7 +333,7 @@ ap.add_argument('-reload_fakes',nargs=1,
 
 ap.add_argument('-pdf_only',nargs=1,
                 help='Updates the pdf with already existing elements but skips the line detection entirely',
-                default=True,type=bool)
+                default=False,type=bool)
 
 #note: used mainly to recompute obs with bugged UL computations. Needs FINISHED computations firsthand, else
 #use reload_autofit and reload_fakes
@@ -341,7 +341,7 @@ ap.add_argument('-line_ul_only',nargs=1,help='Reloads the autofit computations a
                 default=False,type=bool)
 
 ap.add_argument('-hid_only',nargs=1,help='skip the line detection and directly plot the hid',
-                default=True,type=bool)
+                default=False,type=bool)
 
 #date or HR
 ap.add_argument('-hid_sort_method',nargs=1,help='HID summary observation sorting',default='date',type=str)
@@ -437,6 +437,7 @@ ap.add_argument('-diff_bands_NuSTAR_NICER',nargs=1,help='different energy bounds
 
 ap.add_argument('-force_nosplit_fit_multi',nargs=1,help='force no split fit for multi satellites',default=True)
 
+#note: the NuSTAR SNR filtering is included by default in multi
 
 '''CHANDRA'''
 #Chandra issues
@@ -457,12 +458,16 @@ ap.add_argument('-pre_reduced_NICER',nargs=1,
 ap.add_argument('-NICER_lc_binning',nargs=1,help='NICER LC binning',default='1',type=str)
 
 #in this case the continuum components require the NICER calibration components to get a decent fit
-ap.add_argument('-low_E_NICER',nargs=1,help='NICER lower energy threshold for broadband fits',default=2.5,type=str)
+ap.add_argument('-low_E_NICER',nargs=1,help='NICER lower energy threshold for broadband fits',default=0.3,type=str)
 
 '''NuSTAR'''
 
 ap.add_argument('-freeze_nH',nargs=1,help='Freeze main absorption to a fiducial value',default=False,type=bool)
 ap.add_argument('-freeze_nH_val',nargs=1,help='Frozen main absorption value (10^22 cm^-2)',default=14,type=bool)
+
+#A value of 0 disables the SNR testing. Done for each 1keV band, independantly for each NuSTAR spectrum
+ap.add_argument('-filter_NuSTAR_SNR',nargs=1,help='restrict the NuSTAR band to where the SNR is above a given value',
+                default=3,type=float)
 
 '''SUZAKU'''
 
@@ -614,6 +619,8 @@ low_E_NICER=args.low_E_NICER
 skip_flares=args.skip_flares
 spread_comput=args.spread_comput
 skip_started_spread=args.skip_started_spread
+
+filter_NuSTAR_SNR=args.filter_NuSTAR_SNR
 
 diff_bands_NuSTAR_NICER=args.diff_bands_NuSTAR_NICER
 multi_focus=args.multi_focus
@@ -874,7 +881,7 @@ def file_to_obs(file,sat):
     elif sat in ['NICER']:
         return file.split('_sp_grp_opt')[0]
 
-def pdf_summary(epoch_files,fit_ok=False,summary_epoch=None):
+def pdf_summary(epoch_files,fit_ok=False,summary_epoch=None,e_sat_low_list=None,e_sat_high_list=None):
 
     #used to have specific energy limits for different instruments. can be modified later
 
@@ -897,6 +904,11 @@ def pdf_summary(epoch_files,fit_ok=False,summary_epoch=None):
         e_sat_high_indiv = np.repeat(e_sat_high_val, len(epoch_files))
         line_cont_ig_indiv = np.repeat(line_cont_ig_val, len(epoch_files))
         sat_indiv=np.repeat(sat_glob,len(epoch_files))
+
+    if e_sat_low_list is not None:
+        e_sat_low_indiv=e_sat_low_list
+    if e_sat_high_list is not None:
+        e_sat_high_indiv=e_sat_high_list
 
     if sat_glob == 'multi':
         epoch_observ = [file_to_obs(elem_file, elem_telescope) for elem_file, elem_telescope in \
@@ -926,7 +938,9 @@ def pdf_summary(epoch_files,fit_ok=False,summary_epoch=None):
 
     pdf=PDF(orientation="landscape")
     pdf.add_page()
-    pdf.set_font('helvetica', 'B', 16)
+    pdf.set_font('helvetica', 'B', max(10,16-(2*len(epoch_observ))//5))
+
+    line_skip_len=max(6,10-2*len(epoch_observ)//5)
 
     pdf.cell(1,1,'Epoch name :'+short_epoch_id,align='C',center=True)
     pdf.ln(10)
@@ -1000,7 +1014,7 @@ def pdf_summary(epoch_files,fit_ok=False,summary_epoch=None):
                         pdf.cell(1,1,'Object: '+obj_name+' | Date: '+Time(hdul[1].header['MJDSTART'],format='mjd').isot+
                                  ' | Obsid: '+epoch_inf[i_obs][0],align='C',center=True)
                 else:
-                    start_obs_s = hdul[1].header['TSTART'] + hdul[1].header['TIMEZERO']
+                    start_obs_s = hdul[1].header['TSTART'] + (0 if elem_sat=='NuSTAR' else hdul[1].header['TIMEZERO'])
                     # saving for titles later
                     mjd_ref = Time(hdul[1].header['MJDREFI'] + hdul[1].header['MJDREFF'], format='mjd')
 
@@ -1015,7 +1029,8 @@ def pdf_summary(epoch_files,fit_ok=False,summary_epoch=None):
                 pdf.cell(1,1,'Object: '+obj_name+' | Date: '+date_str+' | Obsid: '+epoch_inf[i_obs][0],
                       align='C',center=True)
 
-            pdf.ln(10)
+            pdf.ln(line_skip_len)
+
             if elem_sat=='XMM':
                 pdf.cell(1,1,'exposure: '+epoch_inf[i_obs][2]+' | camera: '+epoch_inf[i_obs][1]+' | mode: '+epoch_inf[i_obs][3]+
                       ' | submode: '+hdul[0].header['SUBMODE']+' | clean exposure time: '+str(round(exposure_list[i_obs]))+
@@ -1043,7 +1058,7 @@ def pdf_summary(epoch_files,fit_ok=False,summary_epoch=None):
                     pdf.cell(1,1,grouping_str+'no pile-up values for this exposure',align='C',center=True)
 
                 pdf.ln(2)
-        pdf.ln(10)
+        pdf.ln(line_skip_len)
 
         #turned off for now
         # if flag_bg[i_obs]:
@@ -1151,6 +1166,10 @@ def pdf_summary(epoch_files,fit_ok=False,summary_epoch=None):
                         formatted_lines.append('-' * 65+'\n')  # Add horizontal line
                         continue
 
+                    #Putting a space before the first statistic line
+                    if 'Fit statistic' in line:
+                            formatted_lines.append('\n')
+
                     # Check if the line contains "Warning" and skip it
                     if "Warning: cstat statistic is only valid for Poisson data." in line:
                         continue
@@ -1190,15 +1209,36 @@ def pdf_summary(epoch_files,fit_ok=False,summary_epoch=None):
                 return lines_nobg
             else:
                 lines_cleaned = []
-                # we display up to the second data group, then only 2 lines at a time
+                # we display up to the second data group, then only non-standardly linked lines
                 for i_grp, lineid_grp in enumerate(lineid_grp_arr):
                     if i_grp == 0:
                         i_begin = 0
                         i_end = lineid_grp_arr[i_grp + 1]
+                        #adding the whole group
+                        lines_cleaned += lines_nobg[i_begin:i_end]
                     else:
-                        i_begin = lineid_grp
-                        i_end = i_begin + 2
-                    lines_cleaned += lines_nobg[i_begin:i_end]
+
+                        lines_cleaned += [lines_nobg[lineid_grp]]
+
+                        #testing every line after that
+                        i_begin = lineid_grp+1
+                        #we can allow skipping the last line here because it will always be a fit display line
+                        i_end = -1 if i_grp==len(lineid_grp_arr)-1 else lineid_grp_arr[i_grp + 1]
+
+                        #computing the group size
+                        grp_size=sum([False if len(elem.split())==0 else elem.split()[0].isdigit()\
+                                      for elem in lines_nobg[i_begin:i_end]])
+
+                        for i_line in range(i_begin,i_begin+grp_size):
+                            elem_line=lines_nobg[i_line]
+                            elem_line_status=elem_line.split()[-1]
+                            elem_line_parnumber=int(elem_line.split()[0])
+
+                            #comparing the link to the expected link value (aka degrouped parameter value)
+                            elem_line_link_std=elem_line_status=='p'+str(1+(max(0,int(elem_line_parnumber-1)%grp_size)))
+
+                            if not elem_line_link_std:
+                                lines_cleaned+=[elem_line]
 
                 # adding everything after the end of the model (besides the last line which is just a 'model not fit yet' line)
                 lines_cleaned += lines_nobg[i_begin + lineid_grp_arr[1] - lineid_grp_arr[0]:-1]
@@ -1206,7 +1246,7 @@ def pdf_summary(epoch_files,fit_ok=False,summary_epoch=None):
                 # formatting to change the position of the datagroup
                 lines_formatted = format_lines(lines_cleaned)
 
-                return lines_formatted
+                return lines_formatted,len(lineid_grp_arr)
 
         def display_fit(fit_type):
 
@@ -1215,7 +1255,8 @@ def pdf_summary(epoch_files,fit_ok=False,summary_epoch=None):
                 fit_ener=str(min(e_sat_low_indiv))+'-'+str(max(e_sat_high_indiv))
             elif 'broadhid' in fit_type:
                 fit_title='HID'
-                fit_ener='3.-10.'
+                fit_ener=str(min(e_sat_low_indiv))+'-'+str(max(e_sat_high_indiv)) if broad_HID_mode else '3.-10.'
+
             if 'linecont' in fit_type:
                 #overwrites the broadband if
                 fit_title='Line continuum'
@@ -1254,10 +1295,11 @@ def pdf_summary(epoch_files,fit_ok=False,summary_epoch=None):
                     with open(outdir+'/'+epoch_observ[0]+'_mod_'+fit_type+'.txt') as mod_txt:
                         fit_lines=mod_txt.readlines()
 
-                        cleaned_lines=disp_multigrp(fit_lines)
+                        cleaned_lines,n_groups=disp_multigrp(fit_lines)
 
-                        pdf.set_font('helvetica', 'B',max(8,10-len(cleaned_lines)//15))
-                        pdf.multi_cell(150,2.6,'\n'*max(0,int((30 if 'auto' in fit_type else 30)\
+                        pdf.set_font('helvetica', 'B',min(8,11-len(cleaned_lines)//13))
+                        pdf.multi_cell(150,2.6-(0.2*max(0,8-(min(8,11-len(cleaned_lines)//13)))),
+                                       '\n'*max(0,int((30 if 'auto' in fit_type else 30)\
                                                               -1.5*len(cleaned_lines)**2/100))\
                                                           +''.join(cleaned_lines))
 
@@ -2172,13 +2214,44 @@ def line_detect(epoch_id):
         return fill_result('Insufficient counts ('+str(round(glob_counts))+' < '+str(round(counts_min_HID))+\
                            ') in HID detection range.')
 
+    #testing the NuSTAR bands if asked to
+    if filter_NuSTAR_SNR!=0.:
+        for i_exp,elem_sat in enumerate(sat_indiv_init):
+            SNR_low=False
+            if elem_sat=='NuSTAR':
+                #starting at 10keV (stops at 78)
+                for val_keV in np.arange(10.,79.):
+                    AllData(i_exp+1).notice('all')
+                    AllData(i_exp+1).ignore('**-'+str(val_keV)+' '+str(val_keV+1)+'-**')
+                    #SNR formula from https://xmm-tools.cosmos.esa.int/external/sas/current/doc/specgroup.pdf 4.3.2 (1)
+
+                    SNR_val=np.sqrt(AllData(i_exp+1).exposure)*AllData(i_exp+1).rate[0]\
+                            /np.sqrt(AllData(i_exp+1).rate[0]+2*(AllData(i_exp+1).rate[2]-AllData(i_exp+1).rate[0]))
+
+                    #stopping the computation if the SNR goes below the limit
+                    if SNR_val<filter_NuSTAR_SNR:
+                        SNR_low=True
+                        break
+
+                #resetting the energy band of the exposure
+                AllData(i_exp+1).notice('all')
+                AllData(i_exp+1).ignore('**-'+str(e_sat_low_indiv[i_exp])+' '+str(e_sat_high_indiv[i_exp])+'-**')
+
+                #storing the final value
+                e_sat_high_indiv[i_exp]=79. if not SNR_low else val_keV
+
+                print('High energy limit of exposure '+str(i_exp+1)+' fixed to '+str(e_sat_high_indiv[i_exp])+
+                      ' keV with a SNR limit of '+str(filter_NuSTAR_SNR))
+
+
     if pdf_only:
 
         if catch_errors:
 
             try:
 
-                pdf_summary(epoch_files,fit_ok=True,summary_epoch=fill_result('Line detection complete.'))
+                pdf_summary(epoch_files,fit_ok=True,summary_epoch=fill_result('Line detection complete.'),
+                            e_sat_low_list=e_sat_low_indiv,e_sat_high_list=e_sat_high_indiv)
 
                 #closing the logfile for both access and Xspec
                 curr_logfile.close()
@@ -2190,7 +2263,8 @@ def line_detect(epoch_id):
 
         else:
 
-            pdf_summary(epoch_files, fit_ok=True, summary_epoch=fill_result('Line detection complete.'))
+            pdf_summary(epoch_files, fit_ok=True, summary_epoch=fill_result('Line detection complete.'),
+                        e_sat_low_list=e_sat_low_indiv, e_sat_high_list=e_sat_high_indiv)
 
             # closing the logfile for both access and Xspec
             curr_logfile.close()
@@ -2291,7 +2365,8 @@ def line_detect(epoch_id):
         '''PDF creation'''
 
         if write_pdf:
-            pdf_summary(epoch_files, fit_ok=True, summary_epoch=fill_result('Line detection complete.'))
+            pdf_summary(epoch_files, fit_ok=True, summary_epoch=fill_result('Line detection complete.'),
+                        e_sat_low_list=e_sat_low_indiv, e_sat_high_list=e_sat_high_indiv)
 
         # closing the logfile for both access and Xspec
         curr_logfile.close()
@@ -2388,28 +2463,28 @@ def line_detect(epoch_id):
 
         #we don't need to make a new chain if the broad fit has done it already
         if not broad_HID_mode:
-            try:
-                # Creating a chain to avoid problems when computing the errors
-                Chain(outdir + '/' + epoch_observ[0] + '_chain_hid' + add_str + '.fits')
-            except:
 
-                breakpoint()
-                # trying to freeze pegged parameters again in case the very last fit created peggs
+            # Creating a chain to avoid problems when computing the errors
+            Chain(outdir + '/' + epoch_observ[0] + '_chain_hid' + add_str + '.fits')
 
-                calc_error(curr_logfile, param='1-' + str(AllModels(1).nParameters * AllData.nGroups), timeout=60,
-                           freeze_pegged=True, indiv=True)
+        # trying to freeze pegged parameters again in case the very last fit created peggs
+        calc_error(curr_logfile, param='1-' + str(AllModels(1).nParameters * AllData.nGroups), timeout=60,
+                   freeze_pegged=True, indiv=True)
 
-                Fit.perform()
+        Fit.perform()
 
-                fitmodel.update_fitcomps()
-                # Creating a chain to avoid problems when computing the errors
-                Chain(outdir + '/' + epoch_observ[0] + '_chain_hid' + add_str + '.fits')
+        fitmodel.update_fitcomps()
+
+        if not broad_HID_mode:
+            # Creating a chain to avoid problems when computing the errors
+            Chain(outdir + '/' + epoch_observ[0] + '_chain_hid' + add_str + '.fits')
 
         # computing and storing the flux for the full luminosity and two bands for the HR
         spflux_single = [None] * 5
 
         '''the first computation is ONLY to get the errors, the main values are overwritten below'''
         # we still only compute the flux of the first model even with NICER because the rest is BG
+
         AllModels.calcFlux(str(hid_cont_range[0]) + ' ' + str(hid_cont_range[1]) + " err 1000 90")
         spflux_single[0] = AllData(1).flux[0], AllData(1).flux[0] - AllData(1).flux[1], AllData(1).flux[2] - \
                                                AllData(1).flux[0]
@@ -2452,6 +2527,7 @@ def line_detect(epoch_id):
 
         # and replacing the main values with the unabsorbed flux values
         # (conservative choice since the other uncertainties are necessarily higher)
+
         AllModels.calcFlux(str(hid_cont_range[0]) + ' ' + str(hid_cont_range[1]))
         spflux_single[0][0] = AllData(1).flux[0]
         AllModels.calcFlux("3. 6.")
@@ -2462,6 +2538,7 @@ def line_detect(epoch_id):
         spflux_single[3][0] = AllData(1).flux[0]
         AllModels.calcFlux("3. 10.")
         spflux_single[4][0] = AllData(1).flux[0]
+
 
         spflux_single = spflux_single.T
 
@@ -3186,18 +3263,15 @@ def line_detect(epoch_id):
         #drawing parameters for the MC significance test later
         autofit_drawpars=np.array([None]*nfakes)
 
-        try:
-            print('\nDrawing parameters from the Chain...')
-            for i_draw in range(nfakes):
+        print('\nDrawing parameters from the Chain...')
+        for i_draw in range(nfakes):
 
-                curr_simpar=AllModels.simpars()
+            curr_simpar=AllModels.simpars()
 
-                #we restrict the simpar to the initial model because we don't really care about simulating the variations of the bg
-                #since it's currently frozen
-                autofit_drawpars[i_draw]=np.array(curr_simpar)[:AllData.nGroups*AllModels(1).nParameters]\
-                                         .reshape(AllData.nGroups,AllModels(1).nParameters)
-        except:
-            breakpoint()
+            #we restrict the simpar to the initial model because we don't really care about simulating the variations of the bg
+            #since it's currently frozen
+            autofit_drawpars[i_draw]=np.array(curr_simpar)[:AllData.nGroups*AllModels(1).nParameters]\
+                                     .reshape(AllData.nGroups,AllModels(1).nParameters)
 
         #turning it back into a regular array
         autofit_drawpars=np.array([elem for elem in autofit_drawpars])
@@ -3748,7 +3822,8 @@ def line_detect(epoch_id):
 
     if write_pdf:
 
-        pdf_summary(epoch_files,fit_ok=True,summary_epoch=fill_result('Line detection complete.'))
+        pdf_summary(epoch_files,fit_ok=True,summary_epoch=fill_result('Line detection complete.'),
+                    e_sat_low_list=e_sat_low_indiv, e_sat_high_list=e_sat_high_indiv)
 
     #closing the logfile for both access and Xspec
     curr_logfile.close()
@@ -3977,7 +4052,7 @@ elif sat_glob=='NuSTAR':
             if id_base[id_elem] in epoch_id_list_ravel:
                 continue
 
-            elem_delta = np.array([-getoverlap([elem_tstart, elem_tstop], [other_start, other_stop], distance=True) for
+            elem_delta = np.array([-get_overlap([elem_tstart, elem_tstop], [other_start, other_stop], distance=True) for
                                    other_start, other_stop in zip(tstart_list, tstop_list)])
 
             # list of matchable epochs
@@ -4069,7 +4144,7 @@ elif sat_glob=='multi':
             if id_base[id_elem] in epoch_id_list_ravel:
                 continue
 
-            elem_delta=np.array([-getoverlap([elem_tstart,elem_tstop],[other_start,other_stop],distance=True) for other_start,other_stop in zip(tstart_list,tstop_list)])
+            elem_delta=np.array([-get_overlap([elem_tstart,elem_tstop],[other_start,other_stop],distance=True) for other_start,other_stop in zip(tstart_list,tstop_list)])
 
             #list of matchable epochs
             elem_epoch_id=np.array([id for id in range(len(tstart_list)) if\
@@ -4199,7 +4274,7 @@ elif sat_glob=='multi':
 
                 for i_exp in range(sum(mask_tel[i_det])):
 
-                    bar_in_plot=getoverlap([num_dates_start[mask_tel[i_det]][i_exp],num_dates_stop[mask_tel[i_det]][i_exp]],ax_exp.get_xlim())>0
+                    bar_in_plot=get_overlap([num_dates_start[mask_tel[i_det]][i_exp],num_dates_stop[mask_tel[i_det]][i_exp]],ax_exp.get_xlim())>0
 
                     ax_exp.axvspan(xmin=num_dates_start[mask_tel[i_det]][i_exp],
                                    xmax=num_dates_stop[mask_tel[i_det]][i_exp],
@@ -4269,8 +4344,6 @@ if reverse_epoch:
 if rewind_epoch_list:
     assert sat_glob=='NICER', 'rewind epoch list not implemented with sats other than NICER'
     epoch_list=[[elem+'_sp_grp_opt.pha' for elem in expand_epoch(started_expos[i])] for i in range(len(started_expos))]
-
-breakpoint()
 
 #### line detections for exposure with a spectrum
 for epoch_id,epoch_files in enumerate(epoch_list):

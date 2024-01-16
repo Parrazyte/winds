@@ -29,6 +29,13 @@ import os
 #     else:
 #         return np.array([array[i][j] for i in range(len(array)) for j in range(len(array[i]))],dtype=mode)
 
+def get_overlap(a, b,distance=False):
+    #compute overlap between two intervals. if distance is set to true, returns the distance between the
+    #intervals if they are disjoint
+    if distance:
+        return min(a[1], b[1]) - max(a[0], b[0])
+    else:
+        return max(0, min(a[1], b[1]) - max(a[0], b[0]))
 
 def shorten_epoch(file_ids):
     # splitting obsids

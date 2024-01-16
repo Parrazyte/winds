@@ -259,8 +259,9 @@ use_obsids=radio_epoch_split=='averaged ObsID'
 use_orbit_obs=radio_epoch_split=='individual orbits'
 use_time_resolved=radio_epoch_split=='Time Resolved'
 
+time_resolved_split_avail = ['100', '30']
+
 if use_time_resolved:
-    time_resolved_split_avail=['100','30']
     time_resolved_split=st.sidebar.radio('Temporal Resolution (s)',time_resolved_split_avail)
     time_resolved_dump_str='_TR_'+time_resolved_split
 else:
@@ -471,6 +472,7 @@ if update_dump or not os.path.isfile(dump_path):
         dump_dict['obj_list']=obj_list
         dump_dict['date_list']=date_list
 
+        dump_dict['exptime_list']=exptime_list
         dump_dict['abslines_infos']=abslines_infos
         dump_dict['autofit_infos']=autofit_infos
         dump_dict['lum_list']=lum_list
@@ -504,6 +506,7 @@ abslines_infos=dump_dict['abslines_infos']
 autofit_infos=dump_dict['autofit_infos']
 lum_list=dump_dict['lum_list']
 dict_linevis=dump_dict['dict_linevis']
+exptime_list=dump_dict['exptime_list']
 
 catal_maxi_df=dump_dict['catal_maxi_df']
 catal_maxi_simbad=dump_dict['catal_maxi_simbad']
@@ -779,9 +782,11 @@ with st.sidebar.expander('Broad band HID'):
     HR_broad_bands=st.radio('HID Hardness Ratio',('[BAND]/[3-6]','([6-10]+[BAND])/[3-6]'))
     lum_broad_bands=st.radio('HID Luminosity',('[3-10]','[3-10]+[BAND]'))
 
+    st.header('BAT')
 
     display_broad_hid_BAT = st.toggle('Display broad band HID using BAT monitoring (HARD BAND=15-50)', value=False)
 
+    st.header('INTEGRAL')
     display_broad_hid_INT = st.toggle('Display broad band HID using INTEGRAL monitoring', value=False)
 
     HID_INT_band=st.radio('INTEGRAL BAND',('30-50','50-100','30-100'))
@@ -1173,6 +1178,8 @@ dict_linevis['lum_broad_bands'] = lum_broad_bands
 dict_linevis['HID_INT_band'] = HID_INT_band
 dict_linevis['Edd_factor_restrict'] = Edd_factor_restrict
 dict_linevis['lum_plot'] = lum_plot
+dict_linevis['use_obsids'] = use_obsids
+dict_linevis['exptime_list'] = exptime_list
 
 if len(global_plotted_datetime)==0:
     st.warning('No points remaining with current sample/date selection')

@@ -533,6 +533,7 @@ def plot_lightcurve(dict_linevis,ctl_maxi_df,ctl_maxi_simbad,name,ctl_bat_df,ctl
     zoom_lc=dict_linevis['zoom_lc']
     mask_obj=dict_linevis['mask_obj']
     no_obs=dict_linevis['no_obs']
+    use_obsids=dict_linevis['use_obsids']
 
     if no_obs:
         date_list=[]
@@ -743,14 +744,15 @@ def plot_lightcurve(dict_linevis,ctl_maxi_df,ctl_maxi_simbad,name,ctl_bat_df,ctl
 
         if mode=='BAT':
             # note that in day binning, the bat dates values are always a day+0.5 and so represent "actual" days
-            #in orbit we divide the exposure time by two
+            #in orbit we divide the exposure time by two and offset the main value by xerr_bat
             xerr_bat = 0.5 if binning == 'day' else bat_lc_df['TIMEDEL']/86400/2
 
             ax_lc.set_yscale('symlog', linthresh=0.01, linscale=0.1)
             ax_lc.yaxis.set_minor_locator(MinorSymLogLocator(linthresh=0.01))
 
             # plotting the lightcurve
-            ax_lc.errorbar(num_bat_dates, bat_lc_df[bat_lc_df.columns[1]], xerr=xerr_bat,
+            ax_lc.errorbar(num_bat_dates,
+                           bat_lc_df[bat_lc_df.columns[1]], xerr=xerr_bat,
                            yerr=bat_lc_df[bat_lc_df.columns[2]],
                            linestyle='', color='black', marker='', elinewidth=0.5, label='bat standard counts')
 
@@ -962,7 +964,14 @@ def plot_lightcurve(dict_linevis,ctl_maxi_df,ctl_maxi_simbad,name,ctl_bat_df,ctl
     #putting an interval in minutes (to avoid imprecisions when zooming)
     date_tick_inter=int((ax_lc.get_xlim()[1]-ax_lc.get_xlim()[0])*24*60/10)
 
-    ax_lc.xaxis.set_major_locator(mdates.MinuteLocator(interval=date_tick_inter))
+    #10 days
+    if date_tick_inter>60*24*10:
+        ax_lc.xaxis.set_major_locator(mdates.DayLocator(interval=date_tick_inter))
+    #1 day
+    elif date_tick_inter>60*24:
+        ax_lc.xaxis.set_major_locator(mdates.HourLocator(interval=date_tick_inter))
+    else:
+        ax_lc.xaxis.set_major_locator(mdates.MinuteLocator(interval=date_tick_inter))
 
     #and offsetting if they're too close to the bounds because otherwise the ticks can be missplaced
     if ax_lc.get_xticks()[0]-ax_lc.get_xlim()[0]>date_tick_inter/(24*60)*3/4:
@@ -974,7 +983,7 @@ def plot_lightcurve(dict_linevis,ctl_maxi_df,ctl_maxi_simbad,name,ctl_bat_df,ctl
     # ax_lc.set_xticks(ax_lc.get_xticks()[::2])
                     
     for label in ax_lc.get_xticklabels(which='major'):
-        label.set(rotation=0, horizontalalignment='center')
+        label.set(rotation=0 if date_tick_inter>60*24*10 else 45, horizontalalignment='center')
 
         #prettier but takes too much space
         # label.set(rotation=45, horizontalalignment='right')
@@ -1730,7 +1739,7 @@ def hid_graph(ax_hid,dict_linevis,
               global_colors=True,alpha_abs=1,
               paper_look=False,bigger_text=True,square_mode=True,zoom=False,
               broad_mode=False,
-              restrict_match_INT=False):
+              restrict_match_INT=False,broad_binning='day',orbit_bin_lim=1):
 
     '''
 
@@ -1762,6 +1771,7 @@ def hid_graph(ax_hid,dict_linevis,
     cmap_color_source=dict_linevis['cmap_color_source']
     cmap_color_det=dict_linevis['cmap_color_det']
     cmap_color_nondet=dict_linevis['cmap_color_nondet']
+    exptime_list=dict_linevis['exptime_list']
 
     if not broad_mode==False:
         HR_broad_bands=dict_linevis['HR_broad_bands']
@@ -1907,22 +1917,40 @@ def hid_graph(ax_hid,dict_linevis,
 
 
         #currently limited to 4U1630-47
-        bat_lc_df = fetch_bat_lightcurve(catal_bat_df, catal_bat_simbad,['4U1630-47'], binning='day')
+        bat_lc_df = fetch_bat_lightcurve(catal_bat_df, catal_bat_simbad,['4U1630-47'], binning=broad_binning)
 
-        bat_lc_mjd=np.array(bat_lc_df[bat_lc_df.columns[0]])
+        if broad_binning=='day':
+            bat_lc_mjd=np.array(bat_lc_df[bat_lc_df.columns[0]])
+        elif broad_binning=='orbit':
+            bat_lc_tstart=Time('51910',format='mjd')+TimeDelta(bat_lc_df['TIME'],format='sec')
+            bat_lc_tend=Time('51910',format='mjd')+TimeDelta(bat_lc_df['TIMEDEL'],format='sec')
 
         #converted to 15-50keV luminosity in Eddington units and removing negative values
         bat_lc_lum=np.array([bat_lc_df[bat_lc_df.columns[1]],bat_lc_df[bat_lc_df.columns[2]]]).clip(0).T\
                     *convert_BAT_count_flux['4U1630-47']*Edd_factor_restrict
 
-        obs_dates=Time(np.array([date_list[mask_obj][0] for i in range(sum(mask_lines))]).astype(str)).mjd.astype(int)
+        if broad_binning=='day':
+            obs_dates=Time(np.array([date_list[mask_obj][0] for i in range(sum(mask_lines))]).astype(str)).mjd.astype(int)
 
 
-        mask_withtime_BAT=[elem in bat_lc_mjd for elem in obs_dates[0]]
+            mask_withtime_BAT=[elem in bat_lc_mjd for elem in obs_dates[0]]
 
-        #getting an array with the bat flux of each observation date
-        lum_broad_single=np.array([np.array([0,0]) if obs_dates[0][i_obs] not in bat_lc_mjd else bat_lc_lum[bat_lc_mjd==obs_dates[0][i_obs]][0]\
-                                  for i_obs in range(len(obs_dates[0]))]).T
+            #getting an array with the bat flux of each observation date
+            lum_broad_single=np.array([np.array([0,0]) if obs_dates[0][i_obs] not in bat_lc_mjd else bat_lc_lum[bat_lc_mjd==obs_dates[0][i_obs]][0]\
+                                      for i_obs in range(len(obs_dates[0]))]).T
+
+        elif broad_binning=='orbit':
+
+            obs_tstart=Time(np.array([date_list[mask_obj][0] for i in range(sum(mask_lines))]).astype(str)).mjd
+            obs_tend=(Time(np.array([date_list[mask_obj][0] for i in range(sum(mask_lines))]).astype(str))+\
+                    TimeDelta(np.array([exptime_list[mask_obj][0] for i in range(sum(mask_lines))],format='sec'))).mjd
+
+            # mask_withtime_BAT = [np.min(get_overlap([obs_]) in bat_lc_mjd for elem in obs_dates[0]]
+
+            # getting an array with the bat flux of each observation date
+            lum_broad_single = np.array([np.array([0, 0]) if obs_dates[0][i_obs] not in bat_lc_mjd else
+                                         bat_lc_lum[bat_lc_mjd == obs_dates[0][i_obs]][0] \
+                                         for i_obs in range(len(obs_dates[0]))]).T
 
         #this is the quantity that needs to be added if the numerator is broad+6-10 and not just broad
         hid_broad_add=lum_plot[2][0][mask_obj][0].astype(float) if HR_broad_6_10 else 0
@@ -1938,18 +1966,38 @@ def hid_graph(ax_hid,dict_linevis,
                                for i in [1, 2]])
 
         #overwriting hid_plot's individual elements because overwriting the full obs array doesn't work
-        for i_obs in range(len(obs_dates[0])):
-            hid_plot_use[0][0][mask_obj][0][i_obs] = hid_broad_vals[i_obs]
-            hid_plot_use[0][1][mask_obj][0][i_obs] = hid_broad_err[0][i_obs]
-            hid_plot_use[0][2][mask_obj][0][i_obs] = hid_broad_err[1][i_obs]
+        #there's lot of issues if using mask_obj directly but here we should be in single object mode only
+        #so we can do it differently
+        i_obj_single=np.argwhere(mask_obj).T[0][0]
 
-            if lum_broad_soft:
-                hid_plot_use[1][0][mask_obj][0][i_obs] += lum_broad_single[0][i_obs]
+        hid_plot_use[0][0][i_obj_single]=hid_broad_vals
+        hid_plot_use[0][1][i_obj_single] = hid_broad_err[0]
+        hid_plot_use[0][2][i_obj_single] = hid_broad_err[1]
 
-                hid_plot_use[1][1][mask_obj][0][i_obs] = ((hid_plot_use[1][1][mask_obj][0][i_obs])**2+ \
-                                                         (lum_broad_single[1][i_obs])**2)**(1/2)
-                hid_plot_use[1][2][mask_obj][0][i_obs] = ((hid_plot_use[1][2][mask_obj][0][i_obs])**2+ \
-                                                         (lum_broad_single[1][i_obs])**2)**(1/2)
+        if lum_broad_soft:
+            hid_plot_use[1][0][i_obj_single] += lum_broad_single[0]
+
+            hid_plot_use[1][1][i_obj_single] = ((hid_plot_use[1][1][i_obj_single]) ** 2 + \
+                                                      (lum_broad_single[1]) ** 2) ** (1 / 2)
+            hid_plot_use[1][2][i_obj_single] = ((hid_plot_use[1][2][i_obj_single]) ** 2 + \
+                                                      (lum_broad_single[1]) ** 2) ** (1 / 2)
+
+        # for i_obs in range(len(obs_dates[0])):
+        #
+        #     hid_plot_use[0][0][mask_obj][0][i_obs] = hid_broad_vals[i_obs]
+        #     hid_plot_use[0][1][mask_obj][0][i_obs] = hid_broad_err[0][i_obs]
+        #     hid_plot_use[0][2][mask_obj][0][i_obs] = hid_broad_err[1][i_obs]
+        #
+        #
+        #     breakpoint()
+        #
+        #     if lum_broad_soft:
+        #         hid_plot_use[1][0][mask_obj][0][i_obs] += lum_broad_single[0][i_obs]
+        #
+        #         hid_plot_use[1][1][mask_obj][0][i_obs] = ((hid_plot_use[1][1][mask_obj][0][i_obs])**2+ \
+        #                                                  (lum_broad_single[1][i_obs])**2)**(1/2)
+        #         hid_plot_use[1][2][mask_obj][0][i_obs] = ((hid_plot_use[1][2][mask_obj][0][i_obs])**2+ \
+        #                                                  (lum_broad_single[1][i_obs])**2)**(1/2)
 
     else:
 
@@ -2121,7 +2169,7 @@ def hid_graph(ax_hid,dict_linevis,
     marker_ul = 'h'
     marker_ul_top = 'H'
 
-    alpha_ul = 0.3
+    alpha_ul = 0.5
 
     # note: the value will finish at false for sources with no non-detections
     label_obj_plotted = np.repeat(False, len(abslines_infos_perobj[mask_obj]))
@@ -3941,23 +3989,25 @@ def correl_graph(data_perinfo,infos,data_ener,dict_linevis,mode='intrinsic',mode
             ax_scat.set_ylim((0,90))
 
         #creating a time variable for time mode to be used later
-        
+
         if time_mode:
-            
+
             #creating an appropriate date axis
             #manually readjusting for small durations because the AutoDateLocator doesn't work well
             time_range=min(mdates.date2num(slider_date[1]),max(mdates.date2num(ravel_ragged(date_list))))-\
                        max(mdates.date2num(slider_date[0]),min(mdates.date2num(ravel_ragged(date_list))))
-            
-            if time_range<150:
-                date_format=mdates.DateFormatter('%Y-%m-%d')
-            elif time_range<1825:
-                date_format=mdates.DateFormatter('%Y-%m')
-            else:
-                date_format=mdates.AutoDateFormatter(mdates.AutoDateLocator())
-            ax_scat.xaxis.set_major_formatter(date_format)
-                            
-            plt.xticks(rotation=70)
+
+            #
+            #
+            # if time_range<150:
+            #     date_format=mdates.DateFormatter('%Y-%m-%d')
+            # elif time_range<1825:
+            #     date_format=mdates.DateFormatter('%Y-%m')
+            # else:
+            #     date_format=mdates.AutoDateFormatter(mdates.AutoDateLocator())
+            # ax_scat.xaxis.set_major_formatter(date_format)
+            #
+            # plt.xticks(rotation=70)
 
 
         date_list_repeat=np.array([date_list for repeater in (i if type(i)==range else [i])]) if not ratio_mode else date_list
@@ -4431,11 +4481,13 @@ def correl_graph(data_perinfo,infos,data_ener,dict_linevis,mode='intrinsic',mode
             uplims_mask=y_data[0].astype(float)[~(linked_mask[0].astype(bool))]==0
         else:
             uplims_mask=None
-            
+
         errbar_list=['' if len(x_data[s])==0 else ax_scat.errorbar(x_data[s].astype(float)[~(linked_mask[s].astype(bool))],
                                                       y_data[s].astype(float)[~(linked_mask[s].astype(bool))],
-                          xerr=None if x_error is None else [elem[~(linked_mask[s].astype(bool))] for elem in x_error[s]],
-                          yerr=[elem[~(linked_mask[s].astype(bool))] for elem in y_error[s]],linewidth=1,
+                          xerr=None if x_error is None else\
+                              np.array([elem[~(linked_mask[s].astype(bool))] for elem in x_error[s]]).clip(0),
+                          yerr=np.array([elem[~(linked_mask[s].astype(bool))] for elem in y_error[s]]).clip(0),
+                                           linewidth=1,
                           c=data_cols[s],label=data_labels[s] if color_scatter=='None' else '',linestyle='',
                           uplims=uplims_mask,
                           marker='D' if color_scatter=='None' else None,alpha=1,zorder=1)\
@@ -4445,8 +4497,10 @@ def correl_graph(data_perinfo,infos,data_ener,dict_linevis,mode='intrinsic',mode
         #note:deprecated
         errbar_list_linked=['' if len(x_data[s])==0 else ax_scat.errorbar(x_data[s].astype(float)[linked_mask[s].astype(bool)],
                                                         y_data[s].astype(float)[linked_mask[s].astype(bool)],
-                          xerr=None if x_error is None else [elem[linked_mask[s].astype(bool)] for elem in x_error[s]],
-                          yerr=[elem[linked_mask[s].astype(bool)] for elem in y_error[s]],linewidth=1,
+                          xerr=None if x_error is None else\
+                              np.array([elem[linked_mask[s].astype(bool)] for elem in x_error[s]]).clip(0),
+                            yerr=np.array([elem[linked_mask[s].astype(bool)] for elem in y_error[s]]).clip(0),
+                                       linewidth=1,
                           color=data_link_cols[s],label='linked '+data_labels[s]  if color_scatter=='None' else '',linestyle='',
                           marker='D' if color_scatter=='None' else None,
                           uplims=False,
@@ -4463,22 +4517,35 @@ def correl_graph(data_perinfo,infos,data_ener,dict_linevis,mode='intrinsic',mode
         
         #adding a line at 0 blueshift
         if infos_split[0]=='bshift':
-            ax_scat.axvline(x=0,ymin=0,ymax=1,color='grey',linestyle=':',lw=1.)
+            if time_mode:
+                ax_scat.axhline(y=0, xmin=0, xmax=1, color='grey', linestyle=':', lw=1.)
+            else:
+                ax_scat.axvline(x=0,ymin=0,ymax=1,color='grey',linestyle=':',lw=1.)
         
         #(-speed_abs_err[0],speed_abs_err[1],color='grey',label='Absolute error region',alpha=0.3)
         
         if display_abserr_bshift and infos_split[0]=='bshift':
             
             #plotting the distribution mean and std (without the GRS exposures)
-            
             v_mean=-200
             v_sigma=360
+
+            if time_mode:
+                #reverses the axese so here we need to do it vertically (only case)
+                # mean
+                ax_scat.axhline(y=v_mean, xmin=0, xmax=1, color='brown', linestyle='-', label=r'$\overline{v}$',
+                                lw=0.75)
+
+                # span for the std
+                ax_scat.axhspan(v_mean - v_sigma, v_mean + v_sigma, color='brown', label=r'$\sigma_v$', alpha=0.1)
+
+            else:
             
-            #mean
-            ax_scat.axvline(x=v_mean,ymin=0,ymax=1,color='brown',linestyle='-',label=r'$\overline{v}$',lw=0.75)
-            
-            #span for the std
-            ax_scat.axvspan(v_mean-v_sigma,v_mean+v_sigma,color='brown',label=r'$\sigma_v$',alpha=0.1)
+                #mean
+                ax_scat.axvline(x=v_mean,ymin=0,ymax=1,color='brown',linestyle='-',label=r'$\overline{v}$',lw=0.75)
+
+                #span for the std
+                ax_scat.axvspan(v_mean-v_sigma,v_mean+v_sigma,color='brown',label=r'$\sigma_v$',alpha=0.1)
                 
         #### Color definition
         
@@ -4708,7 +4775,7 @@ def correl_graph(data_perinfo,infos,data_ener,dict_linevis,mode='intrinsic',mode
                                  yerr=np.array([y_err_single]).T if y_err_single is not None else y_err_single,
                                  xuplims=lims_bool[0]==1,xlolims=lims_bool[0]==-1,uplims=lims_bool[1]==1,lolims=lims_bool[1]==-1,
                                  color=col_single,linestyle='',marker='.' if color_scatter=='None' else None,
-                                 label=label if i_err==0 else '',alpha=alpha_ul if color_scatter=='None' else 1)
+                                 label=label if i_err==0 else '',alpha=alpha_ul)
                     
         ####plotting upper limits
         if show_ul_eqw and ('eqw' in infos or mode=='eqwratio'):
@@ -4744,7 +4811,49 @@ def correl_graph(data_perinfo,infos,data_ener,dict_linevis,mode='intrinsic',mode
                         #lolims here
                         plot_ul_err([-1,0],x_data_ll,y_data_ll,x_data_ll*0.05,y_error_ll.T,color_arr_ul_y)
 
-        
+
+        if time_mode:
+            # creating an appropriate date axis
+            # manually readjusting for small durations because the AutoDateLocator doesn't work well
+            if time_range < 10:
+                date_format = mdates.DateFormatter('%Y-%m-%d %H:%M:%S')
+            elif time_range < 365:
+                date_format = mdates.DateFormatter('%Y-%m-%d')
+            else:
+                date_format = mdates.DateFormatter('%Y-%m')
+
+            ax_scat.xaxis.set_major_formatter(date_format)
+
+            # forcing 8 xticks along the ax
+            ax_scat.set_xlim(ax_scat.get_xlim())
+
+            n_xticks=6
+            # putting an interval in seconds (to avoid imprecisions when zooming)
+            date_tick_inter = int((ax_scat.get_xlim()[1] - ax_scat.get_xlim()[0]) * 24 * 60 * 60 / n_xticks)
+
+            # 10 days
+            if date_tick_inter > 60* 60 * 24 * 10:
+                ax_scat.xaxis.set_major_locator(mdates.DayLocator(interval=date_tick_inter//(24*60*60)))
+            # 1 day
+            elif date_tick_inter > 60* 60 * 24:
+                ax_scat.xaxis.set_major_locator(mdates.HourLocator(interval=date_tick_inter//(60*60)))
+            elif date_tick_inter > 60 * 60:
+                ax_scat.xaxis.set_major_locator(mdates.MinuteLocator(interval=date_tick_inter//(60)))
+            else:
+                ax_scat.xaxis.set_major_locator(mdates.SecondLocator(interval=date_tick_inter))
+
+            # and offsetting if they're too close to the bounds because otherwise the ticks can be missplaced
+            if ax_scat.get_xticks()[0] - ax_scat.get_xlim()[0] > date_tick_inter / (24 * 60 *  60) * 3 / 4:
+                ax_scat.set_xticks(ax_scat.get_xticks() - date_tick_inter / (2 * 24 * 60  * 60))
+
+            if ax_scat.get_xticks()[0] - ax_scat.get_xlim()[0] < date_tick_inter / (24 * 60 * 60) * 1 / 4:
+                ax_scat.set_xticks(ax_scat.get_xticks() + date_tick_inter / (2 * 24 * 60 * 60))
+
+            # ax_lc.set_xticks(ax_lc.get_xticks()[::2])
+
+            for label in ax_scat.get_xticklabels(which='major'):
+                label.set(rotation=0 if date_tick_inter > 60 * 60 * 24 * 10 else 45, horizontalalignment='center')
+
         #### adding cropping on the EW ratio X axis to fix unknown issue
         
         #complicated restriction to take off all the elements of x_data no matter their dimension if they are empty arrays

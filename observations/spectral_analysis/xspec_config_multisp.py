@@ -15,7 +15,7 @@ from xspec import AllModels,AllData,Fit,Spectrum,Model,Plot,Xset,AllChains,Chain
 from fitting_tools import sign_delchis_table,lines_std,lines_e_dict,lines_w_dict,lines_broad_w_dict,\
         link_groups,lines_std_names,def_ftest_threshold,def_ftest_leeway,ang2kev
 
-from general_tools import ravel_ragged
+from general_tools import ravel_ragged,get_overlap
 
 
 from contextlib import redirect_stdout
@@ -32,15 +32,6 @@ import dill
 
 from matplotlib.gridspec import GridSpec
 
-def getoverlap(a, b,distance=False):
-    #compute overlap between two intervals. if distance is set to true, returns the distance between the
-    #intervals if they are disjoint
-    if distance:
-        return min(a[1], b[1]) - max(a[0], b[0])
-    else:
-        return max(0, min(a[1], b[1]) - max(a[0], b[0]))
-
-    
 model_dir='/home/parrama/Soft/Xspec/Models'
 
 #custom model loads
@@ -1080,8 +1071,8 @@ def addcomp(compname,position='last',endmult=None,return_pos=False,modclass=AllM
                     start_position+=1
 
 
-    #continuum keyword
-    if comp_custom=='cont':
+    #continuum type components
+    if comp_custom=='cont' or comp_split=='nthcomp':
         start_position=1
         try:
 
@@ -3626,6 +3617,20 @@ class fitmod:
             self.test_unlink_lines(chain=chain,ftest_threshold=ftest_threshold)        
 
 
+        #resetting the edges in case they were pegged at 0 with a previous fit (noticeable with very low absorption values)
+        #for now only considers one single absorption value per edge (aka linked values between datagroups)
+        for elem_comp in [elem for elem in self.includedlist if elem is not None]:
+            if not 'edge' in elem_comp.compname:
+                continue
+
+            #the first unlocked can be for different datagroups so we do it like that
+            if AllModels(par_degroup(elem_comp.unlocked_pars)[0])(par_degroup(elem_comp.unlocked_pars)[1]).values[0]<1e-4:
+                #1e-2 is too high but should allow to refit correctly
+                AllModels(par_degroup(elem_comp.unlocked_pars)[0])(par_degroup(elem_comp.unlocked_pars)[1]).values=1e-2
+
+        #new fit with the updated edges
+        calc_fit(logfile=self.logfile if chain else None)
+
         #testing if freezing the pegged parameters improves the fit
         par_peg_ids=calc_error(self.logfile,param='1-'+str(AllModels(1).nParameters*AllData.nGroups),freeze_pegged=freeze_final_pegged,indiv=True,
                                test='FeKa26abs_agaussian' in self.name_complist and round(AllData(1).energies[0][0])==3)
@@ -3905,7 +3910,7 @@ class fitmod:
             Ka_bshift_inter=AllModels(1)(Ka_line_comp.parlist[0]).error[:2]
             
             #computing if the intervals intersect
-            abslines_bshift_distinct[i_line]=getoverlap(line_bshift_inter,Ka_bshift_inter)==0
+            abslines_bshift_distinct[i_line]=get_overlap(line_bshift_inter,Ka_bshift_inter)==0
         
         for i_line,line in enumerate(abs_lines):
             

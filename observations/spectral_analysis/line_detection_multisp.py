@@ -273,7 +273,7 @@ NICER no abslines: 4130010128-001_4130010129-001
 
 '''
 ap.add_argument('-force_epochs',nargs=1,help='force epochs to given set of spectra instead of auto matching',
-                default=False,type=bool)
+                default=True,type=bool)
 
 
 force_epochs_str=\
@@ -284,8 +284,13 @@ force_epochs_str=\
 
 force_epochs_str=\
 '''
-['4130010119-003_sp_grp_opt.pha','4130010120-001_sp_grp_opt.pha','4130010120-002_sp_grp_opt.pha','4130010120-003_sp_grp_opt.pha'];
-'''
+['5665010403-001_sp_grp_opt.pha', '6557010101-001_sp_grp_opt.pha',
+              '6557010101-002_sp_grp_opt.pha', '6557010101-003_sp_grp_opt.pha',
+              '6557010101-004_sp_grp_opt.pha', '6557010102-001_sp_grp_opt.pha',
+              '6557010102-002_sp_grp_opt.pha', '6557010102-003_sp_grp_opt.pha',
+              '6557010201-001_sp_grp_opt.pha',
+              'nu80902312002A01_sp_src_grp_opt.pha',
+              'nu80902312002B01_sp_src_grp_opt.pha'];'''
 force_epochs_str_list=[literal_eval(elem.replace('\n','')) for elem in force_epochs_str.split(';')[:-1]]
 
 ap.add_argument('-force_epochs_list',nargs=1,help='force epochs list',default=force_epochs_str_list)
@@ -325,11 +330,11 @@ ap.add_argument('-cont_fit_method',nargs=1,help='fit logic for the broadband fit
 
 ap.add_argument('-reload_autofit',nargs=1,
                 help='Reload existing autofit save files to gain time if a computation has crashed',
-                default=True,type=bool)
+                default=False,type=bool)
 
 ap.add_argument('-reload_fakes',nargs=1,
                 help='Reload fake delchi array file to skip the fake computation if possible',
-                default=True,type=bool)
+                default=False,type=bool)
 
 ap.add_argument('-pdf_only',nargs=1,
                 help='Updates the pdf with already existing elements but skips the line detection entirely',
@@ -359,6 +364,9 @@ ap.add_argument('-refit_cont',nargs=1,
                 help='After the autofit, refit the continuum without excluding the iron region',
                 default=True)
 
+ap.add_argument('-merge_cont',nargs=1,
+                help='Reload the previous continuum before refitting the continuum aftrer autofit',
+                default=True)
 ####split fit
 ap.add_argument('-split_fit',nargs=1,
                 help='Split fitting procedure between components instead of fitting the whole model directly',
@@ -385,6 +393,7 @@ ap.add_argument("-hid_cont_range",nargs=1,
 
 #this skips the HID fitmod fit procedure entirely and replaces it by the broad band fit
 #useful to get better broadband constrains for the HID
+#also skips the computation of the chain for the broadband fit
 ap.add_argument('-broad_HID_mode',nargs=1,
                 help='reuses the broad band fit for the HID computations',default=True,type=str)
 
@@ -479,7 +488,7 @@ ap.add_argument('-suzaku_hid_cont_range',nargs=1,help='min and max energies of t
 ap.add_argument('-suzaku_line_cont_range',nargs=1,help='min and max energies of the suzaku line cont band fit',
                 default='4 40',type=str)
 ap.add_argument('-suzaku_xis_range',nargs=1,help='range of energies usable for suzaku xis',default='1.9 9',type=str)
-ap.add_argument('-suzaku_xis_ignore',nargs=1,help='range of energies to ignore for suzaku xis',default="['2.1 2.3','3.0 3.4']",type=str)
+ap.add_argument('-suzaku_xis_ignore',nargs=1,help='range of energies to ignore for suzaku xis',default="['2.1-2.3','3.0-3.4']",type=str)
 
 ap.add_argument('-suzaku_pin_range',nargs=1,help='range of energies usable for suzaku pin',default='12 40',type=str)
 
@@ -531,6 +540,9 @@ ap.add_argument('-paper_look',nargs=1,
 '''GLOBAL PDF SUMMARY'''
 
 ap.add_argument('-line_infos_pdf',nargs=1,help='write line infos in the global object pdf',default=True,type=bool)
+
+'''Chatter'''
+ap.add_argument('-xchatter',nargs=1,help='xspec main chatter value for the computations',default=1,type=int)
 
 args=ap.parse_args()
 
@@ -600,6 +612,9 @@ freeze_nH=args.freeze_nH
 freeze_nH_val=args.freeze_nH_val
 
 cont_fit_method=args.cont_fit_method
+xchatter=args.xchatter
+
+merge_cont=args.merge_cont
 
 rewind_epoch_list=args.rewind_epoch_list
 force_epochs=args.force_epochs
@@ -862,7 +877,7 @@ norm_nsteps=len(norm_par_space)
 '''''''''''''''''''''''''''''''''''''''
 
 #reducing the amount of data displayed in the terminal (doesn't affect the log file)
-Xset.chatter=5
+Xset.chatter=xchatter
 
 #defining the standard number of fit iterations
 Fit.nIterations=100
@@ -2437,9 +2452,11 @@ def line_detect(epoch_id):
             add_str = '_post_auto'
         else:
             add_str = ''
-        # freezing what needs to be to avoid problems with the Chain
-        calc_error(curr_logfile, param='1-' + str(AllModels(1).nParameters * AllData.nGroups), timeout=60,
-                   freeze_pegged=True, indiv=True)
+
+        if not broad_HID_mode:
+            # freezing what needs to be to avoid problems with the Chain
+            calc_error(curr_logfile, param='1-' + str(AllModels(1).nParameters * AllData.nGroups), timeout=60,
+                       freeze_pegged=True, indiv=True)
 
         Fit.perform()
 
@@ -2467,8 +2484,8 @@ def line_detect(epoch_id):
             # Creating a chain to avoid problems when computing the errors
             Chain(outdir + '/' + epoch_observ[0] + '_chain_hid' + add_str + '.fits')
 
-        # trying to freeze pegged parameters again in case the very last fit created peggs
-        calc_error(curr_logfile, param='1-' + str(AllModels(1).nParameters * AllData.nGroups), timeout=60,
+        # trying to freeze pegged parameters again in case the very last fit created pegs
+        calc_error(curr_logfile, param='1-' + str(AllModels(1).nParameters * AllData.nGroups), timeout=20,
                    freeze_pegged=True, indiv=True)
 
         Fit.perform()
@@ -2725,8 +2742,6 @@ def line_detect(epoch_id):
             #saving the model data to reload it after the broad band fit if needed
             mod_high_dat=allmodel_data()
 
-            fitcont_high.save()
-
             #rescaling before the prints to avoid unecessary loggings in the screen
             rescale(auto=True)
 
@@ -2831,6 +2846,10 @@ def line_detect(epoch_id):
             data_broad=allmodel_data()
             print('\nComputing HID broad fit...')
 
+            for i_sp in range(len(epoch_files_good)):
+                if line_cont_ig_indiv[i_sp] != '':
+                    AllData(i_sp+1).ignore(line_cont_ig_indiv[i_sp])
+
             if broad_HID_mode:
                 fitcont_hid=fitcont_broad
 
@@ -2879,7 +2898,7 @@ def line_detect(epoch_id):
 
             spflux_single=hid_fit_infos(fitcont_hid,broad_absval)
 
-            return spflux_single,broad_absval,broad_abscomp,data_broad
+            return spflux_single,broad_absval,broad_abscomp,data_broad,fitcont_broad
 
         AllModels.clear()
 
@@ -2896,7 +2915,7 @@ def line_detect(epoch_id):
         if len(result_broad_fit)==1:
             return fill_result(result_broad_fit)
         else:
-            main_spflux,broad_absval,broad_abscomp,data_broad=result_broad_fit
+            main_spflux,broad_absval,broad_abscomp,data_broad,fitcont_broad=result_broad_fit
 
         #reloading the frozen scorpeon data\
         # (which won't change anything if it hasn't been fitted but will help otherwise)
@@ -3010,6 +3029,10 @@ def line_detect(epoch_id):
                 #refitting in broad band for the nH
                 ignore_data_indiv(e_sat_low_indiv, e_sat_high_indiv, reset=True, glob_ignore_bands=ignore_bands_indiv)
 
+                #merging the previous continuum if asked to
+                if merge_cont:
+                    fitlines.merge(fitcont_broad)
+
                 #thawing the absorption to allow improving its value
                 abs_incl_comps = (np.array(fitlines.complist)[[elem.absorption and elem.included for elem in \
                                                                     [elem_comp for elem_comp in fitlines.complist
@@ -3073,9 +3096,8 @@ def line_detect(epoch_id):
                     #autofit
                     fitlines.global_fit(chain=False,lock_lines=True,directory=outdir,observ_id=epoch_observ[0],split_fit=split_fit)
 
-                fitlines.dump(outdir+'/'+epoch_observ[0]+'_fitmod_broadhid_post_auto.pkl')
-
                 AllChains.clear()
+
                 main_spflux=hid_fit_infos(fitlines,broad_absval,post_autofit=True)
 
                 '''
@@ -3659,7 +3681,7 @@ def line_detect(epoch_id):
                                 #can happen if there are issues in the data quality, we just don't consider the fakes then
                                 pass
 
-                        Xset.chatter=5
+                        Xset.chatter=xchatter
                         Xset.logChatter=5
 
                         pbar.update(1)
@@ -4479,6 +4501,8 @@ for epoch_id,epoch_files in enumerate(epoch_list):
 
 #not creating the recap file in spread comput mode to avoid issues
 assert spread_comput==1, 'Stopping the computation here to avoid conflicts when making the summary'
+
+breakpoint()
 
 if multi_obj==False:
     #loading the diagnostic messages after the analysis has been done

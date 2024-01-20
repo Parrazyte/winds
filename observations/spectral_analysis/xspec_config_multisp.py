@@ -2480,16 +2480,18 @@ def calc_error(logfile,maxredchi=1e6,param='all',timeout=60,delchi_thresh=0.1,in
             if is_newmodel:
                 #recreating a valid fit
                 calc_fit(logfile=logfile,nonew=True)            
-                
-                print('\nResulting model after loading...\n')
-                #displaying the new model without changing the console chatter state
-                curr_chatter=Xset.chatter
-                Xset.chatter=10
-                AllModels.show()
-                Fit.show()
-                Xset.chatter=curr_chatter
-                #reading the newly created lines we don't care about
-                logfile.readlines()
+
+                if Xset.chatter>5:
+
+                    print('\nResulting model after loading...\n')
+                    #displaying the new model without changing the console chatter state
+                    curr_chatter=Xset.chatter
+                    Xset.chatter=10
+                    AllModels.show()
+                    Fit.show()
+                    Xset.chatter=curr_chatter
+                    #reading the newly created lines we don't care about
+                    logfile.readlines()
 
                 if indiv and base_chi-Fit.statistic>delchi_thresh:
                     break
@@ -2589,7 +2591,8 @@ class fitmod:
                 #directly converting the existing xspec components in the various arrays
                 for compname in self.cont_xcompnames:
                     
-                    setattr(self,'cont_'+compname,fitcomp('cont_'+compname,self.logfile,self.logfile_write,continuum=True))
+                    setattr(self,'cont_'+compname,fitcomp('cont_'+compname,self.logfile,self.logfile_write,continuum=True,
+                                                          fitmod=self))
                     self.cont_complist+=[getattr(self,'cont_'+compname)]
                     self.includedlist+=[getattr(self,'cont_'+compname)]
                     self.name_cont_complist+=['cont_'+compname]
@@ -2610,14 +2613,16 @@ class fitmod:
                 #components already considered in the autofit continuum list should not be here twice
                 if self.name_complist[i] not in self.name_cont_complist:
                     
-                    setattr(self,self.name_complist[i],fitcomp(self.name_complist[i],self.logfile,self.logfile_write,self.idlist[i]))
+                    setattr(self,self.name_complist[i],fitcomp(self.name_complist[i],self.logfile,self.logfile_write,self.idlist[i],
+                                                               fitmod=self))
                     
                     self.complist+=[getattr(self,self.name_complist[i])]
             else:
                 setattr(self,self.name_complist[i],fitcomp(self.name_complist[i],
                                                            self.logfile,self.logfile_write,
                                                            self.idlist[i],
-                                                           fitcomp_names=self.name_complist))
+                                                           fitcomp_names=self.name_complist,
+                                                           fitmod=self))
                 
                 self.complist+=[getattr(self,self.name_complist[i])]
 
@@ -2675,10 +2680,14 @@ class fitmod:
             last_par=getattr(comp.xcomps[-1],comp.xcomps[-1].parameterNames[-1]).index
             comp.parlist=np.arange(first_par,last_par+1).astype(int).tolist()
                        
-            #testing if the component is a global_constant
+            #adding some parameters for components which affect other datagroups
             if 'constant' in comp.compname and comp.parlist[0]==1 and AllModels(1)(1).values[0]==1:
                 comp.parlist+=[1+AllModels(1).nParameters*i_grp for i_grp in range(1,AllData.nGroups)]
-                
+
+            if 'cal' in comp.compname and 'edge' in comp.compname:
+                comp.parlist=ravel_ragged([np.array(comp.parlist)+AllModels(1).nParameters*i_grp\
+                                           for i_grp in range(AllData.nGroups)]).tolist()
+
             comp.unlocked_pars=[i for i in comp.parlist if (not AllModels(par_degroup(i)[0])(par_degroup(i)[1]).frozen and\
                                                                   AllModels(par_degroup(i)[0])(par_degroup(i)[1]).link=='')]
 
@@ -3173,7 +3182,10 @@ class fitmod:
         if sum(custom_ftest_mask)!=0:
             bestcomp_in_custom_id=component_ftest[custom_ftest_mask].argmin()
             try:
-                bestcomp=curr_exclist[np.argwhere(np.array(custom_ftest_mask))[0][bestcomp_in_custom_id]]
+                bestcomp=np.array(curr_exclist)[custom_ftest_mask][bestcomp_in_custom_id]
+
+                #previous version that didn't work
+                #bestcomp=curr_exclist[np.argwhere(np.array(custom_ftest_mask))[0][bestcomp_in_custom_id]]
             except:
                 breakpoint()
         else:
@@ -3616,17 +3628,17 @@ class fitmod:
         if not lock_lines:
             self.test_unlink_lines(chain=chain,ftest_threshold=ftest_threshold)        
 
-
         #resetting the edges in case they were pegged at 0 with a previous fit (noticeable with very low absorption values)
         #for now only considers one single absorption value per edge (aka linked values between datagroups)
         for elem_comp in [elem for elem in self.includedlist if elem is not None]:
             if not 'edge' in elem_comp.compname:
                 continue
 
-            #the first unlocked can be for different datagroups so we do it like that
-            if AllModels(par_degroup(elem_comp.unlocked_pars)[0])(par_degroup(elem_comp.unlocked_pars)[1]).values[0]<1e-4:
-                #1e-2 is too high but should allow to refit correctly
-                AllModels(par_degroup(elem_comp.unlocked_pars)[0])(par_degroup(elem_comp.unlocked_pars)[1]).values=1e-2
+            if len(elem_comp.unlocked_pars)>0:
+                #the first unlocked can be for different datagroups so we do it like that
+                if AllModels(par_degroup(elem_comp.unlocked_pars[0])[0])(par_degroup(elem_comp.unlocked_pars[0])[1]).values[0]<1e-4:
+                    #1e-2 is too high but should allow to refit correctly
+                    AllModels(par_degroup(elem_comp.unlocked_pars[0])[0])(par_degroup(elem_comp.unlocked_pars[0])[1]).values=1e-2
 
         #new fit with the updated edges
         calc_fit(logfile=self.logfile if chain else None)
@@ -4100,13 +4112,19 @@ class fitmod:
             
         return abslines_eqw_ul
     
-    def save(self):
+    def save_mod(self):
         
         '''
-        saves the current model configuration
+        saves the current model configuration and the individual components one by one
         '''
-        
+
+        #saving the whole model
         self.save=allmodel_data()
+
+        #saving each of the included components
+        for incl_comp in [elem for elem in self.includedlist if elem is not None]:
+            incl_comp.save_comp()
+
         
     def dump(self,path=None):
         
@@ -4124,7 +4142,9 @@ class fitmod:
         
         #updating the fitcomps to avoid resetting the logfile when loading
         self.update_fitcomps()
-        
+
+        self.save_mod()
+
         with open(path,'wb') as file:
             dill.dump(self,file)
             
@@ -4142,7 +4162,48 @@ class fitmod:
         self.save.load()
         
         self.update_fitcomps()
-        
+
+    def merge(self,prev_fitmod,add_notincl=True,load_frozen=False,load_links=False,load_valrange=False):
+
+        '''
+        Merges with a previous fitmodel by replacing the saves of all included components also included
+        in the previous model with their equivalent's save
+
+        add_notincl: also includes the previous components if they are not included in the current model
+                     (as long as they are part of complist)
+
+        load_frozen/links/valrage: options on how to loach each fitcomp's save
+        changing from the default can make things not work for automatic reloading
+        (frozen is needed to
+        '''
+
+        prev_inclist=[elem for elem in prev_fitmod.includedlist if elem is not None]
+
+        incl_compnames=[comp.compname for comp in [elem for elem in self.includedlist if elem is not None]]
+
+        for elem_comp in prev_inclist:
+
+            #skipping if the component is not a part of the new fitmod's components
+            if elem_comp.compname not in self.name_complist+self.name_cont_complist:
+                continue
+
+            #including the component if asked to
+            if elem_comp.compname not in incl_compnames \
+                    and elem_comp.compname in self.name_complist+self.name_cont_complist:
+
+                if not add_notincl:
+                    continue
+
+                self.includedlist = getattr(self,elem_comp.compname).addtomod(incl_list=self.includedlist)
+
+                # updating the fitcomps before anything else
+                self.update_fitcomps()
+
+            #replacing the component saves by the previous model's save
+            new_comp=getattr(self,elem_comp.compname)
+
+            new_comp.reload(elem_comp.save,load_frozen=load_frozen,load_links=load_links,load_valrange=load_valrange)
+
 class fitcomp:
     
     '''
@@ -4154,8 +4215,10 @@ class fitcomp:
     Warning: delfrommod with rollback set to True will reload the save made before the component was added for the last time !
     '''
     
-    def __init__(self,compname,logfile=None,logfile_write=None,identifier=None,continuum=False,fitcomp_names=None):
-        
+    def __init__(self,compname,logfile=None,logfile_write=None,identifier=None,continuum=False,fitcomp_names=None,fitmod=None):
+
+        #associated fitmod
+        self.fitmod=fitmod
         #component addcomp name
         self.compname=compname
         
@@ -4434,8 +4497,6 @@ class fitcomp:
         Xset.chatter=prev_chatter
         Xset.logChatter=prev_logchatter
 
-
-            
     def fit(self,split_fit=True):
         
         '''
@@ -4499,7 +4560,6 @@ class fitcomp:
             return np.array([0,0,0])
         
         return np.array([width_par.values[0],width_par.values[0]-width_par.error[0],width_par.error[1]-width_par.values[0]])
-                         
             
     def get_eqwidth(self):
         
@@ -4552,8 +4612,9 @@ class fitcomp:
         
         prev_chatter=Xset.chatter
         prev_logChatter=Xset.logChatter
-        
-        Xset.chatter=5
+
+        if Xset.chatter>5:
+            Xset.chatter=5
         Xset.logChatter=5
         
         if type(bshift_range) not in (list,np.ndarray):
@@ -4642,6 +4703,96 @@ class fitcomp:
             
         return max(distrib_eqw)*1e3
 
+    def save_comp(self):
+        '''
+        saves all of the parameters values, links and frozen states in an array
+
+        no direct parameter attribution to avoid issues when reload
+        '''
+
+        # note: we do this because some models have length 1 values for choices (ex: dscat grain type)
+        # in which case we can't use a regular npars*6 type array
+
+        #note: this number is the number of non-standard parameters in the comp
+        #it doesn't count normally linked parameters after the first datagroup
+        comp_npars=len(self.parlist)
+
+        values = np.array([None] * comp_npars)
+        links = np.array([None] * comp_npars)
+        frozen = np.zeros(comp_npars).astype(bool)
+
+        for id_par,i_par in enumerate(self.parlist):
+
+            elem_par=AllModels(par_degroup(i_par)[0])(par_degroup(i_par)[1])
+
+            # keeping length 1
+            values[id_par] = np.array(elem_par.values)
+
+            # only for normal parameters
+            if len(values[id_par]) > 1:
+                # safeguard against linked parameters with values out of their bounds
+                if values[id_par][0] < values[id_par][2]:
+                    values[id_par][2] = values[id_par][0]
+                if values[id_par][0] > values[id_par][5]:
+                    values[id_par][5] = values[id_par][0]
+
+            frozen[id_par] = elem_par.frozen
+            links[id_par] = elem_par.link.replace('= ', '')
+
+        self.values = values
+        self.frozen = frozen
+        self.links = links
+
+        self.save=[self.values,self.frozen,self.links]
+
+    def reload(self,save=None,load_frozen=False,load_links=False,load_valrange=False):
+
+        '''
+        reload the component values according to an internal or provided save
+
+        can choose to load the whole value range, frozen and link states or not to give more flexibility and
+        avoid issues when reloading a component from a previous model
+        '''
+
+        assert save is not None or self.values is not None, 'Cannot reload component without saved values or giving a save'
+
+        if save is None:
+            reload_values=self.values
+            reload_links=self.links
+            reload_frozen=self.frozen
+        else:
+            reload_values=save[0]
+            reload_frozen=save[1]
+            reload_links=save[2]
+
+        for id_par,i_par in enumerate(self.parlist):
+
+            elem_par=AllModels(par_degroup(i_par)[0])(par_degroup(i_par)[1])
+
+            #changing the values overrides the freeze and link state so it's important to reload the ones
+            #of the current model if we're not loading them
+
+            elem_par_frozen=elem_par.frozen
+            elem_par_link=elem_par.link.replace('= ','')
+
+            #reloading the main value or the whole value array
+            if load_valrange:
+                elem_par.values=reload_values[id_par]
+            else:
+                elem_par.values=[reload_values[id_par][0]]+elem_par.values[1:]
+
+            #reloading the frozen states
+            if load_frozen:
+                elem_par.frozen=reload_frozen[id_par]
+            else:
+                elem_par.frozen=elem_par_frozen
+
+            #reloading the link states
+            #this is the most risky part when reloading components from previous models
+            if load_links:
+                elem_par.links=reload_links[id_par]
+            else:
+                elem_par.link=elem_par_link
 
 ####Plot commands
 '''Plot commands'''

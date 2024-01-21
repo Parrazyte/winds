@@ -411,7 +411,8 @@ if update_dump or not os.path.isfile(dump_path):
         Edd_factor=dist_factor/(1.26e38*mass_obj_list)
         
         #Reading the results files
-        observ_list,lineval_list,lum_list,date_list,instru_list,exptime_list=obj_values(lineval_files,Edd_factor,dict_linevis)
+        observ_list,lineval_list,lum_list,date_list,instru_list,exptime_list,\
+            fitmod_broadband_list=obj_values(lineval_files,Edd_factor,dict_linevis)
 
         #the values here are for each observation
         abslines_infos,autofit_infos=abslines_values(abslines_files,dict_linevis)
@@ -484,6 +485,8 @@ if update_dump or not os.path.isfile(dump_path):
         dump_dict['lc_int_sw_dict']=lc_int_sw_dict
         dump_dict['fit_int_revol_dict']=fit_int_revol_dict
 
+        dump_dict['fitmod_broadband_list']=fitmod_broadband_list
+
         with open(dump_path,'wb+') as dump_file:
             dill.dump(dump_dict,file=dump_file)
    
@@ -515,6 +518,7 @@ dict_lc_rxte=dump_dict['dict_lc_rxte']
 lc_int_sw_dict=dump_dict['lc_int_sw_dict']
 fit_int_revol_dict=dump_dict['fit_int_revol_dict']
 
+fitmod_broadband_list=dump_dict['fitmod_broadband_list']
 
 '''
 # in the abslines_infos_perline form, the order is:
@@ -944,9 +948,10 @@ delta_1y=TimeDelta(365,format='jd')
 delta_1m=TimeDelta(30,format='jd')
 delta_1w=TimeDelta(7,format='jd')
 delta_1h=TimeDelta(3600,format='sec')
+delta_1s=TimeDelta(1,format='sec')
 if restrict_time:
 
-    slider_date=st.slider('Dates restriction',min_value=(Time(min(ravel_ragged(date_list[mask_obj_base])))-\
+    slider_date_coarse=st.slider('Dates restriction',min_value=(Time(min(ravel_ragged(date_list[mask_obj_base])))-\
                                                          (delta_1y if use_obsids else delta_1m)).datetime,
                           max_value=max((Time(max(ravel_ragged(date_list[mask_obj_base])))+\
                                          (delta_1y if use_obsids else delta_1m)),
@@ -957,8 +962,24 @@ if restrict_time:
                                  (Time(max(ravel_ragged(date_list[mask_obj_base])))+ \
                                   (delta_1m if use_obsids else delta_1w)).datetime],
                           step=delta_1h.datetime,
-                          format='YYYY-MM-DD HH:MM:SS')
+                          format='YYYY-MM-DD HH:MM:ss')
 
+    fine_restrict_dates=st.toggle('Fine Dates restriction')
+
+    if fine_restrict_dates:
+        fine_range=slider_date_coarse[1]-slider_date_coarse[0]
+        fine_delta=delta_1s.datetime*60
+        fine_range_split=fine_range//fine_delta
+        slider_date_fine=st.select_slider('Fine Dates restriction',
+                                          options=[slider_date_coarse[0]+fine_delta*i for i in range(fine_range_split+1)],
+                                   # max_value=slider_date_coarse[1],
+                                   value=[slider_date_coarse[0],slider_date_coarse[1]],)
+                        # step=TimeDelta(60,format='sec').datetime,
+                        # format_func = 'YYYY-MM-DD HH:MM:ss')
+        slider_date=slider_date_fine
+
+    else:
+        slider_date=slider_date_coarse
     # slider_date=st.slider('Dates restriction',min_value=(Time(min(ravel_ragged(date_list[mask_obj_base])))-delta_1y).datetime,
     #                       max_value=max((Time(max(ravel_ragged(date_list[mask_obj_base])))+delta_1y),
     #                                 Time(str(date.today()))).datetime,
@@ -2263,7 +2284,7 @@ with st.sidebar.expander('Parameter analysis'):
     use_time='Time (Observation)' in display_param
     use_lineflux='Line flux (Line)' in display_param
     
-    compute_correl=st.toggle('Compute Pearson/Spearman for the scatter plots',value=True)
+    compute_correl=st.toggle('Compute Pearson/Spearman for the scatter plots',value=False)
     display_pearson=st.toggle('Display Pearson rank',value=False)
     st.header('Visualisation')
     radio_color_scatter=st.radio('Scatter plot color options:',('None','Source','Instrument','Time','HR','width','nH'),index=1)
@@ -2651,7 +2672,6 @@ if not (display_scat_intr or display_scat_eqwcomp or display_scat_hid or display
         st.info('Select parameters to compare or enable distributions to generate plots')
 
 if display_single and choice_source[0]=='4U1630-47' and plot_gamma_correl:
-
 
     # integral gamma
     mask_int_ok=~np.isnan(int_lc_df['RATE_30.0-50.0'])

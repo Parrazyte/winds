@@ -1090,6 +1090,7 @@ def obj_values(file_paths,E_factors,dict_linevis):
     date_list=np.array([None]*len(obj_list))
     instru_list=np.array([None]*len(obj_list))
     exptime_list=np.array([None]*len(obj_list))
+    fitmod_broadband_list=np.array([None]*len(obj_list))
     # ind_links=np.array([None]*len(obj_list))
 
     for i in range(len(obj_list)):
@@ -1169,14 +1170,66 @@ def obj_values(file_paths,E_factors,dict_linevis):
         curr_date_list=np.array([None]*len(obs_list[i]))
         curr_instru_list=np.array([None]*len(obs_list[i]))
         curr_exptime_list=np.array([None]*len(obs_list[i]))
+        curr_fitmod_broadband_list=np.array([None]*len(obs_list[i]))
         #fetching spectrum informations
         
         if visual_line:
+
+            '''
+            importing xspec while online can be very complicated, so we only import it here to make the dumps
+            The dumps will never be made online so that there shouldn't be a problem
             
+            
+            Note that xspec still needs to be imported to load the pickles, but we give the results in arrays
+            so that the visual_line dumps don't need it afterwards
+            '''
+            from xspec_config_multisp import load_fitmod,parse_xlog
+
             for i_obs,obs in enumerate(obs_list[i]):
 
                 lineval_path=lineval_paths_arr[i_obs]
+
+                #the path+ obs prefix for all the stored files in the lineplots_X folders
+                obs_path_prefix=lineval_path[:lineval_path.rfind('/')+1]+obs
+
+                '''
+                Here, we need both the txt for the main values and the fitmod for the errors stored in the
+                .errors method
                 
+                Extremely inneficient but this should work for everything
+                
+                Note that since we take the values and the errors from the broadband fits, the errors are not
+                from a chain
+                '''
+
+                txtmod_path=obs_path_prefix+'_mod_broadband_post_auto.txt'
+
+                #safeguard for the few nustar runs where I deleted the products by mistake
+                if os.path.isfile(txtmod_path):
+
+                    with open(txtmod_path) as txt_file:
+                        txt_lines=txt_file.readlines()
+
+                    #fetching the main values of the parameters
+                    mainmod_mainpars=parse_xlog(txt_lines,return_pars=True)[0]
+
+                    fitmod_path=obs_path_prefix+'_fitmod_broadband_post_auto.pkl'
+
+                    assert os.path.isfile(fitmod_path),'broadband_post_auto fitmod missing'
+
+                    #storing the post_hid fitmod to have access to the full model
+                    elem_fitmod=load_fitmod(fitmod_path)
+
+                    #errors ravelled on the datagroup dimension to make things easier
+                    elem_fitmod_errors=[subelem.tolist() for elem in elem_fitmod.errors for subelem in elem]
+
+                    #creating a dictionnary of all component names and asociated parameter values
+                    comp_par_fitmod_broadband_dict={comp.compname:[[mainmod_mainpars[i_par-1]]+elem_fitmod_errors[i_par-1]\
+                                                             for i_par in comp.parlist] for comp in\
+                                              [elem for elem in elem_fitmod.includedlist if elem is not None]}
+
+                    curr_fitmod_broadband_list[i_obs]=comp_par_fitmod_broadband_dict
+
                 if len(obs.split('_'))<=1:
                     
                     if 'source' in obs.split('_')[0]:
@@ -1203,7 +1256,13 @@ def obj_values(file_paths,E_factors,dict_linevis):
 
                         assert len(summary_obs_line)==1, 'Error in observation summary matching'
 
-                        epoch_obs_list=expand_epoch(literal_eval(summary_obs_line[0].split('\t')[0]))
+                        epoch_tab=summary_obs_line[0].split('\t')[0]
+                        # note: this is for backward compatiblity with old NICER reduction without gti-level split
+                        if '[' not in epoch_tab:
+                            epoch_obs_list=[epoch_tab]
+                        else:
+                            epoch_obs_list=expand_epoch(literal_eval(summary_obs_line[0].split('\t')[0]))
+
                         epoch_sp_list=[elem+'_sp_grp_opt.pha' for elem in epoch_obs_list]
 
     
@@ -1288,6 +1347,7 @@ def obj_values(file_paths,E_factors,dict_linevis):
         date_list[i]=curr_date_list
         instru_list[i]=curr_instru_list
         exptime_list[i]=curr_exptime_list
+        fitmod_broadband_list[i]=curr_fitmod_broadband_list
         # ind_links[i]=os.path.join(os.getcwd(),obj_dir)+'/'+np.array(obs_list[i])+'_recap.pdf'
     
     if multi_obj:
@@ -1295,7 +1355,7 @@ def obj_values(file_paths,E_factors,dict_linevis):
     else:
          l_list=np.array([elem for elem in l_list])
     
-    return obs_list,lval_list,l_list,date_list,instru_list,exptime_list
+    return obs_list,lval_list,l_list,date_list,instru_list,exptime_list,fitmod_broadband_list
 
 #@st.cache_data
 def abslines_values(file_paths,dict_linevis,only_abs=False,obsid=None):

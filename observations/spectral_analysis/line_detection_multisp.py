@@ -84,6 +84,8 @@ import os,sys
 import glob
 import argparse
 import re as re
+import time
+
 
 import numpy as np
 
@@ -159,7 +161,7 @@ ap = argparse.ArgumentParser(description='Script to perform line detection in X-
 
 '''GENERAL OPTIONS'''
 
-ap.add_argument('-satellite',nargs=1,help='telescope to fetch spectra from',default='multi',type=str)
+ap.add_argument('-satellite',nargs=1,help='telescope to fetch spectra from',default='NuSTAR',type=str)
 
 #used for NICER and multi for now
 ap.add_argument('-group_max_timedelta',nargs=1,
@@ -217,7 +219,7 @@ ap.add_argument('-xspec_window',nargs=1,help='xspec window id (auto tries to pic
 '''MODELS'''
 #### Models and abslines lock
 ap.add_argument('-cont_model',nargs=1,help='model list to use for the autofit computation',
-                default='nthcont_detailed',type=str)
+                default='nthcont_NuSTAR',type=str)
 
 ap.add_argument('-autofit_model',nargs=1,help='model list to use for the autofit computation',
                 default='lines_narrow',type=str)
@@ -239,7 +241,7 @@ ap.add_argument("-h_update",nargs=1,help='update the bg, rmf and arf file names 
 #this will prevent new analysis and can help for merged folders
 ap.add_argument('-rewind_epoch_list',nargs=1,
                 help='only uses the epoch already existing in the summary file instead of scanning',
-                default=False,type=bool)
+                default=True,type=bool)
 
 ap.add_argument('-spread_comput',nargs=1,
                 help='spread sources in N subsamples to poorly parallelize on different consoles',
@@ -273,7 +275,7 @@ NICER no abslines: 4130010128-001_4130010129-001
 
 '''
 ap.add_argument('-force_epochs',nargs=1,help='force epochs to given set of spectra instead of auto matching',
-                default=True,type=bool)
+                default=False,type=bool)
 
 
 force_epochs_str=\
@@ -375,10 +377,10 @@ ap.add_argument('-split_fit',nargs=1,
 #line significance assessment parameter
 ap.add_argument('-assess_line',nargs=1,
                 help='use fakeit simulations to estimate the significance of each absorption line',
-                default=False,type=bool)
+                default=True,type=bool)
 
 ap.add_argument('-assess_line_upper',nargs=1,help='compute upper limits of each absorption line',
-                default=False,type=bool)
+                default=True,type=bool)
 
 
 '''SPECTRUM PARAMETERS'''
@@ -1932,6 +1934,18 @@ def line_detect(epoch_id):
 
     curr_logfile=open(curr_logfile_write.name,'r')
 
+    def print_xlog(string,logfile_write=curr_logfile_write):
+
+        '''
+        prints and logs info in the xspec log file, and flushed to ensure the logs are printed before the next xspec print
+        '''
+        print(string)
+        logfile_write.write(time.asctime()+'\n')
+        logfile_write.write(string)
+        #adding a line for lisibility
+        logfile_write.write('\n')
+        logfile_write.flush()
+
     #list containing the epoch files rejected by the test
     epoch_files_good=[]
     sat_indiv_good=[]
@@ -1955,10 +1969,10 @@ def line_detect(epoch_id):
             except:
                 try:
                     curr_spec=Spectrum(elem_sp,backfile=None)
-                    print('\nLoaded the spectrum '+elem_sp+' with no background')
+                    print_xlog('\nLoaded the spectrum '+elem_sp+' with no background')
                     bg_off_flag=True
                 except:
-                    print("\nCouldn't load the spectrum "+elem_sp+"  with Xspec. Negative exposure time can cause this. Skipping the spectrum...")
+                    print_xlog("\nCouldn't load the spectrum "+elem_sp+"  with Xspec. Negative exposure time can cause this. Skipping the spectrum...")
                     epoch_result[i_sp]="Couldn't load the spectrum with Xspec."
                     continue
 
@@ -1971,7 +1985,7 @@ def line_detect(epoch_id):
 
             #checking if the spectrum is empty after ignoring outside of the broad interval
             if curr_spec.rate[0]==0:
-                    print("\nSpectrum "+elem_sp+" empty in the ["+str(e_sat_low_indiv_init[i_sp])+"-"+str(e_sat_high_indiv_init[i_sp])+"] keV range. Skipping the spectrum...")
+                    print_xlog("\nSpectrum "+elem_sp+" empty in the ["+str(e_sat_low_indiv_init[i_sp])+"-"+str(e_sat_high_indiv_init[i_sp])+"] keV range. Skipping the spectrum...")
                     epoch_result[i_sp]="Spectrum empty in the ["+str(e_sat_low_indiv_init[i_sp])+"-"+str(e_sat_high_indiv_init[i_sp])+"]keV range."
                     continue
             else:
@@ -1986,18 +2000,18 @@ def line_detect(epoch_id):
                 pileup_lines=fits.open(epoch_observ[i_sp]+'_sp_src.ds')[0].header['PILE-UP'].split(',')
                 pileup_value=pileup_val(pileup_lines[-1])
                 if pileup_value>pileup_lim:
-                    print('\nPile-up value for spectrum '+elem_sp+' above the given limit of '+str(round(100*pileup_lim,1))+
+                    print_xlog('\nPile-up value for spectrum '+elem_sp+' above the given limit of '+str(round(100*pileup_lim,1))+
                           '%. Skipping the spectrum...')
                     epoch_result[i_sp]='Pile-up above the given limit ('+str(round(100*pileup_lim,1))+'%).'
                     continue
                 else:
-                    print('\nPile-up value for spectrum '+elem_sp+' OK.')
+                    print_xlog('\nPile-up value for spectrum '+elem_sp+' OK.')
 
             except:
-                print('\nNo pile-up information available for spectrum '+elem_sp)
+                print_xlog('\nNo pile-up information available for spectrum '+elem_sp)
                 pileup_value=-1
                 if pileup_missing==False:
-                    print('\nSkipping the spectrum...')
+                    print_xlog('\nSkipping the spectrum...')
                     epoch_result[i_sp]='No pile-up info available'
                     continue
 
@@ -2023,7 +2037,7 @@ def line_detect(epoch_id):
 
                 #now we can compare to the standard rates
                 if curr_spec.rate[1]/(bg_rad)**2>max_bg_imaging*bg_blank:
-                    print('\nIntense background detected, probably contaminated by the source. Unloading it to avoid affecting the source...')
+                    print_xlog('\nIntense background detected, probably contaminated by the source. Unloading it to avoid affecting the source...')
                     bg_off_flag=True
 
             '''unloading timing backgrounds'''
@@ -2049,7 +2063,7 @@ def line_detect(epoch_id):
                     regex_lines=regex_file.readlines()
                     curr_SNR=float(regex_lines[3].split('\t')[1])
                 if curr_SNR<SNR_min:
-                    print('\nSpectrum  '+elem_sp+' Signal to Noise Ratio below the limit. Skipping the spectrum ...')
+                    print_xlog('\nSpectrum  '+elem_sp+' Signal to Noise Ratio below the limit. Skipping the spectrum ...')
                     epoch_result[i_sp]='Spectrum SNR below the limit ('+str(SNR_min)+')'
                     continue
 
@@ -2197,14 +2211,14 @@ def line_detect(epoch_id):
     if glob_counts<counts_min:
         flag_lowSNR_line=True
         if not fit_lowSNR:
-            print('\nInsufficient net counts ('+str(round(glob_counts))+' < '+str(round(counts_min))+
+            print_xlog('\nInsufficient net counts ('+str(round(glob_counts))+' < '+str(round(counts_min))+
                   ') in line detection range.')
             return fill_result('Insufficient net counts ('+str(round(glob_counts))+' < '+str(round(counts_min))+\
                                ') in line detection range.')
 
     elif SNR<50:
         if not fit_lowSNR:
-            print('\nInsufficient SNR ('+str(round(SNR,1))+'<50) in line detection range.')
+            print_xlog('\nInsufficient SNR ('+str(round(SNR,1))+'<50) in line detection range.')
             return fill_result('Insufficient SNR ('+str(round(SNR,1))+'<50) in line detection range.')
     else:
         flag_lowSNR_line=False
@@ -2224,7 +2238,7 @@ def line_detect(epoch_id):
         indiv_counts+=[round(AllData(i_grp).rate[2]*AllData(i_grp).exposure)]
         glob_counts+=indiv_counts[-1]
     if glob_counts<counts_min_HID:
-        print('\nInsufficient counts ('+str(round(glob_counts))+' < '+str(round(counts_min_HID))+
+        print_xlog('\nInsufficient counts ('+str(round(glob_counts))+' < '+str(round(counts_min_HID))+
               ') in HID detection range.')
         return fill_result('Insufficient counts ('+str(round(glob_counts))+' < '+str(round(counts_min_HID))+\
                            ') in HID detection range.')
@@ -2255,7 +2269,7 @@ def line_detect(epoch_id):
                 #storing the final value
                 e_sat_high_indiv[i_exp]=79. if not SNR_low else val_keV
 
-                print('High energy limit of exposure '+str(i_exp+1)+' fixed to '+str(e_sat_high_indiv[i_exp])+
+                print_xlog('High energy limit of exposure '+str(i_exp+1)+' fixed to '+str(e_sat_high_indiv[i_exp])+
                       ' keV with a SNR limit of '+str(filter_NuSTAR_SNR))
 
 
@@ -2568,7 +2582,7 @@ def line_detect(epoch_id):
     #reload previously stored autofits to gain time if asked to
     if reload_autofit and os.path.isfile(outdir+'/'+epoch_observ[0]+'_fitmod_autofit.pkl'):
 
-        print('completed autofit detected...Reloading computation.')
+        print_xlog('completed autofit detected...Reloading computation.')
         #reloading the broad band fit and model and re-storing associed variables
         fitlines_broad=load_fitmod(outdir + '/' + epoch_observ[0] + '_fitmod_broadband_post_auto.pkl')
         Xset.restore(outdir+'/'+epoch_observ[0]+'_mod_broadband_post_auto.xcm')
@@ -2668,7 +2682,7 @@ def line_detect(epoch_id):
             AllModels.clear()
             xscorpeon.load(scorpeon_save=data_broad.scorpeon,frozen=True)
 
-            print('\nComputing line continuum fit...')
+            print_xlog('\nComputing line continuum fit...')
 
             #limiting to the line search energy range
             ignore_data_indiv(line_cont_range[0], line_cont_range[1], reset=True, sat_low_groups=e_sat_low_indiv,
@@ -2724,7 +2738,7 @@ def line_detect(epoch_id):
 
             if chi2_cont==0 and chi2_cont_bkn==0:
 
-                print('\nProblem during line continuum fit. Skipping line detection for this exposure...')
+                print_xlog('\nProblem during line continuum fit. Skipping line detection for this exposure...')
                 return ['\nProblem during line continuum fit. Skipping line detection for this exposure...']
             # else:
             #     if chi2_cont<chi2_cont_bkn:
@@ -2769,7 +2783,7 @@ def line_detect(epoch_id):
             '''Broad band fit to get the HR ratio and Luminosity'''
 
             #first broad band fit in e_sat_low-10 to see the spectral shape
-            print('\nComputing broad band fit for visualisation purposes...')
+            print_xlog('\nComputing broad band fit for visualisation purposes...')
 
             ignore_data_indiv(e_sat_low_indiv, e_sat_high_indiv, reset=True, glob_ignore_bands=ignore_bands_indiv)
 
@@ -2811,7 +2825,7 @@ def line_detect(epoch_id):
 
             if chi2_cont==0 and chi2_cont_bkn==0:
 
-                print('\nProblem during broad band fit. Skipping line detection for this exposure...')
+                print_xlog('\nProblem during broad band fit. Skipping line detection for this exposure...')
                 return ['\nProblem during broad band fit. Skipping line detection for this exposure...']
             # else:
             #     if chi2_cont<chi2_cont_bkn:
@@ -2844,7 +2858,7 @@ def line_detect(epoch_id):
 
             #saving the model
             data_broad=allmodel_data()
-            print('\nComputing HID broad fit...')
+            print_xlog('\nComputing HID broad fit...')
 
             for i_sp in range(len(epoch_files_good)):
                 if line_cont_ig_indiv[i_sp] != '':
@@ -2893,7 +2907,7 @@ def line_detect(epoch_id):
 
             if chi2_cont==0:
 
-                print('\nProblem during hid band fit. Skipping line detection for this exposure...')
+                print_xlog('\nProblem during hid band fit. Skipping line detection for this exposure...')
                 return ['\nProblem during hid band fit. Skipping line detection for this exposure...']
 
             spflux_single=hid_fit_infos(fitcont_hid,broad_absval)
@@ -2937,7 +2951,7 @@ def line_detect(epoch_id):
         Plot.commands=()
         Plot.addCommand('rescale')
 
-        print('\nStarting line search...')
+        print_xlog('\nStarting line search...')
 
         cont_abspeak,cont_peak_points,cont_peak_widths,cont_peak_delchis,cont_peak_eqws,chi_dict_init=\
             narrow_line_search(data_mod_high,'cont',line_search_e=line_search_e,line_search_norm=line_search_norm,
@@ -3285,7 +3299,7 @@ def line_detect(epoch_id):
         #drawing parameters for the MC significance test later
         autofit_drawpars=np.array([None]*nfakes)
 
-        print('\nDrawing parameters from the Chain...')
+        print_xlog('\nDrawing parameters from the Chain...')
         for i_draw in range(nfakes):
 
             curr_simpar=AllModels.simpars()
@@ -3301,7 +3315,7 @@ def line_detect(epoch_id):
         #storing the parameter and errors of all the components, as well as their corresponding name
         autofit_parerrors,autofit_parnames=fitlines.get_usedpars_vals()
 
-        print('\nComputing informations from the fit...')
+        print_xlog('\nComputing informations from the fit...')
 
         #### Computing line parameters
 
@@ -3536,7 +3550,7 @@ def line_detect(epoch_id):
         By not giving an exposure, we assume the loaded spectra's exposures
         '''
 
-        print('\nCreating fake spectra to assess line significance...')
+        print_xlog('\nCreating fake spectra to assess line significance...')
 
         fakeset=[FakeitSettings(response='' if not isrmf_grp[i_grp-1] else AllData(i_grp).response.rmf,
                                 arf='' if not isarf_grp[i_grp-1] else AllData(i_grp).response.arf,
@@ -3595,7 +3609,7 @@ def line_detect(epoch_id):
             # attempting to reload the fake delchi arr if allowed
             if reload_fakes and os.path.isfile(outdir + '/' + epoch_observ[0] + '_delchi_arr_fake_line.npy'):
 
-                print('Complete fake computation detected. Reloading...')
+                print_xlog('Complete fake computation detected. Reloading...')
 
                 delchi_arr_fake_line=np.load(outdir + '/' + epoch_observ[0] + '_delchi_arr_fake_line.npy')
                 loaded_fakes=True
@@ -4364,8 +4378,13 @@ if reverse_epoch:
 
 #replacing epoch list by what's in the summary folder if asked to
 if rewind_epoch_list:
-    assert sat_glob=='NICER', 'rewind epoch list not implemented with sats other than NICER'
-    epoch_list=[[elem+'_sp_grp_opt.pha' for elem in expand_epoch(started_expos[i])] for i in range(len(started_expos))]
+    assert sat_glob in ['NICER','NuSTAR'], 'rewind epoch list not implemented with sats other than NICER'
+    if sat_glob=='NICER':
+        suffix_str='_sp_grp_opt.pha'
+    elif sat_glob=='NuSTAR':
+        suffix_str='_sp_src_grp_opt.pha'
+
+        epoch_list=[[elem+suffix_str for elem in expand_epoch(started_expos[i])] for i in range(len(started_expos))]
 
 #### line detections for exposure with a spectrum
 for epoch_id,epoch_files in enumerate(epoch_list):
@@ -4503,7 +4522,6 @@ for epoch_id,epoch_files in enumerate(epoch_list):
 assert spread_comput==1, 'Stopping the computation here to avoid conflicts when making the summary'
 
 breakpoint()
-
 if multi_obj==False:
     #loading the diagnostic messages after the analysis has been done
     if os.path.isfile(os.path.join(outdir,'summary_line_det.log')):

@@ -53,9 +53,9 @@ from astroquery.vizier import Vizier
 
 #visualisation functions
 from visual_line_tools import load_catalogs,dist_mass,obj_values,abslines_values,values_manip,distrib_graph,correl_graph,incl_dic,\
-    n_infos, plot_lightcurve, hid_graph, sources_det_dic, dippers_list,telescope_list,load_integral
+    n_infos, plot_lightcurve, hid_graph, sources_det_dic, dippers_list,telescope_list,load_integral,telescope_colors
 
-
+from lmplot_uncert import lmplot_uncert_a
 # import mpld3
 
 # import streamlit.components.v1 as components
@@ -269,6 +269,11 @@ else:
 
 use_orbit_obs_str='_indiv' if use_orbit_obs else ''
 
+#note: here the goal is to allow to have indiv_X individual lineplots directories that won't load
+#but let lineplots_opt_X directories free when not in orbit_mode
+use_orbit_obs_str_path=use_orbit_obs_str+'/'
+
+
 #We put the telescope option before anything else to filter which file will be used
 choice_telescope=st.sidebar.multiselect('Telescopes', ['NICER','NuSTAR'] if use_orbit_obs or use_time_resolved else\
                  (['XMM','Chandra']+([] if online else ['NICER','NuSTAR','Suzaku','Swift'])),
@@ -340,13 +345,15 @@ if update_dump or not os.path.isfile(dump_path):
         
         all_files=glob.glob('**',recursive=True)
         lineval_id='line_values_'+args.line_search_e.replace(' ','_')+'_'+args.line_search_norm.replace(' ','_')+'.txt'
-        lineval_files=[elem for elem in all_files if outdir+use_orbit_obs_str+'/' in elem and lineval_id in elem\
+        lineval_files=[elem for elem in all_files if outdir+use_orbit_obs_str_path in elem\
+                       and lineval_id in elem\
                        and ('/Sample/' in elem or 'XTEJ1701-462/' in elem)\
                        and ('/'+time_resolved_split+'s/' in elem if use_time_resolved else\
                             np.all(['/'+elem_split+'s/' not in elem for elem_split in time_resolved_split_avail]))]
 
         abslines_id='autofit_values_'+args.line_search_e.replace(' ','_')+'_'+args.line_search_norm.replace(' ','_')+'.txt'
-        abslines_files=[elem for elem in all_files if outdir+use_orbit_obs_str+'/' in elem and abslines_id in elem\
+        abslines_files=[elem for elem in all_files if outdir+use_orbit_obs_str_path in elem \
+                        and abslines_id in elem\
                         and ('/Sample/' in elem or 'XTEJ1701-462/' in elem) \
                         and ('/' + time_resolved_split + 's/' in elem if use_time_resolved else \
                                  np.all(['/' + elem_split + 's/' not in elem for elem_split in time_resolved_split_avail]))]
@@ -354,6 +361,8 @@ if update_dump or not os.path.isfile(dump_path):
         #telescope selection
         lineval_files=[elem for elem_telescope in choice_telescope for elem in lineval_files if elem_telescope+'/' in elem]
         abslines_files=[elem for elem_telescope in choice_telescope for elem in abslines_files if elem_telescope+'/' in elem]
+
+        #removing individual
 
         #removing multi if not asked for explicitely
         if 'multi' not in choice_telescope:
@@ -366,6 +375,7 @@ if update_dump or not os.path.isfile(dump_path):
 
         lineval_files=[elem for elem in lineval_files if outdir+'_old' not in elem]
         abslines_files = [elem for elem in abslines_files if outdir+'_old' not in elem]
+
         if radio_ignore_full:
             lineval_files=[elem for elem in lineval_files if '_full' not in elem]
             abslines_files=[elem for elem in abslines_files if '_full' not in elem]
@@ -548,7 +558,9 @@ line_display_str=np.array([r'FeXXV Ka (6.70 keV)',r'FeXXVI  Ka (6.97 keV)','NiXX
                       'FeXXV Kb (7.89 keV)','FeXXVI Kb (8.25 keV)','FeXXVI Kg (8.70 keV)'])
 
 if multi_obj:
-    radio_single=st.sidebar.radio('Display options:',('All Objects','Multiple Objects','Single Object'))
+    radio_single=st.sidebar.radio('Display options:',('All Objects','Multiple Objects','Single Object')
+                                  ,index=2 if 'NuSTAR' in choice_telescope or 'NICER' in choice_telescope or 'Suzaku'\
+                                   in choice_telescope else 0)
     
     if radio_single=='Single Object':
         display_single=True
@@ -570,7 +582,8 @@ if multi_obj:
 
     if display_single:
         #switching to array to keep the same syntax later on
-        choice_source=[st.sidebar.selectbox('Source',obj_list)]
+        choice_source=[st.sidebar.selectbox('Source',obj_list,index=0 if '4U1630-47' not in obj_list else\
+                                                              int(np.argwhere(obj_list=='4U1630-47')[0][0]))]
 
     #first mask here to limit the display of individual obs to exclude
     if display_single or display_multi:
@@ -735,6 +748,8 @@ if not online:
 
         
 with st.sidebar.expander('Visualisation'):
+
+    skip_HID=st.toggle('Skip HID computation',value=False)
     
     display_dicho=st.toggle('Display favourable zone',value=True)
     
@@ -1204,7 +1219,7 @@ dict_linevis['exptime_list'] = exptime_list
 
 if len(global_plotted_datetime)==0:
     st.warning('No points remaining with current sample/date selection')
-else:
+elif not skip_HID:
     hid_graph(ax_hid,dict_linevis,
               display_single=display_single, display_nondet=display_nondet, display_upper=display_upper,
               cyclic_cmap_nondet=cyclic_cmap_nondet, cyclic_cmap_det=cyclic_cmap_det, cyclic_cmap=cyclic_cmap,
@@ -1252,7 +1267,7 @@ with tab_hid:
 
                 broad_band_disp_ok=False
 
-        if broad_band_disp_ok:
+        if broad_band_disp_ok and not skip_HID:
 
             if not display_broad_hid_BAT:
                 st.info('Toggle BAT broad band HID option in the sidebar to display.')
@@ -1307,7 +1322,7 @@ with tab_hid:
 
                 broad_band_disp_ok=False
 
-        if broad_band_disp_ok:
+        if broad_band_disp_ok and not skip_HID:
 
             if not display_broad_hid_INT:
                 st.info('Toggle INTEGRAL broad band HID option in the sidebar to display.')
@@ -1885,6 +1900,7 @@ if display_single and choice_source[0]=='4U1630-47':
                                     for elem in int_lc_mjd])
 
     if sum(ravel_ragged(mask_intime_plot))>0:
+
         obs_dates = Time(np.array([date_list[mask_obj][0] for i in range(sum(mask_lines))]).astype(str)).mjd.astype(
             float)
 
@@ -2691,19 +2707,44 @@ if display_single and choice_source[0]=='4U1630-47' and plot_gamma_correl:
     from decimal import Decimal
 
     bat_lc_df = fetch_bat_lightcurve(catal_bat_df, catal_bat_simbad, choice_source, binning='day')
+    bat_lc_mjd = np.array(bat_lc_df[bat_lc_df.columns[0]])
 
     num_bat_dates =Time(bat_lc_df['TIME'], format='mjd').mjd
 
+    #for integral
     int_lc_mjd = np.array([Time(elem).mjd.astype(float) for elem in int_lc_df['ISOT']])
-
     int_lc_mjd_int=int_lc_mjd.astype(int)[mask_int_ok]
-
     mask_int_withbat=[elem in num_bat_dates for elem in int_lc_mjd_int]
-
     match_int_bat=np.array([np.argwhere(num_bat_dates==elem)[0][0] for elem in int_lc_mjd_int[mask_int_withbat]])
-
     count_bat_match_int=np.array(bat_lc_df[bat_lc_df.columns[1]][match_int_bat])
     count_bat_err_match_int=np.array(bat_lc_df[bat_lc_df.columns[2]][match_int_bat])
+
+    #for the rest
+    obs_dates = Time(date_list[mask_obj][0].astype(str)).mjd.astype(int)
+
+    mask_withtime_BAT = [elem in bat_lc_mjd for elem in obs_dates]
+
+    mask_NuSTAR=instru_list[mask_obj][0]=='NuSTAR'
+    mask_NuSTAR_withbat=(mask_NuSTAR) & (mask_withtime_BAT)
+    mask_Suzaku=instru_list[mask_obj][0]=='Suzaku'
+    mask_Suzaku_withbat=(mask_Suzaku) & (mask_withtime_BAT)
+
+    match_NuSTAR_bat=np.array([np.argwhere(bat_lc_mjd==elem)[0][0] for elem in obs_dates[mask_NuSTAR_withbat]])
+
+    match_Suzaku_bat=np.array([np.argwhere(bat_lc_mjd==elem)[0][0] for elem in obs_dates[mask_Suzaku_withbat]])
+
+    #note that the second dimension is a len 3 array with errors included
+    obs_gamma=np.array([np.repeat(np.nan,3) if elem is None or \
+                            'disk_nthcomp' not in list(elem.keys()) and 'cont_powerlaw' not in list(elem.keys()) else \
+                        elem['disk_nthcomp'][0] if 'disk_nthcomp' in list(elem.keys()) else \
+                           elem['cont_powerlaw'][0]\
+               for elem in fitmod_broadband_list[mask_obj][0]])[mask_included_selection[mask_obj][0]]
+
+    count_bat_match_NuSTAR=np.array(bat_lc_df[bat_lc_df.columns[1]][match_NuSTAR_bat])
+    count_bat_err_match_NuSTAR=np.array(bat_lc_df[bat_lc_df.columns[2]][match_NuSTAR_bat])
+
+    count_bat_match_Suzaku=np.array(bat_lc_df[bat_lc_df.columns[1]][match_Suzaku_bat])
+    count_bat_err_match_Suzaku=np.array(bat_lc_df[bat_lc_df.columns[2]][match_Suzaku_bat])
 
     #gamma-BAT rate figure
     fig_gamma_bat,ax_gamma_bat=plt.subplots(figsize=(6,6))
@@ -2713,17 +2754,37 @@ if display_single and choice_source[0]=='4U1630-47' and plot_gamma_correl:
     ax_gamma_bat.set_xlabel('powerlaw index')
     ax_gamma_bat.set_ylabel('BAT 15-50 keV rate')
 
-    #setting up alpha for the colors
+    #setting up alpha for the colors depending on the uncertainty of the integral gamma
     int_fit_gamma_alpha=abs(int_fit_gamma[mask_int_withbat]/int_fit_gamma_err.T[mask_int_withbat].T.max(0))
     int_fit_gamma_alpha = np.array([0.0001 if elem == np.inf else elem for elem in int_fit_gamma_alpha])
     int_fit_gamma_alpha = int_fit_gamma_alpha / max(int_fit_gamma_alpha)
     i_max_alpha_gamma=np.argmax(int_fit_gamma_alpha)
 
+    #NuSTAR errorbar
+    ax_gamma_bat.errorbar(obs_gamma[mask_NuSTAR_withbat].T[0].T,count_bat_match_NuSTAR,
+                          xerr=np.array([obs_gamma[mask_NuSTAR_withbat].T[1].T,
+                                         obs_gamma[mask_NuSTAR_withbat].T[2].T]),
+                          yerr=count_bat_err_match_NuSTAR,
+                          alpha=1,
+                          label='NuSTAR', color=telescope_colors['NuSTAR'], ls='')
+
+    #Suzaku errorbar
+    ax_gamma_bat.errorbar(obs_gamma[mask_Suzaku_withbat].T[0].T,count_bat_match_Suzaku,
+                          xerr=np.array([obs_gamma[mask_Suzaku_withbat].T[1].T,
+                                         obs_gamma[mask_Suzaku_withbat].T[2].T]),
+                          yerr=count_bat_err_match_Suzaku,
+                          alpha=1,
+                          label='Suzaku', color=telescope_colors['Suzaku'], ls='')
+
+    #integral errorbar
+    int_gamma_err=np.array([[[int_fit_gamma_err.T[mask_int_withbat][i_int_withbat].T[0]],
+                                             [int_fit_gamma_err.T[mask_int_withbat][i_int_withbat].T[1]]]\
+                           for i_int_withbat in range(sum(mask_int_withbat))])
+
     for i_int_withbat in range(sum(mask_int_withbat)):
         ax_gamma_bat.errorbar(int_fit_gamma[mask_int_withbat][i_int_withbat],
                               count_bat_match_int[i_int_withbat],
-                              xerr=np.array([[int_fit_gamma_err.T[mask_int_withbat][i_int_withbat].T[0]],
-                                             [int_fit_gamma_err.T[mask_int_withbat][i_int_withbat].T[1]]]),
+                              xerr=int_gamma_err[i_int_withbat],
                               yerr=count_bat_err_match_int[i_int_withbat],
                               alpha=int_fit_gamma_alpha[i_int_withbat],
                               label='integral' if i_int_withbat==i_max_alpha_gamma else '',color='black',ls='')
@@ -2742,6 +2803,15 @@ if display_single and choice_source[0]=='4U1630-47' and plot_gamma_correl:
     str_spearman_gamma_bat = r'$r_S \,=' + str(round(r_spearman_gamma_bat[0][0], 2)) +\
                    '$\n$p_S=' + '%.1e' % Decimal(r_spearman_gamma_bat[1][0]) + '$'
 
+    #computing the linear regression
+    # linreg=lmplot_uncert_a(ax_gamma_bat,int_fit_gamma[mask_int_withbat],np.log10(count_bat_match_int),
+    #                        int_gamma_err.T[0],count_bat_err_match_int,
+    #                        xlim=None,ylim=None, percent=90, nsim=100,
+    #                 intercept_pos='auto',
+    #                 return_linreg=True, infer_log_scale=False,nanzero_err=True,
+    #                 error_percent=90,
+    #                 xbounds=None,ybounds=None,
+    #                 line_color='blue',lw=1.3, inter_color='lightgrey')
 
     ax_gamma_bat.legend(fontsize=10,title=str_spearman_gamma_bat)
     fig_gamma_bat.tight_layout()
@@ -2766,7 +2836,7 @@ if display_single and choice_source[0]=='4U1630-47' and plot_gamma_correl:
                 xerr=np.array([[int_fit_gamma_err.T[i_revol].T[0]],[int_fit_gamma_err.T[i_revol].T[1]]]),
                 yerr=int_fit_flux_err[i_revol],color='black',alpha=int_fit_flux_alpha[i_revol],
                 label='integral' if i_revol==i_max_alpha_flux else '',ls='')
-        
+
     r_spearman_gamma_flux= np.array(pymccorrelation(int_fit_gamma, int_fit_flux,
                                           dx=int_fit_gamma_err.T,
                                           dy=int_fit_flux_err,
@@ -2786,9 +2856,10 @@ if display_single and choice_source[0]=='4U1630-47' and plot_gamma_correl:
 
     fig_gamma_flux.tight_layout()
 
-    with st.expander('High energy correlations'):
-        he_cols= st.columns(3)
-        with he_cols[0]:
-            st.pyplot(fig_gamma_bat)
-        with he_cols[1]:
-            st.pyplot(fig_gamma_flux)
+    with tab_param:
+        with st.expander('High energy correlations'):
+            he_cols= st.columns(3)
+            with he_cols[0]:
+                st.pyplot(fig_gamma_bat)
+            with he_cols[1]:
+                st.pyplot(fig_gamma_flux)

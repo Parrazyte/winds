@@ -1218,14 +1218,68 @@ def obj_values(file_paths,E_factors,dict_linevis):
                     assert os.path.isfile(fitmod_path),'broadband_post_auto fitmod missing'
 
                     #storing the post_hid fitmod to have access to the full model
-                    elem_fitmod=load_fitmod(fitmod_path)
+                    #note that the last directory has to be unchanged since the save otherwise there's a
+                    #logfile trace somewhere who's crashing
+
+                    try:
+                        elem_fitmod=load_fitmod(fitmod_path)
+                    except:
+
+                        print('logfile bug in '+fitmod_path)
+                        print('fixing...')
+                        #Annoying bug when at some point the continuum fitmod was saved in the autofit with the
+                        # io of the first xspec log still on it. This needs to be cleaned otherwise they can only load
+                        # in the directory where they were created and if this file exists
+
+                        currdir=os.getcwd()
+
+                        os.chdir('/'.join(fitmod_path.split('/')[:-2]))
+
+                        try:
+                            elem_fitmod=load_fitmod('/'.join(fitmod_path.split('/')[-2:]))
+                        except:
+                            breakpoint()
+                            print("if xspec is imported that shouldn't happen, need to investigate")
+
+                        from xspec import Xset
+                        #we also need to restore the data to resave the fitmod afterwards
+
+                        Xset.restore('/'.join(fitmod_path.split('/')[-2:]).replace('fitmod','mod').replace('.pkl','.xcm'))
+
+                        #updating the component fitmod
+                        for elem_comp in elem_fitmod.complist:
+                            elem_comp.fitmod=elem_fitmod
+
+                        #and resaving
+                        elem_fitmod.dump('/'.join(fitmod_path.split('/')[-2:]))
+
+                        #returning to the current directory
+                        os.chdir(currdir)
+
+                        #and reloading the fitmod
+                        elem_fitmod=load_fitmod(fitmod_path)
 
                     #errors ravelled on the datagroup dimension to make things easier
                     elem_fitmod_errors=[subelem.tolist() for elem in elem_fitmod.errors for subelem in elem]
 
+                    '''
+                    There's two "wrong" xspec errors to readjust:
+                    The upper error can appear as a negative value (the main val) it's pegged
+                    The lower error can be equal the main value  when it' pegged at 1 
+                    We need to correct for both so we edit the array directly
+                    '''
+
+                    tot_error_arr=np.array([[mainmod_mainpars[i_par]]+elem_fitmod_errors[i_par]\
+                                           for i_par in range(len(mainmod_mainpars))]).T
+
+                    tot_error_arr[1]=np.where(tot_error_arr[0]==tot_error_arr[1],0,tot_error_arr[1])
+                    tot_error_arr[2]=tot_error_arr[2].clip(0)
+
+                    tot_error_arr=tot_error_arr.T
+
                     #creating a dictionnary of all component names and asociated parameter values
-                    comp_par_fitmod_broadband_dict={comp.compname:[[mainmod_mainpars[i_par-1]]+elem_fitmod_errors[i_par-1]\
-                                                             for i_par in comp.parlist] for comp in\
+                    #note that we offset the parlist per 1 to get back to parameters ids
+                    comp_par_fitmod_broadband_dict={comp.compname:tot_error_arr[np.array(comp.parlist)-1] for comp in\
                                               [elem for elem in elem_fitmod.includedlist if elem is not None]}
 
                     curr_fitmod_broadband_list[i_obs]=comp_par_fitmod_broadband_dict
@@ -1354,7 +1408,7 @@ def obj_values(file_paths,E_factors,dict_linevis):
         l_list=np.array([elem for elem in l_list],dtype=object)
     else:
          l_list=np.array([elem for elem in l_list])
-    
+
     return obs_list,lval_list,l_list,date_list,instru_list,exptime_list,fitmod_broadband_list
 
 #@st.cache_data
@@ -2384,7 +2438,7 @@ def hid_graph(ax_hid,dict_linevis,
 
         if radio_info_cmap == 'Instrument':
             color_instru = [telescope_colors[elem] for elem in
-                            instru_list[mask_obj][i_obj][obj_val_mask_sign][obj_order_sign]]
+                        instru_list[mask_obj][i_obj][obj_val_mask_sign][obj_order_sign]]
 
             if display_nonsign:
                 color_instru_nonsign = [telescope_colors[elem] for elem in

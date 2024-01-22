@@ -161,7 +161,7 @@ ap = argparse.ArgumentParser(description='Script to perform line detection in X-
 
 '''GENERAL OPTIONS'''
 
-ap.add_argument('-satellite',nargs=1,help='telescope to fetch spectra from',default='NuSTAR',type=str)
+ap.add_argument('-satellite',nargs=1,help='telescope to fetch spectra from',default='multi',type=str)
 
 #used for NICER and multi for now
 ap.add_argument('-group_max_timedelta',nargs=1,
@@ -183,7 +183,7 @@ ap.add_argument("-prefix",nargs=1,help='restrict analysis to a specific prefix',
 
 ####output directory
 ap.add_argument("-outdir",nargs=1,help="name of output directory for line plots",
-                default="lineplots_opt_nth",type=str)
+                default="lineplots_opt",type=str)
 
 #overwrite
 #global overwrite based on recap PDF
@@ -193,7 +193,7 @@ ap.add_argument('-overwrite',nargs=1,
 
 #note : will skip exposures for which the exposure didn't compute or with logged errors
 ap.add_argument('-skip_started',nargs=1,help='skip all exposures listed in the local summary_line_det file',
-                default=False,type=bool)
+                default=True,type=bool)
 
 ap.add_argument('-skip_complete',nargs=1,help='skip completed exposures listed in the local summary_line_det file',
                 default=False,type=bool)
@@ -219,7 +219,7 @@ ap.add_argument('-xspec_window',nargs=1,help='xspec window id (auto tries to pic
 '''MODELS'''
 #### Models and abslines lock
 ap.add_argument('-cont_model',nargs=1,help='model list to use for the autofit computation',
-                default='nthcont_NuSTAR',type=str)
+                default='nthcont_detailed',type=str)
 
 ap.add_argument('-autofit_model',nargs=1,help='model list to use for the autofit computation',
                 default='lines_narrow',type=str)
@@ -241,7 +241,7 @@ ap.add_argument("-h_update",nargs=1,help='update the bg, rmf and arf file names 
 #this will prevent new analysis and can help for merged folders
 ap.add_argument('-rewind_epoch_list',nargs=1,
                 help='only uses the epoch already existing in the summary file instead of scanning',
-                default=True,type=bool)
+                default=False,type=bool)
 
 ap.add_argument('-spread_comput',nargs=1,
                 help='spread sources in N subsamples to poorly parallelize on different consoles',
@@ -377,10 +377,10 @@ ap.add_argument('-split_fit',nargs=1,
 #line significance assessment parameter
 ap.add_argument('-assess_line',nargs=1,
                 help='use fakeit simulations to estimate the significance of each absorption line',
-                default=True,type=bool)
+                default=False,type=bool)
 
 ap.add_argument('-assess_line_upper',nargs=1,help='compute upper limits of each absorption line',
-                default=True,type=bool)
+                default=False,type=bool)
 
 
 '''SPECTRUM PARAMETERS'''
@@ -3045,6 +3045,7 @@ def line_detect(epoch_id):
 
                 #merging the previous continuum if asked to
                 if merge_cont:
+
                     fitlines.merge(fitcont_broad)
 
                 #thawing the absorption to allow improving its value
@@ -4521,7 +4522,6 @@ for epoch_id,epoch_files in enumerate(epoch_list):
 #not creating the recap file in spread comput mode to avoid issues
 assert spread_comput==1, 'Stopping the computation here to avoid conflicts when making the summary'
 
-breakpoint()
 if multi_obj==False:
     #loading the diagnostic messages after the analysis has been done
     if os.path.isfile(os.path.join(outdir,'summary_line_det.log')):
@@ -4638,10 +4638,11 @@ dist_factor=4*np.pi*(dist_obj_list*1e3*3.086e18)**2
 Edd_factor=dist_factor/(1.26e38*mass_obj_list)
 
 #Reading the results files
-observ_list,lineval_list,lum_list,date_list,instru_list,exptime_list=obj_values(lineval_files,Edd_factor,dict_linevis)
+observ_list,lineval_list,lum_list,date_list,instru_list,exptime_list,fitmod_broadband_list\
+    =obj_values(lineval_files,Edd_factor,dict_linevis)
 
 dict_linevis['lum_list']=lum_list
-
+dict_linevis['exptime_list']=exptime_list
 #the values here are for each observation
 abslines_infos,autofit_infos=abslines_values(abslines_files,dict_linevis)
 

@@ -2237,13 +2237,9 @@ def parse_xlog(log_lines,goal='lastmodel',no_display=False,replace_frozen=False,
             if return_pars:
                 mod_lines=[line for line in group_lines if '+/-' in line or '= p' in line or 'frozen' in line]
 
-                try:
-                    #adding all of the main values to the current model list
-                    curr_mod_parlist+=[float(line.split()[-3] if '+/-' in line or '= p' in line else line.split()[-2])\
-                                       for line in mod_lines]
-                except:
-                    breakpoint()
-                    pass
+                #adding all of the main values to the current model list
+                curr_mod_parlist+=[float(line.split()[-3] if '+/-' in line or '= p' in line else line.split()[-2])\
+                                   for line in mod_lines]
 
                 continue
 
@@ -2413,20 +2409,18 @@ def calc_error(logfile,maxredchi=1e6,param='all',timeout=60,delchi_thresh=0.1,in
     else:
         glob_string_par=param
 
-    try:
-        if indiv:
-            #allowing computations of error for single parameters (thus with no - in the string)
-            if type(glob_string_par)==str and '-' not in glob_string_par:
-                error_strlist=[glob_string_par]
-            else:
-                print(glob_string_par)
-                error_strlist=np.arange(int(glob_string_par.split('-')[0]),int(glob_string_par.split('-')[1])+1).astype(str).tolist()
 
-        else:
+    if indiv:
+        #allowing computations of error for single parameters (thus with no - in the string)
+        if type(glob_string_par)==str and '-' not in glob_string_par:
             error_strlist=[glob_string_par]
-    except:
-        breakpoint()
-        pass
+        else:
+            print(glob_string_par)
+            error_strlist=np.arange(int(glob_string_par.split('-')[0]),int(glob_string_par.split('-')[1])+1).astype(str).tolist()
+
+    else:
+        error_strlist=[glob_string_par]
+
     #defining the error function
     def error_func(string_par):
         try:
@@ -2716,6 +2710,9 @@ class fitmod:
             except:
                 raise ValueError
 
+            #safeguard to avoid issues for continuum complists imported in the autofit
+            comp.fitmod=self
+
             comp.xcomps=[getattr(AllModels(1),comp.xcompnames[i]) for i in range(len(comp.xcompnames))]
 
             #xspec numbering here so needs to be shifted
@@ -2843,6 +2840,11 @@ class fitmod:
 
             # updating the fitcomps before anything else
             self.update_fitcomps()
+
+            #for now we skip the individual component fittings to avoid settling into a local minima before all components
+            #are now (can be an issue). Could add an option for this
+            if i_excomp!=len(curr_exclist)-1:
+                continue
 
             # fitting the component only
             component.fit(split_fit=split_fit)
@@ -3230,13 +3232,11 @@ class fitmod:
         #fetching the minimum component in the custom ftest values if they are some
         if sum(custom_ftest_mask)!=0:
             bestcomp_in_custom_id=component_ftest[custom_ftest_mask].argmin()
-            try:
-                bestcomp=np.array(curr_exclist)[custom_ftest_mask][bestcomp_in_custom_id]
+            bestcomp=np.array(curr_exclist)[custom_ftest_mask][bestcomp_in_custom_id]
 
-                #previous version that didn't work
-                #bestcomp=curr_exclist[np.argwhere(np.array(custom_ftest_mask))[0][bestcomp_in_custom_id]]
-            except:
-                breakpoint()
+            #previous version that didn't work
+            #bestcomp=curr_exclist[np.argwhere(np.array(custom_ftest_mask))[0][bestcomp_in_custom_id]]
+
         else:
             bestcomp=np.array(curr_exclist)[component_ftest==min(component_ftest[component_ftest.nonzero()])][0]
 
@@ -3339,10 +3339,7 @@ class fitmod:
 
             #restricting the test to components which are not 'very' significant
             #we fix the limit to 10 times the delchi for the significance threshold with their corresponding number of parameters
-            try:
-                ftest_val=Fit.ftest(new_chi,new_dof,del_chi,new_dof+n_unlocked_pars_with_unlink)
-            except:
-                breakpoint()
+            ftest_val=Fit.ftest(new_chi,new_dof,del_chi,new_dof+n_unlocked_pars_with_unlink)
 
             if ftest_val<ftest_threshold/100 and ftest_val>0:
                 self.print_xlog('\nlog:Very significant component detected. Skipping deletion test.')
@@ -3634,10 +3631,7 @@ class fitmod:
                           for par_number in parlist]
 
         #their id
-        try:
-            id_comp_match=[np.argwhere(elem)[0][0] for elem in mask_comp_match]
-        except:
-            breakpoint()
+        id_comp_match=[np.argwhere(elem)[0][0] for elem in mask_comp_match]
 
         parlist_comps=[[includedcomps[id_comp_match[i_par]],
                         np.argwhere(np.array(parlist_included[id_comp_match[i_par]])==parlist[i_par])[0][0]]\
@@ -3757,24 +3751,27 @@ class fitmod:
                     if not pegged_comp.included:
                         continue
 
-                    #defining the current pegged_par index with the new configuration
+                    #defining the current pegged_par total index with the new configuration
                     pegged_par_index=par_peg_comps[i_par_peg][0].parlist[par_peg_comps[i_par_peg][1]]
 
                     #unfreezing the parameter
-                    AllModels(par_peg_ids[i_par_peg][0])(pegged_par_index).frozen=False
+                    try:
+                        AllModels(par_peg_ids[i_par_peg][0])(par_peg_ids[i_par_peg][1]).frozen=False
+                    except:
+                        breakpoint()
 
-                    #computing the parameter position in all groups values
-                    par_peg_allgrp=(par_peg_ids[i_par_peg][0]-1)*AllModels(1).nParameters+par_peg_ids[i_par_peg][1]
+                    # #computing the parameter position in all groups values
+                    # par_peg_allgrp=(par_peg_ids[i_par_peg][0]-1)*AllModels(1).nParameters+par_peg_ids[i_par_peg][1]
 
                     try:
                         #no need for indiv mode here since we compute the error for a single parameter
-                        calc_error(self.logfile,param=str(par_peg_allgrp))
+                        calc_error(self.logfile,param=str(pegged_par_index),freeze_pegged=True)
                     except:
                         breakpoint()
 
                     #re-freezing the parameter
-                    AllModels(par_peg_ids[i_par_peg][0])(pegged_par_index).frozen=False
-
+                    #AllModels(par_peg_ids[i_par_peg][0])(par_peg_ids[i_par_peg][1]).frozen=False
+                    #we don't do this currently since there is a freeze peg just after in the chain
         ####chain
 
         '''
@@ -4061,11 +4058,7 @@ class fitmod:
                 if comp is fitcomp_line or comp.mandatory or (comp.absorption and comp.xcompnames[0] not in AllModels(1).componentNames):
                     continue
 
-                try:
-                    comp.delfrommod(rollback=False)
-                except:
-                    breakpoint()
-                    pass
+                comp.delfrommod(rollback=False)
 
             #loop on the parameters
             flux_line_dist=np.zeros(len(par_draw))
@@ -4202,7 +4195,6 @@ class fitmod:
         '''
 
         #before the dump we take off the logfile to avoid issues when reloading
-
         logfile_write=self.logfile_write
         logfile=self.logfile
 
@@ -4210,9 +4202,14 @@ class fitmod:
         self.logfile=None
 
         #updating the fitcomps to avoid resetting the logfile when loading
-        self.update_fitcomps()
+        # self.update_fitcomps()
 
-        self.save_mod()
+        #updating the logfile
+        for comp in [elem for elem in self.complist if elem is not None]:
+            comp.logfile=self.logfile
+            comp.logfile_write=self.logfile_write
+
+        # self.save_mod()
 
         with open(path,'wb') as file:
             dill.dump(self,file)

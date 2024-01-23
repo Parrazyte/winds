@@ -10,10 +10,10 @@ from scipy.stats import linregress
 from custom_pymccorrelation import perturb_values
 
 
-def lmplot_uncert_a(ax, x, y, dx, dy, xlim=None,ylim=None, percent=68.26, nsim=2000,
+def lmplot_uncert_a(ax, x, y, dx, dy, xlim=None,ylim=None, percent=68.26, nsim=100,
                     intercept_pos='auto',
                     return_linreg=True, infer_log_scale=False,nanzero_err=True,
-                    error_percent=90,
+                    error_percent=68.26,
                     xbounds=None,ybounds=None,
                     line_color='blue',lw=1.3, inter_color='lightgrey'):
 
@@ -103,7 +103,13 @@ def lmplot_uncert_a(ax, x, y, dx, dy, xlim=None,ylim=None, percent=68.26, nsim=2
         dy_arr = array(nan_to_num(dy)).T * (68.26/error_percent)
     else:
         dx_arr = array(dx).T * (68.26/error_percent)
-        dy_arr = array(dy).T * (68.26/error_percent )
+        dy_arr = array(dy).T * (68.26/error_percent)
+
+    #reshaping simmetrical uncertainties to avoid issues later
+    if np.ndim(dx_arr)==1:
+        dx_arr=np.array([dx_arr,dx_arr]).T
+    if np.ndim(dy_arr)==1:
+        dy_arr = np.array([dy_arr, dy_arr]).T
 
     dx_arr=dx_arr[mask_values]
     dy_arr=dy_arr[mask_values]
@@ -129,23 +135,25 @@ def lmplot_uncert_a(ax, x, y, dx, dy, xlim=None,ylim=None, percent=68.26, nsim=2
     tot_nonlim_mask=~ ((xlim_arr_mask) & (ylim_arr_mask))
 
     if log_x:
-        x_arr=np.log10(x_arr)
 
         #computing the +/- dx effect in log space
-        dx_arr=np.array([np.log10(array(x)+array(dx_arr.T[0])),np.log10(array(x)-array(dx_arr.T[1]))])
+        dx_arr=np.array([np.log10(array(x)-array(dx_arr.T[0])),np.log10(array(x)+array(dx_arr.T[1]))])
+
+        x_arr=np.log10(x_arr)
 
         #and applying it
-        dx_arr=np.array([dx_arr[0]-x_arr,x_arr-dx_arr[1]]).T
+        dx_arr=np.array([x_arr-dx_arr[0],dx_arr[1]-x_arr]).T
+
 
     if log_y:
-        y_arr = np.log10(y_arr)
 
         # computing the +/- dx effect in log space
-        dy_arr = np.array([np.log10(array(y) + array(dy_arr.T[0])), np.log10(array(y) - array(dy_arr.T[1]))])
+        dy_arr = np.array([np.log10(array(y) - array(dy_arr.T[0])), np.log10(array(y) + array(dy_arr.T[1]))])
+
+        y_arr = np.log10(y_arr)
 
         #and applying it
-        dy_arr=np.array([dy_arr[0]-y_arr,y_arr-dy_arr[1]]).T
-
+        dy_arr=np.array([y_arr-dy_arr[0],dy_arr[1]-y_arr]).T
 
     # computing perturbations
     x_pert, y_pert = perturb_values(x_arr, y_arr, dx_arr, dy_arr, xlim=xlim_arr,ylim=ylim_arr,Nperturb=nsim)[:2]
@@ -192,14 +200,22 @@ def lmplot_uncert_a(ax, x, y, dx, dy, xlim=None,ylim=None, percent=68.26, nsim=2
         dy_arr_lim=dy_arr
 
     if xbounds is None:
-        ax.set_xlim((np.nanmin(x_arr-dx_arr_lim),np.nanmax(x_arr+dx_arr_lim)))
+
+        if log_x:
+            ax.set_xlim(10**(np.nanmin(x_arr - dx_arr_lim)), 10**(np.nanmax(x_arr + dx_arr_lim)))
+        else:
+            ax.set_xlim((np.nanmin(x_arr - dx_arr_lim)),(np.nanmax(x_arr + dx_arr_lim)))
     else:
-        ax.set_xlim(np.log10(xbounds) if log_x else xbounds)
+        ax.set_xlim(xbounds)
 
     if ybounds is None:
-        ax.set_ylim((np.nanmin(y_arr-dy_arr_lim),np.nanmax(y_arr+dy_arr_lim)))
+
+        if log_y:
+            ax.set_ylim(10**(np.nanmin(y_arr - dy_arr_lim)), 10**(np.nanmax(y_arr + dy_arr_lim)))
+        else:
+            ax.set_ylim((np.nanmin(y_arr - dy_arr_lim)), (np.nanmax(y_arr + dy_arr_lim)))
     else:
-        ax.set_ylim(np.log10(ybounds) if log_y else ybounds)
+        ax.set_ylim(ybounds)
 
     #first loop with intercept at 0 on nsim iterations
     bound_inter = array([None] * nsim)
@@ -242,7 +258,7 @@ def lmplot_uncert_a(ax, x, y, dx, dy, xlim=None,ylim=None, percent=68.26, nsim=2
 
     #fetching a sample of points from the limits of the ax to create the lines
     if log_x:
-        x_line=np.linspace(np.log10(ax.get_xlim()[0]),np.log10(ax.get_xlim()[1]),2*nsim)
+        x_line=np.logspace(np.log10(ax.get_xlim()[0]),np.log10(ax.get_xlim()[1]),2*nsim)
     else:
         x_line=np.linspace(ax.get_xlim()[0],ax.get_xlim()[1],2*nsim)
 
@@ -252,7 +268,10 @@ def lmplot_uncert_a(ax, x, y, dx, dy, xlim=None,ylim=None, percent=68.26, nsim=2
     intercept_vals_save=intercept_vals.copy()
 
     #list of y position of all perturbated lines
-    y_line_pert=np.array([x_line*slope_vals_save[i]+intercept_vals_save[i] for i in range(nsim)]).T
+    if log_y and not log_x:
+        y_line_pert=10**(np.array([x_line*slope_vals_save[i]+intercept_vals_save[i] for i in range(nsim)]).T)
+    else:
+        y_line_pert =np.array([x_line * slope_vals_save[i] + intercept_vals_save[i] for i in range(nsim)]).T
 
     # plt.figure()
     # plt.errorbar(x_arr, y_arr, xerr=dx_arr.T, yerr=dy_arr.T, linestyle='', marker='d', color='red')
@@ -332,19 +351,14 @@ def lmplot_uncert_a(ax, x, y, dx, dy, xlim=None,ylim=None, percent=68.26, nsim=2
 
     base_regress_line=(x_line-x_intercept)*base_regress_slope+base_regress_intercept
 
-    #converting to powers if in log space
-    if log_x:
-        x_line_plot=10**x_line
-    else:
-        x_line_plot=x_line
-
-    if log_y:
-        y_line_plot=10**base_regress_line
+    # converting to powers if in log space
+    if log_y and not log_x:
+        y_line_plot=10**(base_regress_line)
     else:
         y_line_plot=base_regress_line
 
     #plotting the base line
-    plt.plot(x_line_plot,y_line_plot,lw=lw,color=line_color)
+    plt.plot(x_line,y_line_plot,lw=lw,color=line_color)
 
     #output info
     if return_linreg:

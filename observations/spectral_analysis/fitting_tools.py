@@ -262,6 +262,16 @@ def model_list(model_id='lines',give_groups=False):
 
         interact_groups = None
 
+    if model_id=='nthcont':
+
+        '''
+        subset of continuum with nthcomp for better NuSTAR work + NuSTAR calibration components
+        '''
+
+        avail_comps = ['cont_diskbb','disk_nthcomp','glob_TBabs', 'glob_constant']
+
+        interact_groups = None
+
     if model_id=='nthcont_NuSTAR':
 
         '''

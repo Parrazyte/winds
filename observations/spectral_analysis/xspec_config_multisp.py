@@ -2380,7 +2380,8 @@ def calc_fit(timeout=30,logfile=None,iterations=None,delchi_tresh=0.1,nonew=Fals
         Fit.nIterations=old_iterations
 
 
-def calc_error(logfile,maxredchi=1e6,param='all',timeout=60,delchi_thresh=0.1,indiv=True,give_errors=False,freeze_pegged=False,test=False):
+def calc_error(logfile,maxredchi=1e6,param='all',timeout=60,delchi_thresh=0.1,indiv=True,give_errors=False,
+               freeze_pegged=False):
 
     '''
     Computes the fit errors in a multiprocessing environment to enable stopping the process after a specific time
@@ -2491,6 +2492,10 @@ def calc_error(logfile,maxredchi=1e6,param='all',timeout=60,delchi_thresh=0.1,in
 
             #logging the messages printed during the error computation
             log_lines+=[logfile.readlines()]
+
+            # if 'A valid fit is first required in order to run error command.\n' in log_lines:
+            #     breakpoint()
+            #     pass
 
             print('\nError computation finished.')
 
@@ -2713,6 +2718,10 @@ class fitmod:
             #safeguard to avoid issues for continuum complists imported in the autofit
             comp.fitmod=self
 
+            #updating the logfile
+            comp.logfile=self.logfile
+            comp.logfile_write=self.logfile_write
+
             comp.xcomps=[getattr(AllModels(1),comp.xcompnames[i]) for i in range(len(comp.xcompnames))]
 
             #xspec numbering here so needs to be shifted
@@ -2721,7 +2730,7 @@ class fitmod:
             #we directly define the parlist from the first parameter of the first component and the last of the last component
             #to ensure consistency with multi-components
 
-            #note:for now we don't consider the parameter list in subsequent dagroups except for glob_constant
+            #note:for now we don't consider the parameter list in subsequent datagroups except for glob_constant
             first_par=getattr(comp.xcomps[0],comp.xcomps[0].parameterNames[0]).index
             last_par=getattr(comp.xcomps[-1],comp.xcomps[-1].parameterNames[-1]).index
             comp.parlist=np.arange(first_par,last_par+1).astype(int).tolist()
@@ -2741,11 +2750,6 @@ class fitmod:
         #we also update the list of component xcomps (no multi-components here so w can take the first element in xcompnames safely)
         self.cont_xcompnames=[self.cont_complist[i].xcompnames[0] if self.cont_complist[i].included else ''\
                               for i in range(len(self.cont_complist))]
-
-        #updating the logfile
-        for comp in [elem for elem in self.complist if elem is not None]:
-            comp.logfile=self.logfile
-            comp.logfile_write=self.logfile_write
 
     def list_comps_errlocked(self):
 
@@ -2846,8 +2850,8 @@ class fitmod:
             if i_excomp!=len(curr_exclist)-1:
                 continue
 
-            # fitting the component only
-            component.fit(split_fit=split_fit)
+            # fitting the component (no split fit here, not needed)
+            component.fit(split_fit=False)
 
             # fetching the interactive components from the list if it is provided
             if self.interact_groups is not None:
@@ -3707,10 +3711,8 @@ class fitmod:
         calc_fit(logfile=self.logfile if chain else None)
 
         #testing if freezing the pegged parameters improves the fit
-        par_peg_ids=calc_error(self.logfile,param='1-'+str(AllModels(1).nParameters*AllData.nGroups),freeze_pegged=freeze_final_pegged,indiv=True,
-                               test='FeKa26abs_agaussian' in self.name_complist and round(AllData(1).energies[0][0])==3)
-
-
+        par_peg_ids=calc_error(self.logfile,param='1-'+str(AllModels(1).nParameters*AllData.nGroups),
+                               freeze_pegged=freeze_final_pegged,indiv=True)
 
         #computing the component position of the frozen parameter to allow to unfreeze them later even with modified component positions
         par_peg_comps=self.idtocomp(par_peg_ids)
@@ -4209,7 +4211,7 @@ class fitmod:
             comp.logfile=self.logfile
             comp.logfile_write=self.logfile_write
 
-        # self.save_mod()
+        self.save_mod()
 
         with open(path,'wb') as file:
             dill.dump(self,file)

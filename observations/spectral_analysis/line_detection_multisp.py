@@ -79,13 +79,13 @@ V X (22:12:22):
 
 """
 
+
 #general imports
 import os,sys
 import glob
 import argparse
 import re as re
 import time
-
 
 import numpy as np
 
@@ -161,7 +161,7 @@ ap = argparse.ArgumentParser(description='Script to perform line detection in X-
 
 '''GENERAL OPTIONS'''
 
-ap.add_argument('-satellite',nargs=1,help='telescope to fetch spectra from',default='multi',type=str)
+ap.add_argument('-satellite',nargs=1,help='telescope to fetch spectra from',default='Suzaku',type=str)
 
 #used for NICER and multi for now
 ap.add_argument('-group_max_timedelta',nargs=1,
@@ -183,7 +183,7 @@ ap.add_argument("-prefix",nargs=1,help='restrict analysis to a specific prefix',
 
 ####output directory
 ap.add_argument("-outdir",nargs=1,help="name of output directory for line plots",
-                default="lineplots_opt",type=str)
+                default="lineplots_opt_nth",type=str)
 
 #overwrite
 #global overwrite based on recap PDF
@@ -219,7 +219,7 @@ ap.add_argument('-xspec_window',nargs=1,help='xspec window id (auto tries to pic
 '''MODELS'''
 #### Models and abslines lock
 ap.add_argument('-cont_model',nargs=1,help='model list to use for the autofit computation',
-                default='nthcont_detailed',type=str)
+                default='nthcont',type=str)
 
 ap.add_argument('-autofit_model',nargs=1,help='model list to use for the autofit computation',
                 default='lines_narrow',type=str)
@@ -377,10 +377,10 @@ ap.add_argument('-split_fit',nargs=1,
 #line significance assessment parameter
 ap.add_argument('-assess_line',nargs=1,
                 help='use fakeit simulations to estimate the significance of each absorption line',
-                default=False,type=bool)
+                default=True,type=bool)
 
 ap.add_argument('-assess_line_upper',nargs=1,help='compute upper limits of each absorption line',
-                default=False,type=bool)
+                default=True,type=bool)
 
 
 '''SPECTRUM PARAMETERS'''
@@ -485,14 +485,10 @@ ap.add_argument('-filter_NuSTAR_SNR',nargs=1,help='restrict the NuSTAR band to w
 ap.add_argument('-megumi_files',nargs=1,help='adapt suzaku file structure for megumi data reduction',
                 default=True,type=bool)
 
-ap.add_argument('-suzaku_hid_cont_range',nargs=1,help='min and max energies of the suzaku hid band fit',
-                default='1.9 40',type=str)
-ap.add_argument('-suzaku_line_cont_range',nargs=1,help='min and max energies of the suzaku line cont band fit',
-                default='4 40',type=str)
-ap.add_argument('-suzaku_xis_range',nargs=1,help='range of energies usable for suzaku xis',default='1.9 9',type=str)
+ap.add_argument('-suzaku_xis_range',nargs=1,help='range of energies usable for suzaku xis',default='1.9 9.',type=str)
 ap.add_argument('-suzaku_xis_ignore',nargs=1,help='range of energies to ignore for suzaku xis',default="['2.1-2.3','3.0-3.4']",type=str)
 
-ap.add_argument('-suzaku_pin_range',nargs=1,help='range of energies usable for suzaku pin',default='12 40',type=str)
+ap.add_argument('-suzaku_pin_range',nargs=1,help='range of energies usable for suzaku pin',default='12. 40.',type=str)
 
 '''XMM'''
 
@@ -623,8 +619,6 @@ force_epochs=args.force_epochs
 force_epochs_list=args.force_epochs_list
 
 megumi_files=args.megumi_files
-suzaku_hid_cont_range=np.array(args.suzaku_hid_cont_range.split(' ')).astype(float)
-suzaku_line_cont_range=np.array(args.suzaku_line_cont_range.split(' ')).astype(float)
 
 suzaku_xis_range=np.array(args.suzaku_xis_range.split(' ')).astype(float)
 suzaku_xis_ignore=literal_eval(args.suzaku_xis_ignore)
@@ -1593,7 +1587,7 @@ def pdf_summary(epoch_files,fit_ok=False,summary_epoch=None,e_sat_low_list=None,
     else:
         pdf.output(outdir+'/'+('_'.join(shorten_epoch(epoch_observ)))+'_recap.pdf')
 
-def line_e_ranges(sat):
+def line_e_ranges(sat,det=None):
     '''
     Determines the energy range allowed, as well as the ignore energies for a given satellite
 
@@ -1625,11 +1619,21 @@ def line_e_ranges(sat):
                 e_sat_high = 10.
 
     elif sat == 'Suzaku':
-        e_sat_low = 1.9
-        e_sat_high = 40.
 
-        # note: we don't care about ignoring these with pin since pin doesn't go that low
-        ignore_bands = suzaku_xis_ignore
+        if det==None:
+            e_sat_low=1.9
+            e_sat_high=40.
+
+            ignore_bands=suzaku_xis_ignore
+        else:
+
+            assert det in ['PIN','XIS'],'Detector argument necessary to choose energy ranges for Suzaku'
+
+            e_sat_low =suzaku_xis_range[0] if det=='XIS' else suzaku_pin_range[0]
+            e_sat_high = suzaku_xis_range[1] if det=='XIS' else suzaku_pin_range[1]
+
+            # note: we don't care about ignoring these with pin since pin doesn't go that low
+            ignore_bands = suzaku_xis_ignore
 
     elif sat == 'Chandra':
         e_sat_low = 1.5
@@ -1669,6 +1673,43 @@ def line_e_ranges(sat):
 
     return e_sat_low,e_sat_high,ignore_bands,line_cont_ig
 
+def reload_sp(baseload_path,keyword_skip=None,write_baseload=True,newbl_keyword='skip'):
+    '''
+    Reloads a baseload (with a list of spectra) but excluding files with a specific keyword in their names
+    works by parsing the baseload and rewriting a new version without the corresponding line before loading them
+
+    -baseload_path: base data loading file
+
+    -keywod_skip: basic filter for the data file names to know which files to filter out
+
+    -write_baseload: delete the baseload or not after loading the data
+
+    -newbl_keyword: name for the new baseload file
+    '''
+
+    with open(baseload_path) as f_baseload:
+        baseload_lines=f_baseload.readlines()
+
+    new_baseload_lines=[]
+    for i_line in range(len(baseload_lines)):
+        if baseload_lines[i_line].startswith('data ') and keyword_skip in baseload_lines[i_line]:
+            i_line+=1
+            #skipping this line and all lines describing the sp below
+            while baseload_lines[i_line].split()[0] in ['response','rmf','arf']:
+                i_line+=1
+
+        else:
+            new_baseload_lines+[baseload_lines[i_line]]
+
+    #writing the lines in a new file
+    new_baseload_path=baseload_path.replace('.xcm','_'+newbl_keyword+'.xcm')
+    with open(new_baseload_path,'w+') as f_baseload_skip:
+        f_baseload_skip.writelines(new_baseload_lines)
+
+    Xset.restore(baseload_path)
+
+    if not write_baseload:
+        os.remove(baseload_path)
 
 def line_detect(epoch_id):
 
@@ -1826,47 +1867,6 @@ def line_detect(epoch_id):
 
         return result_arr
 
-    '''Energy bands, ignores, and setup'''
-
-    #used to have specific energy limits for different instruments. can be modified later
-
-    if sat_glob == 'multi':
-        e_sat_low_indiv_init = np.repeat([None], len(epoch_files))
-        e_sat_high_indiv_init = np.repeat([None], len(epoch_files))
-        ignore_bands_indiv_init = np.repeat([None],len(epoch_files))
-        line_cont_ig_indiv_init = np.repeat([None], len(epoch_files))
-        sat_indiv_init = np.repeat([None], len(epoch_files))
-        for id_epoch, elem_file in enumerate(epoch_files):
-            # fetching the instrument of the individual element
-            # note that we replace the megumi xis0_xis3 files by the xis1 because the merged xis0_xis3 have no header
-            #we also replace SUZAKU in caps by Suzaku to have a better time matching strings
-            sat_indiv_init[id_epoch] = fits.open(elem_file.replace('xis0_xis3','xis1'))[1].header['TELESCOP']\
-                .replace('SUZAKU','Suzaku')
-
-            e_sat_low_indiv_init[id_epoch], e_sat_high_indiv_init[id_epoch], ignore_bands_indiv_init[id_epoch],\
-                line_cont_ig_indiv_init[id_epoch] = line_e_ranges(sat_indiv_init[id_epoch])
-    else:
-        e_sat_low_val, e_sat_high_val, ignore_bands_val,line_cont_ig_val = line_e_ranges(sat_glob)
-        e_sat_low_indiv_init = np.repeat(e_sat_low_val, len(epoch_files))
-        e_sat_high_indiv_init = np.repeat(e_sat_high_val, len(epoch_files))
-        ignore_bands_indiv_init = np.repeat(ignore_bands_val,len(epoch_files))
-        line_cont_ig_indiv_init = np.repeat(line_cont_ig_val, len(epoch_files))
-        sat_indiv_init = np.repeat([sat_glob], len(epoch_files))
-
-    if sat_glob == 'multi':
-        epoch_observ = [file_to_obs(elem_file, elem_telescope) for elem_file, elem_telescope in \
-                        zip(epoch_files, sat_indiv_init)]
-    else:
-        epoch_observ = [file_to_obs(elem_file, sat_glob) for elem_file in epoch_files]
-
-    Xset.logChatter=10
-
-    print('\nStarting line detection for files ')
-    print(epoch_files)
-
-    #reset the xspec config
-    reset()
-
     #deprecated
     obs_grating=False
 
@@ -1882,6 +1882,21 @@ def line_detect(epoch_id):
 
     #useful for later
     spec_inf=[elem_sp.split('_') for elem_sp in epoch_files]
+
+    if sat_glob=='multi':
+        sat_indiv_init = np.repeat([None], len(epoch_files))
+
+        for id_epoch, elem_file in enumerate(epoch_files):
+            # fetching the instrument of the individual element
+            # note that we replace the megumi xis0_xis3 files by the xis1 because the merged xis0_xis3 have no header
+            # we also replace SUZAKU in caps by Suzaku to have a better time matching strings
+            sat_indiv_init[id_epoch] = fits.open(elem_file.replace('xis0_xis3', 'xis1'))[1].header['TELESCOP'] \
+                .replace('SUZAKU', 'Suzaku')
+    else:
+        sat_indiv_init = np.repeat([sat_glob], len(epoch_files))
+
+
+
 
     #Step 0 is to readjust the response and bg file names if necessary (i.e. files got renamed)
     if h_update:
@@ -1917,11 +1932,41 @@ def line_detect(epoch_id):
                             epoch_dets+=['XIS']
                             hdul[1].header['RESPFILE']=elem_sp.replace('src_grp_opt.pha','rsp.rmf')
                             hdul[1].header['BACKFILE']=elem_sp.replace('src_grp_opt','bgd')
+                else:
+                    epoch_dets+=[None]
 
                 #saving changes
                 hdul.flush()
 
+    '''Energy bands, ignores, and setup'''
 
+    #used to have specific energy limits for different instruments. can be modified later
+
+    e_sat_low_indiv_init = np.repeat([None], len(epoch_files))
+    e_sat_high_indiv_init = np.repeat([None], len(epoch_files))
+    ignore_bands_indiv_init = np.repeat([None], len(epoch_files))
+    line_cont_ig_indiv_init = np.repeat([None], len(epoch_files))
+
+    if sat_glob != 'multi':
+        sat_indiv_init = np.repeat([sat_glob], len(epoch_files))
+
+    for id_epoch, elem_file in enumerate(epoch_files):
+        e_sat_low_indiv_init[id_epoch], e_sat_high_indiv_init[id_epoch], ignore_bands_indiv_init[id_epoch],\
+            line_cont_ig_indiv_init[id_epoch] = line_e_ranges(sat_indiv_init[id_epoch],epoch_dets[id_epoch])
+
+    if sat_glob == 'multi':
+        epoch_observ = [file_to_obs(elem_file, elem_telescope) for elem_file, elem_telescope in \
+                        zip(epoch_files, sat_indiv_init)]
+    else:
+        epoch_observ = [file_to_obs(elem_file, sat_glob) for elem_file in epoch_files]
+
+    Xset.logChatter=10
+
+    print('\nStarting line detection for files ')
+    print(epoch_files)
+
+    #reset the xspec config
+    reset()
 
     '''Setting up a log file and testing the properties of each spectra'''
 
@@ -1934,10 +1979,13 @@ def line_detect(epoch_id):
 
     curr_logfile=open(curr_logfile_write.name,'r')
 
+    # curr_logfile_linedet=open(outdir+'/'+epoch_observ[0]+'_linedet_log.log','w+')
+
     def print_xlog(string,logfile_write=curr_logfile_write):
 
         '''
         prints and logs info in the xspec log file, and flushed to ensure the logs are printed before the next xspec print
+        Different log file from the main xspec one to (hopefully) avoid issues
         '''
         print(string)
         logfile_write.write(time.asctime()+'\n')
@@ -2074,7 +2122,7 @@ def line_detect(epoch_id):
             e_sat_high_indiv+= [e_sat_high_indiv_init[i_sp]]
             ignore_bands_indiv+= [ignore_bands_indiv_init[i_sp]]
             line_cont_ig_indiv+= [line_cont_ig_indiv_init[i_sp]]
-
+            epoch_dets_good+=[epoch_dets[i_sp]]
         else:
             epoch_files_good+=[elem_sp]
             sat_indiv_good+=[elem_sat]
@@ -2082,11 +2130,20 @@ def line_detect(epoch_id):
             e_sat_high_indiv+= [e_sat_high_indiv_init[i_sp]]
             ignore_bands_indiv+= [ignore_bands_indiv_init[i_sp]]
             line_cont_ig_indiv+= [line_cont_ig_indiv_init[i_sp]]
+            epoch_dets_good+=[epoch_dets[i_sp]]
 
         #testing if all spectra have been taken off
         if len(epoch_files_good)==0:
             return epoch_result
 
+
+    epoch_files_good = np.array(epoch_files_good)
+    sat_indiv_good = np.array(sat_indiv_good)
+    e_sat_low_indiv = np.array(e_sat_low_indiv)
+    e_sat_high_indiv = np.array(e_sat_high_indiv)
+    ignore_bands_indiv = np.array(ignore_bands_indiv)
+    line_cont_ig_indiv = np.array(line_cont_ig_indiv)
+    epoch_dets_good = np.array(epoch_dets_good)
 
     '''
     Data load
@@ -2138,7 +2195,7 @@ def line_detect(epoch_id):
     '''resetting the energy bands if needed'''
     if not force_ener_bounds:
         hid_cont_range[1] = max(e_sat_high_indiv)
-        
+
         #here we just test for the snr and create the line searc hspace, this will re-adjusted esat_high later
         line_cont_range[1] = min(np.array(args.line_cont_range.split(' ')).astype(float)[1],max(e_sat_high_indiv))
 
@@ -2147,13 +2204,15 @@ def line_detect(epoch_id):
     # this one is here to avoid adding one point if incorrect roundings create problem
     line_search_e_space = line_search_e_space[line_search_e_space <= line_search_e[1]]
 
-    for i_obs,elem_sat in enumerate(sat_indiv_good):
-        #ad hoc way to only consider the suzaku detectors
-        i_det_suzaku=0
-        if elem_sat == 'Suzaku':
-            e_sat_high_indiv[i_obs]=40. if epoch_dets[i_det_suzaku]=='PIN' else 9.
-            e_sat_low_indiv[i_obs]=12. if epoch_dets[i_det_suzaku]=='PIN' else 1.9
-            i_det_suzaku+=1
+    #outdated because now included in the line_e_ranges
+    # for i_obs,elem_sat in enumerate(sat_indiv_good):
+    #     #ad hoc way to only consider the suzaku detectors
+    #     i_det_suzaku=0
+    #     if elem_sat == 'Suzaku':
+    #         e_sat_high_indiv[i_obs]=40. if epoch_dets[i_det_suzaku]=='PIN' else 9.
+    #         e_sat_low_indiv[i_obs]=12. if epoch_dets[i_det_suzaku]=='PIN' else 1.9
+    #         #test whether this works
+    #         i_det_suzaku+=1
 
     #in preparation for the raw counts test
     if sat_glob=='Suzaku':
@@ -2272,6 +2331,12 @@ def line_detect(epoch_id):
                 print_xlog('High energy limit of exposure '+str(i_exp+1)+' fixed to '+str(e_sat_high_indiv[i_exp])+
                       ' keV with a SNR limit of '+str(filter_NuSTAR_SNR))
 
+    '''re-resetting the energy bands if needed to adapt to the NuSTAR SNR cuts'''
+    if not force_ener_bounds:
+        hid_cont_range[1] = max(e_sat_high_indiv)
+
+        #here we just test for the snr and create the line searc hspace, this will re-adjusted esat_high later
+        line_cont_range[1] = min(np.array(args.line_cont_range.split(' ')).astype(float)[1],max(e_sat_high_indiv))
 
     if pdf_only:
 
@@ -2516,7 +2581,11 @@ def line_detect(epoch_id):
         '''the first computation is ONLY to get the errors, the main values are overwritten below'''
         # we still only compute the flux of the first model even with NICER because the rest is BG
 
-        AllModels.calcFlux(str(hid_cont_range[0]) + ' ' + str(hid_cont_range[1]) + " err 1000 90")
+        try:
+            AllModels.calcFlux(str(hid_cont_range[0]) + ' ' + str(hid_cont_range[1]) + " err 1000 90")
+        except:
+            breakpoint()
+
         spflux_single[0] = AllData(1).flux[0], AllData(1).flux[0] - AllData(1).flux[1], AllData(1).flux[2] - \
                                                AllData(1).flux[0]
         AllModels.calcFlux("3. 6. err 1000 90")
@@ -2679,10 +2748,10 @@ def line_detect(epoch_id):
             high energy fit and flux array computation
             '''
 
+            print_xlog('\nComputing line continuum fit...')
+
             AllModels.clear()
             xscorpeon.load(scorpeon_save=data_broad.scorpeon,frozen=True)
-
-            print_xlog('\nComputing line continuum fit...')
 
             #limiting to the line search energy range
             ignore_data_indiv(line_cont_range[0], line_cont_range[1], reset=True, sat_low_groups=e_sat_low_indiv,
@@ -2690,13 +2759,22 @@ def line_detect(epoch_id):
 
             #if the stat is low we don't do the autofit anyway so we'd rather get the best fit possible
             if not flag_lowSNR_line:
-                for i_grp in range(len(epoch_files_good)):
+                for i_grp in range(len(epoch_files_good)[mask_nodeload]):
                     #ignoring the line_cont_ig energy range for the fit to avoid contamination by lines
                     AllData(i_grp+1).ignore(line_cont_ig_indiv[i_grp])
 
             #comparing different continuum possibilities with a broken powerlaw or a combination of diskbb and powerlaw
 
             #creating the automatic fit class for the standard continuum
+
+            # Xset.closeLog()
+
+            # Xset.openLog('lineplots_opt_nth/test.log')
+            # curr_logfile = Xset.log
+            # curr_logfile_write = Xset.log
+            # curr_logfile_write.reconfigure(line_buffering=True)
+            # curr_logfile = open(curr_logfile_write.name, 'r')
+
             if broad_absval!=0:
                 fitcont_high=fitmod(comp_cont,
                                     curr_logfile,curr_logfile_write,absval=broad_absval)
@@ -2749,7 +2827,7 @@ def line_detect(epoch_id):
             #note: for now this is fine but might need to be udpated later with telescopes with global ignore bands
             #matching part of this
 
-            for i_sp in range(len(epoch_files_good)):
+            for i_sp in range(len(epoch_files_good)[mask_nodeload]):
                 if line_cont_ig_indiv[i_sp] != '':
                     AllData(i_sp+1).notice(line_cont_ig_indiv[i_sp])
 
@@ -2919,8 +2997,9 @@ def line_detect(epoch_id):
         #frozen Scorpeon for now (unfreezed during the broad fit)
         xscorpeon.load(frozen=True)
 
-        if os.path.isfile(outdir+'/'+epoch_observ[0]+'_baseload.xcm'):
-            os.remove(outdir+'/'+epoch_observ[0]+'_baseload.xcm')
+        baseload_path=outdir+'/'+epoch_observ[0]+'_baseload.xcm'
+        if os.path.isfile(baseload_path):
+            os.remove(baseload_path)
 
         Xset.save(outdir+'/'+epoch_observ[0]+'_baseload.xcm',info='a')
 
@@ -2935,6 +3014,18 @@ def line_detect(epoch_id):
         # (which won't change anything if it hasn't been fitted but will help otherwise)
         xscorpeon.load(scorpeon_save=data_broad.scorpeon,frozen=True)
 
+        '''
+        more advanced automatic detector exclusions to avoid crashing xspec should be done later if needed
+        note the scorpeon model can crash, but in the simple case below we won't ever have Suzaku-NICER
+        for more general automatic detector exclusion this will need to be adresed
+        '''
+        #removing PIN from the detectors if it is there
+        if 'PIN' in epoch_dets_good:
+            reload_sp(baseload_path,keyword_skip='pin',newbl_keyword='autofit')
+            mask_nodeload=epoch_dets_good=='PIN'
+        else:
+            mask_nodeload=True
+
         result_high_fit=high_fit(broad_absval,broad_abscomp)
 
         #if the function returns an array of length 1, it means it returned an error message
@@ -2944,8 +3035,10 @@ def line_detect(epoch_id):
             data_mod_high,fitmod_cont=result_high_fit
 
         # re-limiting to the line search energy range
-        ignore_data_indiv(line_cont_range[0], line_cont_range[1], reset=True, sat_low_groups=e_sat_low_indiv,
-                          sat_high_groups=e_sat_high_indiv,glob_ignore_bands=ignore_bands_indiv)
+        ignore_data_indiv(line_cont_range[0], line_cont_range[1], reset=True,
+                          sat_low_groups=e_sat_low_indiv[mask_nodeload],
+                          sat_high_groups=e_sat_high_indiv[mask_nodeload],
+                          glob_ignore_bands=ignore_bands_indiv[mask_nodeload])
 
         #changing back to the auto rescale of xspec
         Plot.commands=()
@@ -2955,7 +3048,8 @@ def line_detect(epoch_id):
 
         cont_abspeak,cont_peak_points,cont_peak_widths,cont_peak_delchis,cont_peak_eqws,chi_dict_init=\
             narrow_line_search(data_mod_high,'cont',line_search_e=line_search_e,line_search_norm=line_search_norm,
-                               e_sat_low_indiv=e_sat_low_indiv,peak_thresh=peak_thresh,peak_clean=peak_clean,
+                               e_sat_low_indiv=e_sat_low_indiv[mask_nodeload],
+                               peak_thresh=peak_thresh,peak_clean=peak_clean,
                                line_cont_range=line_cont_range,trig_interval=trig_interval,
                                scorpeon_save=data_broad.scorpeon)
 
@@ -2979,7 +3073,7 @@ def line_detect(epoch_id):
             '''
 
             #reloading the continuum fitcomp
-            fitmod_cont.reload()
+            data_mod_high.load()
 
             #feching the list of components we're gonna use
             comp_lines=model_list(autofit_model)
@@ -2989,7 +3083,7 @@ def line_detect(epoch_id):
             curr_logfile_write.reconfigure(line_buffering=True)
             curr_logfile=open(curr_logfile_write.name,'r')
 
-            #creating the fitmod object with the desired componets (we currently do not use comp groups)
+            #creating the fitmod object with the desired components (we currently do not use comp groups)
             fitlines=fitmod(comp_lines,curr_logfile,curr_logfile_write,prev_fitmod=fitmod_cont)
 
             # inputting the fixed abs value to avoid issues during component deletion
@@ -3040,6 +3134,16 @@ def line_detect(epoch_id):
 
                         freeze(parlist=comp.unlocked_pars)
 
+                #reloading the broad band data
+                Xset.restore(baseload_path)
+
+                '''
+                To reload the broadband model and avoid issues, 
+                we need to shift some datagroups and recreate the links properly
+                This will need to be done eventually but for now with just pin going back and forth
+                as the last datagroup this should be fine
+                '''
+
                 #refitting in broad band for the nH
                 ignore_data_indiv(e_sat_low_indiv, e_sat_high_indiv, reset=True, glob_ignore_bands=ignore_bands_indiv)
 
@@ -3053,6 +3157,7 @@ def line_detect(epoch_id):
                                                                     [elem_comp for elem_comp in fitlines.complist
                                                                      if
                                                                      elem_comp is not None]]])
+
                 if len(abs_incl_comps)!=0 and not (sat_glob=='NuSTAR' and freeze_nH):
                     main_abscomp=abs_incl_comps[0]
                     main_abscomp.xcomps[0].nH.frozen=False
@@ -3131,8 +3236,19 @@ def line_detect(epoch_id):
                     if comp.calibration and comp.compname not in ['calNuSTAR_edge']:
                         fitlines.remove_comp(comp)
 
-                ignore_data_indiv(line_cont_range[0], line_cont_range[1], reset=True, sat_low_groups=e_sat_low_indiv,
-                                  sat_high_groups=e_sat_high_indiv, glob_ignore_bands=ignore_bands_indiv)
+                #re-ignoring PIN if needed
+                if 'PIN' in epoch_dets_good:
+                    Xset.restore(baseload_path.replace('.xcm','_autofit.xcm'))
+                    mask_nodeload = epoch_dets_good == 'PIN'
+                else:
+                    mask_nodeload = True
+
+                fitlines.update_fitcomps()
+
+                ignore_data_indiv(line_cont_range[0], line_cont_range[1], reset=True,
+                                  sat_low_groups=e_sat_low_indiv[mask_nodeload],
+                                  sat_high_groups=e_sat_high_indiv[mask_nodeload],
+                                  glob_ignore_bands=ignore_bands_indiv[mask_nodeload])
 
                 #fitting the model to the new energy band first
                 calc_fit(logfile=fitlines.logfile)
@@ -3376,7 +3492,7 @@ def line_detect(epoch_id):
 
         #plotting the combined autofit plot
 
-        def autofit_plot(fig,data,data_noabs,addcomps_cont,comp_pos):
+        def autofit_plot(data,data_noabs,addcomps_cont,comp_pos):
 
             '''
             The goal here is to plot the autofit in a way that shows the different lines
@@ -3404,7 +3520,7 @@ def line_detect(epoch_id):
 
         fig_autofit=plt.figure(figsize=(15,10))
 
-        autofit_plot(fig_autofit,data=data_autofit,data_noabs=data_autofit_noabs,addcomps_cont=addcomps_cont,
+        autofit_plot(data=data_autofit,data_noabs=data_autofit_noabs,addcomps_cont=addcomps_cont,
                      comp_pos=comp_absline_position)
 
         plt.savefig(outdir+'/'+epoch_observ[0]+'_autofit_components_plot_'+args.line_search_e.replace(' ','_')+'_'+args.line_search_norm.replace(' ','_')+'.png')
@@ -3416,7 +3532,8 @@ def line_detect(epoch_id):
 
         chi_dict_autofit=narrow_line_search(data_autofit,'autofit',
                                             line_search_e=line_search_e,line_search_norm=line_search_norm,
-                           e_sat_low_indiv=e_sat_low_indiv,peak_thresh=peak_thresh,peak_clean=peak_clean,
+                           e_sat_low_indiv=e_sat_low_indiv[mask_nodeload],
+                                            peak_thresh=peak_thresh,peak_clean=peak_clean,
                            line_cont_range=line_cont_range,trig_interval=trig_interval,
                            scorpeon_save=data_broad.scorpeon,data_fluxcont=data_autofit_noabs)
 
@@ -3492,9 +3609,10 @@ def line_detect(epoch_id):
 
         paper_plot(fig_paper,chi_dict_init,chi_dict_autofit)
 
-        plt.savefig(outdir+'/'+epoch_observ[0]+'_paper_plot_'+args.line_search_e.replace(' ','_')+'_'+args.line_search_norm.replace(' ','_')+'.png')
-
-        plt.savefig(outdir+'/'+epoch_observ[0]+'_paper_plot_'+args.line_search_e.replace(' ','_')+'_'+args.line_search_norm.replace(' ','_')+'.pdf')
+        plt.savefig(outdir+'/'+epoch_observ[0]+'_paper_plot_'+args.line_search_e.replace(' ','_')+
+                    '_'+args.line_search_norm.replace(' ','_')+'.png')
+        plt.savefig(outdir+'/'+epoch_observ[0]+'_paper_plot_'+args.line_search_e.replace(' ','_')+
+                    '_'+args.line_search_norm.replace(' ','_')+'.pdf')
 
         plt.close(fig_paper)
 
@@ -3643,8 +3761,10 @@ def line_detect(epoch_id):
                         AllData.fakeit(settings=fakeset,applyStats=True,noWrite=True)
 
                         # limiting to the line search energy range
-                        ignore_data_indiv(line_cont_range[0],line_cont_range[1], reset=True, sat_low_groups=e_sat_low_indiv,
-                                          sat_high_groups=e_sat_high_indiv, glob_ignore_bands=ignore_bands_indiv)
+                        ignore_data_indiv(line_cont_range[0],line_cont_range[1], reset=True,
+                                          sat_low_groups=e_sat_low_indiv[mask_nodeload],
+                                          sat_high_groups=e_sat_high_indiv[mask_nodeload],
+                                          glob_ignore_bands=ignore_bands_indiv[mask_nodeload])
 
                         #adjusting the fit and storing the chi²
 
@@ -4566,6 +4686,10 @@ if multi_obj==False:
 
         aborted_files=[elem_epoch.tolist() for elem_epoch,elem_epoch_id in zip(epoch_list,epoch_ids) if\
                         not '_'.join(shorten_epoch(elem_epoch_id))+'_recap.pdf' in lineplots_files]
+
+    #for now should be fine because for now we won't multi on stuff that's too weak to be detected
+    elif sat_glob=='multi':
+        aborted_files=[]
 
     if write_aborted_pdf:
         for elem_epoch_files in aborted_files:

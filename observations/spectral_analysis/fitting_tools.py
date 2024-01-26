@@ -265,17 +265,28 @@ def model_list(model_id='lines',give_groups=False):
     if model_id=='nthcont':
 
         '''
-        subset of continuum with nthcomp for better NuSTAR work + NuSTAR calibration components
+        subset of continuum with nthcomp for better broad band work + NuSTAR calibration components
         '''
 
         avail_comps = ['cont_diskbb','disk_nthcomp','glob_TBabs', 'glob_constant']
 
         interact_groups = None
 
+    if model_id=='nthcont_Suzaku':
+
+        '''
+        subset of continuum with nthcomp for better broad band work + Suzaku crabcorr replacing the constant
+        note that the Suzaku_crabcorr component is specifically set to let only the FS CCDs delta gamma free
+        '''
+
+        avail_comps = ['cont_diskbb','disk_nthcomp','glob_TBabs', 'Suzaku_crabcorr']
+
+        interact_groups = None
+
     if model_id=='nthcont_NuSTAR':
 
         '''
-        subset of continuum with nthcomp for better NuSTAR work + NuSTAR calibration components
+        subset of continuum with nthcomp for better broad band work + NuSTAR calibration components
         '''
 
         avail_comps = ['cont_diskbb','disk_nthcomp','glob_TBabs', 'glob_constant',
@@ -286,7 +297,7 @@ def model_list(model_id='lines',give_groups=False):
     if model_id=='nthcont_detailed':
 
         '''
-        subset of continuum with nthcomp for better NuSTAR work + NuSTAR/NICER calibration components
+        subset of continuum with nthcomp for better broad band work + NuSTAR/NICER calibration components
         '''
 
         avail_comps = ['cont_diskbb','disk_nthcomp','glob_TBabs', 'glob_constant',

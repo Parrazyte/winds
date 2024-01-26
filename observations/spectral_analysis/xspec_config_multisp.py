@@ -53,7 +53,7 @@ model_dir='/home/parrama/Soft/Xspec/Models'
 #custom model loads
 if not streamlit_mode:
     AllModels.lmod('relxill',dirPath=model_dir+'/relxill')
-
+    AllModels.mdefine('crabcorr (1./E^dGamma)crabcorrNorm : mul')
 
 #example of model loading
 # AllModels.initpackage('tbnew_mod',"lmodel_tbnew.dat",dirPath=model_dir+'/tbnew')
@@ -78,10 +78,15 @@ xspec_multmods=\
        cflux    ireflect      kyconv     reflect      thcomp     xilconv
       clumin      kdblur     lsmooth     rfxconv     vashift     zashift
       cpflux     kdblur2     partcov     rgsxsrc     vmshift     zmshift
-     gsmooth    kerrconv      rdblur       simpl     
+     gsmooth    kerrconv      rdblur       simpl    crabcorr
 '''.split()
 
+xspec_globcomps=\
+'''
+constant    crabcorr
+'''
 
+#hopefully there's enough there
 xcolors_grp=['black','red','limegreen','blue','cyan','purple','yellow',
              'black','red','limegreen','blue','cyan','purple','yellow',
              'black','red','limegreen','blue','cyan','purple','yellow',
@@ -984,6 +989,10 @@ def addcomp(compname,position='last',endmult=None,return_pos=False,modclass=AllM
 
         -glob_constant: global constant factor, frozen at 1 for the first data group and free for all others
 
+        -glob_crabcorr: global constant factor+ multiple powerlawin normalization. All free except for first datagroup
+
+        -Suzaku_crabcorr: crabcorr variation where only the Front-Illuminated CCD (xis0_xis3)
+                          have a free to vary deltagamma
         -cont_+component: added inside absorption and edge components
                             NOTE: assumes that all currently existing absorption and edge components are at the
                             beginning of the model
@@ -1065,11 +1074,11 @@ def addcomp(compname,position='last',endmult=None,return_pos=False,modclass=AllM
     #dichotomy between custom models
 
     #global keyword for multiplicative components
-    if multipl and comp_custom=='glob':
+    if multipl and (comp_custom=='glob' or  comp_split=='crabcorr' and comp_custom in ['Suzaku']):
         start_position=1
         end_multipl=-1
         #staying inside the constant factor if there is one
-        if AllModels(1).componentNames[0]=='constant':
+        if AllModels(1).componentNames[0] in xspec_globcomps:
             start_position+=1
 
         main_compnames = AllModels(1).componentNames
@@ -1086,7 +1095,7 @@ def addcomp(compname,position='last',endmult=None,return_pos=False,modclass=AllM
                 if multipl:
                     end_multipl=-1
                 #staying inside the constant factor if there is one
-                if AllModels(1).componentNames[0]=='constant':
+                if AllModels(1).componentNames[0] in xspec_globcomps:
                     start_position+=1
 
 
@@ -1098,7 +1107,7 @@ def addcomp(compname,position='last',endmult=None,return_pos=False,modclass=AllM
             main_compnames = AllModels(1).componentNames
 
             #staying inside the constant factor if there is one
-            if AllModels(1).componentNames[0]=='constant':
+            if AllModels(1).componentNames[0] in xspec_globcomps:
                 start_position+=1
 
             #maintaining inside the absorption component if there are some
@@ -1215,7 +1224,7 @@ def addcomp(compname,position='last',endmult=None,return_pos=False,modclass=AllM
                 #counting the number of parenthesis at the end
                 count_par=0
                 if is_model:
-                    if AllModels(1).componentNames[0]=='constant':
+                    if AllModels(1).componentNames[0] in xspec_globcomps:
                             count_par+=1
                 #adding inside them if there were any
                 if count_par!=0:
@@ -1549,14 +1558,43 @@ def addcomp(compname,position='last',endmult=None,return_pos=False,modclass=AllM
         for i_grp in range(1,AllData.nGroups+1):
             #setting the first data group to a fixed 1 value
             if i_grp==1:
-                AllModels(i_grp)(gap_start).values=[1]+ AllModels(i_grp)(1).values[1:]
+                AllModels(i_grp)(gap_start).values=[1]+ AllModels(i_grp)(gap_start).values[1:]
                 AllModels(i_grp)(gap_start).frozen=True
             #unlinking the rest
             else:
                 AllModels(i_grp)(gap_start).link=''
                 AllModels(i_grp)(gap_start).frozen=False
 
-        return_pars+=[1+AllModels(1).nParameters*i_grp for i_grp in range(1,AllData.nGroups)]
+        return_pars+=[gap_start+AllModels(1).nParameters*i_grp for i_grp in range(1,AllData.nGroups)]
+
+    if comp_split=='crabcorr' and comp_custom is not None:
+        for i_grp in range(1,AllData.nGroups+1):
+            #setting the first data group to a fixed 1 value
+            if i_grp==1:
+                AllModels(i_grp)(gap_start).values=[0]+ AllModels(i_grp)(gap_start).values[1:]
+                AllModels(i_grp)(gap_start).frozen=True
+
+                #note that we edit the values range to avoid negatives values that would make the fit go wild
+                AllModels(i_grp)(gap_start+1).values=[1]+ [0.01, 0., 0., 1e+22, 1e+22]
+                AllModels(i_grp)(gap_start+1).frozen=True
+            #unlinking the rest
+            else:
+                AllModels(i_grp)(gap_start).link=''
+                AllModels(i_grp)(gap_start).frozen=False
+                AllModels(i_grp)(gap_start).values=[0]+ AllModels(i_grp)(gap_start).values[1:]
+
+                AllModels(i_grp)(gap_start+1).link=''
+                AllModels(i_grp)(gap_start+1).frozen=False
+                AllModels(i_grp)(gap_start + 1).values = [1] + [0.01, 0., 0., 1e+22, 1e+22]
+            if i_grp!=AllData.nGroups:
+                return_pars+=[gap_start+AllModels(1).nParameters*i_grp,gap_start+1+AllModels(gap_start).nParameters*i_grp]
+
+        if comp_custom=='Suzaku':
+            #freezing the gamma of every parameter except for the front illuminated one
+            for i_grp in range(1, AllData.nGroups + 1):
+                if 'xis_0' not in AllData(i_grp).fileName and 'xis_2' not in AllData(i_grp).fileName and\
+                        'xis3' not in AllData(i_grp).fileName:
+                    AllModels(i_grp)(gap_start).frozen=True
 
     '''
     Calibration specifics
@@ -2639,7 +2677,8 @@ class fitmod:
                 #directly converting the existing xspec components in the various arrays
                 for compname in self.cont_xcompnames:
 
-                    setattr(self,'cont_'+compname,fitcomp('cont_'+compname,self.logfile,self.logfile_write,continuum=True,
+                    setattr(self,'cont_'+compname,fitcomp('cont_'+compname,self.logfile,self.logfile_write,
+                                                          continuum=True,fitcomp_names=self.name_complist,
                                                           fitmod=self))
                     self.cont_complist+=[getattr(self,'cont_'+compname)]
                     self.includedlist+=[getattr(self,'cont_'+compname)]
@@ -2661,7 +2700,8 @@ class fitmod:
                 #components already considered in the autofit continuum list should not be here twice
                 if self.name_complist[i] not in self.name_cont_complist:
 
-                    setattr(self,self.name_complist[i],fitcomp(self.name_complist[i],self.logfile,self.logfile_write,self.idlist[i],
+                    setattr(self,self.name_complist[i],fitcomp(self.name_complist[i],self.logfile,self.logfile_write,
+                                                               self.idlist[i],fitcomp_names=self.name_complist,
                                                                fitmod=self))
 
                     self.complist+=[getattr(self,self.name_complist[i])]
@@ -2715,13 +2755,6 @@ class fitmod:
             except:
                 raise ValueError
 
-            #safeguard to avoid issues for continuum complists imported in the autofit
-            comp.fitmod=self
-
-            #updating the logfile
-            comp.logfile=self.logfile
-            comp.logfile_write=self.logfile_write
-
             comp.xcomps=[getattr(AllModels(1),comp.xcompnames[i]) for i in range(len(comp.xcompnames))]
 
             #xspec numbering here so needs to be shifted
@@ -2736,20 +2769,27 @@ class fitmod:
             comp.parlist=np.arange(first_par,last_par+1).astype(int).tolist()
 
             #adding some parameters for components which affect other datagroups
-            if 'constant' in comp.compname and comp.parlist[0]==1 and AllModels(1)(1).values[0]==1:
-                comp.parlist+=[1+AllModels(1).nParameters*i_grp for i_grp in range(1,AllData.nGroups)]
-
-            if 'cal' in comp.compname and 'edge' in comp.compname:
+            if ('cal' in comp.compname and 'edge' in comp.compname)\
+                    or np.any([elem in comp.compname for elem in xspec_globcomps]) :
                 comp.parlist=ravel_ragged([np.array(comp.parlist)+AllModels(1).nParameters*i_grp\
                                            for i_grp in range(AllData.nGroups)]).tolist()
 
-            comp.unlocked_pars=[i for i in comp.parlist if (not AllModels(par_degroup(i)[0])(par_degroup(i)[1]).frozen and\
-                                                                  AllModels(par_degroup(i)[0])(par_degroup(i)[1]).link=='')]
+            comp.unlocked_pars=[i for i in comp.parlist if (not AllModels(par_degroup(i)[0])(par_degroup(i)[1]).frozen
+                                                        and AllModels(par_degroup(i)[0])(par_degroup(i)[1]).link=='')]
 
 
         #we also update the list of component xcomps (no multi-components here so w can take the first element in xcompnames safely)
         self.cont_xcompnames=[self.cont_complist[i].xcompnames[0] if self.cont_complist[i].included else ''\
                               for i in range(len(self.cont_complist))]
+
+        #this should be done for all components and not just the included ones
+        for comp in self.complist:
+            # safeguard to avoid issues for continuum complists imported in the autofit
+            comp.fitmod = self
+
+            # updating the logfile
+            comp.logfile = self.logfile
+            comp.logfile_write = self.logfile_write
 
     def list_comps_errlocked(self):
 
@@ -2888,9 +2928,14 @@ class fitmod:
                                 cont_comp.unfreeze()
 
                             # unfreezing constant factors for all but the first datagroup
-                            if AllModels(1).componentNames[0] == 'constant' and AllData.nGroups > 1:
-                                for i_grp in range(2, AllData.nGroups + 1):
-                                    AllModels(i_grp)(1).frozen = False
+                            if AllModels(1).componentNames[0] in xspec_globcomps and AllData.nGroups > 1:
+                                if AllModels(1).componentNames[0]=='constant':
+                                    for i_grp in range(2, AllData.nGroups + 1):
+                                        AllModels(i_grp)(1).frozen = False
+
+                                elif AllModels(1).componentNames[0]=='crabcorr':
+                                    for i_grp in range(2, AllData.nGroups + 1):
+                                        AllModels(i_grp)(2).frozen = False
 
                     elif not added_comp.line or not lock_lines:
                         self.print_xlog('\nlog:Unfreezing ' + added_comp.compname + ' component.')
@@ -3092,11 +3137,15 @@ class fitmod:
                             if cont_comp is not None and (not cont_comp.line or not lock_lines):
                                 cont_comp.unfreeze()
 
-                            #unfreezing constant factors for all but the first datagroup
-                            if AllModels(1).componentNames[0]=='constant' and AllData.nGroups>1:
-                                for i_grp in range(2,AllData.nGroups+1):
-                                    AllModels(i_grp)(1).frozen=False
+                            # unfreezing constant factors for all but the first datagroup
+                            if AllModels(1).componentNames[0] in xspec_globcomps and AllData.nGroups > 1:
+                                if AllModels(1).componentNames[0] == 'constant':
+                                    for i_grp in range(2, AllData.nGroups + 1):
+                                        AllModels(i_grp)(1).frozen = False
 
+                                elif AllModels(1).componentNames[0] == 'crabcorr':
+                                    for i_grp in range(2, AllData.nGroups + 1):
+                                        AllModels(i_grp)(2).frozen = False
                     elif not added_comp.line or not lock_lines:
                         self.print_xlog('\nlog:Unfreezing '+added_comp.compname+' component.')
                         added_comp.unfreeze()
@@ -3816,8 +3865,7 @@ class fitmod:
             self.update_fitcomps()
 
             #computing the number of free parameters (need to be done after a fit) as a baseline for the MC
-            n_free_pars=sum([len(comp.unlocked_pars) for comp in [elem for elem in self.includedlist if elem is not None]])+\
-                        (2*max(0,AllData.nGroups-1) if AllData.nGroups>1 and AllModels(1).componentNames[0]=='constant' else 0)
+            n_free_pars=sum([len(comp.unlocked_pars) for comp in [elem for elem in self.includedlist if elem is not None]])
 
             #computing the markov chain here since we will need it later anyway, it will allow better error definitions
             # AllChains.defLength=4000*n_free_pars
@@ -4067,13 +4115,10 @@ class fitmod:
             for i_sim in range(len(par_draw)):
                 #setting the parameters of the line according to the drawpar
                 for id_parcomp,parcomp in enumerate(fitcomp_line.parlist):
-                    if AllModels(1).componentNames[0]=='constant':
-                        add_val=1
-                    else:
-                        add_val=0
 
-                    #we only draw from the first data group, hence the [0] index in par_draw
-                    AllModels(1)(id_parcomp+1+add_val).values=[par_draw[i_sim][0][parcomp-1]]+AllModels(1)(id_parcomp+1+add_val).values[1:]
+                    #we only draw from the first data group BECAUSE WE TAKE THE FLUX FOR THE FIRST DG,
+                    # hence the [0] index in par_draw
+                    AllModels(1)(id_parcomp+1).values=[par_draw[i_sim][0][parcomp-1]]+AllModels(1)(id_parcomp+1).values[1:]
 
 
                 #computing the flux of the line
@@ -4363,10 +4408,11 @@ class fitcomp:
 
         self.mandatory=False
 
-        if 'constant' in comp_split or self.calibration:
+        if np.any([elem in comp_split for elem in xspec_globcomps]) or self.calibration:
             self.mandatory=True
+
         #ensuring we won't lose the diskbb if there is a nthcomp in the other proposed components
-        elif 'diskbb' in comp_split and fitcomp_names is not None:
+        if 'diskbb' in comp_split and self.fitcomp_names is not None:
             if 'disk_nthcomp' in self.fitcomp_names:
                 self.mandatory=True
 
@@ -4386,12 +4432,14 @@ class fitcomp:
 
             self.parlist=[getattr(self.xcomps[0],self.xcomps[0].parameterNames[i]).index for i in range(len(self.xcomps[0].parameterNames))]
 
-            #testing if the component is a global_constant
-            if 'constant' in self.compname and self.parlist[0]==1 and AllModels(1)(1).values[0]==1:
-                self.parlist+=[1+AllModels(1).nParameters*i_grp for i_grp in range(1,AllData.nGroups)]
+            #adding some parameters for components which affect other datagroups
+            if ('cal' in self.compname and 'edge' in self.compname)\
+                    or np.any([elem in self.compname for elem in xspec_globcomps]) :
+                self.parlist=ravel_ragged([np.array(self.parlist)+AllModels(1).nParameters*i_grp\
+                                           for i_grp in range(AllData.nGroups)]).tolist()
 
-            self.unlocked_pars=[i for i in self.parlist if (not (AllModels(par_degroup(i)[0])(par_degroup(i)[1]).frozen) and\
-                                                            AllModels(par_degroup(i)[0])(par_degroup(i)[1]).link=='')]
+            self.unlocked_pars=[i for i in self.parlist if (not (AllModels(par_degroup(i)[0])(par_degroup(i)[1]).frozen)\
+                                                        and AllModels(par_degroup(i)[0])(par_degroup(i)[1]).link=='')]
 
     def print_xlog(self,string):
 
@@ -4442,6 +4490,7 @@ class fitcomp:
             #computing the unlocked parameters, i.e. the parameters not frozen at the creation of the component
             self.unlocked_pars=[i for i in self.parlist if (not AllModels(par_degroup(i)[0])(par_degroup(i)[1]).frozen and\
                                                             AllModels(par_degroup(i)[0])(par_degroup(i)[1]).link=='')]
+
 
             #computing a mask of base unlocked parameters to rethaw pegged parameters during the second round of autofit
             self.unlocked_pars_base_mask=[(not AllModels(par_degroup(i)[0])(par_degroup(i)[1]).frozen and\

@@ -132,7 +132,7 @@ from xspec import AllChains
 #custom script with a few shorter xspec commands
 from xspec_config_multisp import allmodel_data,model_load,addcomp,Pset,Pnull,rescale,reset,Plot_screen,store_plot,freeze,allfreeze,unfreeze,\
                          calc_error,delcomp,fitmod,fitcomp,calc_fit,xcolors_grp,xPlot,xscorpeon,catch_model_str,\
-                         load_fitmod, ignore_data_indiv
+                         load_fitmod, ignore_data_indiv,par_degroup,xspec_globcomps
 
 from linedet_utils import plot_line_comps,plot_line_search,plot_std_ener,coltour_chi2map,narrow_line_search,\
                             plot_line_ratio
@@ -183,7 +183,7 @@ ap.add_argument("-prefix",nargs=1,help='restrict analysis to a specific prefix',
 
 ####output directory
 ap.add_argument("-outdir",nargs=1,help="name of output directory for line plots",
-                default="lineplots_opt_nth",type=str)
+                default="lineplots_opt_crabcorr",type=str)
 
 #overwrite
 #global overwrite based on recap PDF
@@ -219,7 +219,7 @@ ap.add_argument('-xspec_window',nargs=1,help='xspec window id (auto tries to pic
 '''MODELS'''
 #### Models and abslines lock
 ap.add_argument('-cont_model',nargs=1,help='model list to use for the autofit computation',
-                default='nthcont',type=str)
+                default='nthcont_Suzaku',type=str)
 
 ap.add_argument('-autofit_model',nargs=1,help='model list to use for the autofit computation',
                 default='lines_narrow',type=str)
@@ -245,7 +245,7 @@ ap.add_argument('-rewind_epoch_list',nargs=1,
 
 ap.add_argument('-spread_comput',nargs=1,
                 help='spread sources in N subsamples to poorly parallelize on different consoles',
-                default=1,type=bool)
+                default=4,type=bool)
 
 ap.add_argument('-reverse_spread',nargs=1,help='run the spread computation lists in reverse',default=False,type=bool)
 
@@ -332,7 +332,7 @@ ap.add_argument('-cont_fit_method',nargs=1,help='fit logic for the broadband fit
 
 ap.add_argument('-reload_autofit',nargs=1,
                 help='Reload existing autofit save files to gain time if a computation has crashed',
-                default=False,type=bool)
+                default=True,type=bool)
 
 ap.add_argument('-reload_fakes',nargs=1,
                 help='Reload fake delchi array file to skip the fake computation if possible',
@@ -1699,17 +1699,17 @@ def reload_sp(baseload_path,keyword_skip=None,write_baseload=True,newbl_keyword=
                 i_line+=1
 
         else:
-            new_baseload_lines+[baseload_lines[i_line]]
+            new_baseload_lines+=[baseload_lines[i_line]]
 
     #writing the lines in a new file
     new_baseload_path=baseload_path.replace('.xcm','_'+newbl_keyword+'.xcm')
     with open(new_baseload_path,'w+') as f_baseload_skip:
         f_baseload_skip.writelines(new_baseload_lines)
 
-    Xset.restore(baseload_path)
+    Xset.restore(new_baseload_path)
 
     if not write_baseload:
-        os.remove(baseload_path)
+        os.remove(new_baseload_path)
 
 def line_detect(epoch_id):
 
@@ -2719,6 +2719,12 @@ def line_detect(epoch_id):
         with open(outdir+'/'+epoch_observ[0]+'_chi_dict_init.pkl','wb') as file:
             dill.dump(chi_dict_init,file)
 
+        # re-ignoring PIN if needed
+        if 'PIN' in epoch_dets_good:
+            mask_nodeload = epoch_dets_good != 'PIN'
+        else:
+            mask_nodeload = True
+
         # reloading the continuum models to get the saves back and compute the continuum infos
         Xset.restore(outdir + '/' + epoch_observ[0] + '_mod_autofit.xcm')
 
@@ -2754,12 +2760,14 @@ def line_detect(epoch_id):
             xscorpeon.load(scorpeon_save=data_broad.scorpeon,frozen=True)
 
             #limiting to the line search energy range
-            ignore_data_indiv(line_cont_range[0], line_cont_range[1], reset=True, sat_low_groups=e_sat_low_indiv,
-                              sat_high_groups=e_sat_high_indiv,glob_ignore_bands=ignore_bands_indiv)
+            ignore_data_indiv(line_cont_range[0], line_cont_range[1], reset=True,
+                              sat_low_groups=e_sat_low_indiv[mask_nodeload],
+                              sat_high_groups=e_sat_high_indiv[mask_nodeload],
+                              glob_ignore_bands=ignore_bands_indiv[mask_nodeload])
 
             #if the stat is low we don't do the autofit anyway so we'd rather get the best fit possible
             if not flag_lowSNR_line:
-                for i_grp in range(len(epoch_files_good)[mask_nodeload]):
+                for i_grp in range(len(epoch_files_good[mask_nodeload])):
                     #ignoring the line_cont_ig energy range for the fit to avoid contamination by lines
                     AllData(i_grp+1).ignore(line_cont_ig_indiv[i_grp])
 
@@ -2827,7 +2835,7 @@ def line_detect(epoch_id):
             #note: for now this is fine but might need to be udpated later with telescopes with global ignore bands
             #matching part of this
 
-            for i_sp in range(len(epoch_files_good)[mask_nodeload]):
+            for i_sp in range(len(epoch_files_good[mask_nodeload])):
                 if line_cont_ig_indiv[i_sp] != '':
                     AllData(i_sp+1).notice(line_cont_ig_indiv[i_sp])
 
@@ -3022,7 +3030,7 @@ def line_detect(epoch_id):
         #removing PIN from the detectors if it is there
         if 'PIN' in epoch_dets_good:
             reload_sp(baseload_path,keyword_skip='pin',newbl_keyword='autofit')
-            mask_nodeload=epoch_dets_good=='PIN'
+            mask_nodeload=epoch_dets_good!='PIN'
         else:
             mask_nodeload=True
 
@@ -3239,7 +3247,7 @@ def line_detect(epoch_id):
                 #re-ignoring PIN if needed
                 if 'PIN' in epoch_dets_good:
                     Xset.restore(baseload_path.replace('.xcm','_autofit.xcm'))
-                    mask_nodeload = epoch_dets_good == 'PIN'
+                    mask_nodeload = epoch_dets_good != 'PIN'
                 else:
                     mask_nodeload = True
 
@@ -3405,10 +3413,6 @@ def line_detect(epoch_id):
         plot_autofit_ratio_lines=[(plot_autofit_noabs+plot_autofit_lines[i])/plot_autofit_noabs\
                                      for i in range(len(plot_autofit_lines)) if max(plot_autofit_lines[i])<=0.]
 
-        #recording all the frozen parameters in the model to refreeze them during the fakeit fit
-        #the parameters in the other data groups are all linked besides the constant factor which isn't frozen so there should be no problem
-        autofit_forcedpars=[i for i in range(1,AllModels(1).nParameters+1) if AllModels(1)(i).frozen or AllModels(1)(i).link!='']
-
         '''
         Chain computation for the MC significance
         '''
@@ -3421,8 +3425,8 @@ def line_detect(epoch_id):
 
             curr_simpar=AllModels.simpars()
 
-            #we restrict the simpar to the initial model because we don't really care about simulating the variations of the bg
-            #since it's currently frozen
+            #we restrict the simpar to the initial model because we don't really care about simulating the variations
+            # of the bg since it's currently frozen
             autofit_drawpars[i_draw]=np.array(curr_simpar)[:AllData.nGroups*AllModels(1).nParameters]\
                                      .reshape(AllData.nGroups,AllModels(1).nParameters)
 
@@ -3453,6 +3457,9 @@ def line_detect(epoch_id):
         Saving a "continuum" version of the model without absorption
         '''
 
+        #this first part is to get the mask to reduce autofit_drawpars_cont to its version without
+        #the abslines
+
         #We store the indexes of the absgaussian parameters to shift the rest of the parameters accordingly after
         #deleting those components
         abslines_parsets=np.array([elem.parlist for elem in fitlines.includedlist if elem is not None and elem.named_absline])
@@ -3466,7 +3473,8 @@ def line_detect(epoch_id):
         #switching to indexes instead of actual parameter numbers
         abslines_arrids=[elem-1 for elem in abslines_parids]
 
-        #creating the list of continuum array indexes
+        #creating the list of continuum array indexes (note that this will be applied for each datagroups)
+        #this is for A SINGLE DATAGROUP because autofit_drawpars has a adatagroup dimension
         continuum_arrids=[elem for elem in np.arange(AllModels(1).nParameters) if elem not in abslines_arrids]
 
         #and parameters
@@ -3475,20 +3483,36 @@ def line_detect(epoch_id):
         #to create a drawpar array which works with thereduced model (this line works with several data groups)
         autofit_drawpars_cont=autofit_drawpars.T[continuum_arrids].T
 
-        #same thing with the forced parameters list
-        continuum_forcedpars=[np.argwhere(np.array(continuum_parids)==elem)[0].tolist()[0]+1 for elem in\
-                              [elem2 for elem2 in autofit_forcedpars if elem2 in continuum_parids]]
+        #and now delete the abslines to properly get the forced continuum parameters in the 'no-abs' state
+        full_includedlist=fitlines.includedlist
 
         #deleting all absorption components (reversed so we don't have to update the fitcomps)
         for comp in [elem for elem in fitlines.includedlist if elem is not None][::-1]:
             if comp.named_absline:
-                #note that with no rollback we do not update the values of the component so it has still its included status and everything else
+                #note that with no rollback we do not update the methods of the component
+                # so it has still its included status and everything else
                 comp.delfrommod(rollback=False)
+                fitlines.update_fitcomps()
 
         #storing the no abs line 'continuum' model
         data_autofit_noabs=allmodel_data()
 
+        #recording all the frozen/linked parameters in the model to refreeze them during the fakeit fit
+        #note that here we don't care about how things are linked, just freezing them to their drawpared value
+        #is enough because the drawpar itself will have been generated with the correct link
+        continuum_forcedpars=[i_par for i_par in range(1,AllData.nGroups*AllModels(1).nParameters+1)\
+                            if AllModels(par_degroup(i_par)[0])(par_degroup(i_par)[1]).frozen\
+                            or AllModels(par_degroup(i_par)[0])(par_degroup(i_par)[1]).link!='']
+
         plot_ratio_autofit_noabs=store_plot('ratio')
+
+        #resetting the states of fitlines
+        fitlines.includedlist=full_includedlist
+        data_autofit.load()
+        fitlines.update_fitcomps()
+
+        #and comming back to the noabs state
+        data_autofit_noabs.load()
 
         #plotting the combined autofit plot
 
@@ -3772,12 +3796,18 @@ def line_detect(epoch_id):
                             #unfreezing the model
                             unfreeze(AllModels(i_grp))
 
-                            #keeping the initially frozen parameters frozen
-                            freeze(AllModels(i_grp),parlist=continuum_forcedpars)
+                        for par_forced in continuum_forcedpars:
+                            AllModels(par_degroup(par_forced)[0])(par_degroup(par_forced)[1]).frozen=True
 
-                            #keeping the first constant factor frozen if necessary
-                            if i_grp>1 and AllModels(1).componentNames[0]=='constant':
-                                AllModels(i_grp)(1).frozen=False
+                            #previous method which wouldn't work with more complicated unlinks and free pars
+                            #for multigroup models
+                            # #keeping the initially frozen parameters frozen
+                            # freeze(AllModels(i_grp),parlist=continuum_forcedpars)
+                            #
+                            # #keeping only the first constant factor frozen if necessary
+                            # if i_grp>1 and AllModels(1).componentNames[0]=='constant':
+                            #     AllModels(i_grp)(1).frozen=False
+
 
                         #no error computation to avoid humongus computation times
                         calc_fit(nonew=True,noprint=True)
@@ -4690,6 +4720,7 @@ if multi_obj==False:
     #for now should be fine because for now we won't multi on stuff that's too weak to be detected
     elif sat_glob=='multi':
         aborted_files=[]
+        aborted_epochs=[]
 
     if write_aborted_pdf:
         for elem_epoch_files in aborted_files:
@@ -4762,7 +4793,7 @@ dist_factor=4*np.pi*(dist_obj_list*1e3*3.086e18)**2
 Edd_factor=dist_factor/(1.26e38*mass_obj_list)
 
 #Reading the results files
-observ_list,lineval_list,lum_list,date_list,instru_list,exptime_list,fitmod_broadband_list\
+observ_list,lineval_list,lum_list,date_list,instru_list,exptime_list,fitmod_broadband_list,epoch_obs_list\
     =obj_values(lineval_files,Edd_factor,dict_linevis)
 
 dict_linevis['lum_list']=lum_list

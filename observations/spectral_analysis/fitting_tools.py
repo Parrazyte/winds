@@ -196,7 +196,11 @@ def model_list(model_id='lines',give_groups=False):
         avail_comps=['FeKa0em_bgaussian','FeKb0em_bgaussian','FeKa25em_gaussian','FeKa26em_gaussian',
                       'FeKa25abs_nagaussian','FeKa26abs_nagaussian','NiKa27abs_nagaussian',
                       'FeKb25abs_nagaussian','FeKb26abs_nagaussian','FeKg26abs_nagaussian']
-        
+
+    if model_id=='lines_narrow_noem':
+        avail_comps=['FeKa25abs_nagaussian','FeKa26abs_nagaussian','NiKa27abs_nagaussian',
+                      'FeKb25abs_nagaussian','FeKb26abs_nagaussian','FeKg26abs_nagaussian']
+
     if model_id=='lines_laor':
         '''
         subset of lines_narrow for spectra with huge emission in continuum. No emission line is allowed here

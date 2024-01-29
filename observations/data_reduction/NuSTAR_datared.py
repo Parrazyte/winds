@@ -99,7 +99,7 @@ ap.add_argument('-catch', '--catch_errors', help='Catch errors while running the
 
 # global choices
 ap.add_argument("-a", "--action", nargs='?', help='Give which action(s) to proceed,separated by comas.',
-                default='g,m', type=str)
+                default='m', type=str)
 # default: build,reg,lc,sp,g,m
 
 ap.add_argument("-over", nargs=1, help='overwrite computed tasks (i.e. with products in the batch, or merge directory\
@@ -1555,6 +1555,10 @@ def extract_lc(directory,binning='1',lc_bands_str='3-79',hr_bands='10-50/3-10',c
         -overwrite: overwrite products or not
 
     NOTE THAT THE BACKSCALE CORRECTION IS APPLIED MANUALLY
+
+    NOTE2: currently, the bright flag will be set to true for all individual orbits together
+    Should be changed to individual returns for each observation period if we look at source varying over and
+    under the treshold in the span of an observation
     '''
 
     '''MAIN BEHAVIOR'''

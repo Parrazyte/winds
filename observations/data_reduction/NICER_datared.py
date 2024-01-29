@@ -584,7 +584,7 @@ def create_gtis(directory,split='orbit+flare',band='3-15',binning=1,overwrite=Tr
                     #should clip anything weird in the data unless the flare is huge
                     clip_data = sigma_clip(clip_lc[elem_gti_orbit], sigma=2)
 
-                    #switching to log10 for more constraining stds, the +2 should avoid any negative values
+                    #switching to log10 for more constraining stds, the +3 should avoid any negative values
                     clip_data=np.log10(np.where(clip_data==0,0.01,clip_data))+3
 
                     clip_std=clip_data.std()

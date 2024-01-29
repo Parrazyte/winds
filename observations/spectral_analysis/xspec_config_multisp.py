@@ -84,7 +84,7 @@ xspec_multmods=\
 xspec_globcomps=\
 '''
 constant    crabcorr
-'''
+'''.split()
 
 #hopefully there's enough there
 xcolors_grp=['black','red','limegreen','blue','cyan','purple','yellow',
@@ -1477,6 +1477,8 @@ def addcomp(compname,position='last',endmult=None,return_pos=False,modclass=AllM
 
         xspec_model(gap_end-5).values=[1.7,0.017,1.,1.,3.5,3.5]
 
+    if 'abs' in comp_split and comp_custom is not None and 'glob' in comp_custom:
+        xspec_model(gap_end).values=[1.,0.01,0.,0.,100,100]
     '''
     linking the vashifts from the same group IN FORWARD ORDER ONLY
     In order to do that, we parse the existing components to see if there are already existing components from the same link group. If so, 
@@ -2615,7 +2617,8 @@ class fitmod:
 
     '''
 
-    def __init__(self,complist,logfile,logfile_write,absval=None,interact_groups=None,idlist=None,prev_fitmod=None):
+    def __init__(self,complist,logfile,logfile_write,absval=None,interact_groups=None,idlist=None,prev_fitmod=None,
+                 nth_gamma=None):
 
         #defining empty variables
         self.name_complist=complist
@@ -2627,6 +2630,8 @@ class fitmod:
         self.interact_groups=interact_groups
         self.complist=[]
         self.fixed_abs=absval
+        self.fixed_gamma=nth_gamma
+
         self.progressive_delchis=[]
 
         #attempting to identify already existing elements in the current model
@@ -2878,12 +2883,26 @@ class fitmod:
                     if line_pendant_comp.included:
                         continue
 
-            self.includedlist = component.addtomod(fixed_vals=[self.fixed_abs] if component.absorption \
-                                                                                  and self.fixed_abs is not None else None,
-                                                   incl_list=self.includedlist)
+            #there can be issues when adding crabcorr with datagroups who have very different normalization so
+            #in this case we add a glob_constant first, log the values and then add the crabcorr with the
+            #normalization values of the glob_constant
+            if 'crabcorr' in component.compname:
+                addcomp('glob_constant')
+                calc_fit()
+                norm_vals=[AllModels(i_grp+1)(1).values[0] for i_grp in range(AllData.nGroups)]
+                delcomp('constant')
+
+            self.includedlist = component.addtomod(fixed_vals=[self.fixed_abs] if component.absorption else \
+                                                              [self.fixed_gamma] if 'nthcomp' in component.compname\
+                                                              else None,incl_list=self.includedlist)
 
             # updating the fitcomps before anything else
             self.update_fitcomps()
+
+            if 'crabcorr' in component.compname:
+                #pre-adjusting the crabcorr normalization values
+                for i_grp in range(AllData.nGroups):
+                    AllModels(i_grp+1)(2).values=norm_vals[i_grp]
 
             #for now we skip the individual component fittings to avoid settling into a local minima before all components
             #are now (can be an issue). Could add an option for this
@@ -3094,9 +3113,9 @@ class fitmod:
             #copy of the includedlist for rollback after testing the component significance
             prev_includedlist=copy(self.includedlist)
 
-            self.includedlist=component.addtomod(fixed_vals=[self.fixed_abs] if component.absorption\
-                                                 and self.fixed_abs is not None else None,
-                                                 incl_list=self.includedlist)
+            self.includedlist=component.addtomod(fixed_vals=[self.fixed_abs] if component.absorption else \
+                                                              [self.fixed_gamma] if 'nthComp' in component.compname\
+                                                              else None,incl_list=self.includedlist)
 
             #updating the fitcomps before anything else
             self.update_fitcomps()
@@ -3296,9 +3315,9 @@ class fitmod:
         self.print_xlog('\nlog:The most significant component is '+bestcomp.compname+'. Adding it to the current model...')
 
         #re-adding it with its fit already loaded
-        self.includedlist=bestcomp.addtomod(fixed_vals=[self.fixed_abs] if component.absorption\
-                                            and self.fixed_abs is not None else None,
-                                            incl_list=self.includedlist,fitted=True)
+        self.includedlist=bestcomp.addtomod(fixed_vals=[self.fixed_abs] if component.absorption else \
+                                                              [self.fixed_gamma] if 'nthComp' in component.compname\
+                                                              else None,incl_list=self.includedlist,fitted=True)
 
         #updating the fitcomps before anything else
         self.update_fitcomps()
@@ -3806,19 +3825,14 @@ class fitmod:
                     pegged_par_index=par_peg_comps[i_par_peg][0].parlist[par_peg_comps[i_par_peg][1]]
 
                     #unfreezing the parameter
-                    try:
-                        AllModels(par_peg_ids[i_par_peg][0])(par_peg_ids[i_par_peg][1]).frozen=False
-                    except:
-                        breakpoint()
+                    AllModels(par_peg_ids[i_par_peg][0])(par_peg_ids[i_par_peg][1]).frozen=False
+
 
                     # #computing the parameter position in all groups values
                     # par_peg_allgrp=(par_peg_ids[i_par_peg][0]-1)*AllModels(1).nParameters+par_peg_ids[i_par_peg][1]
 
-                    try:
                         #no need for indiv mode here since we compute the error for a single parameter
-                        calc_error(self.logfile,param=str(pegged_par_index),freeze_pegged=True)
-                    except:
-                        breakpoint()
+                    calc_error(self.logfile,param=str(pegged_par_index),freeze_pegged=True)
 
                     #re-freezing the parameter
                     #AllModels(par_peg_ids[i_par_peg][0])(par_peg_ids[i_par_peg][1]).frozen=False
@@ -4073,7 +4087,9 @@ class fitmod:
                 #creating a proper array with the blueshift of the line and its uncertainties
                 #note: since we want the blueshift we need to swap the value of the vashift AND swap the + error with the - error
                 abslines_bshift[i_line]=\
-                    [-AllModels(1)(vashift_parid).values[0],self.errors[0][vashift_parid-1][1],self.errors[0][vashift_parid-1][0]]
+                    [-AllModels(1)(vashift_parid).values[0],
+                     self.errors[0][vashift_parid-1][1],
+                     self.errors[0][vashift_parid-1][0]]
 
 
             #getting the delchi of the line (we assume that the normalisation is the last parameter of the line component)
@@ -4104,8 +4120,8 @@ class fitmod:
 
             #loop on all the components to delete them, in reverse order to avoid having to update them
             for comp in [elem for elem in self.includedlist if elem is not None][::-1]:
-                #skipping the current component
-                if comp is fitcomp_line or comp.mandatory or (comp.absorption and comp.xcompnames[0] not in AllModels(1).componentNames):
+                #skipping the current component, already removed absorptions
+                if comp is fitcomp_line or (comp.absorption and comp.xcompnames[0] not in AllModels(1).componentNames):
                     continue
 
                 comp.delfrommod(rollback=False)
@@ -4123,6 +4139,10 @@ class fitmod:
 
                 #computing the flux of the line
                 #(should be negligbly affected by the energy limits of instruments since we don't have lines close to these anyway)
+                '''
+                note that this could be an issue for lowwer energy lines if a high-energy telescope is loaded first
+                there could be a need to extend its rmf
+                '''
                 AllModels.calcFlux('0.3 10')
 
                 #and storing it in the distribution
@@ -4145,7 +4165,6 @@ class fitmod:
             #reloading the model
             mod_data_init.load()
             self.update_fitcomps()
-
         #recreating a valid fit for the error computation
         calc_fit()
 
@@ -4276,7 +4295,8 @@ class fitmod:
 
         self.update_fitcomps()
 
-    def merge(self,prev_fitmod,add_notincl=True,load_frozen=False,load_links=False,load_valrange=False):
+    def merge(self,prev_fitmod,add_notincl=True,load_frozen='auto',load_links=False,
+                               load_relative_links=True,load_valrange=False):
 
         '''
         Merges with a previous fitmodel by replacing the saves of all included components also included
@@ -4315,7 +4335,15 @@ class fitmod:
             #replacing the component saves by the previous model's save
             new_comp=getattr(self,elem_comp.compname)
 
-            new_comp.reload(elem_comp.save,load_frozen=load_frozen,load_links=load_links,load_valrange=load_valrange)
+            #we will only load the frozen states of calibation and glob components because we want to unpeg
+            #things for the rest if some stuff has been pegged
+            load_frozen_indiv=load_frozen==True or \
+                              (load_frozen=='auto' and\
+                               (elem_comp.calibration or elem_comp.compname.split('_')[-1] in xspec_globcomps))
+
+            #here we need to use relative links to avoid breaking things
+            new_comp.reload(elem_comp.save,load_frozen=load_frozen_indiv,load_links=load_links,
+                            load_relative_links=load_relative_links,load_valrange=load_valrange)
 
 class fitcomp:
 
@@ -4328,7 +4356,8 @@ class fitcomp:
     Warning: delfrommod with rollback set to True will reload the save made before the component was added for the last time !
     '''
 
-    def __init__(self,compname,logfile=None,logfile_write=None,identifier=None,continuum=False,fitcomp_names=None,fitmod=None):
+    def __init__(self,compname,logfile=None,logfile_write=None,identifier=None,continuum=False,
+                 fitcomp_names=None,fitmod=None):
 
         #associated fitmod
         self.fitmod=fitmod
@@ -4480,10 +4509,17 @@ class fitcomp:
 
             #fixing parameters if values are provided
             if fixed_vals is not None:
-                for i_par,elem_par in enumerate(self.parlist):
-                    AllModels(par_degroup(elem_par)[0])(par_degroup(elem_par)[1]).values=[fixed_vals[i_par]]+\
-                    AllModels(par_degroup(elem_par)[0])(par_degroup(elem_par)[1]).values[1:]
-                    AllModels(par_degroup(elem_par)[0])(par_degroup(elem_par)[1]).frozen=True
+                for i_fixedval,elem_fixedval in enumerate(fixed_vals):
+
+                    #skipping placeholders
+                    if elem_fixedval is None:
+                        continue
+
+                    #fixing the parameters
+                    valpar=self.parlist[i_fixedval]
+                    AllModels(par_degroup(valpar)[0])(par_degroup(valpar)[1]).values=[elem_fixedval]+\
+                    AllModels(par_degroup(valpar)[0])(par_degroup(valpar)[1]).values[1:]
+                    AllModels(par_degroup(valpar)[0])(par_degroup(valpar)[1]).frozen=True
 
             #note: the compnumbers are defined in xspec indexes, which start at 1
 
@@ -4837,6 +4873,7 @@ class fitcomp:
         values = np.array([None] * comp_npars)
         links = np.array([None] * comp_npars)
         frozen = np.zeros(comp_npars).astype(bool)
+        relative_links=np.array([None]*comp_npars)
 
         for id_par,i_par in enumerate(self.parlist):
 
@@ -4856,19 +4893,27 @@ class fitcomp:
             frozen[id_par] = elem_par.frozen
             links[id_par] = elem_par.link.replace('= ', '')
 
+            #for now all links should refer to parameters inside the parlists so this should be fine
+            if links[id_par]!='':
+                relative_links[id_par]=self.fitmod.idtocomp([int(links[id_par].replace('p',''))])[0]
+
         self.values = values
         self.frozen = frozen
         self.links = links
+        self.relative_links=relative_links
 
-        self.save=[self.values,self.frozen,self.links]
+        self.save=[self.values,self.frozen,self.links,self.relative_links]
 
-    def reload(self,save=None,load_frozen=False,load_links=False,load_valrange=False):
+    def reload(self,save=None,load_frozen=False,load_relative_links=True,load_links=False,load_valrange=False,):
 
         '''
         reload the component values according to an internal or provided save
 
         can choose to load the whole value range, frozen and link states or not to give more flexibility and
         avoid issues when reloading a component from a previous model
+
+        relative_links is a special case where you can reload using the relative position of parameters in the
+        parlist of component.
         '''
 
         assert save is not None or self.values is not None, 'Cannot reload component without saved values or giving a save'
@@ -4877,10 +4922,12 @@ class fitcomp:
             reload_values=self.values
             reload_links=self.links
             reload_frozen=self.frozen
+            reload_relative_links=self.relative_links
         else:
             reload_values=save[0]
             reload_frozen=save[1]
             reload_links=save[2]
+            reload_relative_links=save[3]
 
         for id_par,i_par in enumerate(self.parlist):
 
@@ -4889,8 +4936,12 @@ class fitcomp:
             #changing the values overrides the freeze and link state so it's important to reload the ones
             #of the current model if we're not loading them
 
-            elem_par_frozen=elem_par.frozen
-            elem_par_link=elem_par.link.replace('= ','')
+            #first we untie the parameter to allow replacing the values correctly
+            init_par_frozen=elem_par.frozen
+            init_par_link=elem_par.link.replace('= ','')
+
+            elem_par.frozen=False
+            elem_par.link=''
 
             #reloading the main value or the whole value array
             if load_valrange:
@@ -4902,14 +4953,31 @@ class fitcomp:
             if load_frozen:
                 elem_par.frozen=reload_frozen[id_par]
             else:
-                elem_par.frozen=elem_par_frozen
+                elem_par.frozen=init_par_frozen
 
-            #reloading the link states
-            #this is the most risky part when reloading components from previous models
-            if load_links:
-                elem_par.links=reload_links[id_par]
+            '''
+            reloading the link states
+            this is the most risky part when reloading components from previous models so it has more options
+            '''
+
+            if load_relative_links:
+
+                if reload_relative_links[id_par] is not None:
+                    '''
+                    here we transform the (previous fitcomp,corresponding fitmod parlist index)
+                    into the new parameter position of the new fitcomp
+                    We make sure to fetch the new component by fetching the new component using
+                    the previous component's compname
+                    note that here we assume that both have the same number of parameters, which should stay true
+                    '''
+                    new_relative_link=getattr(self.fitmod,reload_relative_links[id_par][0].compname).\
+                                     parlist[reload_relative_links[id_par][1]]
+                    elem_par.link = str(new_relative_link)
+
+            elif load_links:
+                elem_par.link=reload_links[id_par]
             else:
-                elem_par.link=elem_par_link
+                elem_par.link=init_par_link
 
 ####Plot commands
 '''Plot commands'''

@@ -183,7 +183,7 @@ ap.add_argument("-prefix",nargs=1,help='restrict analysis to a specific prefix',
 
 ####output directory
 ap.add_argument("-outdir",nargs=1,help="name of output directory for line plots",
-                default="lineplots_opt_crabcorr",type=str)
+                default="lineplots_opt_crabcorr_noem",type=str)
 
 #overwrite
 #global overwrite based on recap PDF
@@ -222,7 +222,7 @@ ap.add_argument('-cont_model',nargs=1,help='model list to use for the autofit co
                 default='nthcont_Suzaku',type=str)
 
 ap.add_argument('-autofit_model',nargs=1,help='model list to use for the autofit computation',
-                default='lines_narrow',type=str)
+                default='lines_narrow_noem',type=str)
 #narrow or resolved mainly
 
 ap.add_argument('-no_abslines',nargs=1,
@@ -245,7 +245,7 @@ ap.add_argument('-rewind_epoch_list',nargs=1,
 
 ap.add_argument('-spread_comput',nargs=1,
                 help='spread sources in N subsamples to poorly parallelize on different consoles',
-                default=4,type=bool)
+                default=1,type=bool)
 
 ap.add_argument('-reverse_spread',nargs=1,help='run the spread computation lists in reverse',default=False,type=bool)
 
@@ -275,24 +275,13 @@ NICER no abslines: 4130010128-001_4130010129-001
 
 '''
 ap.add_argument('-force_epochs',nargs=1,help='force epochs to given set of spectra instead of auto matching',
-                default=False,type=bool)
-
-
-force_epochs_str=\
-'''
-['nu80801327002A01_sp_src_grp_opt.pha', 'nu80801327002B01_sp_src_grp_opt.pha'];
-'''
-
+                default=True,type=bool)
 
 force_epochs_str=\
 '''
-['5665010403-001_sp_grp_opt.pha', '6557010101-001_sp_grp_opt.pha',
-              '6557010101-002_sp_grp_opt.pha', '6557010101-003_sp_grp_opt.pha',
-              '6557010101-004_sp_grp_opt.pha', '6557010102-001_sp_grp_opt.pha',
-              '6557010102-002_sp_grp_opt.pha', '6557010102-003_sp_grp_opt.pha',
-              '6557010201-001_sp_grp_opt.pha',
-              'nu80902312002A01_sp_src_grp_opt.pha',
-              'nu80902312002B01_sp_src_grp_opt.pha'];'''
+['906008010_xis1_gti_event_spec_src_grp_opt.pha', '906008010_xis0_xis3_gti_event_spec_src_grp_opt.pha', '906008010_pin_src_dtcor_grp_opt.pha'];
+['409007020_xis1_gti_event_spec_src_grp_opt.pha', '409007020_xis0_xis3_gti_event_spec_src_grp_opt.pha'];
+'''
 force_epochs_str_list=[literal_eval(elem.replace('\n','')) for elem in force_epochs_str.split(';')[:-1]]
 
 ap.add_argument('-force_epochs_list',nargs=1,help='force epochs list',default=force_epochs_str_list)
@@ -2521,6 +2510,7 @@ def line_detect(epoch_id):
 
         # storing the current configuration and model
         Xset.save(outdir + '/' + epoch_observ[0] + '_mod_' + mode + '.xcm', info='a')
+
     def hid_fit_infos(fitmodel, broad_absval, post_autofit=False):
 
         '''
@@ -2569,6 +2559,8 @@ def line_detect(epoch_id):
 
         Fit.perform()
 
+        mod_hid=allmodel_data()
+
         fitmodel.update_fitcomps()
 
         if not broad_HID_mode:
@@ -2581,10 +2573,7 @@ def line_detect(epoch_id):
         '''the first computation is ONLY to get the errors, the main values are overwritten below'''
         # we still only compute the flux of the first model even with NICER because the rest is BG
 
-        try:
-            AllModels.calcFlux(str(hid_cont_range[0]) + ' ' + str(hid_cont_range[1]) + " err 1000 90")
-        except:
-            breakpoint()
+        AllModels.calcFlux(str(hid_cont_range[0]) + ' ' + str(hid_cont_range[1]) + " err 1000 90")
 
         spflux_single[0] = AllData(1).flux[0], AllData(1).flux[0] - AllData(1).flux[1], AllData(1).flux[2] - \
                                                AllData(1).flux[0]
@@ -2601,9 +2590,26 @@ def line_detect(epoch_id):
         spflux_single[4] = AllData(1).flux[0], AllData(1).flux[0] - AllData(1).flux[1], AllData(1).flux[2] - \
                                                AllData(1).flux[0]
 
+        #easier to save the fit here to reload it without having changed the energies
+        if os.path.isfile(outdir + '/' + epoch_observ[0] + '_mod_broadhid' + add_str + '_withignore.xcm'):
+            os.remove(outdir + '/' + epoch_observ[0] + '_mod_broadhid' + add_str + '_withignore.xcm')
+        Xset.save(outdir + '/' + epoch_observ[0] + '_mod_broadhid' + add_str + '_withignore.xcm', info='a')
+
+        #re-arranging the energies array to compute a high energy flux value
+        AllModels.setEnergies('0.1 100. 1000 log')
+        #need to remake a new fit after that
+        calc_fit()
+        AllModels.calcFlux("15. 50. err 1000 90")
+        spflux_high = np.array([AllData(1).flux[0], AllData(1).flux[0] - AllData(1).flux[1], AllData(1).flux[2] - \
+                                               AllData(1).flux[0]])
+
+        Xset.restore(outdir + '/' + epoch_observ[0] + '_mod_broadhid' + add_str + '_withignore.xcm')
+
         spflux_single = np.array(spflux_single)
 
         AllChains.clear()
+
+        mod_hid.load()
 
         for i_sp in range(len(epoch_files_good)):
             if line_cont_ig_indiv[i_sp] != '':
@@ -2624,11 +2630,18 @@ def line_detect(epoch_id):
         else:
             main_abs_comp=None
 
+        #removing the calibration components and absorption lines, reverse included order to not have to update the fitcomps
+        for comp in [elem for elem in fitmodel.includedlist if elem is not None][::-1]:
+            if comp.calibration or comp.named_absline:
+                comp.delfrommod(rollback=False)
 
+        #removing the absorption lines
         # and replacing the main values with the unabsorbed flux values
         # (conservative choice since the other uncertainties are necessarily higher)
 
+        #this value is fully useless at this point
         AllModels.calcFlux(str(hid_cont_range[0]) + ' ' + str(hid_cont_range[1]))
+
         spflux_single[0][0] = AllData(1).flux[0]
         AllModels.calcFlux("3. 6.")
         spflux_single[1][0] = AllData(1).flux[0]
@@ -2639,14 +2652,32 @@ def line_detect(epoch_id):
         AllModels.calcFlux("3. 10.")
         spflux_single[4][0] = AllData(1).flux[0]
 
+        #re-arranging the energies array to compute a high energy flux value
+        AllModels.setEnergies('0.1 100. 1000 log')
+        AllModels.calcFlux("15. 50.")
+        spflux_high[0]=AllData(1).flux[0]
+
+        #and resetting the energies
+        Xset.restore(outdir + '/' + epoch_observ[0] + '_mod_broadhid' + add_str + '.xcm')
+
+        '''
+        Note that the errors are significantly underestimated, should do a cflux*continuum and freeze one of the
+        norms of the parts of the continuum
+        issues are:
+            -potential issues with cflux computation (as a convolution component could be imprecise)
+            -what to put in cflux (do we consider e.g. emission lines ? might need to re-organize the components then)
+            -cflux needs to be initialized quite precisely or fitted first independantly, 
+                otherwise it'll block the fit due to too high statistics
+            -remake a chian just for this?
+        '''
 
         spflux_single = spflux_single.T
 
-        # reloading the absorption values to avoid modifying the fit
-        if main_abs_comp is not None:
-            main_abs_comp.xcomps[0].nH.values=broad_absval
+        mod_hid.load()
 
-        return spflux_single
+        fitmodel.update_fitcomps()
+
+        return spflux_single,spflux_high
 
     #reload previously stored autofits to gain time if asked to
     if reload_autofit and os.path.isfile(outdir+'/'+epoch_observ[0]+'_fitmod_autofit.pkl'):
@@ -2703,7 +2734,9 @@ def line_detect(epoch_id):
 
         AllChains.clear()
 
-        main_spflux = hid_fit_infos(fitlines_hid, broad_absval, post_autofit=True)
+        main_spflux,main_spflux_high = hid_fit_infos(fitlines_hid, broad_absval, post_autofit=True)
+
+        np.savetxt(outdir + '/' + epoch_observ[0] + '_main_spflux_high.txt',main_spflux_high)
 
         # restoring the linecont save
         Xset.restore(outdir + '/' + epoch_observ[0] + '_mod_broadband_linecont.xcm')
@@ -2723,7 +2756,7 @@ def line_detect(epoch_id):
         if 'PIN' in epoch_dets_good:
             mask_nodeload = epoch_dets_good != 'PIN'
         else:
-            mask_nodeload = True
+            mask_nodeload = np.repeat(True,AllData.nGroups)
 
         # reloading the continuum models to get the saves back and compute the continuum infos
         Xset.restore(outdir + '/' + epoch_observ[0] + '_mod_autofit.xcm')
@@ -2748,7 +2781,7 @@ def line_detect(epoch_id):
     else:
 
         '''Continuum fits'''
-        def high_fit(broad_absval,broad_abscomp):
+        def high_fit(broad_absval,broad_abscomp,broad_gamma_nthcomp):
 
             '''
             high energy fit and flux array computation
@@ -2761,9 +2794,9 @@ def line_detect(epoch_id):
 
             #limiting to the line search energy range
             ignore_data_indiv(line_cont_range[0], line_cont_range[1], reset=True,
-                              sat_low_groups=e_sat_low_indiv[mask_nodeload],
-                              sat_high_groups=e_sat_high_indiv[mask_nodeload],
-                              glob_ignore_bands=ignore_bands_indiv[mask_nodeload])
+                          sat_low_groups=e_sat_low_indiv[mask_nodeload],
+                          sat_high_groups=e_sat_high_indiv[mask_nodeload],
+                          glob_ignore_bands=ignore_bands_indiv[mask_nodeload])
 
             #if the stat is low we don't do the autofit anyway so we'd rather get the best fit possible
             if not flag_lowSNR_line:
@@ -2791,6 +2824,9 @@ def line_detect(epoch_id):
                 #creating the fitcont without the absorption component if it didn't exist in the broad model
                 fitcont_high=fitmod([elem for elem in comp_cont if elem!=broad_abscomp],
                                     curr_logfile,curr_logfile_write)
+
+            #freezing the gamma of the nthcomp to avoid nonsenses:
+            fitcont_high.fixed_gamma=broad_gamma_nthcomp
 
             # forcing the absorption component to be included for the broad band fit
             if sat_glob == 'NuSTAR' and freeze_nH:
@@ -2930,8 +2966,9 @@ def line_detect(epoch_id):
                 broad_absval=0
                 broad_abscomp=''
 
-            # #freezing the calibration components
-            # for elem in
+            if 'disk_nthcomp' in [comp.compname for comp in \
+                                  [elem for elem in fitcont_broad.includedlist if elem is not None]]:
+                broad_gamma_nthcomp=fitcont_broad.disk_nthcomp.xcomps[0].Gamma.values[0]
 
             for i_sp in range(len(epoch_files_good)):
                 if line_cont_ig_indiv[i_sp] != '':
@@ -2996,9 +3033,9 @@ def line_detect(epoch_id):
                 print_xlog('\nProblem during hid band fit. Skipping line detection for this exposure...')
                 return ['\nProblem during hid band fit. Skipping line detection for this exposure...']
 
-            spflux_single=hid_fit_infos(fitcont_hid,broad_absval)
+            spflux_single,spflux_high=hid_fit_infos(fitcont_hid,broad_absval)
 
-            return spflux_single,broad_absval,broad_abscomp,data_broad,fitcont_broad
+            return spflux_single,broad_absval,broad_abscomp,data_broad,fitcont_broad,broad_gamma_nthcomp,spflux_high
 
         AllModels.clear()
 
@@ -3016,7 +3053,10 @@ def line_detect(epoch_id):
         if len(result_broad_fit)==1:
             return fill_result(result_broad_fit)
         else:
-            main_spflux,broad_absval,broad_abscomp,data_broad,fitcont_broad=result_broad_fit
+            main_spflux,broad_absval,broad_abscomp,data_broad,fitcont_broad,broad_gamma_nthcomp,main_spflux_high\
+                =result_broad_fit
+
+        np.savetxt(outdir + '/' + epoch_observ[0] + '_main_spflux_high.txt',main_spflux_high)
 
         #reloading the frozen scorpeon data\
         # (which won't change anything if it hasn't been fitted but will help otherwise)
@@ -3030,11 +3070,11 @@ def line_detect(epoch_id):
         #removing PIN from the detectors if it is there
         if 'PIN' in epoch_dets_good:
             reload_sp(baseload_path,keyword_skip='pin',newbl_keyword='autofit')
-            mask_nodeload=epoch_dets_good!='PIN'
+            mask_nodeload = epoch_dets_good!='PIN'
         else:
-            mask_nodeload=True
+            mask_nodeload = np.repeat(True,AllData.nGroups)
 
-        result_high_fit=high_fit(broad_absval,broad_abscomp)
+        result_high_fit=high_fit(broad_absval,broad_abscomp,broad_gamma_nthcomp)
 
         #if the function returns an array of length 1, it means it returned an error message
         if len(result_high_fit)==1:
@@ -3094,8 +3134,9 @@ def line_detect(epoch_id):
             #creating the fitmod object with the desired components (we currently do not use comp groups)
             fitlines=fitmod(comp_lines,curr_logfile,curr_logfile_write,prev_fitmod=fitmod_cont)
 
-            # inputting the fixed abs value to avoid issues during component deletion
+            # (just in case) inputting the fixed values to avoid issues during component deletion
             fitlines.fixed_abs = broad_absval
+            fitlines.fixed_gamma = broad_gamma_nthcomp
 
             #global fit, with MC only if no continuum refitting
             fitlines.global_fit(chain=not refit_cont,directory=outdir,observ_id=epoch_observ[0],split_fit=split_fit,
@@ -3142,8 +3183,10 @@ def line_detect(epoch_id):
 
                         freeze(parlist=comp.unlocked_pars)
 
-                #reloading the broad band data
+                #reloading the broad band data without overwriting the model
                 Xset.restore(baseload_path)
+
+                fitlines.update_fitcomps()
 
                 '''
                 To reload the broadband model and avoid issues, 
@@ -3161,6 +3204,13 @@ def line_detect(epoch_id):
                     fitlines.merge(fitcont_broad)
 
                 #thawing the absorption to allow improving its value
+
+                #first we remove the fixed value from the fitmod itself
+                if not (sat_glob=='NuSTAR' and freeze_nH):
+                    #we reset the value of the fixed abs to allow it to be free if it gets deleted and put again
+                    fitlines.fixed_abs=None
+
+                #then we attempt to thaw the component value if the component is included
                 abs_incl_comps = (np.array(fitlines.complist)[[elem.absorption and elem.included for elem in \
                                                                     [elem_comp for elem_comp in fitlines.complist
                                                                      if
@@ -3174,9 +3224,16 @@ def line_detect(epoch_id):
                     fitlines.update_fitcomps()
                     main_abscomp.n_unlocked_pars_base=len(main_abscomp.unlocked_pars)
 
-                if not (sat_glob=='NuSTAR' and freeze_nH):
-                    #we reset the value of the fixed abs to allow it to be free if it gets deleted and put again
-                    fitlines.fixed_abs=None
+                #thawing similarly the nthcomp gamma (note that we can't just pars
+                if 'disk_nthcomp' in fitlines.name_complist:
+                    fitlines.fixed_gamma=None
+
+                if 'disk_nthcomp' in [comp.compname for comp in \
+                                      [elem for elem in fitlines.includedlist if elem is not None]]:
+                    fitlines.disk_nthcomp.xcomps[0].Gamma.frozen=False
+
+                    fitlines.update_fitcomps()
+                    fitlines.disk_nthcomp.n_unlocked_pars_base=len(fitlines.disk_nthcomp.unlocked_pars)
 
                 #fitting the model to the new energy band first
                 calc_fit(logfile=fitlines.logfile)
@@ -3198,8 +3255,9 @@ def line_detect(epoch_id):
                                                                      if
                                                                      elem_comp is not None]]])
 
-                #re fixing the absorption parameter and storing the value to retain it if the absorption gets taken off and tested again
-
+                #re fixing the absorption parameter and storing the value to retain it if the absorption
+                # gets taken off and tested again
+                fitlines.fixed_abs=broad_absval
                 if len(abs_incl_comps)!=0:
                     main_abscomp=abs_incl_comps[0]
                     main_abscomp.xcomps[0].nH.frozen=True
@@ -3207,11 +3265,8 @@ def line_detect(epoch_id):
 
                     fitlines.update_fitcomps()
                     main_abscomp.n_unlocked_pars_base=len(main_abscomp.unlocked_pars)
-
                 else:
                     broad_absval=0
-
-                fitlines.fixed_abs=broad_absval
 
                 if not broad_HID_mode:
                     #refitting in hid band for the HID values
@@ -3226,19 +3281,34 @@ def line_detect(epoch_id):
 
                 AllChains.clear()
 
-                main_spflux=hid_fit_infos(fitlines,broad_absval,post_autofit=True)
+                main_spflux,main_spflux_high=hid_fit_infos(fitlines,broad_absval,post_autofit=True)
+
+                np.savetxt(outdir + '/' + epoch_observ[0] + '_main_spflux_high.txt', main_spflux_high)
 
                 '''
                 Refitting in the autofit range to get the newer version of the autofit and continuum
                 
-                first: restoring the line freeze states
+                first: freezing the nthcomp gamma if necessary
+                 
+                second: restoring the line freeze states
                 here we restore the INITIAL component freeze state, effectively thawing all components pegged during the first autofit
                 '''
+
+                # freezing the gamma of the nthcomp to avoid nonsenses:
+                fitlines.fixed_gamma = broad_gamma_nthcomp
+
+                if 'disk_nthcomp' in [comp.compname for comp in \
+                                      [elem for elem in fitlines.includedlist if elem is not None]]:
+                    fitlines.disk_nthcomp.xcomps[0].Gamma.frozen = True
+
+                    fitlines.update_fitcomps()
+                    fitlines.disk_nthcomp.n_unlocked_pars_base = len(fitlines.disk_nthcomp.unlocked_pars)
 
                 for comp in [elem for elem in fitlines.includedlist if elem is not None]:
 
                     if comp.line and not comp.calibration:
                         #unfreezing the parameter with the mask created at the first addition of the component
+
                         unfreeze(parlist=np.array(comp.parlist)[comp.unlocked_pars_base_mask])
 
                     if comp.calibration and comp.compname not in ['calNuSTAR_edge']:
@@ -3246,10 +3316,19 @@ def line_detect(epoch_id):
 
                 #re-ignoring PIN if needed
                 if 'PIN' in epoch_dets_good:
+                    mod_pre_autofit=allmodel_data()
                     Xset.restore(baseload_path.replace('.xcm','_autofit.xcm'))
                     mask_nodeload = epoch_dets_good != 'PIN'
+
+                    #restoring the rest of the datagroups because reloading a different number of datagroup
+                    #resets the links of all but the first DGs
+                    mod_pre_autofit.default=mod_pre_autofit.default[mask_nodeload]
+
+                    #note that more things would need to be done for NICER/Suzaku and
+                    #some things might not work with NuSTAR edge's links but let's see
+                    mod_pre_autofit.load()
                 else:
-                    mask_nodeload = True
+                    mask_nodeload = np.repeat(True,AllData.nGroups)
 
                 fitlines.update_fitcomps()
 
@@ -3491,7 +3570,8 @@ def line_detect(epoch_id):
             if comp.named_absline:
                 #note that with no rollback we do not update the methods of the component
                 # so it has still its included status and everything else
-                comp.delfrommod(rollback=False)
+                ndel=comp.delfrommod(rollback=False)
+                fitlines.includedlist=fitlines.includedlist[:-ndel]
                 fitlines.update_fitcomps()
 
         #storing the no abs line 'continuum' model
@@ -3504,6 +3584,7 @@ def line_detect(epoch_id):
                             if AllModels(par_degroup(i_par)[0])(par_degroup(i_par)[1]).frozen\
                             or AllModels(par_degroup(i_par)[0])(par_degroup(i_par)[1]).link!='']
 
+        continuu_ranges=[]
         plot_ratio_autofit_noabs=store_plot('ratio')
 
         #resetting the states of fitlines
@@ -3777,7 +3858,20 @@ def line_detect(epoch_id):
                             #freezing doesn't change anything for linked parameters
                             freeze(AllModels(i_grp))
 
-                            AllModels(i_grp).setPars(autofit_drawpars_cont[f_ind][i_grp-1].tolist())
+                            #computing which setpars need to be adjusted from the list
+                            #in the case where the parsed value is out of the default continuum range
+
+                            #skipping the drawpar elements which would give things already nomally linked,
+                            #to avoid issues with parameter ranges ('' is the default value for SetPars)
+                            curr_group_drawpar=autofit_drawpars_cont[f_ind][i_grp-1].tolist()
+                            for group_par in range(1,AllModels(1).nParameters+1):
+                                if AllModels(i_grp)(group_par).link!='' and \
+                                        int(AllModels(i_grp)(group_par).link.replace('= p',''))==group_par:
+                                    curr_group_drawpar[group_par-1]=''
+
+                            # breakpoint()
+                            # print("tchou")
+                            AllModels(i_grp).setPars(curr_group_drawpar)
 
                         #replacing the current spectra with a fake with the same characteristics so this can be looped
                         #applyStats is set to true but shouldn't matter for now since everything is frozen
@@ -4577,7 +4671,7 @@ for epoch_id,epoch_files in enumerate(epoch_list):
 
         sp_epoch=[elem_sp.split('_spec')[0].split('_src')[0] for elem_sp in epoch_files]
 
-        started_epochs=[literal_eval(elem.split(']')[0]+(']')) for elem in started_expos[1:]]
+        started_epochs=[literal_eval(elem.split(']')[0]+(']')) for elem in started_expos]
 
         if skip_started and sp_epoch in started_epochs:
              print('\nSpectrum analysis already performed. Skipping...')

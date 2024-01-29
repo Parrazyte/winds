@@ -2595,13 +2595,16 @@ def line_detect(epoch_id):
             os.remove(outdir + '/' + epoch_observ[0] + '_mod_broadhid' + add_str + '_withignore.xcm')
         Xset.save(outdir + '/' + epoch_observ[0] + '_mod_broadhid' + add_str + '_withignore.xcm', info='a')
 
-        #re-arranging the energies array to compute a high energy flux value
-        AllModels.setEnergies('0.1 100. 1000 log')
-        #need to remake a new fit after that
-        calc_fit()
-        AllModels.calcFlux("15. 50. err 1000 90")
-        spflux_high = np.array([AllData(1).flux[0], AllData(1).flux[0] - AllData(1).flux[1], AllData(1).flux[2] - \
-                                               AllData(1).flux[0]])
+        if max(e_sat_high_indiv)>=20:
+            #re-arranging the energies array to compute a high energy flux value
+            AllModels.setEnergies('0.1 100. 1000 log')
+            #need to remake a new fit after that
+            calc_fit()
+            AllModels.calcFlux("15. 50. err 1000 90")
+            spflux_high = np.array([AllData(1).flux[0], AllData(1).flux[0] - AllData(1).flux[1], AllData(1).flux[2] - \
+                                                   AllData(1).flux[0]])
+        else:
+            spflux_high=None
 
         Xset.restore(outdir + '/' + epoch_observ[0] + '_mod_broadhid' + add_str + '_withignore.xcm')
 
@@ -2653,9 +2656,10 @@ def line_detect(epoch_id):
         spflux_single[4][0] = AllData(1).flux[0]
 
         #re-arranging the energies array to compute a high energy flux value
-        AllModels.setEnergies('0.1 100. 1000 log')
-        AllModels.calcFlux("15. 50.")
-        spflux_high[0]=AllData(1).flux[0]
+        if max(e_sat_high_indiv)>=20:
+            AllModels.setEnergies('0.1 100. 1000 log')
+            AllModels.calcFlux("15. 50.")
+            spflux_high[0]=AllData(1).flux[0]
 
         #and resetting the energies
         Xset.restore(outdir + '/' + epoch_observ[0] + '_mod_broadhid' + add_str + '.xcm')
@@ -2736,7 +2740,8 @@ def line_detect(epoch_id):
 
         main_spflux,main_spflux_high = hid_fit_infos(fitlines_hid, broad_absval, post_autofit=True)
 
-        np.savetxt(outdir + '/' + epoch_observ[0] + '_main_spflux_high.txt',main_spflux_high)
+        if max(e_sat_high_indiv)>=20:
+            np.savetxt(outdir + '/' + epoch_observ[0] + '_main_spflux_high.txt',main_spflux_high)
 
         # restoring the linecont save
         Xset.restore(outdir + '/' + epoch_observ[0] + '_mod_broadband_linecont.xcm')
@@ -3056,7 +3061,8 @@ def line_detect(epoch_id):
             main_spflux,broad_absval,broad_abscomp,data_broad,fitcont_broad,broad_gamma_nthcomp,main_spflux_high\
                 =result_broad_fit
 
-        np.savetxt(outdir + '/' + epoch_observ[0] + '_main_spflux_high.txt',main_spflux_high)
+        if max(e_sat_high_indiv)>=20:
+            np.savetxt(outdir + '/' + epoch_observ[0] + '_main_spflux_high.txt',main_spflux_high)
 
         #reloading the frozen scorpeon data\
         # (which won't change anything if it hasn't been fitted but will help otherwise)
@@ -3283,7 +3289,8 @@ def line_detect(epoch_id):
 
                 main_spflux,main_spflux_high=hid_fit_infos(fitlines,broad_absval,post_autofit=True)
 
-                np.savetxt(outdir + '/' + epoch_observ[0] + '_main_spflux_high.txt', main_spflux_high)
+                if max(e_sat_high_indiv)>=20:
+                    np.savetxt(outdir + '/' + epoch_observ[0] + '_main_spflux_high.txt', main_spflux_high)
 
                 '''
                 Refitting in the autofit range to get the newer version of the autofit and continuum

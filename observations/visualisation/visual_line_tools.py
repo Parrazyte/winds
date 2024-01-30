@@ -174,8 +174,8 @@ mass_dic={
 
 #BAT conversion factors for 1 cts/s in 15-50 keV counts to 15-50keV flux
 convert_BAT_count_flux={
-                        #this one assumes 13e22 nH and 2.5 gamma powerlaw
-                        '4U1630-47':3.603E-07
+                        #this one assumes 11e22nH (but that doesn't change anything) and 2.5 gamma powerlaw
+                        '4U1630-47':3.597E-07
                         }
 
 sources_det_dic=['GRS1915+105','GRS 1915+105','GROJ1655-40','H1743-322','4U1630-47','IGRJ17451-3022']
@@ -193,11 +193,12 @@ n_infos=9
 
 info_str=['equivalent widths','velocity shifts','energies','line flux','time','width']
 
-info_hid_str=['Hardness Ratio','Flux','Time']
+info_hid_str=['Hardness Ratio','3-10 Luminosity','Time','Gamma','15-50 Luminosity']
 
 axis_str=['Line EW (eV)','Line velocity shift (km/s)','Line energy (keV)',r'line flux (erg/s/cm$^{-2}$)',None,r'Line FWHM (km/s)']
 
-axis_hid_str=['Hardness Ratio ([6-10]/[3-6] keV bands)',r'Luminosity in the [3-10] keV band in (L/L$_{Edd}$) units']
+axis_hid_str=['Hardness Ratio ([6-10]/[3-6] keV bands)',r'Luminosity in the [3-10] keV band in (L/L$_{Edd}$) units',None,
+              r'nthcomp $\Gamma$',r'Luminosity in the [15-50] keV band in (L/L$_{Edd}$) units']
 
 #indexes for ratio choices in lines between specific ions/complexes
 ratio_choices={
@@ -589,7 +590,7 @@ def plot_lightcurve(dict_linevis,ctl_maxi_df,ctl_maxi_simbad,name,ctl_bat_df,ctl
 
     elif mode=='BAT':
         ax_lc.set_title(name[0]+str_binning_monit+' BAT monitoring')
-        bat_y_str = 'BAT counts (15-50 keV)'
+        bat_y_str = 'BAT count rate (15-50 keV)'
         ax_lc.set_ylabel(bat_y_str)
 
     elif 'INTEGRAL' in mode:
@@ -747,8 +748,8 @@ def plot_lightcurve(dict_linevis,ctl_maxi_df,ctl_maxi_simbad,name,ctl_bat_df,ctl
             #in orbit we divide the exposure time by two and offset the main value by xerr_bat
             xerr_bat = 0.5 if binning == 'day' else bat_lc_df['TIMEDEL']/86400/2
 
-            ax_lc.set_yscale('symlog', linthresh=0.01, linscale=0.1)
-            ax_lc.yaxis.set_minor_locator(MinorSymLogLocator(linthresh=0.01))
+            ax_lc.set_yscale('symlog', linthresh=0.001, linscale=0.1)
+            ax_lc.yaxis.set_minor_locator(MinorSymLogLocator(linthresh=0.001))
 
             # plotting the lightcurve
             ax_lc.errorbar(num_bat_dates,
@@ -1066,7 +1067,7 @@ def dist_mass(dict_linevis):
             m_obj[i]=8
     
     return d_obj,m_obj
-  
+
 #@st.cache_data
 def obj_values(file_paths,E_factors,dict_linevis):
     
@@ -1091,6 +1092,8 @@ def obj_values(file_paths,E_factors,dict_linevis):
     instru_list=np.array([None]*len(obj_list))
     exptime_list=np.array([None]*len(obj_list))
     fitmod_broadband_list=np.array([None]*len(obj_list))
+    epoch_obs_list=np.array([None]*len(obj_list))
+    flux_high_list=np.array([None]*len(obj_list))
     # ind_links=np.array([None]*len(obj_list))
 
     for i in range(len(obj_list)):
@@ -1111,7 +1114,7 @@ def obj_values(file_paths,E_factors,dict_linevis):
             
             #opening the values file
             with open(elem_path) as store_file:
-                    
+
                 store_lines_single_full=store_file.readlines()[1:]
 
                 #only keeping the lines with selected cameras and exposures
@@ -1171,8 +1174,10 @@ def obj_values(file_paths,E_factors,dict_linevis):
         curr_instru_list=np.array([None]*len(obs_list[i]))
         curr_exptime_list=np.array([None]*len(obs_list[i]))
         curr_fitmod_broadband_list=np.array([None]*len(obs_list[i]))
+        curr_epoch_obs_list=np.array([None]*len(obs_list[i]))
+        curr_flux_high_list=np.array([None]*len(obs_list[i]))
         #fetching spectrum informations
-        
+
         if visual_line:
 
             '''
@@ -1189,8 +1194,54 @@ def obj_values(file_paths,E_factors,dict_linevis):
 
                 lineval_path=lineval_paths_arr[i_obs]
 
-                #the path+ obs prefix for all the stored files in the lineplots_X folders
-                obs_path_prefix=lineval_path[:lineval_path.rfind('/')+1]+obs
+                '''Storing the list of exposures'''
+
+                # fetching the full list of epoch obs to get the exposure later
+                with open('/'.join(lineval_path.split('/')[:-1]) + '/summary_line_det.log') as summary:
+                    summary_lines = summary.readlines()[1:]
+
+                if 'XMM/' in lineval_path or 'Chandra/' in lineval_path:
+                    #safeguard for the previous way the summaries were handled
+                    #kept separate from the rest so this is done consciously
+                    summary_obs_line = [elem for elem in summary_lines if obs in ('_').join(elem.split('\t'))]
+                else:
+                    summary_obs_line = [elem for elem in summary_lines if obs in elem]
+
+                assert len(summary_obs_line) == 1, 'Error in observation summary matching'
+
+                epoch_tab = summary_obs_line[0].split('\t')[0]
+                # note: this is for backward compatiblity with old NICER reduction without gti-level split
+
+                if '[' not in epoch_tab:
+                    elem_epoch_obs_list = [epoch_tab]
+                    multi_sat=False
+                else:
+                    elem_epoch_obs_list = expand_epoch(literal_eval(summary_obs_line[0].split('\t')[0]))
+
+                    #the multi sat flag is here to avoid fetching informations which assume that a single suffix
+                    #works for all the spectra
+
+                    #note: this method is more complicated and won't need to be used as long as we don't only
+                    #allow for multi instrument spectral analysis in multi folders
+                    #failsafe against summaries (such a for nicer) without extension information
+                    # if summary_obs_line[0].count('\t')<2 or 'Suzaku/' in lineval_path:
+                    #     multi_sat=False
+                    # else:
+                    #     multi_sat=len(literal_eval(summary_obs_line[0].split('\t')[1]))>1
+
+                    multi_sat='/multi/' in lineval_path
+
+
+                curr_epoch_obs_list[i_obs] = elem_epoch_obs_list
+
+                # the path+ obs prefix for all the stored files in the lineplots_X folders
+                obs_path_prefix = lineval_path[:lineval_path.rfind('/') + 1] + obs
+
+                #storing the high flux array if it exists
+                if os.path.isfile(obs_path_prefix+'_main_spflux_high.txt'):
+                    curr_flux_high_list[i_obs]=np.loadtxt(obs_path_prefix+'_main_spflux_high.txt')
+
+                '''Storing the fitmod'''
 
                 '''
                 Here, we need both the txt for the main values and the fitmod for the errors stored in the
@@ -1284,80 +1335,79 @@ def obj_values(file_paths,E_factors,dict_linevis):
 
                     curr_fitmod_broadband_list[i_obs]=comp_par_fitmod_broadband_dict
 
-                if len(obs.split('_'))<=1:
-                    
-                    if 'source' in obs.split('_')[0]:
-                        #this means a Swift observation
-                        filepath='/'.join(lineval_path.split('/')[:-2])+'/'+obs+'_grp_opt.pi'
-                        curr_instru_list[i_obs]='Swift'
-                        
-                    elif obs.startswith('nu'):
-                        #this means a NICER observation
-                        #we take the directory structure from the according file in curr_obj_paths
-                        filepath='/'.join(lineval_path.split('/')[:-2])+'/'+obs+'_sp_src_grp_opt.pha'
-                        curr_instru_list[i_obs]='NuSTAR'
-                    else:
-                        #this means a NICER observation
-                        #we take the directory structure from the according file in curr_obj_paths
-                        filepath='/'.join(lineval_path.split('/')[:-2])+'/'+obs+'_sp_grp_opt.pha'
-                        curr_instru_list[i_obs]='NICER'
+                if multi_sat:
+                    #skipping the computations below because we don't care for now
+                    curr_instru_list[i_obs]='multi'
+                    #loading the first obs to get some data
+                    # note: the first item of the literal_eval list here is the suffix of the first file
+                    filepath='/'.join(lineval_path.split('/')[:-2])+'/'+obs+('_gti_event_spec' if 'xis' in obs else '_sp')+ \
+                             literal_eval(summary_obs_line[0].split('\t')[1])[0]
 
-                        #fetching the full list of epoch obs to get the exposure later
-                        with open('/'.join(lineval_path.split('/')[:-1]) + '/summary_line_det.log') as summary:
-                            summary_lines = summary.readlines()[1:]
+                    #ensuring no issue with suzaku files without a header
+                    filepath=filepath.replace('xis0_xis2_xis3','xis1').replace('xis0_xis3','xis1')
 
-                        summary_obs_line = [elem for elem in summary_lines if obs in elem]
 
-                        assert len(summary_obs_line)==1, 'Error in observation summary matching'
-
-                        epoch_tab=summary_obs_line[0].split('\t')[0]
-                        # note: this is for backward compatiblity with old NICER reduction without gti-level split
-                        if '[' not in epoch_tab:
-                            epoch_obs_list=[epoch_tab]
-                        else:
-                            epoch_obs_list=expand_epoch(literal_eval(summary_obs_line[0].split('\t')[0]))
-
-                        epoch_sp_list=[elem+'_sp_grp_opt.pha' for elem in epoch_obs_list]
-
-    
                 else:
-                    
-                    if obs.split('_')[1] in ['pn','mos1','mos2']:
-                        
-                        #we take the directory structure from the according file in curr_obj_paths
-                        filepath='/'.join(lineval_path.split('/')[:-2])+'/'+obs+'_sp_src_grp_20.ds'
-                        curr_instru_list[i_obs]='XMM'
-                        
-                    elif obs.split('_')[1]=='heg':
-                        
-                        #we take the directory structure from the according file in curr_obj_paths
-                        filepath='/'.join(lineval_path.split('/')[:-2])+'/'+obs+'_grp_opt.pha'
-                        curr_instru_list[i_obs]='Chandra'
 
-                    elif 'xis' in obs:
-                        #we take the directory structure from the according file in curr_obj_paths
-                        filepath='/'.join(lineval_path.split('/')[:-2])+'/'+obs+'_gti_event_spec_src_grp_opt.pha'
+                    if len(obs.split('_'))<=1:
 
-                        #getting non stacked files for megumi files to be able to read the header
-                        filepath=filepath.replace('xis0_xis3','xis_1')
+                        if 'source' in obs.split('_')[0]:
+                            #this means a Swift observation
+                            filepath='/'.join(lineval_path.split('/')[:-2])+'/'+obs+'_grp_opt.pi'
+                            curr_instru_list[i_obs]='Swift'
 
-                        curr_instru_list[i_obs]='Suzaku'
+                        elif obs.startswith('nu'):
+                            #this means a NuSTAR observation
+                            #we take the directory structure from the according file in curr_obj_paths
+                            filepath='/'.join(lineval_path.split('/')[:-2])+'/'+obs+'_sp_src_grp_opt.pha'
+                            curr_instru_list[i_obs]='NuSTAR'
+                        else:
+                            #this means a NICER observation
+                            #we take the directory structure from the according file in curr_obj_paths
+                            filepath='/'.join(lineval_path.split('/')[:-2])+'/'+obs+'_sp_grp_opt.pha'
+                            curr_instru_list[i_obs]='NICER'
 
-                    elif obs.split('_')[1] in ['0','1']:
-                        #note that this only works for xis1 files as xis0_xis2 are merged and the header had been removed
-                        #we take the directory structure from the according file in curr_obj_paths
-                        filepath='/'.join(lineval_path.split('/')[:-2])+'/'+obs+'_sp_grp_opt.pha'
-                        curr_instru_list[i_obs]='Suzaku'
-                        
-                    #failsafe if the file is an XMM spectrum a _full folder instead
-                    if not os.path.isfile(filepath):
-                        
-                        filepath='/'.join(lineval_path.split('/')[:-3])+'_full/'+lineval_path.split('/')[-3]+'/'+obs+'_sp_src_grp_20.ds'
-                        
+                            epoch_sp_list=[elem+'_sp_grp_opt.pha' for elem in elem_epoch_obs_list]
+
+
+                    else:
+
+                        if obs.split('_')[1] in ['pn','mos1','mos2']:
+
+                            #we take the directory structure from the according file in curr_obj_paths
+                            filepath='/'.join(lineval_path.split('/')[:-2])+'/'+obs+'_sp_src_grp_20.ds'
+                            curr_instru_list[i_obs]='XMM'
+
+                        elif obs.split('_')[1]=='heg':
+
+                            #we take the directory structure from the according file in curr_obj_paths
+                            filepath='/'.join(lineval_path.split('/')[:-2])+'/'+obs+'_grp_opt.pha'
+                            curr_instru_list[i_obs]='Chandra'
+
+                        elif 'xis' in obs:
+                            #we take the directory structure from the according file in curr_obj_paths
+                            filepath='/'.join(lineval_path.split('/')[:-2])+'/'+obs+'_gti_event_spec_src_grp_opt.pha'
+
+                            #getting non stacked files for megumi files to be able to read the header
+                            filepath=filepath.replace('xis0_xis2_xis3','xis_1').replace('xis0_xis3','xis_1')
+
+                            curr_instru_list[i_obs]='Suzaku'
+
+                        elif obs.split('_')[1] in ['0','1']:
+                            #note that this only works for xis1 files as xis0_xis2 are merged and the header had been removed
+                            #we take the directory structure from the according file in curr_obj_paths
+                            filepath='/'.join(lineval_path.split('/')[:-2])+'/'+obs+'_sp_grp_opt.pha'
+                            curr_instru_list[i_obs]='Suzaku'
+
+                        #failsafe if the file is an XMM spectrum a _full folder instead
                         if not os.path.isfile(filepath):
-                            #should not happen
-                            breakpoint()
-                            print('issue with identifying obs sp path')
+
+                            filepath='/'.join(lineval_path.split('/')[:-3])+'_full/'+lineval_path.split('/')[-3]+'/'+obs+'_sp_src_grp_20.ds'
+
+                            if not os.path.isfile(filepath):
+                                #should not happen
+                                breakpoint()
+                                print('issue with identifying obs sp path')
 
                 #summing the exposures for NICER
                 if curr_instru_list[i_obs]=='NICER':
@@ -1402,6 +1452,8 @@ def obj_values(file_paths,E_factors,dict_linevis):
         instru_list[i]=curr_instru_list
         exptime_list[i]=curr_exptime_list
         fitmod_broadband_list[i]=curr_fitmod_broadband_list
+        epoch_obs_list[i]=curr_epoch_obs_list
+        flux_high_list[i]=curr_flux_high_list
         # ind_links[i]=os.path.join(os.getcwd(),obj_dir)+'/'+np.array(obs_list[i])+'_recap.pdf'
     
     if multi_obj:
@@ -1409,7 +1461,8 @@ def obj_values(file_paths,E_factors,dict_linevis):
     else:
          l_list=np.array([elem for elem in l_list])
 
-    return obs_list,lval_list,l_list,date_list,instru_list,exptime_list,fitmod_broadband_list
+    return obs_list,lval_list,l_list,date_list,instru_list,exptime_list,fitmod_broadband_list,epoch_obs_list,\
+        flux_high_list
 
 #@st.cache_data
 def abslines_values(file_paths,dict_linevis,only_abs=False,obsid=None):
@@ -1839,6 +1892,33 @@ def values_manip(abslines_infos,dict_linevis,autofit_infos,lum_list_infos,mask_i
         return abslines_inf_line, abslines_inf_obj, abslines_plt, abslines_e, \
             lum_plt, hid_plt, incl_plt, width_plt, nh_plt, kt_plt
 
+def values_manip_high_E(lum_high_list,gamma_nthcomp_list):
+
+    '''
+    transposing into plot-like structures with the uncertainty as first dimension,
+    then objects, then observation
+    '''
+
+    n_obj=len(lum_high_list)
+    lum_high_plot=np.array([None]*3)
+    gamma_nthcomp_plot=np.array([None]*3)
+
+    for i_incert in range(3):
+        #this
+        lum_high_plot_incert=np.array([None]*n_obj)
+        gamma_nthcomp_plot_incert=np.array([None]*n_obj)
+        for i_obj in range(n_obj):
+            lum_high_plot_incert[i_obj]=lum_high_list[i_obj].T[i_incert]
+            gamma_nthcomp_plot_incert[i_obj] = gamma_nthcomp_list[i_obj].T[i_incert]
+
+        lum_high_plot[i_incert]=lum_high_plot_incert
+        gamma_nthcomp_plot[i_incert]=gamma_nthcomp_plot_incert
+
+    lum_high_plot=np.array([[subelem for subelem in elem] for elem in lum_high_plot],dtype=object)
+    gamma_nthcomp_plot=np.array([[subelem for subelem in elem] for elem in gamma_nthcomp_plot],dtype=object)
+
+    return lum_high_plot,gamma_nthcomp_plot
+
 def hid_graph(ax_hid,dict_linevis,
               display_single=False,display_nondet=True,display_upper=False,
               cyclic_cmap_nondet=False,cyclic_cmap_det=False,cyclic_cmap=False,
@@ -1896,6 +1976,7 @@ def hid_graph(ax_hid,dict_linevis,
     if broad_mode=='BAT':
         catal_bat_df=dict_linevis['catal_bat_df']
         catal_bat_simbad=dict_linevis['catal_bat_simbad']
+        sign_broad_hid_BAT=dict_linevis['sign_broad_hid_BAT']
 
     if broad_mode=='INTEGRAL' or restrict_match_INT:
         lc_int_sw_dict = dict_linevis['lc_int_sw_dict']
@@ -1973,8 +2054,12 @@ def hid_graph(ax_hid,dict_linevis,
 
         obs_dates=Time(np.array([date_list[mask_obj][0] for i in range(sum(mask_lines))]).astype(str)).mjd.astype(float)
 
-        #computing which observations are within the timeframe of an integral revolution (assuming 3days-long)
-        mask_withtime_INT=[min((int_lc_mjd-elem)[(int_lc_mjd-elem)>=0])<3 for elem in obs_dates[0]]
+        try:
+            #computing which observations are within the timeframe of an integral revolution (assuming 3days-long)
+            mask_withtime_INT=[False if sum((int_lc_mjd - elem) >= 0)==0 else \
+                             min((int_lc_mjd - elem)[(int_lc_mjd - elem) >= 0]) < 3 for elem in obs_dates[0]]
+        except:
+            breakpoint()
 
         #matching each observation to the closest integral revolution that started before it
         closest_time_INT=np.array([np.where((int_lc_mjd-elem_date)<0,10000,(int_lc_mjd-elem_date)).argsort()[0]\
@@ -2031,7 +2116,19 @@ def hid_graph(ax_hid,dict_linevis,
 
 
         #currently limited to 4U1630-47
-        bat_lc_df = fetch_bat_lightcurve(catal_bat_df, catal_bat_simbad,['4U1630-47'], binning=broad_binning)
+        bat_lc_df_init = fetch_bat_lightcurve(catal_bat_df, catal_bat_simbad,['4U1630-47'], binning=broad_binning)
+
+        #restricting to significant BAT detections or not
+        if sign_broad_hid_BAT:
+            # significance test to only get good bat data
+            mask_sign_bat = bat_lc_df_init[bat_lc_df_init.columns[1]] - bat_lc_df_init[
+                bat_lc_df_init.columns[2]] * 2 > 0
+
+            # applying the mask. Reset index necessary to avoid issues when calling indices later.
+            # drop to avoid creating an index column that will ruin the column calling
+            bat_lc_df = bat_lc_df_init[mask_sign_bat].reset_index(drop=True)
+        else:
+            bat_lc_df=bat_lc_df_init
 
         if broad_binning=='day':
             bat_lc_mjd=np.array(bat_lc_df[bat_lc_df.columns[0]])
@@ -2437,8 +2534,11 @@ def hid_graph(ax_hid,dict_linevis,
         # plotting statistically significant absorptions before values
 
         if radio_info_cmap == 'Instrument':
-            color_instru = [telescope_colors[elem] for elem in
-                        instru_list[mask_obj][i_obj][obj_val_mask_sign][obj_order_sign]]
+            try:
+                color_instru = [telescope_colors[elem] for elem in
+                            instru_list[mask_obj][i_obj][obj_val_mask_sign][obj_order_sign]]
+            except:
+                breakpoint()
 
             if display_nonsign:
                 color_instru_nonsign = [telescope_colors[elem] for elem in
@@ -3829,6 +3929,8 @@ def correl_graph(data_perinfo,infos,data_ener,dict_linevis,mode='intrinsic',mode
             -HR
             -flux
             -Time
+            'nthcomp-gamma' (only for high-energy obs)
+            'highE-flux' (15-50 keV)
 
         source:
             -inclin
@@ -3920,7 +4022,7 @@ def correl_graph(data_perinfo,infos,data_ener,dict_linevis,mode='intrinsic',mode
     if streamlit:
         slider_date=dict_linevis['slider_date']
         instru_list=dict_linevis['instru_list'][mask_obj]
-    
+
     if 'color_scatter' in dict_linevis:    
         color_scatter=dict_linevis['color_scatter']
         obj_disp_list=dict_linevis['obj_list'][mask_obj]
@@ -3937,7 +4039,11 @@ def correl_graph(data_perinfo,infos,data_ener,dict_linevis,mode='intrinsic',mode
         nh_plot_restrict=None
     
     observ_list=dict_linevis['observ_list'][mask_obj]
-    
+    lum_high_plot_restrict=dict_linevis['lum_high_plot_restrict']
+    gamma_nthcomp_plot_restrict=dict_linevis['gamma_nthcomp_plot_restrict']
+
+    mask_lum_high_valid=~np.isnan(ravel_ragged(lum_high_plot_restrict[0]))
+
     #This considers all the lines
     mask_obs_sign=np.array([ravel_ragged(abslines_plot[4][0].T[mask_obj].T[i]).astype(float)>=conf_thresh\
                                       for i in range(len(mask_lines))]).any(0)
@@ -4000,7 +4106,8 @@ def correl_graph(data_perinfo,infos,data_ener,dict_linevis,mode='intrinsic',mode
         color_scatter='None'
         
     data_list=[data_perinfo[0],data_perinfo[1],data_ener,data_perinfo[3],date_list,width_plot_restrict]
-        
+
+    high_E_mode=False
     #infos and data definition depending on the mode
     if mode=='intrinsic':
 
@@ -4011,9 +4118,14 @@ def correl_graph(data_perinfo,infos,data_ener,dict_linevis,mode='intrinsic',mode
     elif mode=='observ':
         #the 'None' is here to have the correct index for the width element
         ind_infos=[np.argwhere([elem in infos_split[0] for elem in ['eqw','bshift','ener','lineflux','None','width']])[0][0],
-                    np.argwhere(np.array(['HR','flux','time'])==infos_split[1])[0][0]]
+                    np.argwhere(np.array(['HR','flux','time','nthcomp-gamma','highE-flux'])==infos_split[1])[0][0]]
 
-        data_plot=[data_list[ind_infos[0]], date_list if ind_infos[1]==2 else mode_vals[ind_infos[1]]]
+        if ind_infos[1] in [3,4]:
+            high_E_mode=True
+
+        second_arr_infos=[date_list,gamma_nthcomp_plot_restrict,lum_high_plot_restrict]
+        data_plot=[data_list[ind_infos[0]], second_arr_infos[ind_infos[1]-2] if ind_infos[1]>=2\
+                                            else mode_vals[ind_infos[1]]]
         
         if time_mode:
             data_plot=data_plot[::-1]
@@ -4036,9 +4148,9 @@ def correl_graph(data_perinfo,infos,data_ener,dict_linevis,mode='intrinsic',mode
         else:
             graph_range=[range_absline]
 
-        
     for i in graph_range:
-        
+
+
         figsize_val=(8.+(-0.5 if mode!='observation' else 0),5.5) if color_scatter in ['Time','HR','width','nH'] else (6,6)
 
         # if color_scatter in ['Time','HR','width','nH']:
@@ -4083,7 +4195,9 @@ def correl_graph(data_perinfo,infos,data_ener,dict_linevis,mode='intrinsic',mode
             ax_scat.set_ylabel(infos_split[1]+' '+axis_str[ind_infos[0]])
             
         #putting a logarithmic y scale if it shows equivalent widths or one of the hid parameters
-        if mode!='source' and ((mode=='observ' and scale_log_hr and not time_mode) or ((ind_infos[0 if time_mode else 1] in [0,3] or mode=='eqwratio') and scale_log_eqw)):
+        #note we also don't put the y log scale for a gamma y axis (of course)
+        if mode!='source' and ((mode=='observ' and scale_log_hr and not time_mode and not ind_infos[1]==[3])\
+                               or ((ind_infos[0 if time_mode else 1] in [0,3] or mode=='eqwratio') and scale_log_eqw)):
                             
             ax_scat.set_yscale('log')                
                 
@@ -4125,7 +4239,10 @@ def correl_graph(data_perinfo,infos,data_ener,dict_linevis,mode='intrinsic',mode
 
 
         date_list_repeat=np.array([date_list for repeater in (i if type(i)==range else [i])]) if not ratio_mode else date_list
-        
+
+        mask_lum_high_valid_repeat = ravel_ragged([mask_lum_high_valid for repeater in (i if type(i)==range else [i])])\
+            if not ratio_mode else mask_lum_high_valid
+
         if streamlit:
             mask_intime=(Time(ravel_ragged(date_list_repeat))>=slider_date[0]) & (Time(ravel_ragged(date_list_repeat))<=slider_date[1])
 
@@ -4153,7 +4270,8 @@ def correl_graph(data_perinfo,infos,data_ener,dict_linevis,mode='intrinsic',mode
             else:
                 bool_sign_ratio_width=True
                 
-            bool_det_ratio=(bool_sign_x!=0.) & (~np.isnan(bool_sign_x)) & (bool_sign_y!=0.) & (~np.isnan(bool_sign_y)) & mask_intime_norepeat
+            bool_det_ratio=(bool_sign_x!=0.) & (~np.isnan(bool_sign_x)) & (bool_sign_y!=0.) & (~np.isnan(bool_sign_y)) &\
+                           mask_intime_norepeat & (True if not high_E_mode else mask_lum_high_valid)
             
             #for whatever reason we can't use the bitwise comparison so we compute the minimum significance of the two lines before testing for a single arr
             bool_sign_ratio=np.array([bool_sign_x[bool_det_ratio],bool_sign_y[bool_det_ratio]]).T.min(1)>=conf_thresh
@@ -4164,9 +4282,11 @@ def correl_graph(data_perinfo,infos,data_ener,dict_linevis,mode='intrinsic',mode
                 
             #masks for upper limits (needs at least one axis to have detection and significance)
             bool_nondetsign_x=np.array(((bool_sign_x<conf_thresh).tolist() or (np.isnan(bool_sign_x).tolist()))) &\
-                              (np.array((bool_sign_y>=conf_thresh).tolist()) & np.array((~np.isnan(bool_sign_y)).tolist())) & mask_intime_norepeat
+                        (np.array((bool_sign_y>=conf_thresh).tolist()) & np.array((~np.isnan(bool_sign_y)).tolist())) \
+                              & mask_intime_norepeat & (True if not high_E_mode else mask_lum_high_valid)
             bool_nondetsign_y=np.array(((bool_sign_y<conf_thresh).tolist() or (np.isnan(bool_sign_y).tolist()))) &\
-                              (np.array((bool_sign_x>=conf_thresh).tolist()) & np.array((~np.isnan(bool_sign_x)).tolist())) & mask_intime_norepeat
+                        (np.array((bool_sign_x>=conf_thresh).tolist()) & np.array((~np.isnan(bool_sign_x)).tolist())) \
+                              & mask_intime_norepeat & (True if not high_E_mode else mask_lum_high_valid)
                         
             #the boool sign and det are only used for the ratio in ratio_mode, but are global in eqwratio mode
             if mode=='eqwratio':
@@ -4216,10 +4336,12 @@ def correl_graph(data_perinfo,infos,data_ener,dict_linevis,mode='intrinsic',mode
             bool_sign=ravel_ragged(data_perinfo[4][0][i]).astype(float)
             
             #standard detection mask
-            bool_det=(bool_sign!=0.) & (~np.isnan(bool_sign)) & (mask_intime)
+            bool_det=(bool_sign!=0.) & (~np.isnan(bool_sign)) & (mask_intime) &\
+                     (True if not high_E_mode else mask_lum_high_valid_repeat  )
             
             #mask used for upper limits only
-            bool_nondetsign=((bool_sign<conf_thresh) | (np.isnan(bool_sign))) & (mask_intime)
+            bool_nondetsign=((bool_sign<conf_thresh) | (np.isnan(bool_sign))) & (mask_intime) & \
+                            (True if not high_E_mode else mask_lum_high_valid_repeat)
             
             #restricted significant mask, to be used in conjunction with bool_det
             bool_sign=bool_sign[bool_det]>=conf_thresh
@@ -4233,13 +4355,16 @@ def correl_graph(data_perinfo,infos,data_ener,dict_linevis,mode='intrinsic',mode
                 
             if time_mode:
 
-                x_data=np.array([mdates.date2num(ravel_ragged(date_list_repeat))[bool_det][bool_sign],mdates.date2num(ravel_ragged(date_list_repeat))[bool_det][~bool_sign]],
+                x_data=np.array([mdates.date2num(ravel_ragged(date_list_repeat))[bool_det][bool_sign],
+                                 mdates.date2num(ravel_ragged(date_list_repeat))[bool_det][~bool_sign]],
                                 dtype=object)
-                y_data=np.array([ravel_ragged(data_plot[1][0][i])[bool_det][bool_sign],ravel_ragged(data_plot[1][0][i])[bool_det][~bool_sign]],
+                y_data=np.array([ravel_ragged(data_plot[1][0][i])[bool_det][bool_sign],
+                                 ravel_ragged(data_plot[1][0][i])[bool_det][~bool_sign]],
                         dtype=object)
 
             else:
-                x_data=np.array([ravel_ragged(data_plot[0][0][i])[bool_det][bool_sign],ravel_ragged(data_plot[0][0][i])[bool_det][~bool_sign]],
+                x_data=np.array([ravel_ragged(data_plot[0][0][i])[bool_det][bool_sign],
+                                 ravel_ragged(data_plot[0][0][i])[bool_det][~bool_sign]],
                     dtype=object)
 
         #applying the same thing to the y axis if ratios are also plotted there
@@ -4267,26 +4392,34 @@ def correl_graph(data_perinfo,infos,data_ener,dict_linevis,mode='intrinsic',mode
                                     dtype=object)
                     
                 else:
-                    y_data=np.array([ravel_ragged(data_plot[1][0][i])[bool_det][bool_sign],ravel_ragged(data_plot[1][0][i])[bool_det][~bool_sign]],
+                    y_data=np.array([ravel_ragged(data_plot[1][0][i])[bool_det][bool_sign],
+                                     ravel_ragged(data_plot[1][0][i])[bool_det][~bool_sign]],
                                 dtype=object)
 
             elif mode=='observ' and not time_mode:
                 
-                #since the hid data is the same no matter the line, we need to repeat it for the number of lines used when plotting the global graph
+                #since the hid data is the same no matter the line, we need to repeat it for the number of lines used
+                # when plotting the global graph
+                #index 1 since data_plot is [x_axis,y_axis], then 0 to get the main value
                 y_data_repeat=np.array([data_plot[1][0] for repeater in (i if type(i)==range else [i])])
                                         
                 #only then can the linked mask be applied correctly (doesn't change anything in individual mode)
                 if ratio_mode:
                     #here we just select one of all the lines in the repeat and apply the ratio_mode mask onto it
                     y_data=np.array([ravel_ragged(y_data_repeat[ratio_indexes_x[0]])[bool_det_ratio][bool_sign_ratio],
-                                     ravel_ragged(y_data_repeat[ratio_indexes_x[0]])[bool_det_ratio][~bool_sign_ratio]],dtype=object)
+                                     ravel_ragged(y_data_repeat[ratio_indexes_x[0]])[bool_det_ratio][~bool_sign_ratio]],
+                                    dtype=object)
                 else:
                     #this is not implemented currently
 
-                    y_data=np.array([ravel_ragged(y_data_repeat)[bool_det][bool_sign],ravel_ragged(y_data_repeat)[bool_det][~bool_sign]],
+                    try:
+                        y_data=np.array([ravel_ragged(y_data_repeat)[bool_det][bool_sign],
+                                     ravel_ragged(y_data_repeat)[bool_det][~bool_sign]],
                                     dtype=object)
+                    except:
+                        breakpoint()
+                        pass
 
-                        
             elif mode=='source':
                 y_data_repeat=np.array([data_plot[1][i_obj][0] for repeater in (i if type(i)==range else [i])\
                                         for i_obj in range(n_obj) for i_obs in range(len(data_plot[0][0][repeater][i_obj]))\
@@ -4315,8 +4448,10 @@ def correl_graph(data_perinfo,infos,data_ener,dict_linevis,mode='intrinsic',mode
                                 dtype=object)
                 
                 #same way of defining the errors
-                y_error_ul_x=np.array([ravel_ragged(data_perinfo[0][l][ind_ratio[1]])[bool_nondetsign_x] for l in [1,2]],dtype=object)
-                x_error_ul_y=np.array([ravel_ragged(data_perinfo[0][l][ind_ratio[0]])[bool_nondetsign_y] for l in [1,2]],dtype=object)
+                y_error_ul_x=np.array([ravel_ragged(data_perinfo[0][l][ind_ratio[1]])[bool_nondetsign_x] for l in [1,2]],
+                                      dtype=object)
+                x_error_ul_y=np.array([ravel_ragged(data_perinfo[0][l][ind_ratio[0]])[bool_nondetsign_y] for l in [1,2]],
+                                      dtype=object)
                 
                 #computing two (upper and lower) limits for the ratios
                 
@@ -4376,8 +4511,11 @@ def correl_graph(data_perinfo,infos,data_ener,dict_linevis,mode='intrinsic',mode
                                     [bool_det_ratio][~bool_sign_ratio]]).astype(object)],
                      dtype=object)
             else:         
-                linked_mask=np.array([np.array([type(elem)==str for elem in ravel_ragged(data_perinfo[1][1][i])[bool_det][bool_sign].astype(object)]),
-                                  np.array([type(elem)==str for elem in ravel_ragged(data_perinfo[1][1][i])[bool_det][~bool_sign].astype(object)])],
+                linked_mask=np.array(\
+                                 [np.array([type(elem)==str for elem in \
+                                            ravel_ragged(data_perinfo[1][1][i])[bool_det][bool_sign].astype(object)]),
+                                  np.array([type(elem)==str for elem in \
+                                            ravel_ragged(data_perinfo[1][1][i])[bool_det][~bool_sign].astype(object)])],
                                  dtype=object)
             
         #reconverting the array to bools and replacing it by true if it is empty to avoid conflicts when there is not data to plot
@@ -4466,7 +4604,8 @@ def correl_graph(data_perinfo,infos,data_ener,dict_linevis,mode='intrinsic',mode
                 the uncertainty is computed through the least squares because it's the correct formula for these kind of computation
                 (correctly considers the skewness of the bivariate distribution)
                 here, we can use ratio_indiexes_x[0] and ratio_indexes_x[1] independantly as long was we divide the uncertainty 
-                ([i] which will either be [1] or [2]) by the main value [0]. However, as the uncertainties are asymetric, each one must be paired with the opposite one to maintain consistency 
+                ([i] which will either be [1] or [2]) by the main value [0]. However, as the uncertainties are asymetric,
+                 each one must be paired with the opposite one to maintain consistency 
                 (aka the + uncertaintiy of the numerator and the - incertainty of the denominator, when composed,
                  give the + uncertainty of the quotient)
                 on top of that, the adressing is important as the minus uncertainty of the quotient needs to be first, 
@@ -4810,7 +4949,8 @@ def correl_graph(data_perinfo,infos,data_ener,dict_linevis,mode='intrinsic',mode
             
             #there's no need to repeat in eqwratio since the masks are computed for a single line                
             if mode=='eqwratio' or ratio_mode:
-                color_data_repeat=np.array([obj_disp_list[i_obj] for i_obj in range(n_obj) for i_obs in range(len(data_perinfo[0][0][0][i_obj]))])
+                color_data_repeat=np.array([obj_disp_list[i_obj] for i_obj in range(n_obj)\
+                                            for i_obs in range(len(data_perinfo[0][0][0][i_obj]))])
                 
             else:
                 color_data_repeat=np.array([obj_disp_list[i_obj] for repeater in (i if type(i)==range else [i])\
@@ -4824,7 +4964,8 @@ def correl_graph(data_perinfo,infos,data_ener,dict_linevis,mode='intrinsic',mode
 
             else:
 
-                color_data=np.array([ravel_ragged(color_data_repeat)[bool_det][bool_sign],ravel_ragged(color_data_repeat)[bool_det][~bool_sign]],
+                color_data=np.array([ravel_ragged(color_data_repeat)[bool_det][bool_sign],
+                                     ravel_ragged(color_data_repeat)[bool_det][~bool_sign]],
                             dtype=object)
                 
                 if mode!='eqwratio':
@@ -4908,12 +5049,14 @@ def correl_graph(data_perinfo,infos,data_ener,dict_linevis,mode='intrinsic',mode
                 
                 if time_mode:
                     #uplims here, the upper limits display has the same construction no matter if in ratio mode or not
-                    plot_ul_err([0,1],x_data_ul,y_data_ul,[None]*len(x_data_ul),y_data_ul*0.05,color_arr_ul_x if ratio_mode else color_arr_ul)
+                    plot_ul_err([0,1],x_data_ul,y_data_ul,[None]*len(x_data_ul),
+                                y_data_ul*0.05,color_arr_ul_x if ratio_mode else color_arr_ul)
                 
                 else:
                     
                     #xuplims here, the upper limits display has the same construction no matter if in ratio mode or not
-                    plot_ul_err([1,0],x_data_ul,y_data_ul,x_data_ul*0.05,y_error_ul.T,color_arr_ul_x if ratio_mode else color_arr_ul)
+                    plot_ul_err([1,0],x_data_ul,y_data_ul,x_data_ul*0.05,
+                                y_error_ul.T,color_arr_ul_x if ratio_mode else color_arr_ul)
                 
                 #adding the lower limits in ratio mode
                 if ratio_mode:
@@ -5315,6 +5458,7 @@ def correl_graph(data_perinfo,infos,data_ener,dict_linevis,mode='intrinsic',mode
             with st.spinner('Computing linear trends'):
                 lmplot_uncert_a(ax_scat,x_data_trend,y_data_trend,x_err_trend,y_err_trend,percent=90,
                                                  nsim=100,return_linreg=False,
+                                                 error_percent=90,
                                                  intercept_pos='auto',
                                                  infer_log_scale=False,xbounds=plt.xlim(),ybounds=plt.ylim(),
                                                  line_color='black')
@@ -5334,7 +5478,10 @@ def correl_graph(data_perinfo,infos,data_ener,dict_linevis,mode='intrinsic',mode
             plt.setp(scat_legend.get_title(),fontsize='small')
                 
         if len(x_data_use)>0:
-            plt.tight_layout()      
+            try:
+                plt.tight_layout()
+            except:
+                st.rerun()
         else:
             #preventing log scales for graphs with no values, which crashes them
             plt.xscale('linear')
@@ -5359,3 +5506,22 @@ def correl_graph(data_perinfo,infos,data_ener,dict_linevis,mode='intrinsic',mode
     #returning the graph for streamlit display
     if streamlit:
         return fig_scat
+
+kev_to_erg = 1.60218e-9 # convertion factor from keV to erg
+
+
+def flux_erg_pow(g,K,e1,e2):
+    '''
+    from Tristan Bouchet
+    integrated flux between e1 and e2 from photon index (g) and norm (K) (with F = K*E**(-g)), in erg/s/cm2
+    '''
+    return (K/(2-g))*(e2**(2-g) - e1**(2-g))*kev_to_erg
+
+def err_flux_erg_pow(g, K, dg, dK, e1,e2):
+    '''
+    from Tristan Bouchet
+    finds the error on flux from photon index (g, dg) and norm (K,dK) in erg/s/cm2
+    '''
+    F12 = (K/(2-g))*(e2**(2-g) - e1**(2-g))
+    if K==0. : return 0
+    else : return F12 * np.sqrt( (dK/K)**2 + ((K/(F12*(2-g)))* (np.log(e2)*e2**(2-g)-np.log(e1)*e1**(2-g)) - 1/(2-g))**2 * (dg)**2 ) * kev_to_erg

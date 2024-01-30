@@ -183,7 +183,7 @@ ap.add_argument("-prefix",nargs=1,help='restrict analysis to a specific prefix',
 
 ####output directory
 ap.add_argument("-outdir",nargs=1,help="name of output directory for line plots",
-                default="lineplots_opt_crabcorr_noem",type=str)
+                default="lineplots_opt",type=str)
 
 #overwrite
 #global overwrite based on recap PDF
@@ -222,7 +222,7 @@ ap.add_argument('-cont_model',nargs=1,help='model list to use for the autofit co
                 default='nthcont_Suzaku',type=str)
 
 ap.add_argument('-autofit_model',nargs=1,help='model list to use for the autofit computation',
-                default='lines_narrow_noem',type=str)
+                default='lines_narrow',type=str)
 #narrow or resolved mainly
 
 ap.add_argument('-no_abslines',nargs=1,
@@ -275,7 +275,7 @@ NICER no abslines: 4130010128-001_4130010129-001
 
 '''
 ap.add_argument('-force_epochs',nargs=1,help='force epochs to given set of spectra instead of auto matching',
-                default=True,type=bool)
+                default=False,type=bool)
 
 force_epochs_str=\
 '''
@@ -329,11 +329,15 @@ ap.add_argument('-reload_fakes',nargs=1,
 
 ap.add_argument('-pdf_only',nargs=1,
                 help='Updates the pdf with already existing elements but skips the line detection entirely',
-                default=False,type=bool)
+                default=True,type=bool)
 
 #note: used mainly to recompute obs with bugged UL computations. Needs FINISHED computations firsthand, else
 #use reload_autofit and reload_fakes
 ap.add_argument('-line_ul_only',nargs=1,help='Reloads the autofit computations and re-computes the ULs',
+                default=False,type=bool)
+
+#requires reload_autofit to be set to true
+ap.add_argument('-compute_highflux_only',help='Reloads the autofit computation and simply computes the high flux array',
                 default=False,type=bool)
 
 ap.add_argument('-hid_only',nargs=1,help='skip the line detection and directly plot the hid',
@@ -613,6 +617,11 @@ suzaku_xis_range=np.array(args.suzaku_xis_range.split(' ')).astype(float)
 suzaku_xis_ignore=literal_eval(args.suzaku_xis_ignore)
 
 suzaku_pin_range=np.array(args.suzaku_pin_range.split(' ')).astype(float)
+
+compute_highflux_only=args.compute_highflux_only
+
+if compute_highflux_only:
+    assert reload_autofit,'Reload autofit required for this mode'
 
 low_E_NICER=args.low_E_NICER
 
@@ -2130,7 +2139,7 @@ def line_detect(epoch_id):
     sat_indiv_good = np.array(sat_indiv_good)
     e_sat_low_indiv = np.array(e_sat_low_indiv)
     e_sat_high_indiv = np.array(e_sat_high_indiv)
-    ignore_bands_indiv = np.array(ignore_bands_indiv)
+    ignore_bands_indiv = np.array(ignore_bands_indiv,dtype=object)
     line_cont_ig_indiv = np.array(line_cont_ig_indiv)
     epoch_dets_good = np.array(epoch_dets_good)
 
@@ -2616,8 +2625,11 @@ def line_detect(epoch_id):
 
         for i_sp in range(len(epoch_files_good)):
             if line_cont_ig_indiv[i_sp] != '':
-                AllData(i_sp+1).notice(line_cont_ig_indiv[i_sp])
-
+                try:
+                    AllData(i_sp+1).notice(line_cont_ig_indiv[i_sp])
+                except:
+                    breakpoint()
+                    pass
         store_fit(mode='broadhid' + add_str, fitmod=fitmodel)
 
         # storing the fitmod class into a file
@@ -2742,6 +2754,10 @@ def line_detect(epoch_id):
 
         if max(e_sat_high_indiv)>=20:
             np.savetxt(outdir + '/' + epoch_observ[0] + '_main_spflux_high.txt',main_spflux_high)
+
+        if compute_highflux_only:
+            return fill_result('Line detection complete.')
+
 
         # restoring the linecont save
         Xset.restore(outdir + '/' + epoch_observ[0] + '_mod_broadband_linecont.xcm')
@@ -4770,6 +4786,8 @@ for epoch_id,epoch_files in enumerate(epoch_list):
     else:
         summary_lines=line_detect(epoch_id)
 
+assert not compute_highflux_only,'Stopping the computation here because no need to rebuild the summaries for this'
+
 #not creating the recap file in spread comput mode to avoid issues
 assert spread_comput==1, 'Stopping the computation here to avoid conflicts when making the summary'
 
@@ -4894,8 +4912,8 @@ dist_factor=4*np.pi*(dist_obj_list*1e3*3.086e18)**2
 Edd_factor=dist_factor/(1.26e38*mass_obj_list)
 
 #Reading the results files
-observ_list,lineval_list,lum_list,date_list,instru_list,exptime_list,fitmod_broadband_list,epoch_obs_list\
-    =obj_values(lineval_files,Edd_factor,dict_linevis)
+observ_list,lineval_list,lum_list,date_list,instru_list,exptime_list,fitmod_broadband_list,epoch_obs_list,\
+    flux_high_list=obj_values(lineval_files,Edd_factor,dict_linevis)
 
 dict_linevis['lum_list']=lum_list
 dict_linevis['exptime_list']=exptime_list

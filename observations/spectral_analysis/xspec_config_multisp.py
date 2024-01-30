@@ -993,6 +993,7 @@ def addcomp(compname,position='last',endmult=None,return_pos=False,modclass=AllM
 
         -Suzaku_crabcorr: crabcorr variation where only the Front-Illuminated CCD (xis0_xis3)
                           have a free to vary deltagamma
+
         -cont_+component: added inside absorption and edge components
                             NOTE: assumes that all currently existing absorption and edge components are at the
                             beginning of the model
@@ -1084,7 +1085,8 @@ def addcomp(compname,position='last',endmult=None,return_pos=False,modclass=AllM
         main_compnames = AllModels(1).componentNames
 
         #maiting inside the edge components (assumed to be from calibration if there are some
-        start_position+=sum(['edge' in elem for elem in main_compnames])
+        if comp_split not in xspec_globcomps:
+            start_position+=sum(['edge' in elem for elem in main_compnames])
 
     if comp_custom is not None:
         if 'cal' in comp_custom:

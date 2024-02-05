@@ -166,11 +166,6 @@ def lmplot_uncert_a(ax, x, y, dx, dy, xlim=None,ylim=None, percent=68.26, nsim=1
     x_pert = x_pert.astype(float)
     y_pert = y_pert.astype(float)
 
-    # for i in range(x_pert):
-    #     plt.figure()
-    #
-    #     plt.plot()
-
     #first regplot just to get the ax limits
 
     # storing the elements already in the axe children at the start
@@ -325,6 +320,20 @@ def lmplot_uncert_a(ax, x, y, dx, dy, xlim=None,ylim=None, percent=68.26, nsim=1
 
         slope_vals[i] = curr_regress.slope
         intercept_vals[i] = curr_regress.intercept
+
+
+
+    #tests to check individual realizations
+    # prop_cycle = plt.rcParams['axes.prop_cycle']
+    # colors = prop_cycle.by_key()['color']
+    # for i in np.arange(0,len(x_pert),100):
+    #     plt.figure()
+    #     plt.scatter(x_pert[i],y_pert[i],color='red')
+    #     plt.errorbar(x,y,dx,dy,color='blue',ls='')
+    #     curr_regr=((np.log10(x_line) if log_x else x_line)-x_intercept)*slope_vals[i]+intercept_vals[i]
+    #     plt.plot(x_line,curr_regr,color='orange')
+    #
+    # plt.figure()
 
     uncert_arr = array([[None, None, None]] * 2)
 

@@ -12,9 +12,9 @@ from custom_pymccorrelation import perturb_values
 
 def lmplot_uncert_a(ax, x, y, dx, dy, xlim=None,ylim=None, percent=68.26, nsim=100,
                     intercept_pos='auto',
-                    return_linreg=True, infer_log_scale=False,nanzero_err=True,
+                    return_linreg=True, infer_log_scale=False,log_sampling=False,nanzero_err=True,
                     error_percent=68.26,
-                    xbounds=None,ybounds=None,
+                    xbounds='auto',ybounds='auto',
                     line_color='blue',lw=1.3, inter_color='lightgrey'):
 
     '''
@@ -75,6 +75,9 @@ def lmplot_uncert_a(ax, x, y, dx, dy, xlim=None,ylim=None, percent=68.26, nsim=1
                         (normalized to 68.26)
 
     -xbounds,ybounds:   resizes the graph manually instead of automatically
+        -'auto': auto resize
+        -values: resize manually to these values
+        -None: no resize
     -line_color, lw:     displays for the main plotted line
     -inter_color:        confidence interval region color
 
@@ -202,23 +205,25 @@ def lmplot_uncert_a(ax, x, y, dx, dy, xlim=None,ylim=None, percent=68.26, nsim=1
     else:
         dy_arr_lim=dy_arr
 
-    if xbounds is None:
+    if xbounds is not None:
 
-        if log_x:
-            ax.set_xlim(10**(np.nanmin(x_arr - dx_arr_lim)), 10**(np.nanmax(x_arr + dx_arr_lim)))
+        if xbounds=='auto':
+            if log_x:
+                ax.set_xlim(10**(np.nanmin(x_arr - dx_arr_lim)), 10**(np.nanmax(x_arr + dx_arr_lim)))
+            else:
+                ax.set_xlim((np.nanmin(x_arr - dx_arr_lim)),(np.nanmax(x_arr + dx_arr_lim)))
         else:
-            ax.set_xlim((np.nanmin(x_arr - dx_arr_lim)),(np.nanmax(x_arr + dx_arr_lim)))
-    else:
-        ax.set_xlim(xbounds)
+            ax.set_xlim(xbounds)
 
-    if ybounds is None:
+    if ybounds is not None:
 
-        if log_y:
-            ax.set_ylim(10**(np.nanmin(y_arr - dy_arr_lim)), 10**(np.nanmax(y_arr + dy_arr_lim)))
+        if ybounds=='auto':
+            if log_y:
+                ax.set_ylim(10**(np.nanmin(y_arr - dy_arr_lim)), 10**(np.nanmax(y_arr + dy_arr_lim)))
+            else:
+                ax.set_ylim((np.nanmin(y_arr - dy_arr_lim)), (np.nanmax(y_arr + dy_arr_lim)))
         else:
-            ax.set_ylim((np.nanmin(y_arr - dy_arr_lim)), (np.nanmax(y_arr + dy_arr_lim)))
-    else:
-        ax.set_ylim(ybounds)
+            ax.set_ylim(ybounds)
 
     #first loop with intercept at 0 on nsim iterations
     bound_inter = array([None] * nsim)
@@ -231,6 +236,7 @@ def lmplot_uncert_a(ax, x, y, dx, dy, xlim=None,ylim=None, percent=68.26, nsim=1
 
         slope_vals[i] = curr_regress.slope
         intercept_vals[i] = curr_regress.intercept
+
 
     # for i in range(len(x_arr)):
     #     fig,ax=plt.subplots()
@@ -260,8 +266,9 @@ def lmplot_uncert_a(ax, x, y, dx, dy, xlim=None,ylim=None, percent=68.26, nsim=1
                             for id in range(nsim)])
 
     #fetching a sample of points from the limits of the ax to create the lines
-    if log_x:
+    if log_x or log_sampling:
         x_line=np.logspace(np.log10(ax.get_xlim()[0]),np.log10(ax.get_xlim()[1]),2*nsim)
+
     else:
         x_line=np.linspace(ax.get_xlim()[0],ax.get_xlim()[1],2*nsim)
 
@@ -271,10 +278,11 @@ def lmplot_uncert_a(ax, x, y, dx, dy, xlim=None,ylim=None, percent=68.26, nsim=1
     intercept_vals_save=intercept_vals.copy()
 
     #list of y position of all perturbated lines
-    if log_y and not log_x:
-        y_line_pert=10**(np.array([x_line*slope_vals_save[i]+intercept_vals_save[i] for i in range(nsim)]).T)
+    # if log_y and not log_x:
+    if log_y:
+        y_line_pert=10**(np.array([(np.log10(x_line) if log_x else x_line)*slope_vals_save[i]+intercept_vals_save[i] for i in range(nsim)]).T)
     else:
-        y_line_pert =np.array([x_line * slope_vals_save[i] + intercept_vals_save[i] for i in range(nsim)]).T
+        y_line_pert =np.array([(np.log10(x_line) if log_x else x_line) * slope_vals_save[i] + intercept_vals_save[i] for i in range(nsim)]).T
 
     # plt.figure()
     # plt.errorbar(x_arr, y_arr, xerr=dx_arr.T, yerr=dy_arr.T, linestyle='', marker='d', color='red')
@@ -324,9 +332,8 @@ def lmplot_uncert_a(ax, x, y, dx, dy, xlim=None,ylim=None, percent=68.26, nsim=1
     slope_vals_copy=slope_vals.copy()
     slope_vals.sort()
 
-    # storing the main values as the central position for the array
-    uncert_arr[0][0] = base_regress_slope
-
+    # storing the median value as the central position for the array
+    uncert_arr[0][0] = slope_vals[round(nsim * (0.5))]
     uncert_arr[0][1] = uncert_arr[0][0] - slope_vals[round(nsim * (0.5-percent/200))]
     uncert_arr[0][2] = slope_vals[round(nsim * (0.5+percent/200))] - uncert_arr[0][0]
 
@@ -336,26 +343,24 @@ def lmplot_uncert_a(ax, x, y, dx, dy, xlim=None,ylim=None, percent=68.26, nsim=1
     intercept_vals_copy=intercept_vals.copy()
     intercept_vals.sort()
 
-    #and same for the main non-perturbated value
-    uncert_arr[1][0] = base_regress_intercept
-
+    uncert_arr[1][0] = intercept_vals[round(nsim * (0.5))]
     uncert_arr[1][1] = uncert_arr[1][0] - intercept_vals[round(nsim * (0.5-percent/200))]
     uncert_arr[1][2] = intercept_vals[round(nsim * (0.5+percent/200))] - uncert_arr[1][0]
 
     intercept_arr=uncert_arr[1]
 
     #main sigma value
-
     sigma_vals.sort()
 
     #and the uncertainties
     sigma_arr=np.array([sigma_main,max(sigma_main-sigma_vals[round(nsim * (0.5-percent/200))],0),
                                   max(sigma_vals[round(nsim*(0.5+percent/200))]-sigma_main,0)])
 
-    base_regress_line=(x_line-x_intercept)*base_regress_slope+base_regress_intercept
+    base_regress_line=((np.log10(x_line) if log_x else x_line)-x_intercept)*slope_arr[0]+intercept_arr[0]
 
     # converting to powers if in log space
-    if log_y and not log_x:
+    # if log_y and not log_x:
+    if log_y :
         y_line_plot=10**(base_regress_line)
     else:
         y_line_plot=base_regress_line
@@ -366,3 +371,4 @@ def lmplot_uncert_a(ax, x, y, dx, dy, xlim=None,ylim=None, percent=68.26, nsim=1
     #output info
     if return_linreg:
         return slope_arr,intercept_arr,sigma_arr,x_intercept
+

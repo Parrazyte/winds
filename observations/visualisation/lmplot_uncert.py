@@ -5,7 +5,8 @@ import seaborn as sns
 import matplotlib.pyplot as plt
 import matplotlib as mpl
 from tqdm import tqdm
-from scipy.stats import linregress, norm
+from scipy.stats import linregress
+from scipy.stats import norm as scinorm
 
 from custom_pymccorrelation import perturb_values
 
@@ -105,11 +106,11 @@ def lmplot_uncert_a(ax, x, y, dx, dy, xlim=None,ylim=None, percent=68.26, nsim=1
     #note: we need to resize the uncertainties according to the gaussian distribution
     #so we're using the z-score
     if nanzero_err:
-        dx_arr = array(nan_to_num(dx)).T * 1/norm.ppf((1 + error_percent/100) / 2)
-        dy_arr = array(nan_to_num(dy)).T * 1/norm.ppf((1 + error_percent/100) / 2)
+        dx_arr = array(nan_to_num(dx)).T * 1/scinorm.ppf((1 + error_percent/100) / 2)
+        dy_arr = array(nan_to_num(dy)).T * 1/scinorm.ppf((1 + error_percent/100) / 2)
     else:
-        dx_arr = array(dx).T * 1/norm.ppf((1 + error_percent/100) / 2)
-        dy_arr = array(dy).T * 1/norm.ppf((1 + error_percent/100) / 2)
+        dx_arr = array(dx).T * 1/scinorm.ppf((1 + error_percent/100) / 2)
+        dy_arr = array(dy).T * 1/scinorm.ppf((1 + error_percent/100) / 2)
 
     #reshaping simmetrical uncertainties to avoid issues later
     if np.ndim(dx_arr)==1:

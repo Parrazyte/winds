@@ -376,7 +376,7 @@ def lmplot_uncert_a(ax, x, y, dx, dy, xlim=None,ylim=None, percent=68.26, nsim=1
         y_line_plot=base_regress_line
 
     #plotting the base line
-    plt.plot(x_line,y_line_plot,lw=lw,color=line_color)
+    ax.plot(x_line,y_line_plot,lw=lw,color=line_color)
 
     #output info
     if return_linreg:

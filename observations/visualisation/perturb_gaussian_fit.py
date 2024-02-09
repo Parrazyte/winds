@@ -8,7 +8,8 @@ from tqdm import tqdm
 from lmfit import Model
 
 '''
-some test for the distribution of the blueshift values
+old tests for the distribution of the blueshift values
+supplanted by more direct computations
 '''
 
 # data = loadtxt('model1d_gauss.dat')
@@ -25,6 +26,7 @@ x_ch= np.array([12.40280570006887, -84.02067488142659, -483.4139688969211,
               708.0210633887243, 276.764156337214, 231.494, 417.43, 167.01751,
               -389.10808])
 
+#note that the values are inverted here
 xerr_ch=np.array([[153.082, 153.087, 169.59, 248.011, 307.863, 114.736, 27.0215,
               542.754, 469.091, 556.487, 59.1957, 182.962, 649.822, 359.864,
               136.771, 135.414, 28.6262, 178.895, 255.659, 505.261, 171.917,
@@ -36,7 +38,10 @@ xerr_ch=np.array([[153.082, 153.087, 169.59, 248.011, 307.863, 114.736, 27.0215,
                             157.467, 106.836, 267.837, 30.2385, 511.585, 523.407, 589.057,
                             384.51, 330.017, 101.982, 500.461, 1025.56, 321.61, 808.192,
                             50.8927, 166.87, 641.708, 443.212]]).T
-                                                   
+
+#removing the specific points of GRS
+
+
 x_xmm=np.array([3876.5976858994486, 4992.9741481798155, 5169.240227352179,
        6030.869999844778, 4630.238442295601, 2441.059810599271,
        -2257.7672260053396, 108.28000167497493, 159.05999996473508,
@@ -79,12 +84,12 @@ xerr_xmm=np.array([[930.864, 2227.06, 169.604, 530.306, 2603.64, 1512.52, 933.26
               472.162, 1403.72, 2341.77, 1397.75]]).T
 # y = data[:, 1]
 
-breakpoint()
+# breakpoint()
 
-nfakes=1000
+nfakes=10000
 
-xpert_xmm,dummy,d2=perturb_values(x_xmm,None,xerr_xmm,None,1000)
-xpert_ch,dummy,d2=perturb_values(x_ch,None,xerr_ch,None,1000)
+xpert_xmm,dummy,d2=perturb_values(x_xmm,x_xmm,xerr_xmm,xerr_xmm,Nperturb=1000)
+xpert_ch,dummy,d2=perturb_values(x_ch,x_ch,xerr_ch,xerr_ch,Nperturb=1000)
 
 xflat_xmm=xpert_xmm.astype(float).ravel()
 xflat_ch=xpert_ch.astype(float).ravel()

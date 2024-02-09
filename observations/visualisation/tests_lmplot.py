@@ -285,46 +285,47 @@ err_lx=np.array([[0.004     , 0.007     , 0.003     , 0.009     , 0.006     ,
        0.06204207, 0.13362907, 0.03776474, 0.01336291]])
 
 
-# fig2,ax2=plt.subplots()
-# ax2.errorbar(lvout,xi,xerr=lvout_err,yerr=err_xi,linestyle='')
-# plt.xlabel('lvout')
-# plt.ylabel('xi')
-# a,b,c,d=lmplot_uncert_a(ax2,lvout,xi,lvout_err,err_xi,nsim=2000,intercept_pos='auto',percent=68.)
-# plt.suptitle('intercept at '+str(d)
-#              +'\n'r'a=$%.2f'%a[0]+'_{-%.2f'%a[1]+'}^{+%.2f'%a[2]+'}$'
-#              +'\n'r'b=$%.2f'%b[0]+'_{-%.2f'%b[1]+'}^{+%.2f'%b[2]+'}$'
-#              +'\n'r'sig=$%.2f'%c[0]+'_{-%.2f'%c[1]+'}^{+%.2f'%c[2]+'}$')
-#
-# # plt.figure()
-# # plt.scatter(e,f)
-# fig1,ax1=plt.subplots()
-# ax1.errorbar(lvout,nh,xerr=lvout_err,yerr=err_nh,linestyle='')
-# plt.xlabel('lvout')
-# plt.ylabel('nh')
-# a,b,c,d=lmplot_uncert_a(ax1,lvout,nh,lvout_err,err_nh,nsim=2000,intercept_pos='auto',percent=68)
-# plt.suptitle('intercept at '+str(d)
-#              +'\n'r'a=$%.2f'%a[0]+'_{-%.2f'%a[1]+'}^{+%.2f'%a[2]+'}$'
-#              +'\n'r'b=$%.2f'%b[0]+'_{-%.2f'%b[1]+'}^{+%.2f'%b[2]+'}$'
-#              +'\n'r'sig=$%.2f'%c[0]+'_{-%.2f'%c[1]+'}^{+%.2f'%c[2]+'}$')
-#
-# fig3,ax3=plt.subplots()
-# ax3.errorbar(xi,nh,xerr=err_xi,yerr=err_nh,linestyle='')
-# plt.xlabel('xi')
-# plt.ylabel('nh')
-# a,b,c,d=lmplot_uncert_a(ax3,xi,nh,err_xi,err_nh,nsim=2000,intercept_pos='auto',percent=68)
-# plt.suptitle('intercept at '+str(d)
-#              +'\n'r'a=$%.2f'%a[0]+'_{-%.2f'%a[1]+'}^{+%.2f'%a[2]+'}$'
-#              +'\n'r'b=$%.2f'%b[0]+'_{-%.2f'%b[1]+'}^{+%.2f'%b[2]+'}$'
-#              +'\n'r'sig=$%.2f'%c[0]+'_{-%.2f'%c[1]+'}^{+%.2f'%c[2]+'}$')
+fig2,ax2=plt.subplots()
+ax2.errorbar(lvout,xi,xerr=lvout_err,yerr=err_xi,linestyle='')
+plt.xlabel('lvout')
+plt.ylabel('xi')
+a,b,c,d=lmplot_uncert_a(ax2,lvout,xi,lvout_err,err_xi,nsim=2000,intercept_pos='auto',percent=68.
+                        ,percent_regions=[68,95,99.7],inter_color=['red','green','lightblue'])
+plt.suptitle('intercept at '+str(d)
+             +'\n'r'a=$%.2f'%a[0]+'_{-%.2f'%a[1]+'}^{+%.2f'%a[2]+'}$'
+             +'\n'r'b=$%.2f'%b[0]+'_{-%.2f'%b[1]+'}^{+%.2f'%b[2]+'}$'
+             +'\n'r'sig=$%.2f'%c[0]+'_{-%.2f'%c[1]+'}^{+%.2f'%c[2]+'}$')
+
+# plt.figure()
+# plt.scatter(e,f)
+fig1,ax1=plt.subplots()
+ax1.errorbar(lvout,nh,xerr=lvout_err,yerr=err_nh,linestyle='')
+plt.xlabel('lvout')
+plt.ylabel('nh')
+a,b,c,d=lmplot_uncert_a(ax1,lvout,nh,lvout_err,err_nh,nsim=2000,intercept_pos='auto',percent=68)
+plt.suptitle('intercept at '+str(d)
+             +'\n'r'a=$%.2f'%a[0]+'_{-%.2f'%a[1]+'}^{+%.2f'%a[2]+'}$'
+             +'\n'r'b=$%.2f'%b[0]+'_{-%.2f'%b[1]+'}^{+%.2f'%b[2]+'}$'
+             +'\n'r'sig=$%.2f'%c[0]+'_{-%.2f'%c[1]+'}^{+%.2f'%c[2]+'}$')
+
+fig3,ax3=plt.subplots()
+ax3.errorbar(xi,nh,xerr=err_xi,yerr=err_nh,linestyle='')
+plt.xlabel('xi')
+plt.ylabel('nh')
+a,b,c,d=lmplot_uncert_a(ax3,xi,nh,err_xi,err_nh,nsim=2000,intercept_pos='auto',percent=68)
+plt.suptitle('intercept at '+str(d)
+             +'\n'r'a=$%.2f'%a[0]+'_{-%.2f'%a[1]+'}^{+%.2f'%a[2]+'}$'
+             +'\n'r'b=$%.2f'%b[0]+'_{-%.2f'%b[1]+'}^{+%.2f'%b[2]+'}$'
+             +'\n'r'sig=$%.2f'%c[0]+'_{-%.2f'%c[1]+'}^{+%.2f'%c[2]+'}$')
 
 
-for i_a in range(10):
-       fig4,ax4=plt.subplots()
-       ax4.errorbar(lx,v_out,xerr=err_lx,yerr=err_v_out,linestyle='')
-       plt.xlabel('lx')
-       plt.ylabel('v_out')
-       a,b,c,d=lmplot_uncert_a(ax4,lx,v_out,err_lx,err_v_out,nsim=2000,intercept_pos='auto',percent=90)
-       plt.suptitle('intercept at '+str(d)
-                    +'\n'r'a=$%.2f'%a[0]+'_{-%.2f'%a[1]+'}^{+%.2f'%a[2]+'}$'
-                    +'\n'r'b=$%.2f'%b[0]+'_{-%.2f'%b[1]+'}^{+%.2f'%b[2]+'}$'
-                    +'\n'r'sig=$%.2f'%c[0]+'_{-%.2f'%c[1]+'}^{+%.2f'%c[2]+'}$')
+# for i_a in range(10):
+#        fig4,ax4=plt.subplots()
+#        ax4.errorbar(lx,v_out,xerr=err_lx,yerr=err_v_out,linestyle='')
+#        plt.xlabel('lx')
+#        plt.ylabel('v_out')
+#        a,b,c,d=lmplot_uncert_a(ax4,lx,v_out,err_lx,err_v_out,nsim=2000,intercept_pos='auto',percent=90)
+#        plt.suptitle('intercept at '+str(d)
+#                     +'\n'r'a=$%.2f'%a[0]+'_{-%.2f'%a[1]+'}^{+%.2f'%a[2]+'}$'
+#                     +'\n'r'b=$%.2f'%b[0]+'_{-%.2f'%b[1]+'}^{+%.2f'%b[2]+'}$'
+#                     +'\n'r'sig=$%.2f'%c[0]+'_{-%.2f'%c[1]+'}^{+%.2f'%c[2]+'}$')

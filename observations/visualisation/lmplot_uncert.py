@@ -83,7 +83,8 @@ def lmplot_uncert_a(ax, x, y, dx, dy, xlim=None,ylim=None, percent=68.26,percent
         -values: resize manually to these values
         -None: no resize
     -line_color, lw:     displays for the main plotted line
-    -inter_color:        confidence interval region color
+    -inter_color:        confidence interval region color. If list like, use the different colors
+                         for different intervals
 
     '''
 
@@ -293,6 +294,7 @@ def lmplot_uncert_a(ax, x, y, dx, dy, xlim=None,ylim=None, percent=68.26,percent
 
     y_line_pert.sort()
 
+    #makign an iterable for percent_regions
     if percent_regions=='auto':
         percent_regions_use=np.array([percent])
     else:
@@ -301,9 +303,20 @@ def lmplot_uncert_a(ax, x, y, dx, dy, xlim=None,ylim=None, percent=68.26,percent
         else:
             percent_regions_use=np.array(percent_regions)
 
-    percent_regions_use.sort()
+    #making an iterable for inter_color
+    if type(inter_color) not in (tuple,np.ndarray,list):
+        inter_color_use=np.repeat(inter_color,len(percent_regions_use))
+    else:
+        inter_color_use=np.array(inter_color)
 
-    inter_color_multi=inter_color.replace('light','') if len(percent_regions_use)>1 else inter_color
+    assert len(percent_regions_use)==len(inter_color_use),\
+        'The length of the percent regions and inter_color iterables do not match'
+
+    #re-ordering the colors before sorting the percent regions array
+    inter_color_use=inter_color_use[percent_regions_use.argsort()]
+
+    #sorting the percent regions array
+    percent_regions_use.sort()
 
     #reversing the percent ordering to avoid hiding the center regions with the broader ones
     for i_region,elem_percent_region in enumerate(percent_regions_use[::-1]):
@@ -311,8 +324,8 @@ def lmplot_uncert_a(ax, x, y, dx, dy, xlim=None,ylim=None, percent=68.26,percent
         y_line_low=y_line_pert.T[round(nsim * (0.5-elem_percent_region/200))]
         y_line_high=y_line_pert.T[round(nsim* (0.5+elem_percent_region/200))]
 
-        ax.fill_between(x_line, y_line_low, y_line_high, color=inter_color_multi, zorder=0,
-                        alpha=1/len(percent_regions_use))
+        ax.fill_between(x_line, y_line_low, y_line_high, color=inter_color_use[i_region], zorder=0,
+                        alpha=1)
 
     #keeping the same percent as the perturbation here to be used below
     y_line_low_std = y_line_pert.T[round(nsim * (0.5 - percent / 200))]

@@ -11,7 +11,7 @@ from scipy.stats import norm as scinorm
 from custom_pymccorrelation import perturb_values
 
 
-def lmplot_uncert_a(ax, x, y, dx, dy, xlim=None,ylim=None, percent=68.26, nsim=100,
+def lmplot_uncert_a(ax, x, y, dx, dy, xlim=None,ylim=None, percent=68.26,percent_regions='auto',nsim=100,
                     intercept_pos='auto',
                     return_linreg=True, infer_log_scale=False,log_sampling=False,nanzero_err=True,
                     error_percent=68.26,
@@ -49,14 +49,17 @@ def lmplot_uncert_a(ax, x, y, dx, dy, xlim=None,ylim=None, percent=68.26, nsim=1
 
     ax: ax where the plots will be displayed
 
-    -x,y:        data
+    -x,y:               data
 
-    -dx,dy:      uncertainties. can be of size [2,N] for asymmetric
+    -dx,dy:             uncertainties. can be of size [2,N] for asymmetric
 
-    -xlim,ylim: upper limit information. Either None or a N-size mask with a 1 for upper/lower limits.
-                In this case, the values will be perturbated between x and xlim with a uniform distribution
+    -xlim,ylim:         upper limit information. Either None or a N-size mask with a 1 for upper/lower limits.
+                        In this case, the values will be perturbated between x and xlim with a uniform distribution
 
-    -percent:   percent of the confidence interval used
+    -percent:           percent of the posterior distributions returned (the main value is the median)
+
+    -percent_regions:   percent or list of percent of the line distributions to use for the shaded regions.
+                        use "auto" to keep the same value as percent
 
     -intercept_pos:     method of shifting x_value for the LR computation to get the info of the intercept error
 
@@ -290,13 +293,33 @@ def lmplot_uncert_a(ax, x, y, dx, dy, xlim=None,ylim=None, percent=68.26, nsim=1
 
     y_line_pert.sort()
 
-    y_line_low=y_line_pert.T[round(nsim * (0.5-percent/200))]
-    y_line_high=y_line_pert.T[round(nsim* (0.5+percent/200))]
+    if percent_regions=='auto':
+        percent_regions_use=np.array([percent])
+    else:
+        if type(percent_regions) not in (tuple,np.ndarray,list):
+            percent_regions_use=np.array([percent_regions])
+        else:
+            percent_regions_use=np.array(percent_regions)
 
-    ax.fill_between(x_line, y_line_low, y_line_high, color=inter_color, zorder=0)
+    percent_regions_use.sort()
+
+    inter_color_multi=inter_color.replace('light','') if len(percent_regions_use)>1 else inter_color
+
+    #reversing the percent ordering to avoid hiding the center regions with the broader ones
+    for i_region,elem_percent_region in enumerate(percent_regions_use[::-1]):
+
+        y_line_low=y_line_pert.T[round(nsim * (0.5-elem_percent_region/200))]
+        y_line_high=y_line_pert.T[round(nsim* (0.5+elem_percent_region/200))]
+
+        ax.fill_between(x_line, y_line_low, y_line_high, color=inter_color_multi, zorder=0,
+                        alpha=1/len(percent_regions_use))
+
+    #keeping the same percent as the perturbation here to be used below
+    y_line_low_std = y_line_pert.T[round(nsim * (0.5 - percent / 200))]
+    y_line_high_std = y_line_pert.T[round(nsim * (0.5 + percent / 200))]
 
     #computing the best possible intercept
-    x_intercept_best=x_line[(y_line_high-y_line_low).argsort()[0]]
+    x_intercept_best=x_line[(y_line_high_std-y_line_low_std).argsort()[0]]
 
     if intercept_pos=='best':
         x_intercept=x_intercept_best

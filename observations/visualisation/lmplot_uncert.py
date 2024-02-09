@@ -177,7 +177,7 @@ def lmplot_uncert_a(ax, x, y, dx, dy, xlim=None,ylim=None, percent=68.26, nsim=1
         sns.regplot(x=x_arr, y=y_arr, ax=ax, truncate=False, ci=90)
 
         # # fetching the absciss of the intercept ticks for late
-        x_intercept_ticks = plt.gca().xaxis.get_ticklocs()
+        x_intercept_ticks = ax.xaxis.get_ticklocs()
 
         # fetching the newly added elements to the axis list
         ax_children_regplot = [elem for elem in ax.get_children() if elem not in ax_children_init]

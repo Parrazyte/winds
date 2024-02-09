@@ -36,6 +36,7 @@ from datetime import date
 
 from copy import deepcopy
 
+from scipy.stats import norm
 #correlation values and uncertainties with MC distribution from the uncertainties
 from custom_pymccorrelation import pymccorrelation
 
@@ -54,7 +55,7 @@ from astroquery.vizier import Vizier
 #visualisation functions
 from visual_line_tools import load_catalogs,dist_mass,obj_values,abslines_values,values_manip,distrib_graph,correl_graph,incl_dic,\
     n_infos, plot_lightcurve, hid_graph, sources_det_dic, dippers_list,telescope_list,load_integral,telescope_colors,\
-    convert_BAT_count_flux,flux_erg_pow,err_flux_erg_pow,values_manip_high_E
+    convert_BAT_count_flux,flux_erg_pow,err_flux_erg_pow,values_manip_high_E,corr_factor_lbat,fetch_bat_lightcurve
 
 from lmplot_uncert import lmplot_uncert_a
 # import mpld3
@@ -280,10 +281,13 @@ choice_telescope=st.sidebar.multiselect('Telescopes', ['NICER','NuSTAR'] if use_
                                         default=['NICER','NuSTAR'] if use_orbit_obs or use_time_resolved else ('XMM','Chandra'))
 
 if online:
-    radio_ignore_full=True
+    include_full=True
+    
+    include_untested= False
 else:
     with st.sidebar:
-        radio_ignore_full=not st.toggle('Include problematic data (_full) folders')
+        include_full=st.toggle('Include problematic data (_full) folders')
+        include_untested= st.toggle('Include untested and preliminary NICER sources')
 
 if not online:
     os.system('mkdir -p glob_batch/visual_line_dumps/')
@@ -294,13 +298,17 @@ join_telescope_str='_'.join(join_telescope_str.tolist())
 
 if online:
     dump_path='/mount/src/winds/observations/visualisation/visual_line_dumps/dump_'+join_telescope_str+\
-              use_orbit_obs_str+time_resolved_dump_str+'_'+('no' if radio_ignore_full else '')+'full.pkl'
+              use_orbit_obs_str+time_resolved_dump_str+\
+              ('_full' if include_full else '')+\
+              ('_untested' if include_untested else '')+'.pkl'
 
     
     update_dump=False
 else:
     dump_path='./glob_batch/visual_line_dumps/dump_'+join_telescope_str+\
-              use_orbit_obs_str+time_resolved_dump_str+'_'+('no' if radio_ignore_full else '')+'full.pkl'
+              use_orbit_obs_str+time_resolved_dump_str+\
+              ('_full' if include_full else '')+\
+              ('_untested' if include_untested else '')+'.pkl'
 
     update_dump=st.sidebar.button('Update dump')
 
@@ -385,12 +393,20 @@ if update_dump or not os.path.isfile(dump_path):
         abslines_files = [elem for elem in abslines_files if outdir+'_old' not in elem]
         abslines_files_multi = [elem for elem in abslines_files_multi if outdir+'_old' not in elem]
 
-        if radio_ignore_full:
+        if not include_full:
             lineval_files=[elem for elem in lineval_files if '_full' not in elem]
             lineval_files_multi=[elem for elem in lineval_files_multi if '_full' not in elem]
 
             abslines_files=[elem for elem in abslines_files if '_full' not in elem]
             abslines_files_multi=[elem for elem in abslines_files_multi if '_full' not in elem]
+
+        if not include_untested:
+            lineval_files=[elem for elem in lineval_files if '/untested/' not in elem]
+            lineval_files_multi=[elem for elem in lineval_files_multi if '/untested/' not in elem]
+
+            abslines_files=[elem for elem in abslines_files if '/untested/' not in elem]
+            abslines_files_multi=[elem for elem in abslines_files_multi if '/untested/' not in elem]
+
 
         if multi_obj:
             obj_list=np.unique(np.array([elem.split('/')[-4] for elem in lineval_files]))
@@ -727,7 +743,10 @@ st.sidebar.header('HID options')
 #     mask_lines=np.array(line_display_str!='')
             
 
-display_nonsign=st.sidebar.toggle('Show detections below significance threshold',value=False)
+if online:
+    display_nonsign=False
+else:
+    display_nonsign=st.sidebar.toggle('Show detections below significance threshold',value=False)
 
 if display_nonsign:
     restrict_threshold=st.sidebar.toggle('Prioritize showing maximal values of significant detections',value=True)
@@ -898,7 +917,7 @@ with expander_monit:
 
 
     if plot_lc_monit or plot_hr_monit or plot_lc_bat or plot_lc_integral:
-        zoom_lc=st.toggle('Zoom on the restricted time period in the lightcurve',value=False)
+        zoom_lc=st.toggle('Zoom on the restricted time period in the lightcurve',value=True)
     else:
         zoom_lc=False
         
@@ -1136,18 +1155,8 @@ lum_high_list=np.array([np.array([np.repeat(np.nan,3) if flux_high_list[i_obj][i
                 else flux_high_list[i_obj][i_obs]*Edd_factor[i_obj] for i_obs in range(len(flux_high_list[i_obj]))])\
           for i_obj in range(len(flux_high_list))],dtype=object)
 
-dict_linevis['lum_high_list']=flux_high_list
 
-lum_high_plot,gamma_nthcomp_plot=values_manip_high_E(lum_high_list,gamma_nthcomp_list)
-
-lum_high_plot_restrict=deepcopy(lum_high_plot)
-lum_high_plot_restrict=lum_high_plot_restrict.T[mask_obj].T
-
-gamma_nthcomp_plot_restrict=deepcopy(gamma_nthcomp_plot)
-gamma_nthcomp_plot_restrict=gamma_nthcomp_plot_restrict.T[mask_obj].T
-
-dict_linevis['lum_high_plot_restrict']=lum_high_plot_restrict
-dict_linevis['gamma_nthcomp_plot_restrict']=gamma_nthcomp_plot_restrict
+dict_linevis['lum_high_list']=lum_high_list
 
 if np.ndim(hid_plot)==4:
     flag_single_obj=True
@@ -1466,7 +1475,7 @@ with tab_hid:
 #### About tab
 with tab_about:
     st.markdown('**visual_line** is a visualisation and download tool for iron-band X-ray absorption lines signatures in Black Hole Low-Mass X-ray Binaries (BHLMXBs).')
-    st.markdown('It is made to complement and give access to the results of [Parra et al. 2023](https://arxiv.org/abs/2308.00691), and more generally, to give an overview of the sampling and X-ray evolution of the outbursts of this category of sources.')
+    st.markdown('It is made to complement and give access to the results of my observational papers, and more generally, to give an overview of the sampling and X-ray evolution of the outbursts of this category of sources.')
     st.markdown('Please contact me at [maxime.parra@univ-grenoble-alpes.fr](mailto:maxime.parra@univ-grenoble-alpes.fr) for questions, to report bugs or request features.')
     
     with st.expander('I want an overview of the science behind this'):
@@ -1482,6 +1491,10 @@ with tab_about:
         During these outbursts, sources brighten by several orders of magnitude, up to a significant percentage of their Eddington luminosity $L_{Edd}$, which is the "theoretical" upper limit of standard accreting regimes.  
         
         Meanwhile, these objects follow a specific pattern of spectral evolution, switching from a powerlaw dominated Spectral Energy Distribution (SED) in soft X-rays (the so-called **"hard"** state) during the initial brightening, to the **"soft"** state, similarly bright but dominated by the thermal emission of the accretion disk (most likely extending to the Innermost Stable Circular Orbit of the Black Hole). After some time spent during the soft state (and occasional back and forth in some instances), the source invariably becomes fainter, transits back to the hard state if necessary, then returns to quiescence.
+        
+        Figure references:  
+            [Petrucci et al. 2021](https://doi.org/10.1051/0004-6361/202039524)  
+            [Done et al. 2007](https://doi.org/10.1007/s00159-007-0006-1)  
         #''')
         
         col_fig1, col_fig2= st.columns(2)
@@ -1517,11 +1530,11 @@ with tab_about:
             One of the most critical matters about winds is their physical origin. In X-ray Binaries, two launching mechanisms are favored, using either **thermal** or **magnetic** processes. Modeling efforts are recent and only few observations have been successfully recreated by either until now, but this has shown the limit of current instruments. Indeed, it appears impossible to directly distinguish the wind launch mechanisms by simply using the absorption signatures, even for the best quality observations of the current generation instruments. Thus, until data from the new instruments, such as XRISM, becomes available, hope lies in the constraints on the physical parameters of the model creating the winds, or a more complete model to data comparison. 
             
             The **JED-SAD model** is a complete accretion-ejection framework for magnetically threaded disks, developed at the University of Grenoble-Alpes (France). Beyond very promising results for fitting all
-            parts of the outburst of Black Hole XRBs, this model has been shown to produce winds, through both theoretical solutions and simulations. The results of this study will be compared to synthetic spectral signatures computed from self-similar JED-SAD solutions in the future, in order to access the evolution of the outflow, and to further constrain the nature and physical conditions of the disk during these observations.
+            parts of the outburst of Black Hole XRBs, this model has been shown to produce winds, through both theoretical solutions and simulations. We aim to compare observations to synthetic spectral signatures computed from self-similar JED-SAD solutions, in order to access the evolution of the outflow, and to further constrain the nature and physical conditions of the disk during these observations.
             
             #''')
             
-            st.header('This work')
+            st.header('''The global study ([Parra et al. 2024](https://doi.org/10.1051/0004-6361/202346920))''')
             st.markdown('''
                         The science community and our own modeling efforts would benefit from a global and up-to-date view of the current wind signatures in BHLMXBs. However, while detailed works have been performed on the vast majority of individual detections, there are very few larger studies for several outbursts and sources. With the goal of providing a complete view of all currently known X-ray wind signatures, we first focus on the most historically studied and constraining observations, using the XMM-Newton and Chandra-HETG instruments.  
                         
@@ -1534,11 +1547,7 @@ with tab_about:
             st.image(dump_path[:dump_path.rfind('/')]+'/linedet_example.jpg',caption='Steps of the fitting procedure for a standard 4U130-47 Chandra spectra. First panel: 4-10 spectrum after the first continuum fit. Second panel: ∆C map of the line blind search, restricted to positive (i.e. improvements) regions. Standard confidence intervals are highlighted with different line styles, and the colormap with the ∆C improvements of emission and absorption lines. Third panel: Ratio plot of the best fit model once absorption lines are added. Fourth panel: Remaining residuals seen through a second blind search.')
             
         st.markdown('''
-                    See [Parra et al. 2023](https://arxiv.org/abs/2308.00691) for detailed references to the points discussed above, and [Diaz Trigo et al. 2016](https://doi.org/10.1002/asna.201612315) or [Ponti et al. 2016](https://doi.org/10.1002/asna.201612339) for reviews on winds.  
-                    
-                    Figure references:  
-                        [Petrucci et al. 2021](https://doi.org/10.1051/0004-6361/202039524)  
-                        [Done et al. 2007](https://doi.org/10.1007/s00159-007-0006-1)  
+                    See the paper for detailed references to the points discussed above, and [Diaz Trigo et al. 2016](https://doi.org/10.1002/asna.201612315) or [Ponti et al. 2016](https://doi.org/10.1002/asna.201612339) for reviews on winds.  
                     #''')
                 
     with st.expander('I want to know how to use this tool'):
@@ -2365,9 +2374,18 @@ with st.sidebar.expander('Parameter analysis'):
                                  ('EW ratio (Line)','width (Line)','Line flux (Line)','Time (Observation)',
                                   'Line EW comparison',
                                   'High Energy parameters (Observation)'),default=None)
-    
+
+    add_BAT_flux_corr = st.toggle('Use corrected BAT flux when lacking high-energy coverage', value=True)
+
+    if add_BAT_flux_corr:
+        radio_BAT_binning_scat=st.radio('BAT flux sampling',('daily','single orbit'))
+        BAT_binning_scat='day' if radio_BAT_binning_scat=='daily'\
+                         else 'orbit' if radio_BAT_binning_scat=='single orbit' else None
+    else:
+        BAT_binning_scat='day'
+
     glob_col_source=st.toggle('Normalize source colors over the entire sample',value=True)
-    
+
     st.header('Distributions')
     display_distrib=st.toggle('Plot distributions',value=False)
     use_distrib_lines=st.toggle('Show line by line distribution',value=True)
@@ -2379,7 +2397,7 @@ with st.sidebar.expander('Parameter analysis'):
     st.header('Correlations')
     
     display_types=st.multiselect('Main parameters',('Line','Observation','Source'),default=None)
-    
+
     display_scat_intr='Line' in display_types
     display_scat_hid='Observation' in display_types
     display_scat_inclin='Source' in display_types
@@ -2404,31 +2422,33 @@ with st.sidebar.expander('Parameter analysis'):
     use_time_param='Time (Observation)' in display_param
     use_lineflux='Line flux (Line)' in display_param
     use_high_E_param='High Energy parameters (Observation)' in display_param
+
+    st.header('Computations')
+
+    compute_correl = st.toggle('Compute Pearson/Spearman for the scatter plots', value=False)
+    compute_regr = st.toggle('Compute linear regression in strongly correlated graphs (p<1e-5)', value=False)
+
+    restrict_comput_scatter = st.toggle('Restrict computation bounds', value=False)
+    if restrict_comput_scatter:
+        comput_scatter_xmin = st.number_input(r'$x_{min}$')
+        comput_scatter_xmax = st.number_input(r'$x_{max}$')
+        comput_scatter_ymin = st.number_input(r'$y_{min}$')
+        comput_scatter_ymax = st.number_input(r'$y_{max}$')
+    else:
+        comput_scatter_xmin = 0
+        comput_scatter_xmax = 0
+        comput_scatter_ymin = 0
+        comput_scatter_ymax = 0
+
     
-    compute_correl=st.toggle('Compute Pearson/Spearman for the scatter plots',value=False)
-    display_pearson=st.toggle('Display Pearson rank',value=False)
     st.header('Visualisation')
     radio_color_scatter=st.radio('Scatter plot color options:',('None','Source','Instrument','Time','HR','width','nH'),index=1)
     scale_log_eqw=st.toggle('Use a log scale for the equivalent width and line fluxes')
     scale_log_hr=st.toggle('Use a log scale for the HID parameters',value=True)
-    display_abserr_bshift=st.toggle('Display mean and std of Chandra velocity shift distribution',value=True)
-    
+    display_std_abserr_bshift=st.toggle('Display mean and std of Chandra velocity shift distribution',value=True)
+    display_abserr_bshift=st.toggle('Display mean and std of current velocity shift distribution',value=False)
     common_observ_bounds=st.toggle('Use common observation parameter bounds for all lines',value=True)
-
-    st.header('Trends')
-    plot_trend=st.toggle('Display linear trends in strongly correlated graphs (p<1e-5)',value=False)
-
-    restrict_trend=st.toggle('Restrict trend computation bounds',value=False)
-    if restrict_trend:
-        trend_xmin = st.number_input(r'$x_{min}$')
-        trend_xmax = st.number_input(r'$x_{max}$')
-        trend_ymin = st.number_input(r'$y_{min}$')
-        trend_ymax = st.number_input(r'$y_{max}$')
-    else:
-        trend_xmin=0
-        trend_xmax=0
-        trend_ymin=0
-        trend_ymax=0
+    display_pearson = st.toggle('Display Pearson rank', value=False)
 
     st.header('Upper limits')
     show_scatter_ul=st.toggle('Display upper limits in EW plots',value=False)
@@ -2436,6 +2456,87 @@ with st.sidebar.expander('Parameter analysis'):
 
     st.header('High-energy')
     plot_gamma_correl=st.toggle('Plot powerlaw index correlations',value=False)
+
+#adding the significant BAT extrapolated fluxes to the lum_high_list array if asked to (for the scatter plots)
+if add_BAT_flux_corr and display_single and choice_source[0]=='4U1630-47':
+
+    bat_lc_df_init_scat = fetch_bat_lightcurve(catal_bat_df, catal_bat_simbad, choice_source, binning=BAT_binning_scat)
+
+    #significance test to only get good bat data
+    mask_sign_bat_scat=bat_lc_df_init_scat[bat_lc_df_init_scat.columns[1]]\
+                      -bat_lc_df_init_scat[bat_lc_df_init_scat.columns[2]]*2>0
+
+    #applying the mask. Reset index necessary to avoid issues when calling indices later.
+    # drop to avoid creating an index column that will ruin the column calling
+    bat_lc_df_scat=bat_lc_df_init_scat[mask_sign_bat_scat].reset_index(drop=True)
+
+
+    # converteing to 15-50keV luminosity in Eddington units, removing negative values and
+    bat_lc_lum_nocorr_scat = np.array([bat_lc_df_scat[bat_lc_df_scat.columns[1]],
+                                  bat_lc_df_scat[bat_lc_df_scat.columns[2]]]).clip(0).T \
+                        * convert_BAT_count_flux['4U1630-47'] * Edd_factor_restrict
+
+    bat_lc_lum_scat = corr_factor_lbat(bat_lc_lum_nocorr_scat)
+
+    bat_lc_mjd_scat = np.array(bat_lc_df_scat[bat_lc_df_scat.columns[0]])
+
+    #for the rest
+    obs_dates_4U = Time(date_list[mask_obj][0].astype(str)).mjd.astype(int)
+
+    mask_withtime_BAT = [elem in bat_lc_mjd_scat for elem in obs_dates_4U]
+
+    id_match_BAT_scat = np.array([np.argwhere(bat_lc_mjd_scat == elem)[0][0] for elem in obs_dates_4U[mask_withtime_BAT]])
+
+
+    mask_added_BAT=np.repeat(False,len(lum_high_list[mask_obj][0]))
+
+    for id_obs_match,i_obs_match in enumerate(np.arange(len(lum_high_list[mask_obj][0]))[mask_withtime_BAT]):
+
+        #only overwritting the values without already existing measured fluxes
+        if np.isnan(lum_high_list[mask_obj][0][i_obs_match][0]):
+
+            #note that here we multiply the uncertainties by 1.65 to have everything at 90% uncertainty
+            # (which we later assume in the correlation coefficients computation)
+            lum_high_list[mask_obj][0][i_obs_match]=np.array([bat_lc_lum_scat[id_match_BAT_scat[id_obs_match]][0],
+                                                         bat_lc_lum_scat[id_match_BAT_scat[id_obs_match]][1]*1.65,
+                                                         bat_lc_lum_scat[id_match_BAT_scat[id_obs_match]][1]*1.65])
+
+            mask_added_BAT[i_obs_match]=True
+
+    dict_linevis['bat_lc_lum_scat']=bat_lc_lum_scat
+    dict_linevis['mask_added_BAT']=mask_added_BAT
+
+    #note: simpler to manually check in the code than to apply the mask in 50 different situations in correl_graph
+    #here we also need to remove the points for which there are already values
+    # dict_linevis['mask_lum_list_BAT_infer']=mask_withtime_BAT and np.isnan(lum_high_list[mask_obj][0].T[0])
+
+else:
+    dict_linevis['bat_lc_lum_scat']=None
+    dict_linevis['mask_added_BAT'] = None
+    # dict_linevis['mask_lum_list_BAT_infer']=np.repeat(False,len(lum_high_list[mask_obj][0].T))
+
+lum_high_plot,gamma_nthcomp_plot=values_manip_high_E(lum_high_list,gamma_nthcomp_list)
+
+lum_high_plot_restrict=deepcopy(lum_high_plot)
+lum_high_plot_restrict=lum_high_plot_restrict.T[mask_obj].T
+
+#we create this one solely for the sake of the scatter plots
+hid_high_plot_restrict=deepcopy(lum_high_plot_restrict)
+
+#index 1 is the 3-6 band
+hid_high_plot_restrict[0]=lum_high_plot_restrict[0]/lum_plot_restrict[1][0]
+hid_high_plot_restrict[1]=((lum_high_plot_restrict[1]/lum_high_plot_restrict[0])**2+\
+                          (lum_plot_restrict[1][1]/lum_plot_restrict[1][0])**2)**(1/2)*hid_high_plot_restrict[0]
+hid_high_plot_restrict[2]=((lum_high_plot_restrict[2]/lum_high_plot_restrict[0])**2+\
+                          (lum_plot_restrict[1][2]/lum_plot_restrict[1][0])**2)**(1/2)*hid_high_plot_restrict[0]
+
+
+gamma_nthcomp_plot_restrict=deepcopy(gamma_nthcomp_plot)
+gamma_nthcomp_plot_restrict=gamma_nthcomp_plot_restrict.T[mask_obj].T
+
+dict_linevis['lum_high_plot_restrict']=lum_high_plot_restrict
+dict_linevis['hid_high_plot_restrict']=hid_high_plot_restrict
+dict_linevis['gamma_nthcomp_plot_restrict']=gamma_nthcomp_plot_restrict
 
 if compute_only_withdet:
 
@@ -2501,6 +2602,7 @@ if display_param_withdet:
     
 dict_linevis['display_pearson']=display_pearson
 dict_linevis['display_abserr_bshift']=display_abserr_bshift
+dict_linevis['display_std_abserr_bshift']=display_std_abserr_bshift
 dict_linevis['glob_col_source']=glob_col_source
 dict_linevis['display_th_width_ew']=display_th_width_ew
 dict_linevis['common_observ_bounds']=common_observ_bounds
@@ -2668,6 +2770,10 @@ def streamlit_scat(mode):
                               mode_vals=hid_plot_restrict, mode='observ', conf_thresh=slider_sign,
                               streamlit=True, compute_correl=compute_correl, bigger_text=bigger_text,
                               show_linked=show_linked, show_ul_eqw=show_scatter_ul),
+                 correl_graph(abslines_plot_restrict, 'eqw_highE-HR', abslines_ener_restrict, dict_linevis,
+                              mode_vals=hid_plot_restrict, mode='observ', conf_thresh=slider_sign,
+                              streamlit=True, compute_correl=compute_correl, bigger_text=bigger_text,
+                              show_linked=show_linked, show_ul_eqw=show_scatter_ul),
                  correl_graph(abslines_plot_restrict, 'eqw_highE-flux', abslines_ener_restrict, dict_linevis,
                               mode_vals=hid_plot_restrict, mode='observ', conf_thresh=slider_sign,
                               streamlit=True, compute_correl=compute_correl, bigger_text=bigger_text,
@@ -2678,6 +2784,10 @@ def streamlit_scat(mode):
                               mode_vals=hid_plot_restrict, mode='observ',
                               conf_thresh=slider_sign, streamlit=True, compute_correl=compute_correl,
                               bigger_text=bigger_text, show_linked=show_linked),
+                 correl_graph(abslines_plot_restrict, 'bshift_highE-HR', abslines_ener_restrict, dict_linevis,
+                              mode_vals=hid_plot_restrict, mode='observ',
+                              conf_thresh=slider_sign, streamlit=True, compute_correl=compute_correl,
+                              bigger_text=bigger_text, show_linked=show_linked),
                  correl_graph(abslines_plot_restrict, 'bshift_highE-flux', abslines_ener_restrict, dict_linevis,
                               mode_vals=hid_plot_restrict, mode='observ',
                               conf_thresh=slider_sign, streamlit=True, compute_correl=compute_correl,
@@ -2685,6 +2795,10 @@ def streamlit_scat(mode):
 
             scat_ener += \
                 [correl_graph(abslines_plot_restrict, 'ener_nthcomp-gamma', abslines_ener_restrict, dict_linevis,
+                              mode_vals=hid_plot_restrict, mode='observ',
+                              conf_thresh=slider_sign, streamlit=True, compute_correl=compute_correl,
+                              bigger_text=bigger_text, show_linked=show_linked),
+                 correl_graph(abslines_plot_restrict, 'ener_highE-HR', abslines_ener_restrict, dict_linevis,
                               mode_vals=hid_plot_restrict, mode='observ',
                               conf_thresh=slider_sign, streamlit=True, compute_correl=compute_correl,
                               bigger_text=bigger_text, show_linked=show_linked),
@@ -2714,6 +2828,12 @@ def streamlit_scat(mode):
                 scat_eqwratio+=[correl_graph(abslines_plot_restrict,'eqwratio'+eqwratio_type+'_nthcomp-gamma',abslines_ener_restrict,dict_linevis,mode_vals=hid_plot_restrict,mode='observ',
                           conf_thresh=slider_sign,streamlit=True,compute_correl=compute_correl,bigger_text=bigger_text,show_linked=show_linked,
                           show_ul_eqw=show_scatter_ul),
+                correl_graph(abslines_plot_restrict, 'eqwratio' + eqwratio_type + '_highE-HR',
+                             abslines_ener_restrict, dict_linevis, mode_vals=hid_plot_restrict,
+                             mode='observ',
+                             conf_thresh=slider_sign, streamlit=True, compute_correl=compute_correl,
+                             bigger_text=bigger_text, show_linked=show_linked,
+                             show_ul_eqw=show_scatter_ul),
                   correl_graph(abslines_plot_restrict,'eqwratio'+eqwratio_type+'_highE-flux',abslines_ener_restrict,dict_linevis,mode_vals=hid_plot_restrict,mode='observ',
                           conf_thresh=slider_sign,streamlit=True,compute_correl=compute_correl,bigger_text=bigger_text,show_linked=show_linked,
                           show_ul_eqw=show_scatter_ul)]
@@ -2795,12 +2915,13 @@ dict_linevis['abslines_plot']=abslines_plot
 
 dict_linevis['lock_lims_det']=lock_lims_det
 
-dict_linevis['plot_trend']=plot_trend
-dict_linevis['restrict_trend']=restrict_trend
-dict_linevis['trend_lims']=[[trend_xmin,trend_xmax],[trend_ymin,trend_ymax]]
+dict_linevis['compute_regr']=compute_regr
+dict_linevis['restrict_comput_scatter']=restrict_comput_scatter
+dict_linevis['comput_scatter_lims']=[[comput_scatter_xmin,comput_scatter_xmax],[comput_scatter_ymin,comput_scatter_ymax]]
 
 dict_linevis['color_scatter']=radio_color_scatter
 dict_linevis['observ_list']=observ_list
+dict_linevis['lum_plot_restrict']=lum_plot_restrict
 dict_linevis['hid_plot_restrict']=hid_plot_restrict
 dict_linevis['width_plot_restrict']=width_plot_restrict
 dict_linevis['nh_plot_restrict']=nh_plot_restrict
@@ -2861,11 +2982,11 @@ if display_single and choice_source[0]=='4U1630-47' and plot_gamma_correl:
     int_fit_flux_15_50_high = flux_erg_pow(int_fit_gamma_low, int_fit_norm_high, 15., 50.)
 
     #note that the zero clipping also cancels the "0" high and low values (which come out as negative errs otherwise)
-    int_fit_flux_15_50_err=np.array([[int_fit_flux_15_50-int_fit_flux_15_50_low],
-                                    [int_fit_flux_15_50_high-int_fit_flux_15_50]]).clip(0)
+    int_fit_flux_15_50_err=np.array([int_fit_flux_15_50-int_fit_flux_15_50_low,
+                                    int_fit_flux_15_50_high-int_fit_flux_15_50]).clip(0)
 
-    lum_int_15_50=int_fit_flux_15_50*Edd_factor_restrict
-    lum_int_15_50_err=int_fit_flux_15_50_err*Edd_factor_restrict
+    lum_int_15_50=int_fit_flux_15_50*Edd_factor_restrict[0]
+    lum_int_15_50_err=int_fit_flux_15_50_err*Edd_factor_restrict[0]
 
     int_lc_mjd = np.array([Time(elem).mjd.astype(float) for elem in int_lc_df['ISOT']])
 
@@ -2893,9 +3014,9 @@ if display_single and choice_source[0]=='4U1630-47' and plot_gamma_correl:
 
     num_bat_dates =Time(bat_lc_df['TIME'], format='mjd').mjd
 
-    mask_int_withbat=[elem in num_bat_dates for elem in int_lc_mjd_corr]
+    mask_int_withBAT=[elem in num_bat_dates for elem in int_lc_mjd_corr]
 
-    match_int_bat=np.array([np.argwhere(num_bat_dates==elem)[0][0] for elem in int_lc_mjd_corr[mask_int_withbat]])
+    match_int_bat=np.array([np.argwhere(num_bat_dates==elem)[0][0] for elem in int_lc_mjd_corr[mask_int_withBAT]])
 
     count_bat_match_int=np.array(bat_lc_df[bat_lc_df.columns[1]][match_int_bat])
     count_bat_err_match_int=np.array(bat_lc_df[bat_lc_df.columns[2]][match_int_bat])
@@ -2909,13 +3030,13 @@ if display_single and choice_source[0]=='4U1630-47' and plot_gamma_correl:
     mask_withtime_BAT = [elem in bat_lc_mjd for elem in obs_dates]
 
     mask_NuSTAR=instru_list[mask_obj][0]=='NuSTAR'
-    mask_NuSTAR_withbat=(mask_NuSTAR) & (mask_withtime_BAT)
+    mask_NuSTAR_withBAT=(mask_NuSTAR) & (mask_withtime_BAT)
     mask_Suzaku=instru_list[mask_obj][0]=='Suzaku'
-    mask_Suzaku_withbat=(mask_Suzaku) & (mask_withtime_BAT)
+    mask_Suzaku_withBAT=(mask_Suzaku) & (mask_withtime_BAT)
 
-    match_NuSTAR_bat=np.array([np.argwhere(bat_lc_mjd==elem)[0][0] for elem in obs_dates[mask_NuSTAR_withbat]])
+    match_NuSTAR_bat=np.array([np.argwhere(bat_lc_mjd==elem)[0][0] for elem in obs_dates[mask_NuSTAR_withBAT]])
 
-    match_Suzaku_bat=np.array([np.argwhere(bat_lc_mjd==elem)[0][0] for elem in obs_dates[mask_Suzaku_withbat]])
+    match_Suzaku_bat=np.array([np.argwhere(bat_lc_mjd==elem)[0][0] for elem in obs_dates[mask_Suzaku_withBAT]])
 
     #previous outdated version
     #note that the second dimension is a len 3 array with errors included
@@ -2942,42 +3063,42 @@ if display_single and choice_source[0]=='4U1630-47' and plot_gamma_correl:
     ax_gamma_bat_rate.set_ylabel('BAT 15-50 keV rate')
 
     #setting up alpha for the colors depending on the uncertainty of the integral gamma
-    int_fit_gamma_alpha=abs(int_fit_gamma[mask_int_withbat]/int_fit_gamma_err.T[mask_int_withbat].T.max(0))
+    int_fit_gamma_alpha=abs(int_fit_gamma[mask_int_withBAT]/int_fit_gamma_err.T[mask_int_withBAT].T.max(0))
     int_fit_gamma_alpha = np.array([0.0001 if elem == np.inf else elem for elem in int_fit_gamma_alpha])
     int_fit_gamma_alpha = int_fit_gamma_alpha / max(int_fit_gamma_alpha)
     i_max_alpha_gamma=np.argmax(int_fit_gamma_alpha)
 
     #NuSTAR errorbar (no need to put a NICER as all NICER epochs are there because of NuSTAR)
-    ax_gamma_bat_rate.errorbar(gamma_nthcomp_single[mask_NuSTAR_withbat].T[0].T,count_bat_match_NuSTAR,
-                          xerr=gamma_nthcomp_single[mask_NuSTAR_withbat].T[1:],
+    ax_gamma_bat_rate.errorbar(gamma_nthcomp_single[mask_NuSTAR_withBAT].T[0].T,count_bat_match_NuSTAR,
+                          xerr=gamma_nthcomp_single[mask_NuSTAR_withBAT].T[1:],
                           yerr=count_bat_err_match_NuSTAR,
                           alpha=1,
                           label='NuSTAR', color=telescope_colors['NuSTAR'], ls='')
 
     #Suzaku errorbar
-    ax_gamma_bat_rate.errorbar(gamma_nthcomp_single[mask_Suzaku_withbat].T[0].T,count_bat_match_Suzaku,
-                          xerr=gamma_nthcomp_single[mask_Suzaku_withbat].T[1:],
+    ax_gamma_bat_rate.errorbar(gamma_nthcomp_single[mask_Suzaku_withBAT].T[0].T,count_bat_match_Suzaku,
+                          xerr=gamma_nthcomp_single[mask_Suzaku_withBAT].T[1:],
                           yerr=count_bat_err_match_Suzaku,
                           alpha=1,
                           label='Suzaku', color=telescope_colors['Suzaku'], ls='')
 
     #integral errorbar
-    int_gamma_err=np.array([[[int_fit_gamma_err.T[mask_int_withbat][i_int_withbat].T[0]],
-                                             [int_fit_gamma_err.T[mask_int_withbat][i_int_withbat].T[1]]]\
-                           for i_int_withbat in range(sum(mask_int_withbat))])
+    int_gamma_err=np.array([[[int_fit_gamma_err.T[mask_int_withBAT][i_int_withBAT].T[0]],
+                                             [int_fit_gamma_err.T[mask_int_withBAT][i_int_withBAT].T[1]]]\
+                           for i_int_withBAT in range(sum(mask_int_withBAT))])
 
-    for i_int_withbat in range(sum(mask_int_withbat)):
-        ax_gamma_bat_rate.errorbar(int_fit_gamma[mask_int_withbat][i_int_withbat],
-                              count_bat_match_int[i_int_withbat],
-                              xerr=int_gamma_err[i_int_withbat],
-                              yerr=count_bat_err_match_int[i_int_withbat],
+    for i_int_withBAT in range(sum(mask_int_withBAT)):
+        ax_gamma_bat_rate.errorbar(int_fit_gamma[mask_int_withBAT][i_int_withBAT],
+                              count_bat_match_int[i_int_withBAT],
+                              xerr=int_gamma_err[i_int_withBAT],
+                              yerr=count_bat_err_match_int[i_int_withBAT],
                               # alpha=1,
-                              alpha=int_fit_gamma_alpha[i_int_withbat],
-                              label='integral' if i_int_withbat==i_max_alpha_gamma else '',color='black',ls='')
+                              alpha=int_fit_gamma_alpha[i_int_withBAT],
+                              label='integral' if i_int_withBAT==i_max_alpha_gamma else '',color='black',ls='')
 
-    r_spearman_gamma_bat_rate= np.array(pymccorrelation(int_fit_gamma[mask_int_withbat], count_bat_match_int,
-                                          dx=int_fit_gamma_err.T[mask_int_withbat],
-                                          dy=count_bat_err_match_int,
+    r_spearman_gamma_bat_rate= np.array(pymccorrelation(int_fit_gamma[mask_int_withBAT], count_bat_match_int,
+                                          dx_init=int_fit_gamma_err.T[mask_int_withBAT],
+                                          dy_init=count_bat_err_match_int,
                                           Nperturb=1000, coeff='spearmanr', percentiles=(50, 5, 95)))
 
     # switching back to uncertainties from quantile values
@@ -2992,7 +3113,7 @@ if display_single and choice_source[0]=='4U1630-47' and plot_gamma_correl:
     #computing the linear regression
     #here with error percent of 68.26 because these are standard data
     bat_gamma_slope_arr,bat_gamma_intercept_arr,bat_gamma_sigma_arr,bat_gamma_x_intercept=\
-        lmplot_uncert_a(ax_gamma_bat_rate,int_fit_gamma[mask_int_withbat],count_bat_match_int,
+        lmplot_uncert_a(ax_gamma_bat_rate,int_fit_gamma[mask_int_withBAT],count_bat_match_int,
                            int_gamma_err.T[0],count_bat_err_match_int,
                            xlim=None,ylim=None, percent=90, nsim=100,
                             intercept_pos='auto',
@@ -3040,8 +3161,8 @@ if display_single and choice_source[0]=='4U1630-47' and plot_gamma_correl:
                 label='integral' if i_revol==i_max_alpha_flux else '',ls='')
 
     r_spearman_gamma_flux_int= np.array(pymccorrelation(int_fit_gamma, int_fit_flux,
-                                          dx=int_fit_gamma_err.T,
-                                          dy=int_fit_flux_err,
+                                          dx_init=int_fit_gamma_err.T,
+                                          dy_init=int_fit_flux_err,
                                           Nperturb=1000, coeff='spearmanr', percentiles=(50, 5, 95)))
 
     # switching back to uncertainties from quantile values
@@ -3064,41 +3185,77 @@ if display_single and choice_source[0]=='4U1630-47' and plot_gamma_correl:
 
     # getting an array with the bat flux of each observation date
     lum_BAT_single = np.array(
-        [np.array([0, 0]) if obs_dates[i_obs] not in bat_lc_mjd else bat_lc_lum[bat_lc_mjd == obs_dates[i_obs]][0] \
+        [np.array([np.nan, np.nan]) if obs_dates[i_obs] not in bat_lc_mjd else bat_lc_lum[bat_lc_mjd == obs_dates[i_obs]][0] \
          for i_obs in range(len(obs_dates))]).T
+
+    mask_match_BAT_main=~np.isnan(lum_BAT_single[0])
 
     flux_high_list_single=flux_high_list[mask_obj][0]
     flux_high_list_single_mask=[elem is not None for elem in flux_high_list_single]
 
-    lum_high_list_single=np.array([elem for elem in flux_high_list_single[flux_high_list_single_mask]],dtype=float)\
-                             .clip(0).T*Edd_factor_restrict
+    lum_high_list_single=np.array([elem for elem in flux_high_list_single[flux_high_list_single_mask]],
+                                  dtype=float).clip(0).T*Edd_factor_restrict
+
+    lum_high_list_single_withBAT=lum_high_list_single.T[mask_match_BAT_main[flux_high_list_single_mask]].T
 
     #BAT flux- Observed flux figure
     fig_flux_BAT_native,ax_flux_BAT_native=plt.subplots(figsize=(6,6))
-    ax_flux_BAT_native.set_xlim(1e-3, 1)
-    ax_flux_BAT_native.set_ylim(1e-3, 1)
+    ax_flux_BAT_native.set_xlim(1e-4, 1)
+    ax_flux_BAT_native.set_ylim(1e-4, 1)
     ax_flux_BAT_native.set_xscale('log')
     ax_flux_BAT_native.set_yscale('log')
-    ax_flux_BAT_native.set_xlabel(r'[15-50] keV derived BAT Luminosity ($L/L_{Edd}$) assuming $\Gamma=2.5$')
+    ax_flux_BAT_native.set_xlabel(r'[15-50] keV derived BAT Luminosity ($L/L_{Edd}$)')
     ax_flux_BAT_native.set_ylabel('[15-50] keV measured luminosity ($L/L_{Edd}$)')
 
     #integral errorbar
-    for i_int_withbat in range(sum(mask_int_withbat)):
-        ax_flux_BAT_native.errorbar(lum_bat_match_int[i_int_withbat],
-                              lum_int_15_50[mask_int_withbat][i_int_withbat],
-                              xerr=lum_bat_err_match_int[i_int_withbat],
-                              yerr=lum_int_15_50_err.T[i_int_withbat].T,
+    for i_int_withBAT in range(sum(mask_int_withBAT)):
+        ax_flux_BAT_native.errorbar(lum_bat_match_int[i_int_withBAT],
+                              lum_int_15_50[mask_int_withBAT][i_int_withBAT],
+                              xerr=lum_bat_err_match_int[i_int_withBAT],
+                              yerr=np.array([lum_int_15_50_err.T[i_int_withBAT]]).T,
                               # alpha=1,
-                              alpha=int_fit_gamma_alpha[i_int_withbat],
-                              label='integral (powerlaw)' if i_int_withbat==i_max_alpha_gamma else '',
+                              alpha=int_fit_gamma_alpha[i_int_withBAT],
+                              label='integral (powerlaw)' if i_int_withBAT==i_max_alpha_gamma else '',
                                     color='black',ls='')
 
+    plt.errorbar(lum_BAT_single[0][flux_high_list_single_mask & mask_match_BAT_main],
+                 lum_high_list_single_withBAT[0],
+                 xerr=lum_BAT_single[1][flux_high_list_single_mask & mask_match_BAT_main],
+                 yerr=lum_high_list_single_withBAT[1:],
+                 ls='',color='blue',label='main telescopes (nthcomp)')
 
-    plt.errorbar(lum_BAT_single[0][flux_high_list_single_mask],lum_high_list_single[0],
-                 xerr=lum_BAT_single[1][flux_high_list_single_mask],yerr=lum_high_list_single[1:],ls='',
-                 color='blue',label='main telescopes (nthcomp)')
+    #computing the linear regression
 
-    fig_flux_BAT_native.suptitle('BAT projected vs observed high energy luminosity')
+    lum_bat_regress=np.array(lum_bat_match_int.tolist()+\
+                             lum_BAT_single[0][flux_high_list_single_mask & mask_match_BAT_main].tolist())
+    lum_bat_regress_err=np.array(lum_bat_err_match_int.tolist()+\
+                             lum_BAT_single[1][flux_high_list_single_mask & mask_match_BAT_main].tolist())
+
+    lum_15_50_regress=np.array(lum_int_15_50[mask_int_withBAT].tolist()+lum_high_list_single_withBAT[0].tolist())
+    
+    #here we resize the 90% errors of our dataset assuming a gaussian distribution
+    lum_15_50_regress_err=np.array([lum_int_15_50_err[i_incert].T[mask_int_withBAT].T.tolist()+(lum_high_list_single_withBAT[1:][i_incert]\
+                                   * 1/norm.ppf((1 + 90/100) / 2)).tolist() for i_incert in range(2)])
+
+    
+    bat_corr_slope_arr,bat_corr_intercept_arr,bat_corr_sigma_arr,bat_corr_x_intercept=\
+        lmplot_uncert_a(ax_flux_BAT_native,lum_bat_regress,lum_15_50_regress,
+                           lum_bat_regress_err,lum_15_50_regress_err,
+                           xlim=None,ylim=None, percent=68, nsim=1000,
+                            intercept_pos='auto',
+                            return_linreg=True, infer_log_scale=True,log_sampling=True,nanzero_err=True,
+                            xbounds=None,ybounds=None,
+                            line_color='brown',lw=1.3, inter_color='lightgrey')
+
+    corr_str=r'$L_{Obs}=(\frac{L_{BAT}}{10^{%.1e'%(bat_corr_x_intercept)+'}})^{%.2f'\
+                    % bat_corr_slope_arr[0] +'_{-%.2f' % bat_corr_slope_arr[1] + '}^{+%.2f' % bat_corr_slope_arr[2] + '}}'\
+                 +'\\times 10^{'+('+' if bat_corr_intercept_arr[0]>0 else '')+'%.2f' % bat_corr_intercept_arr[0]\
+                 + '_{-%.2f' % bat_corr_intercept_arr[1] + '}^{+%.2f' % bat_corr_intercept_arr[2] + '}'\
+                 +'}$'
+
+    plt.suptitle(corr_str)
+
+    # fig_flux_BAT_native.suptitle('BAT projected vs observed high energy luminosity')
     plt.legend(fontsize=10,)
 
     #fourth figure to look at the flux vs gamma evolution internally
@@ -3111,10 +3268,46 @@ if display_single and choice_source[0]=='4U1630-47' and plot_gamma_correl:
     
     plt.errorbar(gamma_nthcomp_single[flux_high_list_single_mask].T[0],lum_high_list_single[0],
                  xerr=gamma_nthcomp_single[flux_high_list_single_mask].T[1:],yerr=lum_high_list_single[1:],ls='',
-                 color='blue',label='main telescopes (nthcomp)')
+                 color='blue',label='main telescopes (nthcomp)',marker='d')
 
-    fig_native_flux_gamma.suptitle(r'Observed nthcomp $\Gamma$ vs high energy luminosity')
+    # fig_native_flux_gamma.suptitle(r'Observed nthcomp $\Gamma$ vs high energy luminosity')
     plt.legend(fontsize=10,)
+
+    fig_high_soft, ax_high_soft = plt.subplots()
+
+    plt.errorbar(lum_high_plot_restrict.T[0][0], lum_plot_restrict[1][0][0],
+                 xerr=np.array([elem for elem in lum_high_plot_restrict.T[0][1:]]).clip(0),
+                 yerr=np.array([elem for elem in lum_plot_restrict[1].T[0][1:]]), ls='')
+    plt.xlabel('[15-50] keV lum')
+    plt.ylabel('[3-6] keV lum')
+    plt.suptitle('color color diagram 1')
+    plt.xscale('log')
+    plt.yscale('log')
+
+
+    fig_high_softhard, ax_high_softhard = plt.subplots()
+
+    plt.errorbar(lum_high_plot_restrict.T[0][0], lum_plot_restrict[2][0][0],
+                 xerr=np.array([elem for elem in lum_high_plot_restrict.T[0][1:]]).clip(0),
+                 yerr=np.array([elem for elem in lum_plot_restrict[2].T[0][1:]]), ls='')
+    plt.xlabel('[15-50] keV lum')
+    plt.ylabel('[6-10] keV lum')
+    plt.suptitle('color color diagram 2')
+
+    plt.xscale('log')
+    plt.yscale('log')
+
+    fig_high_softtot, ax_high_softot = plt.subplots()
+
+    plt.errorbar(lum_high_plot_restrict.T[0][0], lum_plot_restrict[4][0][0],
+                 xerr=np.array([elem for elem in lum_high_plot_restrict.T[0][1:]]).clip(0),
+                 yerr=np.array([elem for elem in lum_plot_restrict[4].T[0][1:]]), ls='')
+    plt.xlabel('[15-50] keV lum')
+    plt.ylabel('[3-10] keV lum')
+    plt.suptitle('color color diagram 3')
+
+    plt.xscale('log')
+    plt.yscale('log')
 
     with tab_param:
         with st.expander('High energy correlations'):
@@ -3123,8 +3316,17 @@ if display_single and choice_source[0]=='4U1630-47' and plot_gamma_correl:
                 st.pyplot(fig_gamma_bat_rate)
                 st.pyplot(fig_flux_BAT_native)
             with he_cols[1]:
-                st.pyplot(fig_native_flux_gamma)
                 st.pyplot(fig_gamma_flux_int)
+                st.pyplot(fig_native_flux_gamma)
+
+            colordiag_cols=st.columns(3)
+            with colordiag_cols[0]:
+                st.pyplot(fig_high_soft)
+            with colordiag_cols[1]:
+                st.pyplot(fig_high_softhard)
+            with colordiag_cols[2]:
+                st.pyplot(fig_high_softtot)
+
 
             # he_cols= st.columns(3)
             # with he_cols[0]:

@@ -404,7 +404,7 @@ ap.add_argument("-line_cont_ig_arg",nargs=1,
                 default='iron',type=str)
 
 ap.add_argument("-line_search_e",nargs=1,
-                help='min, max and step of the line energy search',default='4 10 0.05',type=str)
+                help='min, max and step of the line energy search',default='4 10 0.02',type=str)
 
 ap.add_argument("-line_search_norm",nargs=1,
                 help='min, max and nsteps (for one sign)  of the line norm search (which operates in log scale)',

@@ -833,7 +833,7 @@ def plot_lightcurve(dict_linevis,ctl_maxi_df,ctl_maxi_simbad,name,ctl_bat_df,ctl
                 counts_int = np.nan_to_num(fit_integral_revol_df[fit_integral_revol_df.columns[29]])
                 counts_err_int = np.nan_to_num(fit_integral_revol_df[fit_integral_revol_df.columns[30]])
 
-            mask_int_ok = ~np.isnan(fit_integral_revol_df['RATE_30.0-50.'])
+            mask_int_ok = ~np.isnan(fit_integral_revol_df['RATE_30.0-50.0'])
 
             #multiplying by the Eddington factor to get the actual flux
             counts_int=counts_int[mask_int_ok]*dist_factor
@@ -936,7 +936,7 @@ def plot_lightcurve(dict_linevis,ctl_maxi_df,ctl_maxi_simbad,name,ctl_bat_df,ctl
 
         if instru_list[i_obs] not in label_tel_list:
             label_tel_list+=[instru_list[i_obs]]
-        
+
     #resizing the x axis and highlighting depending on wether we are zooming on a restricted time interval or not
     
     tot_dates_list=[]
@@ -944,8 +944,11 @@ def plot_lightcurve(dict_linevis,ctl_maxi_df,ctl_maxi_simbad,name,ctl_bat_df,ctl
     tot_dates_list+=[] if rxte_lc_df is None else num_rxte_dates.tolist()
     tot_dates_list+=[] if bat_lc_df is None else  num_bat_dates.tolist()
     if zoom_lc:
-        ax_lc.set_xlim(max(mdates.date2num(slider_date[0]),min(tot_dates_list)),
-                                             min(mdates.date2num(slider_date[1]),max(tot_dates_list)))
+
+        time_range=min(mdates.date2num(slider_date[1]),max(tot_dates_list))-max(mdates.date2num(slider_date[0]),min(tot_dates_list))
+
+        ax_lc.set_xlim(max(mdates.date2num(slider_date[0]),min(tot_dates_list))-time_range/50,
+                                             min(mdates.date2num(slider_date[1]),max(tot_dates_list))+time_range/50)
         time_range=min(mdates.date2num(slider_date[1]),max(tot_dates_list))-max(mdates.date2num(slider_date[0]),min(tot_dates_list))
         
     else:
@@ -973,15 +976,16 @@ def plot_lightcurve(dict_linevis,ctl_maxi_df,ctl_maxi_simbad,name,ctl_bat_df,ctl
 
     #forcing 8 xticks along the ax
     ax_lc.set_xlim(ax_lc.get_xlim())
+
     #putting an interval in minutes (to avoid imprecisions when zooming)
     date_tick_inter=int((ax_lc.get_xlim()[1]-ax_lc.get_xlim()[0])*24*60/10)
 
-    #10 days
+    #above 10 days ticks
     if date_tick_inter>60*24*10:
-        ax_lc.xaxis.set_major_locator(mdates.DayLocator(interval=date_tick_inter))
-    #1 day
+        ax_lc.xaxis.set_major_locator(mdates.DayLocator(interval=int(date_tick_inter/(24*60))))
+    #above 1 day ticks
     elif date_tick_inter>60*24:
-        ax_lc.xaxis.set_major_locator(mdates.HourLocator(interval=date_tick_inter))
+        ax_lc.xaxis.set_major_locator(mdates.HourLocator(interval=int(date_tick_inter/60)))
     else:
         ax_lc.xaxis.set_major_locator(mdates.MinuteLocator(interval=date_tick_inter))
 
@@ -2559,7 +2563,6 @@ def hid_graph(ax_hid,dict_linevis,
         if len(x_hid[obj_val_mask]) > 0 and display_central_abs:
 
             if display_hid_error:
-
                 ax_hid.errorbar(x_hid[obj_val_mask], y_hid[obj_val_mask],
                                xerr=x_hid_err.T[obj_val_mask].T,yerr=y_hid_err.T[obj_val_mask].T,
                                marker='',ls='',

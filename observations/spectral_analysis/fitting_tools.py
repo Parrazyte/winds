@@ -298,6 +298,17 @@ def model_list(model_id='lines',give_groups=False):
 
         interact_groups = None
 
+    if model_id=='nthcont_NICER':
+
+        '''
+        subset of continuum with nthcomp for better broad band work + NICER calibration components
+        '''
+
+        avail_comps = ['cont_diskbb','disk_nthcomp','glob_TBabs', 'glob_constant',
+                       'calNICERSiem_gaussian','calNICER_edge']
+
+        interact_groups = None
+
     if model_id=='nthcont_detailed':
 
         '''
@@ -350,13 +361,13 @@ def model_list(model_id='lines',give_groups=False):
                       'FeKb25abs_agaussian','FeKb26abs_agaussian','FeKg26abs_agaussian']
         
         
-    elif model_id=='lines_ns':
+    if model_id=='lines_ns':
         # avail_comps=['FeKaem_gaussian','FeKa26abs_nagaussian']
         avail_comps=['cont_diskbb','cont_powerlaw','cont_bb','FeKaem_gaussian','FeKbem_gaussian',
                       'FeKa25abs_nagaussian','FeKa26abs_nagaussian','NiKa27abs_nagaussian',
                       'FeKb25abs_nagaussian','FeKb26abs_nagaussian','FeKg26abs_nagaussian']
         
-    elif model_id=='lines_ns_noem':
+    if model_id=='lines_ns_noem':
         avail_comps=['cont_diskbb','cont_powerlaw','cont_bb','FeKaem_gaussian','FeKbem_gaussian',''
                       'FeKa25abs_nagaussian','FeKa26abs_nagaussian','NiKa27abs_nagaussian',
                       'FeKb25abs_nagaussian','FeKb26abs_nagaussian','FeKg26abs_nagaussian']

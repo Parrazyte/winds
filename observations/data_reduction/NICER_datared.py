@@ -100,14 +100,14 @@ ap.add_argument('-catch','--catch_errors',help='Catch errors while running the d
 
 #global choices
 ap.add_argument("-a","--action",nargs='?',help='Give which action(s) to proceed,separated by comas.',
-                default='gti,fs,l,g,m',type=str)
+                default='1,gti,fs,l,g,m',type=str)
 #default: 1,gti,fs,l,g,m,c
 
 ap.add_argument("-over",nargs=1,help='overwrite computed tasks (i.e. with products in the batch, or merge directory\
                 if "m" is in the actions) in a folder',default=True,type=bool)
 
 #directory level overwrite (not active in local)
-ap.add_argument('-folder_over',nargs=1,help='relaunch action through folders with completed analysis',default=True,type=bool)
+ap.add_argument('-folder_over',nargs=1,help='relaunch action through folders with completed analysis',default=False,type=bool)
 ap.add_argument('-folder_cont',nargs=1,help='skip all but the last 2 directories in the summary folder file',default=False,type=bool)
 #note : we keep the previous 2 directories because bug or breaks can start actions on a directory following the initially stopped one
 
@@ -116,10 +116,11 @@ ap.add_argument('-folder_cont',nargs=1,help='skip all but the last 2 directories
 #1. process
 
 #should only be done in very extreme cases
-ap.add_argument('-keep_SAA',nargs=1,help='keep South Atlantic Anomaly (SAA) Periods',type=bool,default=True)
+ap.add_argument('-keep_SAA',nargs=1,help='keep South Atlantic Anomaly (SAA) Periods',type=bool,default=False)
 
 #gti
-ap.add_argument('-gti_split',nargs=1,help='GTI split method',default='orbit+flare+split_100',type=str)
+#keyword for split: split_timeinsec
+ap.add_argument('-gti_split',nargs=1,help='GTI split method',default='orbit+flare',type=str)
 ap.add_argument('-flare_method',nargs=1,help='Flare extraction method(s)',default='clip+peak',type=str)
 
 #note: not used currently
@@ -688,8 +689,9 @@ def create_gtis(directory,split='orbit+flare',band='3-15',binning=1,overwrite=Tr
 
                             #adding both to the global peak regions list
                             peak_region_multi+=peak_region_match_soft[0]
-                            peak_region_multi+=peak_region_match_hard[0]
 
+                            if len(peak_region_match_hard)!=0:
+                                peak_region_multi+=peak_region_match_hard[0]
 
                     #cleaning potential repeats
                     peak_region_multi=np.unique(peak_region_multi).tolist()

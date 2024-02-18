@@ -713,6 +713,16 @@ slider_sign=st.sidebar.slider('Detection significance treshold',min_value=0.9,ma
 
 replace_high_e_multi=st.sidebar.toggle('Use multi telescope fits for high-energy infos (whenever possible)',value=True)
 
+add_BAT_flux_corr = st.sidebar.toggle('Use corrected BAT flux when lacking high-energy coverage', value=True)
+
+if add_BAT_flux_corr:
+    radio_BAT_binning_scat = st.sidebar.radio('BAT flux sampling', ('daily', 'single orbit'),index=0 if use_obsids else 1)
+
+    BAT_binning_scat = 'day' if radio_BAT_binning_scat == 'daily' \
+        else 'orbit' if radio_BAT_binning_scat == 'single orbit' else None
+else:
+    BAT_binning_scat = 'day'
+
 if replace_high_e_multi:
     for i_obj in range(len(epoch_obs_list)):
         for i_epoch,indiv_epoch in enumerate(epoch_obs_list[i_obj]):
@@ -887,16 +897,18 @@ with st.sidebar.expander('Broad band HID'):
     HR_broad_bands=st.radio('HID Hardness Ratio',('[BAND]/[3-6]','([6-10]+[BAND])/[3-6]'))
     lum_broad_bands=st.radio('HID Luminosity',('[3-10]','[3-10]+[BAND]'))
 
-    st.header('BAT')
-
-    display_broad_hid_BAT = st.toggle('Display broad band HID using BAT monitoring (HARD BAND=15-50)', value=False)
+    display_broad_hid_BAT = st.toggle('Display broad band HID (HARD BAND=15-50)', value=False)
 
     sign_broad_hid_BAT=st.toggle('Restrict BAT hid to 2 sigma BAT detections',value=False)
 
-    st.header('INTEGRAL')
-    display_broad_hid_INT = st.toggle('Display broad band HID using INTEGRAL monitoring', value=False)
-
-    HID_INT_band=st.radio('INTEGRAL BAND',('30-50','50-100','30-100'))
+    #
+    # st.header('INTEGRAL')
+    # display_broad_hid_INT = st.toggle('Display broad band HID using INTEGRAL monitoring', value=False)
+    #
+    # HID_INT_band=st.radio('INTEGRAL BAND',('30-50','50-100','30-100'))
+    #deprecated for now
+    display_broad_hid_INT=False
+    HID_INT_band='30-50'
 
 expander_monit=st.sidebar.expander('Monitoring')
 with expander_monit:
@@ -1141,23 +1153,6 @@ Edd_factor = dist_factor / (1.26e38 * mass_obj_list)
 Edd_factor_restrict=Edd_factor[mask_obj].astype(float)
 dist_factor_restrict=dist_factor[mask_obj].astype(float)
 
-'''HIGH ENERGY TRANSPOSITIONS'''
-flux_high_list = np.array([flux_high_list[i_obj][mask_included_selection[i_obj]] for i_obj in range(n_obj_init)], dtype=object)
-
-fitmod_broadband_list = np.array([fitmod_broadband_list[i_obj][mask_included_selection[i_obj]] for i_obj in range(n_obj_init)], dtype=object)
-gamma_nthcomp_list=np.array([gamma_nthcomp_list[i_obj][mask_included_selection[i_obj]]\
-                             for i_obj in range(n_obj_init)], dtype=object)
-
-dict_linevis['gamma_nthcomp_list']=gamma_nthcomp_list
-
-#creating a luminosity version with nans instead
-lum_high_list=np.array([np.array([np.repeat(np.nan,3) if flux_high_list[i_obj][i_obs] is None\
-                else flux_high_list[i_obj][i_obs]*Edd_factor[i_obj] for i_obs in range(len(flux_high_list[i_obj]))])\
-          for i_obj in range(len(flux_high_list))],dtype=object)
-
-
-dict_linevis['lum_high_list']=lum_high_list
-
 if np.ndim(hid_plot)==4:
     flag_single_obj=True
 else:
@@ -1184,6 +1179,155 @@ nh_plot_restrict=nh_plot_restrict.T[mask_obj].T
 
 kt_plot_restrict=deepcopy(kt_plot)
 kt_plot_restrict=kt_plot_restrict.T[mask_obj].T
+
+
+#HIGH ENERGY TRANSPOSITIONS
+
+flux_high_list = np.array([flux_high_list[i_obj][mask_included_selection[i_obj]] for i_obj in range(n_obj_init)], dtype=object)
+
+fitmod_broadband_list = np.array([fitmod_broadband_list[i_obj][mask_included_selection[i_obj]] for i_obj in range(n_obj_init)], dtype=object)
+gamma_nthcomp_list=np.array([gamma_nthcomp_list[i_obj][mask_included_selection[i_obj]]\
+                             for i_obj in range(n_obj_init)], dtype=object)
+
+dict_linevis['gamma_nthcomp_list']=gamma_nthcomp_list
+
+#creating a luminosity version with nans instead
+lum_high_list=np.array([np.array([np.repeat(np.nan,3) if flux_high_list[i_obj][i_obs] is None\
+                else flux_high_list[i_obj][i_obs]*Edd_factor[i_obj] for i_obs in range(len(flux_high_list[i_obj]))])\
+          for i_obj in range(len(flux_high_list))],dtype=object)
+
+#created to avoid indexation errors, will be replaced later
+lum_high_sign_list = deepcopy(lum_high_list)
+
+#this one will only be for the HID
+lum_high_1sig_list=deepcopy(lum_high_list)
+
+#and a count rate version to store in the table
+BAT_rate_list=np.array([np.array([np.repeat(np.nan,3) for i_obs in range(len(flux_high_list[i_obj]))])\
+          for i_obj in range(len(flux_high_list))],dtype=object)
+
+#adding the significant BAT extrapolated fluxes to the lum_high_list array if asked to (for the scatter plots)
+if add_BAT_flux_corr and display_single and choice_source[0]=='4U1630-47':
+
+    bat_lc_df_scat = fetch_bat_lightcurve(catal_bat_df, catal_bat_simbad, choice_source, binning=BAT_binning_scat)
+
+    #first for all elements
+    bat_lc_arr_rate=np.array([bat_lc_df_scat[bat_lc_df_scat.columns[1]],
+                              bat_lc_df_scat[bat_lc_df_scat.columns[2]],
+                              bat_lc_df_scat[bat_lc_df_scat.columns[2]]]).clip(0)
+
+    # converting to 15-50keV luminosity in Eddington units, removing negative values and
+    bat_lc_lum_nocorr_scat = bat_lc_arr_rate.T \
+                        * convert_BAT_count_flux['4U1630-47'] * Edd_factor_restrict
+
+    bat_lc_lum_scat=corr_factor_lbat(bat_lc_lum_nocorr_scat)
+
+    bat_lc_mjd_scat = np.array(bat_lc_df_scat[bat_lc_df_scat.columns[0]])
+
+    #for the rest
+    obs_dates_4U = Time(date_list[mask_obj][0].astype(str)).mjd.astype(int)
+
+    mask_withtime_BAT = [elem in bat_lc_mjd_scat for elem in obs_dates_4U]
+
+    id_match_BAT_scat = np.array([np.argwhere(bat_lc_mjd_scat == elem)[0][0]\
+                                       for elem in obs_dates_4U[mask_withtime_BAT]])
+
+
+    mask_added_BAT_sign=np.repeat(False,len(lum_high_list[mask_obj][0]))
+
+    #first adding all of the BAT matches
+    for id_obs_match,i_obs_match in enumerate(np.arange(len(lum_high_list[mask_obj][0]))[mask_withtime_BAT]):
+
+        BAT_rate_list[mask_obj][0][i_obs_match]=np.array([bat_lc_arr_rate.T[id_match_BAT_scat[id_obs_match]][0],
+                                                          bat_lc_arr_rate.T[id_match_BAT_scat[id_obs_match]][1]*1.65,
+                                                          bat_lc_arr_rate.T[id_match_BAT_scat[id_obs_match]][1]*1.65])
+        
+        #only overwritting the values without already existing measured fluxes
+        if np.isnan(lum_high_list[mask_obj][0][i_obs_match][0]):
+
+            #note that here we multiply the uncertainties by 1.65 to have everything at 90% uncertainty
+            # (which we later assume in the correlation coefficients computation)
+
+            #in theory the uncertain converison
+            # should be done before the luminosity conversion but it's almost linear so we don't care
+            lum_high_list[mask_obj][0][i_obs_match]=np.array([bat_lc_lum_scat[id_match_BAT_scat[id_obs_match]][0],
+                                                         bat_lc_lum_scat[id_match_BAT_scat[id_obs_match]][1]*1.65,
+                                                         bat_lc_lum_scat[id_match_BAT_scat[id_obs_match]][1]*1.65])
+
+            #1 sigma errors for the broad HID
+            lum_high_1sig_list[mask_obj][0][i_obs_match]=np.array([bat_lc_lum_scat[id_match_BAT_scat[id_obs_match]][0],
+                                                         bat_lc_lum_scat[id_match_BAT_scat[id_obs_match]][1],
+                                                         bat_lc_lum_scat[id_match_BAT_scat[id_obs_match]][1]])
+            mask_added_BAT_sign[i_obs_match]=True
+
+    #then creating a second array for only 2 sigma significant detections (for the scatters)
+    lum_high_sign_list=deepcopy(lum_high_list)
+    for i_obs in range(len(lum_high_list[mask_obj][0])):
+        if lum_high_1sig_list[mask_obj][0][i_obs][0]-lum_high_1sig_list[mask_obj][0][i_obs][1]*2<=0:
+            lum_high_sign_list[mask_obj][0][i_obs]=np.repeat(np.nan,3)
+            mask_added_BAT_sign[i_obs]=False
+
+    dict_linevis['mask_added_BAT_sign']=mask_added_BAT_sign
+
+    #note: simpler to manually check in the code than to apply the mask in 50 different situations in correl_graph
+    #here we also need to remove the points for which there are already values
+    # dict_linevis['mask_lum_list_BAT_infer']=mask_withtime_BAT and np.isnan(lum_high_list[mask_obj][0].T[0])
+
+else:
+    dict_linevis['mask_added_BAT'] = None
+    # dict_linevis['mask_lum_list_BAT_infer']=np.repeat(False,len(lum_high_list[mask_obj][0].T))
+
+#for the HID
+lum_high_1sig_plot,gamma_nthcomp_plot=values_manip_high_E(lum_high_1sig_list,gamma_nthcomp_list)
+
+#for the tables
+lum_high_plot,gamma_nthcomp_plot=values_manip_high_E(lum_high_list,gamma_nthcomp_list)
+
+#for the scatters
+lum_high_sign_plot,gamma_nthcomp_plot=values_manip_high_E(lum_high_sign_list,gamma_nthcomp_list)
+
+BAT_lc_plot,temp=values_manip_high_E(BAT_rate_list,gamma_nthcomp_list)
+
+#masking the selected objects in each array
+BAT_lc_plot_restrict=deepcopy(BAT_lc_plot)
+BAT_lc_plot_restrict=BAT_lc_plot_restrict.T[mask_obj].T
+
+lum_high_1sig_plot_restrict=deepcopy(lum_high_1sig_plot)
+lum_high_1sig_plot_restrict=lum_high_1sig_plot_restrict.T[mask_obj].T
+
+lum_high_plot_restrict=deepcopy(lum_high_plot)
+lum_high_plot_restrict=lum_high_plot_restrict.T[mask_obj].T
+
+lum_high_sign_plot_restrict=deepcopy(lum_high_sign_plot)
+lum_high_sign_plot_restrict=lum_high_sign_plot_restrict.T[mask_obj].T
+
+#we create this one solely for the sake of the scatter plots
+hr_high_plot_restrict=deepcopy(lum_high_plot_restrict)
+
+#index 1 is the 3-6 band. 
+hr_high_plot_restrict[0]=lum_high_plot_restrict[0]/lum_plot_restrict[1][0]
+hr_high_plot_restrict[1]=((lum_high_plot_restrict[1]/lum_high_plot_restrict[0])**2+\
+                          (lum_plot_restrict[1][1]/lum_plot_restrict[1][0])**2)**(1/2)*hr_high_plot_restrict[0]
+hr_high_plot_restrict[2]=((lum_high_plot_restrict[2]/lum_high_plot_restrict[0])**2+\
+                          (lum_plot_restrict[1][2]/lum_plot_restrict[1][0])**2)**(1/2)*hr_high_plot_restrict[0]
+
+#we create this one solely for the sake of the scatter plots
+hr_high_sign_plot_restrict=deepcopy(lum_high_sign_plot_restrict)
+
+hr_high_sign_plot_restrict[0]=lum_high_sign_plot_restrict[0]/lum_plot_restrict[1][0]
+hr_high_sign_plot_restrict[1]=((lum_high_sign_plot_restrict[1]/lum_high_sign_plot_restrict[0])**2+\
+                          (lum_plot_restrict[1][1]/lum_plot_restrict[1][0])**2)**(1/2)*hr_high_sign_plot_restrict[0]
+hr_high_sign_plot_restrict[2]=((lum_high_sign_plot_restrict[2]/lum_high_sign_plot_restrict[0])**2+\
+                          (lum_plot_restrict[1][2]/lum_plot_restrict[1][0])**2)**(1/2)*hr_high_sign_plot_restrict[0]
+
+gamma_nthcomp_plot_restrict=deepcopy(gamma_nthcomp_plot)
+gamma_nthcomp_plot_restrict=gamma_nthcomp_plot_restrict.T[mask_obj].T
+
+dict_linevis['lum_high_1sig_plot_restrict']=lum_high_1sig_plot_restrict
+
+dict_linevis['lum_high_sign_plot_restrict']=lum_high_sign_plot_restrict
+dict_linevis['hr_high_sign_plot_restrict']=hr_high_sign_plot_restrict
+dict_linevis['gamma_nthcomp_plot_restrict']=gamma_nthcomp_plot_restrict
 
 #defining the dataset that will be used in the plots for the colormap limits
 if radio_info_cmap in ['Velocity shift','Del-C']:
@@ -1353,7 +1497,7 @@ tab_hid, tab_monitoring, tab_param,tab_source_df,tab_about=\
 
 with tab_hid:
 
-    tab_soft_hid,tab_BAT_hid,tab_INT_hid=st.tabs(['Soft X HID','BAT HID','INTEGRAL HID'])
+    tab_soft_hid,tab_BAT_hid,tab_INT_hid=st.tabs(['Soft X HID','Broad HID','INTEGRAL HID'])
 
     with tab_soft_hid:
 
@@ -2033,7 +2177,7 @@ order_intime_plot_restrict=np.array([np.array([Time(elem) for elem in date_list[
 #creating  4 dimensionnal dataframes for the observ and line informations
 
 observ_df_list=[]
-
+observ_high_df_list=[]
 line_df_list=[]
 
 abs_plot_tr=np.array([[subelem for subelem in elem] for elem in abslines_plot_restrict]).transpose(3,2,0,1)
@@ -2050,20 +2194,31 @@ for i_obj_r in range(n_obj_r):
     #recreating an individual non ragged array (similar to abslines_perobj) in construction for each object
     hid_plot_indiv=np.array([[subelem for subelem in elem] for elem in hid_plot_restrict.transpose(tr_order)[i_obj_r]],dtype=float)
 
+    hr_high_plot_indiv=np.array([elem for elem in hr_high_plot_restrict.T[i_obj_r]],dtype=float)
+    lum_high_plot_indiv=np.array([elem for elem in lum_high_plot_restrict.T[i_obj_r]],dtype=float)
+
+    BAT_lc_plot_indiv=np.array([elem for elem in BAT_lc_plot_restrict.T[i_obj_r]],dtype=float)
+
     #this one is put back to non-Eddington values, and we remove the first flux measurement whose band can change between instruments or computations
     flux_plot_indiv=np.array([[subelem for subelem in elem] for elem in lum_plot_restrict[1:].transpose(tr_order)[i_obj_r]],dtype=float)/Edd_factor_restrict[i_obj_r]
 
     line_plot_indiv=np.array([[[subsubelem for subsubelem in subelem] for subelem in elem] for elem in abs_plot_tr[i_obj_r]],dtype=float)
 
-
-
-
     #applying the intime mask on each observation and sorting by date
-    hid_plot_indiv=hid_plot_indiv.transpose(2,0,1)[mask_intime_plot[i_obj_r].astype(bool)][order_intime_plot_restrict[i_obj_r].astype(int)].transpose(1,2,0)
-    flux_plot_indiv=flux_plot_indiv.transpose(2,0,1)[mask_intime_plot[i_obj_r].astype(bool)][order_intime_plot_restrict[i_obj_r].astype(int)].transpose(1,2,0)
+    hid_plot_indiv=hid_plot_indiv.transpose(2,0,1)[mask_intime_plot[i_obj_r].astype(bool)]\
+                    [order_intime_plot_restrict[i_obj_r].astype(int)].transpose(1,2,0)
+    flux_plot_indiv=flux_plot_indiv.transpose(2,0,1)[mask_intime_plot[i_obj_r].astype(bool)]\
+                    [order_intime_plot_restrict[i_obj_r].astype(int)].transpose(1,2,0)
         
-    line_plot_indiv=line_plot_indiv.transpose(3,0,1,2)[mask_intime_plot[i_obj_r].astype(bool)][order_intime_plot_restrict[i_obj_r].astype(int)].transpose(2,3,0,1)
+    line_plot_indiv=line_plot_indiv.transpose(3,0,1,2)[mask_intime_plot[i_obj_r].astype(bool)]\
+                    [order_intime_plot_restrict[i_obj_r].astype(int)].transpose(2,3,0,1)
 
+    hr_high_plot_indiv=hr_high_plot_indiv.T[mask_intime_plot[i_obj_r].astype(bool)]\
+                        [order_intime_plot_restrict[i_obj_r].astype(int)].T
+    lum_high_plot_indiv = lum_high_plot_indiv.T[mask_intime_plot[i_obj_r].astype(bool)]\
+                          [order_intime_plot_restrict[i_obj_r].astype(int)].T
+    BAT_lc_plot_indiv = BAT_lc_plot_indiv.T[mask_intime_plot[i_obj_r].astype(bool)]\
+                          [order_intime_plot_restrict[i_obj_r].astype(int)].T
 
     '''
     # splitting information to take off 1 dimension and only take specific information    
@@ -2103,10 +2258,14 @@ for i_obj_r in range(n_obj_r):
     row_index_obs=pd.MultiIndex.from_arrays(row_index_arr_obs,names=['Source','Instrument','obsid','date'])
     
     row_index_line=pd.MultiIndex.from_arrays(row_index_arr_line,names=['Source','Instrument','obsid','date','line'])
-    
+
     #you can use the standard way for columns for the observ df
-    iter_columns=[['HR [6-10]/[3-10]','Lx/LEdd','flux_3-6','flux_6-10','flux_1-3','flux_3-10'],['main','err-','err+']]
-    
+    iter_columns=[['HR [6-10]/[3-10]','L_3-10/LEdd','Flux_3-6','Flux_6-10','Flux_1-3','Flux_3-10'],
+                  ['main','90% err-','90% err+']]
+
+    iter_columns_high=[['HR [15-50]/[3-6]','L_15-50/LEdd','Flux_15-50','BAT_rate_15-50'],
+                       ['main','90% err-','90% err+']]
+
     #but not for the line df
     column_index_arr_line=np.array([['EW','main'],['EW','err-'],['EW','err+'],
                           ['blueshift','main'],['blueshift','err-'],['blueshift','err+'],
@@ -2119,15 +2278,27 @@ for i_obj_r in range(n_obj_r):
     observ_col=np.concatenate([hid_plot_indiv,flux_plot_indiv]).transpose(2,0,1)
     observ_col_reshaped=observ_col.reshape(n_obs_r,len(iter_columns[0])*len(iter_columns[1]))
 
+    observ_col_high=np.array([hr_high_plot_indiv,lum_high_plot_indiv,lum_high_plot_indiv/Edd_factor_restrict[i_obj_r],
+                              BAT_lc_plot_indiv])\
+                    .transpose(2,0,1)
+
+    observ_col_high_reshaped=observ_col_high.reshape(n_obs_r,len(iter_columns_high[0])*len(iter_columns_high[1]))
+
     #creating both dataframes, with a reshape in 2 dimensions (one for the lines and one for the columns)
     #switching to str type allows to display low values correctly
-    curr_df=produce_df(observ_col_reshaped,
-                                iter_rows,iter_columns,row_names=['Source','Instrument','ObsID','date'],
+    curr_df_observ=produce_df(observ_col_reshaped,iter_rows,iter_columns,
+                              row_names=['Source','Instrument','ObsID','date'],
+                                column_names=['measure','value'],row_index=row_index_obs).astype(str)
+
+    curr_df_observ_high=produce_df(observ_col_high_reshaped, iter_rows,iter_columns_high,
+                                   row_names=['Source','Instrument','ObsID','date'],
                                 column_names=['measure','value'],row_index=row_index_obs).astype(str)
 
     pd.set_option('display.float_format', lambda x: '%.3e' % x)
 
-    observ_df_list+=[curr_df]
+    observ_df_list+=[curr_df_observ]
+
+    observ_high_df_list+=[curr_df_observ_high]
 
     line_df_list+=[produce_df(line_plot_indiv.transpose(1,2,0).reshape(n_obs_r*sum(mask_lines),14),None,None,row_names=None,
                             column_names=None,row_index=row_index_line,col_index=column_index_line).astype(str)]
@@ -2135,31 +2306,50 @@ for i_obj_r in range(n_obj_r):
 if no_obs:
     observ_df=None
     line_df=None
+    observ_high_df_list=None
 else:
     observ_df=pd.concat(observ_df_list)
     line_df=pd.concat(line_df_list)
-
+    observ_high_df=pd.concat(observ_high_df_list)
         
 with tab_source_df:
     
     with st.expander('Observation parameters'):
 
+        tab_observ_soft,tab_observ_high=st.tabs(('Soft X-rays','Hard X-rays'))
+
         if no_obs:
             st.warning('No points remaining with current sample/date selection')
 
         else:
-            #the format is offset by 3 because we shift by the number of columns with row names
-            st.dataframe(observ_df,use_container_width=True,column_config={\
-                         i:st.column_config.NumberColumn(format='%.3e') for i in range(4,len(observ_df.columns)+4)})
+            with tab_observ_soft:
 
-            csv_observ= convert_df(observ_df)
+                #the format is offset by 3 because we shift by the number of columns with row names
+                st.dataframe(observ_df,use_container_width=True,column_config={\
+                             i:st.column_config.NumberColumn(format='%.3e') for i in range(4,len(observ_df.columns)+4)})
 
-            st.download_button(
-                label="Download as CSV",
-                data=csv_observ,
-                file_name='observ_table.csv',
-                mime='text/csv',
-            )
+                csv_observ= convert_df(observ_df)
+
+                st.download_button(
+                    label="Download soft X-ray infos as CSV",
+                    data=csv_observ,
+                    file_name='observ_table.csv',
+                    mime='text/csv',
+                )
+
+            with tab_observ_high:
+                # the format is offset by 3 because we shift by the number of columns with row names
+                st.dataframe(observ_high_df, use_container_width=True, column_config={ \
+                    i: st.column_config.NumberColumn(format='%.3e') for i in range(4, len(observ_df.columns) + 4)})
+
+                csv_observ_high = convert_df(observ_high_df)
+
+                st.download_button(
+                    label="Download hard X-ray infos as CSV",
+                    data=csv_observ_high,
+                    file_name='observ_high_table.csv',
+                    mime='text/csv',
+                )
 
     if display_single:
         with st.expander('Monitoring'):
@@ -2375,15 +2565,6 @@ with st.sidebar.expander('Parameter analysis'):
                                   'Line EW comparison',
                                   'High Energy parameters (Observation)'),default=None)
 
-    add_BAT_flux_corr = st.toggle('Use corrected BAT flux when lacking high-energy coverage', value=True)
-
-    if add_BAT_flux_corr:
-        radio_BAT_binning_scat=st.radio('BAT flux sampling',('daily','single orbit'))
-        BAT_binning_scat='day' if radio_BAT_binning_scat=='daily'\
-                         else 'orbit' if radio_BAT_binning_scat=='single orbit' else None
-    else:
-        BAT_binning_scat='day'
-
     glob_col_source=st.toggle('Normalize source colors over the entire sample',value=True)
 
     st.header('Distributions')
@@ -2457,86 +2638,6 @@ with st.sidebar.expander('Parameter analysis'):
     st.header('High-energy')
     plot_gamma_correl=st.toggle('Plot powerlaw index correlations',value=False)
 
-#adding the significant BAT extrapolated fluxes to the lum_high_list array if asked to (for the scatter plots)
-if add_BAT_flux_corr and display_single and choice_source[0]=='4U1630-47':
-
-    bat_lc_df_init_scat = fetch_bat_lightcurve(catal_bat_df, catal_bat_simbad, choice_source, binning=BAT_binning_scat)
-
-    #significance test to only get good bat data
-    mask_sign_bat_scat=bat_lc_df_init_scat[bat_lc_df_init_scat.columns[1]]\
-                      -bat_lc_df_init_scat[bat_lc_df_init_scat.columns[2]]*2>0
-
-    #applying the mask. Reset index necessary to avoid issues when calling indices later.
-    # drop to avoid creating an index column that will ruin the column calling
-    bat_lc_df_scat=bat_lc_df_init_scat[mask_sign_bat_scat].reset_index(drop=True)
-
-
-    # converteing to 15-50keV luminosity in Eddington units, removing negative values and
-    bat_lc_lum_nocorr_scat = np.array([bat_lc_df_scat[bat_lc_df_scat.columns[1]],
-                                  bat_lc_df_scat[bat_lc_df_scat.columns[2]]]).clip(0).T \
-                        * convert_BAT_count_flux['4U1630-47'] * Edd_factor_restrict
-
-    bat_lc_lum_scat = corr_factor_lbat(bat_lc_lum_nocorr_scat)
-
-    bat_lc_mjd_scat = np.array(bat_lc_df_scat[bat_lc_df_scat.columns[0]])
-
-    #for the rest
-    obs_dates_4U = Time(date_list[mask_obj][0].astype(str)).mjd.astype(int)
-
-    mask_withtime_BAT = [elem in bat_lc_mjd_scat for elem in obs_dates_4U]
-
-    id_match_BAT_scat = np.array([np.argwhere(bat_lc_mjd_scat == elem)[0][0] for elem in obs_dates_4U[mask_withtime_BAT]])
-
-
-    mask_added_BAT=np.repeat(False,len(lum_high_list[mask_obj][0]))
-
-    for id_obs_match,i_obs_match in enumerate(np.arange(len(lum_high_list[mask_obj][0]))[mask_withtime_BAT]):
-
-        #only overwritting the values without already existing measured fluxes
-        if np.isnan(lum_high_list[mask_obj][0][i_obs_match][0]):
-
-            #note that here we multiply the uncertainties by 1.65 to have everything at 90% uncertainty
-            # (which we later assume in the correlation coefficients computation)
-            lum_high_list[mask_obj][0][i_obs_match]=np.array([bat_lc_lum_scat[id_match_BAT_scat[id_obs_match]][0],
-                                                         bat_lc_lum_scat[id_match_BAT_scat[id_obs_match]][1]*1.65,
-                                                         bat_lc_lum_scat[id_match_BAT_scat[id_obs_match]][1]*1.65])
-
-            mask_added_BAT[i_obs_match]=True
-
-    dict_linevis['bat_lc_lum_scat']=bat_lc_lum_scat
-    dict_linevis['mask_added_BAT']=mask_added_BAT
-
-    #note: simpler to manually check in the code than to apply the mask in 50 different situations in correl_graph
-    #here we also need to remove the points for which there are already values
-    # dict_linevis['mask_lum_list_BAT_infer']=mask_withtime_BAT and np.isnan(lum_high_list[mask_obj][0].T[0])
-
-else:
-    dict_linevis['bat_lc_lum_scat']=None
-    dict_linevis['mask_added_BAT'] = None
-    # dict_linevis['mask_lum_list_BAT_infer']=np.repeat(False,len(lum_high_list[mask_obj][0].T))
-
-lum_high_plot,gamma_nthcomp_plot=values_manip_high_E(lum_high_list,gamma_nthcomp_list)
-
-lum_high_plot_restrict=deepcopy(lum_high_plot)
-lum_high_plot_restrict=lum_high_plot_restrict.T[mask_obj].T
-
-#we create this one solely for the sake of the scatter plots
-hid_high_plot_restrict=deepcopy(lum_high_plot_restrict)
-
-#index 1 is the 3-6 band
-hid_high_plot_restrict[0]=lum_high_plot_restrict[0]/lum_plot_restrict[1][0]
-hid_high_plot_restrict[1]=((lum_high_plot_restrict[1]/lum_high_plot_restrict[0])**2+\
-                          (lum_plot_restrict[1][1]/lum_plot_restrict[1][0])**2)**(1/2)*hid_high_plot_restrict[0]
-hid_high_plot_restrict[2]=((lum_high_plot_restrict[2]/lum_high_plot_restrict[0])**2+\
-                          (lum_plot_restrict[1][2]/lum_plot_restrict[1][0])**2)**(1/2)*hid_high_plot_restrict[0]
-
-
-gamma_nthcomp_plot_restrict=deepcopy(gamma_nthcomp_plot)
-gamma_nthcomp_plot_restrict=gamma_nthcomp_plot_restrict.T[mask_obj].T
-
-dict_linevis['lum_high_plot_restrict']=lum_high_plot_restrict
-dict_linevis['hid_high_plot_restrict']=hid_high_plot_restrict
-dict_linevis['gamma_nthcomp_plot_restrict']=gamma_nthcomp_plot_restrict
 
 if compute_only_withdet:
 

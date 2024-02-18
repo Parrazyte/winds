@@ -226,11 +226,17 @@ min_nh=5e-1
 def corr_factor_lbat(lbat_init):
 
     '''
-    without uncertainties for now. requires lbat_init in Eddington units to work
+    without uncertainties for now. Fetched manually from the linear regression
+    requires lbat_init in Eddington units to work
     '''
 
     return (lbat_init/10**(1e-4))**(1.01)*10**(-0.77)
 
+def bat_rate_to_gamma(rate):
+    '''
+    without uncertainties for now. Fetched manually from the linear regression
+    '''
+    return ((np.log10(rate)+3.03)/1.00)+1
 
 def forceAspect(ax,aspect=1):
     
@@ -628,7 +634,7 @@ def plot_lightcurve(dict_linevis,ctl_maxi_df,ctl_maxi_simbad,name,ctl_bat_df,ctl
             #note: the conversion factor is here to convert(ish) the rxte counts into maxi counts
             ax_lc.errorbar(num_rxte_dates,rxte_lc_df[rxte_lc_df.columns[1]]/25,xerr=0.5,yerr=rxte_lc_df[rxte_lc_df.columns[2]]/25,
                         linestyle='',color='sienna',marker='',elinewidth=0.5,label='RXTE standard counts')
-            ax_lc.set_ylim(0.1,ax_lc.get_ylim()[1])
+            ax_lc.set_ylim(0.1,ax_lc.get_ylim()[1]*1.1)
     
         if mode=='HR_soft':
             
@@ -684,7 +690,7 @@ def plot_lightcurve(dict_linevis,ctl_maxi_df,ctl_maxi_simbad,name,ctl_bat_df,ctl
 
             ax_lc.set_yscale('symlog', linthresh=0.05, linscale=0.1)
             ax_lc.yaxis.set_minor_locator(MinorSymLogLocator(linthresh=0.05))
-            ax_lc.set_ylim(0,max(ax_lc.get_ylim()[1],5e-2))
+            ax_lc.set_ylim(0,max(ax_lc.get_ylim()[1],5e-2)*1.1)
 
         if mode=='HR_soft':
             #computing the HR evolution and uncertainties
@@ -744,7 +750,7 @@ def plot_lightcurve(dict_linevis,ctl_maxi_df,ctl_maxi_simbad,name,ctl_bat_df,ctl
         '''
 
         if binning=='day':
-            num_bat_dates = mdates.date2num(Time(bat_lc_df['TIME'], format='mjd').datetime)
+            num_bat_dates = mdates.date2num(Time(bat_lc_df['TIME'], format='mjd').datetime)+0.5
         elif binning=='orbit':
 
             #base time value + TIME in seconds + half of the exposure to center the point
@@ -1923,6 +1929,8 @@ def values_manip_high_E(lum_high_list,gamma_nthcomp_list):
     '''
     transposing into plot-like structures with the uncertainty as first dimension,
     then objects, then observation
+
+    names should be updated because now it's used to transpose more stuff with the same structure
     '''
 
     n_obj=len(lum_high_list)
@@ -2009,7 +2017,9 @@ def hid_graph(ax_hid,dict_linevis,
         fit_int_revol_dict = dict_linevis['fit_int_revol_dict']
         HID_INT_band=dict_linevis['HID_INT_band']
 
-
+    #note that these one only get the significant BAT detections so no need to refilter
+    lum_high_1sig_plot_restrict=dict_linevis['lum_high_1sig_plot_restrict']
+    lum_high_sign_plot_restrict=dict_linevis['lum_high_sign_plot_restrict']
     # global normalisations values for the points
     norm_s_lin = 5
     norm_s_pow = 1.15
@@ -2141,71 +2151,85 @@ def hid_graph(ax_hid,dict_linevis,
         ax_hid.set_xlabel('Hardness Ratio in '+HR_broad_bands.replace('BAND','15-50')+' keV bands)')
         ax_hid.set_ylabel(r'Luminosity in the '+lum_broad_bands.replace('BAND','15-50')+' keV band in (L/L$_{Edd}$) units')
 
-        #currently limited to 4U1630-47
-        bat_lc_df_init = fetch_bat_lightcurve(catal_bat_df, catal_bat_simbad,['4U1630-47'], binning=broad_binning)
+        # #currently limited to 4U1630-47
+        # bat_lc_df_init = fetch_bat_lightcurve(catal_bat_df, catal_bat_simbad,['4U1630-47'], binning=broad_binning)
+        #
+        # #restricting to significant BAT detections or not
+        #
+        # mask_sign_bat = bat_lc_df_init[bat_lc_df_init.columns[1]] - bat_lc_df_init[
+        #     bat_lc_df_init.columns[2]] * 2 > 0
+        #
+        # if sign_broad_hid_BAT:
+        #     # significance test to only get good bat data
+        #
+        #     # applying the mask. Reset index necessary to avoid issues when calling indices later.
+        #     # drop to avoid creating an index column that will ruin the column calling
+        #     bat_lc_df = bat_lc_df_init[mask_sign_bat].reset_index(drop=True)
+        # else:
+        #     bat_lc_df=bat_lc_df_init
+        #
+        # if broad_binning=='day':
+        #     bat_lc_mjd=np.array(bat_lc_df[bat_lc_df.columns[0]])
+        #
+        # elif broad_binning=='orbit':
+        #     bat_lc_tstart=Time('51910',format='mjd')+TimeDelta(bat_lc_df['TIME'],format='sec')
+        #     bat_lc_tend=Time('51910',format='mjd')+TimeDelta(bat_lc_df['TIMEDEL'],format='sec')
+        #
+        # #converting to 15-50keV luminosity in Eddington units, removing negative values
+        # bat_lc_lum_nocorr=np.array([bat_lc_df[bat_lc_df.columns[1]],bat_lc_df[bat_lc_df.columns[2]],
+        #                             bat_lc_df[bat_lc_df.columns[2]]]).clip(0).T\
+        #             *convert_BAT_count_flux['4U1630-47']*Edd_factor_restrict
+        #
+        # #and applying the correction
+        # bat_lc_lum=corr_factor_lbat(bat_lc_lum_nocorr)
+        #
+        # if broad_binning=='day':
+        #     obs_dates=Time(np.array([date_list[mask_obj][0] for i in range(sum(mask_lines))]).astype(str)).mjd.astype(int)
+        #
+        #
+        #     mask_withtime_BAT=[elem in bat_lc_mjd for elem in obs_dates[0]]
+        #
+        #     #this one only considers BAT but also considers non-significant points
+        #
+        #     #not necessary now that we create different arrays beforehand
+        #     # #getting an array with the bat flux of each observation date
+        #     # lum_broad_single_BAT=np.array([np.array([np.nan, np.nan,np.nan]) if obs_dates[0][i_obs] not in bat_lc_mjd else bat_lc_lum[bat_lc_mjd==obs_dates[0][i_obs]][0]\
+        #     #                           for i_obs in range(len(obs_dates[0]))]).T
+        #
+        # elif broad_binning=='orbit':
+        #
+        #     obs_tstart=Time(np.array([date_list[mask_obj][0] for i in range(sum(mask_lines))]).astype(str)).mjd
+        #     obs_tend=(Time(np.array([date_list[mask_obj][0] for i in range(sum(mask_lines))]).astype(str))+\
+        #             TimeDelta(np.array([exptime_list[mask_obj][0] for i in range(sum(mask_lines))],format='sec'))).mjd
+        #
+        #     #TO BE IMPROVED FOR MORE PRECISION
+        #     # # getting an array with the bat flux of each observation date
+        #     # lum_broad_single_BAT = np.array([np.array([np.nan, np.nan]) if obs_dates[0][i_obs] not in bat_lc_mjd else
+        #     #                              bat_lc_lum[bat_lc_mjd == obs_dates[0][i_obs]][0] \
+        #     #                              for i_obs in range(len(obs_dates[0]))]).T
 
-        #restricting to significant BAT detections or not
+        #now we combine the BAT non-significant elements and the already existing significant elements in
+        #lum_high_plot_restrict
+        lum_broad_single=np.array([elem for elem in lum_high_1sig_plot_restrict.T[0]])
 
-        mask_sign_bat = bat_lc_df_init[bat_lc_df_init.columns[1]] - bat_lc_df_init[
-            bat_lc_df_init.columns[2]] * 2 > 0
+        #mask to highlight non-significant BAT detections
+        mask_sign_high_E=~np.isnan(np.array([elem for elem in lum_high_sign_plot_restrict.T[0]])[0])
 
-        if sign_broad_hid_BAT:
-            # significance test to only get good bat data
+        lum_broad_single=lum_broad_single.T
 
-            # applying the mask. Reset index necessary to avoid issues when calling indices later.
-            # drop to avoid creating an index column that will ruin the column calling
-            bat_lc_df = bat_lc_df_init[mask_sign_bat].reset_index(drop=True)
-        else:
-            bat_lc_df=bat_lc_df_init
+        #transforming the BAT non-significant detections in 1 sigma upper limits or removing them
+        for i_bat in range(len(lum_broad_single)):
+            if not mask_sign_high_E[i_bat]:
+                if not sign_broad_hid_BAT:
+                    lum_broad_single[i_bat]=np.array([lum_broad_single[i_bat][0]+lum_broad_single[i_bat][1],
+                                            lum_broad_single[i_bat][0]+lum_broad_single[i_bat][1],0.])
+                else:
+                    lum_broad_single[i_bat]=np.repeat(np.nan,3)
 
-        if broad_binning=='day':
-            bat_lc_mjd=np.array(bat_lc_df[bat_lc_df.columns[0]])
+        lum_broad_single=lum_broad_single.T
 
-        elif broad_binning=='orbit':
-            bat_lc_tstart=Time('51910',format='mjd')+TimeDelta(bat_lc_df['TIME'],format='sec')
-            bat_lc_tend=Time('51910',format='mjd')+TimeDelta(bat_lc_df['TIMEDEL'],format='sec')
-
-        #converting to 15-50keV luminosity in Eddington units, removing negative values
-        bat_lc_lum_nocorr=np.array([bat_lc_df[bat_lc_df.columns[1]],bat_lc_df[bat_lc_df.columns[2]]]).clip(0).T\
-                    *convert_BAT_count_flux['4U1630-47']*Edd_factor_restrict
-
-        #and applying the correction
-        bat_lc_lum=corr_factor_lbat(bat_lc_lum_nocorr)
-
-        #transforming the detections in upper limits
-        if not sign_broad_hid_BAT:
-            for i_bat in range(len(bat_lc_lum)):
-                if not mask_sign_bat[i_bat]:
-                    bat_lc_lum[i_bat]=np.array([bat_lc_lum[i_bat][0]+bat_lc_lum[i_bat][1],0.])
-
-
-        if broad_binning=='day':
-            obs_dates=Time(np.array([date_list[mask_obj][0] for i in range(sum(mask_lines))]).astype(str)).mjd.astype(int)
-
-
-            mask_withtime_BAT=[elem in bat_lc_mjd for elem in obs_dates[0]]
-
-            #permanent mask for the alpha parameters later
-            mask_withtime_BAT_sign=[elem in np.array(bat_lc_df_init[mask_sign_bat][bat_lc_df_init.columns[0]])\
-                                    for elem in obs_dates[0]]
-
-            #getting an array with the bat flux of each observation date
-            lum_broad_single=np.array([np.array([np.nan, np.nan]) if obs_dates[0][i_obs] not in bat_lc_mjd else bat_lc_lum[bat_lc_mjd==obs_dates[0][i_obs]][0]\
-                                      for i_obs in range(len(obs_dates[0]))]).T
-
-        elif broad_binning=='orbit':
-
-            obs_tstart=Time(np.array([date_list[mask_obj][0] for i in range(sum(mask_lines))]).astype(str)).mjd
-            obs_tend=(Time(np.array([date_list[mask_obj][0] for i in range(sum(mask_lines))]).astype(str))+\
-                    TimeDelta(np.array([exptime_list[mask_obj][0] for i in range(sum(mask_lines))],format='sec'))).mjd
-
-            # mask_withtime_BAT = [np.min(get_overlap([obs_]) in bat_lc_mjd for elem in obs_dates[0]]
-
-            #TO BE IMPROVED FOR MORE PRECISION
-            # getting an array with the bat flux of each observation date
-            lum_broad_single = np.array([np.array([np.nan, np.nan]) if obs_dates[0][i_obs] not in bat_lc_mjd else
-                                         bat_lc_lum[bat_lc_mjd == obs_dates[0][i_obs]][0] \
-                                         for i_obs in range(len(obs_dates[0]))]).T
+        #creating the mask to avoid plotting nans everywhere
+        mask_with_broad=~np.isnan(lum_broad_single[0])
 
         #this is the quantity that needs to be added if the numerator is broad+6-10 and not just broad
         hid_broad_add=lum_plot[2][0][mask_obj][0].astype(float) if HR_broad_6_10 else 0
@@ -2215,7 +2239,7 @@ def hid_graph(ax_hid,dict_linevis,
 
         #here the numerator is the quadratic uncertainty addition and then the fraction is for the quadratic ratio uncertainty
         #composition
-        hid_broad_err= np.array([((((lum_plot[2][i][mask_obj][0] if HR_broad_6_10 else 0)**2+lum_broad_single[1]**2)**(1/2)\
+        hid_broad_err= np.array([((((lum_plot[2][i][mask_obj][0] if HR_broad_6_10 else 0)**2+lum_broad_single[i]**2)**(1/2)\
                            /(lum_broad_single[0]+hid_broad_add)) ** 2 + \
                                 (lum_plot[1][i][mask_obj][0] / lum_plot[1][0][mask_obj][0]) ** 2) ** (1 / 2) * hid_broad_vals\
                                for i in [1, 2]])
@@ -2488,7 +2512,7 @@ def hid_graph(ax_hid,dict_linevis,
         mask_intime = (datelist_obj >= Time(slider_date[0])) & (datelist_obj <= Time(slider_date[1]))
 
         if broad_mode=='BAT':
-            mask_intime=(mask_intime) & mask_withtime_BAT
+            mask_intime=(mask_intime) & mask_with_broad
         if broad_mode=='INTEGRAL' or restrict_match_INT:
             mask_intime = (mask_intime) & mask_withtime_INT
 
@@ -2612,7 +2636,7 @@ def hid_graph(ax_hid,dict_linevis,
 
             if broad_mode=='BAT' and not sign_broad_hid_BAT:
 
-                alpha_abs_sign_full=np.where(mask_withtime_BAT_sign,1,0.3)
+                alpha_abs_sign_full=np.where(mask_sign_high_E,1,0.3)
 
                 alpha_abs_detsign=alpha_abs_sign_full[obj_val_mask_sign][obj_order_sign]
 
@@ -2621,20 +2645,21 @@ def hid_graph(ax_hid,dict_linevis,
             else:
                 alpha_abs_detsign=None
 
-            # displaying "significant only" cmaps/sizes
-            scat_col += [
-                ax_hid.scatter(x_hid[obj_val_mask_sign][obj_order_sign], y_hid[obj_val_mask_sign][obj_order_sign],
-                               marker=marker_abs, color=color_val_detsign,
-                               c=c_scat, s=norm_s_lin * obj_size_sign[obj_val_mask_sign][obj_order_sign] ** norm_s_pow,
-                               edgecolor='black' if not display_edgesource else colors_obj.to_rgba(i_obj_glob),
-                               linewidth=1 + int(display_edgesource) / 2,
-                               norm=cmap_norm_info,
-                               label=obj_list[mask_obj][i_obj] if not label_obj_plotted[i_obj] and \
-                                                                  (
-                                                                              radio_info_cmap == 'Source' or display_edgesource) and len(
-                                   x_hid[obj_val_mask_sign]) > 0 else '',
-                               cmap=cmap_info, alpha=alpha_abs_detsign,
-                               plotnonfinite=True)]
+            if len(x_hid[obj_val_mask_sign][obj_order_sign])>0:
+                # displaying "significant only" cmaps/sizes
+                scat_col += [
+                    ax_hid.scatter(x_hid[obj_val_mask_sign][obj_order_sign], y_hid[obj_val_mask_sign][obj_order_sign],
+                                   marker=marker_abs, color=color_val_detsign,
+                                   c=c_scat, s=norm_s_lin * obj_size_sign[obj_val_mask_sign][obj_order_sign] ** norm_s_pow,
+                                   edgecolor='black' if not display_edgesource else colors_obj.to_rgba(i_obj_glob),
+                                   linewidth=1 + int(display_edgesource) / 2,
+                                   norm=cmap_norm_info,
+                                   label=obj_list[mask_obj][i_obj] if not label_obj_plotted[i_obj] and \
+                                                                      (
+                                                                                  radio_info_cmap == 'Source' or display_edgesource) and len(
+                                       x_hid[obj_val_mask_sign]) > 0 else '',
+                                   cmap=cmap_info, alpha=alpha_abs_detsign,
+                                   plotnonfinite=True)]
 
 
             if (radio_info_cmap == 'Source' or display_edgesource) and len(x_hid[obj_val_mask_sign]) > 0:
@@ -2936,8 +2961,8 @@ def hid_graph(ax_hid,dict_linevis,
                     Time(date_list[mask_obj_base][i_obj_base].astype(str)) <= Time(slider_date[1]))
 
         if broad_mode=='BAT':
-            mask_intime=np.array([(elem) & mask_withtime_BAT for elem in mask_intime])
-            mask_intime_norepeat=(mask_intime_norepeat) & mask_withtime_BAT
+            mask_intime=np.array([(elem) & mask_with_broad for elem in mask_intime])
+            mask_intime_norepeat=(mask_intime_norepeat) & mask_with_broad
         if broad_mode=='INTEGRAL' or restrict_match_INT:
             mask_intime=np.array([(elem) & mask_withtime_INT for elem in mask_intime])
             mask_intime_norepeat=(mask_intime_norepeat) & mask_withtime_INT
@@ -3032,7 +3057,7 @@ def hid_graph(ax_hid,dict_linevis,
                     edgec_scat = None
 
                 if broad_mode == 'BAT' and not sign_broad_hid_BAT:
-                    alpha_nondet_ul_full = np.where(mask_withtime_BAT_sign, 1, 0.3)
+                    alpha_nondet_ul_full = np.where( mask_sign_high_E, 1, 0.3)
 
                     alpha_nondet_ul = alpha_nondet_ul_full[mask_nondet_ul]
 
@@ -3081,12 +3106,11 @@ def hid_graph(ax_hid,dict_linevis,
                             mdates.date2num(date_list[mask_obj_base][i_obj_base][mask_nondet]) \
                                 if radio_info_cmap == 'Time' else \
                                 nh_plot.T[mask_obj_base].T[0][i_obj_base][mask_nondet] if radio_info_cmap == 'nH' else \
-                                    kt_plot.T[mask_obj_base].T[0][i_obj_base][
-                                        mask_nondet] if radio_info_cmap == 'kT' else \
+                                kt_plot.T[mask_obj_base].T[0][i_obj_base][mask_nondet] if radio_info_cmap == 'kT' else \
                                         'grey'
 
                 if broad_mode == 'BAT' and not sign_broad_hid_BAT:
-                    alpha_nondet_full = np.where(mask_withtime_BAT_sign, 1, 0.3)
+                    alpha_nondet_full = np.where(mask_sign_high_E, 1, 0.3)
 
                     alpha_nondet= alpha_nondet_full[mask_nondet]
 
@@ -4141,14 +4165,14 @@ def correl_graph(data_perinfo,infos,data_ener,dict_linevis,mode='intrinsic',mode
     observ_list=dict_linevis['observ_list'][mask_obj]
 
     #note that these one only get the significant BAT detections so no need to refilter
-    lum_high_plot_restrict=dict_linevis['lum_high_plot_restrict']
-    hid_high_plot_restrict=dict_linevis['hid_high_plot_restrict']
+    lum_high_sign_plot_restrict=dict_linevis['lum_high_sign_plot_restrict']
+    hr_high_sign_plot_restrict=dict_linevis['hr_high_sign_plot_restrict']
 
     gamma_nthcomp_plot_restrict=dict_linevis['gamma_nthcomp_plot_restrict']
-    bat_lc_lum_scat=dict_linevis['bat_lc_lum_scat']
-    mask_added_BAT=dict_linevis['mask_added_BAT']
 
-    mask_lum_high_valid=~np.isnan(ravel_ragged(lum_high_plot_restrict[0]))
+    mask_added_BAT_sign=dict_linevis['mask_added_BAT_sign']
+
+    mask_lum_high_valid=~np.isnan(ravel_ragged(lum_high_sign_plot_restrict[0]))
 
     #This considers all the lines
     mask_obs_sign=np.array([ravel_ragged(abslines_plot[4][0].T[mask_obj].T[i]).astype(float)>=conf_thresh\
@@ -4229,7 +4253,7 @@ def correl_graph(data_perinfo,infos,data_ener,dict_linevis,mode='intrinsic',mode
         if ind_infos[1] in [3,4,5]:
             high_E_mode=True
 
-        second_arr_infos=[date_list,gamma_nthcomp_plot_restrict,lum_high_plot_restrict,hid_high_plot_restrict]
+        second_arr_infos=[date_list,gamma_nthcomp_plot_restrict,lum_high_sign_plot_restrict,hr_high_sign_plot_restrict]
         data_plot=[data_list[ind_infos[0]], second_arr_infos[ind_infos[1]-2] if ind_infos[1]>=2\
                                             else mode_vals[ind_infos[1]]]
         
@@ -4408,7 +4432,9 @@ def correl_graph(data_perinfo,infos,data_ener,dict_linevis,mode='intrinsic',mode
                 x_data,y_data=[np.array([ravel_ragged(data_plot[0][0][ind_infos[i]])[bool_det][bool_sign],
                                          ravel_ragged(data_plot[0][0][ind_infos[i]])[bool_det][~bool_sign]],dtype=object) for i in [0,1]]
 
-                mask_added_BAT_use=mask_added_BAT_use[bool_det][bool_sign]
+                mask_added_BAT_sign_use=None if mask_added_BAT_sign is not None else \
+                                        mask_added_BAT_sign[bool_det][bool_sign]
+
 
                 #same thing for the uncertainties                
                 x_error,y_error=[np.array([[ravel_ragged(data_plot[i][l][ind_infos[i]])[bool_det][bool_sign] for l in [1,2]],                                         
@@ -4519,7 +4545,8 @@ def correl_graph(data_perinfo,infos,data_ener,dict_linevis,mode='intrinsic',mode
                                      ravel_ragged(y_data_repeat[ratio_indexes_x[0]])[bool_det_ratio][~bool_sign_ratio]],
                                     dtype=object)
 
-                    mask_added_BAT_use=mask_added_BAT[bool_det_ratio][bool_sign_ratio]
+                    mask_added_BAT_sign_use = None if mask_added_BAT_sign is not None else \
+                        mask_added_BAT_sign[bool_det_ratio][bool_sign_ratio]
                 else:
                     #this is not implemented currently
 
@@ -4528,7 +4555,8 @@ def correl_graph(data_perinfo,infos,data_ener,dict_linevis,mode='intrinsic',mode
                                      ravel_ragged(y_data_repeat)[bool_det][~bool_sign]],
                                     dtype=object)
 
-                        mask_added_BAT_use = ravel_ragged([mask_added_BAT \
+                        mask_added_BAT_sign_use = None if mask_added_BAT_sign is not None else \
+                            ravel_ragged([mask_added_BAT_sign \
                                             for repeater in (i if type(i)==range else [i])])[bool_det][bool_sign]
                     except:
                         breakpoint()
@@ -5291,13 +5319,13 @@ def correl_graph(data_perinfo,infos,data_ener,dict_linevis,mode='intrinsic',mode
 
                         #highlighting BAT projected luminosities without having to worry about how the graphs
                         #were created
-                        if mode=='observ' and ind_infos[1] in [4,5] and bat_lc_lum_scat is not None:
+                        if mode=='observ' and ind_infos[1] in [4,5] and mask_added_BAT_sign_use is not None:
 
-                            ls_dist=np.array([np.where(bool,'--','-') for bool in mask_added_BAT_use])
+                            ls_dist=np.array([np.where(bool,'--','-') for bool in mask_added_BAT_sign_use])
 
                             #older version
                             # ls_dist=np.array([np.where((elem in bat_lc_lum_scat.T[0] if ind_infos[1]==4 else bool),'--','-')\
-                            #                   for elem,bool in zip(y_data[s],mask_added_BAT_use)])
+                            #                   for elem,bool in zip(y_data[s],mask_added_BAT_sign_use)])
 
                             ls_dist = ls_dist.tolist()
 
@@ -5441,15 +5469,15 @@ def correl_graph(data_perinfo,infos,data_ener,dict_linevis,mode='intrinsic',mode
                         if uplims_mask is None:
 
                             #adding the marker color change for the BAT infered obs
-                            if mode == 'observ' and ind_infos[1] in [4,5] and bat_lc_lum_scat is not None:
+                            if mode == 'observ' and ind_infos[1] in [4,5] and mask_added_BAT_sign_use is not None:
 
-                                facecol_adjust_mask=mask_added_BAT_use[color_mask]
+                                facecol_adjust_mask=mask_added_BAT_sign_use[color_mask]
 
                                 #older version
                                 # facecol_adjust_mask = np.array([(elem in bat_lc_lum_scat.T[0]) if ind_infos[1]==4\
                                 #                                 else bool\
                                 #                     for elem,bool in zip(y_data[s][color_mask],
-                                #                                          mask_added_BAT_use[color_mask])])
+                                #                                          mask_added_BAT_sign_use[color_mask])])
 
                                 for id_obs in range(len(y_data[s][color_mask])):
                                     ax_scat.scatter(
@@ -5661,10 +5689,10 @@ def correl_graph(data_perinfo,infos,data_ener,dict_linevis,mode='intrinsic',mode
             # since we can't easily change the lin to log type of the axes, we recreate a linear
             with st.spinner('Computing linear regrs'):
                 lmplot_uncert_a(ax_scat, x_data_regr, y_data_regr, x_err_regr, y_err_regr, percent=90,
-                                nsim=100, return_linreg=False,
+                                nsim=1000, return_linreg=False,
                                 error_percent=90,
                                 intercept_pos='auto',
-                                infer_log_scale=False, xbounds=plt.xlim(), ybounds=plt.ylim(),
+                                infer_log_scale=True, xbounds=plt.xlim(), ybounds=plt.ylim(),
                                 line_color='black')
 
         #### legend display

@@ -161,11 +161,11 @@ ap = argparse.ArgumentParser(description='Script to perform line detection in X-
 
 '''GENERAL OPTIONS'''
 
-ap.add_argument('-satellite',nargs=1,help='telescope to fetch spectra from',default='Suzaku',type=str)
+ap.add_argument('-satellite',nargs=1,help='telescope to fetch spectra from',default='NICER',type=str)
 
 #used for NICER and multi for now
 ap.add_argument('-group_max_timedelta',nargs=1,
-                help='maximum time delta for epoch/gti grouping in dd_hh_mm_ss',default='00_08_00_00',type=str)
+                help='maximum time delta for epoch/gti grouping in dd_hh_mm_ss',default='00_06_00_00',type=str)
 
 #00_00_00_10 for NICER TR
 #00_00_15_00 for NuSTAR individual orbits
@@ -219,7 +219,7 @@ ap.add_argument('-xspec_window',nargs=1,help='xspec window id (auto tries to pic
 '''MODELS'''
 #### Models and abslines lock
 ap.add_argument('-cont_model',nargs=1,help='model list to use for the autofit computation',
-                default='nthcont_Suzaku',type=str)
+                default='nthcont_NICER',type=str)
 
 ap.add_argument('-autofit_model',nargs=1,help='model list to use for the autofit computation',
                 default='lines_narrow',type=str)
@@ -325,11 +325,11 @@ ap.add_argument('-reload_autofit',nargs=1,
 
 ap.add_argument('-reload_fakes',nargs=1,
                 help='Reload fake delchi array file to skip the fake computation if possible',
-                default=False,type=bool)
+                default=True,type=bool)
 
 ap.add_argument('-pdf_only',nargs=1,
                 help='Updates the pdf with already existing elements but skips the line detection entirely',
-                default=True,type=bool)
+                default=False,type=bool)
 
 #note: used mainly to recompute obs with bugged UL computations. Needs FINISHED computations firsthand, else
 #use reload_autofit and reload_fakes
@@ -1215,7 +1215,7 @@ def pdf_summary(epoch_files,fit_ok=False,summary_epoch=None,e_sat_low_list=None,
 
             # no need to do anything for less than two datagroups
             if len(lineid_grp_arr) < 2:
-                return lines_nobg
+                return lines_nobg,1
             else:
                 lines_cleaned = []
                 # we display up to the second data group, then only non-standardly linked lines

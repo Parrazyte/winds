@@ -37,7 +37,14 @@ def get_overlap(a, b,distance=False):
     else:
         return max(0, min(a[1], b[1]) - max(a[0], b[0]))
 
-def shorten_epoch(file_ids):
+def shorten_epoch(file_ids_init):
+
+    if file_ids_init=='auto':
+        from xspec import AllData
+        file_ids=[AllData(i+1).fileName.split('_sp')[0] for i in range(AllData.nGroups)]
+    else:
+        file_ids=file_ids_init
+
     # splitting obsids
     obsids = np.unique([elem.split('-')[0] for elem in file_ids])
     obsids_list = [elem.split('-')[0] for elem in file_ids]

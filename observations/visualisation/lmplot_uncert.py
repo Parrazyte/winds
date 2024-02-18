@@ -16,7 +16,7 @@ def lmplot_uncert_a(ax, x, y, dx, dy, xlim=None,ylim=None, percent=68.26,percent
                     return_linreg=True, infer_log_scale=False,log_sampling=False,nanzero_err=True,
                     error_percent=68.26,
                     xbounds='auto',ybounds='auto',
-                    line_color='blue',lw=1.3, inter_color='lightgrey'):
+                    line_color='blue',lw=1.3, inter_color='lightgrey',check_indiv=False):
 
     '''
     Computes a linear regression, confidence bands and errors on its interval using bootstrapping
@@ -86,6 +86,9 @@ def lmplot_uncert_a(ax, x, y, dx, dy, xlim=None,ylim=None, percent=68.26,percent
     -inter_color:        confidence interval region color. If list like, use the different colors
                          for different intervals
 
+    -check_indiv:
+           -True         plot a few elements of the perturbation, to check results
+           -combined     plot the elements on the same graph
     '''
 
     if infer_log_scale:
@@ -284,13 +287,29 @@ def lmplot_uncert_a(ax, x, y, dx, dy, xlim=None,ylim=None, percent=68.26,percent
     else:
         y_line_pert =np.array([(np.log10(x_line) if log_x else x_line) * slope_vals_save[i] + intercept_vals_save[i] for i in range(nsim)]).T
 
-    # plt.figure()
-    # plt.errorbar(x_arr, y_arr, xerr=dx_arr.T, yerr=dy_arr.T, linestyle='', marker='d', color='red')
     # #to check the lines if needed
-    # for i in range(nsim//25):
-    #
-    #     plt.scatter(x_pert[i],y_pert[i])
-    #     plt.plot(x_line,y_line_pert.T[i],alpha=0.1)
+    if check_indiv:
+        if check_indiv=='merge':
+            plt.figure()
+            if log_x:
+                plt.xscale('log')
+            if log_y:
+                plt.yscale('log')
+
+            plt.errorbar(x,y, xerr=dx, yerr=dy, linestyle='', marker='d', color='red',alpha=0.05)
+
+        for i in range(nsim//20):
+            if check_indiv is True:
+                plt.figure()
+                if log_x:
+                    plt.xscale('log')
+                if log_y:
+                    plt.yscale('log')
+                plt.errorbar(x,y, xerr=dx, yerr=dy, linestyle='', marker='d', color='red')
+
+            plt.scatter(10**(x_pert[i]),10**(y_pert[i]),color='blue',alpha=0.05 if check_indiv=='merge' else 1)
+
+            plt.plot(x_line,y_line_pert.T[i],alpha=0.05 if check_indiv=='merge' else 0.5,color='green')
 
     y_line_pert.sort()
 

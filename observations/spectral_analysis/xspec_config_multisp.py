@@ -31,7 +31,7 @@ except:
 from fitting_tools import sign_delchis_table,lines_std,lines_e_dict,lines_w_dict,lines_broad_w_dict,\
         link_groups,lines_std_names,def_ftest_threshold,def_ftest_leeway,ang2kev
 
-from general_tools import ravel_ragged,get_overlap
+from general_tools import ravel_ragged,get_overlap,shorten_epoch
 
 
 from contextlib import redirect_stdout
@@ -521,7 +521,7 @@ class scorpeon_group_save:
 if not streamlit_mode:
     xscorpeon=scorpeon_manager()
 
-def save_broad_SED(e_low=0.1,e_high=100,nbins=1e3,path=None,retain_session=True,
+def save_broad_SED(path=None,e_low=0.1,e_high=100,nbins=1e3,retain_session=False,
                    remove_abs=True,remove_gaussian=True,remove_cal=True,
                    remove_scorpeon=True):
 
@@ -586,8 +586,11 @@ def save_broad_SED(e_low=0.1,e_high=100,nbins=1e3,path=None,retain_session=True,
         Xset.restore('make_broad_mod_save.xcm')
         os.remove('make_broad_mod_save.xcm')
 
+    data_groups_str='' if AllData.nGroups=='0' else 'Loaded epoch ids : '+' '.join(shorten_epoch('auto'))
     if path is not None:
-        np.savetxt(path, save_arr, header='save of '+cleaned_expression+'\nnu\tnuErr\tLnu\nHz\tHz\terg/s/Hz',
+        np.savetxt(path, save_arr, header='save of '+cleaned_expression+' with '+str(int(nbins))+
+                                          ' log bins in the [%.2e'%e_low+',%.2e'%e_high+'] keV band'+
+                                          '\n'+data_groups_str+'\nnu\tnuErr\tLnu\nHz\tHz\terg/s/Hz',
                    delimiter=' ')
     else:
         return save_arr

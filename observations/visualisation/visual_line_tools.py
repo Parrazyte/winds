@@ -3310,31 +3310,34 @@ def hid_graph(ax_hid,dict_linevis,
                                    (elem_x_s>=broad_x_linthresh and elem_x_e>=broad_x_linthresh)\
                                    for (elem_x_s,elem_x_e) in zip(xarr_start,xarr_end)])
 
-        #linear version first
-        xpos = (xarr_start + xarr_end) / 2
-        ypos = (yarr_start + yarr_end) / 2
+        #preventing error when no point
+        if sum(x_arr_log_ok)!=0:
 
-        xdir = xarr_end - xarr_start
-        ydir = yarr_end - yarr_start
+            #linear version first
+            xpos = (xarr_start + xarr_end) / 2
+            ypos = (yarr_start + yarr_end) / 2
 
-        #log version in the mask
-        xpos[x_arr_log_ok] = 10**((np.log10(xarr_start[x_arr_log_ok]) + np.log10(xarr_end[x_arr_log_ok])) / 2)
-        ypos[x_arr_log_ok] = 10**((np.log10(yarr_start[x_arr_log_ok]) + np.log10(yarr_end[x_arr_log_ok])) / 2)
+            xdir = xarr_end - xarr_start
+            ydir = yarr_end - yarr_start
 
-        xdir[x_arr_log_ok] = 10**(np.log10(xarr_end[x_arr_log_ok]) - np.log10(xarr_start[x_arr_log_ok]))
-        ydir[x_arr_log_ok] = 10**(np.log10(yarr_end[x_arr_log_ok]) - np.log10(yarr_start[x_arr_log_ok]))
+            #log version in the mask
+            xpos[x_arr_log_ok] = 10**((np.log10(xarr_start[x_arr_log_ok]) + np.log10(xarr_end[x_arr_log_ok])) / 2)
+            ypos[x_arr_log_ok] = 10**((np.log10(yarr_start[x_arr_log_ok]) + np.log10(yarr_end[x_arr_log_ok])) / 2)
 
-        arrow_size_frac=0.001
+            xdir[x_arr_log_ok] = 10**(np.log10(xarr_end[x_arr_log_ok]) - np.log10(xarr_start[x_arr_log_ok]))
+            ydir[x_arr_log_ok] = 10**(np.log10(yarr_end[x_arr_log_ok]) - np.log10(yarr_start[x_arr_log_ok]))
 
-        for X, Y, dX, dY,log_ok in zip(xpos, ypos, xdir, ydir,x_arr_log_ok):
-            if log_ok:
-                ax_hid.annotate("", xytext=(X, Y), xy=(10**(np.log10(X) + arrow_size_frac * np.log10(dX)),
-                                                       10**(np.log10(Y) + arrow_size_frac * np.log10(dY))),
-                                arrowprops=dict(arrowstyle='->', color='grey',alpha=0.5), size=10)
-            else:
-                ax_hid.annotate("", xytext=(X, Y), xy=(X+ arrow_size_frac *dX,
-                                                       Y+ arrow_size_frac *dY),
-                                arrowprops=dict(arrowstyle='->', color='grey',alpha=0.5), size=10)
+            arrow_size_frac=0.001
+
+            for X, Y, dX, dY,log_ok in zip(xpos, ypos, xdir, ydir,x_arr_log_ok):
+                if log_ok:
+                    ax_hid.annotate("", xytext=(X, Y), xy=(10**(np.log10(X) + arrow_size_frac * np.log10(dX)),
+                                                           10**(np.log10(Y) + arrow_size_frac * np.log10(dY))),
+                                    arrowprops=dict(arrowstyle='->', color='grey',alpha=0.5), size=10)
+                else:
+                    ax_hid.annotate("", xytext=(X, Y), xy=(X+ arrow_size_frac *dX,
+                                                           Y+ arrow_size_frac *dY),
+                                    arrowprops=dict(arrowstyle='->', color='grey',alpha=0.5), size=10)
 
 
         # else:
@@ -4418,7 +4421,7 @@ def correl_graph(data_perinfo,infos,data_ener,dict_linevis,mode='intrinsic',mode
             bool_nondetsign_y=np.array(((bool_sign_y<conf_thresh).tolist() or (np.isnan(bool_sign_y).tolist()))) &\
                         (np.array((bool_sign_x>=conf_thresh).tolist()) & np.array((~np.isnan(bool_sign_x)).tolist())) \
                               & mask_intime_norepeat & (True if not high_E_mode else mask_lum_high_valid)
-                        
+
             #the boool sign and det are only used for the ratio in ratio_mode, but are global in eqwratio mode
             if mode=='eqwratio':
                 
@@ -4578,15 +4581,15 @@ def correl_graph(data_perinfo,infos,data_ener,dict_linevis,mode='intrinsic',mode
 
                 #we use the same double definition here
                 #in ratio_mode, x is the numerator so the ul_x case amounts to an upper limit
-                x_data_ul_x=np.array(ravel_ragged(data_perinfo[5][0][ind_ratio[0]])[bool_nondetsign_x],
+                y_data_ul_x=np.array(ravel_ragged(data_perinfo[5][0][ind_ratio[0]])[bool_nondetsign_x],
                                 dtype=object)                
-                y_data_ul_x=np.array(ravel_ragged(data_perinfo[0][0][ind_ratio[1]])[bool_nondetsign_x],
+                x_data_ul_x=np.array(ravel_ragged(data_perinfo[0][0][ind_ratio[1]])[bool_nondetsign_x],
                                 dtype=object)
                 
                 #here in ratio mode ul_y amounts to a lower limit
-                x_data_ul_y=np.array(ravel_ragged(data_perinfo[0][0][ind_ratio[0]])[bool_nondetsign_y],
+                y_data_ul_y=np.array(ravel_ragged(data_perinfo[0][0][ind_ratio[0]])[bool_nondetsign_y],
                                 dtype=object)
-                y_data_ul_y=np.array(ravel_ragged(data_perinfo[5][0][ind_ratio[1]])[bool_nondetsign_y],
+                x_data_ul_y=np.array(ravel_ragged(data_perinfo[5][0][ind_ratio[1]])[bool_nondetsign_y],
                                 dtype=object)
                 
                 #same way of defining the errors
@@ -4616,6 +4619,8 @@ def correl_graph(data_perinfo,infos,data_ener,dict_linevis,mode='intrinsic',mode
                         
                         x_data_ul=y_data_ul_x/x_data_ul_x
                         y_data_ul=np.array(ravel_ragged(y_data_repeat[ind_ratio[0]])[bool_nondetsign_x],dtype=object)
+
+                        pass
                         
             else:
                 

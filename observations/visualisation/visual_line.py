@@ -1207,7 +1207,8 @@ BAT_rate_list=np.array([np.array([np.repeat(np.nan,3) for i_obs in range(len(flu
           for i_obj in range(len(flux_high_list))],dtype=object)
 
 #adding the significant BAT extrapolated fluxes to the lum_high_list array if asked to (for the scatter plots)
-if add_BAT_flux_corr and display_single and choice_source[0]=='4U1630-47':
+#the sum mask_obj condition skips issues when no observation is kept
+if add_BAT_flux_corr and display_single and choice_source[0]=='4U1630-47' and sum(mask_obj)>0:
 
     bat_lc_df_scat = fetch_bat_lightcurve(catal_bat_df, catal_bat_simbad, choice_source, binning=BAT_binning_scat)
 
@@ -1216,7 +1217,7 @@ if add_BAT_flux_corr and display_single and choice_source[0]=='4U1630-47':
                               bat_lc_df_scat[bat_lc_df_scat.columns[2]],
                               bat_lc_df_scat[bat_lc_df_scat.columns[2]]]).clip(0)
 
-    # converting to 15-50keV luminosity in Eddington units, removing negative values and
+    # converting to 15-50keV luminosity in Eddington units, removing negative values
     bat_lc_lum_nocorr_scat = bat_lc_arr_rate.T \
                         * convert_BAT_count_flux['4U1630-47'] * Edd_factor_restrict
 
@@ -1522,7 +1523,7 @@ with tab_hid:
 
                 broad_band_disp_ok=False
 
-        if broad_band_disp_ok and not skip_HID:
+        if broad_band_disp_ok and not skip_HID and not len(global_plotted_datetime)==0:
 
             if not display_broad_hid_BAT:
                 st.info('Toggle BAT broad band HID option in the sidebar to display.')
@@ -1578,7 +1579,7 @@ with tab_hid:
 
                 broad_band_disp_ok=False
 
-        if broad_band_disp_ok and not skip_HID:
+        if broad_band_disp_ok and not skip_HID and not len(global_plotted_datetime)==0:
 
             if not display_broad_hid_INT:
                 st.info('Toggle INTEGRAL broad band HID option in the sidebar to display.')

@@ -30,6 +30,8 @@ from matplotlib.gridspec import GridSpec
 
 from matplotlib.lines import Line2D
 from matplotlib.ticker import Locator,MaxNLocator,AutoMinorLocator
+from scipy.stats import norm as scinorm
+
 import matplotlib.dates as mdates
 
 #pickle for the rxte lightcurve dictionnary
@@ -74,14 +76,33 @@ from general_tools import ravel_ragged,MinorSymLogLocator,rescale_log,expand_epo
 from astroquery.vizier import Vizier
 
 
-telescope_list=('XMM','Chandra','NICER','Suzaku','NuSTAR','Swift')
+telescope_list=('Chandra','NICER','NuSTAR','Suzaku','XMM','Swift')
 
-telescope_colors={'XMM':'red',
-                  'Chandra':'blue',
-                  'NICER':'green',
-                  'Suzaku':'magenta',
-                  'NuSTAR':'orange',
-                  'Swift':'cyan'}
+#making a "fake" instrument (colorblind friendly) colormap to keep individual identification
+color_cmap_instru = mpl.cm.plasma
+
+norm_pow=1.
+c_norm_instru = mpl.colors.Normalize(vmin=0.,
+                              vmax=len(telescope_list)**(norm_pow)-1.5)
+
+colors_func_instru = mpl.cm.ScalarMappable(norm=c_norm_instru, cmap=color_cmap_instru)
+
+# computing the actual color array for the detections
+telescope_colors={'Chandra':colors_func_instru.to_rgba(0),
+                  'NICER':colors_func_instru.to_rgba(1),
+                  'NuSTAR':colors_func_instru.to_rgba(2**(norm_pow)),
+                  'Suzaku':colors_func_instru.to_rgba(3**(norm_pow)),
+                   'XMM':colors_func_instru.to_rgba(4**(norm_pow)),
+                  'Swift':colors_func_instru.to_rgba(5**(norm_pow))}
+
+
+#previous non colorblind-friendly mode
+# telescope_colors={'XMM':'red',
+#                   'Chandra':'blue',
+#                   'NICER':'green',
+#                   'Suzaku':'magenta',
+#                   'NuSTAR':'orange',
+#                   'Swift':'cyan'}
 
 #inclination, mass and other values
 
@@ -226,11 +247,58 @@ min_nh=5e-1
 def corr_factor_lbat(lbat_init):
 
     '''
+
+    TAILORED FOR 4U1630-47 !
+
     without uncertainties for now. Fetched manually from the linear regression
     requires lbat_init in Eddington units to work
     '''
 
     return (lbat_init/10**(1e-4))**(1.01)*10**(-0.77)
+
+def int_rate_to_flux(int_rate,int_rate_err=None,error_percent=68.26):
+
+    '''
+
+    TAILORED FOR 4U1630-47 !
+
+    Without uncertainties for now. Fetched manually from the linear regression.
+    returns FLUX values.
+
+    The input is in 30-50keV, and the output in 15-50keV (since the goal is to convert \
+    the native ISGRI rate into a 15-50 keV flux usable direcly in the broad HID
+
+    Note that the errors on the regression parameters are extendable to different values
+    (mainly because the regression itself assumes gaussian perturbations on the values themselves)
+    assuming a gaussian evolution (this works pretty well in practice)
+
+    '''
+
+    #this gives the conversion for the gaussian error parameters
+    err_conv=scinorm.ppf((1 + error_percent/100) / 2)
+
+
+    int_flux_main=(int_rate / 10) ** (1.16) * 10 ** (-8.84)
+
+    if int_rate_err is not None:
+        assert np.array(int_rate_err).size in [1,2], 'This function only accepts individual values'
+        if np.array(int_rate_err).size==1:
+            int_rate_err_use=[int_rate_err,int_rate_err]
+        else:
+            int_rate_err_use=int_rate_err
+
+        int_rate_low=int_rate-int_rate_err_use[0]
+        int_rate_high = int_rate + int_rate_err_use[1]
+
+        #note here that we test both sides of the uncertainty for the power to make things simpler
+        int_flux_low=min((int_rate_low/10)**(1.16+0.14*err_conv),(int_rate_low/10)**(1.16-0.15*err_conv))\
+                     *10**(-(8.84+0.04*err_conv))
+        int_flux_high=max((int_rate_high/10)**(1.16+0.14*err_conv),(int_rate_high/10)**(1.16-0.15*err_conv))\
+                      *10**(-(8.84-0.04*err_conv))
+
+        return int_flux_main,int_flux_main-int_flux_low,int_flux_high-int_flux_main
+    else:
+        return int_flux_main
 
 def bat_rate_to_gamma(rate):
     '''
@@ -582,13 +650,15 @@ def plot_lightcurve(dict_linevis,ctl_maxi_df,ctl_maxi_simbad,name,ctl_bat_df,ctl
     str_binning_monit=' daily' if binning=='day' else ' individual orbit'
     str_binning_int=' revolution' if binning=='revol' else 'science window ' if binning=='sw' else ''
     #main axis definitions
-    ax_lc.set_xlabel('Time')
+    # ax_lc.set_xlabel('Time')
     if mode=='full':
-        ax_lc.set_title(name[0]+str_binning_monit+' broad band monitoring')
-        
-        maxi_y_str='MAXI '+maxi_lc_df.columns[1] if maxi_lc_df is not None else ''
-        rxte_y_str='RXTE '+rxte_lc_df.columns[1]+'/25' if rxte_lc_df is not None else ''
-        ax_lc.set_ylabel(maxi_y_str+('/' if maxi_lc_df is not None and rxte_lc_df is not None else '')+rxte_y_str)
+        # ax_lc.set_title(name[0]+str_binning_monit+' broad band monitoring')
+
+        # full name is maxi_lc_df.columns[1]
+        maxi_y_str='MAXI 2-20 keV rate' if maxi_lc_df is not None else ''
+        #full name is rxte_lc_df.columns[1]
+        rxte_y_str='RXTE 1.5-12 keV rate/'+str(20 if name[0]=='4U1630-47' else 25) if rxte_lc_df is not None else ''
+        ax_lc.set_ylabel(maxi_y_str+(' | ' if maxi_lc_df is not None and rxte_lc_df is not None else '')+rxte_y_str)
 
     elif mode=='HR_soft':
         ax_lc.set_title(name[0]+str_binning_monit+' Soft Hardness Ratio monitoring')
@@ -632,7 +702,8 @@ def plot_lightcurve(dict_linevis,ctl_maxi_df,ctl_maxi_simbad,name,ctl_bat_df,ctl
             
             #plotting the full lightcurve
             #note: the conversion factor is here to convert(ish) the rxte counts into maxi counts
-            ax_lc.errorbar(num_rxte_dates,rxte_lc_df[rxte_lc_df.columns[1]]/25,xerr=0.5,yerr=rxte_lc_df[rxte_lc_df.columns[2]]/25,
+            ax_lc.errorbar(num_rxte_dates,rxte_lc_df[rxte_lc_df.columns[1]]/(20 if name[0]=='4U1630-47' else 25) ,
+                           xerr=0.5,yerr=rxte_lc_df[rxte_lc_df.columns[2]]/(20 if name[0]=='4U1630-47' else 25),
                         linestyle='',color='sienna',marker='',elinewidth=0.5,label='RXTE standard counts')
             ax_lc.set_ylim(0.1,ax_lc.get_ylim()[1]*1.1)
     
@@ -847,8 +918,8 @@ def plot_lightcurve(dict_linevis,ctl_maxi_df,ctl_maxi_simbad,name,ctl_bat_df,ctl
 
             # creating a different variable for the times (centered on the middle of the revolution)
             integral_revol_dates=[(Time(elem)+TimeDelta(1.5,format='jd')).datetime\
-                                  for elem in fit_integral_revol_df['ISOT']]
-            num_int_revol_dates=np.array([mdates.date2num(elem) for elem in integral_revol_dates])[mask_int_ok]
+                                  for elem in fit_integral_revol_df['ISOT'][mask_int_ok]]
+            num_int_revol_dates=np.array([mdates.date2num(elem) for elem in integral_revol_dates])
 
             ax_lc.set_yscale('symlog', linthresh=float('%.1e'%(1e-10*dist_factor)), linscale=0.1)
             ax_lc.yaxis.set_minor_locator(MinorSymLogLocator(linthresh=float('%.1e'%(1e-10*dist_factor))))
@@ -1010,7 +1081,13 @@ def plot_lightcurve(dict_linevis,ctl_maxi_df,ctl_maxi_simbad,name,ctl_bat_df,ctl
         #prettier but takes too much space
         # label.set(rotation=45, horizontalalignment='right')
 
-    ax_lc.legend(loc='upper left')
+    #contamination zone for 4U
+    if name[0]=='4U1630-47' and mode in ['full','HR_soft','HR_hard']:
+        conta_start=mdates.date2num(Time('2018-12-10').datetime)
+        conta_end=mdates.date2num(Time('2019-06-20').datetime)
+        plt.axvspan(xmin=conta_start,xmax=conta_end,color='grey',zorder=1000,alpha=0.3)
+
+    ax_lc.legend(loc='upper left',ncols=2)
 
     if superpose_ew:
         ax_lc_ew.legend(loc='upper right')
@@ -1311,7 +1388,7 @@ def obj_values(file_paths,E_factors,dict_linevis):
                             elem_fitmod=load_fitmod('/'.join(fitmod_path.split('/')[-2:]))
                         except:
                             breakpoint()
-                            print("if xspec is imported that shouldn't happen, need to investigate")
+                            print("if the pyxspec path is loaded that shouldn't happen, need to investigate")
 
                         from xspec import Xset
                         #we also need to restore the data to resave the fitmod afterwards
@@ -1924,34 +2001,26 @@ def values_manip(abslines_infos,dict_linevis,autofit_infos,lum_list_infos,mask_i
         return abslines_inf_line, abslines_inf_obj, abslines_plt, abslines_e, \
             lum_plt, hid_plt, incl_plt, width_plt, nh_plt, kt_plt
 
-def values_manip_high_E(lum_high_list,gamma_nthcomp_list):
+def values_manip_high_E(val_high_list):
 
     '''
-    transposing into plot-like structures with the uncertainty as first dimension,
+    transposing list like structures into plot-like structures with the uncertainty as first dimension,
     then objects, then observation
-
-    names should be updated because now it's used to transpose more stuff with the same structure
     '''
 
-    n_obj=len(lum_high_list)
-    lum_high_plot=np.array([None]*3)
-    gamma_nthcomp_plot=np.array([None]*3)
+    n_obj=len(val_high_list)
+    val_high_plot=np.array([None]*3)
 
     for i_incert in range(3):
         #this
-        lum_high_plot_incert=np.array([None]*n_obj)
-        gamma_nthcomp_plot_incert=np.array([None]*n_obj)
+        val_high_plot_incert=np.array([None]*n_obj)
         for i_obj in range(n_obj):
-            lum_high_plot_incert[i_obj]=lum_high_list[i_obj].T[i_incert]
-            gamma_nthcomp_plot_incert[i_obj] = gamma_nthcomp_list[i_obj].T[i_incert]
+            val_high_plot_incert[i_obj]=val_high_list[i_obj].T[i_incert]
 
-        lum_high_plot[i_incert]=lum_high_plot_incert
-        gamma_nthcomp_plot[i_incert]=gamma_nthcomp_plot_incert
+        val_high_plot[i_incert]=val_high_plot_incert
 
-    lum_high_plot=np.array([[subelem for subelem in elem] for elem in lum_high_plot],dtype=object)
-    gamma_nthcomp_plot=np.array([[subelem for subelem in elem] for elem in gamma_nthcomp_plot],dtype=object)
-
-    return lum_high_plot,gamma_nthcomp_plot
+    val_high_plot=np.array([[subelem for subelem in elem] for elem in val_high_plot],dtype=object)
+    return val_high_plot
 
 def hid_graph(ax_hid,dict_linevis,
               display_single=False,display_nondet=True,display_upper=False,
@@ -1977,7 +2046,8 @@ def hid_graph(ax_hid,dict_linevis,
     abslines_infos_perobj=dict_linevis['abslines_infos_perobj']
     abslines_plot=dict_linevis['abslines_plot']
     nh_plot=dict_linevis['nh_plot']
-    kt_plot=dict_linevis['kt_plot']
+    kt_plot_restrict = dict_linevis['Tin_diskbb_plot_restrict']
+    kt_plot=dict_linevis['Tin_diskbb_plot']
     hid_plot=dict_linevis['hid_plot']
     incl_plot=dict_linevis['incl_plot']
     mask_obj=dict_linevis['mask_obj']
@@ -2012,10 +2082,9 @@ def hid_graph(ax_hid,dict_linevis,
         catal_bat_simbad=dict_linevis['catal_bat_simbad']
         sign_broad_hid_BAT=dict_linevis['sign_broad_hid_BAT']
 
-    if broad_mode=='INTEGRAL' or restrict_match_INT:
+    if restrict_match_INT:
         lc_int_sw_dict = dict_linevis['lc_int_sw_dict']
         fit_int_revol_dict = dict_linevis['fit_int_revol_dict']
-        HID_INT_band=dict_linevis['HID_INT_band']
 
     #note that these one only get the significant BAT detections so no need to refilter
     lum_high_1sig_plot_restrict=dict_linevis['lum_high_1sig_plot_restrict']
@@ -2048,88 +2117,6 @@ def hid_graph(ax_hid,dict_linevis,
 
         #computing which observations are within the timeframe of an integral revolution (assuming 3days-long)
         mask_withtime_INT=[min((int_lc_mjd-elem)[(int_lc_mjd-elem)>=0])<3 for elem in obs_dates[0]]
-
-    if broad_mode=='INTEGRAL':
-
-        HR_broad_6_10=HR_broad_bands=='([6-10]+[BAND])/[3-6]'
-        lum_broad_soft=lum_broad_bands=='[3-10]+[BAND]'
-
-        ax_hid.set_yscale('log')
-        if not HR_broad_6_10:
-            broad_x_linthresh=1e-4
-            ax_hid.set_xscale('symlog', linthresh=broad_x_linthresh, linscale=0.1)
-        else:
-            broad_x_linthresh=0
-            ax_hid.set_xscale('log')
-
-        ax_hid.xaxis.set_minor_locator(MinorSymLogLocator(linthresh=broad_x_linthresh))
-
-        ax_hid.set_xlabel('Hardness Ratio in '+HR_broad_bands+' keV bands)')
-        ax_hid.set_ylabel(r'Luminosity in the '+lum_broad_bands+' keV band in (L/L$_{Edd}$) units')
-
-
-        #currently limited to 4U1630-47
-        int_lc_df = fit_int_revol_dict['4U1630-47']
-
-        int_lc_mjd=np.array([Time(elem).mjd.astype(float) for elem in int_lc_df['ISOT']])
-
-        #the negative values removal is just a precaution
-        if HID_INT_band=='30-50':
-            int_lc_lum = np.array([int_lc_df[int_lc_df.columns[-6]],
-                                   int_lc_df[int_lc_df.columns[-5]]]).clip(0).T \
-                                * Edd_factor_restrict
-        elif HID_INT_band=='50-100':
-            int_lc_lum = np.array([int_lc_df[int_lc_df.columns[-4]],
-                                   int_lc_df[int_lc_df.columns[-3]]]).clip(0).T \
-                                * Edd_factor_restrict
-        elif HID_INT_band=='30-100':
-            int_lc_lum = np.array([int_lc_df[int_lc_df.columns[-6]]+int_lc_df[int_lc_df.columns[-4]],
-                                   ((int_lc_df[int_lc_df.columns[-5]]).clip(0)**2+\
-                                    (int_lc_df[int_lc_df.columns[-3]]).clip(0)**2)**(1/2)]).clip(0).T \
-                                * Edd_factor_restrict
-
-        obs_dates=Time(np.array([date_list[mask_obj][0] for i in range(sum(mask_lines))]).astype(str)).mjd.astype(float)
-
-        #computing which observations are within the timeframe of an integral revolution (assuming 3days-long)
-        mask_withtime_INT=[False if sum((elem-int_lc_mjd) >= 0)==0 else \
-                         min(( elem - int_lc_mjd)[(elem - int_lc_mjd) >= 0]) < 3 for elem in obs_dates[0]]
-
-        #matching each observation to the closest integral revolution that started before it
-        closest_time_INT=np.array([np.where((int_lc_mjd-elem_date)<0,10000,(int_lc_mjd-elem_date)).argsort()[0]\
-                          for elem_date in obs_dates[0]])
-
-        #getting an array with the bat flux of each observation date
-        lum_broad_single=np.array([np.array([0,0]) if not mask_withtime_INT[i_obs] else\
-                                   int_lc_lum[closest_time_INT[i_obs]]\
-                                  for i_obs in range(len(obs_dates[0]))]).T
-
-        #this is the quantity that needs to be added if the numerator is broad+6-10 and not just broad
-        hid_broad_add=lum_plot[2][0][mask_obj][0].astype(float) if HR_broad_6_10 else 0
-
-        hid_broad_vals = (lum_broad_single[0] + hid_broad_add)\
-                         / lum_plot[1][0][mask_obj][0].astype(float)
-
-        #here the numerator is the quadratic uncertainty addition and then the fraction is for the quadratic ratio uncertainty
-        #composition
-        hid_broad_err= np.array([((((lum_plot[2][i][mask_obj][0] if HR_broad_6_10 else 0)**2+lum_broad_single[1]**2)**(1/2)\
-                           /(lum_broad_single[0]+hid_broad_add)) ** 2 + \
-                                (lum_plot[1][i][mask_obj][0] / lum_plot[1][0][mask_obj][0]) ** 2) ** (1 / 2) * hid_broad_vals\
-                               for i in [1, 2]])
-
-        #overwriting hid_plot's individual elements because overwriting the full obs array doesn't work
-        for i_obs in range(len(obs_dates[0])):
-            hid_plot_use[0][0][mask_obj][0][i_obs] = hid_broad_vals[i_obs]
-            hid_plot_use[0][1][mask_obj][0][i_obs] = hid_broad_err[0][i_obs]
-            hid_plot_use[0][2][mask_obj][0][i_obs] = hid_broad_err[1][i_obs]
-
-
-            if lum_broad_soft:
-                hid_plot_use[1][0][mask_obj][0][i_obs] += lum_broad_single[0][i_obs]
-
-                hid_plot_use[1][1][mask_obj][0][i_obs] = ((hid_plot_use[1][1][mask_obj][0][i_obs])**2+ \
-                                                         (lum_broad_single[1][i_obs])**2)**(1/2)
-                hid_plot_use[1][2][mask_obj][0][i_obs] = ((hid_plot_use[1][2][mask_obj][0][i_obs])**2+ \
-                                                         (lum_broad_single[1][i_obs])**2)**(1/2)
 
     elif broad_mode=='BAT':
 
@@ -2212,7 +2199,7 @@ def hid_graph(ax_hid,dict_linevis,
         #lum_high_plot_restrict
         lum_broad_single=np.array([elem for elem in lum_high_1sig_plot_restrict.T[0]])
 
-        #mask to highlight non-significant BAT detections
+        #mask to highlight non-significant high Energy detections
         mask_sign_high_E=~np.isnan(np.array([elem for elem in lum_high_sign_plot_restrict.T[0]])[0])
 
         lum_broad_single=lum_broad_single.T
@@ -2261,23 +2248,6 @@ def hid_graph(ax_hid,dict_linevis,
             hid_plot_use[1][2][i_obj_single] = ((hid_plot_use[1][2][i_obj_single]) ** 2 + \
                                                       (lum_broad_single[1]) ** 2) ** (1 / 2)
 
-        # for i_obs in range(len(obs_dates[0])):
-        #
-        #     hid_plot_use[0][0][mask_obj][0][i_obs] = hid_broad_vals[i_obs]
-        #     hid_plot_use[0][1][mask_obj][0][i_obs] = hid_broad_err[0][i_obs]
-        #     hid_plot_use[0][2][mask_obj][0][i_obs] = hid_broad_err[1][i_obs]
-        #
-        #
-        #     breakpoint()
-        #
-        #     if lum_broad_soft:
-        #         hid_plot_use[1][0][mask_obj][0][i_obs] += lum_broad_single[0][i_obs]
-        #
-        #         hid_plot_use[1][1][mask_obj][0][i_obs] = ((hid_plot_use[1][1][mask_obj][0][i_obs])**2+ \
-        #                                                  (lum_broad_single[1][i_obs])**2)**(1/2)
-        #         hid_plot_use[1][2][mask_obj][0][i_obs] = ((hid_plot_use[1][2][mask_obj][0][i_obs])**2+ \
-        #                                                  (lum_broad_single[1][i_obs])**2)**(1/2)
-
     else:
 
         # log x scale for an easier comparison with Ponti diagrams
@@ -2306,9 +2276,6 @@ def hid_graph(ax_hid,dict_linevis,
     nh_plot_restrict = deepcopy(nh_plot)
 
     nh_plot_restrict = nh_plot_restrict.T[mask_obj].T
-
-    kt_plot_restrict = deepcopy(kt_plot)
-    kt_plot_restrict = kt_plot_restrict.T[mask_obj].T
 
     if len(mask_obj) == 1 and np.ndim(hid_plot_use) == 4:
         hid_plot_restrict=hid_plot_use
@@ -2513,8 +2480,6 @@ def hid_graph(ax_hid,dict_linevis,
 
         if broad_mode=='BAT':
             mask_intime=(mask_intime) & mask_with_broad
-        if broad_mode=='INTEGRAL' or restrict_match_INT:
-            mask_intime = (mask_intime) & mask_withtime_INT
 
         # defining the mask for detections and non detection        
         mask_det = (abslines_obj[0][4][mask_lines] > 0.) & (mask_intime)
@@ -2963,7 +2928,7 @@ def hid_graph(ax_hid,dict_linevis,
         if broad_mode=='BAT':
             mask_intime=np.array([(elem) & mask_with_broad for elem in mask_intime])
             mask_intime_norepeat=(mask_intime_norepeat) & mask_with_broad
-        if broad_mode=='INTEGRAL' or restrict_match_INT:
+        if restrict_match_INT:
             mask_intime=np.array([(elem) & mask_withtime_INT for elem in mask_intime])
             mask_intime_norepeat=(mask_intime_norepeat) & mask_withtime_INT
 
@@ -3361,8 +3326,6 @@ def hid_graph(ax_hid,dict_linevis,
                 # vertical
                 ax_hid.axline((0.1, 1e-6), (0.1, 10), ls='--', color='grey')
 
-        elif broad_mode=='INTEGRAL':
-            pass
         else:
             # horizontal
             ax_hid.axline((0.01, 1e-2), (10, 1e-2), ls='--', color='grey')
@@ -3584,21 +3547,18 @@ def hid_graph(ax_hid,dict_linevis,
                                 0.125, 0.218), handleheight=4, handlelength=4, facecolor='None')
 
     if radio_info_cmap == 'Instrument':
-        instru_examples = np.array([Line2D([0], [0], marker=marker_abs, color='red', markeredgecolor='black',
-                                           markersize=(norm_s_lin * 5 ** norm_s_pow) ** (1 / 2), linestyle='None'),
-                                    Line2D([0], [0], marker=marker_abs, color='blue', markeredgecolor='black',
-                                           markersize=(norm_s_lin * 5 ** norm_s_pow) ** (1 / 2), linestyle='None'),
-                                    Line2D([0], [0], marker=marker_abs, color='green', markeredgecolor='black',
-                                           markersize=(norm_s_lin * 5 ** norm_s_pow) ** (1 / 2), linestyle='None'),
-                                    Line2D([0], [0], marker=marker_abs, color='magenta', markeredgecolor='black',
-                                           markersize=(norm_s_lin * 5 ** norm_s_pow) ** (1 / 2), linestyle='None'),
-                                    Line2D([0], [0], marker=marker_abs, color='orange', markeredgecolor='black',
-                                           markersize=(norm_s_lin * 5 ** norm_s_pow) ** (1 / 2), linestyle='None')])
+        instru_examples = np.array([Line2D([0], [0], marker=marker_abs, color=list(telescope_colors.values())[i],
+                                           markeredgecolor='black',
+                                           markersize=(norm_s_lin * 5 ** norm_s_pow) ** (1 / 2), linestyle='None')\
+                                    for i in range(len(telescope_list))])
 
-        instru_ind = [np.argwhere(np.array(telescope_list) == elem)[0][0] for elem in np.array(choice_telescope)]
+        telescope_choice_sort=np.array(choice_telescope)
+        telescope_choice_sort.sort()
+
+        instru_ind = [np.argwhere(np.array(telescope_list) == elem)[0][0] for elem in telescope_choice_sort]
 
         instru_legend = fig_hid.legend(handles=instru_examples[instru_ind].tolist(), loc='upper right',
-                                       labels=choice_telescope,
+                                       labels=telescope_choice_sort.tolist(),
                                        title=radio_info_cmap,
                                        bbox_to_anchor=(0.900, 0.88) if bigger_text and square_mode else (0.825, 0.918),
                                        handleheight=1, handlelength=4, facecolor='None')
@@ -3643,7 +3603,7 @@ def distrib_graph(data_perinfo,info,dict_linevis,data_ener=None,conf_thresh=0.99
     bins_bshift=dict_linevis['bins_bshift']
     bins_ener=dict_linevis['bins_ener']
     mask_obj=dict_linevis['mask_obj']
-    
+
     
     if streamlit:
         display_nonsign=dict_linevis['display_nonsign']
@@ -3654,12 +3614,13 @@ def distrib_graph(data_perinfo,info,dict_linevis,data_ener=None,conf_thresh=0.99
         width_plot_restrict=dict_linevis['width_plot_restrict']
         glob_col_source=dict_linevis['glob_col_source']
         cmap_color_det=dict_linevis['cmap_color_det']
+        split_dist_method=dict_linevis['split_dist_method']
     else:
         display_nonsign=True
         scale_log_eqw=False
         glob_col_source=False
         cmap_color_det=mpl.cm.plasma
-        
+        split_dist_method=False
         
     save_dir=dict_linevis['save_dir']
     save_str_prefix=dict_linevis['save_str_prefix']
@@ -3997,7 +3958,7 @@ def distrib_graph(data_perinfo,info,dict_linevis,data_ener=None,conf_thresh=0.99
 
                         try:
                             ax_hist.hist(hist_data_split,color=[telescope_colors[instru_unique[i_instru]] for i_instru in range(len(instru_unique))],
-                                      label=instru_unique,bins=hist_bins,rwidth=0.8,align='left')
+                                      label=instru_unique,bins=hist_bins,rwidth=0.8,align='left',stacked=not split_dist_method)
                         except:
                             breakpoint()
 
@@ -4107,6 +4068,7 @@ def correl_graph(data_perinfo,infos,data_ener,dict_linevis,mode='intrinsic',mode
 
 
         compute_regr=dict_linevis['compute_regr']
+        regr_pval_threshold=dict_linevis['regr_pval_threshold']
         restrict_comput_scatter=dict_linevis['restrict_comput_scatter']
         comput_scatter_lims=dict_linevis['comput_scatter_lims']
 
@@ -4173,7 +4135,7 @@ def correl_graph(data_perinfo,infos,data_ener,dict_linevis,mode='intrinsic',mode
 
     gamma_nthcomp_plot_restrict=dict_linevis['gamma_nthcomp_plot_restrict']
 
-    mask_added_BAT_sign=dict_linevis['mask_added_BAT_sign']
+    mask_added_regr_sign=dict_linevis['mask_added_regr_sign']
 
     mask_lum_high_valid=~np.isnan(ravel_ragged(lum_high_sign_plot_restrict[0]))
 
@@ -4283,7 +4245,7 @@ def correl_graph(data_perinfo,infos,data_ener,dict_linevis,mode='intrinsic',mode
 
     for i in graph_range:
 
-        figsize_val=(8.+(-0.5 if mode!='observation' else 0),5.5) if color_scatter in ['Time','HR','width','nH'] else (6,6)
+        figsize_val=(8.+(-0.5 if mode!='observation' else 0),5.5) if color_scatter in ['Time','HR','width','nH','L_3-10'] else (6,6)
 
         # if color_scatter in ['Time','HR','width','nH']:
         #
@@ -4395,6 +4357,7 @@ def correl_graph(data_perinfo,infos,data_ener,dict_linevis,mode='intrinsic',mode
             ind_ratio=ind_infos if mode=='eqwratio' else ratio_indexes_x
                 
             #in eqw ratio mode we need to make sure than both lines are defined for each point so we must combine the mask of both lines
+
             bool_sign_x=ravel_ragged(data_perinfo[4][0][ind_ratio[0]]).astype(float)
             bool_sign_y=ravel_ragged(data_perinfo[4][0][ind_ratio[1]]).astype(float)
 
@@ -4435,8 +4398,8 @@ def correl_graph(data_perinfo,infos,data_ener,dict_linevis,mode='intrinsic',mode
                 x_data,y_data=[np.array([ravel_ragged(data_plot[0][0][ind_infos[i]])[bool_det][bool_sign],
                                          ravel_ragged(data_plot[0][0][ind_infos[i]])[bool_det][~bool_sign]],dtype=object) for i in [0,1]]
 
-                mask_added_BAT_sign_use=None if mask_added_BAT_sign is not None else \
-                                        mask_added_BAT_sign[bool_det][bool_sign]
+                mask_added_regr_sign_use=None if mask_added_regr_sign is None else \
+                                        mask_added_regr_sign[bool_det][bool_sign]
 
 
                 #same thing for the uncertainties                
@@ -4548,22 +4511,19 @@ def correl_graph(data_perinfo,infos,data_ener,dict_linevis,mode='intrinsic',mode
                                      ravel_ragged(y_data_repeat[ratio_indexes_x[0]])[bool_det_ratio][~bool_sign_ratio]],
                                     dtype=object)
 
-                    mask_added_BAT_sign_use = None if mask_added_BAT_sign is not None else \
-                        mask_added_BAT_sign[bool_det_ratio][bool_sign_ratio]
+                    mask_added_regr_sign_use = None if mask_added_regr_sign is None else \
+                        mask_added_regr_sign[bool_det_ratio][bool_sign_ratio]
                 else:
                     #this is not implemented currently
 
-                    try:
-                        y_data=np.array([ravel_ragged(y_data_repeat)[bool_det][bool_sign],
-                                     ravel_ragged(y_data_repeat)[bool_det][~bool_sign]],
-                                    dtype=object)
+                    y_data=np.array([ravel_ragged(y_data_repeat)[bool_det][bool_sign],
+                                 ravel_ragged(y_data_repeat)[bool_det][~bool_sign]],
+                                dtype=object)
 
-                        mask_added_BAT_sign_use = None if mask_added_BAT_sign is not None else \
-                            ravel_ragged([mask_added_BAT_sign \
-                                            for repeater in (i if type(i)==range else [i])])[bool_det][bool_sign]
-                    except:
-                        breakpoint()
-                        pass
+                    mask_added_regr_sign_use = None if mask_added_regr_sign is None else \
+                        ravel_ragged([mask_added_regr_sign \
+                                        for repeater in (i if type(i)==range else [i])])[bool_det][bool_sign]
+
 
             elif mode=='source':
                 y_data_repeat=np.array([data_plot[1][i_obj][0] for repeater in (i if type(i)==range else [i])\
@@ -5036,9 +4996,10 @@ def correl_graph(data_perinfo,infos,data_ener,dict_linevis,mode='intrinsic',mode
             #here we can keep a simple labeling
             label_dict=telescope_colors
             
-        elif color_scatter in ['Time','HR','width','nH']:
+        elif color_scatter in ['Time','HR','width','nH','L_3-10']:
             
-            color_var_arr=date_list if color_scatter=='Time' else hid_plot[0][0] if color_scatter=='HR'\
+            color_var_arr=date_list if color_scatter=='Time'\
+                else hid_plot[0][0] if color_scatter=='HR' else hid_plot[1][0] if color_scatter=='L_3-10'\
                 else width_plot_restrict[0] if color_scatter=='width' else nh_plot_restrict[0]
                             
             #there's no need to repeat in eqwratio since the masks are computed for a single line                
@@ -5104,7 +5065,7 @@ def correl_graph(data_perinfo,infos,data_ener,dict_linevis,mode='intrinsic',mode
                 c_norm = mpl.colors.Normalize(vmin=min(ravel_ragged(c_arr_tot))*0.9,
                                               vmax=max(ravel_ragged(c_arr_tot))*1.1)
             else:
-                if color_scatter in ['HR','nH']:
+                if color_scatter in ['HR','nH','L_3-10']:
                     c_norm=colors.LogNorm(vmin=min(ravel_ragged(c_arr_tot)),
                                           vmax=max(ravel_ragged(c_arr_tot)))
                 else:
@@ -5322,15 +5283,15 @@ def correl_graph(data_perinfo,infos,data_ener,dict_linevis,mode='intrinsic',mode
                     if type(elem_children)==mpl.collections.LineCollection:
                         elem_children.set_colors(color_arr[s][~(linked_mask[s].astype(bool))])
 
-                        #highlighting BAT projected luminosities without having to worry about how the graphs
+                        #highlighting BAT/INT projected luminosities without having to worry about how the graphs
                         #were created
-                        if mode=='observ' and ind_infos[1] in [4,5] and mask_added_BAT_sign_use is not None:
+                        if mode=='observ' and ind_infos[1] in [4,5] and mask_added_regr_sign_use is not None:
 
-                            ls_dist=np.array([np.where(bool,'--','-') for bool in mask_added_BAT_sign_use])
+                            ls_dist=np.array([np.where(bool,'--','-') for bool in mask_added_regr_sign_use])
 
                             #older version
                             # ls_dist=np.array([np.where((elem in bat_lc_lum_scat.T[0] if ind_infos[1]==4 else bool),'--','-')\
-                            #                   for elem,bool in zip(y_data[s],mask_added_BAT_sign_use)])
+                            #                   for elem,bool in zip(y_data[s],mask_added_regr_sign_use)])
 
                             ls_dist = ls_dist.tolist()
 
@@ -5384,7 +5345,7 @@ def correl_graph(data_perinfo,infos,data_ener,dict_linevis,mode='intrinsic',mode
                     
                     elem_children.set_colors(color_arr[s][(linked_mask[s].astype(bool))])
                 
-            if color_scatter in ['Time','HR','width','nH']:
+            if color_scatter in ['Time','HR','width','nH','L_3-10']:
                 
                 #adding space for the colorbar
                 #breaks everything so not there currently
@@ -5432,7 +5393,7 @@ def correl_graph(data_perinfo,infos,data_ener,dict_linevis,mode='intrinsic',mode
                     ####TODO: reintroduce cax to get constant ax size
                     test=plt.colorbar(scat_list[0],ticks=mdates.AutoDateLocator(),format=date_format)
 
-                elif color_scatter in ['HR','width','nH']:
+                elif color_scatter in ['HR','width','nH','L_3-10']:
 
                     #creating the colormap (we add a bottom extension for nH to indicate the values cut)
                     test=plt.colorbar(scat_list[0],
@@ -5449,7 +5410,7 @@ def correl_graph(data_perinfo,infos,data_ener,dict_linevis,mode='intrinsic',mode
         
                         #creating a mask for the points of the right color
                         if color_scatter=='Instrument':
-                            color_mask=[elem==label_dict[color_label] for elem in color_arr[s][~(linked_mask[s].astype(bool))]]
+                            color_mask=[(elem==label_dict[color_label]).all() for elem in color_arr[s][~(linked_mask[s].astype(bool))]]
                             color_mask_linked=[elem==label_dict[color_label] for elem in color_arr[s][(linked_mask[s].astype(bool))]]
                                 
                         #same idea but here since the color is an RGB tuple we need to convert the element before the comparison
@@ -5474,15 +5435,15 @@ def correl_graph(data_perinfo,infos,data_ener,dict_linevis,mode='intrinsic',mode
                         if uplims_mask is None:
 
                             #adding the marker color change for the BAT infered obs
-                            if mode == 'observ' and ind_infos[1] in [4,5] and mask_added_BAT_sign_use is not None:
+                            if mode == 'observ' and ind_infos[1] in [4,5] and mask_added_regr_sign_use is not None:
 
-                                facecol_adjust_mask=mask_added_BAT_sign_use[color_mask]
+                                facecol_adjust_mask=mask_added_regr_sign_use[color_mask]
 
                                 #older version
                                 # facecol_adjust_mask = np.array([(elem in bat_lc_lum_scat.T[0]) if ind_infos[1]==4\
                                 #                                 else bool\
                                 #                     for elem,bool in zip(y_data[s][color_mask],
-                                #                                          mask_added_BAT_sign_use[color_mask])])
+                                #                                          mask_added_regr_sign_use[color_mask])])
 
                                 for id_obs in range(len(y_data[s][color_mask])):
                                     ax_scat.scatter(
@@ -5514,11 +5475,11 @@ def correl_graph(data_perinfo,infos,data_ener,dict_linevis,mode='intrinsic',mode
                                               alpha=1,zorder=1)
                             
                             else:
-                                
                                 ax_scat.scatter(
-                                    x_data[s].astype(float)[~(linked_mask[s].astype(bool))][color_mask],
-                                    y_data[s].astype(float)[~(linked_mask[s].astype(bool))][color_mask],
-                                          color=label_dict[color_label],label=color_label,marker='D',alpha=1,zorder=1)
+                                x_data[s].astype(float)[~(linked_mask[s].astype(bool))][color_mask],
+                                y_data[s].astype(float)[~(linked_mask[s].astype(bool))][color_mask],
+                                      color=label_dict[color_label],label=color_label,marker='D',alpha=1,zorder=1)
+
                         else:
                             ax_scat.scatter(
                                 x_data[s].astype(float)[~(linked_mask[s].astype(bool))][~uplims_mask][np.array(color_mask)[~uplims_mask]],
@@ -5629,7 +5590,7 @@ def correl_graph(data_perinfo,infos,data_ener,dict_linevis,mode='intrinsic',mode
             x_error_sign_T = None if x_error is None else np.array([elem for elem in x_error[0]]).T[restrict_comput_mask]
             y_error_sign_T = None if y_error is None else np.array([elem for elem in y_error[0]]).T[restrict_comput_mask]
 
-            # note: general p-score conversion: 1/norm.ppf((1 + error_percent/100) / 2)
+            # note: general p-score conversion: 1/scinorm.ppf((1 + error_percent/100) / 2)
 
             if display_pearson:
                 r_pearson = np.array(
@@ -5680,7 +5641,7 @@ def correl_graph(data_perinfo,infos,data_ener,dict_linevis,mode='intrinsic',mode
 
             legend_title += ''
 
-        if compute_regr and compute_correl and r_spearman[1][0] < 1e-5:
+        if compute_regr and compute_correl and r_spearman[1][0] < regr_pval_threshold:
 
             # note: doesn't consider non-significant detections
 
@@ -5694,14 +5655,14 @@ def correl_graph(data_perinfo,infos,data_ener,dict_linevis,mode='intrinsic',mode
             # since we can't easily change the lin to log type of the axes, we recreate a linear
             with st.spinner('Computing linear regrs'):
                 lmplot_uncert_a(ax_scat, x_data_regr, y_data_regr, x_err_regr, y_err_regr, percent=90,
-                                nsim=1000, return_linreg=False,
+                                nsim=2000, return_linreg=False,percent_regions=[68,95,99.7],
                                 error_percent=90,
-                                intercept_pos='auto',
+                                intercept_pos='auto',inter_color=['lightgrey','silver','darkgrey'],
                                 infer_log_scale=True, xbounds=plt.xlim(), ybounds=plt.ylim(),
                                 line_color='black')
 
         #### legend display
-        if show_linked or (compute_correl and mode!='source' and len(x_data[0])>1 and not time_mode) or color_scatter not in ['Time','HR','width','nH',None]:
+        if show_linked or (compute_correl and mode!='source' and len(x_data[0])>1 and not time_mode) or color_scatter not in ['Time','HR','width','nH','L_3-10',None]:
             
             scat_legend=ax_scat.legend(fontsize=9 if infos=='eqw_width' and display_th_width_ew else 10,title=legend_title,
                                    ncol=2 if display_th_width_ew and infos=='eqw_width' else 1,loc='upper right' if not ratio_mode else 'upper right')

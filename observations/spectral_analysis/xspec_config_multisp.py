@@ -81,6 +81,13 @@ xspec_multmods=\
      gsmooth    kerrconv      rdblur       simpl    crabcorr
 '''.split()
 
+def is_abs(comp_split):
+    '''
+    Rule for defining standard absorption components in the model logic
+    '''
+
+    return ('abs' in comp_split and comp_split!='gabs') or 'TB' in comp_split\
+                or 'tbnew' in comp_split or 'tbnew_gas' in comp_split
 xspec_globcomps=\
 '''
 constant    crabcorr
@@ -94,6 +101,8 @@ xcolors_grp=['black','red','limegreen','blue','cyan','purple','yellow',
              'black','red','limegreen','blue','cyan','purple','yellow',
              'black','red','limegreen','blue','cyan','purple','yellow',
              'black','red','limegreen','blue','cyan','purple','yellow']
+
+xscat_pos_dict={'4U1630':0.9}
 
 
 def ignore_data_indiv(e_low_groups,e_high_groups,reset=False,sat_low_groups=None,sat_high_groups=None,
@@ -590,7 +599,7 @@ def save_broad_SED(path=None,e_low=0.1,e_high=100,nbins=1e3,retain_session=False
     if path is not None:
         np.savetxt(path, save_arr, header='save of '+cleaned_expression+' with '+str(int(nbins))+
                                           ' log bins in the [%.2e'%e_low+',%.2e'%e_high+'] keV band'+
-                                          '\n'+data_groups_str+'\nnu\tnuErr\tLnu\nHz\tHz\terg/s/Hz',
+                                          '\n'+data_groups_str+'\nnu (Hz) \tnuErr (Hz) \tLnu (erg/s/Hz)',
                    delimiter=' ')
     else:
         return save_arr
@@ -1001,6 +1010,10 @@ def addcomp(compname,position='last',endmult=None,return_pos=False,modclass=AllM
                             NOTE: assumes that all currently existing absorption and edge components are at the
                             beginning of the model
 
+    Dust scattering
+        -globOBJNAME_xscat: scattering component linked with existing absorption if any
+                            regions extraction sizes extracted automatically
+                            position fixed to a specific value if the object name is in the xscat_pos_dict dictionnary
     Lines :
         use (Linetype)-(n/a/na/...)gaussian
 
@@ -1078,7 +1091,7 @@ def addcomp(compname,position='last',endmult=None,return_pos=False,modclass=AllM
     #dichotomy between custom models
 
     #global keyword for multiplicative components
-    if multipl and (comp_custom=='glob' or  comp_split=='crabcorr' and comp_custom in ['Suzaku']):
+    if multipl and ('glob' in comp_custom or (comp_split=='crabcorr' and comp_custom in ['Suzaku'])):
         start_position=1
         end_multipl=-1
         #staying inside the constant factor if there is one
@@ -1116,7 +1129,7 @@ def addcomp(compname,position='last',endmult=None,return_pos=False,modclass=AllM
                 start_position+=1
 
             #maintaining inside the absorption component if there are some
-            start_position+=sum([elem.startswith('TB') or ('abs' in elem and elem!='gabs')\
+            start_position+=sum([elem.startswith('TB') or ('abs' in elem and elem!='gabs') or ('scat' in elem)\
                                  for elem in main_compnames])
 
             #maiting inside the edge components if there are some
@@ -1482,8 +1495,9 @@ def addcomp(compname,position='last',endmult=None,return_pos=False,modclass=AllM
 
         xspec_model(gap_end-5).values=[1.7,0.017,1.,1.,3.5,3.5]
 
-    if 'abs' in comp_split and comp_custom is not None and 'glob' in comp_custom:
+    if 'abs' in comp_split and comp_split!='gabs' and comp_custom is not None and 'glob' in comp_custom:
         xspec_model(gap_end).values=[1.,0.01,0.,0.,100,100]
+
     '''
     linking the vashifts from the same group IN FORWARD ORDER ONLY
     In order to do that, we parse the existing components to see if there are already existing components from the same link group. If so, 
@@ -1604,6 +1618,21 @@ def addcomp(compname,position='last',endmult=None,return_pos=False,modclass=AllM
                     AllModels(i_grp)(gap_start).frozen=True
 
     '''
+    From here onwards we need to test the telescopes of the datagroups
+    '''
+
+    group_sp=[]
+    for i_grp in range(1, AllData.nGroups + 1):
+        if "xis0" in AllData(i_grp).fileName:
+            with fits.open(AllData(i_grp).fileName) as hdul:
+                if hdul[1].header['TELESCOP']!='SUZAKU':
+                    # replacing the merged fits file to not loose the headers
+                    group_sp += [AllData(i_grp).fileName.replace('xis0_xis2_xis3', 'xis1') \
+                        .replace('xis0_xis3', 'xis1')]
+        else:
+            group_sp += [AllData(i_grp).fileName]
+
+    '''
     Calibration specifics
     Done after the relink since they affect the linking between components
     '''
@@ -1618,7 +1647,7 @@ def addcomp(compname,position='last',endmult=None,return_pos=False,modclass=AllM
                 first_group_use=True
                 #using the edge only for NICER datagroups, otherwise freezing the normalization at 0
                 for i_grp in range(1,AllData.nGroups+1):
-                    with fits.open(AllData(i_grp).fileName) as hdul:
+                    with fits.open(group_sp[i_grp-1]) as hdul:
                         if 'TELESCOP' not in hdul[1].header or hdul[1].header['TELESCOP']!='NICER':
                             AllModels(i_grp)(gap_end).link=''
                             AllModels(i_grp)(gap_end).values=0
@@ -1646,7 +1675,7 @@ def addcomp(compname,position='last',endmult=None,return_pos=False,modclass=AllM
                 first_group_use=True
                 #using the edge only for NuSTAR datagroups, otherwise freezing the normalization at 0
                 for i_grp in range(1,AllData.nGroups+1):
-                    with fits.open(AllData(i_grp).fileName) as hdul:
+                    with fits.open(group_sp[i_grp-1]) as hdul:
                         if 'TELESCOP' not in hdul[1].header or hdul[1].header['TELESCOP']!='NuSTAR':
                             AllModels(i_grp)(gap_end).values=0
                             AllModels(i_grp)(gap_end).frozen=True
@@ -1664,6 +1693,37 @@ def addcomp(compname,position='last',endmult=None,return_pos=False,modclass=AllM
 
                             else:
                                 AllModels(i_grp)(gap_end).link=str(par_tolink)
+
+    '''Dust Scattering Halo model (xscat) specifics'''
+
+    if comp_split == 'xscat':
+
+        #linking the nH to the first absorption component found in the model
+        for comp in AllModels(1).componentNames:
+            if is_abs(comp.split('_')[0]):
+                abs_comp=getattr(AllModels(1),comp)
+                abs_comp_firstpar=getattr(abs_comp,abs_comp.parameterNames[0])
+                AllModels(1)(gap_end-3).link=str(abs_comp_firstpar.index)
+
+        # only doing presets if added with a prefix
+        if comp_custom != '':
+            for i_grp in range(1, AllData.nGroups + 1):
+                with fits.open(group_sp[i_grp-1]) as hdul:
+                    if 'TELESCOP' in hdul[1].header and hdul[1].header['TELESCOP'] == 'NICER':
+                        AllModels(i_grp)(gap_end-1).values=180
+
+                    #testing if the spectrum has an extraction region part in its fits
+                    if len(hdul)>=4 and 'REG' in hdul[3].name:
+
+                        #if yes, we fix the extraction radius to the one in the file using the infos stored
+                        first_reg_lastrad=hdul[3].data.R[0][-1]
+                        pix_to_arcsec=abs(hdul[3].columns['X'].coord_inc*3600)
+                        AllModels(i_grp)(gap_end-1).values=round(first_reg_lastrad*pix_to_arcsec)
+
+            #fixing the position if an object is specified
+            if comp_custom.replace('glob','') in list(xscat_pos_dict.keys()):
+                AllModels(1)(gap_end-2).values=xscat_pos_dict[comp_custom.replace('glob','')]
+                AllModels(1)(gap_end-2).frozen=True
 
     AllModels.show()
 
@@ -4404,7 +4464,7 @@ class fitcomp:
             comp_split=compname
 
         #defining if the component is an absorption component:
-        if 'abs' in comp_split or 'TB' in comp_split or 'tbnew' in comp_split or 'tbnew_gas' in comp_split:
+        if is_abs(comp_split):
             self.absorption=True
         else:
             self.absorption=False

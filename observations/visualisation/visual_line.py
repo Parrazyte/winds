@@ -700,6 +700,13 @@ if multi_obj:
         if len(mask_included_selection)==1:
             #this is necessary to avoid issues when choosing a single telescope with a single object
             mask_included_selection=mask_included_selection.astype(bool)
+
+#masking for restriction to single objects
+if display_single or display_multi:
+    mask_obj_select=np.array([elem in choice_source for elem in obj_list])
+else:
+    mask_obj_select=np.repeat(True,len(obj_list))
+
 ####Nickel display is turned off here
 with st.sidebar.expander('Absorption lines restriction'):
     selectbox_abstype=st.multiselect('',
@@ -779,6 +786,24 @@ if replace_high_e_multi:
             gamma_nthcomp_list[i_obj][i_epoch]=gamma_nthcomp_list_multi[i_obj][id_match_multi[0]]
             Tin_diskbb_list[i_obj][i_epoch]=Tin_diskbb_list_multi[i_obj][id_match_multi[0]]
 
+
+'''RESTRICTION MASKING AND TRANSPOSING'''
+
+n_obj_init=len(obj_list)
+
+# getting all the variations we need
+abslines_infos_perline, abslines_infos_perobj, abslines_plot, abslines_ener, \
+    lum_plot, hid_plot, incl_plot, width_plot, nh_plot, kt_plot,lum_list = values_manip(abslines_infos, dict_linevis,
+                                                                                autofit_infos,
+                                                                                lum_list,
+                                                                                mask_include=mask_included_selection)
+
+
+
+instru_list = np.array([instru_list[i_obj][mask_included_selection[i_obj]] for i_obj in range(n_obj_init)], dtype=object)
+observ_list = np.array([observ_list[i_obj][mask_included_selection[i_obj]] for i_obj in range(n_obj_init)], dtype=object)
+date_list = np.array([date_list[i_obj][mask_included_selection[i_obj]] for i_obj in range(n_obj_init)], dtype=object)
+
 ####Streamlit HID options
 st.sidebar.header('HID options')
 
@@ -800,11 +825,19 @@ else:
         
 HID_options_str=np.array(['Source','Inclination','Instrument','Time',
                           r'line $V_{shift}$',r'line $\Delta$C',r'line $EW$ ratio',
-                          r'$nH$',r'$T_{in}$'])
+                          r'$nH$',r'$T_{in}$','Custom: Line substructures'])
+radio_info_cmap_options=['Source','Inclination','Instrument','Time','Velocity shift','Del-C','EW ratio','nH','kT',
+                         'line_struct']
+
+#only putting the custom colormap for 4U for now
+if not (display_single and obj_list[mask_obj_select][0]=='4U1630-47'):
+    HID_options_str=HID_options_str[:-1]
+    radio_info_cmap_options=radio_info_cmap_options[:-1]
+
 radio_info_cmap_str=st.sidebar.radio('HID colormap',HID_options_str,index=0)
 
 radio_info_index=np.argwhere(HID_options_str==radio_info_cmap_str)[0][0]
-radio_info_cmap_options=['Source','Inclination','Instrument','Time','Velocity shift','Del-C','EW ratio','nH','kT']
+
 radio_info_cmap=radio_info_cmap_options[radio_info_index]
 
 if radio_info_cmap!='Source':
@@ -1014,24 +1047,6 @@ else:
     fig_hid,ax_hid=plt.subplots(1,1,figsize=(8,6))
 ax_hid.clear()
 
-
-'''RESTRICTION MASKING AND TRANSPOSING'''
-
-n_obj_init=len(obj_list)
-
-# getting all the variations we need
-abslines_infos_perline, abslines_infos_perobj, abslines_plot, abslines_ener, \
-    lum_plot, hid_plot, incl_plot, width_plot, nh_plot, kt_plot,lum_list = values_manip(abslines_infos, dict_linevis,
-                                                                                autofit_infos,
-                                                                                lum_list,
-                                                                                mask_include=mask_included_selection)
-
-
-
-instru_list = np.array([instru_list[i_obj][mask_included_selection[i_obj]] for i_obj in range(n_obj_init)], dtype=object)
-observ_list = np.array([observ_list[i_obj][mask_included_selection[i_obj]] for i_obj in range(n_obj_init)], dtype=object)
-date_list = np.array([date_list[i_obj][mask_included_selection[i_obj]] for i_obj in range(n_obj_init)], dtype=object)
-
 '''Dichotomy'''
 
 #some warnings to avoid crashes
@@ -1053,12 +1068,6 @@ if radio_info_cmap=='EW ratio' and len(eqw_ratio_ids)<2:
 
 #string of the colormap legend for the informations
 radio_info_label=['Velocity shift', r'$\Delta-C$', 'Equivalent width ratio']
-
-#masking for restriction to single objects
-if display_single or display_multi:
-    mask_obj_select=np.array([elem in choice_source for elem in obj_list])
-else:
-    mask_obj_select=np.repeat(True,len(obj_list))
 
 #masking the objects depending on inclination
 mask_inclin=[include_noinclin if elem not in incl_dic else getoverlap((incl_dic[elem][0]-incl_dic[elem][1],incl_dic[elem][0]+incl_dic[elem][2]),slider_inclin)>0 for elem in obj_list]
@@ -1379,6 +1388,7 @@ mask_added_regr_sign=(mask_added_INT_sign) | (mask_added_BAT_sign)
 
 dict_linevis['mask_added_regr_sign']=mask_added_regr_sign
 
+
 #for the HID
 lum_high_1sig_plot=values_manip_high_E(lum_high_1sig_list)
 gamma_nthcomp_plot=values_manip_high_E(gamma_nthcomp_list)
@@ -1438,6 +1448,39 @@ dict_linevis['hr_high_sign_plot_restrict']=hr_high_sign_plot_restrict
 dict_linevis['gamma_nthcomp_plot_restrict']=gamma_nthcomp_plot_restrict
 dict_linevis['Tin_diskbb_plot_restrict']=Tin_diskbb_plot_restrict
 dict_linevis['Tin_diskbb_plot']=Tin_diskbb_plot
+
+#custom colorbar for the line substructure and outliers (needs the high energy elements)
+
+diago_color=deepcopy(hid_plot[1][0])
+if display_single:
+    for i_obj in range(len(diago_color)):
+        if obj_list[i_obj]=='4U1630-47':
+            for i_obs in range(len(diago_color[i_obj])):
+
+                #first rule is for luminosity and HR + HR broad or det treshold to remove things
+                # that stay in intermediate states
+                # second rule is for a significant detection in suzeaku above 3.8 EWratio
+                is_line=(not np.isnan(abslines_plot[4][0][0][i_obj][i_obs])
+                                                 and abslines_plot[4][0][0][i_obj][i_obs]>slider_sign and \
+                                                 not np.isnan(abslines_plot[4][0][1][i_obj][i_obs]))
+
+                is_below_broad=not np.isnan(hr_high_plot_restrict[0][0][i_obs]) and hr_high_plot_restrict[0][0][i_obs]<0.1
+
+                is_substructure=(hid_plot[1][0][i_obj][i_obs]<4.2e-2 and hid_plot[1][0][i_obj][i_obs]>2e-2 \
+                                 and hid_plot[0][0][i_obj][i_obs]<0.35 and (is_line or is_below_broad)) or \
+                                                (((is_line and abslines_plot[4][0][1][i_obj][i_obs]>slider_sign) and \
+                                                 abslines_plot[0][0][1][i_obj][i_obs]\
+                                                 /abslines_plot[0][0][0][i_obj][i_obs]>3.8) and\
+                                                instru_list[i_obj][i_obs]=='Suzaku')
+                if is_substructure:
+                    diago_color[i_obj][i_obs]='orange'
+                #outlier SPL detection
+                elif abslines_plot[4][0][0][i_obj][i_obs]>slider_sign and hid_plot[1][0][i_obj][i_obs]>1e-1:
+                    diago_color[i_obj][i_obs]='blue'
+                else:
+                    diago_color[i_obj][i_obs]='grey'
+
+dict_linevis['diago_color']=diago_color
 
 
 #defining the dataset that will be used in the plots for the colormap limits
@@ -2697,9 +2740,14 @@ with st.sidebar.expander('Parameter analysis'):
     
     st.header('Visualisation')
     radio_color_scatter_options=np.array(['None','Source','Instrument','Time',
-                                          r'line $FWHM$',r'$nH$',r'$HR_{soft}$',r'$L_{3-10}$'])
+                                          r'line $FWHM$',r'$nH$',r'$HR_{soft}$',r'$L_{3-10}$',
+                                          'Custom: Line substructures'])
     color_scatter_options=['None','Source','Instrument','Time',
-                           'width','nH','HR','L_3-10']
+                           'width','nH','HR','L_3-10','line_struct']
+    if not (display_single and obj_list[mask_obj_select][0]=='4U1630-47'):
+        radio_color_scatter_options=radio_color_scatter_options[:-1]
+        color_scatter_options=color_scatter_options[:-1]
+
     radio_color_scatter=st.radio('Scatter plot color options:',radio_color_scatter_options,index=1)
     color_scatter= np.array(color_scatter_options)[radio_color_scatter_options==radio_color_scatter][0]
 
@@ -2778,8 +2826,7 @@ if display_param_withdet:
     dict_linevis['width_plot_restrict']=width_plot_restrict
     dict_linevis['hid_plot_restrict']=hid_plot_restrict
     dict_linevis['incl_plot_restrict']=incl_plot_restrict
-    
-    
+
 dict_linevis['display_pearson']=display_pearson
 dict_linevis['display_abserr_bshift']=display_abserr_bshift
 dict_linevis['display_std_abserr_bshift']=display_std_abserr_bshift

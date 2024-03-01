@@ -1807,7 +1807,7 @@ def values_manip(abslines_infos,dict_linevis,autofit_infos,lum_list_infos,mask_i
     
     '''
     in the plt form, the new order is:
-        -the info (5 rows, eqw/bshift/Del-C/sign/flux)
+        -the info (5 rows, ew/bshift/Del-C/sign/flux)
         -it's uncertainty (3 rows, main value/neg uncert/pos uncert,useless for the Del-C and sign)
         -each absorption line
         -the number of sources
@@ -2027,7 +2027,7 @@ def hid_graph(ax_hid,dict_linevis,
               cyclic_cmap_nondet=False,cyclic_cmap_det=False,cyclic_cmap=False,
               cmap_incl_type=None,cmap_incl_type_str=None,
               radio_info_label=None,
-              eqw_ratio_ids=None,
+              ew_ratio_ids=None,
               display_obj_zerodet=True,
               restrict_threshold=False,display_nonsign=False,display_central_abs=False,
               display_incl_inside=False,dash_noincl=False,
@@ -2494,10 +2494,10 @@ def hid_graph(ax_hid,dict_linevis,
             [np.nan if len(abslines_obj[0][radio_cmap_i][mask_lines].T[i_obs][mask_sign.T[i_obs]]) == 0 else \
                  (max(abslines_obj[0][radio_cmap_i][mask_lines].T[i_obs][mask_sign.T[i_obs]]) \
                       if radio_info_cmap != 'EW ratio' else \
-                      np.nan if abslines_obj[0][radio_cmap_i][eqw_ratio_ids[0]].T[i_obs] < slider_sign or \
-                                abslines_obj[0][radio_cmap_i][eqw_ratio_ids[1]].T[i_obs] < slider_sign else \
-                          abslines_obj[0][radio_cmap_i][eqw_ratio_ids[1]].T[i_obs] / \
-                          abslines_obj[0][radio_cmap_i][eqw_ratio_ids[0]].T[i_obs]) \
+                      np.nan if abslines_obj[0][radio_cmap_i][ew_ratio_ids[0]].T[i_obs] < slider_sign or \
+                                abslines_obj[0][radio_cmap_i][ew_ratio_ids[1]].T[i_obs] < slider_sign else \
+                          abslines_obj[0][radio_cmap_i][ew_ratio_ids[1]].T[i_obs] / \
+                          abslines_obj[0][radio_cmap_i][ew_ratio_ids[0]].T[i_obs]) \
              for i_obs in range(len(abslines_obj[0][radio_cmap_i][mask_lines].T))])
 
         # the size is always tied to the EW
@@ -3548,7 +3548,7 @@ def hid_graph(ax_hid,dict_linevis,
                              (Line2D([0], [0], marker=marker_abs, color='black',
                                      markersize=(norm_s_lin * 50 ** norm_s_pow) ** (1 / 2), linestyle='None'))]
 
-    eqw_legend = fig_hid.legend(handles=hid_size_examples, loc='center left', labels=['5 eV', '20 eV', '50 eV'],
+    ew_legend = fig_hid.legend(handles=hid_size_examples, loc='center left', labels=['5 eV', '20 eV', '50 eV'],
                                 title='Equivalent widths',
                                 bbox_to_anchor=(0.125, 0.218 + (
                                     0.028 if paper_look and not zoom else 0)) if bigger_text and square_mode else (
@@ -3593,7 +3593,7 @@ def distrib_graph(data_perinfo,info,dict_linevis,data_ener=None,conf_thresh=0.99
     '''
     repartition diagram from all the observations in the current pool (i.e. all objects/obs/lines).
     
-    Use the 'info' keyword to graph flux,eqwidth, bshift or ener
+    Use the 'info' keyword to graph flux,ewidth, bshift or ener
     
     Use the 'indiv' keyword to plot for all lines simultaneously or 6 plots for the 6 single lines
     
@@ -3615,7 +3615,7 @@ def distrib_graph(data_perinfo,info,dict_linevis,data_ener=None,conf_thresh=0.99
     
     if streamlit:
         display_nonsign=dict_linevis['display_nonsign']
-        scale_log_eqw=dict_linevis['scale_log_eqw']
+        scale_log_ew=dict_linevis['scale_log_ew']
         obj_disp_list=dict_linevis['obj_list'][mask_obj]
         instru_list=dict_linevis['instru_list'][mask_obj]
         date_list=dict_linevis['date_list'][mask_obj]
@@ -3625,7 +3625,7 @@ def distrib_graph(data_perinfo,info,dict_linevis,data_ener=None,conf_thresh=0.99
         split_dist_method=dict_linevis['split_dist_method']
     else:
         display_nonsign=True
-        scale_log_eqw=False
+        scale_log_ew=False
         glob_col_source=False
         cmap_color_det=mpl.cm.plasma
         split_dist_method=False
@@ -3641,7 +3641,7 @@ def distrib_graph(data_perinfo,info,dict_linevis,data_ener=None,conf_thresh=0.99
     
     line_mode=info=='lines'
     if not line_mode:
-        ind_info=np.argwhere([elem in info for elem in ['eqw','bshift','ener','lineflux','time','width']])[0][0]
+        ind_info=np.argwhere([elem in info for elem in ['ew','bshift','ener','lineflux','time','width']])[0][0]
     else:
         #we don't care here
         ind_info=0
@@ -3666,14 +3666,14 @@ def distrib_graph(data_perinfo,info,dict_linevis,data_ener=None,conf_thresh=0.99
         else:
             graph_range=[range_absline]
 
-    #computing the range of the eqw bins from the global graph to get the same scale for all individual graphs)
+    #computing the range of the ew bins from the global graph to get the same scale for all individual graphs)
     
-    if scale_log_eqw:
-        bins_eqw=np.geomspace(1,min(100,(max(ravel_ragged(data_perinfo[0][0]))//5+1)*5),20)
+    if scale_log_ew:
+        bins_ew=np.geomspace(1,min(100,(max(ravel_ragged(data_perinfo[0][0]))//5+1)*5),20)
     else:
-        bins_eqw=np.linspace(5,min(100,(max(ravel_ragged(data_perinfo[0][0]))//5+1)*5),20)
+        bins_ew=np.linspace(5,min(100,(max(ravel_ragged(data_perinfo[0][0]))//5+1)*5),20)
         
-    bins_eqwratio=np.linspace(0.2,4,20)
+    bins_ewratio=np.linspace(0.2,4,20)
     
     if n_infos>=5:
         if len(ravel_ragged(data_perinfo[3][0])[ravel_ragged(data_perinfo[4][0])>0])>0 and len(ravel_ragged(data_perinfo[3][0]).nonzero()[0])!=0:
@@ -3692,9 +3692,9 @@ def distrib_graph(data_perinfo,info,dict_linevis,data_ener=None,conf_thresh=0.99
     bins_width=np.linspace(0,5500,12)
 
     #sorting the bins in an array depending on the info asked
-    bins_info=[bins_eqw,bins_bshift,bins_ener,bins_flux,bins_time,bins_width]
+    bins_info=[bins_ew,bins_bshift,bins_ener,bins_flux,bins_time,bins_width]
     
-    bins_ratio=[bins_eqwratio]
+    bins_ratio=[bins_ewratio]
     
     #and fetching the current one (or custom bins for other modes)
     hist_bins=bins_info[ind_info] if not ratio_mode else bins_ratio[ind_info] if not line_mode else range(graph_range)
@@ -3738,7 +3738,7 @@ def distrib_graph(data_perinfo,info,dict_linevis,data_ener=None,conf_thresh=0.99
             ax_hist.set_ylim([0,max_height+0.25])
             
         if ind_info in [0,3]:            
-            if ind_info==3 or scale_log_eqw:
+            if ind_info==3 or scale_log_ew:
                 ax_hist.set_xscale('log')
                 
         #these boolean arrays distinguish non detections (i.e. 0/nan significance) and statistically significant detections from the others
@@ -4003,18 +4003,21 @@ def distrib_graph(data_perinfo,info,dict_linevis,data_ener=None,conf_thresh=0.99
         return fig_hist
     
 def correl_graph(data_perinfo,infos,data_ener,dict_linevis,mode='intrinsic',mode_vals=None,conf_thresh=0.99,indiv=False,save=False,close=False,
-                 streamlit=False,compute_correl=False,bigger_text=False,show_linked=True,show_ul_eqw=False):
+                 streamlit=False,compute_correl=False,bigger_text=False,show_linked=True,show_ul_ew=False):
     
     '''
+
+    should be updated to reflect 4U paper changes
+
     Scatter plots for specific line parameters from all the observations in the current pool (i.e. all objects/obs/lines).
     
     infos:
         Intrinsic:
-            -eqwidth
+            -ewidth
             -bshift
             -ener
-            -eqwratio+25/26/Ka/Kb : ratio between the two 25/26/Ka/Kb lines. Always uses the highest line (in energy) as numerator
-            -width Note: adding a number directly after the width is necessary to plot eqwratio vs width as line for which
+            -ewratio+25/26/Ka/Kb : ratio between the two 25/26/Ka/Kb lines. Always uses the highest line (in energy) as numerator
+            -width Note: adding a number directly after the width is necessary to plot ewratio vs width as line for which
                             the width is plotted needs to be specified
             -nH
             
@@ -4028,10 +4031,10 @@ def correl_graph(data_perinfo,infos,data_ener,dict_linevis,mode='intrinsic',mode
         source:
             -inclin
     Modes:
-        -Intrinsic    Use the 'info' keyword to plot infos vs one another
-        -observ          Use the 'info' keyword to plot infos vs HR or flux (observ info always on y axis)
-        -source       Use the 'info' keyword to plot eqwidth, bshift, ener or flux vs the source inclinations
-        -eqwratio   Use the 'info' keyword to specify which the lines for which the eqw will be compared
+        -Intrinsic  Use the 'info' keyword to plot infos vs one another
+        -observ     Use the 'info' keyword to plot infos vs HR or flux (observ info always on y axis)
+        -source     Use the 'info' keyword to plot ewidth, bshift, ener or flux vs the source inclinations
+        -ewcomp     Use the 'info' keyword to specify which the lines for which the ew will be compared
         
     In HID mode, requires the mode_vals variable to be set to the flux values
     in inclin mode, idem with the inclination values
@@ -4072,7 +4075,7 @@ def correl_graph(data_perinfo,infos,data_ener,dict_linevis,mode='intrinsic',mode
     if streamlit:
         display_nonsign=dict_linevis['display_nonsign']
         scale_log_hr=dict_linevis['scale_log_hr']
-        scale_log_eqw=dict_linevis['scale_log_eqw']
+        scale_log_ew=dict_linevis['scale_log_ew']
 
 
         compute_regr=dict_linevis['compute_regr']
@@ -4092,7 +4095,7 @@ def correl_graph(data_perinfo,infos,data_ener,dict_linevis,mode='intrinsic',mode
 
         display_nonsign=True
         scale_log_hr=True
-        scale_log_eqw=True
+        scale_log_ew=True
         compute_regr=False
         lock_lims_det=False
         display_pearson=False
@@ -4191,13 +4194,18 @@ def correl_graph(data_perinfo,infos,data_ener,dict_linevis,mode='intrinsic',mode
             ratio_indexes_x=ratio_choices[infos_split[1][-2:]]
     else:
         ratio_mode=False
+
+    if mode=='ewcomp':
+        line_comp_mode=True
+    else:
+        line_comp_mode=False
         
     #not showing upper limit for the width plot as there's no point currently
     if 'width' in infos:
         width_mode=True
-        show_ul_eqw=False
+        show_ul_ew=False
         if ratio_mode:
-            #if comparing width with the eqwratio, the line number for the width has to be specified for the width and is 
+            #if comparing width with the ewratio, the line number for the width has to be specified for the width and is 
             #retrieved (and -1 to compare to an index)
             width_line_id=int(infos[infos.find('width')+5])-1
 
@@ -4205,7 +4213,7 @@ def correl_graph(data_perinfo,infos,data_ener,dict_linevis,mode='intrinsic',mode
         width_mode=False
         
     #failsafe to prevent wrong colorings for intrinsic plots
-    if (ratio_mode or mode=='eqwratio') and color_scatter=='width':
+    if (ratio_mode or line_comp_mode) and color_scatter=='width':
         color_scatter='None'
         
     data_list=[data_perinfo[0],data_perinfo[1],data_ener,data_perinfo[3],date_list,width_plot_restrict]
@@ -4214,13 +4222,13 @@ def correl_graph(data_perinfo,infos,data_ener,dict_linevis,mode='intrinsic',mode
     #infos and data definition depending on the mode
     if mode=='intrinsic':
 
-        ind_infos=[np.argwhere([elem in infos_split[i] for elem in ['eqw','bshift','ener','lineflux','time','width']])[0][0] for i in [0,1]]
+        ind_infos=[np.argwhere([elem in infos_split[i] for elem in ['ew','bshift','ener','lineflux','time','width']])[0][0] for i in [0,1]]
 
         data_plot=[data_list[ind] for ind in ind_infos]
         
     elif mode=='observ':
         #the 'None' is here to have the correct index for the width element
-        ind_infos=[np.argwhere([elem in infos_split[0] for elem in ['eqw','bshift','ener','lineflux','None','width']])[0][0],
+        ind_infos=[np.argwhere([elem in infos_split[0] for elem in ['ew','bshift','ener','lineflux','None','width']])[0][0],
                     np.argwhere(np.array(['HR','flux','time','nthcomp-gamma','highE-flux','highE-HR'])==infos_split[1])[0][0]]
 
         if ind_infos[1] in [3,4,5]:
@@ -4234,10 +4242,10 @@ def correl_graph(data_perinfo,infos,data_ener,dict_linevis,mode='intrinsic',mode
             data_plot=data_plot[::-1]
         
     elif mode=='source':
-        ind_infos=[np.argwhere([elem in infos_split[0] for elem in ['eqw','bshift','ener','lineflux','None','width']])[0][0],-1]
+        ind_infos=[np.argwhere([elem in infos_split[0] for elem in ['ew','bshift','ener','lineflux','None','width']])[0][0],-1]
         data_plot=[data_list[ind_infos[0]], mode_vals]
         
-    elif mode=='eqwratio':
+    elif line_comp_mode:
         ind_infos=[np.argwhere([elem in infos_split[i] for elem in lines_std_names[3:]])[0][0] for i in [0,1]]
         data_plot=[data_perinfo[0],data_perinfo[0]]
     
@@ -4277,12 +4285,12 @@ def correl_graph(data_perinfo,infos,data_ener,dict_linevis,mode='intrinsic',mode
                                   info_hid_str[ind_infos[1]])+' scatter for the '+lines_std[lines_std_names[3+i]]+
                                   ' absorption line')
             else:
-                fig_scat.suptitle(((infos_split[0]+' - '+infos_split[1]+' equivalent widths') if mode=='eqwratio' else\
+                fig_scat.suptitle(((infos_split[0]+' - '+infos_split[1]+' equivalent widths') if line_comp_mode else\
                     ((info_str[ind_infos[0]] if not ratio_mode else infos_split[0])+' - '+(info_str[ind_infos[1]] if mode=='intrinsic' else\
                               (info_hid_str[ind_infos[1]]) if mode=='observ' else 'inclination')))\
                               +(' for currently selected '+('lines and ' if not ratio_mode else '')+'sources' if streamlit else ' for all absorption lines'))
             
-        if mode!='eqwratio':
+        if not line_comp_mode:
 
             if sum(mask_lines)==1:
                 line_str=lines_std[np.array(lines_std_names)[3:9][mask_lines][0]]
@@ -4301,12 +4309,12 @@ def correl_graph(data_perinfo,infos,data_ener,dict_linevis,mode='intrinsic',mode
         #putting a logarithmic y scale if it shows equivalent widths or one of the hid parameters
         #note we also don't put the y log scale for a gamma y axis (of course)
         if mode!='source' and ((mode=='observ' and scale_log_hr and not time_mode and not ind_infos[1]==[3])\
-                               or ((ind_infos[0 if time_mode else 1] in [0,3] or mode=='eqwratio') and scale_log_eqw)):
+                               or ((ind_infos[0 if time_mode else 1] in [0,3] or line_comp_mode) and scale_log_ew)):
                             
             ax_scat.set_yscale('log')                
                 
         #putting a logarithmic x scale if it shows equivalent widths
-        if ind_infos[0] in [0,3] and scale_log_eqw and not time_mode:
+        if ind_infos[0] in [0,3] and scale_log_ew and not time_mode:
             ax_scat.set_xscale('log')
 
         
@@ -4358,13 +4366,13 @@ def correl_graph(data_perinfo,infos,data_ener,dict_linevis,mode='intrinsic',mode
         #the boolean masks for detections and significance are more complex when using ratios instead of the standard data since 
         #two lines need to be checked
                     
-        if mode=='eqwratio' or ratio_mode:
+        if line_comp_mode or ratio_mode:
                                 
-            #we can use the data constructs used for the eqw ratio mode to create the ratios in ratio_mode
+            #we can use the data constructs used for the ew ratio mode to create the ratios in ratio_mode
             #we just need to get common indexing variable
-            ind_ratio=ind_infos if mode=='eqwratio' else ratio_indexes_x
+            ind_ratio=ind_infos if line_comp_mode else ratio_indexes_x
                 
-            #in eqw ratio mode we need to make sure than both lines are defined for each point so we must combine the mask of both lines
+            #in ew ratio mode we need to make sure than both lines are defined for each point so we must combine the mask of both lines
 
             bool_sign_x=ravel_ragged(data_perinfo[4][0][ind_ratio[0]]).astype(float)
             bool_sign_y=ravel_ragged(data_perinfo[4][0][ind_ratio[1]]).astype(float)
@@ -4393,8 +4401,8 @@ def correl_graph(data_perinfo,infos,data_ener,dict_linevis,mode='intrinsic',mode
                         (np.array((bool_sign_x>=conf_thresh).tolist()) & np.array((~np.isnan(bool_sign_x)).tolist())) \
                               & mask_intime_norepeat & (True if not high_E_mode else mask_lum_high_valid)
 
-            #the boool sign and det are only used for the ratio in ratio_mode, but are global in eqwratio mode
-            if mode=='eqwratio':
+            #the boool sign and det are only used for the ratio in ratio_mode, but are global in ewratio mode
+            if line_comp_mode:
                 
                 #converting the standard variables to the ratio ones
                 bool_det=bool_det_ratio
@@ -4427,7 +4435,7 @@ def correl_graph(data_perinfo,infos,data_ener,dict_linevis,mode='intrinsic',mode
                                     dtype=object)
 
                         
-                    #in this case the eqw ratio is on the Y axis
+                    #in this case the ew ratio is on the Y axis
                     y_data=np.array(
                           [ravel_ragged(data_plot[1][0][ratio_indexes_x[0]])[bool_det_ratio][bool_sign_ratio]/\
                            ravel_ragged(data_plot[1][0][ratio_indexes_x[1]])[bool_det_ratio][bool_sign_ratio],
@@ -4543,9 +4551,9 @@ def correl_graph(data_perinfo,infos,data_ener,dict_linevis,mode='intrinsic',mode
                         
         #### upper limit computation
         
-        if show_ul_eqw:
+        if show_ul_ew:
             
-            if mode=='eqwratio' or ratio_mode:
+            if line_comp_mode or ratio_mode:
 
                 #we use the same double definition here
                 #in ratio_mode, x is the numerator so the ul_x case amounts to an upper limit
@@ -4610,8 +4618,8 @@ def correl_graph(data_perinfo,infos,data_ener,dict_linevis,mode='intrinsic',mode
                         
         #in the errors we want to distinguish the parameters which were linked so we start compute the masks of the 'linked' values
         
-        #we don't really care about the linked state in eqwratio mode
-        if mode=='eqwratio':
+        #we don't really care about the linked state in ewratio mode
+        if line_comp_mode:
             linked_mask=np.array([np.repeat(False,len(x_data[0])),np.repeat(False,len(x_data[1]))],dtype=object)
         else:
             if ratio_mode:
@@ -4709,7 +4717,7 @@ def correl_graph(data_perinfo,infos,data_ener,dict_linevis,mode='intrinsic',mode
         #### error computation
         #(already done earlier in specific cases)
         
-        #in ratio mode the errors are always for the eqw and thus are simply computed from composing the uncertainties of each eqw
+        #in ratio mode the errors are always for the ew and thus are simply computed from composing the uncertainties of each ew
         #then coming back to the ratio
         if ratio_mode:
             if time_mode:
@@ -4759,7 +4767,7 @@ def correl_graph(data_perinfo,infos,data_ener,dict_linevis,mode='intrinsic',mode
                 y_error=np.array([[elem if type(elem)!=str else (ravel_ragged(data_plot[1][j][i-3])[ind_val] if i<5 else\
                       ravel_ragged(data_plot[0][1][i-4])[ind_val]) for ind_val,elem in enumerate(ravel_ragged(data_plot[1][j][i]))] for j in [1,2]])
             
-        elif not ratio_mode and mode!='eqwratio':
+        elif not ratio_mode and not line_comp_mode:
             if time_mode:
                 #swapping the error to the y axis
                 y_error=np.array([[elem if type(elem)!=str else linked_uncer(ind_val,j,ind_infos[1])\
@@ -4803,7 +4811,7 @@ def correl_graph(data_perinfo,infos,data_ener,dict_linevis,mode='intrinsic',mode
 
         #maybe missing something for time mode here
         ###TODO
-        if show_ul_eqw and mode!='eqwratio' and not time_mode:
+        if show_ul_ew and not line_comp_mode and not time_mode:
             if ratio_mode:
                 #creation of y errors from both masks for upper and lower limits
                 y_error_ul=np.array([ravel_ragged(y_err_repeat[l][ind_ratio[0]])[bool_nondetsign_x] for l in [0,1]],dtype=object)
@@ -4813,7 +4821,7 @@ def correl_graph(data_perinfo,infos,data_ener,dict_linevis,mode='intrinsic',mode
                 y_error_ul=np.array([ravel_ragged(y_err_repeat[l])[bool_nondetsign] for l in [0,1]],dtype=object)
                 
         #applying the det and sign masks
-        if mode!='eqwratio' and not ratio_mode:
+        if not line_comp_mode and not ratio_mode:
 
             if time_mode:
                 y_error=[np.array([y_error[0][bool_det][bool_sign],y_error[1][bool_det][bool_sign]]),
@@ -4877,7 +4885,7 @@ def correl_graph(data_perinfo,infos,data_ener,dict_linevis,mode='intrinsic',mode
             
                 
         #locking the graph if asked to to avoid things going haywire with upper limits
-        if lock_lims_det or not show_ul_eqw:
+        if lock_lims_det or not show_ul_ew:
             ax_scat.set_xlim(ax_scat.get_xlim())
             ax_scat.set_ylim(ax_scat.get_ylim())
         
@@ -4963,8 +4971,8 @@ def correl_graph(data_perinfo,infos,data_ener,dict_linevis,mode='intrinsic',mode
             
         if color_scatter=='Instrument':
 
-            #there's no need to repeat in eqwratio since the masks are computed for a single line                
-            if mode=='eqwratio' or ratio_mode:
+            #there's no need to repeat in ewratio since the masks are computed for a single line                
+            if line_comp_mode or ratio_mode:
                 color_data_repeat=instru_list
             else:
                 color_data_repeat=np.array([instru_list for repeater in (i if type(i)==range else [i])])
@@ -4978,11 +4986,11 @@ def correl_graph(data_perinfo,infos,data_ener,dict_linevis,mode='intrinsic',mode
                 color_data=np.array([ravel_ragged(color_data_repeat)[bool_det][bool_sign],ravel_ragged(color_data_repeat)[bool_det][~bool_sign]],
                                 dtype=object)
                 
-                if mode!='eqwratio':
+                if not line_comp_mode:
                     #same thing for the upper limits
                     color_data_ul=ravel_ragged(color_data_repeat)[bool_nondetsign]
 
-            if mode=='eqwratio' or ratio_mode:
+            if line_comp_mode or ratio_mode:
                 #same thing for the upper limits in x and y
                 color_data_ul_x=ravel_ragged(color_data_repeat)[bool_nondetsign_x]
                 color_data_ul_y=ravel_ragged(color_data_repeat)[bool_nondetsign_y]
@@ -4991,9 +4999,9 @@ def correl_graph(data_perinfo,infos,data_ener,dict_linevis,mode='intrinsic',mode
             color_arr=np.array([np.array([telescope_colors[elem] for elem in color_data[s]]) for s in [0,1]],dtype=object)
             
             #and for the upper limits if needed
-            if show_ul_eqw:
+            if show_ul_ew:
                                     
-                if ratio_mode or mode=='eqwratio':
+                if ratio_mode or line_comp_mode:
                     color_arr_ul_x=np.array([telescope_colors[elem] for elem in color_data_ul_x])
         
                     color_arr_ul_y=np.array([telescope_colors[elem] for elem in color_data_ul_y])
@@ -5006,8 +5014,8 @@ def correl_graph(data_perinfo,infos,data_ener,dict_linevis,mode='intrinsic',mode
             
         elif color_scatter=='line_struct':
 
-            # there's no need to repeat in eqwratio since the masks are computed for a single line                
-            if mode == 'eqwratio' or ratio_mode:
+            # there's no need to repeat in ewratio since the masks are computed for a single line                
+            if line_comp_mode or ratio_mode:
                 color_data_repeat = diago_color
             else:
                 color_data_repeat = np.array([diago_color for repeater in (i if type(i) == range else [i])])
@@ -5022,11 +5030,11 @@ def correl_graph(data_perinfo,infos,data_ener,dict_linevis,mode='intrinsic',mode
                                        ravel_ragged(color_data_repeat)[bool_det][~bool_sign]],
                                       dtype=object)
 
-                if mode != 'eqwratio':
+                if not line_comp_mode:
                     # same thing for the upper limits
                     color_data_ul = ravel_ragged(color_data_repeat)[bool_nondetsign]
 
-            if mode == 'eqwratio' or ratio_mode:
+            if line_comp_mode or ratio_mode:
                 # same thing for the upper limits in x and y
                 color_data_ul_x = ravel_ragged(color_data_repeat)[bool_nondetsign_x]
                 color_data_ul_y = ravel_ragged(color_data_repeat)[bool_nondetsign_y]
@@ -5036,9 +5044,9 @@ def correl_graph(data_perinfo,infos,data_ener,dict_linevis,mode='intrinsic',mode
                                  dtype=object)
 
             # and for the upper limits if needed
-            if show_ul_eqw:
+            if show_ul_ew:
 
-                if ratio_mode or mode == 'eqwratio':
+                if ratio_mode or line_comp_mode:
                     color_arr_ul_x = np.array([elem for elem in color_data_ul_x])
 
                     color_arr_ul_y = np.array([elem for elem in color_data_ul_y])
@@ -5054,11 +5062,11 @@ def correl_graph(data_perinfo,infos,data_ener,dict_linevis,mode='intrinsic',mode
                 else hid_plot[0][0] if color_scatter=='HR' else hid_plot[1][0] if color_scatter=='L_3-10'\
                 else width_plot_restrict[0] if color_scatter=='width' else nh_plot_restrict[0]
                             
-            #there's no need to repeat in eqwratio since the masks are computed for a single line                
+            #there's no need to repeat in ewratio since the masks are computed for a single line                
             if color_scatter=='width':
                 color_data_repeat=color_var_arr
             else:
-                if mode=='eqwratio' or ratio_mode:
+                if line_comp_mode or ratio_mode:
                     color_data_repeat=color_var_arr
                 else:
                     color_data_repeat=np.array([color_var_arr for repeater in (i if type(i)==range else [i])])
@@ -5072,11 +5080,11 @@ def correl_graph(data_perinfo,infos,data_ener,dict_linevis,mode='intrinsic',mode
                 color_data=np.array([ravel_ragged(color_data_repeat)[bool_det][bool_sign],ravel_ragged(color_data_repeat)[bool_det][~bool_sign]],
                                 dtype=object)
 
-                if mode!='eqwratio':
+                if not line_comp_mode:
                     #same thing for the upper limits
                     color_data_ul=ravel_ragged(color_data_repeat)[bool_nondetsign]
 
-            if mode=='eqwratio' or ratio_mode:
+            if line_comp_mode or ratio_mode:
                 
                 #same thing for the upper limits in x and y
                 color_data_ul_x=ravel_ragged(color_data_repeat)[bool_nondetsign_x]
@@ -5086,7 +5094,7 @@ def correl_graph(data_perinfo,infos,data_ener,dict_linevis,mode='intrinsic',mode
             if color_scatter=='Time':
                 c_arr=np.array([mdates.date2num(color_data[s]) for s in [0,1]],dtype=object)
             
-                if ratio_mode or mode=='eqwratio':
+                if ratio_mode or line_comp_mode:
                     c_arr_ul_x=mdates.date2num(color_data_ul_x)
                     c_arr_ul_y=mdates.date2num(color_data_ul_y)
                     
@@ -5095,7 +5103,7 @@ def correl_graph(data_perinfo,infos,data_ener,dict_linevis,mode='intrinsic',mode
             else:
                 c_arr=color_data
                 
-                if ratio_mode or mode=='eqwratio':
+                if ratio_mode or line_comp_mode:
                     c_arr_ul_x=color_data_ul_x
                     c_arr_ul_y=color_data_ul_y
                 else:
@@ -5104,8 +5112,8 @@ def correl_graph(data_perinfo,infos,data_ener,dict_linevis,mode='intrinsic',mode
             c_arr_tot=c_arr.tolist()
             
             # #adding the upper limits to the normalisation if necessary
-            if show_ul_eqw and ('eqw' in infos or mode=='eqwratio'):
-                if mode=='eqwratio' or ratio_mode:
+            if show_ul_ew and ('ew' in infos or line_comp_mode):
+                if line_comp_mode or ratio_mode:
                     
                     c_arr_tot+=[c_arr_ul_x,c_arr_ul_y]
                 else:
@@ -5133,7 +5141,7 @@ def correl_graph(data_perinfo,infos,data_ener,dict_linevis,mode='intrinsic',mode
             color_arr=np.array([[colors_func_date.to_rgba(elem) for elem in c_arr[s]] for s in ([0,1] if display_nonsign else [0]) ])
             
             #and for the upper limits
-            if ratio_mode or mode=='eqwratio':
+            if ratio_mode or line_comp_mode:
                 
                 #the axes swap in timemode requires swapping the indexes to fetch the uncertainty locations
                 color_arr_ul_x=np.array([colors_func_date.to_rgba(elem) for elem in c_arr_ul_x])
@@ -5143,8 +5151,8 @@ def correl_graph(data_perinfo,infos,data_ener,dict_linevis,mode='intrinsic',mode
             
         elif color_scatter=='Source':
             
-            #there's no need to repeat in eqwratio since the masks are computed for a single line                
-            if mode=='eqwratio' or ratio_mode:
+            #there's no need to repeat in ewratio since the masks are computed for a single line                
+            if line_comp_mode or ratio_mode:
                 color_data_repeat=np.array([obj_disp_list[i_obj] for i_obj in range(n_obj)\
                                             for i_obs in range(len(data_perinfo[0][0][0][i_obj]))])
                 
@@ -5164,20 +5172,20 @@ def correl_graph(data_perinfo,infos,data_ener,dict_linevis,mode='intrinsic',mode
                                      ravel_ragged(color_data_repeat)[bool_det][~bool_sign]],
                             dtype=object)
                 
-                if mode!='eqwratio':
+                if not line_comp_mode:
                     #same thing for the upper limits
                     color_data_ul=ravel_ragged(color_data_repeat)[bool_nondetsign]
 
-            if mode=='eqwratio' or ratio_mode:
+            if line_comp_mode or ratio_mode:
                 #same thing for the upper limits in x and y
                 color_data_ul_x=ravel_ragged(color_data_repeat)[bool_nondetsign_x]
                 color_data_ul_y=ravel_ragged(color_data_repeat)[bool_nondetsign_y]
                 
             color_data_tot=[color_data[s] for s in ([0,1] if display_nonsign else [0])]
             #global array for unique extraction
-            if show_ul_eqw and ('eqw' in infos or mode=='eqwratio'):
+            if show_ul_ew and ('ew' in infos or line_comp_mode):
                 
-                if not ratio_mode and mode!='eqwratio':
+                if not ratio_mode and not line_comp_mode:
                     #same thing for the upper limits
                     color_data_tot+=[color_data_ul]
                 else:
@@ -5203,9 +5211,9 @@ def correl_graph(data_perinfo,infos,data_ener,dict_linevis,mode='intrinsic',mode
                 color_arr=np.array([color_arr,'None'],dtype=object)
 
             #same for the upper limits if needed
-            if show_ul_eqw and ('eqw' in infos or mode=='eqwratio'):
+            if show_ul_ew and ('ew' in infos or line_comp_mode):
                                     
-                if ratio_mode or mode=='eqwratio':
+                if ratio_mode or line_comp_mode:
                     color_arr_ul_x=np.array([colors_func_obj.to_rgba(np.argwhere(disp_objects==elem)[0][0]) for elem in color_data_ul_x])
         
                     color_arr_ul_y=np.array([colors_func_obj.to_rgba(np.argwhere(disp_objects==elem)[0][0]) for elem in color_data_ul_y])
@@ -5229,9 +5237,9 @@ def correl_graph(data_perinfo,infos,data_ener,dict_linevis,mode='intrinsic',mode
                                  label=label if i_err==0 else '',alpha=alpha_ul)
                     
         ####plotting upper limits
-        if show_ul_eqw and ('eqw' in infos or mode=='eqwratio'):
+        if show_ul_ew and ('ew' in infos or line_comp_mode):
             
-            if mode=='eqwratio':
+            if line_comp_mode:
                 #xuplims here
                 plot_ul_err([1,0],x_data_ul_x,y_data_ul_x,x_data_ul_x*0.05,y_error_ul_x.T,color_arr_ul_x)
                 
@@ -5489,12 +5497,12 @@ def correl_graph(data_perinfo,infos,data_ener,dict_linevis,mode='intrinsic',mode
 
                         col_concat=(color_arr_ul_x.tolist() if type(color_arr_ul_x)!=str else []+\
                                      color_arr_ul_y.tolist() if type(color_arr_ul_y)!=str  else [])\
-                                         if (ratio_mode or mode=='eqwratio') else color_arr_ul
+                                         if (ratio_mode or line_comp_mode) else color_arr_ul
 
                         no_ul_displayed=np.sum([tuple(elem)==label_dict[color_label] for elem in col_concat])==0
                                 
                         #not displaying color/labels that are not actually in the plot
-                        if np.sum(color_mask)==0 and np.sum(color_mask_linked)==0 and (not show_ul_eqw or no_ul_displayed):
+                        if np.sum(color_mask)==0 and np.sum(color_mask_linked)==0 and (not show_ul_ew or no_ul_displayed):
                             continue
                         
                         #needs to be split to avoid indexation problem when calling color_mask behind
@@ -5561,8 +5569,8 @@ def correl_graph(data_perinfo,infos,data_ener,dict_linevis,mode='intrinsic',mode
                         
         # ax_scat.set_xlim(mdates.date2num(['2012-01-01']),mdates.date2num(['2012-10-01']))
 
-        #adjusting the axis sizes for eqwratio mode to get the same scale
-        if mode=='eqwratio':
+        #adjusting the axis sizes for ewratio mode to get the same scale
+        if line_comp_mode:
             ax_scat.set_ylim(max(min(ax_scat.get_xlim()[0],ax_scat.get_ylim()[0]),0),max(ax_scat.get_xlim()[1],ax_scat.get_ylim()[1]))
             ax_scat.set_xlim(max(min(ax_scat.get_xlim()[0],ax_scat.get_ylim()[0]),0),max(ax_scat.get_xlim()[1],ax_scat.get_ylim()[1]))
             ax_scat.plot(ax_scat.get_xlim(),ax_scat.get_ylim(),ls='--',color='grey')
@@ -5571,8 +5579,8 @@ def correl_graph(data_perinfo,infos,data_ener,dict_linevis,mode='intrinsic',mode
         forceAspect(ax_scat,aspect=0.8)
         
         
-        #### theoretical line drawing for eqw_width
-        if infos=='eqw_width' and display_th_width_ew:
+        #### theoretical line drawing for ew_width
+        if infos=='ew_width' and display_th_width_ew:
             
             #adding a blank line in the legend for cleaner display                                
             ax_scat.plot(np.NaN, np.NaN, '-', color='none', label='   ')
@@ -5600,7 +5608,7 @@ def correl_graph(data_perinfo,infos,data_ener,dict_linevis,mode='intrinsic',mode
                          color=colors_curve[id_curve],
                          alpha=0.5,ls=ls_curve[id_curve%len(ls_curve)])
                 
-        #logarithmic scale by default for eqw ratios
+        #logarithmic scale by default for ew ratios
         if ratio_mode:
         
             if time_mode:
@@ -5651,7 +5659,7 @@ def correl_graph(data_perinfo,infos,data_ener,dict_linevis,mode='intrinsic',mode
             x_data_trend = x_data[0][restrict_comput_mask]
             y_data_trend = y_data[0][restrict_comput_mask]
 
-            # we cannot transpose the whole arrays since in eqwratio/HID mode they are most likely ragged due to having both
+            # we cannot transpose the whole arrays since in ewcomp/HID mode they are most likely ragged due to having both
             # the significant and unsignificant data, so we create regular versions manually
             x_error_sign_T = None if x_error is None else np.array([elem for elem in x_error[0]]).T[restrict_comput_mask]
             y_error_sign_T = None if y_error is None else np.array([elem for elem in y_error[0]]).T[restrict_comput_mask]
@@ -5730,8 +5738,8 @@ def correl_graph(data_perinfo,infos,data_ener,dict_linevis,mode='intrinsic',mode
         #### legend display
         if show_linked or (compute_correl and mode!='source' and len(x_data[0])>1 and not time_mode) or color_scatter not in ['Time','HR','width','nH','L_3-10',None]:
             
-            scat_legend=ax_scat.legend(fontsize=9 if infos=='eqw_width' and display_th_width_ew else 10,title=legend_title,
-                                   ncol=2 if display_th_width_ew and infos=='eqw_width' else 1,loc='upper right' if not ratio_mode else 'upper right')
+            scat_legend=ax_scat.legend(fontsize=9 if infos=='ew_width' and display_th_width_ew else 10,title=legend_title,
+                                   ncol=2 if display_th_width_ew and infos=='ew_width' else 1,loc='upper right' if not ratio_mode else 'upper right')
             plt.setp(scat_legend.get_title(),fontsize='small')
                 
         if len(x_data_use)>0:
@@ -5744,7 +5752,14 @@ def correl_graph(data_perinfo,infos,data_ener,dict_linevis,mode='intrinsic',mode
             plt.xscale('linear')
             plt.yscale('linear')
             
-        #### custom things for the paper
+        #changing the second brightest substructure point for the EW ratio plot to the manually fitted one 
+        #with relaxed SAA filtering
+        if color_scatter=='line_struct' and 'ewratio' in infos[0]:
+            breakpoint()
+            pass
+        
+        
+        #### custom things for the wind_review_global paper
         
         # #specific limits for the width graphs
         # ax_scat.set_xlim(0,90)

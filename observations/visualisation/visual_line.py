@@ -858,10 +858,10 @@ else:
     
 if radio_info_cmap=='EW ratio':
     with st.sidebar.expander('Lines selection for EW ratio:'):
-        selectbox_ratioeqw=st.sidebar.multiselect('',options=line_display_str[mask_lines],default=line_display_str[mask_lines][:2])
+        selectbox_ratioew=st.sidebar.multiselect('',options=line_display_str[mask_lines],default=line_display_str[mask_lines][:2])
         
 else:
-    selectbox_ratioeqw=''
+    selectbox_ratioew=''
     
 radio_zoom_hid=st.sidebar.radio('Zoom:',('Global sample','Current selection','manual bounds'),index=0)
 if radio_zoom_hid=='Global sample':
@@ -1059,9 +1059,9 @@ if len(selectbox_abstype)<1:
     st.stop()
 
 #fetching the line indexes when plotting EW ratio as colormap
-eqw_ratio_ids=np.argwhere([elem in selectbox_ratioeqw for elem in line_display_str]).T[0]
+ew_ratio_ids=np.argwhere([elem in selectbox_ratioew for elem in line_display_str]).T[0]
 
-if radio_info_cmap=='EW ratio' and len(eqw_ratio_ids)<2:
+if radio_info_cmap=='EW ratio' and len(ew_ratio_ids)<2:
     st.warning('Cannot build EW ratio colormap from current line restriction')
     st.stop()
 
@@ -1631,7 +1631,7 @@ elif not skip_HID:
               cyclic_cmap_nondet=cyclic_cmap_nondet, cyclic_cmap_det=cyclic_cmap_det, cyclic_cmap=cyclic_cmap,
               cmap_incl_type=cmap_incl_type, cmap_incl_type_str=cmap_incl_type_str,
               radio_info_label=radio_info_label,
-              eqw_ratio_ids=eqw_ratio_ids,
+              ew_ratio_ids=ew_ratio_ids,
               display_obj_zerodet=display_obj_zerodet,
               restrict_threshold=restrict_threshold, display_nonsign=display_nonsign,
               display_central_abs=display_central_abs,
@@ -1703,7 +1703,7 @@ with tab_hid:
                           cyclic_cmap=cyclic_cmap,
                           cmap_incl_type=cmap_incl_type, cmap_incl_type_str=cmap_incl_type_str,
                           radio_info_label=radio_info_label,
-                          eqw_ratio_ids=eqw_ratio_ids,
+                          ew_ratio_ids=ew_ratio_ids,
                           display_obj_zerodet=display_obj_zerodet,
                           restrict_threshold=restrict_threshold, display_nonsign=display_nonsign,
                           display_central_abs=display_central_abs,
@@ -2668,15 +2668,15 @@ with st.sidebar.expander('Parameter analysis'):
                                   'Line EW comparison',
                                   'High Energy parameters (Observation)'),default=None)
 
-    use_eqwratio = 'EW ratio (Line)' in display_param
-    display_scat_eqwcomp=  'Line EW comparison' in display_param
-    if use_eqwratio and sum(mask_lines)<=1:
+    use_ewratio = 'EW ratio (Line)' in display_param
+    display_scat_ewcomp=  'Line EW comparison' in display_param
+    if use_ewratio and sum(mask_lines)<=1:
         st.warning('Cannot build EW ratio with current line restriction')
-        use_eqwratio=False
+        use_ewratio=False
 
-    if display_scat_eqwcomp and sum(mask_lines)<=1:
+    if display_scat_ewcomp and sum(mask_lines)<=1:
         st.warning('Cannot compare Line EW with current line restriction')
-        display_scat_eqwcomp=False
+        display_scat_ewcomp=False
 
     glob_col_source=st.toggle('Normalize source colors over the entire sample',value=True)
 
@@ -2697,16 +2697,16 @@ with st.sidebar.expander('Parameter analysis'):
     display_scat_hid='Observation' in display_types
     display_scat_inclin='Source' in display_types
     
-    display_scat_eqwcomp='Line EW comparison' in display_param
-    if display_scat_eqwcomp:        
-        eqwratio_comp=st.multiselect('Lines to compare', [elem for elem in lines_std_names[3:9] if 'abs' in elem],default=lines_std_names[3:5])
+    display_scat_ewcomp='Line EW comparison' in display_param
+    if display_scat_ewcomp:        
+        ewratio_comp=st.multiselect('Lines to compare', [elem for elem in lines_std_names[3:9] if 'abs' in elem],default=lines_std_names[3:5])
         
 
 
-    if use_eqwratio:
-        eqwratio_strs=np.array(['Fe XXVI Ka/Fe XXV Ka','FeXXVI Kb/Fe XXV Kb','FeXXV Kb/Fe XXV Ka','FeXXVI Kb/Fe XXVI Ka'])
-        eqwratio_type_str=st.selectbox('Ratio to use',eqwratio_strs)
-        eqwratio_type=str(np.array(['Ka','Kb','25','26'])[eqwratio_strs==eqwratio_type_str][0])
+    if use_ewratio:
+        ewratio_strs=np.array(['Fe XXVI Ka/Fe XXV Ka','FeXXVI Kb/Fe XXV Kb','FeXXV Kb/Fe XXV Ka','FeXXVI Kb/Fe XXVI Ka'])
+        ewratio_type_str=st.selectbox('Ratio to use',ewratio_strs)
+        ewratio_type=str(np.array(['Ka','Kb','25','26'])[ewratio_strs==ewratio_type_str][0])
 
     use_width='width (Line)' in display_param
     if use_width:
@@ -2751,7 +2751,7 @@ with st.sidebar.expander('Parameter analysis'):
     radio_color_scatter=st.radio('Scatter plot color options:',radio_color_scatter_options,index=1)
     color_scatter= np.array(color_scatter_options)[radio_color_scatter_options==radio_color_scatter][0]
 
-    scale_log_eqw=st.toggle('Use a log scale for the equivalent width and line fluxes')
+    scale_log_ew=st.toggle('Use a log scale for the equivalent width and line fluxes')
     scale_log_hr=st.toggle('Use a log scale for the HID parameters',value=True)
     display_std_abserr_bshift=st.toggle('Display mean and std of Chandra velocity shift distribution',value=True)
     display_abserr_bshift=st.toggle('Display mean and std of current velocity shift distribution',value=False)
@@ -2848,12 +2848,12 @@ os.system('mkdir -p '+save_dir+'/graphs/inclin')
 '''Distributions'''
 
 def streamlit_distrib():
-    distrib_eqw=distrib_graph(abslines_plot_restrict,'eqw',dict_linevis,conf_thresh=slider_sign,streamlit=True,bigger_text=bigger_text,split=split_distrib)
+    distrib_ew=distrib_graph(abslines_plot_restrict,'ew',dict_linevis,conf_thresh=slider_sign,streamlit=True,bigger_text=bigger_text,split=split_distrib)
     distrib_bshift=distrib_graph(abslines_plot_restrict,'bshift',dict_linevis,conf_thresh=slider_sign,streamlit=True,bigger_text=bigger_text,split=split_distrib)
     distrib_ener=distrib_graph(abslines_plot_restrict,'ener',dict_linevis,abslines_ener_restrict,conf_thresh=slider_sign,streamlit=True,
                                bigger_text=bigger_text,split=split_distrib)
-    if use_eqwratio:
-        distrib_eqwratio=distrib_graph(abslines_plot_restrict,'eqwratio'+eqwratio_type,dict_linevis,conf_thresh=slider_sign,streamlit=True,
+    if use_ewratio:
+        distrib_ewratio=distrib_graph(abslines_plot_restrict,'ewratio'+ewratio_type,dict_linevis,conf_thresh=slider_sign,streamlit=True,
                                        bigger_text=bigger_text,split=split_distrib)
         
     if n_infos>=5 and use_lineflux:
@@ -2869,10 +2869,10 @@ def streamlit_distrib():
     with tab_param:
         with st.expander('Distribution graphs'):
             
-            col_list={'eqw':None,'bshift':None,'ener':None}
+            col_list={'ew':None,'bshift':None,'ener':None}
             
-            if use_eqwratio:
-                col_list['eqwratio']=None
+            if use_ewratio:
+                col_list['ewratio']=None
             if n_infos>=5 and use_lineflux:
                 col_list['lineflux']=None
     
@@ -2887,17 +2887,17 @@ def streamlit_distrib():
             for i_col,col_name in enumerate(list(col_list.keys())):
                 col_list[col_name]=st_cols[i_col]
                 
-            with col_list['eqw']:
-                st.pyplot(distrib_eqw)
+            with col_list['ew']:
+                st.pyplot(distrib_ew)
     
             with col_list['bshift']:
                 st.pyplot(distrib_bshift)
             with col_list['ener']:
                 st.pyplot(distrib_ener)
                     
-            if use_eqwratio:
-                with col_list['eqwratio']:
-                    st.pyplot(distrib_eqwratio)
+            if use_ewratio:
+                with col_list['ewratio']:
+                    st.pyplot(distrib_ewratio)
             
             if use_lineflux and n_infos>=5:
                 with col_list['lineflux']:
@@ -2917,25 +2917,25 @@ def streamlit_distrib():
 
 def streamlit_scat(mode):
     
-    scat_eqw=[]
+    scat_ew=[]
     scat_bshift=[]
     scat_ener=[]
     scat_width=[]
     
-    if mode=='eqwratio':
-        scat_eqw=[correl_graph(abslines_plot_restrict,eqwratio_comp[0]+'_'+eqwratio_comp[1],abslines_ener_restrict,dict_linevis,mode='eqwratio',
+    if mode=='ewcomp':
+        scat_ew=[correl_graph(abslines_plot_restrict,ewratio_comp[0]+'_'+ewratio_comp[1],abslines_ener_restrict,dict_linevis,mode='ewcomp',
                                conf_thresh=slider_sign,streamlit=True,compute_correl=compute_correl,bigger_text=bigger_text,show_linked=show_linked,
-                               show_ul_eqw=show_scatter_ul)]
-        if use_time_param and use_eqwratio:
+                               show_ul_ew=show_scatter_ul)]
+        if use_time_param and use_ewratio:
             #not actually bshift but we keep the same column names
-            scat_bshift=[correl_graph(abslines_plot_restrict,'time_eqwratio'+eqwratio_type,abslines_ener_restrict,dict_linevis,mode_vals=hid_plot_restrict,
+            scat_bshift=[correl_graph(abslines_plot_restrict,'time_ewratio'+ewratio_type,abslines_ener_restrict,dict_linevis,mode_vals=hid_plot_restrict,
                                         mode='observ',conf_thresh=slider_sign,streamlit=True,compute_correl=compute_correl,bigger_text=bigger_text,
-                                        show_linked=show_linked,show_ul_eqw=show_scatter_ul)]
+                                        show_linked=show_linked,show_ul_ew=show_scatter_ul)]
             
     if mode=='intrinsic':
-        scat_eqw=[correl_graph(abslines_plot_restrict,'bshift_eqw',abslines_ener_restrict,dict_linevis,conf_thresh=slider_sign,streamlit=True,
+        scat_ew=[correl_graph(abslines_plot_restrict,'bshift_ew',abslines_ener_restrict,dict_linevis,conf_thresh=slider_sign,streamlit=True,
                                 compute_correl=compute_correl,bigger_text=bigger_text,show_linked=show_linked)]
-        scat_bshift=[correl_graph(abslines_plot_restrict,'ener_eqw',abslines_ener_restrict,dict_linevis,conf_thresh=slider_sign,streamlit=True,
+        scat_bshift=[correl_graph(abslines_plot_restrict,'ener_ew',abslines_ener_restrict,dict_linevis,conf_thresh=slider_sign,streamlit=True,
                                compute_correl=compute_correl,bigger_text=bigger_text,show_linked=show_linked)]
         scat_ener=[correl_graph(abslines_plot_restrict,'ener_bshift',abslines_ener_restrict,dict_linevis,conf_thresh=slider_sign,streamlit=True,
                                  compute_correl=compute_correl,bigger_text=bigger_text,show_linked=show_linked)]
@@ -2944,41 +2944,41 @@ def streamlit_scat(mode):
                                         streamlit=True,compute_correl=compute_correl,bigger_text=bigger_text,show_linked=show_linked)]
             
         if use_time_param:
-            scat_eqw+=[correl_graph(abslines_plot_restrict,'time_eqw',abslines_ener_restrict,dict_linevis,mode_vals=None,mode='observ',
+            scat_ew+=[correl_graph(abslines_plot_restrict,'time_ew',abslines_ener_restrict,dict_linevis,mode_vals=None,mode='observ',
                                         conf_thresh=slider_sign,streamlit=True,compute_correl=compute_correl,bigger_text=bigger_text,
-                                        show_linked=show_linked,show_ul_eqw=show_scatter_ul)]
+                                        show_linked=show_linked,show_ul_ew=show_scatter_ul)]
             scat_bshift+=[correl_graph(abslines_plot_restrict,'time_bshift',abslines_ener_restrict,dict_linevis,mode_vals=None,mode='observ',
                                         conf_thresh=slider_sign,streamlit=True,compute_correl=compute_correl,bigger_text=bigger_text,
-                                        show_linked=show_linked,show_ul_eqw=show_scatter_ul)]
+                                        show_linked=show_linked,show_ul_ew=show_scatter_ul)]
             scat_ener+=[correl_graph(abslines_plot_restrict,'time_ener',abslines_ener_restrict,dict_linevis,mode_vals=None,mode='observ',
                                         conf_thresh=slider_sign,streamlit=True,compute_correl=compute_correl,bigger_text=bigger_text,
-                                        show_linked=show_linked,show_ul_eqw=show_scatter_ul)]
+                                        show_linked=show_linked,show_ul_ew=show_scatter_ul)]
             if use_width:
                 scat_width+=[correl_graph(abslines_plot_restrict,'time_width',abslines_ener_restrict,dict_linevis,mode_vals=None,mode='observ',
                                         conf_thresh=slider_sign,streamlit=True,compute_correl=compute_correl,bigger_text=bigger_text,
-                                        show_linked=show_linked,show_ul_eqw=show_scatter_ul)]
+                                        show_linked=show_linked,show_ul_ew=show_scatter_ul)]
             
         if use_width:
-            scat_eqw+=[correl_graph(abslines_plot_restrict,'eqw_width',abslines_ener_restrict,dict_linevis,mode_vals=None,
+            scat_ew+=[correl_graph(abslines_plot_restrict,'ew_width',abslines_ener_restrict,dict_linevis,mode_vals=None,
                                         conf_thresh=slider_sign,streamlit=True,compute_correl=compute_correl,bigger_text=bigger_text,
-                                        show_linked=show_linked,show_ul_eqw=show_scatter_ul)]
+                                        show_linked=show_linked,show_ul_ew=show_scatter_ul)]
             scat_bshift+=[correl_graph(abslines_plot_restrict,'bshift_width',abslines_ener_restrict,dict_linevis,mode_vals=None,
                                         conf_thresh=slider_sign,streamlit=True,compute_correl=compute_correl,bigger_text=bigger_text,
-                                        show_linked=show_linked,show_ul_eqw=show_scatter_ul)]
+                                        show_linked=show_linked,show_ul_ew=show_scatter_ul)]
             scat_ener+=[correl_graph(abslines_plot_restrict,'ener_width',abslines_ener_restrict,dict_linevis,mode_vals=None,
                                         conf_thresh=slider_sign,streamlit=True,compute_correl=compute_correl,bigger_text=bigger_text,
-                                        show_linked=show_linked,show_ul_eqw=show_scatter_ul)]
-            if use_eqwratio:
-                scat_width=[correl_graph(abslines_plot_restrict,'eqwratio'+eqwratio_type+'_width1',abslines_ener_restrict,dict_linevis,mode_vals=hid_plot_restrict,conf_thresh=slider_sign,streamlit=True,compute_correl=compute_correl,bigger_text=bigger_text,
-                                            show_linked=show_linked,show_ul_eqw=show_scatter_ul)]
-                scat_eqwratio=[correl_graph(abslines_plot_restrict,'eqwratio'+eqwratio_type+'_width2',abslines_ener_restrict,dict_linevis,mode_vals=hid_plot_restrict,conf_thresh=slider_sign,streamlit=True,compute_correl=compute_correl,bigger_text=bigger_text,
-                                            show_linked=show_linked,show_ul_eqw=show_scatter_ul)]
+                                        show_linked=show_linked,show_ul_ew=show_scatter_ul)]
+            if use_ewratio:
+                scat_width=[correl_graph(abslines_plot_restrict,'ewratio'+ewratio_type+'_width1',abslines_ener_restrict,dict_linevis,mode_vals=hid_plot_restrict,conf_thresh=slider_sign,streamlit=True,compute_correl=compute_correl,bigger_text=bigger_text,
+                                            show_linked=show_linked,show_ul_ew=show_scatter_ul)]
+                scat_ewratio=[correl_graph(abslines_plot_restrict,'ewratio'+ewratio_type+'_width2',abslines_ener_restrict,dict_linevis,mode_vals=hid_plot_restrict,conf_thresh=slider_sign,streamlit=True,compute_correl=compute_correl,bigger_text=bigger_text,
+                                            show_linked=show_linked,show_ul_ew=show_scatter_ul)]
     elif mode=='observ':
-        scat_eqw=\
-        [correl_graph(abslines_plot_restrict,'eqw_HR',abslines_ener_restrict,dict_linevis,mode_vals=hid_plot_restrict,mode='observ',conf_thresh=slider_sign,
-                      streamlit=True,compute_correl=compute_correl,bigger_text=bigger_text,show_linked=show_linked,show_ul_eqw=show_scatter_ul),
-         correl_graph(abslines_plot_restrict,'eqw_flux',abslines_ener_restrict,dict_linevis,mode_vals=hid_plot_restrict,mode='observ',conf_thresh=slider_sign,
-                      streamlit=True,compute_correl=compute_correl,bigger_text=bigger_text,show_linked=show_linked,show_ul_eqw=show_scatter_ul)]
+        scat_ew=\
+        [correl_graph(abslines_plot_restrict,'ew_HR',abslines_ener_restrict,dict_linevis,mode_vals=hid_plot_restrict,mode='observ',conf_thresh=slider_sign,
+                      streamlit=True,compute_correl=compute_correl,bigger_text=bigger_text,show_linked=show_linked,show_ul_ew=show_scatter_ul),
+         correl_graph(abslines_plot_restrict,'ew_flux',abslines_ener_restrict,dict_linevis,mode_vals=hid_plot_restrict,mode='observ',conf_thresh=slider_sign,
+                      streamlit=True,compute_correl=compute_correl,bigger_text=bigger_text,show_linked=show_linked,show_ul_ew=show_scatter_ul)]
 
         scat_bshift=\
             [correl_graph(abslines_plot_restrict,'bshift_HR',abslines_ener_restrict,dict_linevis,mode_vals=hid_plot_restrict,mode='observ',
@@ -2993,19 +2993,19 @@ def streamlit_scat(mode):
                       conf_thresh=slider_sign,streamlit=True,compute_correl=compute_correl,bigger_text=bigger_text,show_linked=show_linked)]
 
         if use_high_E_param:
-            scat_eqw += \
-                [correl_graph(abslines_plot_restrict, 'eqw_nthcomp-gamma', abslines_ener_restrict, dict_linevis,
+            scat_ew += \
+                [correl_graph(abslines_plot_restrict, 'ew_nthcomp-gamma', abslines_ener_restrict, dict_linevis,
                               mode_vals=hid_plot_restrict, mode='observ', conf_thresh=slider_sign,
                               streamlit=True, compute_correl=compute_correl, bigger_text=bigger_text,
-                              show_linked=show_linked, show_ul_eqw=show_scatter_ul),
-                 correl_graph(abslines_plot_restrict, 'eqw_highE-HR', abslines_ener_restrict, dict_linevis,
+                              show_linked=show_linked, show_ul_ew=show_scatter_ul),
+                 correl_graph(abslines_plot_restrict, 'ew_highE-HR', abslines_ener_restrict, dict_linevis,
                               mode_vals=hid_plot_restrict, mode='observ', conf_thresh=slider_sign,
                               streamlit=True, compute_correl=compute_correl, bigger_text=bigger_text,
-                              show_linked=show_linked, show_ul_eqw=show_scatter_ul),
-                 correl_graph(abslines_plot_restrict, 'eqw_highE-flux', abslines_ener_restrict, dict_linevis,
+                              show_linked=show_linked, show_ul_ew=show_scatter_ul),
+                 correl_graph(abslines_plot_restrict, 'ew_highE-flux', abslines_ener_restrict, dict_linevis,
                               mode_vals=hid_plot_restrict, mode='observ', conf_thresh=slider_sign,
                               streamlit=True, compute_correl=compute_correl, bigger_text=bigger_text,
-                              show_linked=show_linked, show_ul_eqw=show_scatter_ul)]
+                              show_linked=show_linked, show_ul_ew=show_scatter_ul)]
 
             scat_bshift += \
                 [correl_graph(abslines_plot_restrict, 'bshift_nthcomp-gamma', abslines_ener_restrict, dict_linevis,
@@ -3043,28 +3043,28 @@ def streamlit_scat(mode):
              correl_graph(abslines_plot_restrict,'width_flux',abslines_ener_restrict,dict_linevis,mode_vals=hid_plot_restrict,mode='observ',
                           conf_thresh=slider_sign,streamlit=True,compute_correl=compute_correl,bigger_text=bigger_text,show_linked=show_linked)]
         
-        if use_eqwratio:
-            scat_eqwratio=\
-            [correl_graph(abslines_plot_restrict,'eqwratio'+eqwratio_type+'_HR',abslines_ener_restrict,dict_linevis,mode_vals=hid_plot_restrict,mode='observ',
+        if use_ewratio:
+            scat_ewratio=\
+            [correl_graph(abslines_plot_restrict,'ewratio'+ewratio_type+'_HR',abslines_ener_restrict,dict_linevis,mode_vals=hid_plot_restrict,mode='observ',
                   conf_thresh=slider_sign,streamlit=True,compute_correl=compute_correl,bigger_text=bigger_text,show_linked=show_linked,
-                  show_ul_eqw=show_scatter_ul),
-            correl_graph(abslines_plot_restrict,'eqwratio'+eqwratio_type+'_flux',abslines_ener_restrict,dict_linevis,mode_vals=hid_plot_restrict,mode='observ',
+                  show_ul_ew=show_scatter_ul),
+            correl_graph(abslines_plot_restrict,'ewratio'+ewratio_type+'_flux',abslines_ener_restrict,dict_linevis,mode_vals=hid_plot_restrict,mode='observ',
                   conf_thresh=slider_sign,streamlit=True,compute_correl=compute_correl,bigger_text=bigger_text,show_linked=show_linked,
-                  show_ul_eqw=show_scatter_ul)]
+                  show_ul_ew=show_scatter_ul)]
 
             if use_high_E_param:
-                scat_eqwratio+=[correl_graph(abslines_plot_restrict,'eqwratio'+eqwratio_type+'_nthcomp-gamma',abslines_ener_restrict,dict_linevis,mode_vals=hid_plot_restrict,mode='observ',
+                scat_ewratio+=[correl_graph(abslines_plot_restrict,'ewratio'+ewratio_type+'_nthcomp-gamma',abslines_ener_restrict,dict_linevis,mode_vals=hid_plot_restrict,mode='observ',
                           conf_thresh=slider_sign,streamlit=True,compute_correl=compute_correl,bigger_text=bigger_text,show_linked=show_linked,
-                          show_ul_eqw=show_scatter_ul),
-                correl_graph(abslines_plot_restrict, 'eqwratio' + eqwratio_type + '_highE-HR',
+                          show_ul_ew=show_scatter_ul),
+                correl_graph(abslines_plot_restrict, 'ewratio' + ewratio_type + '_highE-HR',
                              abslines_ener_restrict, dict_linevis, mode_vals=hid_plot_restrict,
                              mode='observ',
                              conf_thresh=slider_sign, streamlit=True, compute_correl=compute_correl,
                              bigger_text=bigger_text, show_linked=show_linked,
-                             show_ul_eqw=show_scatter_ul),
-                  correl_graph(abslines_plot_restrict,'eqwratio'+eqwratio_type+'_highE-flux',abslines_ener_restrict,dict_linevis,mode_vals=hid_plot_restrict,mode='observ',
+                             show_ul_ew=show_scatter_ul),
+                  correl_graph(abslines_plot_restrict,'ewratio'+ewratio_type+'_highE-flux',abslines_ener_restrict,dict_linevis,mode_vals=hid_plot_restrict,mode='observ',
                           conf_thresh=slider_sign,streamlit=True,compute_correl=compute_correl,bigger_text=bigger_text,show_linked=show_linked,
-                          show_ul_eqw=show_scatter_ul)]
+                          show_ul_ew=show_scatter_ul)]
 
         if n_infos>=5 and use_lineflux:
             scat_lineflux=\
@@ -3074,9 +3074,9 @@ def streamlit_scat(mode):
                           conf_thresh=slider_sign,streamlit=True,compute_correl=compute_correl,bigger_text=bigger_text,show_linked=show_linked)]
         
     elif mode=='source':
-        scat_eqw+=[correl_graph(abslines_plot_restrict,'eqw_inclin',abslines_ener_restrict,dict_linevis,mode_vals=incl_plot_restrict,mode='source',
+        scat_ew+=[correl_graph(abslines_plot_restrict,'ew_inclin',abslines_ener_restrict,dict_linevis,mode_vals=incl_plot_restrict,mode='source',
                                 conf_thresh=slider_sign,streamlit=True,compute_correl=compute_correl,bigger_text=bigger_text,show_linked=show_linked,
-                                show_ul_eqw=show_scatter_ul)]
+                                show_ul_ew=show_scatter_ul)]
         
         scat_bshift+=[correl_graph(abslines_plot_restrict,'bshift_inclin',abslines_ener_restrict,dict_linevis,mode_vals=incl_plot_restrict,mode='source',
                                conf_thresh=slider_sign,streamlit=True,compute_correl=compute_correl,bigger_text=bigger_text,show_linked=show_linked)]
@@ -3094,14 +3094,14 @@ def streamlit_scat(mode):
     with tab_param:
         with st.expander('Correlation graphs for '+('line' if mode=='intrinsic' else mode)+' parameters'):
     
-            col_list={'eqw':None,'bshift':None,'ener':None}
+            col_list={'ew':None,'bshift':None,'ener':None}
             
             if use_width:
                 col_list['width']=None
             
             #defining columns for each data type
-            if use_eqwratio and (mode=='observ' or use_width):
-                col_list['eqwratio']=None
+            if use_ewratio and (mode=='observ' or use_width):
+                col_list['ewratio']=None
             if n_infos>=5 and use_lineflux:
                 col_list['lineflux']=None
             st_cols=st.columns(len(col_list))
@@ -3109,20 +3109,20 @@ def streamlit_scat(mode):
             for i_col,col_name in enumerate(list(col_list.keys())):
                 col_list[col_name]=st_cols[i_col]
             
-            with col_list['eqw']:
-                pholder_ew=[st.pyplot(elem) for elem in scat_eqw]
+            with col_list['ew']:
+                pholder_ew=[st.pyplot(elem) for elem in scat_ew]
                             
-            if mode!='eqwratio' or use_time_param:
+            if mode!='ewcomp' or use_time_param:
     
                 with col_list['bshift']:
                     pholder_bshift=[st.pyplot(elem) for elem in scat_bshift]
     
-            if mode!='eqwratio':
+            if mode!='ewcomp':
                 with col_list['ener']:
                     pholder_ener=[st.pyplot(elem) for elem in scat_ener]
-                if use_eqwratio and (mode=='observ' or use_width):
-                    with col_list['eqwratio']:
-                        pholder_ewratio=[st.pyplot(elem) for elem in scat_eqwratio]
+                if use_ewratio and (mode=='observ' or use_width):
+                    with col_list['ewratio']:
+                        pholder_ewratio=[st.pyplot(elem) for elem in scat_ewratio]
                         
             if use_lineflux and n_infos>=5:
                 with col_list['lineflux']:
@@ -3136,7 +3136,7 @@ mpl.rcParams.update({'font.size': 14})
 
 #storing arguments to reduce the number of arguments in the scatter plot functions    
 dict_linevis['scale_log_hr']=scale_log_hr
-dict_linevis['scale_log_eqw']=scale_log_eqw
+dict_linevis['scale_log_ew']=scale_log_ew
 
 dict_linevis['abslines_ener']=abslines_ener
 dict_linevis['abslines_plot']=abslines_plot
@@ -3171,8 +3171,8 @@ if display_distrib:
 if display_scat_intr:
     streamlit_scat('intrinsic')
 
-if display_scat_eqwcomp:
-    streamlit_scat('eqwratio')
+if display_scat_ewcomp:
+    streamlit_scat('ewcomp')
     
 if display_scat_hid:
     streamlit_scat('observ')
@@ -3180,7 +3180,7 @@ if display_scat_hid:
 if display_scat_inclin:
     streamlit_scat('source')
     
-if not (display_scat_intr or display_scat_eqwcomp or display_scat_hid or display_scat_inclin):
+if not (display_scat_intr or display_scat_ewcomp or display_scat_hid or display_scat_inclin):
     with tab_param:
         st.info('Select parameters to compare or enable distributions to generate plots')
 

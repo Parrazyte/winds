@@ -2511,6 +2511,18 @@ def hid_graph(ax_hid,dict_linevis,
         # creating a display order which is the reverse of the EW size order to make sure we do not hide part the detections
         obj_order_sign = obj_size_sign[obj_val_mask_sign].argsort()[::-1]
 
+        if radio_info_cmap=='line_struct':
+            #reordering to have the substructures above the rest
+            colors_data_restrict=diago_color[mask_obj][i_obj][obj_val_mask_sign]
+            obj_order_sign_mainstruct=obj_size_sign[obj_val_mask_sign][colors_data_restrict=='grey'].argsort()[::-1]
+            obj_order_sign_substruct=obj_size_sign[obj_val_mask_sign][colors_data_restrict=='orange'].argsort()[::-1]
+            obj_order_sign_outliers=obj_size_sign[obj_val_mask_sign][colors_data_restrict=='blue'].argsort()[::-1]
+
+            len_arr=np.arange(len(obj_order_sign))
+            obj_order_sign=np.concatenate([len_arr[colors_data_restrict=='grey'][obj_order_sign_mainstruct],
+                                                len_arr[colors_data_restrict=='orange'][obj_order_sign_substruct],
+                                                len_arr[colors_data_restrict=='blue'][obj_order_sign_outliers]])
+
         # same thing for all detections
         obj_val_cmap = np.array(
             [np.nan if len(abslines_obj[0][radio_cmap_i][mask_lines].T[i_obs][mask_det.T[i_obs]]) == 0 else \
@@ -2627,7 +2639,6 @@ def hid_graph(ax_hid,dict_linevis,
                                        x_hid[obj_val_mask_sign]) > 0 else '',
                                    cmap=cmap_info, alpha=alpha_abs_detsign,
                                    plotnonfinite=True)]
-
 
             if (radio_info_cmap == 'Source' or display_edgesource) and len(x_hid[obj_val_mask_sign]) > 0:
                 label_obj_plotted[i_obj] = True
@@ -4838,7 +4849,18 @@ def correl_graph(data_perinfo,infos,data_ener,dict_linevis,mode='intrinsic',mode
             else:
                 y_error=[np.array([y_error[0][bool_det][bool_sign],y_error[1][bool_det][bool_sign]]).astype(float),
                           np.array([y_error[0][bool_det][~bool_sign],y_error[1][bool_det][~bool_sign]]).astype(float)]
-        
+
+        # changing the second brightest substructure point for the EW ratio plot to the manually fitted one
+        # with relaxed SAA filtering
+        if color_scatter == 'line_struct' and 'ewratio' in infos_split[0]:
+            x_point = 1.6302488583411436
+            id_point_refit=np.argwhere(x_data[0]==x_point)[0][0]
+
+            #computed manually
+            x_data[0][id_point_refit]=2.41
+            x_error[0][0][id_point_refit]=1.09
+            x_error[0][1][id_point_refit]=2.59
+
         #no need to do anything for y error in hid mode since it's already set to None
         
         data_cols=['blue','grey']
@@ -5341,11 +5363,9 @@ def correl_graph(data_perinfo,infos,data_ener,dict_linevis,mode='intrinsic',mode
                 for elem_children in ([] if type(elem_errbar)==str else elem_errbar.get_children()[1:]):
                     
                     if type(elem_children)==mpl.collections.LineCollection:
-                        try:
-                            elem_children.set_colors(color_arr[s][~(linked_mask[s].astype(bool))])
-                        except:
-                            breakpoint()
-                            pass
+
+                        elem_children.set_colors(color_arr[s][~(linked_mask[s].astype(bool))])
+
                         #highlighting BAT/INT projected luminosities without having to worry about how the graphs
                         #were created
                         if mode=='observ' and ind_infos[1] in [4,5] and mask_added_regr_sign_use is not None:
@@ -5366,11 +5386,12 @@ def correl_graph(data_perinfo,infos,data_ener,dict_linevis,mode='intrinsic',mode
                             data_bshift=np.array([x_data[s],y_data[s]])[np.array(infos_split)=='bshift'][s]
                             
                             ls_dist=np.repeat('-',len(x_data[s]))
-                           
+                            #to avoid issues due to the type of the array
+                            ls_dist = ls_dist.tolist()
+
                             facecol_dist=np.repeat('full',len(x_data[s]))
                             
-                            ls_dist=ls_dist.astype(object)
-                            
+
                             facecol_dist=facecol_dist.tolist()
                             
                             bshift_obscured=[948.903977133402, 1356.3406485107535, 2639.060062961778]
@@ -5380,9 +5401,17 @@ def correl_graph(data_perinfo,infos,data_ener,dict_linevis,mode='intrinsic',mode
                             for i_obscured in index_bshift_GRS:
                                 ls_dist[i_obscured]='--'
                                 facecol_dist[i_obscured]='none'
-                            
-                            ls_dist=ls_dist.tolist()
-                            
+
+                            elem_children.set_linestyles(ls_dist)
+
+                        #dashing the errorbar for the 4U point with adjusted manual values for the EW ratio
+                        elif color_scatter == 'line_struct' and 'ewratio' in infos_split[0]:
+                            ls_dist=np.repeat('-',len(x_data[s]))
+                            #to avoid issues due to the type of the array
+                            ls_dist = ls_dist.tolist()
+
+                            ls_dist[id_point_refit]='--'
+
                             elem_children.set_linestyles(ls_dist)
                             
                     else:
@@ -5402,8 +5431,7 @@ def correl_graph(data_perinfo,infos,data_ener,dict_linevis,mode='intrinsic',mode
                         
             for s,elem_errbar_linked in enumerate(errbar_list_linked):
                 #replacing indiviudally the colors for each point but the line
-                
-                
+
                 for elem_children in ([] if type(elem_errbar_linked)==str else elem_errbar_linked.get_children()[1:]):
                     
                     elem_children.set_colors(color_arr[s][(linked_mask[s].astype(bool))])
@@ -5547,6 +5575,20 @@ def correl_graph(data_perinfo,infos,data_ener,dict_linevis,mode='intrinsic',mode
                                               marker='D',edgecolor=None if id_GRS not in index_bshift_GRS_indiv else\
                                             label_dict[color_label],
                                               alpha=1,zorder=1)
+
+                            # changing the marker color for the 4U point with adjusted manual values for the EW ratio
+                            elif  color_scatter == 'line_struct' and 'ewratio' in infos_split[0]:
+
+                                for id_obs,id_obs_full in enumerate(np.arange(len(y_data[s]))[color_mask]):
+                                    ax_scat.scatter(
+                                        x_data[s].astype(float)[~(linked_mask[s].astype(bool))][color_mask][id_obs],
+                                        y_data[s].astype(float)[~(linked_mask[s].astype(bool))][color_mask][id_obs],
+                                        color=label_dict[color_label] if id_obs_full!=id_point_refit else None,
+                                        facecolor='none' if id_obs_full==id_point_refit else None,
+                                        label=color_label if id_obs == 0 else '',
+                                        marker='D',
+                                        edgecolor=label_dict[color_label] if id_obs_full==id_point_refit else None,
+                                        alpha=1, zorder=1)
                             
                             else:
                                 ax_scat.scatter(
@@ -5751,13 +5793,7 @@ def correl_graph(data_perinfo,infos,data_ener,dict_linevis,mode='intrinsic',mode
             #preventing log scales for graphs with no values, which crashes them
             plt.xscale('linear')
             plt.yscale('linear')
-            
-        #changing the second brightest substructure point for the EW ratio plot to the manually fitted one 
-        #with relaxed SAA filtering
-        if color_scatter=='line_struct' and 'ewratio' in infos[0]:
-            breakpoint()
-            pass
-        
+
         
         #### custom things for the wind_review_global paper
         

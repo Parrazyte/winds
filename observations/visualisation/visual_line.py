@@ -1449,10 +1449,16 @@ dict_linevis['gamma_nthcomp_plot_restrict']=gamma_nthcomp_plot_restrict
 dict_linevis['Tin_diskbb_plot_restrict']=Tin_diskbb_plot_restrict
 dict_linevis['Tin_diskbb_plot']=Tin_diskbb_plot
 
+#n_obj_restricted
+n_obj_r=sum(mask_obj)
+
+#creating an array for the intime observations
+mask_intime_plot=np.array([(Time(date_list[mask_obj][i_obj_r].astype(str))>=Time(slider_date[0])) & (Time(date_list[mask_obj][i_obj_r].astype(str))<=Time(slider_date[1])) for i_obj_r in range(n_obj_r)],dtype=object)
+
 #custom colorbar for the line substructure and outliers (needs the high energy elements)
 
 diago_color=deepcopy(hid_plot[1][0])
-if display_single:
+if display_single and sum(ravel_ragged(mask_intime_plot))>0:
     for i_obj in range(len(diago_color)):
         if obj_list[i_obj]=='4U1630-47':
             for i_obs in range(len(diago_color[i_obj])):
@@ -2242,11 +2248,6 @@ with tab_source_df:
 #OBS & LINE TABLES
 '''
 
-#n_obj_restricted
-n_obj_r=sum(mask_obj)
-
-#creating an array for the intime observations
-mask_intime_plot=np.array([(Time(date_list[mask_obj][i_obj_r].astype(str))>=Time(slider_date[0])) & (Time(date_list[mask_obj][i_obj_r].astype(str))<=Time(slider_date[1])) for i_obj_r in range(n_obj_r)],dtype=object)
 
 if display_single and choice_source[0]=='4U1630-47':
 

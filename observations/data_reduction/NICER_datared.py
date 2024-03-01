@@ -100,7 +100,7 @@ ap.add_argument('-catch','--catch_errors',help='Catch errors while running the d
 
 #global choices
 ap.add_argument("-a","--action",nargs='?',help='Give which action(s) to proceed,separated by comas.',
-                default='1,gti,fs,l,g,m',type=str)
+                default='c,1,gti,fs,l,g,m',type=str)
 #default: 1,gti,fs,l,g,m,c
 
 ap.add_argument("-over",nargs=1,help='overwrite computed tasks (i.e. with products in the batch, or merge directory\
@@ -115,8 +115,20 @@ ap.add_argument('-folder_cont',nargs=1,help='skip all but the last 2 directories
 
 #1. process
 
+#These arguments should be adjusted with lots of attention after looking at both the flare plots
+#the summary of temporal filtering logged in process_obsdir, and the resulting spectra
+
 #should only be done in very extreme cases
-ap.add_argument('-keep_SAA',nargs=1,help='keep South Atlantic Anomaly (SAA) Periods',type=bool,default=False)
+ap.add_argument('-keep_SAA',nargs=1,help='keep South Atlantic Anomaly (SAA) Periods',type=bool,default=True)
+
+ap.add_argument('-overshoot_limit',nargs=1,help='overshoot event rate limit',type=float,default=30)
+
+ap.add_argument('-undershoot_limit',nargs=1,help='undershoot event rate limit',type=float,default=500)
+
+ap.add_argument('-min_gti',nargs=1,help='minimum gti size',type=float,default=5.0)
+
+ap.add_argument('-erodedilate',nargs=1,help='Erodes increasingly more gtis around the excluded intervals',
+                type=float,default=5.0)
 
 #gti
 #keyword for split: split_timeinsec
@@ -166,6 +178,10 @@ bgmodel=args.bgmodel
 bglanguage=args.bg_language
 
 keep_SAA=args.keep_SAA
+overshoot_limit=args.overshoot_limit
+undershoot_limit=args.undershoot_limit
+min_gti=args.min_gti
+erodedilate=args.erodedilate
 
 gti_split=args.gti_split
 gti_lc_band=args.gti_lc_band
@@ -213,16 +229,24 @@ def _remove_control_chars(message):
     ansi_escape =re.compile(r'(\x9B|\x1B\[)[0-?]*[ -\/]*[@-~]')
     return ansi_escape.sub('', message)
 
-def process_obsdir(directory,overwrite=True,keep_SAA=False):
+def process_obsdir(directory,overwrite=True,keep_SAA=False,overshoot_limit=30.,undershoot_limit=500.,
+                                            min_gti=5.0,erodedilate=5.0):
     
     '''
     Processes a directory using the nicerl2 script
 
-    options:
+    options (default values are the defaults of the function)
+
+    see https://heasarc.gsfc.nasa.gov/docs/software/lheasoft/help/nimaketime.html for details of these
 
     -keep_SAA: remove South Atlantic Anomaly filtering (default False).
                 Should only be done in specific cases, see
-                https://heasarc.gsfc.nasa.gov/docs/software/lheasoft/help/nimaketime.html
+
+    -overshoot/undershoot limit: limit above which to filter the events depending on these quantities
+
+    -min_gti minimum gti
+
+    -erodedilate: erodes gtis arode the excluded intervals
 
     '''
     
@@ -240,8 +264,12 @@ def process_obsdir(directory,overwrite=True,keep_SAA=False):
 
         bashproc.logfile_read=sys.stdout
 
-        bashproc.sendline('nicerl2 indir='+directory+' clobber='+('YES' if overwrite else 'FALSE')+' nicersaafilt='+
-                          ('NO' if keep_SAA else 'YES'))
+        bashproc.sendline('nicerl2 indir=' + directory +' clobber=' + ('YES' if overwrite else 'FALSE') +
+                          ' nicersaafilt=' + ('NO' if keep_SAA else 'YES') +
+                          ' overonly_range=0-%.1f'%overshoot_limit +
+                          ' underonly_range=0-%.1f'%undershoot_limit +
+                          ' mingti=%.1f' % min_gti +
+                          ' erodedilate=%.1f' % erodedilate)
 
         process_state=bashproc.expect(['terminating with status','Event files written'],timeout=None)
         
@@ -1796,7 +1824,8 @@ if not local:
                         folder_state='Running '+curr_action
                         
                         if curr_action=='1':
-                            process_obsdir(dirname,overwrite=overwrite_glob,keep_SAA=keep_SAA)
+                            process_obsdir(dirname,overwrite=overwrite_glob,keep_SAA=keep_SAA,overshoot_limit=overshoot_limit,
+                                                    undershoot_limit=undershoot_limit,min_gti=min_gti,erodedilate=erodedilate)
                             process_obsdir_done.wait()
                         if curr_action=='2':
                             select_detector(dirname,detectors=bad_detectors)
@@ -1864,7 +1893,8 @@ if not local:
                 for curr_action in action_list:
                     folder_state='Running '+curr_action
                     if curr_action=='1':
-                        process_obsdir(dirname,overwrite=overwrite_glob,keep_SAA=keep_SAA)
+                        process_obsdir(dirname,overwrite=overwrite_glob,keep_SAA=keep_SAA,overshoot_limit=overshoot_limit,
+                                                undershoot_limit=undershoot_limit,min_gti=min_gti,erodedilate=erodedilate)
                         process_obsdir_done.wait()
                     if curr_action=='2':
                         select_detector(dirname,detectors=bad_detectors)
@@ -1946,7 +1976,8 @@ else:
     #for loop to be able to use different orders if needed
     for curr_action in action_list:
             if curr_action=='1':
-                process_obsdir(absdir,overwrite=overwrite_glob,keep_SAA=keep_SAA)
+                process_obsdir(absdir,overwrite=overwrite_glob,keep_SAA=keep_SAA,overshoot_limit=overshoot_limit,
+                                        undershoot_limit=undershoot_limit,min_gti=min_gti,erodedilate=erodedilate)
                 process_obsdir_done.wait()
             if curr_action=='2':
                 select_detector(absdir,detectors=bad_detectors)

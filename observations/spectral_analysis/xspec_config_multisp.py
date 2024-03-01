@@ -433,28 +433,36 @@ class scorpeon_manager:
 
             for i_grp in range(AllData.nGroups):
 
-                if self.bgload_paths is None or self.bgload_paths[i_grp] is None:
+                if self.bgload_paths[i_grp] is None:
                     continue
 
-                mod_nxb=AllModels(i_grp+1,modName='nxb')
+                try:
+                    mod_nxb=AllModels(i_grp+1,modName='nxb')
 
-                for i_par in range(mod_nxb.nParameters):
+                    for i_par in range(mod_nxb.nParameters):
 
-                    mod_nxb(i_par+1).frozen=True
+                        mod_nxb(i_par+1).frozen=True
+                except:
+                    pass
 
-                mod_sky=AllModels(i_grp+1,modName='sky')
+                try:
+                    mod_sky=AllModels(i_grp+1,modName='sky')
 
-                for i_par in range(mod_sky.nParameters):
+                    for i_par in range(mod_sky.nParameters):
 
-                    mod_sky(i_par+1).frozen=True
+                        mod_sky(i_par+1).frozen=True
+                except:
+                    pass
 
-                pass
 
     def clear(self):
         mod_save=allmodel_data()
         AllModels.clear()
         mod_save.load(load_scorpeon=False)
 
+    def freeze(self):
+        self.bgload_paths=None
+        self.load(frozen=True)
 
 class scorpeon_data:
 
@@ -1592,21 +1600,21 @@ def addcomp(compname,position='last',endmult=None,return_pos=False,modclass=AllM
         for i_grp in range(1,AllData.nGroups+1):
             #setting the first data group to a fixed 1 value
             if i_grp==1:
-                AllModels(i_grp)(gap_start).values=[0]+ AllModels(i_grp)(gap_start).values[1:]
+                AllModels(i_grp)(gap_start).values=[0]+ [0.01, -0.15,-0.15,0.15,0.15]
                 AllModels(i_grp)(gap_start).frozen=True
 
                 #note that we edit the values range to avoid negatives values that would make the fit go wild
-                AllModels(i_grp)(gap_start+1).values=[1]+ [0.01, 0., 0., 1e+22, 1e+22]
+                AllModels(i_grp)(gap_start+1).values=[1]+ [0.01, 0.85,0.85,1.15,1.15]
                 AllModels(i_grp)(gap_start+1).frozen=True
             #unlinking the rest
             else:
                 AllModels(i_grp)(gap_start).link=''
                 AllModels(i_grp)(gap_start).frozen=False
-                AllModels(i_grp)(gap_start).values=[0]+ AllModels(i_grp)(gap_start).values[1:]
+                AllModels(i_grp)(gap_start).values=[0]+ [0.01, -0.15,-0.15,0.15,0.15]
 
                 AllModels(i_grp)(gap_start+1).link=''
                 AllModels(i_grp)(gap_start+1).frozen=False
-                AllModels(i_grp)(gap_start + 1).values = [1] + [0.01, 0., 0., 1e+22, 1e+22]
+                AllModels(i_grp)(gap_start + 1).values = [1] + [0.01, 0.85,0.85,1.15,1.15]
             if i_grp!=AllData.nGroups:
                 return_pars+=[gap_start+AllModels(1).nParameters*i_grp,gap_start+1+AllModels(gap_start).nParameters*i_grp]
 

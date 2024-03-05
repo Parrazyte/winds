@@ -895,13 +895,20 @@ def split_str_expr(string):
                 xspec_str += [string[comp_str:i + 1]]
 
     return xspec_str
-def numbered_expression(expression=None):
+def numbered_expression(expression=None,mult_conv='auto'):
 
     '''
-    Return an edit model xspec expression with each component's naming in the current xspec model
+    Return an edited model xspec expression with each component's naming in the current xspec model
     by default, uses the current model expression
 
-    Also returns a dictionnary containing all custom table component and their xspec names
+    the mult_conv determines whether the * should be replaced by parenthesis
+    (to know when to add new components as parts of multiplicative components)
+        options:
+            -auto (default): only replaces the * for global xspec_globcomps and absorption components
+            -full:  replaces everything
+            -False: doesn't replace
+
+    Also returns a dictionnary containing all custom table components and their xspec names
 
     '''
 
@@ -915,9 +922,40 @@ def numbered_expression(expression=None):
     xspec_str=split_str_expr(string)
 
     i=0
-    #adding numbers by replacing by the actual model component names
-    for j,elem in enumerate(xspec_str):
-        if elem in '()+-* ':
+    j=0
+
+    #this will be used to store parenthesis
+    add_par=[]
+
+    #we use a while here since xspec_str can be modified
+    while j<len(xspec_str):
+
+        elem=xspec_str[j]
+
+        if elem=='*':
+            if mult_conv=='full' or (mult_conv=='auto' and\
+                                   xspec_str[j-1].split('_')[0] in xspec_globcomps or \
+                                   is_abs(xspec_str[j-1].split('_')[0])):
+                xspec_str[j]='('
+                add_par+=[')']
+                j+=1
+                continue
+            else:
+                j+=1
+                continue
+
+        #continuing directly here because there shouldn't ever be a a*b(c)
+        if elem=='(':
+            j+=1
+            continue
+
+        if elem in ')+- ':
+
+            #adding an ending parenthesis if necessary
+            if len(add_par)!=0:
+                xspec_str.insert(j+1,add_par[-1])
+                add_par=add_par[:-1]
+            j+=1
             continue
 
         #testing if the component is a table
@@ -928,7 +966,12 @@ def numbered_expression(expression=None):
 
         #needs a proper call to AllModels(1) here to be able to use it whenever we want
         xspec_str[j]=AllModels(1).componentNames[i]
+
         i+=1
+        j+=1
+
+    #adding any last parenthesis
+    xspec_str+=add_par
 
     return ''.join(xspec_str),dict_tables
 
@@ -976,7 +1019,7 @@ def xModel(expression,table_dict=None,modclass=AllModels,mod_name='',mod_number=
         return AllModels(1,mod_name)
 
 def addcomp(compname,position='last',endmult=None,return_pos=False,modclass=AllModels,
-            included_list=None,values=None,links=None,frozen=None):
+            included_list=None,values=None,links=None,frozen=None,mult_conv_rule='auto'):
 
     '''
     changes the default model to add a new component, by saving the old model parameters and thn loading a new model with the new
@@ -990,8 +1033,17 @@ def addcomp(compname,position='last',endmult=None,return_pos=False,modclass=AllM
     Same for links and frozen
 
     the "position" keyword refers to the position of the added component:
+
         -last: last component in the model
+
+        -lastinall:last component, but inside all global multiplications
+        Note: very useful when adding new components in a model with multiple global multiplicative components
+        (e.g. absorption, calibration constants, etc.)
+
         -lastin: last component, but inside the last multiplication
+        Note: very useful when adding new calibration components which we only want to be multiplied by
+        a global calibration component
+
         -*xspec component name (with underscore numbering if its not the first)/associated number: BEFORE this component
         the numbering is considered actual component numbering (starting at 1) for positive numbers,
         and array numberings (negatives up to 0) for negative numbers
@@ -1001,6 +1053,11 @@ def addcomp(compname,position='last',endmult=None,return_pos=False,modclass=AllM
         -all/-1: ends at the end of the model
         -*xspec component name/associated number: AFTER this component
 
+    mult_conv_rule: determines whether to replace the components with a single multiplication
+    with parenthesis (which will integrate the new component inside even if it's added after that component)
+    or not.
+    Default value is at 'auto' which only does that for global absorption and calibration components
+    Can be set to True or False to do things more manually if needed
 
     custom components (work together):
 
@@ -1198,7 +1255,7 @@ def addcomp(compname,position='last',endmult=None,return_pos=False,modclass=AllM
         model_saves=allmodel_data().default
 
         #getting the xspec expression of the current model as well as the list of components
-        num_expr,table_dict=numbered_expression()
+        num_expr,table_dict=numbered_expression(mult_conv=mult_conv_rule)
 
         #replacing a * by parenthesis for single constant*additive models to have an easier time later
 
@@ -1214,7 +1271,7 @@ def addcomp(compname,position='last',endmult=None,return_pos=False,modclass=AllM
         else:
             if start_position=='first':
                 xcomp_start=xcomps[0]
-            elif start_position in ['last','lastin']:
+            elif start_position in ['last','lastin','lastinall']:
                 #can't use an actual component here since we place the new component before it
                 xcomp_start=-1
             else:
@@ -1244,22 +1301,33 @@ def addcomp(compname,position='last',endmult=None,return_pos=False,modclass=AllM
                 if num_expr[num_expr.find(AllModels(1).componentNames[1])-1]=='*':
                     num_expr=num_expr.replace('*'+AllModels(1).componentNames[1],'('+AllModels(1).componentNames[1]+')',1)
 
-            #at the very end of the model but inside parenthesis
-            if position=='lastin':
+            #at the very end of the model but inside parentheses
+            if position in ['lastin','lastinall']:
 
-                #counting the number of parenthesis at the end
-                count_par=0
+                #counting the number of parenthesis at the end of the current model
+                count_par_final=0
                 if is_model:
-                    if AllModels(1).componentNames[0] in xspec_globcomps:
-                            count_par+=1
-                #adding inside them if there were any
-                if count_par!=0:
-                    new_expr=num_expr[:-count_par]+'+'+comp_split+num_expr[-count_par:]
+                    for char in num_expr[::-1]:
+                        if char==')':
+                            count_par_final+=1
+                        else:
+                            break
+
+                if position=='lastin':
+                    #capping at one for the single lastin
+                    count_par_final=min(count_par_final,1)
+
+                #adding the componet inside the desired number of parentheses
+                if count_par_final!=0:
+                    new_expr=num_expr[:-count_par_final]+'+'+comp_split+num_expr[-count_par_final:]
                 else:
                     new_expr=num_expr+'+'+comp_split
+
+                pass
             else:
                 #at the very end of the model
                 new_expr=num_expr+'+'+comp_split
+            pass
         else:
 
             #if we are inserting our component inside of a single multiplicative component, we must replace the * by parenthesis
@@ -1766,7 +1834,8 @@ def delcomp(compname,modclass=AllModels,give_ndel=False):
 
 
     #the easiest way to fetch the position of the component to delete is to transform the model expression according to xspec namings
-    xspec_expr,table_dict=numbered_expression(old_exp)
+    #note: no need to replace the * when deleting
+    xspec_expr,table_dict=numbered_expression(old_exp,mult_conv=False)
 
     new_exp_bef=xspec_expr[:xspec_expr.find(compname)].replace(' ','')
     new_exp_aft=xspec_expr[xspec_expr.find(compname)+len(compname):].replace(' ','')
@@ -2755,7 +2824,7 @@ class fitmod:
                 #directly converting the existing xspec components in the various arrays
                 for compname in self.cont_xcompnames:
 
-                    setattr(self,'cont_'+compname,fitcomp('cont_'+compname,self.logfile,self.logfile_write,
+                    setattr(self,'cont_'+compname,make_fitcomp('cont_'+compname,self.logfile,self.logfile_write,
                                                           continuum=True,fitcomp_names=self.name_complist,
                                                           fitmod=self))
                     self.cont_complist+=[getattr(self,'cont_'+compname)]
@@ -2778,13 +2847,13 @@ class fitmod:
                 #components already considered in the autofit continuum list should not be here twice
                 if self.name_complist[i] not in self.name_cont_complist:
 
-                    setattr(self,self.name_complist[i],fitcomp(self.name_complist[i],self.logfile,self.logfile_write,
+                    setattr(self,self.name_complist[i],make_fitcomp(self.name_complist[i],self.logfile,self.logfile_write,
                                                                self.idlist[i],fitcomp_names=self.name_complist,
                                                                fitmod=self))
 
                     self.complist+=[getattr(self,self.name_complist[i])]
             else:
-                setattr(self,self.name_complist[i],fitcomp(self.name_complist[i],
+                setattr(self,self.name_complist[i],make_fitcomp(self.name_complist[i],
                                                            self.logfile,self.logfile_write,
                                                            self.idlist[i],
                                                            fitcomp_names=self.name_complist,
@@ -4418,15 +4487,36 @@ class fitmod:
             new_comp.reload(elem_comp.save,load_frozen=load_frozen_indiv,load_links=load_links,
                             load_relative_links=load_relative_links,load_valrange=load_valrange)
 
+def make_fitcomp(compname,logfile=None,logfile_write=None,identifier=None,continuum=False,
+                 fitcomp_names=None,fitmod=None):
+
+    '''
+    Creates a given type of fitcomp depending on what the starting parameters are
+    '''
+
+    if '_' in compname:
+        comp_prefix = compname.split('_')[0]
+        comp_split = compname.split('_')[-1]
+    else:
+        comp_prefix = ''
+        comp_split = compname
+
+    if 'gaussian' in comp_split and not 'cal' in comp_split:
+        return fitcomp_line(compname,logfile=logfile,logfile_write=logfile_write,identifier=identifier,
+                           continuum=continuum,fitcomp_names=fitcomp_names,fitmod=fitmod)
+    else:
+        return fitcomp(compname,logfile=logfile,logfile_write=logfile_write,identifier=identifier,
+                       continuum=continuum,fitcomp_names=fitcomp_names,fitmod=fitmod)
+
 class fitcomp:
 
     '''
     class used for a singular component added in fitmod
-    Stores various parameters for the automatic fit.
+    Stores various parameters for automatic fitting purposes.
     compname must be a component name understandable by addcomp
-    name can be any string and will be used to identify the component
 
-    Warning: delfrommod with rollback set to True will reload the save made before the component was added for the last time !
+    Warning: delfrommod with rollback set to True will reload the save made before
+             the component was added for the last time !
     '''
 
     def __init__(self,compname,logfile=None,logfile_write=None,identifier=None,continuum=False,
@@ -4546,7 +4636,8 @@ class fitcomp:
     def print_xlog(self,string):
 
         '''
-        prints and logs info in the xspec log file, and flushed to ensure the logs are printed before the next xspec print
+        prints and logs info in the associated xspec log file,
+        flushed to ensure the logs are printed before the next xspec print
         '''
 
         print(string)
@@ -4578,7 +4669,9 @@ class fitcomp:
                 self.old_mod_npars=0
 
             #defining the list of parameter numbers associated to this/these component(s) and its/their component number(s)
-            self.parlist,self.compnumbers=addcomp(self.compname,position='lastin',included_list=incl_list,return_pos=True)
+            #additive calibration components are added with lastin to not consider all the multiplicative calibration components
+            self.parlist,self.compnumbers=addcomp(self.compname,position='lastin' if self.calibration else 'lastinall',
+                                                  included_list=incl_list,return_pos=True)
 
             #fixing parameters if values are provided
             if fixed_vals is not None:
@@ -4647,7 +4740,8 @@ class fitcomp:
     def delfrommod(self,rollback=True):
 
         '''
-        rollback : load the model save before the component was saved. Doesn't necessicate to update_fitcomps afterwards
+        rollback : load the model save before the component was saved.
+        Doesn't requires update_fitcomps afterwards
         '''
         if not self.included:
             self.print_xlog('\nlog:Fit component not yet added to model.')
@@ -4704,7 +4798,7 @@ class fitcomp:
 
     def unfreeze(self):
         '''
-        unfreezing the unlocked parameters of this component
+        unfreezes the unlocked parameters of this component
         '''
         if not self.included:
             self.print_xlog('\nlog:Cannot freeze not included components.')
@@ -4728,7 +4822,8 @@ class fitcomp:
         '''
         Fit + errors of this component
 
-        if split_fit is set to True, freezes all other components then computes the fit and error with this component unlocked only
+        if split_fit is set to True, freezes all other components
+                                     then computes the fit and error with this component unlocked only
 
         '''
 
@@ -4760,174 +4855,6 @@ class fitcomp:
             calc_error(logfile=self.logfile,param='1-'+str(AllData.nGroups*AllModels(1).nParameters),indiv=True)
 
         self.fitted_mod=allmodel_data()
-
-    def get_width(self):
-
-        if not self.included:
-            self.print_xlog('\nlog:Component not included. Returning 0 values')
-            return np.zeros(3)
-
-        width_par=AllModels(1)(self.parlist[-2])
-
-        #returning 0 if the parameter is unconstrained (and thus has been frozen)
-        if width_par.frozen:
-            return np.array([0,0,0])
-
-        self.logfile.readlines()
-
-        #computing the width with the current fit
-        Fit.error('stop ,,0.1 max 100 9.00 '+str(self.parlist[-2]))
-
-        #storing the error lines
-        log_lines=self.logfile.readlines()
-
-        #testing if the parameter is pegged to 0 at 3 sigma
-        if  '***Warning: Parameter pegged at hard limit: 0\n' in log_lines:
-            return np.array([0,0,0])
-
-        return np.array([width_par.values[0],width_par.values[0]-width_par.error[0],width_par.error[1]-width_par.values[0]])
-
-    def get_eqwidth(self):
-
-        '''
-        Note : we currently only compute the eqwidth of the first data group
-        '''
-
-        if not self.included:
-            self.print_xlog('\nlog:Component not included. Returning 0 values')
-            return np.zeros(3)
-
-        #computing the eqwidth without errors first
-        AllModels.eqwidth(self.compnumbers[-1])
-
-        eqwidth_noerr=np.array(AllData(1).eqwidth)*1e3
-
-        try:
-            #eqwidth at 90%
-            AllModels.eqwidth(self.compnumbers[-1],err=True,number=1000,level=90)
-
-            #conversion in eV from keV (same e)
-            eqwidth=np.array(AllData(1).eqwidth)*1e3
-
-            #testing if the MC computation led to bounds out of the initial value :
-            if eqwidth[1]<=eqwidth[0]<=eqwidth[2]:
-                #getting the actual uncertainties and not the quantile values
-                eqwidth_arr=np.array([abs(eqwidth[0]),eqwidth[0]-eqwidth[1],eqwidth[2]-eqwidth[0]])
-            else:
-                #if the bounds are outside we take the median of the bounds as the main value instead
-                eqwidth_arr=\
-                    np.array([abs(eqwidth[1]+eqwidth[2])/2,abs(eqwidth[2]-eqwidth[1])/2,abs(eqwidth[2]-eqwidth[1])/2])
-        except:
-            eqwidth_arr=eqwidth_noerr
-
-        return eqwidth_arr
-
-    def get_eqwidth_ul(self,bshift_range,line_width=0,pre_delete=False):
-
-        '''
-        Note : we compute the eqw ul from the first data group
-        Also tests the upper limit for included components by removing them first
-        '''
-
-        if self.compname.split('_')[0]=='NiKa27abs':
-            return 0
-
-        curr_model=allmodel_data()
-
-        distrib_eqw=[]
-
-        prev_chatter=Xset.chatter
-        prev_logChatter=Xset.logChatter
-
-        if Xset.chatter>5:
-            Xset.chatter=5
-        Xset.logChatter=5
-
-        if type(bshift_range) not in (list,np.ndarray):
-            #skipping interval computations when a precise value for the EQW is provided
-            bshift_space=bshift_range
-        else:
-            bshift_space=np.linspace(-bshift_range[1],-bshift_range[0],101)
-
-
-        with tqdm(total=len(bshift_space)) as pbar:
-
-            #loop on a sampling in the line blueshift range
-            for vshift in  bshift_space:
-
-                #restoring the initial model
-                curr_model.load()
-
-                #deleting the component if needed and the model is not in a no-abs line version
-                if self.included and not pre_delete:
-                    delcomp(self.compname)
-
-
-                #adding an equivalent component, without providing the included group because we don't want to link it
-                addcomp(self.compname,position='lastin')
-
-                npars=AllModels(1).nParameters
-
-                #### forcing unfrozen lines even if the line is manually disabled in addcomp (unless its Nickel)
-                if 'Nika' not in self.compname:
-                    AllModels(1)(npars).values=[-1e-4,1e-7,-5e-2,-5e-2,0,0]
-                    AllModels(1)(npars).frozen=False
-
-                #skipping the computation if the line is above the maximum energy
-                if AllModels(1)(npars-2).values[0]>AllData(1).energies[-1][1]:
-                    self.print_xlog('Line above maximum energy range. Skipping computation...')
-                    distrib_eqw+=[0]
-                    break
-
-                #freezing the width value
-                AllModels(1)(npars-1).values=[line_width]+AllModels(1)(npars-1).values[1:]
-                AllModels(1)(npars-1).frozen=1
-
-                #freezing the blueshift
-                AllModels(1)(npars-3).frozen=1
-
-                #putting the vshift value
-                AllModels(1)(npars-3).values=[vshift]+[vshift/1e3,bshift_space[0],bshift_space[0],bshift_space[-1],bshift_space[-1]]
-
-                #reading and freezing the pegged parameters to keep the EW computation from crashing
-                self.logfile.readlines()
-                AllModels.show()
-
-                #fitting
-                calc_fit(logfile=self.logfile)
-
-                Xset.logChatter=10
-
-                # #reading and freezing the pegged parameters to keep the EW computation from crashing
-                # self.logfile.readlines()
-                # AllModels.show()
-
-                model_lines=self.logfile.readlines()
-                parse_xlog(model_lines,freeze_pegged=True,no_display=True)
-
-                #last attempt at fit computation with query at no
-                calc_fit()
-
-                try:
-                    #computing the EQW with errors
-                    AllModels.eqwidth(len(AllModels(1).componentNames),err=True,number=1000,level=99.7)
-                    #adding the eqw value to the distribution
-                    distrib_eqw+=[abs(AllData(1).eqwidth[1])]
-                except:
-                    self.print_xlog('Issue during EW computation')
-                    distrib_eqw+=[0]
-
-                Xset.logChatter=5
-
-                pbar.update()
-
-        Xset.chatter=prev_chatter
-        Xset.logChatter=prev_logChatter
-
-        #reloading the previous model iteration
-        curr_model.load()
-
-        return max(distrib_eqw)*1e3
 
     def save_comp(self):
         '''
@@ -5051,6 +4978,192 @@ class fitcomp:
                 elem_par.link=reload_links[id_par]
             else:
                 elem_par.link=init_par_link
+
+
+class fitcomp_line(fitcomp):
+
+    '''
+    Child class of fitcomp to add additional methods for line components
+    '''
+
+    def __init__(self, compname, logfile=None, logfile_write=None, identifier=None,
+                 continuum=False,fitcomp_names=None, fitmod=None):
+        super().__init__(compname,logfile=logfile,logfile_write=logfile_write,identifier=identifier,
+                       continuum=continuum,fitcomp_names=fitcomp_names,fitmod=fitmod)
+    def get_width(self):
+
+        '''
+        computes errors to see if the width of the current component (assumed to be gaussian)
+        is not compatible with 0 at 3 sigma
+        If it isn't, returns its values, otherwise returns an array of 0
+        '''
+
+        if not self.included:
+            self.print_xlog('\nlog:Component not included. Returning 0 values')
+            return np.zeros(3)
+
+        width_par=AllModels(1)(self.parlist[-2])
+
+        #returning 0 if the parameter is unconstrained (and thus has been frozen)
+        if width_par.frozen:
+            return np.array([0,0,0])
+
+        self.logfile.readlines()
+
+        #computing the width with the current fit
+        Fit.error('stop ,,0.1 max 100 9.00 '+str(self.parlist[-2]))
+
+        #storing the error lines
+        log_lines=self.logfile.readlines()
+
+        #testing if the parameter is pegged to 0 at 3 sigma
+        if  '***Warning: Parameter pegged at hard limit: 0\n' in log_lines:
+            return np.array([0,0,0])
+
+        return np.array([width_par.values[0],width_par.values[0]-width_par.error[0],width_par.error[1]-width_par.values[0]])
+
+    def get_eqwidth(self):
+
+        '''
+        Note : we currently only compute the eqwidth of the first data group
+        '''
+
+        if not self.included:
+            self.print_xlog('\nlog:Component not included. Returning 0 values')
+            return np.zeros(3)
+
+        #computing the eqwidth without errors first
+        AllModels.eqwidth(self.compnumbers[-1])
+
+        eqwidth_noerr=np.array(AllData(1).eqwidth)*1e3
+
+        try:
+            #eqwidth at 90%
+            AllModels.eqwidth(self.compnumbers[-1],err=True,number=1000,level=90)
+
+            #conversion in eV from keV (same e)
+            eqwidth=np.array(AllData(1).eqwidth)*1e3
+
+            #testing if the MC computation led to bounds out of the initial value :
+            if eqwidth[1]<=eqwidth[0]<=eqwidth[2]:
+                #getting the actual uncertainties and not the quantile values
+                eqwidth_arr=np.array([abs(eqwidth[0]),eqwidth[0]-eqwidth[1],eqwidth[2]-eqwidth[0]])
+            else:
+                #if the bounds are outside we take the median of the bounds as the main value instead
+                eqwidth_arr=\
+                    np.array([abs(eqwidth[1]+eqwidth[2])/2,abs(eqwidth[2]-eqwidth[1])/2,abs(eqwidth[2]-eqwidth[1])/2])
+        except:
+            eqwidth_arr=eqwidth_noerr
+
+        return eqwidth_arr
+
+    def get_eqwidth_ul(self,bshift_range,line_width=0,pre_delete=False):
+
+        '''
+        Note : we compute the eqw ul from the first data group
+        Also tests the upper limit for included components by removing them first
+        '''
+
+        if self.compname.split('_')[0]=='NiKa27abs':
+            return 0
+
+        curr_model=allmodel_data()
+
+        distrib_eqw=[]
+
+        prev_chatter=Xset.chatter
+        prev_logChatter=Xset.logChatter
+
+        if Xset.chatter>5:
+            Xset.chatter=5
+        Xset.logChatter=5
+
+        if type(bshift_range) not in (list,np.ndarray):
+            #skipping interval computations when a precise value for the EQW is provided
+            bshift_space=bshift_range
+        else:
+            bshift_space=np.linspace(-bshift_range[1],-bshift_range[0],101)
+
+
+        with tqdm(total=len(bshift_space)) as pbar:
+
+            #loop on a sampling in the line blueshift range
+            for vshift in  bshift_space:
+
+                #restoring the initial model
+                curr_model.load()
+
+                #deleting the component if needed and the model is not in a no-abs line version
+                if self.included and not pre_delete:
+                    delcomp(self.compname)
+
+
+                #adding an equivalent component, without providing the included group because we don't want to link it
+                addcomp(self.compname,position='lastinall')
+
+                npars=AllModels(1).nParameters
+
+                #### forcing unfrozen lines even if the line is manually disabled in addcomp (unless its Nickel)
+                if 'Nika' not in self.compname:
+                    AllModels(1)(npars).values=[-1e-4,1e-7,-5e-2,-5e-2,0,0]
+                    AllModels(1)(npars).frozen=False
+
+                #skipping the computation if the line is above the maximum energy
+                if AllModels(1)(npars-2).values[0]>AllData(1).energies[-1][1]:
+                    self.print_xlog('Line above maximum energy range. Skipping computation...')
+                    distrib_eqw+=[0]
+                    break
+
+                #freezing the width value
+                AllModels(1)(npars-1).values=[line_width]+AllModels(1)(npars-1).values[1:]
+                AllModels(1)(npars-1).frozen=1
+
+                #freezing the blueshift
+                AllModels(1)(npars-3).frozen=1
+
+                #putting the vshift value
+                AllModels(1)(npars-3).values=[vshift]+[vshift/1e3,bshift_space[0],bshift_space[0],bshift_space[-1],bshift_space[-1]]
+
+                #reading and freezing the pegged parameters to keep the EW computation from crashing
+                self.logfile.readlines()
+                AllModels.show()
+
+                #fitting
+                calc_fit(logfile=self.logfile)
+
+                Xset.logChatter=10
+
+                # #reading and freezing the pegged parameters to keep the EW computation from crashing
+                # self.logfile.readlines()
+                # AllModels.show()
+
+                model_lines=self.logfile.readlines()
+                parse_xlog(model_lines,freeze_pegged=True,no_display=True)
+
+                #last attempt at fit computation with query at no
+                calc_fit()
+
+                try:
+                    #computing the EQW with errors
+                    AllModels.eqwidth(len(AllModels(1).componentNames),err=True,number=1000,level=99.7)
+                    #adding the eqw value to the distribution
+                    distrib_eqw+=[abs(AllData(1).eqwidth[1])]
+                except:
+                    self.print_xlog('Issue during EW computation')
+                    distrib_eqw+=[0]
+
+                Xset.logChatter=5
+
+                pbar.update()
+
+        Xset.chatter=prev_chatter
+        Xset.logChatter=prev_logChatter
+
+        #reloading the previous model iteration
+        curr_model.load()
+
+        return max(distrib_eqw)*1e3
+
 
 ####Plot commands
 '''Plot commands'''

@@ -1,9 +1,9 @@
-
+import os,sys
 import numpy as np
 
 import time
 import pexpect
-
+import matplotlib.pyplot as plt
 from tqdm import tqdm
 from xspec import AllModels,AllData,Fit,Spectrum,Model,Plot,Xset,FakeitSettings,Chain
 
@@ -12,11 +12,12 @@ from xspec_config_multisp import allmodel_data,model_load,addcomp,Pset,Pnull,res
                          calc_error,delcomp,fitmod,calc_fit,xcolors_grp,xPlot,xscorpeon,catch_model_str,\
                          load_fitmod, ignore_data_indiv,par_degroup,xspec_globcomps
 
-import matplotlib.pyplot as plt
-import os,sys
+
+sign_sigmas_delchi_1dof=[1.,3.841,8.81]
 
 def simu_xrism(mode='ew_lim',mod_path=None,rmf_path='Hp',arf_path='pointsource_GVclosed',expos=50,flux_range='1_100_20',
-               line='FeKa26abs',line_v=[-3000,3000],line_w=[0,0.05],width_test_val=0.02,width_EW_resol=1):
+               line='FeKa26abs',line_v=[-3000,3000],line_w=[0,0.05],width_test_val=0.02,width_EW_resol=0.05,
+               width_EW_inter=[0.1,100]):
 
     '''
     Computes XRISM simulations of line detection
@@ -55,7 +56,9 @@ def simu_xrism(mode='ew_lim',mod_path=None,rmf_path='Hp',arf_path='pointsource_G
             -the line is taken at 0 velocity and fitted
 
             -width_test_val: test width to witch to fetch the lowest EW
-            -width_resol:resolution for when to stop when trying to find the limit for computing the width of the line
+
+            -width_EW_resol: resolution for when to stop when trying to find the limit
+                             for computing the width of the line, in RELATIVE units (so default value is 5% error)
 
 
     '''
@@ -86,16 +89,15 @@ def simu_xrism(mode='ew_lim',mod_path=None,rmf_path='Hp',arf_path='pointsource_G
     if mod_path is not None:
         AllModels.clear()
         Xset.restore(mod_path)
-        freeze()
 
     #computing the 3-10 flux
     AllModels.calcFlux('3. 10.')
-    flux_base=AllModels(1).flux
+    flux_base=AllModels(1).flux[0]
 
     flux_range_vals=np.array(flux_range.split('_')).astype(float)
 
     n_flux=int(flux_range_vals[2])
-    flux_inter=np.logspace(np.log10(flux_range_vals[0]),np.log10(flux_range_vals[1]),n_flux)
+    flux_inter=np.logspace(np.log10(flux_range_vals[0]),np.log10(flux_range_vals[1]),n_flux)*1e-8
 
     #adding a constant from the flux value to renormalize
     addcomp('glob_constant')
@@ -128,7 +130,7 @@ def simu_xrism(mode='ew_lim',mod_path=None,rmf_path='Hp',arf_path='pointsource_G
                 #freezing the parameters before faking
                 freeze()
 
-                AllModels(1)(1).values=flux_base/elem_flux
+                AllModels(1)(1).values=elem_flux/flux_base
 
                 #remove previously computed spectra
                 if os.path.isfile('temp_sp.pi'):
@@ -153,11 +155,11 @@ def simu_xrism(mode='ew_lim',mod_path=None,rmf_path='Hp',arf_path='pointsource_G
 
                 AllData.ignore('**-2. 10.-**')
 
-                AllData(1).rmf.arf=arf_path_use
+                AllData(1).response.arf=arf_path_use
 
                 #loading the continuum model and fitting
                 mod_cont.load()
-                AllModels(1)(1).values=flux_base/elem_flux
+                AllModels(1)(1).values=elem_flux/flux_base
 
                 calc_fit()
 
@@ -175,9 +177,10 @@ def simu_xrism(mode='ew_lim',mod_path=None,rmf_path='Hp',arf_path='pointsource_G
                 calc_fit()
 
                 #and computing the eqwidth of the best fit in the interval
-
-                AllModels.eqwidth(comp_num[-1], err=True, number=1000, level=68)
-
+                try:
+                    AllModels.eqwidth(comp_num[-1], err=True, number=1000, level=68)
+                except:
+                    breakpoint()
                 eqw_lim_arr[i_flux][0]=-AllData(1).eqwidth[1]
 
                 AllModels.eqwidth(comp_num[-1], err=True, number=1000, level=95)
@@ -205,20 +208,16 @@ def simu_xrism(mode='ew_lim',mod_path=None,rmf_path='Hp',arf_path='pointsource_G
         print('Computing width detectability for the given flux range...')
         width_lim_arr=np.zeros((n_flux,3))
 
-        EW_init=100
-
-        Ew_vals_queue=[]
-
         '''
         The method here is to parse the EW interval by multipling/diving by progressively lower factors until
-        we find the right value (binary search)
+        we find the right value (binary search). Here we do it in logspace because we don't know what to expect
         '''
 
-        base_step=1/2
+        #starting at the max possible value allowed
+        width_EW_init=width_EW_inter[1]
 
-        step_1sig=base_step
-        step_2sig=base_step
-        step_3sig=base_step
+        #and starting with a middle step in log space
+        base_step=(width_EW_inter[0]/width_EW_inter[1])**(1/2)
 
         with tqdm(total=n_flux) as pbar:
             for i_flux,elem_flux in enumerate(flux_inter):
@@ -227,7 +226,7 @@ def simu_xrism(mode='ew_lim',mod_path=None,rmf_path='Hp',arf_path='pointsource_G
                 mod_cont.load()
 
                 #adjusting the luminosity
-                AllModels(1)(1).values = flux_base / elem_flux
+                AllModels(1)(1).values = elem_flux/flux_base
 
                 #adding the test line
                 comp_par, comp_num = addcomp(line + '_agaussian', position='lastinall')
@@ -249,10 +248,44 @@ def simu_xrism(mode='ew_lim',mod_path=None,rmf_path='Hp',arf_path='pointsource_G
                 freeze()
                 mod_width_base=allmodel_data()
 
+                #variable steps for each sigma
+                step_1sig = base_step
+                step_2sig = base_step
+                step_3sig = base_step
+
+                #final variable to assess whether a given sigma width has been stored for one flux value
+                ok_constr_1sig=False
+                ok_constr_2sig=False
+                ok_constr_3sig=False
+
+                EW_constr_1sig=[]
+                EW_constr_2sig=[]
+                EW_constr_3sig=[]
+
+                EW_test_width=width_EW_init
+
+                '''
+                The loop is as follow:
+                
+                1. put the appropriate norm for EW_test
+                2. Fake
+                3. test if the width is constrained at 1/2/3 sigmas
+                4. change EW test according to the 1 sigma constrain (2 if the 1sig is complete, 3 if the 2sig is)
+                5. -if the current 'main' EW test gives the same result as the previous iteration, keep 
+                    multiplying or dividing by the current step
+                6. -otherwise, swap to multiply from division, divide the step by 2, and continue 
+                
+                widths not constrained for 100eV lines are considered unconstrained and store as such  
+                    
+                '''
+
                 while (width_lim_arr[i_flux]==0).any():
 
                     #freezing the parameters before faking
                     freeze()
+
+                    #chaning the normalization of the gaussian to match the EW width to test
+                    AllModels(1)(comp_par[-1]).values=EW_test_width*norm_EW_factor
 
                     #remove previously computed spectra
                     if os.path.isfile('temp_sp.pi'):
@@ -278,7 +311,7 @@ def simu_xrism(mode='ew_lim',mod_path=None,rmf_path='Hp',arf_path='pointsource_G
 
                     AllData.ignore('**-2. 10.-**')
 
-                    AllData(1).rmf.arf=arf_path_use
+                    AllData(1).response.arf=arf_path_use
 
                     #loading the cont version of the width model (to avoid issues with parameters)
                     mod_cont.load()
@@ -291,32 +324,209 @@ def simu_xrism(mode='ew_lim',mod_path=None,rmf_path='Hp',arf_path='pointsource_G
 
                     #testing whether the line width is constrained
 
-                    # computing the width with the current fit at a given sigma (check values of the delchi)
-                    Fit.error('stop ,,0.1 max 100 9.00 ' + str(comp_par[-2]))
+                    # computing the width with the current fit at 1 sigma
+                    Fit.error('stop ,,0.1 max 100 1. ' + str(comp_par[-2]))
 
                     '''
                     we consider the width constrained if the lower bound is more than 1% of the base value
                     (since here we know the base value), because things tend to peg at very low values instead
                     of saying thart they're frozen at 0
                     '''
-                    if AllModels(1)(comp_par[-2]).error[0]>=width_test_val/100:
-                        step_1sig=False
 
-                    #note: go down to the lowest value to which 1 sigma is constrained with a delta of width_resol, and then
-                    #come back up, having each of the previous minimum values for which the 2 and 3 sigma weren't
+                    if AllModels(1)(comp_par[-2]).error[0]<width_test_val/100:
+                        EW_constr_1sig+=[-EW_test_width]
+                        EW_constr_2sig+=[-EW_test_width]
+                        EW_constr_3sig+=[-EW_test_width]
+                    else:
+                        EW_constr_1sig+=[EW_test_width]
 
-                    #unfreezing
+                        #then at 2 sigma
+                        Fit.error('stop ,,0.1 max 100 4. ' + str(comp_par[-2]))
+                        if AllModels(1)(comp_par[-2]).error[0]<width_test_val/100:
+                            EW_constr_2sig += [-EW_test_width]
+                            EW_constr_3sig += [-EW_test_width]
+                        else:
+                            EW_constr_2sig += [EW_test_width]
 
+                            # then at 3 sigma
+                            Fit.error('stop ,,0.1 max 100 9. ' + str(comp_par[-2]))
+                            if AllModels(1)(comp_par[-2]).error[0] < width_test_val / 100:
+                                EW_constr_3sig += [-EW_test_width]
+                            else:
+                                EW_constr_3sig += [EW_test_width]
+
+                    #limit tests if nothing is constrained at 100 eVs
+                    if EW_constr_1sig[-1]==-width_EW_init:
+                        width_lim_arr[i_flux][0]=abs(EW_constr_1sig)
+                        ok_constr_1sig=True
+
+                    if EW_constr_1sig[-1]==-width_EW_init:
+                        width_lim_arr[i_flux][1] = abs(EW_constr_2sig)
+                        ok_constr_2sig=True
+
+                    if EW_constr_1sig[-1]==-width_EW_init:
+                        width_lim_arr[i_flux][2] = abs(EW_constr_3sig)
+                        ok_constr_3sig=True
+
+
+                    if not ok_constr_1sig:
+                        #testing for 1 sigma in priority
+
+                        #going down for the first iteration after 100eVs
+                        if len(EW_constr_1sig)==1:
+                            EW_test_width*=step_1sig
+                        else:
+                            #since we store constrains and non-constrains width different signs,
+                            #a change in constrain in the last two iterations will always be negative
+                            constrain_change=EW_constr_1sig[-1]/EW_constr_1sig[-2]
+                            constrain_fraction=abs((EW_constr_1sig[-1]-EW_constr_1sig[-2])/max(EW_constr_1sig[-2:]))
+
+                            #if the constrain changed and the fraction delta is under the resolution, we're done
+                            if constrain_change and constrain_fraction<width_EW_resol:
+                                #note here that taking the max works both because we note non-constrain with negatives
+                                #but also because the constrained one will always be higher
+                                width_lim_arr[i_flux][0]=max(EW_constr_1sig[-2:])
+                                ok_constr_1sig=True
+
+                            else:
+                                #taking the square root of the current step
+                                # (to divide the remaining logarithmic interval by two)
+                                step_1sig=step_1sig**(1/2)
+
+                                if constrain_change:
+                                    #changing the step direction
+                                    step_1sig=1/step_1sig
+                                    
+                                EW_test_width*=step_1sig
+
+
+                    if ok_constr_1sig and not ok_constr_2sig:
+                        #testing for 2 sigma in priority
+
+                        #going down for the first iteration after 100eVs
+                        if len(EW_constr_2sig)==1:
+                            EW_test_width*=step_2sig
+                        else:
+                            #checking if this is the first time we're moving according to this one
+                            if step_2sig==base_step:
+                                #computing the remaining log interval
+
+                                #fetching the non constraints
+                                EW_noconstr_2sig=np.array(EW_constr_2sig)[EW_constr_2sig < 0]
+
+                                #and the constrains
+                                EW_withconstr_2sig = np.array(EW_constr_2sig)[EW_constr_2sig > 0]
+                                
+                                #there should necessarily be non-constrains since we test for the limit
+                                #of the least significant test first
+                                if len(EW_noconstr_2sig)==0:
+                                    breakpoint()
+                                    print('This shouldnt be possible')
+
+                                #putting the EW value on the constrained one
+                                EW_test_width=min(EW_withconstr_2sig)
+                                
+                                #and computing the remaining half logspace factor
+                                #min on the numerator here since they are in negative values
+                                step_2sig=(-min(EW_noconstr_2sig)/\
+                                          min(EW_withconstr_2sig))**(1/2)
+                                                                
+                            #otherwise we can proceed normally
+                            else:
+                                # since we store constrains and non-constrains width different signs,
+                                # a change in constrain in the last two iterations will always be negative
+                                constrain_change = EW_constr_2sig[-1] / EW_constr_2sig[-2]
+                                constrain_fraction = abs(
+                                    (EW_constr_2sig[-1] - EW_constr_2sig[-2]) / max(EW_constr_2sig[-2:]))
+
+                                # if the constrain changed and the fraction delta is under the resolution, we're done
+                                if constrain_change and constrain_fraction < width_EW_resol:
+                                    # note here that taking the max works both because we note non-constrain with negatives
+                                    # but also because the constrained one will always be higher
+                                    width_lim_arr[i_flux][1] = max(EW_constr_2sig[-2:])
+                                    ok_constr_2sig = True
+
+                                else:
+                                    # taking the square root of the current step
+                                    # (to divide the remaining logarithmic interval by two)
+                                    step_2sig = step_2sig ** (1 / 2)
+
+                                    if constrain_change:
+                                        # changing the step direction
+                                        step_2sig = 1 / step_2sig
+
+                                    EW_test_width*=step_2sig
+
+
+                    if ok_constr_1sig and ok_constr_2sig and not ok_constr_3sig:
+                        # testing for 3 sigma in priority
+
+                        # going down for the first iteration after the first one
+                        if len(EW_constr_3sig) == 1:
+                            EW_test_width *= step_3sig
+                        else:
+                            # checking if this is the first time we're moving according to this one
+                            if step_3sig == base_step:
+                                # computing the remaining log interval
+
+                                # fetching the non constraints
+                                EW_noconstr_3sig = np.array(EW_constr_3sig)[EW_constr_3sig < 0]
+
+                                # and the constrains
+                                EW_withconstr_3sig = np.array(EW_constr_3sig)[EW_constr_3sig > 0]
+
+                                # there should necessarily be non-constrains since we test for the limit
+                                # of the least significant test first
+                                if len(EW_noconstr_3sig) == 0:
+                                    breakpoint()
+                                    print('This shouldnt be possible')
+
+                                # putting the EW value on the constrained one
+                                EW_test_width = min(EW_withconstr_3sig)
+
+                                # and computing the remaining half logspace factor
+                                # min on the numerator here since they are in negative values
+                                step_3sig = (-min(EW_noconstr_3sig) / \
+                                             min(EW_withconstr_3sig)) ** (1 / 2)
+
+                            # otherwise we can proceed normally
+                            else:
+                                # since we store constrains and non-constrains width different signs,
+                                # a change in constrain in the last two iterations will always be negative
+                                constrain_change = EW_constr_3sig[-1] / EW_constr_3sig[-2]
+                                constrain_fraction = abs(
+                                    (EW_constr_3sig[-1] - EW_constr_3sig[-2]) / max(EW_constr_3sig[-2:]))
+
+                                # if the constrain changed and the fraction delta is under the resolution, we're done
+                                if constrain_change and constrain_fraction < width_EW_resol:
+                                    # note here that taking the max works both because we note non-constrain with negatives
+                                    # but also because the constrained one will always be higher
+                                    width_lim_arr[i_flux][2] = max(EW_constr_3sig[-2:])
+                                    ok_constr_3sig = True
+
+                                else:
+                                    # taking the square root of the current step
+                                    # (to divide the remaining logarithmic interval by two)
+                                    step_3sig = step_3sig ** (1 / 2)
+
+                                    if constrain_change:
+                                        # changing the step direction
+                                        step_3sig = 1 / step_3sig
+
+                                    EW_test_width*=step_3sig
 
 
                 pbar.update()
 
-        # save_arr=np.concatenate((np.array([flux_inter]),eqw_lim_arr.T)).T
-        #
-        # header_elems=['mod_path '+str(mod_path),'rmf_path '+rmf_path,'arf_path '+arf_path,'expos '+str(expos)+' ks',
-        #               'flux_range logspace('+flux_range+') e-8 erg/s/cm² ',
-        #               'line '+line,'line_v '+str(line_v),'line_w '+str(line_w),
-        #               'columns: flux ew_limit at 1/2/3 sigma']
-        #
-        # np.savetxt('ew_lim_mod.txt',save_arr,header='\n'.join(header_elems))
-        # return flux_inter,eqw_lim_arr
+        save_arr=np.concatenate((np.array([flux_inter]),width_lim_arr.T)).T
+
+        header_elems=['mod_path '+str(mod_path),'rmf_path '+rmf_path,'arf_path '+arf_path,'expos '+str(expos)+' ks',
+                      'flux_range logspace('+flux_range+') e-8 erg/s/cm² ',
+                      'line '+line,
+                      'tested width '+str(10**3*width_test_val)+' eVs',
+                      'tested EW interval '+str(width_EW_inter),
+                      'resolution fraction '+str(width_EW_resol),
+                      'columns: flux ew_limit at 1/2/3 sigma']
+
+        np.savetxt('ew_lim_mod.txt',save_arr,header='\n'.join(header_elems))
+        return flux_inter,width_lim_arr

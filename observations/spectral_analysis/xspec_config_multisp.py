@@ -26,10 +26,8 @@ except:
     AllModels, AllData, Fit, Spectrum, Model, Plot, Xset, AllChains, Chain=[None]*9
 
 
-
-
 from fitting_tools import sign_delchis_table,lines_std,lines_e_dict,lines_w_dict,lines_broad_w_dict,\
-        link_groups,lines_std_names,def_ftest_threshold,def_ftest_leeway,ang2kev
+        link_groups,lines_std_names,def_ftest_threshold,def_ftest_leeway,ang2kev,sign_sigmas_delchi_1dof
 
 from general_tools import ravel_ragged,get_overlap,shorten_epoch
 
@@ -5010,8 +5008,8 @@ class fitcomp_line(fitcomp):
 
         self.logfile.readlines()
 
-        #computing the width with the current fit
-        Fit.error('stop ,,0.1 max 100 9.00 '+str(self.parlist[-2]))
+        #computing the width with the current fit at 3 sigmas (third index of the sign_sigmas_delchi_1dof arr)
+        Fit.error('stop ,,0.1 max 100 '+sign_sigmas_delchi_1dof[2]+' '+str(self.parlist[-2]))
 
         #storing the error lines
         log_lines=self.logfile.readlines()

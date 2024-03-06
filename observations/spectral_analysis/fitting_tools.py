@@ -15,8 +15,9 @@ c_light=299792.458
 #(from https://fr.wikipedia.org/wiki/Loi_du_%CF%87%C2%B2)
 sign_delchis_table=[6.63,9.21,11.34,13.28,15.09,16.81,18.48,20.09,21.67,23.21]
 
-#same with 99.7% (3 sigma)
-sign_3sig_delchi_stable=[8.81]
+#1,2,3 sigmas delchi for a single d.d.f.
+# (computed with http://courses.atlas.illinois.edu/spring2016/STAT/STAT200/pchisq.html)
+sign_sigmas_delchi_1dof=[1.,4.,9.]
 
 def_ftest_threshold=0.01
 

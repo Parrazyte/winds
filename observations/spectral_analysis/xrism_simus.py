@@ -12,11 +12,21 @@ from xspec_config_multisp import allmodel_data,model_load,addcomp,Pset,Pnull,res
                          calc_error,delcomp,fitmod,calc_fit,xcolors_grp,xPlot,xscorpeon,catch_model_str,\
                          load_fitmod, ignore_data_indiv,par_degroup,xspec_globcomps
 
+rmf_abv = {'Hp': '/media/parrama/SSD/Observ/highres/XRISM_responses/rsl_Hp_5eV.rmf',
+           'Mp': '/media/parrama/SSD/Observ/highres/XRISM_responses/rsl_Mp_6eV.rmf',
+           'Lp': '/media/parrama/SSD/Observ/highres/XRISM_responses/rsl_Lp_18eV.rmf'}
+
+rmf_abv_list = list(rmf_abv.keys())
+
+arf_abv = {'pointsource_GVclosed': '/media/parrama/SSD/Observ/highres/XRISM_responses/rsl_pointsource_GVclosed.arf',
+           'pointsource_off_GVclosed': '/media/parrama/SSD/Observ/highres/XRISM_responses/rsl_pointsource_off_GVclosed.arf'}
+
+arf_abv_list = list(arf_abv.keys())
 
 sign_sigmas_delchi_1dof=[1.,3.841,8.81]
 
 def simu_xrism(mode='ew_lim',mod_path=None,rmf_path='Hp',arf_path='pointsource_GVclosed',expos=50,flux_range='1_100_20',
-               line='FeKa26abs',line_v=[-3000,3000],line_w=[0,0.05],width_test_val=0.02,width_EW_resol=0.05,
+               line='FeKa26abs',line_v=[0,0],line_w=[0.02,0.02],width_test_val=0.02,width_EW_resol=0.05,
                width_EW_inter=[0.1,100]):
 
     '''
@@ -44,10 +54,14 @@ def simu_xrism(mode='ew_lim',mod_path=None,rmf_path='Hp',arf_path='pointsource_G
         -flux_range:
             flux value interval to be parsed. The spectrum will be renormalized to have its values in the
             3-10keV band
-            the interval is low_lim_high_lim_nsteps in log space, low and highlim in units of 1e-8 erg/cm²/s
+            the interval is low_lim_high_lim_nsteps in log space, low and highlim in units of 1e-10 erg/cm²/s
 
         -line: name of the line to test (mainly for the energy)
 
+        -line_v/line_w: velocity and width range for the line.
+                        If the start and end values are the same, freezes the parameters.
+                        NOTE: currently there are issues when not freezing, would require a steppar
+                        to explore the parameter ranges and avoid the fit getting stuck
 
         EW_lim mode:
             -line_v/line_w: min/max velocity and width intervals to allow when fitting the line
@@ -55,26 +69,20 @@ def simu_xrism(mode='ew_lim',mod_path=None,rmf_path='Hp',arf_path='pointsource_G
         width_lim mode:
             -the line is taken at 0 velocity and fitted
 
-            -width_test_val: test width to witch to fetch the lowest EW
+            -width_test_val: test width to witch to fetch the lowest EW in keV
+
+            -width_EW_interval: EW interval in which to test for the lines
 
             -width_EW_resol: resolution for when to stop when trying to find the limit
                              for computing the width of the line, in RELATIVE units (so default value is 5% error)
 
+    #TOOD: add verbose
+    #TODO: add arf/rmf cutting
+    #TODO: add low width_EW_interval threshold
 
     '''
 
     AllData.clear()
-
-    rmf_abv={'Hp':'/media/parrama/SSD/Observ/highres/XRISM_responses/rsl_Hp_5eV.rmf',
-             'Mp':'/media/parrama/SSD/Observ/highres/XRISM_responses/rsl_Mp_6eV.rmf',
-             'Lp':'/media/parrama/SSD/Observ/highres/XRISM_responses/rsl_Lp_18eV.rmf'}
-
-    rmf_abv_list=list(rmf_abv.keys())
-
-    arf_abv={'pointsource_GVclosed':'/media/parrama/SSD/Observ/highres/XRISM_responses/rsl_pointsource_GVclosed.arf',
-            'pointsource_off_GVclosed':'/media/parrama/SSD/Observ/highres/XRISM_responses/rsl_pointsource_off_GVclosed.arf'}
-
-    arf_abv_list=list(arf_abv.keys())
 
     if rmf_path in rmf_abv_list:
         rmf_path_use=rmf_abv[rmf_path]
@@ -97,7 +105,7 @@ def simu_xrism(mode='ew_lim',mod_path=None,rmf_path='Hp',arf_path='pointsource_G
     flux_range_vals=np.array(flux_range.split('_')).astype(float)
 
     n_flux=int(flux_range_vals[2])
-    flux_inter=np.logspace(np.log10(flux_range_vals[0]),np.log10(flux_range_vals[1]),n_flux)*1e-8
+    flux_inter=np.logspace(np.log10(flux_range_vals[0]),np.log10(flux_range_vals[1]),n_flux)*1e-10
 
     #adding a constant from the flux value to renormalize
     addcomp('glob_constant')
@@ -142,16 +150,17 @@ def simu_xrism(mode='ew_lim',mod_path=None,rmf_path='Hp',arf_path='pointsource_G
                 AllData.fakeit(settings=fakeset, applyStats=True)
 
                 #rebinning the spectrum before loading it
-                bashproc.sendline('ftgrouppha infile=temp_sp.pi'+' outfile=temp_sp_grp_opt.pi grouptype= opt'+
-                                  ' respfile='+rmf_path_use)
-
-                #waiting for the spectrum to be created:
-                while not os.path.isfile('temp_sp_grp_opt.pi'):
-                    time.sleep(1)
-
-                AllData.clear()
-
-                AllData('1:1 temp_sp_grp_opt.pi')
+                # # using optsnmin puts some bins at weird wiggling ratios
+                # # using opt puts some bins at 0 for some reason maybe bc the rmf has issues
+                # bashproc.sendline('ftgrouppha infile=temp_sp.pi'+' outfile=temp_sp_grp_opt.pi '+
+                #                   ' grouptype=optsnmin groupscale=3.0'+
+                #                   ' respfile='+rmf_path_use+' clobber=True')
+                #
+                # #waiting for the spectrum to be created:
+                # while not os.path.isfile('temp_sp_grp_opt.pi'):
+                #     time.sleep(1)
+                # AllData.clear()
+                # AllData('1:1 temp_sp_grp_opt.pi')
 
                 AllData.ignore('**-2. 10.-**')
 
@@ -163,31 +172,49 @@ def simu_xrism(mode='ew_lim',mod_path=None,rmf_path='Hp',arf_path='pointsource_G
 
                 calc_fit()
 
+                if Fit.statistic/Fit.dof>2:
+                    print('Issue with fake continuum fitting.')
+                    breakpoint()
+                    pass
+
                 #freezing the continuum
                 freeze()
 
                 #adding the line component
                 comp_par,comp_num=addcomp(line+'_agaussian', position='lastinall',return_pos=True)
 
-                #with appropriate parameter range
-                AllModels(1)(comp_par[0]).values=[0.,10.,line_v[0],line_v[0],line_v[1],line_v[1]]
-                AllModels(1)(comp_par[2]).values = [0., 0.01, line_w[0], line_w[0], line_w[1], line_w[1]]
+                #with appropriate parameter range (and freezing if its a single value
+                AllModels(1)(comp_par[0]).values=[0.,0. if line_v[0]==line_v[1] else 10.,
+                                                  line_v[0],line_v[0],line_v[1],line_v[1]]
+                AllModels(1)(comp_par[2]).values = [line_w[0], 0. if line_w[0]==line_w[1] else 0.01,
+                                                    line_w[0], line_w[0], line_w[1], line_w[1]]
+
 
                 #fitting
                 calc_fit()
 
+                #to be implemented if need be for parameter variations
+                # (we change the critical delta to avoid pyxspec getting stuck if the steppar finds a better fit)
+                # #storing the current fit delta
+                # curr_crit_delta=Fit.criticalDelta
+                #
+                # Fit.criticalDelta=1e10
+                #
+                # #doing a steppar on the velocity and the width
+                # Fit.steppar(str(comp_par[0])+' '+str(line_v[0])+' '+str(line_v[1])+'50 8 -1e-7 -1e-5 10')
+
+                #Fit.criticalDelta=curr_crit_delta
+
                 #and computing the eqwidth of the best fit in the interval
-                try:
-                    AllModels.eqwidth(comp_num[-1], err=True, number=1000, level=68)
-                except:
-                    breakpoint()
-                eqw_lim_arr[i_flux][0]=-AllData(1).eqwidth[1]
-
-                AllModels.eqwidth(comp_num[-1], err=True, number=1000, level=95)
+                AllModels.eqwidth(int(comp_num[-1]), err=True, number=1000, level=68)
 
                 eqw_lim_arr[i_flux][0]=-AllData(1).eqwidth[1]
 
-                AllModels.eqwidth(comp_num[-1], err=True, number=1000, level=99.7)
+                AllModels.eqwidth(int(comp_num[-1]), err=True, number=1000, level=95)
+
+                eqw_lim_arr[i_flux][0]=-AllData(1).eqwidth[1]
+
+                AllModels.eqwidth(int(comp_num[-1]), err=True, number=1000, level=99.7)
 
                 eqw_lim_arr[i_flux][0]=-AllData(1).eqwidth[1]
 
@@ -196,7 +223,7 @@ def simu_xrism(mode='ew_lim',mod_path=None,rmf_path='Hp',arf_path='pointsource_G
         save_arr=np.concatenate((np.array([flux_inter]),eqw_lim_arr.T)).T
 
         header_elems=['mod_path '+str(mod_path),'rmf_path '+rmf_path,'arf_path '+arf_path,'expos '+str(expos)+' ks',
-                      'flux_range logspace('+flux_range+') e-8 erg/s/cm² ',
+                      'flux_range logspace('+flux_range+') e-10 erg/s/cm² ',
                       'line '+line,'line_v '+str(line_v),'line_w '+str(line_w),
                       'columns: flux ew_limit at 1/2/3 sigma']
 
@@ -239,7 +266,7 @@ def simu_xrism(mode='ew_lim',mod_path=None,rmf_path='Hp',arf_path='pointsource_G
 
                 # faking a spectrum to get the eqwidth because xspec is garbage
                 AllData.fakeit(noWrite=True)
-                AllModels.eqwidth(comp_num[-1])
+                AllModels.eqwidth(int(comp_num[-1]))
 
                 # computing the normalization factor (with a negative so we can keep our EW in positive values
                 norm_EW_factor = -AllModels(1)(comp_par[-1]).values[0]/AllData(1).eqwidth[0]
@@ -521,7 +548,7 @@ def simu_xrism(mode='ew_lim',mod_path=None,rmf_path='Hp',arf_path='pointsource_G
         save_arr=np.concatenate((np.array([flux_inter]),width_lim_arr.T)).T
 
         header_elems=['mod_path '+str(mod_path),'rmf_path '+rmf_path,'arf_path '+arf_path,'expos '+str(expos)+' ks',
-                      'flux_range logspace('+flux_range+') e-8 erg/s/cm² ',
+                      'flux_range logspace('+flux_range+') e-10 erg/s/cm² ',
                       'line '+line,
                       'tested width '+str(10**3*width_test_val)+' eVs',
                       'tested EW interval '+str(width_EW_inter),

@@ -919,7 +919,7 @@ with st.sidebar.expander('Visualisation'):
     
     display_dicho=st.toggle('Display favourable zone',value=True)
     
-    display_obj_zerodet=st.toggle('Color non-detections',value=True)
+    color_nondet=st.toggle('Color non-detections',value=True)
     
     display_hid_error=st.toggle('Display errorbar for HID position',value=False)
     
@@ -1177,10 +1177,8 @@ else:
 #storing the number of objects with detections
 n_obj_withdet=sum(mask_obj_withdet & mask_obj_base)
 
-if not display_obj_zerodet:
-    mask_obj=mask_obj_base
-else:
-    mask_obj=mask_obj_base
+#we don't fuse with mask_obj_withdet anymore since the options to remove non-detections was removed
+mask_obj=mask_obj_base
 
 # distance factor for the flux conversion later on
 dist_factor = 4 * np.pi * (dist_obj_list * 1e3 * 3.086e18) ** 2
@@ -1638,7 +1636,7 @@ elif not skip_HID:
               cmap_incl_type=cmap_incl_type, cmap_incl_type_str=cmap_incl_type_str,
               radio_info_label=radio_info_label,
               ew_ratio_ids=ew_ratio_ids,
-              display_obj_zerodet=display_obj_zerodet,
+              color_nondet=color_nondet,
               restrict_threshold=restrict_threshold, display_nonsign=display_nonsign,
               display_central_abs=display_central_abs,
               display_incl_inside=display_incl_inside, dash_noincl=dash_noincl,
@@ -1710,7 +1708,7 @@ with tab_hid:
                           cmap_incl_type=cmap_incl_type, cmap_incl_type_str=cmap_incl_type_str,
                           radio_info_label=radio_info_label,
                           ew_ratio_ids=ew_ratio_ids,
-                          display_obj_zerodet=display_obj_zerodet,
+                          color_nondet=color_nondet,
                           restrict_threshold=restrict_threshold, display_nonsign=display_nonsign,
                           display_central_abs=display_central_abs,
                           display_incl_inside=display_incl_inside, dash_noincl=dash_noincl,

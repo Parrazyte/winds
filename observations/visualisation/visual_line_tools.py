@@ -1962,6 +1962,7 @@ def values_manip(abslines_infos,dict_linevis,autofit_infos,lum_list_infos,mask_i
                         '''
                         
                         #here we fetch the correct line by applying the mask. The 0 after is there to avoid a len 1 nested array
+                        #note: should be replaced by the line actual energy if using big bshifts
                         width_vals=autofit_inf[i_obj][i_obs][0][0][mask_sigma][0].astype(float)[i_uncert]\
                                               /lines_e_dict[lines_std_names[3+i_line]][0]*c_light*2.3548
                                                   
@@ -2028,7 +2029,7 @@ def hid_graph(ax_hid,dict_linevis,
               cmap_incl_type=None,cmap_incl_type_str=None,
               radio_info_label=None,
               ew_ratio_ids=None,
-              display_obj_zerodet=True,
+              color_nondet=True,
               restrict_threshold=False,display_nonsign=False,display_central_abs=False,
               display_incl_inside=False,dash_noincl=False,
               display_hid_error=False,display_edgesource=False,split_cmap_source=True,
@@ -2271,7 +2272,7 @@ def hid_graph(ax_hid,dict_linevis,
         dtype=object)
 
     incl_cmap = np.array([incl_plot.T[0], incl_plot.T[0] - incl_plot.T[1], incl_plot.T[0] + incl_plot.T[2]]).T
-    incl_cmap_base = incl_cmap[mask_obj_base]
+    incl_cmap_base = incl_cmap[mask_obj]
     incl_cmap_restrict = incl_cmap[mask_obj]
 
     nh_plot_restrict = deepcopy(nh_plot)
@@ -2291,7 +2292,7 @@ def hid_graph(ax_hid,dict_linevis,
         mask_obj_withdet = np.array([(elem >= slider_sign).any() for elem in global_displayed_sign])
 
     # storing the number of objects with detections
-    n_obj_withdet = sum(mask_obj_withdet & mask_obj_base)
+    n_obj_withdet = sum(mask_obj_withdet & mask_obj)
 
     # computing the extremal values of the whole sample/plotted sample to get coherent colormap normalisations, and creating the range of object colors
     if global_colors:
@@ -2735,10 +2736,12 @@ def hid_graph(ax_hid,dict_linevis,
                     else:
                         elem_scatter.set_clim(
                             vmin=max(
-                                min(mdates.date2num(ravel_ragged(date_list[mask_obj])[global_mask_intime_norepeat])),
+                                min(mdates.date2num(ravel_ragged(date_list\
+                                    [mask_obj])[global_mask_intime_norepeat])),
                                 mdates.date2num(slider_date[0])),
                             vmax=min(
-                                max(mdates.date2num(ravel_ragged(date_list[mask_obj])[global_mask_intime_norepeat])),
+                                max(mdates.date2num(ravel_ragged(date_list\
+                                    [mask_obj])[global_mask_intime_norepeat])),
                                 mdates.date2num(slider_date[1])))
 
                 elif radio_info_cmap == 'nH':
@@ -2826,11 +2829,18 @@ def hid_graph(ax_hid,dict_linevis,
 
                 if radio_info_cmap == 'Time':
 
+                    low_bound_date = max(
+                        min(mdates.date2num(ravel_ragged(date_list[True if global_colors else mask_obj]) \
+                                                [global_mask_intime_norepeat])),
+                        mdates.date2num(slider_date[0]))
+
+                    high_bound_date = min(
+                        max(mdates.date2num(ravel_ragged(date_list[True if global_colors else mask_obj]) \
+                                                [global_mask_intime_norepeat])),
+                        mdates.date2num(slider_date[1]))
+
                     # manually readjusting for small durations because the AutoDateLocator doesn't work well
-                    time_range = min(max(mdates.date2num(ravel_ragged(date_list[mask_obj]))),
-                                     mdates.date2num(slider_date[1])) - \
-                                 max(min(mdates.date2num(ravel_ragged(date_list[mask_obj]))),
-                                     mdates.date2num(slider_date[0]))
+                    time_range = high_bound_date - low_bound_date
 
                     if time_range < 150:
                         date_format = mdates.DateFormatter('%Y-%m-%d')
@@ -2840,7 +2850,7 @@ def hid_graph(ax_hid,dict_linevis,
                         date_format = mdates.AutoDateFormatter(mdates.AutoDateLocator())
 
                     cb = plt.colorbar(elem_scatter_forcol, cax=ax_cb, ticks=mdates.AutoDateLocator(),
-                                      format=date_format)
+                                      format=date_format,)
                 else:
                     cb = plt.colorbar(elem_scatter_forcol, cax=ax_cb, extend='min' if radio_info_cmap == 'nH' else None)
                     if cmap_norm_ticks is not None:
@@ -2885,7 +2895,7 @@ def hid_graph(ax_hid,dict_linevis,
     scatter_nondet = []
 
     # loop for non detection, separated to be able to restrict the color range in case of non detection
-    for i_obj_base, abslines_obj_base in enumerate(abslines_infos_perobj[mask_obj_base]):
+    for i_obj_base, abslines_obj_base in enumerate(abslines_infos_perobj[mask_obj]):
 
         # skipping everything if we don't plot nondetections
         if not display_nondet:
@@ -2893,7 +2903,7 @@ def hid_graph(ax_hid,dict_linevis,
 
         # defining the index of the object in the entire array if asked to, in order to avoid changing colors
         if global_colors:
-            i_obj_glob = np.argwhere(obj_list == obj_list[mask_obj_base][i_obj_base])[0][0]
+            i_obj_glob = np.argwhere(obj_list == obj_list[mask_obj][i_obj_base])[0][0]
         else:
             i_obj_glob = i_obj_base
 
@@ -2903,15 +2913,15 @@ def hid_graph(ax_hid,dict_linevis,
 
         # we use non-detection-masked arrays for non detection to plot them even while restricting the colors to a part of the sample
 
-        x_hid_base = lum_list[mask_obj_base][i_obj_base].T[2][0] / lum_list[mask_obj_base][i_obj_base].T[1][0]
-        y_hid_base = lum_list[mask_obj_base][i_obj_base].T[4][0]
+        x_hid_base = lum_list[mask_obj][i_obj_base].T[2][0] / lum_list[mask_obj][i_obj_base].T[1][0]
+        y_hid_base = lum_list[mask_obj][i_obj_base].T[4][0]
 
         if len(mask_obj)==1 and np.ndim(hid_plot)==4:
             x_hid_uncert=hid_plot.transpose(2,0,1,3)[i_obj][0]
             y_hid_uncert=hid_plot.transpose(2,0,1,3)[i_obj][1]
         else:
-            x_hid_uncert = hid_plot_use.T[mask_obj_base][i_obj_base].T[0]
-            y_hid_uncert = hid_plot_use.T[mask_obj_base][i_obj_base].T[1]
+            x_hid_uncert = hid_plot_use.T[mask_obj][i_obj_base].T[0]
+            y_hid_uncert = hid_plot_use.T[mask_obj][i_obj_base].T[1]
 
         # reconstructing standard arrays
         x_hid_uncert = np.array([[subelem for subelem in elem] for elem in x_hid_uncert])
@@ -2919,11 +2929,11 @@ def hid_graph(ax_hid,dict_linevis,
 
         if broad_mode!=False:
 
-            x_hid_base = hid_plot_use[0][0][mask_obj_base][i_obj_base]
+            x_hid_base = hid_plot_use[0][0][mask_obj][i_obj_base]
 
             #done this way to avoid overwriting lum_list if using += on y_hid_base
             if lum_broad_soft:
-                y_hid_base=lum_list[mask_obj_base][i_obj_base].T[4][0]+lum_broad_single[0]
+                y_hid_base=lum_list[mask_obj][i_obj_base].T[4][0]+lum_broad_single[0]
 
         # defining the non detection as strictly non detection or everything below the significance threshold
         if display_nonsign:
@@ -2933,12 +2943,12 @@ def hid_graph(ax_hid,dict_linevis,
             mask_det = abslines_obj_base[0][4][mask_lines] >= slider_sign
 
         # defining the mask for the time interval restriction
-        datelist_obj = Time(np.array([date_list[mask_obj_base][i_obj_base] \
+        datelist_obj = Time(np.array([date_list[mask_obj][i_obj_base] \
                                       for i in range(sum(mask_lines_ul if display_upper else mask_lines))]).astype(str))
         mask_intime = (datelist_obj >= Time(slider_date[0])) & (datelist_obj <= Time(slider_date[1]))
 
-        mask_intime_norepeat = (Time(date_list[mask_obj_base][i_obj_base].astype(str)) >= Time(slider_date[0])) & (
-                    Time(date_list[mask_obj_base][i_obj_base].astype(str)) <= Time(slider_date[1]))
+        mask_intime_norepeat = (Time(date_list[mask_obj][i_obj_base].astype(str)) >= Time(slider_date[0])) & (
+                    Time(date_list[mask_obj][i_obj_base].astype(str)) <= Time(slider_date[1]))
 
         if broad_mode=='BAT':
             mask_intime=np.array([(elem) & mask_with_broad for elem in mask_intime])
@@ -2979,8 +2989,8 @@ def hid_graph(ax_hid,dict_linevis,
                     max(mdates.date2num(ravel_ragged(date_list)[global_mask_intime_norepeat])))
             else:
                 norm_cmap_time = mpl.colors.Normalize(
-                    min(mdates.date2num(ravel_ragged(date_list[mask_obj_base])[global_mask_intime_norepeat])),
-                    max(mdates.date2num(ravel_ragged(date_list[mask_obj_base])[global_mask_intime_norepeat])))
+                    min(mdates.date2num(ravel_ragged(date_list[mask_obj])[global_mask_intime_norepeat])),
+                    max(mdates.date2num(ravel_ragged(date_list[mask_obj])[global_mask_intime_norepeat])))
             if display_upper:
 
                 # we define the upper limit range of points independantly to be able to have a different set of lines used for detection and
@@ -3011,7 +3021,7 @@ def hid_graph(ax_hid,dict_linevis,
 
                 if radio_info_cmap == 'Instrument':
                     color_data = [telescope_colors[elem] for elem in
-                                  instru_list[mask_obj_base][i_obj_base][mask_nondet_ul]]
+                                  instru_list[mask_obj][i_obj_base][mask_nondet_ul]]
 
                     edgec_scat = [colors.to_rgba(elem) for elem in color_data]
                 else:
@@ -3019,18 +3029,18 @@ def hid_graph(ax_hid,dict_linevis,
                     edgec_scat = (colors_obj.to_rgba(i_obj_glob) if not split_cmap_source else \
                                       (colors_nondet.to_rgba(id_obj_nondet) if source_nondet else \
                                            colors_det.to_rgba(
-                                               id_obj_det))) if radio_info_cmap == 'Source' and display_obj_zerodet else \
+                                               id_obj_det))) if radio_info_cmap == 'Source' and color_nondet else \
                         cmap_info(norm_cmap_incl(incl_cmap_base[i_obj_base][cmap_incl_type])) \
                             if radio_info_cmap == 'Inclination' else \
                             cmap_info(
-                                norm_cmap_time(mdates.date2num(date_list[mask_obj_base][i_obj_base][mask_nondet_ul]))) \
+                                norm_cmap_time(mdates.date2num(date_list[mask_obj][i_obj_base][mask_nondet_ul]))) \
                                 if radio_info_cmap == 'Time' else \
-                                cmap_info(cmap_norm_info(nh_plot.T[mask_obj_base].T[0][i_obj_base][
+                                cmap_info(cmap_norm_info(nh_plot.T[mask_obj].T[0][i_obj_base][
                                                              mask_nondet_ul])) if radio_info_cmap == 'nH' else \
                                     cmap_info(
-                                        cmap_norm_info(kt_plot.T[mask_obj_base].T[0][i_obj_base][mask_nondet_ul])) if (
+                                        cmap_norm_info(kt_plot.T[mask_obj].T[0][i_obj_base][mask_nondet_ul])) if (
                                                 1 and radio_info_cmap == 'kT') else \
-                                        diago_color[mask_obj_base][i_obj_base][mask_nondet_ul] \
+                                        diago_color[mask_obj][i_obj_base][mask_nondet_ul] \
                                             if radio_info_cmap == 'line_struct' else \
                                             'grey'
 
@@ -3056,13 +3066,13 @@ def hid_graph(ax_hid,dict_linevis,
                     x_hid_base[mask_nondet_ul], y_hid_base[mask_nondet_ul], marker=marker_ul_curr,
                     facecolor=color_val_nondet_ul, edgecolor=edgec_scat,
                     s=norm_s_lin * obj_size_ul[mask_nondet_ul] ** norm_s_pow,
-                    label='' if not display_obj_zerodet else (
+                    label='' if not color_nondet else (
                         obj_list[mask_obj][i_obj_base] if not label_obj_plotted[i_obj_base] and \
                                                           (radio_info_cmap == 'Source' or display_edgesource) else ''),
                     zorder=500, alpha=alpha_nondet_ul,
                     cmap=cmap_info if radio_info_cmap in ['Inclination', 'Time'] else None, ls='--' if (
-                                display_incl_inside and not bool_incl_inside[mask_obj_base][
-                            i_obj_base] or dash_noincl and bool_noincl[mask_obj_base][i_obj_base]) else 'solid',
+                                display_incl_inside and not bool_incl_inside[mask_obj][
+                            i_obj_base] or dash_noincl and bool_noincl[mask_obj][i_obj_base]) else 'solid',
                     plotnonfinite=True)
 
                 #we re-enforce the facecolor after otherwise because it can be overwirtten by alpha modifications
@@ -3074,7 +3084,7 @@ def hid_graph(ax_hid,dict_linevis,
 
                 if radio_info_cmap == 'Instrument':
                     color_data = [telescope_colors[elem] for elem in
-                                  instru_list[mask_obj_base][i_obj_base][mask_nondet]]
+                                  instru_list[mask_obj][i_obj_base][mask_nondet]]
 
                     c_scat_nondet = [colors.to_rgba(elem) for elem in color_data]
                 else:
@@ -3082,14 +3092,14 @@ def hid_graph(ax_hid,dict_linevis,
                     c_scat_nondet = np.array([(colors_obj.to_rgba(i_obj_glob) if not split_cmap_source else \
                                                    (colors_nondet.to_rgba(id_obj_nondet) if source_nondet else \
                                                         colors_det.to_rgba(
-                                                            id_obj_det)))]) if radio_info_cmap == 'Source' and display_obj_zerodet else \
+                                                            id_obj_det)))]) if radio_info_cmap == 'Source' and color_nondet else \
                         np.repeat(incl_cmap_base[i_obj_base][cmap_incl_type], sum(mask_nondet)) \
                             if radio_info_cmap == 'Inclination' else \
-                            mdates.date2num(date_list[mask_obj_base][i_obj_base][mask_nondet]) \
+                            mdates.date2num(date_list[mask_obj][i_obj_base][mask_nondet]) \
                                 if radio_info_cmap == 'Time' else \
-                                nh_plot.T[mask_obj_base].T[0][i_obj_base][mask_nondet] if radio_info_cmap == 'nH' else \
-                                kt_plot.T[mask_obj_base].T[0][i_obj_base][mask_nondet] if radio_info_cmap == 'kT' else \
-                                    diago_color[mask_obj_base][i_obj_base][mask_nondet] \
+                                nh_plot.T[mask_obj].T[0][i_obj_base][mask_nondet] if radio_info_cmap == 'nH' else \
+                                kt_plot.T[mask_obj].T[0][i_obj_base][mask_nondet] if radio_info_cmap == 'kT' else \
+                                    diago_color[mask_obj][i_obj_base][mask_nondet] \
                                         if radio_info_cmap == 'line_struct' else \
                                         'grey'
 
@@ -3107,7 +3117,7 @@ def hid_graph(ax_hid,dict_linevis,
                 elem_scatter_nondet = ax_hid.scatter(x_hid_base[mask_nondet], y_hid_base[mask_nondet],
                                                      marker=marker_nondet,
                                                      c=c_scat_nondet, cmap=cmap_info, norm=cmap_norm_info,
-                                                     label='' if not display_obj_zerodet else (
+                                                     label='' if not color_nondet else (
                                                          obj_list[mask_obj][i_obj_base] if not label_obj_plotted[
                                                              i_obj_base] and \
                                                         (radio_info_cmap == 'Source' or display_edgesource) else ''),
@@ -3128,17 +3138,17 @@ def hid_graph(ax_hid,dict_linevis,
                             cmap_norm_info.vmax = 90
                         elif radio_info_cmap == 'Time':
                             cmap_norm_info.vmin = max(min(mdates.date2num(
-                                ravel_ragged(date_list[mask_obj_base])[global_mask_intime_norepeat])),
+                                ravel_ragged(date_list[mask_obj])[global_mask_intime_norepeat])),
                                                       mdates.date2num(slider_date[0]))
                             cmap_norm_info.vmax = min(max(mdates.date2num(
-                                ravel_ragged(date_list[mask_obj_base])[global_mask_intime_norepeat])),
+                                ravel_ragged(date_list[mask_obj])[global_mask_intime_norepeat])),
                                                       mdates.date2num(slider_date[1]))
 
                         elif radio_info_cmap == 'nH':
                             cmap_norm_info.vmin = min(
-                                ravel_ragged(nh_plot.T[mask_obj_base].T[0])[global_mask_intime_norepeat])
+                                ravel_ragged(nh_plot.T[mask_obj].T[0])[global_mask_intime_norepeat])
                             cmap_norm_info.vmax = max(
-                                ravel_ragged(nh_plot.T[mask_obj_base].T[0])[global_mask_intime_norepeat])
+                                ravel_ragged(nh_plot.T[mask_obj].T[0])[global_mask_intime_norepeat])
                         elif radio_info_cmap == 'kT':
                             cmap_norm_info.vmin = kt_min
                             cmap_norm_info.vmax = kt_max
@@ -3158,7 +3168,7 @@ def hid_graph(ax_hid,dict_linevis,
                         for elem_children in elem_err_nondet.get_children()[1:]:
                             elem_children.set_colors(c_scat_nondet_rgba_clim)
 
-            if radio_info_cmap == 'Source' and display_obj_zerodet:
+            if radio_info_cmap == 'Source' and color_nondet:
                 label_obj_plotted[i_obj_base] = True
 
             if radio_info_cmap in type_1_cm:
@@ -3177,15 +3187,15 @@ def hid_graph(ax_hid,dict_linevis,
                     else:
                         elem_scatter_nondet.set_clim(
                             vmin=max(min(mdates.date2num(
-                                ravel_ragged(date_list[mask_obj_base])[global_mask_intime_norepeat])),
+                                ravel_ragged(date_list[mask_obj])[global_mask_intime_norepeat])),
                                      mdates.date2num(slider_date[0])),
                             vmax=min(max(mdates.date2num(
-                                ravel_ragged(date_list[mask_obj_base])[global_mask_intime_norepeat])),
+                                ravel_ragged(date_list[mask_obj])[global_mask_intime_norepeat])),
                                      mdates.date2num(slider_date[1])))
                         # if display_hid_error:
                     #     elem_err_nondet.set_clim(
-                    #     vmin=max(min(mdates.date2num(ravel_ragged(date_list[mask_obj_base][global_mask_intime_norepeat]))),mdates.date2num(slider_date[0])),
-                    #     vmax=min(max(mdates.date2num(ravel_ragged(date_list[mask_obj_base][global_mask_intime_norepeat]))),mdates.date2num(slider_date[1])))
+                    #     vmin=max(min(mdates.date2num(ravel_ragged(date_list[mask_obj][global_mask_intime_norepeat]))),mdates.date2num(slider_date[0])),
+                    #     vmax=min(max(mdates.date2num(ravel_ragged(date_list[mask_obj][global_mask_intime_norepeat]))),mdates.date2num(slider_date[1])))
 
                 elif radio_info_cmap == 'nH':
                     if global_colors:
@@ -3193,8 +3203,8 @@ def hid_graph(ax_hid,dict_linevis,
                                                      vmax=max(ravel_ragged(nh_plot[0])))
                     else:
                         elem_scatter_nondet.set_clim(
-                            vmin=min(ravel_ragged(nh_plot.T[mask_obj_base].T[0])[global_mask_intime_norepeat]),
-                            vmax=max(ravel_ragged(nh_plot.T[mask_obj_base].T[0])[global_mask_intime_norepeat]))
+                            vmin=min(ravel_ragged(nh_plot.T[mask_obj].T[0])[global_mask_intime_norepeat]),
+                            vmax=max(ravel_ragged(nh_plot.T[mask_obj].T[0])[global_mask_intime_norepeat]))
                 elif radio_info_cmap == 'kT':
                     elem_scatter_nondet.set_clim(vmin=kt_min,
                                                  vmax=kt_max)
@@ -3204,13 +3214,13 @@ def hid_graph(ax_hid,dict_linevis,
 
                 # creating the colorbar at the end if it hasn't been created with the detections
                 if i_obj_base == len(
-                        abslines_infos_perobj[mask_obj_base]) - 1 and not is_colored_scat and is_colored_scat_nondet:
+                        abslines_infos_perobj[mask_obj]) - 1 and not is_colored_scat and is_colored_scat_nondet:
 
                     # creating an empty scatter with a 'c' value to serve as base for the colorbar
                     elem_scatter_empty = ax_hid.scatter(x_hid_base[mask_nondet][False], y_hid_base[mask_nondet][False],
                                                         marker=None,
                                                         c=cmap_info(norm_cmap_time(mdates.date2num(
-                                                            date_list[mask_obj_base][i_obj_base][mask_nondet])))[False],
+                                                            date_list[mask_obj][i_obj_base][mask_nondet])))[False],
                                                         label='', zorder=1000, edgecolor=None, cmap=cmap_info, alpha=1.)
 
                     if radio_info_cmap == 'Inclination':
@@ -3222,17 +3232,18 @@ def hid_graph(ax_hid,dict_linevis,
                         cb.set_label(cmap_incl_type_str + ' of the source inclination (°)', labelpad=10)
                     elif radio_info_cmap == 'Time':
 
-                        elem_scatter_empty.set_clim(
-                            vmin=max(min(mdates.date2num(ravel_ragged(date_list[mask_obj_base]))),
-                                     mdates.date2num(slider_date[0])),
-                            vmax=min(max(mdates.date2num(ravel_ragged(date_list[mask_obj_base]))),
-                                     mdates.date2num(slider_date[1])))
+                        low_bound_date=max(min(mdates.date2num(ravel_ragged(date_list[True if global_colors else mask_obj])\
+                                                                 [global_mask_intime_norepeat])),
+                                     mdates.date2num(slider_date[0]))
+
+                        high_bound_date=min(max(mdates.date2num(ravel_ragged(date_list[True if global_colors else mask_obj])\
+                                                                 [global_mask_intime_norepeat])),
+                                     mdates.date2num(slider_date[1]))
+
+                        elem_scatter_empty.set_clim(vmin=low_bound_date,vmax=high_bound_date)
 
                         # manually readjusting for small durations because the AutoDateLocator doesn't work well
-                        time_range = min(max(mdates.date2num(ravel_ragged(date_list[mask_obj_base]))),
-                                         mdates.date2num(slider_date[1])) - \
-                                     max(min(mdates.date2num(ravel_ragged(date_list[mask_obj_base]))),
-                                         mdates.date2num(slider_date[0]))
+                        time_range = high_bound_date-low_bound_date
 
                         if time_range < 150:
                             date_format = mdates.DateFormatter('%Y-%m-%d')
@@ -3248,8 +3259,8 @@ def hid_graph(ax_hid,dict_linevis,
 
                     elif radio_info_cmap == 'nH':
                         elem_scatter_empty.set_clim(
-                            vmin=min(ravel_ragged(nh_plot.T[mask_obj_base].T[0])[global_mask_intime_norepeat]),
-                            vmax=max(ravel_ragged(nh_plot.T[mask_obj_base].T[0])[global_mask_intime_norepeat]))
+                            vmin=min(ravel_ragged(nh_plot.T[mask_obj].T[0])[global_mask_intime_norepeat]),
+                            vmax=max(ravel_ragged(nh_plot.T[mask_obj].T[0])[global_mask_intime_norepeat]))
                         cb = plt.colorbar(elem_scatter_empty, cax=ax_cb, extend='min')
 
                         cb.set_label(r'nH ($10^{22}$ cm$^{-2}$)')
@@ -3449,7 +3460,7 @@ def hid_graph(ax_hid,dict_linevis,
 
         # old legend version
         # hid_legend=fig_hid.legend(loc='upper right',ncol=1,bbox_to_anchor=(1.11,0.895) if bigger_text and radio_info_cmap=='Source' \
-        #                           and display_obj_zerodet else (0.9,0.88))
+        #                           and color_nondet else (0.9,0.88))
 
         mpl.rcParams['legend.fontsize'] = old_legend_size
 
@@ -4169,12 +4180,17 @@ def correl_graph(data_perinfo,infos,data_ener,dict_linevis,mode='intrinsic',mode
     mask_intime_norepeat=(Time(ravel_ragged(date_list))>=slider_date[0]) & (Time(ravel_ragged(date_list))<=slider_date[1])
 
     mask_sign_restrict=mask_obs_sign & mask_intime_norepeat
-        
-    bounds_hr=[0.9*min(ravel_ragged(hid_plot[0][0])[mask_sign_restrict]-ravel_ragged(hid_plot[0][1])[mask_sign_restrict]),
-                1/0.9*max(ravel_ragged(hid_plot[0][0])[mask_sign_restrict]+ravel_ragged(hid_plot[0][2])[mask_sign_restrict])]
-    bounds_flux=[0.9*min(ravel_ragged(hid_plot[1][0])[mask_sign_restrict]-ravel_ragged(hid_plot[1][1])[mask_sign_restrict]),
-                1/0.9*max(ravel_ragged(hid_plot[1][0])[mask_sign_restrict]+ravel_ragged(hid_plot[1][2])[mask_sign_restrict])]
 
+    mask_bounds=mask_intime_norepeat if show_ul_ew and not lock_lims_det else mask_sign_restrict
+
+    if sum(mask_bounds)>0:
+        bounds_hr=[0.9*min(ravel_ragged(hid_plot[0][0])[mask_bounds]-ravel_ragged(hid_plot[0][1])[mask_bounds]),
+                1/0.9*max(ravel_ragged(hid_plot[0][0])[mask_bounds]+ravel_ragged(hid_plot[0][2])[mask_bounds])]
+        bounds_flux=[0.9*min(ravel_ragged(hid_plot[1][0])[mask_bounds]-ravel_ragged(hid_plot[1][1])[mask_bounds]),
+                1/0.9*max(ravel_ragged(hid_plot[1][0])[mask_bounds]+ravel_ragged(hid_plot[1][2])[mask_bounds])]
+    else:
+        bounds_hr=None
+        bounds_flux=None
     
     n_obj=len(observ_list)
     
@@ -5135,33 +5151,35 @@ def correl_graph(data_perinfo,infos,data_ener,dict_linevis,mode='intrinsic',mode
             
             # #adding the upper limits to the normalisation if necessary
             if show_ul_ew and ('ew' in infos or line_comp_mode):
+
                 if line_comp_mode or ratio_mode:
-                    
                     c_arr_tot+=[c_arr_ul_x,c_arr_ul_y]
                 else:
                     c_arr_tot+=[c_arr_ul]    
                         
             #differing norms for Time and HR:
-            if min(ravel_ragged(c_arr_tot))==max(ravel_ragged(c_arr_tot)):
-                #safeguard to keep a middle range color when there's only one value
-                c_norm = mpl.colors.Normalize(vmin=min(ravel_ragged(c_arr_tot))*0.9,
-                                              vmax=max(ravel_ragged(c_arr_tot))*1.1)
-            else:
-                if color_scatter in ['HR','nH','L_3-10']:
-                    c_norm=colors.LogNorm(vmin=min(ravel_ragged(c_arr_tot)),
-                                          vmax=max(ravel_ragged(c_arr_tot)))
+            if len(ravel_ragged(c_arr_tot))>0:
+                if min(ravel_ragged(c_arr_tot))==max(ravel_ragged(c_arr_tot)):
+                    #safeguard to keep a middle range color when there's only one value
+                    c_norm = mpl.colors.Normalize(vmin=min(ravel_ragged(c_arr_tot))*0.9,
+                                                  vmax=max(ravel_ragged(c_arr_tot))*1.1)
                 else:
+                    if color_scatter in ['HR','nH','L_3-10']:
+                        c_norm=colors.LogNorm(vmin=min(ravel_ragged(c_arr_tot)),
+                                              vmax=max(ravel_ragged(c_arr_tot)))
+                    else:
 
-                    c_norm=mpl.colors.Normalize(vmin=min(ravel_ragged(c_arr_tot)),
-                                                vmax=max(ravel_ragged(c_arr_tot)))
+                        c_norm=mpl.colors.Normalize(vmin=min(ravel_ragged(c_arr_tot)),
+                                                    vmax=max(ravel_ragged(c_arr_tot)))
+            else:
+                c_norm=None
 
-                    
             color_cmap=mpl.cm.plasma
             colors_func_date=mpl.cm.ScalarMappable(norm=c_norm,cmap=color_cmap)
-            
+
             #computing the actual color array for the detections
             color_arr=np.array([[colors_func_date.to_rgba(elem) for elem in c_arr[s]] for s in ([0,1] if display_nonsign else [0]) ])
-            
+
             #and for the upper limits
             if ratio_mode or line_comp_mode:
                 
@@ -5463,7 +5481,8 @@ def correl_graph(data_perinfo,infos,data_ener,dict_linevis,mode='intrinsic',mode
                         
                 for elem_scat in scat_list_tot:
 
-                    elem_scat.set_clim(min(ravel_ragged(c_arr_tot)),max(ravel_ragged(c_arr_tot)))
+                    if len(ravel_ragged(c_arr_tot))>0:
+                        elem_scat.set_clim(min(ravel_ragged(c_arr_tot)),max(ravel_ragged(c_arr_tot)))
                                                 
                 if color_scatter=='Time':
                     #creating the colormap
@@ -5670,7 +5689,7 @@ def correl_graph(data_perinfo,infos,data_ener,dict_linevis,mode='intrinsic',mode
         ####forcing common observ bounds if asked 
         #computing the common bounds if necessary
         if common_observ_bounds:
-            if mode=='observ':
+            if mode=='observ' and sum(mask_bounds)>0:
                 plt.ylim(bounds_hr if infos_split[1]=='HR' else bounds_flux if infos_split[1]=='flux' else None)
 
         #### Correlation values

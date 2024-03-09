@@ -931,9 +931,9 @@ def numbered_expression(expression=None,mult_conv='auto'):
         elem=xspec_str[j]
 
         if elem=='*':
-            if mult_conv=='full' or (mult_conv=='auto' and\
-                                   xspec_str[j-1].split('_')[0] in xspec_globcomps or \
-                                   is_abs(xspec_str[j-1].split('_')[0])):
+            if mult_conv=='full' or (mult_conv=='auto' and \
+                                     (xspec_str[j-1].split('_')[0] in xspec_globcomps or \
+                                   is_abs(xspec_str[j-1].split('_')[0]))):
                 xspec_str[j]='('
                 add_par+=[')']
                 j+=1
@@ -951,7 +951,7 @@ def numbered_expression(expression=None,mult_conv='auto'):
 
             #adding an ending parenthesis if necessary
             if len(add_par)!=0:
-                xspec_str.insert(j+1,add_par[-1])
+                xspec_str.insert(j,add_par[-1])
                 add_par=add_par[:-1]
             j+=1
             continue
@@ -1154,7 +1154,8 @@ def addcomp(compname,position='last',endmult=None,return_pos=False,modclass=AllM
     #dichotomy between custom models
 
     #global keyword for multiplicative components
-    if multipl and ('glob' in comp_custom or (comp_split=='crabcorr' and comp_custom in ['Suzaku'])):
+    if multipl and comp_custom is not None\
+            and ('glob' in comp_custom or (comp_split=='crabcorr' and comp_custom in ['Suzaku'])):
         start_position=1
         end_multipl=-1
         #staying inside the constant factor if there is one

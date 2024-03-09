@@ -12,22 +12,34 @@ from xspec_config_multisp import allmodel_data,model_load,addcomp,Pset,Pnull,res
                          calc_error,delcomp,fitmod,calc_fit,xcolors_grp,xPlot,xscorpeon,catch_model_str,\
                          load_fitmod, ignore_data_indiv,par_degroup,xspec_globcomps
 
-rmf_abv = {'Hp': '/media/parrama/SSD/Observ/highres/XRISM_responses/rsl_Hp_5eV.rmf',
-           'Mp': '/media/parrama/SSD/Observ/highres/XRISM_responses/rsl_Mp_6eV.rmf',
-           'Lp': '/media/parrama/SSD/Observ/highres/XRISM_responses/rsl_Lp_18eV.rmf'}
+reset()
+Plot.xLog=False
+
+rmf_abv = {'XRISM_Hp': '/media/parrama/SSD/Observ/highres/XRISM_responses/rsl_Hp_5eV.rmf',
+           'XRISM_Mp': '/media/parrama/SSD/Observ/highres/XRISM_responses/rsl_Mp_6eV.rmf',
+           'XRISM_Lp': '/media/parrama/SSD/Observ/highres/XRISM_responses/rsl_Lp_18eV.rmf',
+        'PN_Timing': '/media/parrama/SSD/Observ/highres/linedet_compa/resp_XMM/Timing/0670672901_pn_S003_Timing_auto.rmf',
+        'heg_graded_-1':'/media/parrama/SSD/Observ/highres/linedet_compa/resp_Chandra/graded/13716_heg_-1.rmf',
+         'heg_graded_1':'/media/parrama/SSD/Observ/highres/linedet_compa/resp_Chandra/graded/13716_heg_1.rmf'}
 
 rmf_abv_list = list(rmf_abv.keys())
 
-arf_abv = {'pointsource_GVclosed': '/media/parrama/SSD/Observ/highres/XRISM_responses/rsl_pointsource_GVclosed.arf',
-           'pointsource_off_GVclosed': '/media/parrama/SSD/Observ/highres/XRISM_responses/rsl_pointsource_off_GVclosed.arf'}
+arf_abv = {'XRISM_pointsource_GVclosed': '/media/parrama/SSD/Observ/highres/XRISM_responses/rsl_pointsource_GVclosed.arf',
+           'XRISM_pointsource_off_GVclosed': '/media/parrama/SSD/Observ/highres/XRISM_responses/rsl_pointsource_off_GVclosed.arf',
+           'PN_Timing': '/media/parrama/SSD/Observ/highres/linedet_compa/resp_XMM/Timing/0670672901_pn_S003_Timing_auto.arf',
+           'heg_graded_-1': '/media/parrama/SSD/Observ/highres/linedet_compa/resp_Chandra/graded/13716_heg_-1.arf',
+           'heg_graded_1': '/media/parrama/SSD/Observ/highres/linedet_compa/resp_Chandra/graded/13716_heg_1.arf'}
+
 
 arf_abv_list = list(arf_abv.keys())
 
 sign_sigmas_delchi_1dof=[1.,3.841,8.81]
 
-def simu_xrism(mode='ew_lim',mod_path=None,rmf_path='Hp',arf_path='pointsource_GVclosed',expos=50,flux_range='1_100_20',
-               line='FeKa26abs',line_v=[0,0],line_w=[0.02,0.02],width_test_val=0.02,width_EW_resol=0.05,
-               width_EW_inter=[0.1,100]):
+def line_simu(mod_path=None,mode='ew_lim',rmf_path='XRISM_Hp',arf_path='XRISM_pointsource_GVclosed',
+              expos=50,flux_range='1_100_20',chatter=10,
+              regroup=False,fakestats=True,n_iter=10,
+              line='FeKa26abs',line_v=[-3000,3000],line_w=[0.005,0.005],
+              width_test_val=0.005,width_EW_resol=0.05,width_EW_inter=[0.1,100]):
 
     '''
     Computes XRISM simulations of line detection
@@ -41,13 +53,21 @@ def simu_xrism(mode='ew_lim',mod_path=None,rmf_path='Hp',arf_path='pointsource_G
 
         -rmf_path/arf_path: rmf/arf to use for the fakes. must be an absolute path. available shortcuts:
             rmf_path:
-                'Hp': rsl_Hp_5eV.rmf
-                'Mp': rsl_Mp_6eV.rmf
-                'Lp': rsl_Lp_18eV.rmf
+                'XRISM_Hp': rsl_Hp_5eV.rmf
+                'XRISM_Mp': rsl_Mp_6eV.rmf
+                'XRISM_Lp': rsl_Lp_18eV.rmf
+                'PN_Timing': 0670672901_pn_S003_Timing_auto.rmf
+                'heg_graded_-1': 13716_heg_-1.rmf
+                'heg_graded_1': 13716_heg_1.rmf
 
             arf_path:
-                'pointsource_GVclosed'      rsl_pointsource_GVclosed.arf
-                'pointsource_off_GVclosed'  rsl_pointsource_off_GVclosed.arf
+                'XRISM_pointsource_GVclosed'        rsl_pointsource_GVclosed.arf
+                'XRISM_pointsource_off_GVclosed'    rsl_pointsource_off_GVclosed.arf
+                'PN_Timing'                         0670672901_pn_S003_Timing_auto.arf
+                'heg_graded_-1': 13716_heg_-1.arf
+                'heg_graded_1': 13716_heg_1.arf
+
+        Notes that paths that are too long may result in issues
 
         -expos: exposure value in kiloseconds
 
@@ -55,6 +75,13 @@ def simu_xrism(mode='ew_lim',mod_path=None,rmf_path='Hp',arf_path='pointsource_G
             flux value interval to be parsed. The spectrum will be renormalized to have its values in the
             3-10keV band
             the interval is low_lim_high_lim_nsteps in log space, low and highlim in units of 1e-10 erg/cm²/s
+
+        -regroup: Regroup or not the spectra with ftgrouppha before analysis
+
+        -fakestats: Use the applyStats options of fakeit to consider statistical fluctuations when faking
+                    (otherwise a "perfect" spectrum with 0 chi² gets created)
+
+        -niter: number of iterations to test for each flux
 
         -line: name of the line to test (mainly for the energy)
 
@@ -76,27 +103,51 @@ def simu_xrism(mode='ew_lim',mod_path=None,rmf_path='Hp',arf_path='pointsource_G
             -width_EW_resol: resolution for when to stop when trying to find the limit
                              for computing the width of the line, in RELATIVE units (so default value is 5% error)
 
-    #TOOD: add verbose
     #TODO: add arf/rmf cutting
     #TODO: add low width_EW_interval threshold
 
     '''
 
+    old_chatter=Xset.chatter
+    Xset.chatter=chatter
+
     AllData.clear()
 
-    if rmf_path in rmf_abv_list:
-        rmf_path_use=rmf_abv[rmf_path]
-    else:
-        rmf_path_use=rmf_path
+    #here we assume that the elements are the same size
 
-    if arf_path in arf_abv_list:
-        arf_path_use=arf_abv[arf_path]
+    rmf_path_use=[]
+    arf_path_use=[]
+
+    if type(rmf_path) in [list,np.ndarray,tuple]:
+        rmf_path_list=rmf_path
+        arf_path_list=arf_path
     else:
-        arf_path_use=arf_path
+        rmf_path_list=[rmf_path]
+        arf_path_list=[arf_path]
+
+    for elem_rmf, elem_arf in zip(rmf_path_list,arf_path_list):
+        if elem_rmf in rmf_abv_list:
+            rmf_path_use+=[os.path.relpath(rmf_abv[elem_rmf])]
+        else:
+            rmf_path_use+=[elem_rmf]
+
+        if elem_arf in arf_abv_list:
+            arf_path_use+=[os.path.relpath(arf_abv[elem_arf])]
+        else:
+            arf_path_use+=[elem_arf]
+
+    logfile_write=Xset.openLog('line_simu.log')
+    #ensuring the log information gets in the correct place in the log file by forcing line to line buffering
+    logfile_write.reconfigure(line_buffering=True)
+
+    logfile=open(logfile_write.name,'r')
 
     if mod_path is not None:
         AllModels.clear()
         Xset.restore(mod_path)
+
+    Plot.xLog=False
+    Fit.statMethod = 'cstat'
 
     #computing the 3-10 flux
     AllModels.calcFlux('3. 10.')
@@ -115,9 +166,10 @@ def simu_xrism(mode='ew_lim',mod_path=None,rmf_path='Hp',arf_path='pointsource_G
 
     mod_cont=allmodel_data()
 
-    fakeset = FakeitSettings(response=rmf_path_use,arf=arf_path_use,exposure=expos*1000,
+    fakeset = [FakeitSettings(response=elem_rmf,arf=elem_arf,exposure=expos*1000,
                               background='',
-                              fileName='temp_sp.pi')
+                              fileName='temp_sp_'+str(i_grp+1)+'.pi') for i_grp,(elem_rmf,elem_arf) in\
+                                enumerate(zip(rmf_path_use,arf_path_use))]
 
     #creating a bash process to run ftgrouppha on the fake spectra
     bashproc = pexpect.spawn("/bin/bash", encoding='utf-8')
@@ -128,109 +180,153 @@ def simu_xrism(mode='ew_lim',mod_path=None,rmf_path='Hp',arf_path='pointsource_G
     if mode=='ew_lim':
 
         print('Computing EW limits for the given flux range...')
-        eqw_lim_arr=np.zeros((n_flux,3))
+        ew_lim_arr=np.zeros((n_flux,3))
 
-        with tqdm(total=n_flux) as pbar:
+        with tqdm(total=n_flux*n_iter) as pbar:
             for i_flux,elem_flux in enumerate(flux_inter):
 
-                mod_cont.load()
+                ew_lim_distrib=np.repeat(None,3*n_iter).reshape(3,n_iter)
 
-                #freezing the parameters before faking
-                freeze()
+                for i_iter in range(n_iter):
+                    mod_cont.load()
 
-                AllModels(1)(1).values=elem_flux/flux_base
+                    #freezing the parameters before faking
+                    freeze()
 
-                #remove previously computed spectra
-                if os.path.isfile('temp_sp.pi'):
-                    os.remove('temp_sp.pi')
+                    AllModels(1)(1).values=elem_flux/flux_base
 
-                if os.path.isfile('temp_sp_grp_opt.pi'):
-                    os.remove('temp_sp_grp_opt.pi')
+                    #remove previously computed spectra
+                    if os.path.isfile('temp_sp.pi'):
+                        os.remove('temp_sp.pi')
 
-                AllData.fakeit(settings=fakeset, applyStats=True)
+                    if os.path.isfile('temp_sp_grp_opt.pi'):
+                        os.remove('temp_sp_grp_opt.pi')
 
-                #rebinning the spectrum before loading it
-                # # using optsnmin puts some bins at weird wiggling ratios
-                # # using opt puts some bins at 0 for some reason maybe bc the rmf has issues
-                # bashproc.sendline('ftgrouppha infile=temp_sp.pi'+' outfile=temp_sp_grp_opt.pi '+
-                #                   ' grouptype=optsnmin groupscale=3.0'+
-                #                   ' respfile='+rmf_path_use+' clobber=True')
-                #
-                # #waiting for the spectrum to be created:
-                # while not os.path.isfile('temp_sp_grp_opt.pi'):
-                #     time.sleep(1)
-                # AllData.clear()
-                # AllData('1:1 temp_sp_grp_opt.pi')
+                    AllData.fakeit(nSpectra=len(fakeset),settings=fakeset, applyStats=fakestats)
 
-                AllData.ignore('**-2. 10.-**')
+                    #rebinning the spectrum before loading it
+                    if regroup:
+                        # using optsnmin puts some bins at weird wiggling ratios
+                        # bashproc.sendline('ftgrouppha infile=temp_sp.pi'+' outfile=temp_sp_grp_opt.pi '+
+                        #                   ' grouptype=optsnmin groupscale=3.0'+
+                        #                   ' respfile='+rmf_path_use+' clobber=True')
 
-                AllData(1).response.arf=arf_path_use
+                        # using opt puts some bins at 0 for some reason maybe bc the rmf has issues
+                        group_str='ftgrouppha infile=temp_sp.pi outfile=temp_sp_grp_opt.pi '+\
+                                          'grouptype=opt'+\
+                                          'respfile='+rmf_path_use+' clobber=True'
+                        bashproc.sendline(group_str)
 
-                #loading the continuum model and fitting
-                mod_cont.load()
-                AllModels(1)(1).values=elem_flux/flux_base
+                        #waiting for the spectrum to be created:
+                        while not os.path.isfile('temp_sp_grp_opt.pi'):
+                            time.sleep(1)
 
-                calc_fit()
+                        AllData.clear()
+                        AllData('1:1 temp_sp_grp_opt.pi')
 
-                if Fit.statistic/Fit.dof>2:
-                    print('Issue with fake continuum fitting.')
-                    breakpoint()
-                    pass
+                    AllData.ignore('**-2. 10.-**')
+                    AllData.ignore('bad')
 
-                #freezing the continuum
-                freeze()
-
-                #adding the line component
-                comp_par,comp_num=addcomp(line+'_agaussian', position='lastinall',return_pos=True)
-
-                #with appropriate parameter range (and freezing if its a single value
-                AllModels(1)(comp_par[0]).values=[0.,0. if line_v[0]==line_v[1] else 10.,
-                                                  line_v[0],line_v[0],line_v[1],line_v[1]]
-                AllModels(1)(comp_par[2]).values = [line_w[0], 0. if line_w[0]==line_w[1] else 0.01,
-                                                    line_w[0], line_w[0], line_w[1], line_w[1]]
+                    for i_grp in range(1,AllData.nGroups+1):
+                        AllData(i_grp).response.arf=arf_path_use[i_grp-1]
 
 
-                #fitting
-                calc_fit()
+                    #loading the continuum model and fitting
+                    mod_cont.load()
+                    AllModels(1)(1).values=elem_flux/flux_base
 
-                #to be implemented if need be for parameter variations
-                # (we change the critical delta to avoid pyxspec getting stuck if the steppar finds a better fit)
-                # #storing the current fit delta
-                # curr_crit_delta=Fit.criticalDelta
-                #
-                # Fit.criticalDelta=1e10
-                #
-                # #doing a steppar on the velocity and the width
-                # Fit.steppar(str(comp_par[0])+' '+str(line_v[0])+' '+str(line_v[1])+'50 8 -1e-7 -1e-5 10')
+                    calc_fit()
 
-                #Fit.criticalDelta=curr_crit_delta
+                    if Fit.statistic/Fit.dof>2:
+                        print('Issue with fake continuum fitting.')
+                        breakpoint()
+                        pass
 
-                #and computing the eqwidth of the best fit in the interval
-                AllModels.eqwidth(int(comp_num[-1]), err=True, number=1000, level=68)
+                    #freezing the continuum
+                    freeze()
 
-                eqw_lim_arr[i_flux][0]=-AllData(1).eqwidth[1]
+                    #adding the line component
+                    comp_par,comp_num=addcomp(line+'_agaussian', position='lastinall',return_pos=True)
 
-                AllModels.eqwidth(int(comp_num[-1]), err=True, number=1000, level=95)
+                    #with appropriate parameter range (and freezing if its a single value
+                    AllModels(1)(comp_par[0]).values=[0.,0. if line_v[0]==line_v[1] else 10.,
+                                                      line_v[0],line_v[0],line_v[1],line_v[1]]
+                    AllModels(1)(comp_par[2]).values = [line_w[0], 0. if line_w[0]==line_w[1] else 0.01,
+                                                        line_w[0], line_w[0], line_w[1], line_w[1]]
 
-                eqw_lim_arr[i_flux][0]=-AllData(1).eqwidth[1]
 
-                AllModels.eqwidth(int(comp_num[-1]), err=True, number=1000, level=99.7)
+                    #fitting
+                    calc_fit()
 
-                eqw_lim_arr[i_flux][0]=-AllData(1).eqwidth[1]
+                    Fit.query='yes'
+                    #computing the error on the velocity shift parameter of the line to ensure we are not stuck
+                    calc_error(logfile,param=str(comp_par[0]),timeout=15,freeze_pegged=True)
+                    calc_fit()
+                    Fit.query='on'
 
-                pbar.update()
+                    #to be implemented if need be for parameter variations
+                    # (we change the critical delta to avoid pyxspec getting stuck if the steppar finds a better fit)
+                    # #storing the current fit delta
+                    # curr_crit_delta=Fit.criticalDelta
+                    #
+                    # Fit.criticalDelta=1e10
+                    #
+                    # #doing a steppar on the velocity and the width
+                    # Fit.steppar(str(comp_par[0])+' '+str(line_v[0])+' '+str(line_v[1])+'50 8 -1e-7 -1e-5 10')
 
-        save_arr=np.concatenate((np.array([flux_inter]),eqw_lim_arr.T)).T
+                    #Fit.criticalDelta=curr_crit_delta
 
-        header_elems=['mod_path '+str(mod_path),'rmf_path '+rmf_path,'arf_path '+arf_path,'expos '+str(expos)+' ks',
-                      'flux_range logspace('+flux_range+') e-10 erg/s/cm² ',
-                      'line '+line,'line_v '+str(line_v),'line_w '+str(line_w),
-                      'columns: flux ew_limit at 1/2/3 sigma']
+                    #and computing the eqwidth of the best fit in the interval
+                    try:
+                        AllModels.eqwidth(int(comp_num[-1]), err=True, number=1000, level=68)
+                    except:
+                        #this means both of the parameters are unconstrained and pegged
+                        #thus here we fix the blueshift and rerun the eqwidth test
+                        AllModels(1)(comp_par[0]).frozen=True
+                        calc_fit()
+                        AllModels.eqwidth(int(comp_num[-1]), err=True, number=1000, level=68)
 
-        np.savetxt('ew_lim_mod.txt',save_arr,header='\n'.join(header_elems))
-        return flux_inter,eqw_lim_arr
+                    ew_lim_distrib[0][i_iter]=-AllData(1).eqwidth[1]*1e3
+
+                    AllModels.eqwidth(int(comp_num[-1]), err=True, number=1000, level=95)
+
+                    ew_lim_distrib[1][i_iter]=-AllData(1).eqwidth[1]*1e3
+
+                    AllModels.eqwidth(int(comp_num[-1]), err=True, number=1000, level=99.7)
+
+                    ew_lim_distrib[2][i_iter]=-AllData(1).eqwidth[1]*1e3
+
+                    pbar.update()
+
+                ew_lim_distrib.sort()
+
+                #storing the median of the distribution of the limits for this flux value
+                ew_lim_arr[i_flux]=ew_lim_distrib.T[n_iter//2]
+
+        save_arr=np.concatenate((np.array([flux_inter]),ew_lim_arr.T)).T
+
+        header_elems=['mod_path '+str(mod_path),
+                      'rmf_path '+str(rmf_path_use),'arf_path '+str(arf_path_use),
+                      'expos '+str(expos)+' ks',
+                      'Fake stats '+str(fakestats),
+                      'n_iter '+str(n_iter),
+                      'flux_range logspace('+flux_range+') (e-10 erg/s/cm²) ',
+                      'line '+line,'line_v '+str(line_v)+' (km/s)','line_w '+str(line_w)+' (keV)',
+                      'columns: flux | ew_limit at 1/2/3 sigma (eV)']
+
+        np.savetxt('ew_lim_mod'+
+                   ('_regroup' if regroup else '')+
+                   ('_nostat' if not fakestats else '')+
+                   '_'+str(n_iter)+'_iter'+
+                   '_width_'+str(line_w[0])+'_'+str(line_w[1])+'.txt',save_arr,header='\n'.join(header_elems))
+
+        Xset.chatter=old_chatter
+
+        return save_arr
 
     if mode=='width_lim':
+
+        #n_iter to be implemented here
 
         print('Computing width detectability for the given flux range...')
         width_lim_arr=np.zeros((n_flux,3))
@@ -322,23 +418,25 @@ def simu_xrism(mode='ew_lim',mod_path=None,rmf_path='Hp',arf_path='pointsource_G
                         os.remove('temp_sp_grp_opt.pi')
 
                     #faking
-                    AllData.fakeit(settings=fakeset, applyStats=True)
+                    AllData.fakeit(nSpectra=len(fakeset),settings=fakeset, applyStats=fakestats)
 
-                    #rebinning the spectrum before loading it
-                    bashproc.sendline('ftgrouppha infile=temp_sp.pi'+' outfile=temp_sp_grp_opt.pi grouptype= opt'+
-                                      ' respfile='+rmf_path_use)
-
-                    #waiting for the spectrum to be created:
-                    while not os.path.isfile('temp_sp_grp_opt.pi'):
-                        time.sleep(1)
-
-                    AllData.clear()
-
-                    AllData('1:1 temp_sp_grp_opt.pi')
+                    # #rebinning the spectrum before loading it
+                    # bashproc.sendline('ftgrouppha infile=temp_sp.pi'+' outfile=temp_sp_grp_opt.pi grouptype= opt'+
+                    #                   ' respfile='+rmf_path_use)
+                    #
+                    # #waiting for the spectrum to be created:
+                    # while not os.path.isfile('temp_sp_grp_opt.pi'):
+                    #     time.sleep(1)
+                    #
+                    # AllData.clear()
+                    #
+                    # AllData('1:1 temp_sp_grp_opt.pi')
 
                     AllData.ignore('**-2. 10.-**')
+                    AllData.ignore('bad')
 
-                    AllData(1).response.arf=arf_path_use
+                    for i_grp in range(1, AllData.nGroups + 1):
+                        AllData(i_grp).response.arf = arf_path_use[i_grp - 1]
 
                     #loading the cont version of the width model (to avoid issues with parameters)
                     mod_cont.load()
@@ -547,7 +645,8 @@ def simu_xrism(mode='ew_lim',mod_path=None,rmf_path='Hp',arf_path='pointsource_G
 
         save_arr=np.concatenate((np.array([flux_inter]),width_lim_arr.T)).T
 
-        header_elems=['mod_path '+str(mod_path),'rmf_path '+rmf_path,'arf_path '+arf_path,'expos '+str(expos)+' ks',
+        header_elems=['mod_path '+str(mod_path),'rmf_path '+str(rmf_path_use),'arf_path '+str(arf_path_use),
+                      'expos '+str(expos)+' ks','Fake stats '+str(fakestats),
                       'flux_range logspace('+flux_range+') e-10 erg/s/cm² ',
                       'line '+line,
                       'tested width '+str(10**3*width_test_val)+' eVs',
@@ -555,5 +654,6 @@ def simu_xrism(mode='ew_lim',mod_path=None,rmf_path='Hp',arf_path='pointsource_G
                       'resolution fraction '+str(width_EW_resol),
                       'columns: flux ew_limit at 1/2/3 sigma']
 
-        np.savetxt('ew_lim_mod.txt',save_arr,header='\n'.join(header_elems))
+        np.savetxt('ew_lim_widthdet_mod'+('_regroup' if regroup else '')+('_nostat' if not fakestats else '')+
+                   '_width_'+str(line_w[0])+'_'+str(line_w[1])+'.txt',save_arr,header='\n'.join(header_elems))
         return flux_inter,width_lim_arr

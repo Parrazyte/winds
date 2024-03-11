@@ -99,7 +99,7 @@ ap.add_argument('-catch', '--catch_errors', help='Catch errors while running the
 
 # global choices
 ap.add_argument("-a", "--action", nargs='?', help='Give which action(s) to proceed,separated by comas.',
-                default='m', type=str)
+                default='lc,m', type=str)
 # default: build,reg,lc,sp,g,m
 
 ap.add_argument("-over", nargs=1, help='overwrite computed tasks (i.e. with products in the batch, or merge directory\
@@ -166,7 +166,7 @@ ap.add_argument('-hr_bands_str', nargs=1, help='Gives the list of bands to creat
                 type=str)
 
 #note: also makes the spectrum function create spectra uniquely from GTIs
-ap.add_argument('-make_gti_orbit',nargs=1,help='cut individual observations per orbits with gtis',default=True,
+ap.add_argument('-make_gti_orbit',nargs=1,help='cut individual observations per orbits with gtis',default=False,
                 type=bool)
 '''spectra'''
 
@@ -1659,7 +1659,7 @@ def extract_lc(directory,binning='1',lc_bands_str='3-79',hr_bands='10-50/3-10',c
 
                 gti_list=create_gtis(bashproc,lc_cut_path,lc_cut_fig)
             else:
-                gti_list=[]
+                gti_list=[None]
 
             for id_orbit,elem_gti in enumerate(gti_list):
 

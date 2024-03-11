@@ -427,7 +427,7 @@ class scorpeon_manager:
             scorpeon_save.load()
 
         #freezing the model if asked to
-        if frozen:
+        if frozen and self.bgload_paths is not None:
 
             for i_grp in range(AllData.nGroups):
 

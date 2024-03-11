@@ -11,8 +11,8 @@ ap = argparse.ArgumentParser(description='Script to plot line detectability from
 ap.add_argument("-fakestats",nargs=1,help='use run with or without fakeit statistical fluctuations',
                 default=True,type=str)
 
-ap.add_argument('-n_iter',nargs=1,help='number of iterations of each flux level',
-                default=10,type=str)
+ap.add_argument('-n_iter',nargs=1,help='number of iterations of each flux level for XRISM/XMM/Chandra',
+                default=[10,50,50],type=str)
 
 ap.add_argument('-width_inter',nargs=1,help='width interval bounds',default=[5e-3,5e-3])
 
@@ -33,17 +33,17 @@ fakestats=args.fakestats
 
 arr_XRISM=np.loadtxt('/media/parrama/SSD/Observ/highres/linedet_compa/fakes_XRISM/ew_lim_mod'
                      +('_nostat' if not fakestats else '')+
-                     '_'+str(n_iter)+'_iter'+
+                     '_'+str(n_iter[0])+'_iter'+
                      '_width_'+ width_str+'.txt')
 
 arr_XMM=np.loadtxt('/media/parrama/SSD/Observ/highres/linedet_compa/fakes_XMM/ew_lim_mod'
                    + ('_nostat' if not fakestats else '') +
-                   '_' + str(n_iter) + '_iter' +
+                   '_' + str(n_iter[1]) + '_iter' +
                    '_width_' + width_str + '.txt')
 
 arr_Chandra=np.loadtxt('/media/parrama/SSD/Observ/highres/linedet_compa/fakes_Chandra/ew_lim_mod'
                        + ('_nostat' if not fakestats else '') +
-                       '_' + str(n_iter) + '_iter' +
+                       '_' + str(n_iter[2]) + '_iter' +
                        '_width_' + width_str + '.txt')
 
 fig_EW,ax_EW=plt.subplots(figsize=(8,6))

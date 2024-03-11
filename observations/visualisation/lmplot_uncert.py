@@ -47,6 +47,7 @@ def lmplot_uncert_a(ax, x, y, dx, dy, xlim=None,ylim=None, percent=68.26,percent
 
     5) extract the percentages of slope, intercept, and scatter and return them if necessary
 
+    Note: the scatte is returned as the sqrt of the variance of each point compared to the linear regression
     ax: ax where the plots will be displayed
 
     -x,y:               data
@@ -256,16 +257,11 @@ def lmplot_uncert_a(ax, x, y, dx, dy, xlim=None,ylim=None, percent=68.26,percent
     slope=init_reg.slope
     inter=init_reg.intercept
 
-    #main sigma value
-    sigma_main=np.sqrt(np.nansum((y_arr[tot_nonlim_mask]- \
-                                  ((x_arr[tot_nonlim_mask])*slope+\
-                                    inter))**2))/sum(tot_nonlim_mask)
-
     #computing the intrinsic scatter (standard deviation) (here because not affected by change in intercept
     #main sigma from non perturbated values
     sigma_vals=np.array([np.sqrt(np.nansum((y_pert[id][tot_nonlim_mask]-\
                                    ((x_pert[id][tot_nonlim_mask])*slope_vals[id]+\
-                                    intercept_vals[id]))**2))/sum(tot_nonlim_mask)\
+                                    intercept_vals[id]))**2)/sum(tot_nonlim_mask))\
                             for id in range(nsim)])
 
     #fetching a sample of points from the limits of the ax to create the lines
@@ -416,6 +412,9 @@ def lmplot_uncert_a(ax, x, y, dx, dy, xlim=None,ylim=None, percent=68.26,percent
 
     #main sigma value
     sigma_vals.sort()
+
+    #main value being the median
+    sigma_main=sigma_vals[len(sigma_vals)//2]
 
     #and the uncertainties
     sigma_arr=np.array([sigma_main,max(sigma_main-sigma_vals[round(nsim * (0.5-percent/200))],0),

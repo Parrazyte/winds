@@ -131,7 +131,7 @@ from xspec import AllChains
 
 #custom script with a few shorter xspec commands
 from xspec_config_multisp import allmodel_data,model_load,addcomp,Pset,Pnull,rescale,reset,Plot_screen,store_plot,freeze,allfreeze,unfreeze,\
-                         calc_error,delcomp,fitmod,fitcomp,calc_fit,xcolors_grp,xPlot,xscorpeon,catch_model_str,\
+                         calc_error,delcomp,fitmod,calc_fit,xcolors_grp,xPlot,xscorpeon,catch_model_str,\
                          load_fitmod, ignore_data_indiv,par_degroup,xspec_globcomps
 
 from linedet_utils import plot_line_comps,plot_line_search,plot_std_ener,coltour_chi2map,narrow_line_search,\
@@ -165,7 +165,7 @@ ap.add_argument('-satellite',nargs=1,help='telescope to fetch spectra from',defa
 
 #used for NICER and multi for now
 ap.add_argument('-group_max_timedelta',nargs=1,
-                help='maximum time delta for epoch/gti grouping in dd_hh_mm_ss',default='00_06_00_00',type=str)
+                help='maximum time delta for epoch/gti grouping in dd_hh_mm_ss',default='01_00_00_00',type=str)
 
 #00_00_00_10 for NICER TR
 #00_00_15_00 for NuSTAR individual orbits
@@ -179,6 +179,7 @@ ap.add_argument("-grouping",nargs=1,help='specfile grouping for spectra in Kaast
 
 ap.add_argument('-fitstat',nargs=1,help='fit statistic to be used for the spectral analysis',default='cstat',type=str)
 
+ap.add_argument('-xspec_query',nargs=1,help='fit query command for xspec',default='no',type=str)
 ap.add_argument("-prefix",nargs=1,help='restrict analysis to a specific prefix',default='auto',type=str)
 
 ####output directory
@@ -403,6 +404,7 @@ ap.add_argument("-line_cont_ig_arg",nargs=1,
                 help='min and max energies of the ignore zone in the line continuum broand band fit',
                 default='iron',type=str)
 
+#note that the recent change in this will make fake computations slower because they use the same grid
 ap.add_argument("-line_search_e",nargs=1,
                 help='min, max and step of the line energy search',default='4 10 0.02',type=str)
 
@@ -640,6 +642,8 @@ match_closest_NICER=args.match_closest_NICER
 plot_multi_overlap=args.plot_multi_overlap
 skip_single_instru=args.skip_single_instru
 
+xspec_query=args.xspec_query
+
 outdir=args.outdir
 pileup_lim=args.pileup_lim
 pileup_missing=args.pmiss
@@ -875,6 +879,8 @@ Xset.chatter=xchatter
 
 #defining the standard number of fit iterations
 Fit.nIterations=100
+
+Fit.query=xspec_query
 
 #summary file header
 summary_header='Obsid\tFile identifier\tSpectrum extraction result\n'

@@ -845,7 +845,7 @@ def plot_lightcurve(dict_linevis,ctl_maxi_df,ctl_maxi_simbad,name,ctl_bat_df,ctl
                            yerr=bat_lc_df[bat_lc_df.columns[2]],
                            linestyle='', color='black', marker='', elinewidth=0.5, label='bat standard counts')
 
-            ax_lc.set_ylim(0,max(ax_lc.get_ylim()[1],1e-2))
+            ax_lc.set_ylim(0,max(max(bat_lc_df[bat_lc_df.columns[1]])*1.1,1e-2))
 
     lc_integral_sw_df=None
     fit_integral_revol_df=None
@@ -2072,6 +2072,8 @@ def hid_graph(ax_hid,dict_linevis,
     cmap_color_nondet=dict_linevis['cmap_color_nondet']
     exptime_list=dict_linevis['exptime_list']
     diago_color=dict_linevis['diago_color']
+    custom_states_color=dict_linevis['custom_states_color']
+    hr_high_plot_restrict=dict_linevis['hr_high_plot_restrict']
 
     if not broad_mode==False:
         HR_broad_bands=dict_linevis['HR_broad_bands']
@@ -2103,7 +2105,7 @@ def hid_graph(ax_hid,dict_linevis,
     type_1_cm = ['Inclination', 'Time', 'nH', 'kT']
 
     # parameters without actual colorbars
-    type_1_colorcode = ['Source', 'Instrument','line_struct']
+    type_1_colorcode = ['Source', 'Instrument','custom_line_struct','custom_acc_states']
 
     fig_hid=ax_hid.get_figure()
 
@@ -2207,13 +2209,13 @@ def hid_graph(ax_hid,dict_linevis,
         lum_broad_single=lum_broad_single.T
 
         #transforming the BAT non-significant detections in 1 sigma upper limits or removing them
-        for i_bat in range(len(lum_broad_single)):
-            if not mask_sign_high_E[i_bat]:
+        for i_obs in range(len(lum_broad_single)):
+            if not mask_sign_high_E[i_obs]:
                 if not sign_broad_hid_BAT:
-                    lum_broad_single[i_bat]=np.array([lum_broad_single[i_bat][0]+lum_broad_single[i_bat][1],
-                                            lum_broad_single[i_bat][0]+lum_broad_single[i_bat][1],0.])
+                    lum_broad_single[i_obs]=np.array([lum_broad_single[i_obs][0]+lum_broad_single[i_obs][1],
+                                            lum_broad_single[i_obs][0]+lum_broad_single[i_obs][1],0.])
                 else:
-                    lum_broad_single[i_bat]=np.repeat(np.nan,3)
+                    lum_broad_single[i_obs]=np.repeat(np.nan,3)
 
         lum_broad_single=lum_broad_single.T
 
@@ -2512,17 +2514,31 @@ def hid_graph(ax_hid,dict_linevis,
         # creating a display order which is the reverse of the EW size order to make sure we do not hide part the detections
         obj_order_sign = obj_size_sign[obj_val_mask_sign].argsort()[::-1]
 
-        if radio_info_cmap=='line_struct':
-            #reordering to have the substructures above the rest
-            colors_data_restrict=diago_color[mask_obj][i_obj][obj_val_mask_sign]
-            obj_order_sign_mainstruct=obj_size_sign[obj_val_mask_sign][colors_data_restrict=='grey'].argsort()[::-1]
-            obj_order_sign_substruct=obj_size_sign[obj_val_mask_sign][colors_data_restrict=='orange'].argsort()[::-1]
-            obj_order_sign_outliers=obj_size_sign[obj_val_mask_sign][colors_data_restrict=='blue'].argsort()[::-1]
+        if 'custom' in radio_info_cmap:
+            if radio_info_cmap=='custom_line_struct':
+                #reordering to have the substructures above the rest
+                colors_data_restrict=diago_color[mask_obj][i_obj][obj_val_mask_sign]
+                obj_order_sign_mainstruct=obj_size_sign[obj_val_mask_sign][colors_data_restrict=='grey'].argsort()[::-1]
+                obj_order_sign_substruct=obj_size_sign[obj_val_mask_sign][colors_data_restrict=='orange'].argsort()[::-1]
+                obj_order_sign_outliers=obj_size_sign[obj_val_mask_sign][colors_data_restrict=='blue'].argsort()[::-1]
 
-            len_arr=np.arange(len(obj_order_sign))
-            obj_order_sign=np.concatenate([len_arr[colors_data_restrict=='grey'][obj_order_sign_mainstruct],
-                                                len_arr[colors_data_restrict=='orange'][obj_order_sign_substruct],
-                                                len_arr[colors_data_restrict=='blue'][obj_order_sign_outliers]])
+                len_arr=np.arange(len(obj_order_sign))
+                obj_order_sign=np.concatenate([len_arr[colors_data_restrict=='grey'][obj_order_sign_mainstruct],
+                                                    len_arr[colors_data_restrict=='orange'][obj_order_sign_substruct],
+                                                    len_arr[colors_data_restrict=='blue'][obj_order_sign_outliers]])
+
+            elif radio_info_cmap=='custom_acc_states':
+                # reordering to have the substructures above the rest
+                colors_data_restrict = custom_states_color[mask_obj][i_obj][obj_val_mask_sign]
+
+                states_zorder=['grey','red','orange','green','blue','purple']
+                obj_order_sign_states=[obj_size_sign[obj_val_mask_sign][colors_data_restrict == elem_state_zorder]\
+                                              .argsort()[::-1] for elem_state_zorder in states_zorder]
+
+                len_arr = np.arange(len(obj_order_sign))
+                obj_order_sign = np.concatenate([len_arr[colors_data_restrict == states_zorder[i_state]]\
+                                                     [obj_order_sign_states[i_state]]\
+                                                 for i_state in range(len(states_zorder))])
 
         # same thing for all detections
         obj_val_cmap = np.array(
@@ -2600,7 +2616,9 @@ def hid_graph(ax_hid,dict_linevis,
                             kt_plot_restrict[0][i_obj][obj_val_mask_sign][
                                 obj_order_sign] if radio_info_cmap == 'kT' else \
                                 diago_color[mask_obj][i_obj][obj_val_mask_sign][obj_order_sign]\
-                                    if radio_info_cmap=='line_struct' else \
+                                    if radio_info_cmap=='custom_line_struct' else \
+                                custom_states_color[mask_obj][i_obj][obj_val_mask_sign][obj_order_sign] \
+                                        if radio_info_cmap == 'custom_acc_states' else \
                                 obj_val_cmap_sign[obj_val_mask_sign][obj_order_sign]
 
         #### TODO : test the dates here with just IGRJ17451 to solve color problem
@@ -2683,7 +2701,9 @@ def hid_graph(ax_hid,dict_linevis,
                         nh_plot_restrict[0][i_obj][obj_val_mask_nonsign] if radio_info_cmap == 'nH' else \
                             kt_plot_restrict[0][i_obj][obj_val_mask_nonsign] if radio_info_cmap == 'kT' else \
                                 diago_color[mask_obj][i_obj][obj_val_mask_nonsign] \
-                                    if radio_info_cmap == 'line_struct' else \
+                                    if radio_info_cmap == 'custom_line_struct' else \
+                                    custom_states_color[mask_obj][i_obj][obj_val_mask_nonsign] \
+                                        if radio_info_cmap == 'custom_acc_states' else \
                                     obj_val_cmap[obj_val_mask_nonsign]
 
             # adding a failsafe to avoid problems when nothing is displayed
@@ -3041,8 +3061,10 @@ def hid_graph(ax_hid,dict_linevis,
                                         cmap_norm_info(kt_plot.T[mask_obj].T[0][i_obj_base][mask_nondet_ul])) if (
                                                 1 and radio_info_cmap == 'kT') else \
                                         diago_color[mask_obj][i_obj_base][mask_nondet_ul] \
-                                            if radio_info_cmap == 'line_struct' else \
-                                            'grey'
+                                            if radio_info_cmap == 'custom_line_struct' else \
+                                            custom_states_color[mask_obj][i_obj_base][mask_nondet_ul] \
+                                                if radio_info_cmap == 'custom_acc_states' \
+                                            else 'grey'
 
                 # adding a failsafe to avoid problems when nothing is displayed
                 if len(edgec_scat) == 0:
@@ -3100,8 +3122,10 @@ def hid_graph(ax_hid,dict_linevis,
                                 nh_plot.T[mask_obj].T[0][i_obj_base][mask_nondet] if radio_info_cmap == 'nH' else \
                                 kt_plot.T[mask_obj].T[0][i_obj_base][mask_nondet] if radio_info_cmap == 'kT' else \
                                     diago_color[mask_obj][i_obj_base][mask_nondet] \
-                                        if radio_info_cmap == 'line_struct' else \
-                                        'grey'
+                                        if radio_info_cmap == 'custom_line_struct' else \
+                                    custom_states_color[mask_obj][i_obj_base][mask_nondet] \
+                                        if radio_info_cmap == 'custom_acc_states' \
+                                        else 'grey'
 
                 if broad_mode == 'BAT' and not sign_broad_hid_BAT:
                     alpha_nondet_full = np.where(mask_sign_high_E, 1, 0.3)
@@ -3681,7 +3705,7 @@ def distrib_graph(data_perinfo,info,dict_linevis,data_ener=None,conf_thresh=0.99
     if indiv:
         graph_range=range_absline
     else:
-        #using a list index for the global graphs allows us to keep the same line_structure
+        #using a list index for the global graphs allows us to keep the same structure
         #however we need to restrict it to the currently plotted lines in streamlit mode
         if streamlit:
             graph_range=[range(len([elem for elem in mask_lines if elem]))]
@@ -4144,6 +4168,8 @@ def correl_graph(data_perinfo,infos,data_ener,dict_linevis,mode='intrinsic',mode
         slider_date=dict_linevis['slider_date']
         instru_list=dict_linevis['instru_list'][mask_obj]
         diago_color=dict_linevis['diago_color'][mask_obj]
+        custom_states_color = dict_linevis['custom_states_color']
+
     if 'color_scatter' in dict_linevis:    
         color_scatter=dict_linevis['color_scatter']
         obj_disp_list=dict_linevis['obj_list'][mask_obj]
@@ -4279,7 +4305,7 @@ def correl_graph(data_perinfo,infos,data_ener,dict_linevis,mode='intrinsic',mode
     if indiv:
         graph_range=range_absline
     else:
-        #using a list index for the global graphs allows us to keep the same line_structure
+        #using a list index for the global graphs allows us to keep the same structure
         #however we need to restrict it to the currently plotted lines in streamlit mode
         if streamlit:
             graph_range=[range(len([elem for elem in mask_lines if elem]))]
@@ -4868,7 +4894,7 @@ def correl_graph(data_perinfo,infos,data_ener,dict_linevis,mode='intrinsic',mode
 
         # changing the second brightest substructure point for the EW ratio plot to the manually fitted one
         # with relaxed SAA filtering
-        if color_scatter == 'line_struct' and 'ewratio' in infos_split[0]:
+        if color_scatter == 'custom_line_struct' and 'ewratio' in infos_split[0]:
             x_point = 1.6302488583411436
             id_point_refit=np.argwhere(x_data[0]==x_point)[0][0]
 
@@ -5049,14 +5075,15 @@ def correl_graph(data_perinfo,infos,data_ener,dict_linevis,mode='intrinsic',mode
 
             #here we can keep a simple labeling
             label_dict=telescope_colors
-            
-        elif color_scatter=='line_struct':
 
+        elif 'custom' in color_scatter:
+
+            custom_color=diago_color if color_scatter=='custom_line_struct' else custom_states_color
             # there's no need to repeat in ewratio since the masks are computed for a single line                
             if line_comp_mode or ratio_mode:
-                color_data_repeat = diago_color
+                color_data_repeat = custom_color
             else:
-                color_data_repeat = np.array([diago_color for repeater in (i if type(i) == range else [i])])
+                color_data_repeat = np.array([custom_color for repeater in (i if type(i) == range else [i])])
 
             if ratio_mode:
                 color_data = np.array([ravel_ragged(color_data_repeat)[bool_det_ratio][bool_sign_ratio],
@@ -5092,7 +5119,15 @@ def correl_graph(data_perinfo,infos,data_ener,dict_linevis,mode='intrinsic',mode
                 else:
                     color_arr_ul = np.array([elem for elem in color_data_ul])
 
-            label_dict={'main structure':'grey','substructure':'orange','outliers':'blue'}
+            if color_scatter=='custom_line_struct':
+                label_dict={'main structure':'grey','substructure':'orange','outliers':'blue'}
+            elif color_scatter=='custom_acc_states':
+                label_dict = {'undecided': 'grey',
+                              'thermal dominated': 'yellow',
+                              'intermediate': 'orange',
+                              'SPL': 'red',
+                              'canonical hard':'blue',
+                              'QRM':'violet'}
 
         elif color_scatter in ['Time','HR','width','nH','L_3-10']:
             
@@ -5423,7 +5458,7 @@ def correl_graph(data_perinfo,infos,data_ener,dict_linevis,mode='intrinsic',mode
                             elem_children.set_linestyles(ls_dist)
 
                         #dashing the errorbar for the 4U point with adjusted manual values for the EW ratio
-                        elif color_scatter == 'line_struct' and 'ewratio' in infos_split[0]:
+                        elif color_scatter == 'custom_line_struct' and 'ewratio' in infos_split[0]:
                             ls_dist=np.repeat('-',len(x_data[s]))
                             #to avoid issues due to the type of the array
                             ls_dist = ls_dist.tolist()
@@ -5527,7 +5562,7 @@ def correl_graph(data_perinfo,infos,data_ener,dict_linevis,mode='intrinsic',mode
                             color_mask_linked=[(elem == label_dict[color_label]).all() for elem in
                                                color_arr[s][(linked_mask[s].astype(bool))]]
 
-                        elif color_scatter=='line_struct':
+                        elif 'custom' in color_scatter:
                             color_mask = [elem == label_dict[color_label] for elem in
                                           color_arr[s][~(linked_mask[s].astype(bool))]]
 
@@ -5596,7 +5631,7 @@ def correl_graph(data_perinfo,infos,data_ener,dict_linevis,mode='intrinsic',mode
                                               alpha=1,zorder=1)
 
                             # changing the marker color for the 4U point with adjusted manual values for the EW ratio
-                            elif  color_scatter == 'line_struct' and 'ewratio' in infos_split[0]:
+                            elif  color_scatter == 'custom_line_struct' and 'ewratio' in infos_split[0]:
 
                                 for id_obs,id_obs_full in enumerate(np.arange(len(y_data[s]))[color_mask]):
                                     ax_scat.scatter(

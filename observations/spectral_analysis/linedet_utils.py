@@ -95,7 +95,7 @@ def narrow_line_search(data_cont, suffix,e_sat_low_indiv,line_search_e=[4,10,0.0
 
     # reseting the model
     AllModels.clear()
-    xscorpeon.load(scorpeon_save=scorpeon_save, frozen=True)
+    xscorpeon.load('auto',scorpeon_save=scorpeon_save, frozen=True)
 
     # reloading the broad band model
     data_cont.load()

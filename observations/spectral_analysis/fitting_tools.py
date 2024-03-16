@@ -123,7 +123,7 @@ lines_w_dict={
                   'FeKb0em':[1e-2,0.,0.05],
                   'FeKa25em':[1e-2,0.,0.05],
                   'FeKa26em':[1e-2,0.,0.05],
-                  'calNICERSiem':[0.1,0.,0.2],
+                  'calNICERSiem':[0.1,0.05,0.2],
                   }
 
 lines_broad_w_dict={

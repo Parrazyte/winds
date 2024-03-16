@@ -165,7 +165,7 @@ ap.add_argument('-satellite',nargs=1,help='telescope to fetch spectra from',defa
 
 #used for NICER and multi for now
 ap.add_argument('-group_max_timedelta',nargs=1,
-                help='maximum time delta for epoch/gti grouping in dd_hh_mm_ss',default='01_00_00_00',type=str)
+                help='maximum time delta for epoch/gti grouping in dd_hh_mm_ss_ms',default='00_00_00_00_001',type=str)
 
 #00_00_00_10 for NICER TR
 #00_00_15_00 for NuSTAR individual orbits
@@ -184,7 +184,7 @@ ap.add_argument("-prefix",nargs=1,help='restrict analysis to a specific prefix',
 
 ####output directory
 ap.add_argument("-outdir",nargs=1,help="name of output directory for line plots",
-                default="lineplots_opt",type=str)
+                default="lineplots_opt_manual",type=str)
 
 #overwrite
 #global overwrite based on recap PDF
@@ -194,7 +194,7 @@ ap.add_argument('-overwrite',nargs=1,
 
 #note : will skip exposures for which the exposure didn't compute or with logged errors
 ap.add_argument('-skip_started',nargs=1,help='skip all exposures listed in the local summary_line_det file',
-                default=True,type=bool)
+                default=False,type=bool)
 
 ap.add_argument('-skip_complete',nargs=1,help='skip completed exposures listed in the local summary_line_det file',
                 default=False,type=bool)
@@ -250,7 +250,8 @@ ap.add_argument('-spread_comput',nargs=1,
 
 ap.add_argument('-reverse_spread',nargs=1,help='run the spread computation lists in reverse',default=False,type=bool)
 
-#note: havign both reverse spread and reverse epoch with spread_comput>1 will give you back the normal order
+#note: having both reverse spread and reverse epoch with spread_comput>1 will give you back the normal order
+#note that reverse_epoch is done after the spread comput
 ap.add_argument('-reverse_epoch',nargs=1,help='reverse epoch list order',default=False,type=bool)
 
 #better when spread computations are not running
@@ -292,7 +293,7 @@ ap.add_argument('-SNR_min',nargs=1,help='minimum source Signal to Noise Ratio',d
 #shouldn't be needed now that we have a counts min limit + sometimes false especially in timing when the bg is the source
 
 ap.add_argument('-counts_min',nargs=1,
-                help='minimum source counts in the source region in the line continuum range',default=1000,type=float)
+                help='minimum source counts in the source region in the line continuum range',default=500,type=float)
 ap.add_argument('-fit_lowSNR',nargs=1,
                 help='fit the continuum of low quality data to get the HID values',default=False,type=str)
 
@@ -318,7 +319,7 @@ ap.add_argument('-write_aborted_pdf',nargs=1,help='create aborted pdfs at the en
 #options: "opt" (tests the significance of each components and add them accordingly)
 # and "force_all" to force all components
 ap.add_argument('-cont_fit_method',nargs=1,help='fit logic for the broadband fits',
-                default='force_all')
+                default='force_add')
 
 ap.add_argument('-reload_autofit',nargs=1,
                 help='Reload existing autofit save files to gain time if a computation has crashed',
@@ -330,7 +331,7 @@ ap.add_argument('-reload_fakes',nargs=1,
 
 ap.add_argument('-pdf_only',nargs=1,
                 help='Updates the pdf with already existing elements but skips the line detection entirely',
-                default=False,type=bool)
+                default=True,type=bool)
 
 #note: used mainly to recompute obs with bugged UL computations. Needs FINISHED computations firsthand, else
 #use reload_autofit and reload_fakes
@@ -461,10 +462,16 @@ ap.add_argument('-NICER_bkg',nargs=1,help='NICER background type',default='scorp
 ap.add_argument('-pre_reduced_NICER',nargs=1,
                 help='change NICER data format to pre-reduced obsids',default=False,type=bool)
 
-ap.add_argument('-NICER_lc_binning',nargs=1,help='NICER LC binning',default='1',type=str)
+ap.add_argument('-NICER_lc_binning',nargs=1,help='NICER LC binning',default='0.1',type=str)
 
 #in this case the continuum components require the NICER calibration components to get a decent fit
 ap.add_argument('-low_E_NICER',nargs=1,help='NICER lower energy threshold for broadband fits',default=0.3,type=str)
+
+#note: Important to correctly assess the background of observations within the SAA
+ap.add_argument('-extend_scorpeon_nxb_SAA',nargs=1,help='Extend scorpeon nxb_SAA range',default=True)
+
+#ueseful when the SAA values/overshoots are high and thus the default parameter value is underestimated
+ap.add_argument('-fit_SAA_norm',nargs=1,help='unfreeze the nxb_saa_norm parameter to fit it',default=True)
 
 '''NuSTAR'''
 
@@ -592,6 +599,9 @@ no_abslines=args.no_abslines
 NICER_bkg=args.NICER_bkg
 line_ul_only=args.line_ul_only
 NICER_lc_binning=args.NICER_lc_binning
+extend_scorpeon_nxb_SAA=args.extend_scorpeon_nxb_SAA
+fit_SAA_norm=args.fit_SAA_norm
+
 reload_autofit=args.reload_autofit
 reverse_spread=args.reverse_spread
 spread_overwrite=args.spread_overwrite
@@ -1443,7 +1453,7 @@ def pdf_summary(epoch_files,fit_ok=False,summary_epoch=None,e_sat_low_list=None,
             pdf.ln(10)
 
             #recognizing time-resolved spectra
-            elem_orbit=elem_epoch.split('S')[0]
+            elem_orbit=elem_epoch.split('S')[0].split('M')[0].split('F')[0].split('I')[0]
 
             try:
                 pdf.image(elem_orbit+ '_flares.png',x=2,y=70,w=140)
@@ -2960,11 +2970,12 @@ def line_detect(epoch_id):
             #fitting
             fitcont_broad.global_fit(split_fit=split_fit,method=cont_fit_method)
 
-            #unfreezing the scorpeon model by resetting it
-            xscorpeon.load()
+            if 'NICER' in sat_indiv_good:
+                #unfreezing the scorpeon model by resetting it
+                xscorpeon.load(fit_SAA_norm=True)
 
-            #refitting in case this allows something else to appear
-            fitcont_broad.global_fit(split_fit=False,method=cont_fit_method)
+                #refitting in case this allows something else to appear
+                fitcont_broad.global_fit(split_fit=False,method=cont_fit_method)
 
             mod_fitcont=allmodel_data()
 
@@ -2996,7 +3007,8 @@ def line_detect(epoch_id):
             if 'disk_nthcomp' in [comp.compname for comp in \
                                   [elem for elem in fitcont_broad.includedlist if elem is not None]]:
                 broad_gamma_nthcomp=fitcont_broad.disk_nthcomp.xcomps[0].Gamma.values[0]
-
+            else:
+                broad_gamma_nthcomp=2.5
             for i_sp in range(len(epoch_files_good)):
                 if line_cont_ig_indiv[i_sp] != '':
                     AllData(i_sp+1).notice(line_cont_ig_indiv[i_sp])
@@ -3269,6 +3281,18 @@ def line_detect(epoch_id):
                 #autofit
                 fitlines.global_fit(chain=False,lock_lines=True,directory=outdir,observ_id=epoch_observ[0],
                                     split_fit=split_fit)
+
+                if 'NICER' in sat_indiv_good:
+                    # unfreezing the scorpeon model by resetting it
+                    xscorpeon.load(fit_SAA_norm=True)
+
+                    # refitting in case this allows something else to appear
+                    fitlines.global_fit(chain=False,lock_lines=True,directory=outdir,observ_id=epoch_observ[0],
+                                        split_fit=split_fit)
+
+                    xscorpeon.freeze()
+
+                data_broad_postauto=allmodel_data()
 
                 AllChains.clear()
 
@@ -4228,7 +4252,8 @@ elif sat_glob=='NICER':
     max_delta=(TimeDelta(group_max_timedelta.split('_')[0],format='jd')+\
               TimeDelta(group_max_timedelta.split('_')[1],format='jd')/24+ \
               TimeDelta(group_max_timedelta.split('_')[2], format='jd')/(24*60)+ \
-              TimeDelta(group_max_timedelta.split('_')[3], format='jd')/(24*3600)).to_value('jd')
+              TimeDelta(group_max_timedelta.split('_')[3], format='jd')/(24*3600)+ \
+              TimeDelta(group_max_timedelta.split('_')[4], format='jd')/(24*3600*1e3)).to_value('jd')
 
     epoch_id_list_ravel=[]
     epoch_id_list=[]
@@ -4341,10 +4366,11 @@ elif sat_glob=='NuSTAR':
         tstop_list[i_file] = obs_stop.to_value('jd')
 
     # max delta between gti starts in sec
-    max_delta = (TimeDelta(group_max_timedelta.split('_')[0], format='jd') + \
-                 TimeDelta(group_max_timedelta.split('_')[1], format='jd') / 24 + \
-                 TimeDelta(group_max_timedelta.split('_')[2], format='jd') / (24 * 60) + \
-                 TimeDelta(group_max_timedelta.split('_')[3], format='jd') / (24 * 3600)).to_value('jd')
+    max_delta=(TimeDelta(group_max_timedelta.split('_')[0],format='jd')+\
+              TimeDelta(group_max_timedelta.split('_')[1],format='jd')/24+ \
+              TimeDelta(group_max_timedelta.split('_')[2], format='jd')/(24*60)+ \
+              TimeDelta(group_max_timedelta.split('_')[3], format='jd')/(24*3600)+ \
+              TimeDelta(group_max_timedelta.split('_')[4], format='jd')/(24*3600*1e3)).to_value('jd')
 
     epoch_id_list_ravel = []
     epoch_id_list = []
@@ -4429,7 +4455,8 @@ elif sat_glob=='multi':
     max_delta=(TimeDelta(group_max_timedelta.split('_')[0],format='jd')+\
               TimeDelta(group_max_timedelta.split('_')[1],format='jd')/24+ \
               TimeDelta(group_max_timedelta.split('_')[2], format='jd')/(24*60)+ \
-              TimeDelta(group_max_timedelta.split('_')[3], format='jd')/(24*3600)).to_value('jd')
+              TimeDelta(group_max_timedelta.split('_')[3], format='jd')/(24*3600)+ \
+              TimeDelta(group_max_timedelta.split('_')[4], format='jd')/(24*3600*1e3)).to_value('jd')
 
     epoch_id_list_ravel=[]
     epoch_id_list=[]
@@ -5204,10 +5231,21 @@ items_str_list=['abslines_infos_perobj',
 for dict_key, dict_item in zip(items_str_list,items_list):
     dict_linevis[dict_key]=dict_item
 
+#we don't use this one
+dict_linevis['Tin_diskbb_plot_restrict']=None
+dict_linevis['Tin_diskbb_plot']=None
+dict_linevis['diago_color']=None
+dict_linevis['custom_states_color']=None
+dict_linevis['hr_high_plot_restrict']=None
+dict_linevis['lum_high_1sig_plot_restrict']=None
+dict_linevis['lum_high_sign_plot_restrict']=None
+
 #individual plotting options for the graph that will create the PDF
 display_single=not multi_obj
 display_upper=True
 display_evol_single=display_single
+diago_color=None
+
 
 hid_graph(ax_hid,dict_linevis,
           display_single=True,display_upper=True,display_evol_single=True,
@@ -5373,6 +5411,9 @@ def save_pdf(fig):
                 point_recapfile=[elem for elem in save_dir_list if point_observ+'_recap.pdf' in elem][0]
             except:
                 avail_recapfile=glob.glob(os.path.join(save_dir, point_observ + '**_recap.pdf'))
+
+                if len(avail_recapfile)!=1:
+                    breakpoint()
 
                 assert len(avail_recapfile)==1,"Issue with finding individual pdf recap files"
 

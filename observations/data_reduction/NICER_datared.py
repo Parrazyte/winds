@@ -13,6 +13,9 @@ import re
 import threading
 import numpy as np
 import time
+from ast import literal_eval
+
+from matplotlib.widgets import Slider,Button
 
 from astropy.stats import sigma_clip
 import matplotlib as mpl
@@ -100,14 +103,14 @@ ap.add_argument('-catch','--catch_errors',help='Catch errors while running the d
 
 #global choices
 ap.add_argument("-a","--action",nargs='?',help='Give which action(s) to proceed,separated by comas.',
-                default='c,1,gti,fs,l,g,m',type=str)
+                default='gti,l,fs,g,m',type=str)
 #default: 1,gti,fs,l,g,m,c
 
 ap.add_argument("-over",nargs=1,help='overwrite computed tasks (i.e. with products in the batch, or merge directory\
                 if "m" is in the actions) in a folder',default=True,type=bool)
 
 #directory level overwrite (not active in local)
-ap.add_argument('-folder_over',nargs=1,help='relaunch action through folders with completed analysis',default=False,type=bool)
+ap.add_argument('-folder_over',nargs=1,help='relaunch action through folders with completed analysis',default=True,type=bool)
 ap.add_argument('-folder_cont',nargs=1,help='skip all but the last 2 directories in the summary folder file',default=False,type=bool)
 #note : we keep the previous 2 directories because bug or breaks can start actions on a directory following the initially stopped one
 
@@ -121,7 +124,7 @@ ap.add_argument('-folder_cont',nargs=1,help='skip all but the last 2 directories
 #should only be done in very extreme cases
 ap.add_argument('-keep_SAA',nargs=1,help='keep South Atlantic Anomaly (SAA) Periods',type=bool,default=True)
 
-ap.add_argument('-overshoot_limit',nargs=1,help='overshoot event rate limit',type=float,default=30)
+ap.add_argument('-overshoot_limit',nargs=1,help='overshoot event rate limit',type=float,default=100)
 
 ap.add_argument('-undershoot_limit',nargs=1,help='undershoot event rate limit',type=float,default=500)
 
@@ -132,22 +135,33 @@ ap.add_argument('-erodedilate',nargs=1,help='Erodes increasingly more gtis aroun
 
 #gti
 #keyword for split: split_timeinsec
-ap.add_argument('-gti_split',nargs=1,help='GTI split method',default='orbit+flare',type=str)
+ap.add_argument('-gti_split',nargs=1,help='GTI split method',default='orbit+flare+intensity_3',type=str)
 ap.add_argument('-flare_method',nargs=1,help='Flare extraction method(s)',default='clip+peak',type=str)
 
 #note: not used currently
 ap.add_argument('-gti_lc_band',nargs=1,help='Band for the lightcurve used for GTI splitting',
                 default='12-15',type=str)
 
+#note: can be better to increase the soft treshold for high background moments
+ap.add_argument('-int_split_band',nargs=1,help='band of the lightcurve used for GTI intensity splitting',
+                type=str,default='0.3-10.')
+
+#this should be well above the variability that's being probed to get a good sampling
+ap.add_argument('-int_split_bin',nargs=1,help='binning of the light curve used for GTI intensity splitting in s',
+                default=0.1)
+
 #lightcurve
-ap.add_argument('-lc_bin',nargs=1,help='Gives the binning of all lightcurces/HR evolutions (in s)',default=1,type=str)
+ap.add_argument('-lc_bin',nargs=1,help='Gives the binning of all lightcurces/HR evolutions (in s)',default=0.1,type=str)
 #note: also defines the binning used for the gti definition
 
 ap.add_argument('-lc_bands_str',nargs=1,help='Gives the list of bands to create lightcurves from',default='3-10',type=str)
 ap.add_argument('-hr_bands_str',nargs=1,help='Gives the list of bands to create hrsfrom',default='6-10/3-6',type=str)
 
 
-#spectra
+#spectra (note that this doesn't work right not because the keyword isn't implemented yet)
+ap.add_argument('-relax_SAA_bg',help='Increase the maximum of the nxb.saa_norm model to a higher value',
+                default=False,type=str)
+
 ap.add_argument('-bg',"--bgmodel",help='Give the background model to use for the data reduction',default='scorpeon_script',type=str)
 ap.add_argument('-bg_lang',"--bg_language",
         help='Gives the language output for the script generated to load spectral data into either PyXspec or Xspec',
@@ -178,6 +192,9 @@ bgmodel=args.bgmodel
 bglanguage=args.bg_language
 
 keep_SAA=args.keep_SAA
+
+relax_SAA_bg=args.relax_SAA_bg
+
 overshoot_limit=args.overshoot_limit
 undershoot_limit=args.undershoot_limit
 min_gti=args.min_gti
@@ -187,9 +204,13 @@ gti_split=args.gti_split
 gti_lc_band=args.gti_lc_band
 flare_method=args.flare_method
 
+int_split_band=args.int_split_band
+int_split_bin=args.int_split_bin
+
 lc_bin=args.lc_bin
 lc_bands_str=args.lc_bands_str
 hr_bands_str=args.hr_bands_str
+
 
 grouptype=args.grouptype
 bad_detectors=args.bad_detectors
@@ -330,46 +351,359 @@ def select_detector(directory,detectors='-14,-34,-54'):
         bashproc.sendline('exit')
         select_detector_done.set()
 
-def create_gtis(directory,split='orbit+flare',band='3-15',binning=1,overwrite=True,clip_method='median',
-                clip_sigma=2.,clip_band='8-12',flare_method='clip+peak',peak_score_thresh=2.):
+def plot_event_diag(mode,obs_start_str,time_obs,id_gti_orbit,
+                    counts_035_8,counts_8_12,counts_overshoot,counts_undershoot,cutoff_rigidity,
+                    counts_035_8_glob=None,
+                    save_path=None,
+                    id_gti=None,id_flares=None,
+                    gti_nimkt_arr=None,split_str=None,split_gti_arr=None,
+                    orbit_cut_times=None):
+    
     '''
-    wrapper for a function to split nicer obsids into indivudal portions
+    Global event diagnostic plot function
+    
+    Displays a lot of elements to infer how usable the information is, notably the main quantities of the mkf file
+    
+    modes:
+        -global to display the whole obsid with basic info
+        -orbit to display detailed info and excluded/included intervals on a single orbit
+        -manual to select a gti interval in manual gti creation mode
+    '''
+    
+    fig_events, ax_events = plt.subplots(1, figsize=(12, 8))
 
+    ax_events.set_xlabel('Time (s) after ' + obs_start_str)
+    ax_events.set_ylabel('Count Rate (counts/s)')
+    ax_rigidity = ax_events.twinx()
+    ax_rigidity.set_ylabel('Cutoff Rigidity (Gev/c)')
 
-    before:
-    first creates a lightcurve with the chosen binning then uses it to define
-    individual gtis
+    # we just want something above 0 here while keeping a log scale but allowing 0 counts
+    ax_events.set_yscale('symlog', linthresh=0.1, linscale=0.1)
+    ax_events.yaxis.set_minor_locator(MinorSymLogLocator(linthresh=0.1))
 
-    now:
-    computes the gti from the unusual parts of the 8-12keV lightcurve
+    if mode=='global':
 
-    modes (combinable):
+        n_orbit=len(id_gti_orbit)
+        
+        for i_orbit in range(n_orbit):
+                
+            ax_events.errorbar(time_obs[id_gti_orbit[i_orbit]], counts_035_8[id_gti_orbit[i_orbit]],
+                               color='red', label='0.35-8 keV Count Rate' if i_orbit==0 else '')
+        
+            ax_events.errorbar(time_obs[id_gti_orbit[i_orbit]], counts_8_12[id_gti_orbit[i_orbit]],
+                               color='blue', label='8-12 keV Count Rate' if i_orbit==0 else '')
+        
+            ax_events.errorbar(time_obs[id_gti_orbit[i_orbit]], counts_overshoot[id_gti_orbit[i_orbit]],
+                               color='orange', label='Overshoot Rate (>20keV)' if i_orbit==0 else '')
+        
+            ax_events.errorbar(time_obs[id_gti_orbit[i_orbit]], counts_undershoot[id_gti_orbit[i_orbit]],
+                               color='brown', label='Undershoot Rate' if i_orbit==0 else '')
+        
+            ax_rigidity.plot(time_obs[id_gti_orbit[i_orbit]], cutoff_rigidity[id_gti_orbit[i_orbit]],
+                             color='green', label='Cutoff Rigidity' if i_orbit==0 else '')
+
+        ax_rigidity.axhline(1.5, 0, 1, color='green', ls='--', label='Upper limit for risky regions')
+        ax_events.axhline(30, 0, 1, color='orange', ls='--', label='Default nicerl2 flare cut')
+
+        ax_events.legend(loc='upper left')
+        ax_rigidity.legend(loc='upper right')
+        ax_events.set_ylim(0, ax_events.get_ylim()[1])
+
+        plt.tight_layout()
+
+        plt.savefig(save_path)
+
+        plt.close()
+
+        return
+
+    ax_events.errorbar(time_obs[id_gti_orbit], counts_035_8,
+                       color='red', label='0.35-8 keV Count Rate')
+
+    ax_events.errorbar(time_obs[id_gti_orbit], counts_8_12,
+                       color='blue', label='8-12 keV Count Rate')
+
+    ax_events.errorbar(time_obs[id_gti_orbit], counts_overshoot,
+                       color='orange', label='Overshoot Rate (>20keV)')
+
+    ax_events.errorbar(time_obs[id_gti_orbit], counts_undershoot,
+                       color='brown', label='Undershoot Rate')
+
+    ax_rigidity.plot(time_obs[id_gti_orbit], cutoff_rigidity,
+                     color='green', label='Cutoff Rigidity')
+
+    # flare and gti intervals
+    for id_inter, list_inter in enumerate(list(interval_extract(id_gti))):
+        ax_rigidity.axvspan(time_obs[min(list_inter)], time_obs[max(list_inter)], color='grey', alpha=0.2,
+                            label='standard gtis' if id_inter == 0 else '')
+
+    for id_inter, list_inter in enumerate(list(interval_extract(id_flares))):
+        ax_rigidity.axvspan(time_obs[min(list_inter)], time_obs[max(list_inter)], color='blue', alpha=0.2,
+                            label='flare gtis' if id_inter == 0 else '')
+
+    # computing the non-gti intervals from nimaketime
+    id_nongti_nimkt = []
+
+    for elem_gti in id_gti_orbit:
+        # testing if the gti is in one of the gtis of the nimaketime
+        if not ((time_obs[elem_gti] >= gti_nimkt_arr.T[0]) & (time_obs[elem_gti] <= gti_nimkt_arr.T[1])).any():
+            # and storing if that's not the case
+            id_nongti_nimkt += [elem_gti]
+
+    # and plotting
+    for id_inter, list_inter in enumerate(list(interval_extract(id_nongti_nimkt))):
+        ax_rigidity.axvspan(time_obs[min(list_inter)], time_obs[max(list_inter)], color='red', alpha=0.1,
+                            label='std nimaketime excluded intervals' if id_inter == 0 else '')
+
+    # plotting the split gti intervals if in the right mode
+    if split_gti_arr is not None:
+        if 'intensity' in split_str:
+
+            #showing splits horizontally
+            for id_inter, list_inter in enumerate(split_gti_arr):
+
+                ax_events.axhspan(min(counts_035_8_glob[list_inter]),max(counts_035_8_glob[list_inter]),
+                                    color='green', alpha=0.1,
+                                    label='intensity split intervals (flare cuts excluded)' \
+                                        if id_inter == 0 else '')
+                if id_inter!=0:
+                    ax_events.axhline(min(counts_035_8_glob[list_inter]),color='green',ls=':')
+        else:
+            #showing splits vertically
+            for id_inter, list_inter in enumerate(split_gti_arr):
+                ax_rigidity.axvspan(time_obs[min(list_inter)], time_obs[max(list_inter)],
+                                    color='green', alpha=0.1,
+                                    label='split intervals ' +
+                                          ('(flare cuts excluded)' if 'flare' in split_str else '') \
+                                        if id_inter == 0 else '')
+                if id_inter!=0:
+                    ax_rigidity.axvline(time_obs[min(list_inter)],color='green',ls=':')
+
+    ax_rigidity.axhline(1.5, 0, 1, color='green', ls='--', label='UL of risky rigidity region')
+    ax_events.axhline(30, 0, 1, color='orange', ls='--', label='Default overshoot cut')
+    ax_events.axhline(500, 0, 1, color='brown', ls='--', label='Default undershoot cut')
+
+    ax_events.legend(loc='upper left')
+    ax_rigidity.legend(loc='upper right')
+    ax_events.set_ylim(0, ax_events.get_ylim()[1])
+
+    if mode=='manual':
+
+        if len(orbit_cut_times)!=0:
+            for elem_time in orbit_cut_times:
+                ax_events.axvline(elem_time,color='green')
+
+        ax_slider=fig_events.add_axes([0.2, 0.02, 0.65, 0.03])
+
+        slid = Slider(ax_slider, label='current gti',
+                      valmin=time_obs[id_gti_orbit][0] if len(orbit_cut_times)==0 else orbit_cut_times[-1], valmax=time_obs[id_gti_orbit][-1],valstep=1)
+
+        def slider_update(val):
+
+            for elem_child in ax_events.get_children():
+                if elem_child._label == 'current gti':
+                    elem_child.remove()
+            ax_events.axvspan(time_obs[id_gti_orbit][0] if len(orbit_cut_times)==0 else orbit_cut_times[-1],
+                              slid.val, 0, 1, alpha=0.3, color='green',label='current gti')
+
+        slid.on_changed(slider_update)
+
+        ax_button=fig_events.add_axes([0.9, 0.025, 0.08, 0.04])
+
+        but = Button(ax=ax_button, label='Save GTI')
+
+        def func_button(val):
+            plt.close()
+            print(slid.val)
+
+        plt.show()
+        but.on_clicked(func_button)
+
+        plt.show(block=True)
+
+        return slid.val
+
+    else:
+
+        plt.tight_layout()
+
+        # note that str_orbit adds 1 to the counter
+        plt.savefig(save_path)
+
+        plt.close()
+    
+def create_gtis(directory,split='orbit+flare',band='3-15',flare_method='clip+peak',clip_method='median',
+                clip_sigma=2.,clip_band='8-12',peak_score_thresh=2.,
+                int_split_band='0.3-10.',int_split_bin=0.1,clip_int_delta=True):
+    '''
+    wrapper for a function to split nicer obsids into indivudal portions with different methods
+    the default binning is 1s because the NICER mkf file time resolution is 1s
+
+    overwrite is always on here since we don't use a specific nicerdas task with the overwrite option
+    split modes (combinable):
         -orbit:split each obs into each individual nicer observation period
+               GTIs naming: obsid-XXX chronologically for each split
 
-        -clip: isolates background flare periods in each observation and creates individual
-        note that all individual flare/dip periods in single orbits are grouped together
-
-        -variability: isolates true flares/dips from the lightcurve already treated for the flares
-        #should take the main lightcurve instead of the >20keV. To be implemented
+        -flare: isolates background flare periods in each observation from the main data
+                GTI naming: obsid-XXXFYYY
 
         -split_X: on top of cutting splits and flares, splits each orbit in individual periods of X seconds for
                   time-resolved spectroscopy
+                  GTI naming: obsid-XXXTYYY
 
-    clip_method:
-        -median or mean to clip from the mean or from the median
+        -manual: provides an interactive window to make individual gti splits per orbit.
+                 GTI naming: obsid-XXXMYYY
 
-    clip_sigma:
-        -sigma for which to apply clipping to
+        -intensity_N: Splits the gtis depending on their count rate in N portions
+                  (from the delta between min and max of the count rate of each orbit)
+                  N can be a number to split in even intensity delta intervals, or a list of quantiles in percent
+                  to split in portions (should be ordered and not include 0 or 100)
 
-    clip_band:
-        -which file or info from the mkf file to use to clip the flares
-        currently implemented:
-        -8-12keV
-        -overshoot
+                  Note that this requires a first set of orbit-level gtis, so the orbit option must be enabled
+                  This also means that the flare and gtis excluded by nimaketime are also not in the lc which serves
+                  as the base
+
+                  ex:
+                  -intensity_4 will split between below the 25%, 25-50%, 50-75% and >75%
+                  of the max_counts-min_counts delta
+                  -intensity_[15,50,85] will split below 15%, 15-50%, 50-85% and above 85%
+
+                 GTI naming: obsid-XXXIYYY
+            int_split_band:
+                band in which the lightcurve used to create the intensity split will be created
+
+            int_split_bin:
+                binning of the lightcurve used for the intensity split
+
+            clip_int_delta:
+                3 sigma clip the lightcurve used for the intensity split before doing the repartition:
+                the effect is a tighter repartition and the each side of the 3 sigma clip ends up with the first/last
+                portion
+
+    flare detection methods:
+            -clip: clips the highest count portion of the observation in a given band
+                   note that all individual flare/dip periods in single orbits are grouped together
+
+                clip_method:
+                    -median or mean to clip from the mean or from the median
+
+                clip_sigma:
+                    -sigma for which to apply clipping to
+
+                clip_band:
+                    -which file or info from the mkf file to use to clip the flares
+                    currently implemented:
+                        -8-12keV
+                        -overshoot
+
+            -peak: performs peak detection in the individual orbit using findpeaks then exclude peak regions
+                   with a given "score" (see https://erdogant.github.io/findpeaks/pages/html/Topology.html)
+
+                peak_score_thresh:
+                    peak score threshold to exlcude peaks as flares in the data
+
+
 
     NOTE: requires sas and a sasinit alias to initialize it (to use tabgtigen)
 
     '''
+
+    def create_gti_files(id_gti, data_lc, orbit_prefix, suffix, file_base,time_gtis):
+
+        '''
+        creates a gti file from a list of indexes of times which will be picked in data_lc
+
+        1.creates a copy of a lightcurve_type file (file_base) with an additional column with a gti mask
+                (typically this is either the mkf file for classic cuts (so 1 second resolution)
+                or a lightcurve file for more flexible resolution
+
+        2.creates the gti file itself using sas's tabgtigen
+        '''
+
+        if len(id_gti) == 0:
+            return
+
+        # Here we use the housekeeping file as the fits base for the gti mask file
+        fits_gti = fits.open(file_base)
+
+        # creating a custom gti 'mask' file
+        gti_column = fits.ColDefs([fits.Column(name='IS_GTI', format='I',
+                                               array=np.array([1 if i in id_gti else 0 for i in range(len(data_lc))]))])
+
+        # replacing the hdu with a hdu containing it
+        fits_gti[1] = fits.BinTableHDU.from_columns(fits_gti[1].columns[:2] + gti_column)
+        fits_gti[1].name = 'IS_GTI'
+
+        lc_mask_path = os.path.join(directory, 'xti', obsid + '_gti_mask_' + orbit_prefix + suffix) + '.fits'
+
+        if os.path.isfile(lc_mask_path):
+            os.remove(lc_mask_path)
+
+        fits_gti.writeto(lc_mask_path)
+
+        # waiting for the file to be created
+        while not os.path.isfile(lc_mask_path):
+            time.sleep(0.1)
+
+        # creating the orbit gti expression
+        gti_path = os.path.join(directory, 'xti', obsid + '_gti_' + orbit_prefix + suffix) + '.gti'
+
+        print(gti_path)
+        bashproc.sendline('tabgtigen table=' + lc_mask_path + ' expression="IS_GTI==1" gtiset=' + gti_path)
+
+        # this shouldn't take too long so we keep the timeout
+        # two expects because there's one for the start and another for the end
+        bashproc.expect('tabgtigen:- tabgtigen')
+        bashproc.expect('tabgtigen:- tabgtigen')
+
+        '''
+        There is an issue with the way tabgtigen creates the exposure due to a lacking keyword
+        To ensure things work correctly, we remake the contents of the file and keep the header
+        '''
+
+        # preparing the list of gtis to replace manually
+        gti_intervals = np.array(list(interval_extract(id_gti))).T
+
+        delta_time_gtis=(time_gtis[1]-time_gtis[0])/2
+        # opening and modifying the content of the header in the gti file for NICER
+        with fits.open(gti_path, mode='update') as hdul:
+
+            # for some reason we don't get the right values here so we recreate them
+            # creating a custom gti 'mask' file
+
+            # storing the current header
+            prev_header = hdul[1].header
+
+            # creating a START and a STOP column in "standard" GTI fashion
+            # note: the 0.5 is there to allow the initial and final second bounds
+
+            ####note that the start_obs_s-0.5 might need to be modified
+
+            gti_column_start = fits.ColDefs([fits.Column(name='START', format='D',
+                                                         array=np.array([time_gtis[elem] + start_obs_s -delta_time_gtis for elem in
+                                                                         gti_intervals[0]]))])
+            gti_column_stop = fits.ColDefs([fits.Column(name='STOP', format='D',
+                                                        array=np.array([time_gtis[elem] + start_obs_s + delta_time_gtis for elem in
+                                                                        gti_intervals[1]]))])
+
+            # replacing the hdu
+            hdul[1] = fits.BinTableHDU.from_columns(gti_column_start + gti_column_stop)
+
+            # replacing the header
+            hdul[1].header = prev_header
+
+            # Changing the reference times
+            hdul[1].header['MJDREF'] = 56658 + 7.775925925925930E-04
+
+            # hdul[1].header['MJDREFI']=56658
+            # hdul[1].header['MJDREFF']=7.775925925925930E-04
+
+            # and the gti keywords
+            hdul[1].header['ONTIME'] = len(id_gti)
+            hdul[1].header['TSTART'] = hdul[1].data['START'][0] - start_obs_s
+            hdul[1].header['TSTOP'] = hdul[1].data['STOP'][-1] - start_obs_s
+
+            hdul.flush()
 
     #ensuring a good obsid name even in local
     if directory=='./':
@@ -553,43 +887,16 @@ def create_gtis(directory,split='orbit+flare',band='3-15',binning=1,overwrite=Tr
                 split_gti_arr[i_orbit]=split_gti_orbit
 
         #plotting the global figure
+        save_path_str=os.path.join(directory,obsid+'-global_flares.png')
 
-        fig_flares,ax_flares=plt.subplots(1,figsize=(12,8))
-
-        ax_flares.set_xlabel('Time (s) after ' + obs_start_str)
-        ax_flares.set_ylabel('Count Rate (counts/s)')
-
-        #we just want something above 0 here while keeping a log scale but allowing 0 counts
-        ax_flares.set_yscale('symlog', linthresh=0.1, linscale=0.1)
-        ax_flares.yaxis.set_minor_locator(MinorSymLogLocator(linthresh=0.1))
-
-        ax_rigidity=ax_flares.twinx()
-        ax_rigidity.set_ylabel('Cutoff Rigidity (Gev/c)')
-
-        for i_orbit in range(n_orbit):
-
-            ax_flares.errorbar(time_obs[id_gti_orbit[i_orbit]],counts_035_8[id_gti_orbit[i_orbit]],
-                               color='red',label='0.35-8 keV Count Rate' if i_orbit==0 else '')
-
-            ax_flares.errorbar(time_obs[id_gti_orbit[i_orbit]],counts_8_12[id_gti_orbit[i_orbit]],
-                               color='blue',label='8-12 keV Count Rate' if i_orbit==0 else '')
-
-            ax_flares.errorbar(time_obs[id_gti_orbit[i_orbit]], counts_overshoot[id_gti_orbit[i_orbit]],
-                               color='orange',label='Overshoot Rate (>20keV)' if i_orbit==0 else '')
-
-            ax_rigidity.plot(time_obs[id_gti_orbit[i_orbit]],cutoff_rigidity[id_gti_orbit[i_orbit]],
-                             color='green',label='Cutoff Rigidity' if i_orbit==0 else '')
-
-        ax_rigidity.axhline(1.5, 0, 1, color='green', ls='--', label='Upper limit for risky regions')
-        ax_flares.axhline(30, 0, 1, color='orange', ls='--', label='Default nicerl2 flare cut')
-
-        ax_flares.legend(loc='upper left')
-        ax_rigidity.legend(loc='upper right')
-        ax_flares.set_ylim(0,ax_flares.get_ylim()[1])
-
-        plt.tight_layout()
-
-        plt.savefig(os.path.join(directory,obsid+'-global_flares.png'))
+        plot_event_diag('global',obs_start_str,time_obs,
+                        id_gti_orbit=id_gti_orbit,
+                        counts_035_8=counts_035_8,
+                        counts_8_12=counts_8_12,
+                        counts_overshoot=counts_overshoot,
+                        counts_undershoot=counts_undershoot,
+                        cutoff_rigidity=cutoff_rigidity,
+                        save_path=save_path_str)
 
         #can be modified if needed
 
@@ -740,90 +1047,65 @@ def create_gtis(directory,split='orbit+flare',band='3-15',binning=1,overwrite=Tr
                         split_gti_arr[i_orbit][i_split]=[elem for elem in split_gti_arr[i_orbit][i_split]\
                                                      if elem not in id_flares[i_orbit]]
 
-
         else:
             id_gti=id_gti_orbit
             id_flares=[]
             id_dips=[]
 
+        if 'manual' in split:
+
+            split_gti_arr= np.array([None] * n_orbit)
+
+            for i_orbit in range(n_orbit):
+                orbit_cut_times=[time_obs[id_gti[i_orbit]][0]]
+
+                while orbit_cut_times[-1]!=time_obs[id_gti[i_orbit]][-1]:
+
+                    orbit_cut_times+=\
+                                [plot_event_diag(mode='manual', obs_start_str=obs_start_str, time_obs=time_obs,
+                                id_gti_orbit=id_gti_orbit[i_orbit],
+                                counts_035_8=counts_035_8[id_gti_orbit[i_orbit]],
+                                counts_8_12=counts_8_12[id_gti_orbit[i_orbit]],
+                                counts_overshoot=counts_overshoot[id_gti_orbit[i_orbit]],
+                                counts_undershoot=counts_undershoot[id_gti_orbit[i_orbit]],
+                                cutoff_rigidity=cutoff_rigidity[id_gti_orbit[i_orbit]],
+                                save_path=save_path_str,
+                                id_gti=id_gti[i_orbit], id_flares=id_flares[i_orbit],
+                                gti_nimkt_arr=gti_nimkt_arr, split_str=split,
+                                split_gti_arr=split_gti_arr[i_orbit],orbit_cut_times=orbit_cut_times)]
+
+                    print('Added gti manual split at t='+str(orbit_cut_times[-1])+' s')
+
+                n_cuts=len(orbit_cut_times)
+                cut_gtis = [np.argwhere(time_obs == orbit_cut_times[i_cut])[0][0] for i_cut in
+                            range(n_cuts)]
+
+                #note that the min(i_cut+1) offsets all but the first cut's gti starts by one, and the end is always
+                #offset by one. So here we make the choice that the cut is part of the gti up to that cut
+                split_gti_arr[i_orbit]=np.array([min(i_cut,1)+np.arange(cut_gtis[i_cut],cut_gtis[i_cut+1]+max(1-i_cut,0)) for i_cut in range(n_cuts-1)],dtype=object)
+
+                #removing flares if necessary
+                if 'flares' in split:
+                    for i_split in range(len(split_gti_arr[i_orbit])):
+                        split_gti_arr[i_orbit][i_split] = np.array([elem for elem in split_gti_arr[i_orbit][i_split] \
+                                                           if elem not in id_flares[i_orbit]])
+
         #creating individual orbit figures
         for i_orbit in range(n_orbit):
+            
+            save_path_str=os.path.join(directory,obsid+'-'+str_orbit(i_orbit)+'_flares.png')
 
-            fig_flares, ax_flares = plt.subplots(1, figsize=(12, 8))
-
-            ax_flares.set_xlabel('Time (s) after ' + obs_start_str)
-            ax_flares.set_ylabel('Count Rate (counts/s)')
-            ax_rigidity = ax_flares.twinx()
-            ax_rigidity.set_ylabel('Cutoff Rigidity (Gev/c)')
-
-            # we just want something above 0 here while keeping a log scale but allowing 0 counts
-            ax_flares.set_yscale('symlog', linthresh=0.1, linscale=0.1)
-            ax_flares.yaxis.set_minor_locator(MinorSymLogLocator(linthresh=0.1))
-
-            ax_flares.errorbar(time_obs[id_gti_orbit[i_orbit]], counts_035_8[id_gti_orbit[i_orbit]],
-                               color='red', label='0.35-8 keV Count Rate')
-
-            ax_flares.errorbar(time_obs[id_gti_orbit[i_orbit]], counts_8_12[id_gti_orbit[i_orbit]],
-                               color='blue', label='8-12 keV Count Rate')
-
-            ax_flares.errorbar(time_obs[id_gti_orbit[i_orbit]], counts_overshoot[id_gti_orbit[i_orbit]],
-                               color='orange', label='Overshoot Rate (>20keV)')
-
-            ax_flares.errorbar(time_obs[id_gti_orbit[i_orbit]], counts_undershoot[id_gti_orbit[i_orbit]],
-                               color='brown', label='Undershoot Rate')
-
-            ax_rigidity.plot(time_obs[id_gti_orbit[i_orbit]], cutoff_rigidity[id_gti_orbit[i_orbit]],
-                             color='green', label='Cutoff Rigidity')
-
-            #flare and gti intervals
-            for id_inter,list_inter in enumerate(list(interval_extract(id_gti[i_orbit]))):
-                ax_rigidity.axvspan(time_obs[min(list_inter)], time_obs[max(list_inter)], color='grey', alpha=0.2,
-                                    label='standard gtis' if id_inter==0 else '')
-
-            for id_inter,list_inter in enumerate(list(interval_extract(id_flares[i_orbit]))):
-                ax_rigidity.axvspan(time_obs[min(list_inter)], time_obs[max(list_inter)], color='blue', alpha=0.2,
-                                    label='flare gtis' if id_inter==0 else '')
-
-            #computing the non-gti intervals from nimaketime
-            id_nongti_nimkt=[]
-
-            for elem_gti in id_gti_orbit[i_orbit]:
-                #testing if the gti is in one of the gtis of the nimaketime
-                if not ((time_obs[elem_gti] >= gti_nimkt_arr.T[0]) & (time_obs[elem_gti] <= gti_nimkt_arr.T[1])).any():
-                    #and storing if that's not the case
-                    id_nongti_nimkt+=[elem_gti]
-
-            #and plotting
-            for id_inter,list_inter in enumerate(list(interval_extract(id_nongti_nimkt))):
-                ax_rigidity.axvspan(time_obs[min(list_inter)], time_obs[max(list_inter)], color='red', alpha=0.1,
-                                    label='std nimaketime excluded intervals' if id_inter==0 else '')
-
-
-            #plotting the split gti intervals if in the right mode
-            if 'split' in split:
-
-                for id_inter, list_inter in enumerate(split_gti_arr[i_orbit]):
-
-                    ax_rigidity.axvspan(time_obs[min(list_inter)], time_obs[max(list_inter)],
-                                        color='green', alpha=0.1,
-                                        label='split intervals '+
-                                              ('(flare cuts included)' if 'flare' in split else '')\
-                                              if id_inter == 0 else '')
-
-            ax_rigidity.axhline(1.5, 0, 1, color='green', ls='--', label='Upper limit for risky regions')
-            ax_flares.axhline(30, 0, 1, color='orange', ls='--', label='Default overshoot cut')
-            ax_flares.axhline(500, 0, 1, color='brown', ls='--', label='Default undershoot cut')
-
-
-            ax_flares.legend(loc='upper left')
-            ax_rigidity.legend(loc='upper right')
-            ax_flares.set_ylim(0, ax_flares.get_ylim()[1])
-            plt.tight_layout()
-
-            #note that str_orbit adds 1 to the counter
-            plt.savefig(os.path.join(directory,obsid+'-'+str_orbit(i_orbit)+
-                        '_flares.png'))
-            plt.close()
+            plot_event_diag(mode='orbit',obs_start_str=obs_start_str,time_obs=time_obs,
+                            id_gti_orbit=id_gti_orbit[i_orbit],
+                            counts_035_8=counts_035_8[id_gti_orbit[i_orbit]],
+                            counts_8_12=counts_8_12[id_gti_orbit[i_orbit]],
+                            counts_overshoot=counts_overshoot[id_gti_orbit[i_orbit]],
+                            counts_undershoot=counts_undershoot[id_gti_orbit[i_orbit]],
+                            cutoff_rigidity=cutoff_rigidity[id_gti_orbit[i_orbit]],
+                            save_path=save_path_str,
+                            id_gti=id_gti[i_orbit],id_flares=id_flares[i_orbit],
+                            gti_nimkt_arr=gti_nimkt_arr,split_str=split,
+                            split_gti_arr=split_gti_arr[i_orbit])
 
         #creating the gti files for each part of the obsid
         bashproc.sendline('sasinit')
@@ -843,120 +1125,131 @@ def create_gtis(directory,split='orbit+flare',band='3-15',binning=1,overwrite=Tr
         #
         #     return expr
 
-        def create_gti_files(id_gti,data_lc,orbit_prefix,suffix):
-
-            '''
-            creates a gti file from a list of indexes of times which will be picked in data_lc
-
-            1.creates a copy of the mkf file with an additional column with a gti mask
-
-            2.creates the gti file itself using sas's tabgtigen
-            '''
-
-            if len(id_gti)==0:
-                return
-
-            # Here we use the housekeeping file as the fits base for the gti mask file
-            fits_gti=fits.open(file_mkf)
-
-            #creating a custom gti 'mask' file
-            gti_column=fits.ColDefs([fits.Column(name='IS_GTI', format='I',
-                                    array=np.array([1 if i in id_gti else 0 for i in range(len(data_lc))]))])
-
-            #replacing the hdu with a hdu containing it
-            fits_gti[1]=fits.BinTableHDU.from_columns(fits_gti[1].columns[:2]+gti_column)
-            fits_gti[1].name='IS_GTI'
-
-            lc_mask_path = os.path.join(directory,'xti',obsid+'_gti_mask_'+orbit_prefix+suffix)+'.fits'
-
-            if os.path.isfile(lc_mask_path):
-                os.remove(lc_mask_path)
-
-            fits_gti.writeto(lc_mask_path)
-
-            #waiting for the file to be created
-            while not os.path.isfile(lc_mask_path):
-                time.sleep(0.1)
-
-            #creating the orbit gti expression
-            gti_path=os.path.join(directory,'xti',obsid+'_gti_'+orbit_prefix+suffix)+'.gti'
-
-            print(gti_path)
-            bashproc.sendline('tabgtigen table='+lc_mask_path+' expression="IS_GTI==1" gtiset='+gti_path)
-
-            #this shouldn't take too long so we keep the timeout
-            #two expects because there's one for the start and another for the end
-            bashproc.expect('tabgtigen:- tabgtigen')
-            bashproc.expect('tabgtigen:- tabgtigen')
-
-            '''
-            There is an issue with the way tabgtigen creates the exposure due to a lacking keyword
-            To ensure things work correctly, we remake the contents of the file and keep the header
-            '''
-
-            #preparing the list of gtis to replace manually
-            gti_intervals=np.array(list(interval_extract(id_gti))).T
-
-            #opening and modifying the content of the header in the gti file for NICER
-            with fits.open(gti_path,mode='update') as hdul:
-
-                #for some reason we don't get the right values here so we recreate them
-                # creating a custom gti 'mask' file
-
-                #storing the current header
-                prev_header=hdul[1].header
-
-                #creating a START and a STOP column in "standard" GTI fashion
-                #note: the 0.5 is there to allow the initial and final second bounds
-                gti_column_start = fits.ColDefs([fits.Column(name='START', format='D',
-                                                       array=np.array([time_obs[elem]+start_obs_s-0.5 for elem in gti_intervals[0]]))])
-                gti_column_stop = fits.ColDefs([fits.Column(name='STOP', format='D',
-                                                       array=np.array([time_obs[elem]+start_obs_s+0.5 for elem in gti_intervals[1]]))])
-
-                #replacing the hdu
-                hdul[1]= fits.BinTableHDU.from_columns(gti_column_start + gti_column_stop)
-
-                #replacing the header
-                hdul[1].header=prev_header
-
-                #Changing the reference times
-                hdul[1].header['MJDREF']=56658+7.775925925925930E-04
-
-                # hdul[1].header['MJDREFI']=56658
-                # hdul[1].header['MJDREFF']=7.775925925925930E-04
-
-                #and the gti keywords
-                hdul[1].header['ONTIME']=len(id_gti)
-                hdul[1].header['TSTART']=hdul[1].data['START'][0]-start_obs_s
-                hdul[1].header['TSTOP'] = hdul[1].data['STOP'][-1]-start_obs_s
-
-                hdul.flush()
-
         for i_orbit in range(n_orbit):
 
-            if 'split' in split:
+            if 'split' in split or 'manual' in split:
+
+                split_str='S' if 'split' in split else 'M' if 'manual' in split else ''
                 #create the gti files with a "S" keyword and keeping the orbit information in the name
                 for i_split,split_gtis in enumerate(split_gti_arr[i_orbit]):
                     if len(split_gtis)>0:
-                        create_gti_files(split_gtis,flare_lc,str_orbit(i_orbit),'S'+str_orbit(i_split))
+                        create_gti_files(split_gtis,flare_lc,str_orbit(i_orbit),split_str+str_orbit(i_split),file_base=file_mkf,time_gtis=time_obs)
             else:
-                create_gti_files(id_gti[i_orbit],flare_lc,str_orbit(i_orbit),'')
+                create_gti_files(id_gti[i_orbit],flare_lc,str_orbit(i_orbit),'',file_base=file_mkf,time_gtis=time_obs)
 
             if len(id_flares[i_orbit])>0:
-                create_gti_files(id_flares[i_orbit],flare_lc,str_orbit(i_orbit), 'F')
+                create_gti_files(id_flares[i_orbit],flare_lc,str_orbit(i_orbit), 'F',file_base=file_mkf,time_gtis=time_obs)
 
-            # create_gti_files(id_dips[id_orbit],flare_lc,str_orbit(i_orbit), 'D')
-        #
-        # #only deleting the lightcurve files after everything has been finished
-        # for elem_file in new_files_lc:
-        #     os.remove(elem_file)
+
+        if 'intensity' in split:
+
+            split_gti_arr= np.array([None] * n_orbit)
+
+            '''
+            Splitting according to a given intensity repartition 
+            This is done after the first gti creation because it requires the gti files of individual
+            orbits to be created
+            '''
+
+            int_split_keyword=[elem for elem in split.split('+') if 'intensity' in elem][0]
+
+            int_split_type=literal_eval(int_split_keyword.split('_')[1])
+
+            if type(int_split_type)==int:
+                int_split_quantiles=np.linspace(0,100,int_split_type+1)
+            else:
+                int_split_quantiles=[0]+int_split_type+[100]
+
+
+            #creating a lightcurve for all orbits with the given band and binning
+            extract_lc(directory,binning=int_split_bin,bands=int_split_band,HR=None,overwrite=True)
+
+            for i_orbit in range(n_orbit):
+
+                int_lc_orbit_path=os.path.join(directory,'xti',obsid+'-'+str_orbit(i_orbit)+'_'+str(int_split_band)+\
+                                            '_bin_'+str(int_split_bin)+'.lc')
+
+                with fits.open(int_lc_orbit_path) as hdul:
+
+                    int_lc_orbit_time = hdul[1].data['TIME']
+                    int_lc_orbit_cts= hdul[1].data['RATE']
+
+                    #cts_err = hdul[1].data['ERROR']
+
+
+                if clip_int_delta:
+                    #sigma clipping to remove significant outliers
+                    int_lc_orbit_cts_var=sigma_clip(int_lc_orbit_cts,3)
+                else:
+                    int_lc_orbit_cts_var=sigma_clip(int_lc_orbit_cts,3)
+
+
+                int_lc_orbit_cts_delta = int_lc_orbit_cts_var.max() - int_lc_orbit_cts_var.min()
+
+                orbit_gti_int=[]
+
+                time_quantiles=[]
+                
+                for i_quantile in range(len(int_split_quantiles)-1):
+                    mask_quantile= (int_lc_orbit_cts > (int_lc_orbit_cts_var.min() + int_lc_orbit_cts_delta * int_split_quantiles[i_quantile]/100)) & \
+                                   (int_lc_orbit_cts <= (int_lc_orbit_cts_var.min() + int_lc_orbit_cts_delta * int_split_quantiles[i_quantile+1]/100))
+
+                    #adding the lowest value bins below the clipping for the lowest quantile
+                    if i_quantile==0:
+                        mask_quantile= mask_quantile | (int_lc_orbit_cts <= int_lc_orbit_cts_var.min())
+
+                    #adding the highest value bins above the clipping for the highest quantile
+                    if i_quantile==len(int_split_quantiles)-2:
+                        mask_quantile = mask_quantile | (int_lc_orbit_cts > int_lc_orbit_cts_var.max())
+
+                    #here we don't transfer into the mkf back because we'll be using the lightcurve file directly
+                    #for the gtis so a range of the ids of mask_quantile is directly the gtis we want
+                    orbit_gti_int+=[np.arange(len(int_lc_orbit_time))[mask_quantile]]
+                    
+                    # #careful here, this can be tricky when transfered into lightcurves later depending
+                    # #on the binning of said lightcurves
+                    # time_quantiles+=[lc_time[mask_quantile]-0.5*float(int_split_bin)]
+                    # 
+                    # #adding the gti indexes
+                    # orbit_gti_int+=[np.array([np.argwhere(time_obs==time_quantiles[i_quantile][i_elem])[0][0] for i_elem in
+                    #    range(len(time_quantiles[i_quantile]))])]
+
+                split_gti_arr[i_orbit]=orbit_gti_int
+
+                save_path_str = os.path.join(directory, obsid + '-' + str_orbit(i_orbit) + '_flares.png')
+
+                #it's too complicated to display the time cut here so we simply don't
+                plot_event_diag(mode='orbit', obs_start_str=obs_start_str, time_obs=time_obs,
+                                id_gti_orbit=id_gti_orbit[i_orbit],
+                                counts_035_8=counts_035_8[id_gti_orbit[i_orbit]],
+                                counts_8_12=counts_8_12[id_gti_orbit[i_orbit]],
+                                counts_overshoot=counts_overshoot[id_gti_orbit[i_orbit]],
+                                counts_undershoot=counts_undershoot[id_gti_orbit[i_orbit]],
+                                cutoff_rigidity=cutoff_rigidity[id_gti_orbit[i_orbit]],
+                                counts_035_8_glob=counts_035_8,
+                                save_path=save_path_str,
+                                id_gti=id_gti[i_orbit], id_flares=id_flares[i_orbit],
+                                gti_nimkt_arr=gti_nimkt_arr, split_str=split,
+                                split_gti_arr=None)
+
+                split_str='I'
+
+                #create the gti files with a "I" keyword and keeping the orbit information in the name
+                #here we use the int_lc directly to have the right resolution
+                for i_split,split_gtis in enumerate(split_gti_arr[i_orbit]):
+                    if len(split_gtis)>0:
+                        create_gti_files(split_gtis,int_lc_orbit_time,str_orbit(i_orbit),split_str+str_orbit(i_split),
+                                         file_base=int_lc_orbit_path,time_gtis=int_lc_orbit_time)
+
+                #removing the non-split gti file
+                os.remove(os.path.join(directory,'xti',obsid+'_gti_'+str_orbit(i_orbit)+'.gti'))
 
         #exiting the bashproc
         bashproc.sendline('exit')
         create_gtis_done.set()
 
 #### extract_all_spectral
-def extract_all_spectral(directory,bkgmodel='scorpeon_script',language='python',overwrite=True):
+def extract_all_spectral(directory,bkgmodel='scorpeon_script',language='python',overwrite=True,relax_SAA_bg=True):
     
     '''
     Wrapper for nicerl3-spect, extracts spectra, creates bkg and rmfs
@@ -967,6 +1260,9 @@ def extract_all_spectral(directory,bkgmodel='scorpeon_script',language='python',
     We follow the steps highlighted in https://heasarc.gsfc.nasa.gov/docs/nicer/analysis_threads/nicerl3-spect/
 
     Processes a directory using the nicerl3-spect script
+
+    -relax_SAA_bg: options to incease the range of possible values of nxb.saa_norm to a higher value
+    (By default this is at a max of 100 as of Heasoft 6.33, but this is clearly insufficient for SAA passages)
     
     bgmodel options:
         -scorpeon_script: uses scorpeon in script mode to create a variable xspec-compatible bg model
@@ -1039,8 +1335,10 @@ def extract_all_spectral(directory,bkgmodel='scorpeon_script',language='python',
             #suffix for naming products
             gti_suffix='' if gtifile is None else '-'+(gtifile[gtifile.rfind('/')+1:].split('_gti_')[1]).replace('.gti','')
 
+            relaxed_SAA_bg_str=' bkgconfigs="nxb.saa_norm.max=6000"' if relax_SAA_bg else ''
+
             bashproc.sendline('nicerl3-spect indir='+directory+' bkgmodeltype='+bkgmodel_str+' bkgformat='+bkgmodel_mode+' '+bkg_outlang_str+
-                              ' clobber='+('YES' if overwrite else 'FALSE')+gti_str)
+                              ' clobber='+('YES' if overwrite else 'FALSE')+gti_str+relaxed_SAA_bg_str)
 
             process_state=bashproc.expect(['DONE','ERROR: could not find UFA file','Task aborting due to zero EXPOSURE'],timeout=None)
 
@@ -1169,8 +1467,9 @@ s
     lc_bands=np.unique(lc_bands)[::-1]
 
     #storing the ids for the HR bands
-    id_band_num_HR=np.argwhere(HR.split('/')[0]==lc_bands)[0][0]
-    id_band_den_HR=np.argwhere(HR.split('/')[1]==lc_bands)[0][0]
+    if HR is not None:
+        id_band_num_HR=np.argwhere(HR.split('/')[0]==lc_bands)[0][0]
+        id_band_den_HR=np.argwhere(HR.split('/')[1]==lc_bands)[0][0]
     
     set_var(bashproc)
 
@@ -1207,7 +1506,7 @@ s
 
             data_lc_arr=np.array([None]*len(lc_bands))
 
-            #storing the
+            #storing the lightcurve
             for i_lc,indiv_band in enumerate(lc_bands):
 
                 old_files_lc=[elem for elem in glob.glob(os.path.join(directory,'xti/**/*'),recursive=True) if elem.endswith('.lc') and 'bin' not in elem]
@@ -1215,7 +1514,7 @@ s
                 for elem_file in old_files_lc:
                     os.remove(elem_file)
 
-                pi_band='-'.join((np.array(indiv_band.split('-')).astype(int)*100).astype(str).tolist())
+                pi_band='-'.join((np.array(indiv_band.split('-')).astype(float)*100).astype(int).astype(str).tolist())
 
                 bashproc.sendline('nicerl3-lc '+directory+' pirange='+pi_band+' timebin='+str(binning)+' '+
                                   ' clobber='+('YES' if overwrite else 'FALSE')+gti_str)
@@ -1254,7 +1553,7 @@ s
 
                     start_obs_s = fits_mkf[1].header['TSTART'] + fits_mkf[1].header['TIMEZERO']
 
-                file_lc=[elem for elem in glob.glob(os.path.join(directory,'xti/**/*'),recursive=True) if elem.endswith('.lc')][0]
+                file_lc=[elem for elem in glob.glob(os.path.join(directory,'xti/**/*'),recursive=True) if elem.endswith('.lc') and elem.split('/')[-1].startswith('ni')][0]
 
                 #storing the data of the lc
                 with fits.open(file_lc) as fits_lc:
@@ -1279,7 +1578,8 @@ s
                     time_zero_arr[i_lc]=str(time_zero.to_datetime())
 
                     #saving the lc in a different file
-                    fits_lc.writeto(file_lc.replace('.lc',gti_suffix+'_'+indiv_band+'_bin_'+str(binning)+'.dat'),overwrite=True)
+                    fits_lc.writeto(file_lc.replace('.lc',gti_suffix+'_'+indiv_band+'_bin_'+str(binning)+'.lc')\
+                                    .replace('mpu7_sr','').replace('ni'+directory.replace('/',''),directory.replace('/','')).replace('event_cl/',''),overwrite=True)
 
                 #removing the direct products
                 new_files_lc = [elem for elem in glob.glob(os.path.join(directory, 'xti/**/*'), recursive=True) if
@@ -1291,7 +1591,7 @@ s
                 #and plotting it
                 fig_lc,ax_lc=plt.subplots(1,figsize=(10,8))
 
-                plt.errorbar(data_lc_arr[i_lc]['TIME'],data_lc_arr[i_lc]['RATE'],xerr=float(binning),yerr=data_lc_arr[i_lc]['ERROR'],ls='-',lw=1,color='grey',ecolor='blue')
+                plt.errorbar(data_lc_arr[i_lc]['TIME'],data_lc_arr[i_lc]['RATE'],xerr=float(binning)/2,yerr=data_lc_arr[i_lc]['ERROR'],ls='-',lw=1,color='grey',ecolor='blue')
 
                 plt.suptitle('NICER lightcurve for observation '+directory+gti_suffix+' in the '+indiv_band+' keV band')
 
@@ -1302,28 +1602,29 @@ s
                 plt.savefig('./'+directory+'/'+directory+gti_suffix+'_lc_'+indiv_band+'_bin_'+str(binning)+'.png')
                 plt.close()
 
-            if time_zero_arr[id_band_num_HR]!=time_zero_arr[id_band_den_HR]:
-                print('NICER_datared error: both lightcurve for the HR have different zero values')
-                raise ValueError
+            if HR is not None:
+                if time_zero_arr[id_band_num_HR]!=time_zero_arr[id_band_den_HR]:
+                    print('NICER_datared error: both lightcurve for the HR have different zero values')
+                    raise ValueError
 
-            #creating the HR plot
-            fig_hr,ax_hr=plt.subplots(1,figsize=(10,8))
+                #creating the HR plot
+                fig_hr,ax_hr=plt.subplots(1,figsize=(10,8))
 
-            hr_vals=data_lc_arr[id_band_num_HR]['RATE']/data_lc_arr[id_band_den_HR]['RATE']
+                hr_vals=data_lc_arr[id_band_num_HR]['RATE']/data_lc_arr[id_band_den_HR]['RATE']
 
-            hr_err=hr_vals*(((data_lc_arr[id_band_num_HR]['ERROR']/data_lc_arr[id_band_num_HR]['RATE'])**2+
-                            (data_lc_arr[id_band_den_HR]['ERROR']/data_lc_arr[id_band_den_HR]['RATE'])**2)**(1/2))
+                hr_err=hr_vals*(((data_lc_arr[id_band_num_HR]['ERROR']/data_lc_arr[id_band_num_HR]['RATE'])**2+
+                                (data_lc_arr[id_band_den_HR]['ERROR']/data_lc_arr[id_band_den_HR]['RATE'])**2)**(1/2))
 
-            plt.errorbar(data_lc_arr[id_band_num_HR]['TIME'],hr_vals,xerr=binning,yerr=hr_err,ls='-',lw=1,color='grey',ecolor='blue')
+                plt.errorbar(data_lc_arr[id_band_num_HR]['TIME'],hr_vals,xerr=float(binning)/2,yerr=hr_err,ls='-',lw=1,color='grey',ecolor='blue')
 
-            plt.suptitle('NICER HR evolution for observation '+directory+gti_suffix+' in the '+HR+' keV band')
+                plt.suptitle('NICER HR evolution for observation '+directory+gti_suffix+' in the '+HR+' keV band')
 
-            plt.xlabel('Time (s) after '+time_zero_arr[id_band_num_HR])
-            plt.ylabel('Hardness Ratio ('+HR+' keV)')
+                plt.xlabel('Time (s) after '+time_zero_arr[id_band_num_HR])
+                plt.ylabel('Hardness Ratio ('+HR+' keV)')
 
-            plt.tight_layout()
-            plt.savefig('./'+directory+'/'+directory+gti_suffix+'_hr_'+indiv_band+'_bin_'+str(binning)+'.png')
-            plt.close()
+                plt.tight_layout()
+                plt.savefig('./'+directory+'/'+directory+gti_suffix+'_hr_'+indiv_band+'_bin_'+str(binning)+'.png')
+                plt.close()
 
         if len(gti_files)==0:
             print('no gti files detected. Computing lightcurve products from the entire obsid...')
@@ -1832,20 +2133,21 @@ if not local:
                             select_detector_done.wait()
 
                         if curr_action=='gti':
-                            output_err=create_gtis(dirname,split=gti_split,band=gti_lc_band,binning=lc_bin,
-                                        overwrite=overwrite_glob,flare_method=flare_method)
+                            output_err=create_gtis(dirname,split=gti_split,band=gti_lc_band,
+                                        flare_method=flare_method,
+                                        int_split_band=int_split_band,int_split_bin=int_split_bin)
                             if type(output_err)==str:
                                 raise ValueError
                             create_gtis_done.wait()
 
                         if curr_action=='fs':
-                            output_err=extract_all_spectral(dirname,bkgmodel=bgmodel,language=bglanguage,overwrite=overwrite_glob)
+                            output_err=extract_all_spectral(dirname,bkgmodel=bgmodel,language=bglanguage,overwrite=overwrite_glob,relax_SAA_bg=relax_SAA_bg)
                             if type(output_err)==str:
                                 raise ValueError
                             extract_all_spectral_done.wait()
                             
                         if curr_action=='l':
-                            output_err=extract_lc(dirname,binning=lc_bin,bands=lc_bands_str,HR=hr_bands_str,overwrite=overwrite_glob)
+                            output_err=extract_lc(dirname,binning=lc_bin if 'intensity' not in gti_split else int_split_bin,bands=lc_bands_str,HR=hr_bands_str,overwrite=overwrite_glob)
                             if type(output_err)==str:
                                 raise ValueError
                             extract_lc_done.wait()
@@ -1901,8 +2203,9 @@ if not local:
                         select_detector_done.wait()
 
                     if curr_action=='gti':
-                        output_err=create_gtis(dirname,split=gti_split,band=gti_lc_band,binning=lc_bin,
-                                    overwrite=overwrite_glob,flare_method=flare_method)
+                        output_err=create_gtis(dirname,split=gti_split,band=gti_lc_band,
+                                    flare_method=flare_method,
+                                        int_split_band=int_split_band,int_split_bin=int_split_bin)
                         if type(output_err) == str:
                             folder_state=output_err
                         else:
@@ -1911,7 +2214,7 @@ if not local:
 
                     if curr_action == 'fs':
                         output_err = extract_all_spectral(dirname, bkgmodel=bgmodel, language=bglanguage,
-                                                          overwrite=overwrite_glob)
+                                                          overwrite=overwrite_glob,relax_SAA_bg=relax_SAA_bg)
                         if type(output_err) == str:
                             folder_state=output_err
                         else:
@@ -1919,7 +2222,7 @@ if not local:
                         extract_all_spectral_done.wait()
 
                     if curr_action == 'l':
-                        output_err = extract_lc(dirname, binning=lc_bin, bands=lc_bands_str, HR=hr_bands_str,
+                        output_err = extract_lc(dirname,binning=lc_bin if 'intensity' not in gti_split else int_split_bin, bands=lc_bands_str, HR=hr_bands_str,
                                                 overwrite=overwrite_glob)
                         if type(output_err) == str:
                             folder_state=output_err
@@ -1965,6 +2268,9 @@ if not local:
             file_edit('summary_folder_analysis_'+args.action+'.log',directory,directory+'\t'+folder_state+'\n',summary_folder_header)
                 
 else:
+
+    #OUTDATED
+    assert True,'local mode currently outdated'
     #taking of the merge action if local is set since there is no point to merge in local (the batch directory acts as merge)
     action_list=[elem for elem in action_list if elem!='m']
     
@@ -1984,9 +2290,17 @@ else:
                 select_detector_done.wait()
 
             if curr_action=='gti':
-                output_err = create_gtis(absdir, split=gti_split, band=gti_lc_band, binning=lc_bin,
-                                         overwrite=overwrite_glob,flare_method=flare_method)
+                output_err = create_gtis(absdir, split=gti_split, band=gti_lc_band,
+                                         flare_method=flare_method,
+                                        int_split_band=int_split_band,int_split_bin=int_split_bin)
                 create_gtis_done.wait()
+
+            if curr_action == 'l':
+                output_err = extract_lc(absdir, binning=lc_bin if 'intensity' not in gti_split else int_split_bin,
+                                        bands=lc_bands_str, HR=hr_bands_str, overwrite=overwrite_glob)
+                if type(output_err) == str:
+                    raise ValueError
+                extract_lc_done.wait()
 
             if curr_action=='s':
                 extract_spectrum(absdir)

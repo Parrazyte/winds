@@ -825,9 +825,9 @@ else:
         
 HID_options_str=np.array(['Source','Inclination','Instrument','Time',
                           r'line $V_{shift}$',r'line $\Delta$C',r'line $EW$ ratio',
-                          r'$nH$',r'$T_{in}$','Custom: Line substructures'])
+                          r'$nH$',r'$T_{in}$','Custom: Line substructures','Custom: accretion states'])
 radio_info_cmap_options=['Source','Inclination','Instrument','Time','Velocity shift','Del-C','EW ratio','nH','kT',
-                         'line_struct']
+                         'custom_line_struct','custom_acc_states']
 
 #only putting the custom colormap for 4U for now
 if not (display_single and obj_list[mask_obj_select][0]=='4U1630-47'):
@@ -1420,12 +1420,27 @@ lum_high_sign_plot_restrict=lum_high_sign_plot_restrict.T[mask_obj].T
 #we create this one solely for the sake of the scatter plots
 hr_high_plot_restrict=deepcopy(lum_high_plot_restrict)
 
-#index 1 is the 3-6 band. 
+#index 1 is the 3-6 band. slightly overestimated since lum_plot is in 90% uncertainties but these should be negligible
 hr_high_plot_restrict[0]=lum_high_plot_restrict[0]/lum_plot_restrict[1][0]
 hr_high_plot_restrict[1]=((lum_high_plot_restrict[1]/lum_high_plot_restrict[0])**2+\
                           (lum_plot_restrict[1][1]/lum_plot_restrict[1][0])**2)**(1/2)*hr_high_plot_restrict[0]
-hr_high_plot_restrict[2]=((lum_high_plot_restrict[2]/lum_high_plot_restrict[0])**2+\
-                          (lum_plot_restrict[1][2]/lum_plot_restrict[1][0])**2)**(1/2)*hr_high_plot_restrict[0]
+
+#different conditions depending on whether the high_E luminosity is 0 or not to create the upper limit
+for i_obj in range(len(hr_high_plot_restrict[2])):
+
+    #this won't be true if the values are nans
+    no_det_vals=lum_high_plot_restrict[0][i_obj]==0.
+
+    #standard computation
+    hr_high_UL_whenvalue=((lum_high_plot_restrict[2][i_obj]/lum_high_plot_restrict[0][i_obj])**2+\
+                              (lum_plot_restrict[1][2][i_obj]/lum_plot_restrict[1][0][i_obj])**2)**(1/2)\
+                 *hr_high_plot_restrict[0][i_obj]
+
+    #constructing conservatively from UL numerator/LLdenominator
+    hr_high_UL_whennovalue=lum_high_plot_restrict[2][i_obj]/(lum_plot_restrict[1][0][i_obj]-lum_plot_restrict[1][1][i_obj])
+
+
+    hr_high_plot_restrict[2][i_obj]=np.where(no_det_vals,hr_high_UL_whennovalue,hr_high_UL_whenvalue)
 
 #we create this one solely for the sake of the scatter plots
 hr_high_sign_plot_restrict=deepcopy(lum_high_sign_plot_restrict)
@@ -1433,8 +1448,23 @@ hr_high_sign_plot_restrict=deepcopy(lum_high_sign_plot_restrict)
 hr_high_sign_plot_restrict[0]=lum_high_sign_plot_restrict[0]/lum_plot_restrict[1][0]
 hr_high_sign_plot_restrict[1]=((lum_high_sign_plot_restrict[1]/lum_high_sign_plot_restrict[0])**2+\
                           (lum_plot_restrict[1][1]/lum_plot_restrict[1][0])**2)**(1/2)*hr_high_sign_plot_restrict[0]
-hr_high_sign_plot_restrict[2]=((lum_high_sign_plot_restrict[2]/lum_high_sign_plot_restrict[0])**2+\
-                          (lum_plot_restrict[1][2]/lum_plot_restrict[1][0])**2)**(1/2)*hr_high_sign_plot_restrict[0]
+
+#different conditions depending on whether the high_E luminosity is 0 or not to create the upper limit
+for i_obj in range(len(hr_high_sign_plot_restrict[2])):
+
+    #this won't be true if the values are nans
+    no_det_vals=lum_high_sign_plot_restrict[0][i_obj]==0.
+
+    #standard computation
+    hr_high_sign_UL_whenvalue=((lum_high_sign_plot_restrict[2][i_obj]/lum_high_sign_plot_restrict[0][i_obj])**2+\
+                              (lum_plot_restrict[1][2][i_obj]/lum_plot_restrict[1][0][i_obj])**2)**(1/2)\
+                 *hr_high_sign_plot_restrict[0][i_obj]
+
+    #constructing conservatively from UL numerator/LLdenominator
+    hr_high_sign_UL_whennovalue=lum_high_sign_plot_restrict[2][i_obj]/(lum_plot_restrict[1][0][i_obj]-lum_plot_restrict[1][1][i_obj])
+
+
+    hr_high_sign_plot_restrict[2][i_obj]=np.where(no_det_vals,hr_high_sign_UL_whennovalue,hr_high_sign_UL_whenvalue)
 
 gamma_nthcomp_plot_restrict=deepcopy(gamma_nthcomp_plot)
 gamma_nthcomp_plot_restrict=gamma_nthcomp_plot_restrict.T[mask_obj].T
@@ -1442,6 +1472,7 @@ gamma_nthcomp_plot_restrict=gamma_nthcomp_plot_restrict.T[mask_obj].T
 dict_linevis['lum_high_1sig_plot_restrict']=lum_high_1sig_plot_restrict
 
 dict_linevis['lum_high_sign_plot_restrict']=lum_high_sign_plot_restrict
+dict_linevis['hr_high_plot_restrict']=hr_high_plot_restrict
 dict_linevis['hr_high_sign_plot_restrict']=hr_high_sign_plot_restrict
 dict_linevis['gamma_nthcomp_plot_restrict']=gamma_nthcomp_plot_restrict
 dict_linevis['Tin_diskbb_plot_restrict']=Tin_diskbb_plot_restrict
@@ -1485,7 +1516,58 @@ if display_single and sum(ravel_ragged(mask_intime_plot))>0:
                     diago_color[i_obj][i_obs]='grey'
 
 dict_linevis['diago_color']=diago_color
+# breakpoint()
+custom_states_color=deepcopy(hid_plot[1][0])
+if display_single and sum(ravel_ragged(mask_intime_plot))>0:
+    for i_obj in range(len(custom_states_color)):
+        if obj_list[i_obj]=='4U1630-47':
+            for i_obs in range(len(custom_states_color[i_obj])):
 
+                #first rule is for luminosity and HR + HR broad or det treshold to remove things
+                # that stay in intermediate states
+                # second rule is for a significant detection in suzeaku above 3.8 EWratio
+                
+                obs_soft_lum=hid_plot[1][0][i_obj][i_obs]
+                obs_soft_HR=hid_plot[0][0][i_obj][i_obs]
+                obs_broad_HR=hr_high_plot_restrict[0][0][i_obs]
+
+                #note that the 1.65 are to convert to 1 sigma uncertainties
+
+                obs_broad_HR_UL=hr_high_plot_restrict[2][0][i_obs]/1.65 if hr_high_plot_restrict[0][0][i_obs]==0. else\
+                    hr_high_plot_restrict[0][0][i_obs]+hr_high_plot_restrict[1][0][i_obs]/1.65
+
+                obs_broad_HR_sign=not np.isnan(hr_high_plot_restrict[0][0][i_obs]) and \
+                                  not hr_high_plot_restrict[0][0][i_obs]==0. and \
+                                  (lum_high_plot_restrict[0][0][i_obs]>2*lum_high_plot_restrict[1][0][i_obs]/1.65)
+
+                # note that the 6.1 limit is done explicitely to only take the right points during the 2021 outburst
+                is_standard_hard=obs_soft_HR>6.1e-1 and obs_soft_lum<1e-1
+
+                is_QRM=obs_soft_lum>1e-1 and obs_soft_lum<1.2e-1 and obs_soft_HR>6e-1
+
+                is_soft=obs_broad_HR<1e-1 if obs_broad_HR_sign else obs_broad_HR_UL<1e-1
+
+                is_inter=not np.isnan(obs_broad_HR) and \
+                         ((obs_broad_HR_sign and obs_broad_HR>1e-1) or (not obs_broad_HR_sign and obs_broad_HR_UL>0.1))
+
+                is_SPL=not np.isnan(obs_broad_HR) and obs_broad_HR>2.8e-1 and obs_soft_lum>5e-2
+
+                #no decidable state
+                custom_states_color[i_obj][i_obs]='grey'
+
+                if is_inter:
+                    custom_states_color[i_obj][i_obs] = 'orange'
+                if is_soft:
+                    custom_states_color[i_obj][i_obs] = 'green'
+                if is_SPL:
+                    custom_states_color[i_obj][i_obs]='red'
+
+                if is_standard_hard:
+                    custom_states_color[i_obj][i_obs] = 'blue'
+                if is_QRM:
+                    custom_states_color[i_obj][i_obs] = 'purple'
+
+dict_linevis['custom_states_color']=custom_states_color
 
 #defining the dataset that will be used in the plots for the colormap limits
 if radio_info_cmap in ['Velocity shift','Del-C']:
@@ -2740,9 +2822,9 @@ with st.sidebar.expander('Parameter analysis'):
     st.header('Visualisation')
     radio_color_scatter_options=np.array(['None','Source','Instrument','Time',
                                           r'line $FWHM$',r'$nH$',r'$HR_{soft}$',r'$L_{3-10}$',
-                                          'Custom: Line substructures'])
+                                          'Custom: Line substructures','Custom: accretion states'])
     color_scatter_options=['None','Source','Instrument','Time',
-                           'width','nH','HR','L_3-10','line_struct']
+                           'width','nH','HR','L_3-10','custom_line_struct','custom_acc_states']
     if not (display_single and obj_list[mask_obj_select][0]=='4U1630-47'):
         radio_color_scatter_options=radio_color_scatter_options[:-1]
         color_scatter_options=color_scatter_options[:-1]

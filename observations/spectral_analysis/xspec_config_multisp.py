@@ -271,6 +271,32 @@ class allmodel_data:
 mod_sky=None
 mod_nxb=None
 
+def fit_broader(epoch_id,add_gaussem=False):
+    '''
+    for quick refitting in broader bands
+    '''
+
+    Plot.xLog=False
+
+    Xset.restore('lineplots_opt/'+epoch_id+'_mod_broadband_post_auto.xcm')
+    AllModels.clear()
+    xscorpeon.load('auto',frozen=True)
+    addcomp('cont_diskbb')
+    addcomp('disk_nthcomp')
+    addcomp('glob_TBabs')
+    addcomp('calNICERSiem_gaussian')
+    addcomp('glob_constant')
+    AllData.notice('0.3-3.')
+    calc_fit()
+
+    if add_gaussem:
+        addcomp('FeKa0em_bgaussian', position='diskbb')
+        calc_fit()
+
+    xscorpeon.load('auto',frozen=False)
+    calc_fit()
+    xscorpeon.freeze()
+
 
 class model_data:
 
@@ -348,7 +374,7 @@ class scorpeon_manager:
     def __init__(self):
         self.bgload_paths=None
 
-    def load(self,bgload_paths=None,scorpeon_save=None,frozen=False):
+    def load(self,bgload_paths=None,scorpeon_save=None,frozen=False,extend_SAA_norm=True,fit_SAA_norm=False):
 
         '''
         reloads the nicer bg model(s) from the stored path(s), and scorpeon save(s) if any
@@ -357,6 +383,14 @@ class scorpeon_manager:
         datagroups with no models should be left as empty in the bgload_paths array
 
         as of now, loads up to a single model per datagroup
+
+        extend_SAA norm:
+            -extends the maximal values of the nxb_SAA_norm parameter which for now are by default kept way too low
+            for SAA passages
+
+        fit_SAA_norm:
+            -unfreezes this parameter which is usually frozen to allow to fit it
+
         '''
 
         #updating the bgload paths if an argument if prodivded
@@ -398,41 +432,51 @@ class scorpeon_manager:
             #assuming 1 spectrum per group here
             curr_grp_sp=AllData(i_grp+1)
 
-            if curr_grp_sp.energies[0][0]>0.5:
+            try:
+                mod_nxb = AllModels(i_grp + 1, modName='nxb')
 
-                try:
+                # extending the range for the SAA_norm parameter (note: might need to go above that for obs
+                # with really high overshoots, but then careful about the spectrum...)
+                if extend_SAA_norm:
+                    mod_nxb(7).values = mod_nxb(7).values[:4] + [6000, 6000]
+                if fit_SAA_norm:
+                    mod_nxb(7).frozen = False
+
+                if curr_grp_sp.energies[0][0]>0.5:
+
                     mod_nxb=AllModels(i_grp+1,modName='nxb')
 
                     #freezing noise_norm
                     mod_nxb(11).frozen=True
-                except:
-                    pass
 
-                try:
-                    mod_sky=AllModels(i_grp+1,modName='sky')
+            except:
+                pass
+
+            try:
+                mod_sky=AllModels(i_grp+1,modName='sky')
+
+                if curr_grp_sp.energies[0][0]>0.5:
+
                     #freezing gal_nh
                     mod_sky(1).frozen=True
 
                     #freezing lhb_em
                     mod_sky(8).frozen=True
 
-                    if curr_grp_sp.energies[0][0]>1.:
-                        #freezing halo_em
-                        mod_sky(6).frozen=True
-                except:
-                    pass
+                if curr_grp_sp.energies[0][0]>1.:
+                    #freezing halo_em
+                    mod_sky(6).frozen=True
+            except:
+                pass
 
         #loading all of the saves
         if scorpeon_save is not None:
             scorpeon_save.load()
 
         #freezing the model if asked to
-        if frozen and self.bgload_paths is not None:
+        if frozen:
 
             for i_grp in range(AllData.nGroups):
-
-                if self.bgload_paths[i_grp] is None:
-                    continue
 
                 try:
                     mod_nxb=AllModels(i_grp+1,modName='nxb')
@@ -576,10 +620,16 @@ def save_broad_SED(path=None,e_low=0.1,e_high=100,nbins=1e3,retain_session=False
                 time.sleep(1)
 
     if remove_cal:
+        #removing the edge calibration components
         for elem_edge in ['edge','smedge']:
             while elem_edge in AllModels(1).componentNames:
                 delcomp(elem_edge)
                 time.sleep(1)
+        #removing the line calibration components
+        for elem_comp in AllModels(1).componentNames:
+            if 'gaussian' in elem_comp:
+                if getattr(AllModels(1),elem_comp).LineE.values[0] in [1.74]:
+                    delcomp(elem_comp)
 
     if remove_scorpeon:
         xscorpeon.clear()
@@ -659,6 +709,7 @@ def reset():
     Fit.nIterations=1000
     Plot.xAxis='keV'
     Plot.add=True
+    Fit.statMethod='cstat'
 
 
 def model_load(model_saves,mod_name='',mod_number=1,gap_par=None,in_add=False,table_dict=None,modclass=AllModels,
@@ -1492,6 +1543,8 @@ def addcomp(compname,position='last',endmult=None,return_pos=False,modclass=AllM
                     xspec_model(gap_end - 2).values = [ener_line, ener_line / 100, ener_line, ener_line,
                                                        ener_line,
                                                        ener_line]
+
+                    #freezing the energy
                     xspec_model(gap_end - 2).frozen=True
                 else:
                     #outputing the line values (delta of 1/100 of the line ener, no redshift, +0.4keV blueshift max)
@@ -1568,7 +1621,7 @@ def addcomp(compname,position='last',endmult=None,return_pos=False,modclass=AllM
             xspec_model(gap_end-3).link=disk_par_id
             xspec_model(gap_end-2).values=1
 
-        xspec_model(gap_end-5).values=[1.7,0.017,1.,1.,3.5,3.5]
+        xspec_model(gap_end-5).values=[1.7,0.017,1.001,1.001,3.5,3.5]
 
     if 'abs' in comp_split and comp_split!='gabs' and comp_custom is not None and 'glob' in comp_custom:
         xspec_model(gap_end).values=[1.,0.01,0.,0.,100,100]
@@ -2981,6 +3034,7 @@ class fitmod:
             assert not (component.multipl and len(self.includedlist) == 0),\
                 'First component of the mod list is multipl. Order change required.'
 
+
             # skipping adding lines in lines locked mode
             if component.line and lock_lines:
                 continue
@@ -2989,15 +3043,9 @@ class fitmod:
             if component.named_absline and no_abslines:
                 continue
 
-            #only adding the calibration components if their relevant energies is inside what is currently noticed
+            #skipping adding calibration components before a first fit to avoid pegged issues
             if component.calibration:
-                Plot('ldata')
-                ener_bounds=[Plot.x()[0],Plot.x()[-1]]
-
-                #here we add a margin of 1 keV on each side to avoid having components at the very beginning/end
-                # of the model, which would be hard to constrain
-                if not component.cal_e-1>=ener_bounds[0] and component.cal_e+1<=ener_bounds[1]:
-                    continue
+                continue
 
             # excluding addition of named components with pendants when not allowing mixing between emission and absorption of the same line
             if component.named_line and nomixline:
@@ -3159,6 +3207,31 @@ class fitmod:
 
         self.update_fitcomps()
 
+        #adding calibration components
+        for i_excomp,component in enumerate(curr_exclist):
+
+            if not component.calibration:
+                continue
+
+            #only adding the calibration components if their relevant energies is inside what is currently noticed
+            Plot('ldata')
+            ener_bounds=[Plot.x()[0],Plot.x()[-1]]
+
+            #here we add a margin of 1 keV on each side to avoid having components at the very beginning/end
+            # of the model, which would be hard to constrain
+            if not component.cal_e-1>=ener_bounds[0] and component.cal_e+1<=ener_bounds[1]:
+                continue
+
+            self.includedlist = component.addtomod(fixed_vals=[self.fixed_abs] if component.absorption else \
+                                                              [self.fixed_gamma] if 'nthcomp' in component.compname\
+                                                              else None,incl_list=self.includedlist)
+            self.update_fitcomps()
+
+            component.fit(split_fit=False)
+
+            component.fitted_mod=allmodel_data()
+
+        self.update_fitcomps()
 
     def test_addcomp(self,chain=False,lock_lines=False,no_abslines=False,nomixline=True,split_fit=True,
                      ftest_threshold=def_ftest_threshold,ftest_leeway=def_ftest_leeway):
@@ -3857,7 +3930,9 @@ class fitmod:
 
         '''
         Fits components in diffrerent manners:
-         -'force_all'   : forces addition of all available component in the order of the list
+         -'force_all'   : forces the inclusion of all available component in the order of the list
+         -'force_add'   : forces the addition of all available component in the order of the list, then
+                          allows to delete them if they are not significant
          -'opt'         : progressively in order of fit significance when being added 1 by 1
 
         Components are added by default at the end of the model and inside global multiplicative components,
@@ -3876,7 +3951,7 @@ class fitmod:
         #the main condition for stopping the fitting process is having added every possible component
         #of course we need to take off the placeholders to compare the lists
 
-        if method=='force_all':
+        if method in ['force_all','force_add']:
             self.add_allcomps(chain=chain,lock_lines=lock_lines,no_abslines=no_abslines,nomixline=nomixline,split_fit=split_fit)
         elif method=='opt':
             while [elem for elem in self.includedlist if elem is not None]!=self.complist:
@@ -3932,7 +4007,7 @@ class fitmod:
             calc_fit(logfile=self.logfile if chain else None)
             calc_error(self.logfile,param='1-'+str(AllModels(1).nParameters*AllData.nGroups),indiv=True)
 
-        if method=='opt':
+        if method in ['opt','force_add']:
             '''
             last run of component deletion with the new minimum
             '''
@@ -3966,8 +4041,10 @@ class fitmod:
                     pegged_par_index=par_peg_comps[i_par_peg][0].parlist[par_peg_comps[i_par_peg][1]]
 
                     #unfreezing the parameter
-                    AllModels(par_peg_ids[i_par_peg][0])(par_peg_ids[i_par_peg][1]).frozen=False
-
+                    try:
+                        AllModels(par_peg_ids[i_par_peg][0])(pegged_par_index).frozen=False
+                    except:
+                        breakpoint()
 
                     # #computing the parameter position in all groups values
                     # par_peg_allgrp=(par_peg_ids[i_par_peg][0]-1)*AllModels(1).nParameters+par_peg_ids[i_par_peg][1]

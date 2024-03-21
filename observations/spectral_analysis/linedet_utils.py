@@ -133,6 +133,9 @@ def narrow_line_search(data_cont, suffix,e_sat_low_indiv,line_search_e=[4,10,0.0
     comp_gauss.Sigma = 0
     comp_gauss.Sigma.frozen = 1
 
+    ####TODO: test if this affects things
+    #Fit.steppar='on'
+
     # tqdm creates a progress bar display:
     with tqdm(total=len(line_search_e_space)) as pbar:
 
@@ -368,7 +371,7 @@ def plot_line_search(chi_dict_plot,outdir,sat,save=True,suffix=None,epoch_observ
 
     comb_title = r' Blind search visualisation for observ ' + ('' if epoch_observ is None else epoch_observ[0]) +\
                  '\n with line par ' + line_search_e_str + \
-                 ' and norm par' + line_search_norm_str + ' in continuum units'
+                 ' and norm par ' + line_search_norm_str + ' in continuum units'
 
     comb_label = []
     for i_grp in range(AllData.nGroups):

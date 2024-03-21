@@ -132,7 +132,7 @@ from xspec import AllChains
 #custom script with a few shorter xspec commands
 from xspec_config_multisp import allmodel_data,model_load,addcomp,Pset,Pnull,rescale,reset,Plot_screen,store_plot,freeze,allfreeze,unfreeze,\
                          calc_error,delcomp,fitmod,calc_fit,xcolors_grp,xPlot,xscorpeon,catch_model_str,\
-                         load_fitmod, ignore_data_indiv,par_degroup,xspec_globcomps
+                         load_fitmod, ignore_data_indiv,par_degroup,xspec_globcomps,store_fit
 
 from linedet_utils import plot_line_comps,plot_line_search,plot_std_ener,coltour_chi2map,narrow_line_search,\
                             plot_line_ratio
@@ -277,19 +277,18 @@ NICER no abslines: 4130010128-001_4130010129-001
 
 '''
 ap.add_argument('-force_epochs',nargs=1,help='force epochs to given set of spectra instead of auto matching',
-                default=False,type=bool)
+                default=True,type=bool)
 
 force_epochs_str=\
 '''
-['906008010_xis1_gti_event_spec_src_grp_opt.pha', '906008010_xis0_xis3_gti_event_spec_src_grp_opt.pha', '906008010_pin_src_dtcor_grp_opt.pha'];
-['409007020_xis1_gti_event_spec_src_grp_opt.pha', '409007020_xis0_xis3_gti_event_spec_src_grp_opt.pha'];
+['5665010401-002M003_sp_grp_opt.pha'];
 '''
 force_epochs_str_list=[literal_eval(elem.replace('\n','')) for elem in force_epochs_str.split(';')[:-1]]
 
 ap.add_argument('-force_epochs_list',nargs=1,help='force epochs list',default=force_epochs_str_list)
 
 
-ap.add_argument('-SNR_min',nargs=1,help='minimum source Signal to Noise Ratio',default=50,type=float)
+ap.add_argument('-SNR_min',nargs=1,help='minimum source Signal to Noise Ratio',default=30,type=float)
 #shouldn't be needed now that we have a counts min limit + sometimes false especially in timing when the bg is the source
 
 ap.add_argument('-counts_min',nargs=1,
@@ -323,15 +322,15 @@ ap.add_argument('-cont_fit_method',nargs=1,help='fit logic for the broadband fit
 
 ap.add_argument('-reload_autofit',nargs=1,
                 help='Reload existing autofit save files to gain time if a computation has crashed',
-                default=True,type=bool)
+                default=False,type=bool)
 
 ap.add_argument('-reload_fakes',nargs=1,
                 help='Reload fake delchi array file to skip the fake computation if possible',
-                default=True,type=bool)
+                default=False,type=bool)
 
 ap.add_argument('-pdf_only',nargs=1,
                 help='Updates the pdf with already existing elements but skips the line detection entirely',
-                default=True,type=bool)
+                default=False,type=bool)
 
 #note: used mainly to recompute obs with bugged UL computations. Needs FINISHED computations firsthand, else
 #use reload_autofit and reload_fakes
@@ -462,7 +461,7 @@ ap.add_argument('-NICER_bkg',nargs=1,help='NICER background type',default='scorp
 ap.add_argument('-pre_reduced_NICER',nargs=1,
                 help='change NICER data format to pre-reduced obsids',default=False,type=bool)
 
-ap.add_argument('-NICER_lc_binning',nargs=1,help='NICER LC binning',default='0.1',type=str)
+ap.add_argument('-NICER_lc_binning',nargs=1,help='NICER LC binning',default='1',type=str)
 
 #in this case the continuum components require the NICER calibration components to get a decent fit
 ap.add_argument('-low_E_NICER',nargs=1,help='NICER lower energy threshold for broadband fits',default=0.3,type=str)
@@ -590,6 +589,7 @@ restrict_fakes=args.restrict_fakes
 pre_reduced_NICER=args.pre_reduced_NICER
 fit_lowSNR=args.fit_lowSNR
 counts_min_HID=args.counts_min_HID
+
 refit_cont=args.refit_cont
 launch_cpd=args.launch_cpd
 pdf_only=args.pdf_only
@@ -2289,7 +2289,7 @@ def line_detect(epoch_id):
             return fill_result('Insufficient net counts ('+str(round(glob_counts))+' < '+str(round(counts_min))+\
                                ') in line detection range.')
 
-    elif SNR<50:
+    elif SNR<SNR_min:
         if not fit_lowSNR:
             print_xlog('\nInsufficient SNR ('+str(round(SNR,1))+'<50) in line detection range.')
             return fill_result('Insufficient SNR ('+str(round(SNR,1))+'<50) in line detection range.')
@@ -2515,26 +2515,8 @@ def line_detect(epoch_id):
 
     abslines_table_str=None
 
-    def store_fit(mode='broadband', fitmod=None):
-
-        '''
-        plots and saves various informations about a fit
-        '''
-
-        # Since the automatic rescaling goes haywire when using the add command, we manually rescale (with our own custom command)
-        rescale(auto=True)
-
-        Plot_screen("ldata,ratio,delchi", outdir + '/' + epoch_observ[0] + '_screen_xspec_' + mode,
-                    includedlist=None if fitmod is None else fitmod.includedlist)
-
-        # saving the model str
-        catch_model_str(curr_logfile, savepath=outdir + '/' + epoch_observ[0] + '_mod_' + mode + '.txt')
-
-        if os.path.isfile(outdir + '/' + epoch_observ[0] + '_mod_' + mode + '.xcm'):
-            os.remove(outdir + '/' + epoch_observ[0] + '_mod_' + mode + '.xcm')
-
-        # storing the current configuration and model
-        Xset.save(outdir + '/' + epoch_observ[0] + '_mod_' + mode + '.xcm', info='a')
+    def curr_store_fit(mode='broadband',fitmod=None):
+        store_fit(mode=mode, epoch_id=epoch_observ[0],outdir=outdir, logfile=curr_logfile, fitmod=fitmod)
 
     def hid_fit_infos(fitmodel, broad_absval, post_autofit=False):
 
@@ -2646,7 +2628,7 @@ def line_detect(epoch_id):
                 except:
                     breakpoint()
                     pass
-        store_fit(mode='broadhid' + add_str, fitmod=fitmodel)
+        curr_store_fit(mode='broadhid' + add_str, fitmod=fitmodel)
 
         # storing the fitmod class into a file
         fitmodel.dump(outdir + '/' + epoch_observ[0] + '_fitmod_broadhid' + add_str + '.pkl')
@@ -2959,7 +2941,7 @@ def line_detect(epoch_id):
                 broad_absval=None
 
             #creating the automatic fit class for the standard continuum
-            fitcont_broad=fitmod(comp_cont,curr_logfile,curr_logfile_write,absval=broad_absval)
+            fitcont_broad=fitmod(comp_cont,curr_logfile,curr_logfile_write,absval=broad_absval,sat_list=sat_indiv_good)
 
             # forcing the absorption component to be included for the broad band fit
             if sat_glob == 'NuSTAR' and freeze_nH:
@@ -2968,14 +2950,7 @@ def line_detect(epoch_id):
                 main_abscomp.mandatory = True
 
             #fitting
-            fitcont_broad.global_fit(split_fit=split_fit,method=cont_fit_method)
-
-            if 'NICER' in sat_indiv_good:
-                #unfreezing the scorpeon model by resetting it
-                xscorpeon.load(fit_SAA_norm=True)
-
-                #refitting in case this allows something else to appear
-                fitcont_broad.global_fit(split_fit=False,method=cont_fit_method)
+            fitcont_broad.global_fit(split_fit=split_fit,method=cont_fit_method,fit_scorpeon=True,fit_SAA_norm=True)
 
             mod_fitcont=allmodel_data()
 
@@ -3013,7 +2988,7 @@ def line_detect(epoch_id):
                 if line_cont_ig_indiv[i_sp] != '':
                     AllData(i_sp+1).notice(line_cont_ig_indiv[i_sp])
 
-            store_fit(mode='broadband',fitmod=fitcont_broad)
+            curr_store_fit(mode='broadband',fitmod=fitcont_broad)
 
             #storing the class
             fitcont_broad.dump(outdir+'/'+epoch_observ[0]+'_fitmod_broadband.pkl')
@@ -3172,7 +3147,7 @@ def line_detect(epoch_id):
             curr_logfile=open(curr_logfile_write.name,'r')
 
             #creating the fitmod object with the desired components (we currently do not use comp groups)
-            fitlines=fitmod(comp_lines,curr_logfile,curr_logfile_write,prev_fitmod=fitmod_cont)
+            fitlines=fitmod(comp_lines,curr_logfile,curr_logfile_write,prev_fitmod=fitmod_cont,sat_list=sat_indiv_good)
 
             # (just in case) inputting the fixed values to avoid issues during component deletion
             fitlines.fixed_abs = broad_absval
@@ -3202,7 +3177,7 @@ def line_detect(epoch_id):
                 AllChains.clear()
 
                 #saving the initial autofit result for checking purposes
-                store_fit(mode='autofit_init',fitmod=fitlines)
+                curr_store_fit(mode='autofit_init',fitmod=fitlines)
 
                 #storing the fitmod class into a file
                 fitlines.dump(outdir+'/'+epoch_observ[0]+'_fitmod_autofit_init.pkl')
@@ -3280,23 +3255,16 @@ def line_detect(epoch_id):
 
                 #autofit
                 fitlines.global_fit(chain=False,lock_lines=True,directory=outdir,observ_id=epoch_observ[0],
-                                    split_fit=split_fit)
+                                    split_fit=split_fit,fit_scorpeon=True,fit_SAA_norm=fit_SAA_norm)
 
-                if 'NICER' in sat_indiv_good:
-                    # unfreezing the scorpeon model by resetting it
-                    xscorpeon.load(fit_SAA_norm=True)
-
-                    # refitting in case this allows something else to appear
-                    fitlines.global_fit(chain=False,lock_lines=True,directory=outdir,observ_id=epoch_observ[0],
-                                        split_fit=split_fit)
-
-                    xscorpeon.freeze()
+                #refreezing the scorpeon model
+                xscorpeon.freeze()
 
                 data_broad_postauto=allmodel_data()
 
                 AllChains.clear()
 
-                store_fit(mode='broadband_post_auto',fitmod=fitlines)
+                curr_store_fit(mode='broadband_post_auto',fitmod=fitlines)
 
                 #storing the class
                 fitlines.dump(outdir+'/'+epoch_observ[0]+'_fitmod_broadband_post_auto.pkl')
@@ -3922,8 +3890,6 @@ def line_detect(epoch_id):
                                         int(AllModels(i_grp)(group_par).link.replace('= p',''))==group_par:
                                     curr_group_drawpar[group_par-1]=''
 
-                            # breakpoint()
-                            # print("tchou")
                             AllModels(i_grp).setPars(curr_group_drawpar)
 
                         #replacing the current spectra with a fake with the same characteristics so this can be looped

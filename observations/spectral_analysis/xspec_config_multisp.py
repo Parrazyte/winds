@@ -268,6 +268,23 @@ class allmodel_data:
         Xset.chatter=xchatter
         Xset.logChatter=xlogchatter
 
+    def store(self,path):
+
+        with open(path, 'wb+') as dump_file:
+            dill.dump(self, file=dump_file)
+
+
+def load_mod(path,load_xspec=True):
+
+    with open(path, 'rb') as dump_file:
+        allmod_data= dill.load(dump_file)
+
+        if load_xspec:
+            allmod_data.load()
+
+        return allmod_data
+
+
 mod_sky=None
 mod_nxb=None
 
@@ -374,7 +391,8 @@ class scorpeon_manager:
     def __init__(self):
         self.bgload_paths=None
 
-    def load(self,bgload_paths=None,scorpeon_save=None,frozen=False,extend_SAA_norm=True,fit_SAA_norm=False):
+    def load(self,bgload_paths=None,scorpeon_save=None,load_save_freeze=True,frozen=False,extend_SAA_norm=True,
+             fit_SAA_norm=False):
 
         '''
         reloads the nicer bg model(s) from the stored path(s), and scorpeon save(s) if any
@@ -471,7 +489,7 @@ class scorpeon_manager:
 
         #loading all of the saves
         if scorpeon_save is not None:
-            scorpeon_save.load()
+            scorpeon_save.load(load_frozen=load_save_freeze)
 
         #freezing the model if asked to
         if frozen:
@@ -536,7 +554,12 @@ class scorpeon_data:
                 self.sky_save_list+=[None]
 
 
-    def load(self):
+    def load(self,load_frozen=False):
+
+        '''
+        if load_frozen is set to False, will check the current value range to avoid changing the current
+        frozen states
+        '''
 
         for i_grp in range(len(self.nxb_save_list)):
 
@@ -548,21 +571,28 @@ class scorpeon_data:
 
                 for i_par in range(mod_nxb.nParameters):
 
+                    curr_par_frozen=mod_nxb(i_par+1).frozen
+
                     mod_nxb(i_par+1).values=nxb_save.values[i_par]
 
                     mod_nxb(i_par+1).link=nxb_save.link[i_par]
 
-                    mod_nxb(i_par+1).frozen=nxb_save.frozen[i_par]
+                    mod_nxb(i_par+1).frozen=False if not load_frozen and not curr_par_frozen else nxb_save.frozen[i_par]
 
             if sky_save is not None:
                 mod_sky=AllModels(i_grp+1,modName='sky')
 
                 for i_par in range(mod_sky.nParameters):
 
+                    curr_par_frozen=mod_sky(i_par+1).frozen
+
                     mod_sky(i_par+1).values=sky_save.values[i_par]
                     mod_sky(i_par+1).link=sky_save.link[i_par]
                     mod_sky(i_par+1).frozen=sky_save.frozen[i_par]
 
+                    mod_sky(i_par+1).frozen=False if not load_frozen and not curr_par_frozen else sky_save.frozen[i_par]
+
+    
 class scorpeon_group_save:
 
     '''
@@ -710,7 +740,7 @@ def reset():
     Plot.xAxis='keV'
     Plot.add=True
     Fit.statMethod='cstat'
-
+    Fit.query='no'
 
 def model_load(model_saves,mod_name='',mod_number=1,gap_par=None,in_add=False,table_dict=None,modclass=AllModels,
                verbose=False):
@@ -959,6 +989,8 @@ def numbered_expression(expression=None,mult_conv='auto'):
 
     Also returns a dictionnary containing all custom table components and their xspec names
 
+    Note that for double * multiplications of the type X*A*B(C+D), this will give issues but this shouldn't happen
+
     '''
 
     if expression is None:
@@ -987,14 +1019,17 @@ def numbered_expression(expression=None,mult_conv='auto'):
                                    is_abs(xspec_str[j-1].split('_')[0]))):
                 xspec_str[j]='('
                 add_par+=[')']
+                count_lpar=0
                 j+=1
                 continue
             else:
                 j+=1
                 continue
 
-        #continuing directly here because there shouldn't ever be a a*b(c)
         if elem=='(':
+            if len(add_par)>0:
+                count_lpar+=1
+
             j+=1
             continue
 
@@ -1002,8 +1037,15 @@ def numbered_expression(expression=None,mult_conv='auto'):
 
             #adding an ending parenthesis if necessary
             if len(add_par)!=0:
-                xspec_str.insert(j,add_par[-1])
-                add_par=add_par[:-1]
+                #if we are following a * transformed into ( who englobes another (, we need to wait for the end
+                #parenthesis (or several of them potentially)
+                if count_lpar!=0:
+                    if elem == ')':
+                        count_lpar-=1
+                else:
+                    xspec_str.insert(j,add_par[-1])
+                    add_par=add_par[:-1]
+
             j+=1
             continue
 
@@ -1233,7 +1275,7 @@ def addcomp(compname,position='last',endmult=None,return_pos=False,modclass=AllM
 
 
     #continuum type components
-    if comp_custom=='cont' or comp_split=='nthcomp':
+    if comp_custom=='cont' or comp_split.lower()=='nthcomp':
         start_position=1
         try:
 
@@ -1286,6 +1328,9 @@ def addcomp(compname,position='last',endmult=None,return_pos=False,modclass=AllM
             named_line=False
     else:
         line=False
+
+    if compname=='c_zxipcf':
+        comp_split='cabs*zxipcf'
 
     '''component creation'''
 
@@ -1486,6 +1531,9 @@ def addcomp(compname,position='last',endmult=None,return_pos=False,modclass=AllM
     if compname=='cont_bb':
         xspec_model(gap_end-1).values=[1.0, 0.01, 0.1, 0.1, 4.0, 4.0]
 
+    if compname=='c_zxipcf':
+        #linking the cabs absorption to the zxipcf absorption
+        xspec_model(gap_end-4).link=str(gap_end-3)
     '''gaussian specifics (additive only)'''
 
     #this only works for non continuum components but we can assume gaussian lines will never be continuum components
@@ -1609,9 +1657,9 @@ def addcomp(compname,position='last',endmult=None,return_pos=False,modclass=AllM
         #high-inclination constraints
         xspec_model(gap_end-1).values=[70,1,50,50,90,90]
 
-    '''nthcomp sepcifics'''
+    '''nthcomp specifics'''
 
-    if comp_split=='nthcomp' and comp_custom is not None:
+    if comp_split.lower=='nthcomp' and comp_custom is not None:
         if comp_custom=='disk':
             xspec_model(gap_end-4).frozen=True
             xspec_model(gap_end - 3).frozen = False
@@ -2614,7 +2662,7 @@ def calc_fit(timeout=30,logfile=None,iterations=None,delchi_tresh=0.1,nonew=Fals
         Fit.nIterations=old_iterations
 
 
-def calc_error(logfile,maxredchi=1e6,param='all',timeout=60,delchi_thresh=0.1,indiv=True,give_errors=False,
+def calc_error(logfile,maxredchi=1e6,param='all',delchi_err='',timeout=60,delchi_thresh=0.1,indiv=True,give_errors=False,
                freeze_pegged=False):
 
     '''
@@ -2660,7 +2708,7 @@ def calc_error(logfile,maxredchi=1e6,param='all',timeout=60,delchi_thresh=0.1,in
     def error_func(string_par):
         try:
             #the fit returns an error when there is a new fit found so we pass the potential errors.
-            Fit.error('max '+str(float(maxredchi))+' '+string_par)
+            Fit.error('max '+str(float(maxredchi))+' '+('' if delchi_err=='' else str(float(delchi_err)))+' '+string_par)
         except:
             pass
 
@@ -2752,7 +2800,8 @@ def calc_error(logfile,maxredchi=1e6,param='all',timeout=60,delchi_thresh=0.1,in
 
                     error_pars[(int(error_str)-1)//AllModels(1).nParameters][(int(error_str)-1)%AllModels(1).nParameters]=\
                         new_errors[(int(error_str)-1)//AllModels(1).nParameters][(int(error_str)-1)%AllModels(1).nParameters]
-
+                else:
+                    error_pars=new_errors
 
             print('\nParsing the logs to see if a new minimum was found...')
 
@@ -2812,14 +2861,14 @@ class fitmod:
     '''
 
     def __init__(self,complist,logfile,logfile_write,absval=None,interact_groups=None,idlist=None,prev_fitmod=None,
-                 nth_gamma=None):
+                 nth_gamma=None,sat_list=None):
 
         #defining empty variables
         self.name_complist=complist
         self.includedlist=[]
         self.logfile=logfile
         self.logfile_write=logfile_write
-
+        self.sat_list=sat_list
         self.idlist=idlist if idlist!=None else np.array([None]*len(complist))
         self.interact_groups=interact_groups
         self.complist=[]
@@ -3009,7 +3058,8 @@ class fitmod:
 
         return comps_errlocked
 
-    def add_allcomps(self, chain=False, lock_lines=False, no_abslines=False, nomixline=True, split_fit=True):
+    def add_allcomps(self, chain=False, lock_lines=False, no_abslines=False, nomixline=True, split_fit=True,
+                     fit_scorpeon=False,fit_SAA_norm=False):
 
         '''
         Adds all components from the excl_list in the order of the list
@@ -3207,6 +3257,16 @@ class fitmod:
 
         self.update_fitcomps()
 
+        #fitting the scorpeon model if asked to
+        if fit_scorpeon and 'NICER' in self.sat_list:
+            # unfreezing the scorpeon model by resetting it
+            xscorpeon.load('auto',frozen=False,fit_SAA_norm=fit_SAA_norm)
+
+        mod_test=allmodel_data()
+
+        #computing a fit with the scorpeon model on
+        calc_fit()
+
         #adding calibration components
         for i_excomp,component in enumerate(curr_exclist):
 
@@ -3223,7 +3283,7 @@ class fitmod:
                 continue
 
             self.includedlist = component.addtomod(fixed_vals=[self.fixed_abs] if component.absorption else \
-                                                              [self.fixed_gamma] if 'nthcomp' in component.compname\
+                                                              [self.fixed_gamma] if 'nthcomp' in component.compname.lower()\
                                                               else None,incl_list=self.includedlist)
             self.update_fitcomps()
 
@@ -3328,7 +3388,7 @@ class fitmod:
             prev_includedlist=copy(self.includedlist)
 
             self.includedlist=component.addtomod(fixed_vals=[self.fixed_abs] if component.absorption else \
-                                                              [self.fixed_gamma] if 'nthComp' in component.compname\
+                                                              [self.fixed_gamma] if 'nthcomp' in component.compname.lower()\
                                                               else None,incl_list=self.includedlist)
 
             #updating the fitcomps before anything else
@@ -3530,7 +3590,7 @@ class fitmod:
 
         #re-adding it with its fit already loaded
         self.includedlist=bestcomp.addtomod(fixed_vals=[self.fixed_abs] if component.absorption else \
-                                                              [self.fixed_gamma] if 'nthComp' in component.compname\
+                                                              [self.fixed_gamma] if 'nthcomp' in component.compname.lower()\
                                                               else None,incl_list=self.includedlist,fitted=True)
 
         #updating the fitcomps before anything else
@@ -3926,7 +3986,8 @@ class fitmod:
         return parlist_comps
 
     def global_fit(self,chain=False,directory=None,observ_id=None,freeze_final_pegged=True,no_abslines=False,lock_lines=False,nomixline=True,split_fit=True,
-                   ftest_threshold=def_ftest_threshold,ftest_leeway=def_ftest_leeway,method='opt'):
+                   ftest_threshold=def_ftest_threshold,ftest_leeway=def_ftest_leeway,
+                   method='opt',fit_scorpeon=False,fit_SAA_norm=False):
 
         '''
         Fits components in diffrerent manners:
@@ -3934,6 +3995,12 @@ class fitmod:
          -'force_add'   : forces the addition of all available component in the order of the list, then
                           allows to delete them if they are not significant
          -'opt'         : progressively in order of fit significance when being added 1 by 1
+
+        -fit_scorpeon: fits the scorpeon model when NICER is part of the loaded satellites (with sat_list)
+            in force_all and force_all modes,will fit before adding calibration components
+            in opt mode (normally done after continuum fits) will fit it AFTER the component addition test
+
+        in opt mode, the scorpeon fit
 
         Components are added by default at the end of the model and inside global multiplicative components,
         except when keywords like glob or cont change this.
@@ -3952,7 +4019,8 @@ class fitmod:
         #of course we need to take off the placeholders to compare the lists
 
         if method in ['force_all','force_add']:
-            self.add_allcomps(chain=chain,lock_lines=lock_lines,no_abslines=no_abslines,nomixline=nomixline,split_fit=split_fit)
+            self.add_allcomps(chain=chain,lock_lines=lock_lines,no_abslines=no_abslines,nomixline=nomixline,
+                              split_fit=split_fit,fit_scorpeon=fit_scorpeon,fit_SAA_norm=fit_SAA_norm)
         elif method=='opt':
             while [elem for elem in self.includedlist if elem is not None]!=self.complist:
 
@@ -3969,6 +4037,20 @@ class fitmod:
                 #testing for line inversion when available
                 if not lock_lines and nomixline:
                     self.test_mix_lines(chain)
+
+            # fitting the scorpeon model if asked to
+            if fit_scorpeon and 'NICER' in self.sat_list:
+
+                curr_mod=allmodel_data()
+
+                curr_scorpeon=curr_mod.scorpeon
+
+                # unfreezing the scorpeon model by resetting it (here considering previous saves but with the freeze
+                # state of the first auto load)
+                xscorpeon.load('auto',frozen=False, scorpeon_save=curr_scorpeon,fit_SAA_norm=fit_SAA_norm,
+                               load_save_freeze=False)
+
+                calc_fit()
 
         '''Checking if unlinking the energies of each absorption line is statistically significant'''
 
@@ -5437,14 +5519,22 @@ class plot_save:
             #adding default model component names if there is a default model
             if '' in list_models:
 
+                mod_expression,mod_tables_dict=numbered_expression()
+
                 #there are addcomps for the default models only if it has more than one additive components
                 #we thus need to compare the total number of addcomps with the other model addcomps
                 if len(self.addcomps[0])>(2 if 'nxb' in list_models else 0) + (2 if 'sky' in list_models else 0):
+
                     for elemcomp in AllModels(1).componentNames:
 
-                        #restricting to additive components
-                        if elemcomp.split('_')[0] not in xspec_multmods:
-                            self.addcompnames+=[elemcomp]
+                        #restricting to additive tables for table models
+                        if elemcomp in list(mod_tables_dict.keys()):
+                            if 'atable{' in mod_tables_dict[elemcomp]:
+                                self.addcompnames += [elemcomp]
+                        else:
+                            #restricting to additive components
+                            if elemcomp.split('_')[0] not in xspec_multmods:
+                                self.addcompnames+=[elemcomp]
 
             #adding NICER background component Names
             if 'nxb' in list_models:
@@ -5765,6 +5855,26 @@ def xPlot(types,axes_input=None,plot_saves_input=None,plot_arg=None,includedlist
         return axes
     else:
         return None,None
+
+def store_fit(mode, epoch_id, outdir, logfile, fitmod=None):
+    '''
+    plots and saves various informations about a fit
+    '''
+
+    # Since the automatic rescaling goes haywire when using the add command, we manually rescale (with our own custom command)
+    rescale(auto=True)
+
+    Plot_screen("ldata,ratio,delchi", outdir + '/' + epoch_id + '_screen_xspec_' + mode,
+                includedlist=None if fitmod is None else fitmod.includedlist)
+
+    # saving the model str
+    catch_model_str(logfile, savepath=outdir + '/' + epoch_id + '_mod_' + mode + '.txt')
+
+    if os.path.isfile(outdir + '/' + epoch_id + '_mod_' + mode + '.xcm'):
+        os.remove(outdir + '/' + epoch_id + '_mod_' + mode + '.xcm')
+
+    # storing the current configuration and model
+    Xset.save(outdir + '/' + epoch_id + '_mod_' + mode + '.xcm', info='a')
 
 def Plot_screen(datatype,path,mode='matplotlib',xspec_windid=None,includedlist=None):
 

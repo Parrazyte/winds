@@ -57,13 +57,13 @@ ax_EW.set_xlabel('EW treshold for detection')
 marker_sigmas=['+','x','d']
 ls_sigmas=[':','--','-']
 
-[ax_EW.plot(arr_XMM.T[1+i_sigma],arr_XMM.T[0],label=str(1+i_sigma)+r' $\sigma$',
+[ax_EW.plot(arr_XMM.T[1+i_sigma],arr_XMM.T[0],label=str(1+i_sigma)+' XMM',
                marker=marker_sigmas[i_sigma],ls=ls_sigmas[i_sigma],color='red') for i_sigma in id_sigmas]
 
-[ax_EW.plot(arr_Chandra.T[1+i_sigma],arr_Chandra.T[0],label='',
+[ax_EW.plot(arr_Chandra.T[1+i_sigma],arr_Chandra.T[0],label=str(1+i_sigma)+' Chandra',
                marker=marker_sigmas[i_sigma],ls=ls_sigmas[i_sigma],color='blue') for i_sigma in id_sigmas]
 
-[ax_EW.plot(arr_XRISM.T[1+i_sigma],arr_XRISM.T[0],label='',
+[ax_EW.plot(arr_XRISM.T[1+i_sigma],arr_XRISM.T[0],label=str(1+i_sigma)+' XRISM',
                marker=marker_sigmas[i_sigma],ls=ls_sigmas[i_sigma],color='violet') for i_sigma in id_sigmas]
 
 plt.suptitle('Line EW constrains, '+(' with ' if fakestats else ' without ')+'statistical fluctuations.\n'+

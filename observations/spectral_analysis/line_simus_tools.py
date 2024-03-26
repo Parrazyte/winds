@@ -10,7 +10,7 @@ from fitting_tools import sign_sigmas_delchi_1dof
 #custom script with a few shorter xspec commands
 from xspec_config_multisp import allmodel_data,model_load,addcomp,Pset,Pnull,rescale,reset,Plot_screen,store_plot,freeze,allfreeze,unfreeze,\
                          calc_error,delcomp,fitmod,calc_fit,xcolors_grp,xPlot,xscorpeon,catch_model_str,\
-                         load_fitmod, ignore_data_indiv,par_degroup,xspec_globcomps
+                         load_fitmod, ignore_data_indiv,par_degroup,xspec_globcomps,is_abs,lines_e_dict,calc_EW
 
 reset()
 Fit.query='yes'
@@ -46,7 +46,7 @@ def line_simu(mod_path=None,mode='ew_lim',rmf_path='XRISM_Hp',arf_path='XRISM_po
               regroup=False,fakestats=True,n_iter=10,
               line='FeKa26abs',line_v=[-3000,3000],line_w=[0.005,0.005],
               width_test_val=0.005,width_EW_resol=0.05,width_EW_inter=[0.1,100],
-              EW_bshift_lim=20,width_bshift_lim=0.005):
+              EW_bshift_lim=20,width_bshift_val=0.005,sampl_gabs_string='-3_2_500'):
 
     '''
     Computes simulations of line detection with given rmf and paths
@@ -114,6 +114,13 @@ def line_simu(mod_path=None,mode='ew_lim',rmf_path='XRISM_Hp',arf_path='XRISM_po
             -width_EW_resol: resolution for when to stop when trying to find the limit
                              for computing the width of the line, in RELATIVE units (so default value is 5% error)
 
+        bshfit_err mode (for now only for absorption lines)
+            -puts a gabs at a 0 velocity to avoid issues with unrealistic shapes for low widths
+            -computes a single time the strength that gives the desired EW (EW_bshift_lim)
+            -line created with width_bshift_lim
+            -fits the line after creation, computes the 1/2/3 sigma errors on the blueshift
+
+            sampl_gabs_string: np.logspace parameters for sampling the gabs strength to approximate the EW
     #TODO: add arf/rmf cutting
     #TODO: add low width_EW_interval threshold
 
@@ -328,6 +335,7 @@ def line_simu(mod_path=None,mode='ew_lim',rmf_path='XRISM_Hp',arf_path='XRISM_po
         np.savetxt('ew_lim_mod'+
                    ('_regroup' if regroup else '')+
                    ('_nostat' if not fakestats else '')+
+                    '_'+str(expos)+'ks'+
                    '_'+str(n_iter)+'_iter'+
                    '_width_'+str(line_w[0])+'_'+str(line_w[1])+'.txt',save_arr,header='\n'.join(header_elems))
 
@@ -343,9 +351,98 @@ def line_simu(mod_path=None,mode='ew_lim',rmf_path='XRISM_Hp',arf_path='XRISM_po
         bshift_err_arr=np.zeros((n_flux,3))
 
         '''
-        The method here is to parse the EW interval by multipling/diving by progressively lower factors until
-        we find the right value (binary search). Here we do it in logspace because we don't know what to expect
+        The method is:
+        1. Compute the strength of the gabs that will give the right EW \
+         (will be independant of the continuum flux so can be used for all flux values)
+        2. Loop on the flux values
+        3. For each flux value, a given number of times (to average the fluctuations),
+           fake the model with the right constant factor 
+        4. Fit a continuum, fix it, add a gabs, fit it, compute the errors of the blueshift
+        6. Store the median of the shift distribution for each flux values
         '''
+        # reloading the continuum model
+        mod_cont.load()
+
+        # computing where to put the test line
+        line_pos = 1 + sum([is_abs(comp) for comp in AllModels(1).componentNames]) \
+                   + sum([comp in xspec_globcomps for comp in AllModels(1).componentNames])
+
+        print('Will add the gabs line in position ' + str(line_pos))
+
+        # adding the test line
+        comp_par, comp_num = addcomp('gabs', position=line_pos, endmult=AllModels(1).componentNames[-1],return_pos=True)
+
+        line_E = lines_e_dict[line][0]
+        AllModels(1)(comp_par[0]).values = line_E
+
+        # putting an even blueshift range
+        max_bshift = max(abs(lines_e_dict[line][1]), lines_e_dict[line][2])
+        eshift_range = [line_E * (1 - max_bshift / 299792.458), line_E * (1 + max_bshift / 299792.458)]
+
+        # fixing the energy
+        AllModels(1)(comp_par[0]).values = [line_E, line_E / 1000, eshift_range[0], eshift_range[0],
+                                            eshift_range[1], eshift_range[1]]
+
+        # and the width at the desired value
+        AllModels(1)(comp_par[-2]).values = width_bshift_val
+
+        # AllModels(1)(comp_par[2]).frozen=True
+
+        # faking a spectrum to get the model values (to compute the EW because xspec is garbage
+        AllData.fakeit(noWrite=True)
+
+        # making a range of energies within 10 sigma of the line
+        AllModels.setEnergies(str(line_E-10*width_bshift_val)+' '+str(line_E+10*width_bshift_val)+' 1000 lin')
+
+        e_vals=AllModels(1).energies(1)
+
+        e_vals_med=[(e_vals[i+1]+e_vals[i])/2 for i in range(len(e_vals)-1)]
+
+        mod_line_list=[]
+
+        n_vals_sampl_strength=100
+
+        #sample of gaussian strength
+        sampl_gabs_str_vals=np.array(sampl_gabs_string.split('_')).astype(float)
+        sampl_gabs_strength=np.logspace(sampl_gabs_str_vals[0],sampl_gabs_str_vals[1],int(sampl_gabs_str_vals[2]))
+
+        for elem_str in sampl_gabs_strength:
+            AllModels(1)(comp_par[-1]).values=elem_str
+            mod_line_list+=[AllModels(1).values(1)]
+
+        mod_gabs_temp=allmodel_data()
+
+        delcomp('gabs')
+
+        mod_cont_vals=AllModels(1).values(1)
+
+        indiv_EW=-np.array([calc_EW(e_vals_med,mod_cont_vals,mod_line_list[id]) for id in range(len(mod_line_list))])\
+                 *1000
+
+        min_delta_EW=min(abs(indiv_EW-EW_bshift_lim))
+
+        assert min_delta_EW-EW_bshift_lim<1, 'Unsufficient gabs strength sampling'
+
+        gabs_str_EW_select=sampl_gabs_strength[abs(indiv_EW-EW_bshift_lim).argmin()]
+
+        print('Selecting gabs strength for an EW of %.3e'%(indiv_EW[abs(indiv_EW-EW_bshift_lim).argmin()])+' eV')
+        #selecting the right value
+
+        mod_gabs_temp.load()
+
+        AllModels(1)(comp_par[-1]).values = gabs_str_EW_select
+
+        freeze()
+
+        #for checking purposes
+        # plt.figure()
+        # [plt.plot(mod_line_list[i]) for i in range(len(mod_line_list))]
+        # plt.plot(mod_cont,ls='--')
+
+        mod_gabs=allmodel_data()
+
+        #resetting the energy range
+        AllModels.setEnergies('reset')
 
         with tqdm(total=n_flux*n_iter) as pbar:
             for i_flux,elem_flux in enumerate(flux_inter):
@@ -354,50 +451,14 @@ def line_simu(mod_path=None,mode='ew_lim',rmf_path='XRISM_Hp',arf_path='XRISM_po
 
                 for i_iter in range(n_iter):
 
-                    #reloading the continuum model
-                    mod_cont.load()
-
-                    #adjusting the luminosity
-                    AllModels(1)(1).values = elem_flux/flux_base
-
-                    #adding the test line
-                    comp_par, comp_num = addcomp(line + '_agaussian', position='lastinall',return_pos=True)
-
-                    #storing the line energy
-                    line_E=AllModels(1)(comp_par[1]).values[0]
-
-                    #putting an even blueshift range
-                    bshift_vals=AllModels(1)(comp_par[0]).values
-                    max_bshift_delta=max(bshift_vals[0]-bshift_vals[3],bshift_vals[5]-bshift_vals[0])
-
-                    bshift_min=bshift_vals[0]-max_bshift_delta
-                    bshift_max=bshift_vals[0]+max_bshift_delta
-
-                    AllModels(1)(comp_par[0]).values=AllModels(1)(comp_par[0]).values[:2]+\
-                                                     [bshift_min,bshift_min,bshift_max,bshift_max]
-                    # freezing the blueshift at 0
-                    AllModels(1)(comp_par[0]).frozen = True
-
-                    # and the width at the desired value
-                    AllModels(1)(comp_par[2]).values = width_bshift_lim
-
-                    AllModels(1)(comp_par[2]).frozen=True
-
-                    # faking a spectrum to get the eqwidth because xspec is garbage
-                    AllData.fakeit(noWrite=True)
-                    AllModels.eqwidth(int(comp_num[-1]))
-
-                    # computing the normalization factor (with a negative so we can keep our EW in positive values
-                    norm_EW_factor = -AllModels(1)(comp_par[-1]).values[0]/(AllData(1).eqwidth[0]*1e3)
-
-                    #choosing the right EW
-                    AllModels(1)(comp_par[-1]).values=norm_EW_factor*EW_bshift_lim
-
-                    #storing the model
-                    mod_bshift_base=allmodel_data()
-                    freeze()
-
                     AllData.clear()
+
+                    mod_gabs.load()
+
+                    # adjusting the luminosity
+                    AllModels(1)(1).values = elem_flux / flux_base
+
+                    freeze()
 
                     #faking the spectrum with the right parameters
                     AllData.fakeit(nSpectra=len(fakeset), settings=fakeset, applyStats=fakestats)
@@ -423,30 +484,38 @@ def line_simu(mod_path=None,mode='ew_lim',rmf_path='XRISM_Hp',arf_path='XRISM_po
                         #ignoring everything outside of the line energy to avoid issues because of too many bins
                         AllData.ignore('**-'+str(line_E-1)+' '+str(line_E+1)+'-**')
 
+                    # adding the test line
+                    comp_par, comp_num = addcomp('gabs', position=line_pos,
+                                                 endmult=AllModels(1).componentNames[-1],return_pos=True)
 
-                    #adding the test line
-                    comp_par, comp_num = addcomp(line + '_agaussian', position='lastinall',return_pos=True)
+                    line_E = lines_e_dict[line][0]
+                    AllModels(1)(comp_par[0]).values = line_E
 
-                    AllModels(1)(comp_par[0]).values=AllModels(1)(comp_par[0]).values[:2]+\
-                                                     [bshift_min,bshift_min,bshift_max,bshift_max]
+                    # putting an even blueshift range
+                    max_bshift = max(abs(lines_e_dict[line][1]), lines_e_dict[line][2])
+                    eshift_range = [line_E * (1 - max_bshift / 299792.458), line_E * (1 + max_bshift / 299792.458)]
+
+                    # giving the energy value
+                    AllModels(1)(comp_par[0]).values = [line_E, line_E / 1000, eshift_range[0], eshift_range[0],
+                                                        eshift_range[1], eshift_range[1]]
+
                     # and the width at the desired value
-                    AllModels(1)(comp_par[2]).values = width_bshift_lim
+                    AllModels(1)(comp_par[2]).values = width_bshift_val
 
-                    max_width_range=AllModels(1)(comp_par[2]).values[-1]
-
-                    AllModels(1)(comp_par[2]).frozen=False
-
-                    #fitting to get an estimate on the blueshift
+                    #fitting a first time
                     calc_fit()
 
-                    #trying to converge on the correct luminosity if the fit if it gets stuck
-                    if XRISM_sp:
-                        #steppar on the width because that is the difficult parameter to compute
-                        Fit.steppar('log '+str(comp_par[2])
-                                    + ' ' + str(width_bshift_lim/10)
-                                    + ' ' + str(min(width_bshift_lim*10,max_width_range)) + ' 20')
-                    else:
-                        Fit.steppar(str(comp_par[0])+' '+str(bshift_min)+' '+str(bshift_max)+' 100')
+                    #computing the error on the blueshift just to ensure we get the right value
+                    Fit.error(str(comp_par[0]))
+
+                    # #trying to converge on the correct luminosity if the fit if it gets stuck
+                    # if XRISM_sp:
+                    #     #steppar on the width because that is the difficult parameter to compute
+                    #     Fit.steppar('log '+str(comp_par[2])
+                    #                 + ' ' + str(width_bshift_val/10)
+                    #                 + ' ' + str(min(width_bshift_val*10,max_width_range)) + ' 20')
+                    # else:
+                    #     Fit.steppar(str(comp_par[0])+' '+str(bshift_min)+' '+str(bshift_max)+' 100')
 
                     #with XRISM, computing the errors while letting the fit improve is too long,
                     #so we block the fit improvement until the end of the error computation
@@ -455,35 +524,34 @@ def line_simu(mod_path=None,mode='ew_lim',rmf_path='XRISM_Hp',arf_path='XRISM_po
                         Fit.criticalDelta=1e9
                         Fit.query='no'
 
-                    #the first error computation will also help find the best fit
-                    print('Computing bshift error at 3 sigma')
-
-                    # computing the blueshift error of the line
-                    err_3sig = calc_error(param=str(comp_par[0]), logfile=logfile, delchi_err=9., give_errors=True,
-                                          timeout=30 if XRISM_sp else 5,indiv=False)
+                    # #the first error computation will also help find the best fit
+                    # print('Computing bshift error at 3 sigma')
+                    #
+                    # # computing the blueshift error of the line
+                    # err_3sig = calc_error(param=str(comp_par[0]), logfile=logfile, delchi_err=9., give_errors=True,
+                    #                       timeout=30 if XRISM_sp else 5,indiv=False)
 
                     if Fit.statistic / Fit.dof > 2:
                         print('Issue with fake continuum fitting.')
-                        breakpoint()
+                        # breakpoint()
                         pass
 
-                    err_3sig_rel = err_3sig[0][comp_par[0]-1]
+                    # err_3sig_rel = err_3sig[0][comp_par[0]-1]
 
-                    if max(err_3sig_rel)==0:
-                        bshift_err_distrib[2][i_iter]=0
-                    else:
-                        # adding the main value because it can be false too
-                        err_3sig_full = err_3sig_rel + AllModels(1)(comp_par[0]).values[0]
-
-                        bshift_err_distrib[2][i_iter] = max(abs(err_3sig_full))
+                    # if max(err_3sig_rel)==0:
+                    #     bshift_err_distrib[2][i_iter]=0
+                    # else:
+                    #     # adding the main value because it can be false too
+                    #     err_3sig_full = err_3sig_rel + AllModels(1)(comp_par[0]).values[0]
+                    #
+                    #     bshift_err_distrib[2][i_iter] = max(abs(err_3sig_full))
 
                     print('Computing bshift error at 1 sigma')
-                    #
-                    # curr_delta=Fit.criticalDelta
-                    # Fit.criticalDelta=1e9
+
 
                     #computing the blueshift error of the line
-                    err_1sig = calc_error(param=str(comp_par[0]), logfile=logfile, delchi_err=1., give_errors=True,
+                    err_1sig = calc_error(param=str(comp_par[0]), logfile=logfile,
+                                          delchi_err=1., give_errors=True,
                                           timeout=30 if XRISM_sp else 5,indiv=False)
 
                     err_1sig_rel = err_1sig[0][comp_par[0]-1]
@@ -495,12 +563,13 @@ def line_simu(mod_path=None,mode='ew_lim',rmf_path='XRISM_Hp',arf_path='XRISM_po
                         # adding the main value because it can be false too
                         err_1sig_full = err_1sig_rel + AllModels(1)(comp_par[0]).values[0]
 
-                        bshift_err_distrib[0][i_iter] = max(abs(err_1sig_full))
+                        bshift_err_distrib[0][i_iter] = max(abs(err_1sig_full-line_E))/line_E*299792.458
 
                     print('Computing bshift error at 2 sigma')
 
                     # computing the blueshift error of the line
-                    err_2sig= calc_error(param=str(comp_par[0]), logfile=logfile, delchi_err=4., give_errors=True,
+                    err_2sig= calc_error(param=str(comp_par[0]), logfile=logfile,
+                                         delchi_err=4., give_errors=True,
                                           timeout=30 if XRISM_sp else 5,indiv=False)
 
                     err_2sig_rel=err_2sig[0][comp_par[0]-1]
@@ -511,12 +580,30 @@ def line_simu(mod_path=None,mode='ew_lim',rmf_path='XRISM_Hp',arf_path='XRISM_po
                         # adding the main value because it can be false too
                         err_2sig_full = err_2sig_rel + AllModels(1)(comp_par[0]).values[0]
 
-                        bshift_err_distrib[1][i_iter] = max(abs(err_2sig_full))
+                        bshift_err_distrib[1][i_iter] = max(abs(err_2sig_full-line_E))/line_E*299792.458
 
                     #putting back the fit delta to its right value
                     if XRISM_sp:
                         Fit.criticalDelta=curr_delta
                         Fit.query='yes'
+
+                    print('Computing bshift error at 3 sigma')
+
+                    #computing the blueshift error of the line
+                    err_3sig = calc_error(param=str(comp_par[0]), logfile=logfile,
+                                          delchi_err=9., give_errors=True,
+                                          timeout=30 if XRISM_sp else 5,indiv=False)
+
+                    err_3sig_rel = err_3sig[0][comp_par[0]-1]
+
+                    #storing no error if the value is unconstrained
+                    if max(err_3sig_rel) == 0:
+                        bshift_err_distrib[2][i_iter] = 0
+                    else:
+                        # adding the main value because it can be false too
+                        err_3sig_full = err_3sig_rel + AllModels(1)(comp_par[0]).values[0]
+
+                        bshift_err_distrib[2][i_iter] = max(abs(err_3sig_full-line_E))/line_E*299792.458
 
                     # if (bshift_err_distrib.T[i_iter]==0).any():
                     #     breakpoint()
@@ -530,7 +617,6 @@ def line_simu(mod_path=None,mode='ew_lim',rmf_path='XRISM_Hp',arf_path='XRISM_po
 
                 np.savetxt('bshift_err_arr.txt', bshift_err_arr)
 
-
         save_arr=np.concatenate((np.array([flux_inter]),bshift_err_arr.T)).T
 
         header_elems=['mod_path '+str(mod_path),
@@ -539,15 +625,16 @@ def line_simu(mod_path=None,mode='ew_lim',rmf_path='XRISM_Hp',arf_path='XRISM_po
                       'Fake stats '+str(fakestats),
                       'n_iter '+str(n_iter),
                       'flux_range logspace('+flux_range+') (e-10 erg/s/cm²) ',
-                      'line '+line,'line_EW '+str(EW_bshift_lim)+' (km/s)','line_w '+str(width_bshift_lim)+' (keV)',
+                      'line '+line,'line_EW '+str(EW_bshift_lim)+' (km/s)','line_w '+str(width_bshift_val)+' (keV)',
                       'columns: flux | bshift_limit at 1/2/3 sigma (eV)']
 
         np.savetxt('bshift_err_mod'+
                    ('_regroup' if regroup else '')+
                    ('_nostat' if not fakestats else '')+
+                   '_' + str(expos) + 'ks' +
                    '_'+str(n_iter)+'_iter'+
                    '_EW_'+str(EW_bshift_lim)+
-                   '_width_'+str(width_bshift_lim)+'.txt',save_arr,header='\n'.join(header_elems))
+                   '_width_'+str(width_bshift_val)+'.txt',save_arr,header='\n'.join(header_elems))
 
         Xset.chatter=old_chatter
 
@@ -885,6 +972,7 @@ def line_simu(mod_path=None,mode='ew_lim',rmf_path='XRISM_Hp',arf_path='XRISM_po
                       'resolution fraction '+str(width_EW_resol),
                       'columns: flux ew_limit at 1/2/3 sigma']
 
+        #to be updated
         np.savetxt('ew_lim_widthdet_mod'+('_regroup' if regroup else '')+('_nostat' if not fakestats else '')+
                    '_width_'+str(line_w[0])+'_'+str(line_w[1])+'.txt',save_arr,header='\n'.join(header_elems))
         return flux_inter,width_lim_arr

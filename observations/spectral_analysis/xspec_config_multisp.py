@@ -10,6 +10,7 @@ import matplotlib as mpl
 import matplotlib.pyplot as plt
 
 from astropy.io import fits
+from scipy.integrate import trapezoid
 
 '''
 This script can be imported just for load_fitmod in the streamlit pipelines
@@ -86,10 +87,12 @@ def is_abs(comp_split):
 
     return ('abs' in comp_split and comp_split!='gabs') or 'TB' in comp_split\
                 or 'tbnew' in comp_split or 'tbnew_gas' in comp_split
+
 xspec_globcomps=\
 '''
 constant    crabcorr
 '''.split()
+
 
 #hopefully there's enough there
 xcolors_grp=['black','red','limegreen','blue','cyan','purple','yellow',
@@ -1066,6 +1069,142 @@ def numbered_expression(expression=None,mult_conv='auto'):
 
     return ''.join(xspec_str),dict_tables
 
+def calc_EW(x_vals,y_cont,y_line,broad_vs_resol=True):
+
+    '''
+    Needs the plot to be in energies
+    return values in keV
+
+    broad_vs_vresol: the line doesn't take a negligible (<100 bins) part of the energies
+    '''
+
+    assert Plot.xAxis=='keV', 'Issue: needs xAxis to be set to keV'
+
+    #converting inputs to arrays to avoid issues with selection
+    x_vals_use=np.array(x_vals)
+    y_cont_use=np.array(y_cont)
+    y_line_use=np.array(y_line)
+    
+    line_int=trapezoid(y_line_use-y_cont_use,x_vals_use)
+
+    line_type='em' if line_int>0 else 'abs'
+
+    if line_type=='abs':
+        line_center_id=(y_line_use/y_cont_use).argmin()
+    elif line_type=='em':
+        line_center_id = (y_line_use/ y_cont_use).argmax()
+
+    delta_id_max=min(line_center_id,len(x_vals_use)-line_center_id)
+
+    #since the continuum isn't constant we compute the integral to get the values for different EWs
+    cont_int=[trapezoid(y_cont_use[line_center_id-(i+1)//2:line_center_id+(i//2)],
+                        x_vals_use[line_center_id-(i+1)//2:line_center_id+(i//2)])\
+              for i in range(min(100,delta_id_max*2) if not broad_vs_resol else delta_id_max*2)]
+
+    eners=[x_vals_use[line_center_id-(i+1)//2:line_center_id+(i//2)]\
+              for i in range(min(100,delta_id_max*2) if not broad_vs_resol else delta_id_max*2)]
+
+
+    #computing where the line integral matches the continuum integral
+
+    line_w_id=abs(abs(line_int)-cont_int).argmin()
+
+    line_w=(-1 if line_type=='abs' else 1) * (x_vals_use[line_center_id+(line_w_id//2)-1]-\
+                                             x_vals_use[line_center_id-(line_w_id+1)//2])
+
+    return round(line_w,6)
+
+# mask=x>6.5 & x<7.5
+# mask=np.array(x)>6.5 & np.array(x)<7.5
+# mask
+# len(mask)
+# x=AllModels(1).energies(1)
+# mask=(np.array(x)>6.5) & (np.array(x)<7.5)
+# sum(mask)
+# y=np.array(y)
+# x=np.array(x)
+# trapezoid(y,x)
+# trapezoid(y[mask],x[mask])
+# x_vals=np.array([(x[i+1]+x[i])/2 for i in range(len(x)-1)])
+# len(x_vals)
+# x
+# x_vals
+# mask=(np.array(x_vals)>6.5) & (np.array(x_vals)<7.5)
+# AllModels.show()
+# delcomp('gabs')
+# y_new=AllModels(1).values(1)
+# y_new=np.array(AllModels(1).values(1))
+# trapezoid(y_new[mask],x_vals[mask])
+# trapezoid(y[mask],x_vals[mask])
+# x_vals[mask][0]
+# 5.139482816100655e-07- 5.227880037443472e-07
+# test=(5.139482816100655e-07- 5.227880037443472e-07)
+# y_vals[0]
+# y[0]
+# y[-1]
+# y[mask][0]
+# y[mask][-1]
+# y[mask][abs(x_vals-6.97).argmin()]
+# y[mask][abs(x_vals[mask]-6.97).argmin()]
+# y_vals[mask][abs(x_vals[mask]-6.97).argmin()]
+# y_loc=y_new[mask][abs(x_vals[mask]-6.97).argmin()]
+# test=(5.139482816100655e-07- 5.227880037443472e-07)*y_loc
+# test=(5.139482816100655e-07- 5.227880037443472e-07)/y_loc
+# x_vals[abs(x_vals[mask]-6.97).argmin()]
+# y_new[mask][abs(x_vals[mask]-6.97).argmin()]
+# y_new[mask][abs(x_vals[mask]-6.97).argmin()-1]
+# y_new[mask][abs(x_vals[mask]-6.90).argmin()]
+# x[mask][abs(x_vals[mask]-6.90).argmin()]
+# x_vals[mask][abs(x_vals[mask]-6.90).argmin()]
+# x_vals[mask][abs(x_vals[mask]-6.97).argmin()]
+# x_vals[mask][abs(x_vals[mask]-6.97).argmin()-1]
+# y/y_new.argmax()
+# (y/y_new).argmax()
+# y_new.argmin()
+# y_new
+# (y[mask]/y_new[mask]).argmax()
+# y_mask
+# y
+# y[mask]
+# y_new[mask]
+# (y[mask]/y_new[mask]).max()
+# (y[mask]/y_new[mask]).min()
+# y[mask]/y_new[mask]
+# (y[mask]/y_new[mask]).argmin()
+# x[mask][931]
+# x_vals[mask][931]
+# x_vals[mask][932]
+# x_vals[mask][933]
+# x_vals[mask][934]
+# x_vals[mask][935]
+# mod=[trapezoid(x_vals,y_new[931-i,931+i]) for i in range(1000)]
+# mod=[trapezoid(x_vals[mask][931-i:931+i],y_new[mask][931-i,931+i]) for i in range(1000)]
+# mod=[trapezoid(x_vals[mask][931-i:931+i],y_new[mask][931-i:931+i]) for i in range(1000)]
+# i=10
+# [931-i,931+i]
+# y_new[mask][931-i:931+i]
+# mod=[trapezoid(x_vals[mask][931-i:931+i],y_new[mask][931-i:931+i]) for i in range(100)]
+# trapezoid(x_vals[mask][931-i:931+i],y_new[mask][931-i:931+i])
+# trapezoid(x_vals[mask][931-i:931+i],y_new[mask][931-i:931+i]*10)
+# trapezoid(x_vals[mask][931-i:931+i],y_new[mask][931-i:931+i]*100000)
+# x_vals[mask][931-i:931+i]
+# trapezoid(y_new[mask][931-i:931+i]*100000,x_vals[mask][931-i:931+i])
+# trapezoid(y_new[mask][931-i:931+i],x_vals[mask][931-i:931+i])
+# test=(5.227880037443472e-07-5.139482816100655e-07)
+# test
+# mod=[trapezoid(y_new[mask][931-i:931+i],x_vals[mask][931-i:931+i]) for i in range(100)]
+# mod
+# abs(mod-test).argmin()
+# abs(mod-test)
+# abs(np.array(mod)-test).argmin()
+# x_vals[931-17]
+# x_vals[mask][931+17]
+# x_vals[mask][931-17]
+# 6.974250078-6.95724988
+# x_vals[mask][931-16]
+# x_vals[mask][931+17]-x_vals[mask][931-17]
+# x_vals[mask][931+16]-x_vals[mask][931-16]
+
 '''
 In order to allow the use of custom atable & mtable components in the fitting architecture,
 we need to replace the mtable model names (which appear when using AllModels.componentNames) with their fits table
@@ -1659,7 +1798,7 @@ def addcomp(compname,position='last',endmult=None,return_pos=False,modclass=AllM
 
     '''nthcomp specifics'''
 
-    if comp_split.lower=='nthcomp' and comp_custom is not None:
+    if comp_split.lower()=='nthcomp' and comp_custom is not None:
         if comp_custom=='disk':
             xspec_model(gap_end-4).frozen=True
             xspec_model(gap_end - 3).frozen = False

@@ -103,7 +103,7 @@ ap.add_argument('-catch','--catch_errors',help='Catch errors while running the d
 
 #global choices
 ap.add_argument("-a","--action",nargs='?',help='Give which action(s) to proceed,separated by comas.',
-                default='l,m',type=str)
+                default='c,1,gti,',type=str)
 #default: 1,gti,fs,l,g,m,c
 
 ap.add_argument("-over",nargs=1,help='overwrite computed tasks (i.e. with products in the batch, or merge directory\
@@ -128,6 +128,12 @@ ap.add_argument('-overshoot_limit',nargs=1,help='overshoot event rate limit',typ
 
 ap.add_argument('-undershoot_limit',nargs=1,help='undershoot event rate limit',type=float,default=500)
 
+ap.add_argument('-keep_lowmem',nargs=1,help='disable the memory discarding filtering for high count rates',type=bool,
+                default=True)
+
+#default to keep the base value of NICERDAS (30 as of the writing of this)
+ap.add_argument('-br_earth_min',nargs=1,help='bright earth minimum angle',type=str,default='default')
+
 ap.add_argument('-min_gti',nargs=1,help='minimum gti size',type=float,default=5.0)
 
 ap.add_argument('-erodedilate',nargs=1,help='Erodes increasingly more gtis around the excluded intervals',
@@ -138,6 +144,16 @@ ap.add_argument('-erodedilate',nargs=1,help='Erodes increasingly more gtis aroun
 ap.add_argument('-gti_split',nargs=1,help='GTI split method',default='orbit+flare',type=str)
 ap.add_argument('-flare_method',nargs=1,help='Flare extraction method(s)',default='clip+peak',type=str)
 
+
+'''Flare methods '''
+#for clip
+ap.add_argument('-clip_sigma',nargs=1,help='clipping minimum variance treshold in sigmas',default=3,type=float)
+ap.add_argument('-flare_factor',nargs=1,help='minimum flare multiplication factor for flare clipping',
+                default=2,type=float)
+
+#for peak
+ap.add_argument('-peak_score_thresh',nargs=1,help='topological peak score treshold for peak exclusion',
+                default=10,type=float)
 #note: not used currently
 ap.add_argument('-gti_lc_band',nargs=1,help='Band for the lightcurve used for GTI splitting',
                 default='12-15',type=str)
@@ -162,7 +178,8 @@ ap.add_argument('-hr_bands_str',nargs=1,help='Gives the list of bands to create 
 ap.add_argument('-relax_SAA_bg',help='Increase the maximum of the nxb.saa_norm model to a higher value',
                 default=False,type=str)
 
-ap.add_argument('-bg',"--bgmodel",help='Give the background model to use for the data reduction',default='scorpeon_script',type=str)
+ap.add_argument('-bg',"--bgmodel",help='Give the background model to use for the data reduction',
+                default='scorpeon_script',type=str)
 ap.add_argument('-bg_lang',"--bg_language",
         help='Gives the language output for the script generated to load spectral data into either PyXspec or Xspec',
                 default='python',type=str)
@@ -170,11 +187,14 @@ ap.add_argument('-bg_lang',"--bg_language",
 ap.add_argument('-gtype',"--grouptype",help='Give the group type to use in regroup_spectral',default='opt',type=str)
 
 #deprecated
-ap.add_argument('-baddet','--bad_detectors',help='List detectors to exclude from the data reduction',default='-14,-34,-54',type=str)
+ap.add_argument('-baddet','--bad_detectors',help='List detectors to exclude from the data reduction',
+                default='-14,-34,-54',type=str)
 
     
-ap.add_argument('-heasoft_init_alias',help="name of the heasoft initialisation script alias",default="heainit",type=str)
-ap.add_argument('-caldbinit_init_alias',help="name of the caldbinit initialisation script alias",default="caldbinit",type=str)
+ap.add_argument('-heasoft_init_alias',help="name of the heasoft initialisation script alias",
+                default="heainit",type=str)
+ap.add_argument('-caldbinit_init_alias',help="name of the caldbinit initialisation script alias",
+                default="caldbinit",type=str)
 ap.add_argument('-alias_3C50',help="bash alias for the 3C50 directory",default='$NICERBACK3C50',type=str)
 
 args=ap.parse_args()
@@ -199,11 +219,15 @@ overshoot_limit=args.overshoot_limit
 undershoot_limit=args.undershoot_limit
 min_gti=args.min_gti
 erodedilate=args.erodedilate
-
+keep_lowmem=args.keep_lowmem
+br_earth_min=args.br_earth_min
 gti_split=args.gti_split
 gti_lc_band=args.gti_lc_band
 flare_method=args.flare_method
 
+clip_sigma=args.clip_sigma
+flare_factor=args.flare_factor
+peak_score_thresh=args.peak_score_thresh
 int_split_band=args.int_split_band
 int_split_bin=args.int_split_bin
 
@@ -251,7 +275,8 @@ def _remove_control_chars(message):
     return ansi_escape.sub('', message)
 
 def process_obsdir(directory,overwrite=True,keep_SAA=False,overshoot_limit=30.,undershoot_limit=500.,
-                                            min_gti=5.0,erodedilate=5.0):
+                                            min_gti=5.0,erodedilate=5.0,keep_lowmem=False,
+                                            br_earth_min='default'):
     
     '''
     Processes a directory using the nicerl2 script
@@ -268,6 +293,14 @@ def process_obsdir(directory,overwrite=True,keep_SAA=False,overshoot_limit=30.,u
     -min_gti minimum gti
 
     -erodedilate: erodes gtis arode the excluded intervals
+
+    -keep_lowmem: True to disable the max_lowmem filtering
+    This column indicates when the MPU is discarding events due extremely high count rates,
+     in which case the calibration problems will likely arise.
+     The default value of 0 disables this criterium, in favor of a similar screening done in niautoscreen.
+
+    -br_earth_min:  Exclude times when distance to the bright earth is less than MIN_BR_EARTH.
+
 
     '''
     
@@ -290,7 +323,9 @@ def process_obsdir(directory,overwrite=True,keep_SAA=False,overshoot_limit=30.,u
                           ' overonly_range=0-%.1f'%overshoot_limit +
                           ' underonly_range=0-%.1f'%undershoot_limit +
                           ' mingti=%.1f' % min_gti +
-                          ' erodedilate=%.1f' % erodedilate)
+                          ' erodedilate=%.1f' % erodedilate+
+                          (' max_lowmem=0' if keep_lowmem else '')+
+                          (' br_earth='+str(br_earth_min) if br_earth_min!='default' else ''))
 
         process_state=bashproc.expect(['terminating with status','Event files written'],timeout=None)
         
@@ -534,7 +569,8 @@ def plot_event_diag(mode,obs_start_str,time_obs,id_gti_orbit,
     
 def create_gtis(directory,split='orbit+flare',band='3-15',flare_method='clip+peak',clip_method='median',
                 clip_sigma=2.,clip_band='8-12',peak_score_thresh=2.,
-                int_split_band='0.3-10.',int_split_bin=0.1,clip_int_delta=True):
+                int_split_band='0.3-10.',int_split_bin=0.1,clip_int_delta=True,
+                flare_factor=2):
     '''
     wrapper for a function to split nicer obsids into indivudal portions with different methods
     the default binning is 1s because the NICER mkf file time resolution is 1s
@@ -588,13 +624,16 @@ def create_gtis(directory,split='orbit+flare',band='3-15',flare_method='clip+pea
                     -median or mean to clip from the mean or from the median
 
                 clip_sigma:
-                    -sigma for which to apply clipping to
+                    -variance sigmas for which to apply clipping to
 
                 clip_band:
                     -which file or info from the mkf file to use to clip the flares
                     currently implemented:
                         -8-12keV
                         -overshoot
+
+                flare_factor:
+                    -treshold value of the minimal multiplication factor of the flare in clip_band
 
             -peak: performs peak detection in the individual orbit using findpeaks then exclude peak regions
                    with a given "score" (see https://erdogant.github.io/findpeaks/pages/html/Topology.html)
@@ -940,8 +979,7 @@ def create_gtis(directory,split='orbit+flare',band='3-15',flare_method='clip+pea
                     #              and (clip_lc[elem])<=clip_base+3*clip_std]
 
                     elem_id_flares+=[elem for elem in elem_gti_orbit if \
-                                 (clip_lc[elem])>clip_base+clip_sigma*clip_std and clip_lc[elem]>=clip_base+np.log10(2)]
-
+                                 (clip_lc[elem])>clip_base+clip_sigma*clip_std and clip_lc[elem]>=clip_base+np.log10(flare_factor)]
 
                 if 'peak' in flare_method:
                     def peak_search(array_arg,topo_score_thresh=3,id_offset=0):
@@ -2126,7 +2164,9 @@ if not local:
                         
                         if curr_action=='1':
                             process_obsdir(dirname,overwrite=overwrite_glob,keep_SAA=keep_SAA,overshoot_limit=overshoot_limit,
-                                                    undershoot_limit=undershoot_limit,min_gti=min_gti,erodedilate=erodedilate)
+                                                    undershoot_limit=undershoot_limit,
+                                           min_gti=min_gti,erodedilate=erodedilate,keep_lowmem=keep_lowmem,
+                                           br_earth_min=br_earth_min)
                             process_obsdir_done.wait()
                         if curr_action=='2':
                             select_detector(dirname,detectors=bad_detectors)
@@ -2135,7 +2175,10 @@ if not local:
                         if curr_action=='gti':
                             output_err=create_gtis(dirname,split=gti_split,band=gti_lc_band,
                                         flare_method=flare_method,
-                                        int_split_band=int_split_band,int_split_bin=int_split_bin)
+                                        int_split_band=int_split_band,int_split_bin=int_split_bin,
+                                                   flare_factor=flare_factor,
+                                                   clip_sigma=clip_sigma,
+                                                   peak_score_thresh=peak_score_thresh)
                             if type(output_err)==str:
                                 raise ValueError
                             create_gtis_done.wait()
@@ -2196,7 +2239,9 @@ if not local:
                     folder_state='Running '+curr_action
                     if curr_action=='1':
                         process_obsdir(dirname,overwrite=overwrite_glob,keep_SAA=keep_SAA,overshoot_limit=overshoot_limit,
-                                                undershoot_limit=undershoot_limit,min_gti=min_gti,erodedilate=erodedilate)
+                                                undershoot_limit=undershoot_limit,
+                                       min_gti=min_gti,erodedilate=erodedilate,keep_lowmem=keep_lowmem,
+                                       br_earth_min=br_earth_min)
                         process_obsdir_done.wait()
                     if curr_action=='2':
                         select_detector(dirname,detectors=bad_detectors)
@@ -2205,7 +2250,9 @@ if not local:
                     if curr_action=='gti':
                         output_err=create_gtis(dirname,split=gti_split,band=gti_lc_band,
                                     flare_method=flare_method,
-                                        int_split_band=int_split_band,int_split_bin=int_split_bin)
+                                        int_split_band=int_split_band,int_split_bin=int_split_bin,
+                                               flare_factor=flare_factor,
+                                               clip_sigma=clip_sigma,peak_score_thresh=peak_score_thresh)
                         if type(output_err) == str:
                             folder_state=output_err
                         else:
@@ -2283,7 +2330,9 @@ else:
     for curr_action in action_list:
             if curr_action=='1':
                 process_obsdir(absdir,overwrite=overwrite_glob,keep_SAA=keep_SAA,overshoot_limit=overshoot_limit,
-                                        undershoot_limit=undershoot_limit,min_gti=min_gti,erodedilate=erodedilate)
+                                        undershoot_limit=undershoot_limit,
+                               min_gti=min_gti,erodedilate=erodedilate,keep_lowmem=keep_lowmem,
+                               br_earth_min=br_earth_min)
                 process_obsdir_done.wait()
             if curr_action=='2':
                 select_detector(absdir,detectors=bad_detectors)
@@ -2292,7 +2341,9 @@ else:
             if curr_action=='gti':
                 output_err = create_gtis(absdir, split=gti_split, band=gti_lc_band,
                                          flare_method=flare_method,
-                                        int_split_band=int_split_band,int_split_bin=int_split_bin)
+                                        int_split_band=int_split_band,int_split_bin=int_split_bin,
+                                         flare_factor=flare_factor,
+                                         clip_sigma=clip_sigma,peak_score_thresh=peak_score_thresh)
                 create_gtis_done.wait()
 
             if curr_action == 'l':

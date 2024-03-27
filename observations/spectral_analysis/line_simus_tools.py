@@ -193,7 +193,7 @@ def line_simu(mod_path=None,mode='ew_lim',rmf_path='XRISM_Hp',arf_path='XRISM_po
     bashproc = pexpect.spawn("/bin/bash", encoding='utf-8')
     bashproc.sendline('heainit')
 
-    print('Computing detectability')
+    line_E = lines_e_dict[line][0]
 
     if mode=='ew_lim':
 
@@ -220,7 +220,8 @@ def line_simu(mod_path=None,mode='ew_lim',rmf_path='XRISM_Hp',arf_path='XRISM_po
                     if os.path.isfile('temp_sp_grp_opt.pi'):
                         os.remove('temp_sp_grp_opt.pi')
 
-
+                    #faking the spectrum with the right parameters
+                    AllData.fakeit(nSpectra=len(fakeset), settings=fakeset, applyStats=fakestats)
 
                     #rebinning the spectrum before loading it
                     if regroup:
@@ -262,6 +263,11 @@ def line_simu(mod_path=None,mode='ew_lim',rmf_path='XRISM_Hp',arf_path='XRISM_po
 
                     #freezing the continuum
                     freeze()
+
+                    XRISM_sp=AllData(1).fileinfo('TELESCOP')=='XRISM'
+                    if XRISM_sp:
+                        #ignoring everything outside of the line energy to avoid issues because of too many bins
+                        AllData.ignore('**-'+str(line_E-1)+' '+str(line_E+1)+'-**')
 
                     #adding the line component
                     comp_par,comp_num=addcomp(line+'_agaussian', position='lastinall',return_pos=True)
@@ -337,6 +343,7 @@ def line_simu(mod_path=None,mode='ew_lim',rmf_path='XRISM_Hp',arf_path='XRISM_po
                    ('_nostat' if not fakestats else '')+
                     '_'+str(expos)+'ks'+
                    '_'+str(n_iter)+'_iter'+
+                   '_flux_' + flux_range +
                    '_width_'+str(line_w[0])+'_'+str(line_w[1])+'.txt',save_arr,header='\n'.join(header_elems))
 
         Xset.chatter=old_chatter
@@ -506,7 +513,7 @@ def line_simu(mod_path=None,mode='ew_lim',rmf_path='XRISM_Hp',arf_path='XRISM_po
                     calc_fit()
 
                     #computing the error on the blueshift just to ensure we get the right value
-                    Fit.error(str(comp_par[0]))
+                    calc_error(logfile,param=str(comp_par[0]))
 
                     # #trying to converge on the correct luminosity if the fit if it gets stuck
                     # if XRISM_sp:
@@ -557,7 +564,8 @@ def line_simu(mod_path=None,mode='ew_lim',rmf_path='XRISM_Hp',arf_path='XRISM_po
                     err_1sig_rel = err_1sig[0][comp_par[0]-1]
 
                     #storing no error if the value is unconstrained
-                    if max(err_1sig_rel) == 0:
+                    # (for that we're testing if it's close to the main value)
+                    if (abs(err_1sig_rel/AllModels(1).gabs.LineE.values[0])>0.9).any():
                         bshift_err_distrib[0][i_iter] = 0
                     else:
                         # adding the main value because it can be false too
@@ -574,7 +582,7 @@ def line_simu(mod_path=None,mode='ew_lim',rmf_path='XRISM_Hp',arf_path='XRISM_po
 
                     err_2sig_rel=err_2sig[0][comp_par[0]-1]
 
-                    if max(err_2sig_rel) == 0:
+                    if (abs(err_2sig_rel/AllModels(1).gabs.LineE.values[0])>0.9).any():
                         bshift_err_distrib[1][i_iter] = 0
                     else:
                         # adding the main value because it can be false too
@@ -597,7 +605,7 @@ def line_simu(mod_path=None,mode='ew_lim',rmf_path='XRISM_Hp',arf_path='XRISM_po
                     err_3sig_rel = err_3sig[0][comp_par[0]-1]
 
                     #storing no error if the value is unconstrained
-                    if max(err_3sig_rel) == 0:
+                    if (abs(err_3sig_rel/AllModels(1).gabs.LineE.values[0])>0.9).any():
                         bshift_err_distrib[2][i_iter] = 0
                     else:
                         # adding the main value because it can be false too
@@ -612,8 +620,14 @@ def line_simu(mod_path=None,mode='ew_lim',rmf_path='XRISM_Hp',arf_path='XRISM_po
 
                 bshift_err_distrib.sort()
 
+                bshift_err_distrib_1sig_constr=bshift_err_distrib[0][bshift_err_distrib[0].nonzero()]
+                bshift_err_distrib_2sig_constr = bshift_err_distrib[1][bshift_err_distrib[1].nonzero()]
+                bshift_err_distrib_3sig_constr = bshift_err_distrib[2][bshift_err_distrib[2].nonzero()]
+
                 #storing the median of the distribution of the limits for this flux value
-                bshift_err_arr[i_flux]=bshift_err_distrib.T[n_iter//2]
+                bshift_err_arr[i_flux][0]= np.median(bshift_err_distrib_1sig_constr)
+                bshift_err_arr[i_flux][1]= np.median(bshift_err_distrib_2sig_constr)
+                bshift_err_arr[i_flux][2]= np.median(bshift_err_distrib_3sig_constr)
 
                 np.savetxt('bshift_err_arr.txt', bshift_err_arr)
 
@@ -633,6 +647,7 @@ def line_simu(mod_path=None,mode='ew_lim',rmf_path='XRISM_Hp',arf_path='XRISM_po
                    ('_nostat' if not fakestats else '')+
                    '_' + str(expos) + 'ks' +
                    '_'+str(n_iter)+'_iter'+
+                   '_flux_'+flux_range+
                    '_EW_'+str(EW_bshift_lim)+
                    '_width_'+str(width_bshift_val)+'.txt',save_arr,header='\n'.join(header_elems))
 

@@ -580,6 +580,7 @@ epoch_obs_list_multi=dump_dict['epoch_obs_list_multi']
 flux_high_list=dump_dict['flux_high_list']
 flux_high_list_multi=dump_dict['flux_high_list_multi']
 
+
 #creating some secondary lists from fitmod_broadband
 gamma_nthcomp_list=np.array([np.array([np.repeat(np.nan,3) if\
                             (subelem is None or 'disk_nthcomp' not in list(subelem.keys())) else\
@@ -1487,7 +1488,7 @@ mask_intime_plot=np.array([(Time(date_list[mask_obj][i_obj_r].astype(str))>=Time
 #custom colorbar for the line substructure and outliers (needs the high energy elements)
 
 diago_color=deepcopy(hid_plot[1][0])
-if display_single and sum(ravel_ragged(mask_intime_plot))>0:
+if display_single and choice_source[0]=='4U1630-47' and sum(ravel_ragged(mask_intime_plot))>0:
     for i_obj in range(len(diago_color)):
         if obj_list[i_obj]=='4U1630-47':
             for i_obs in range(len(diago_color[i_obj])):
@@ -1518,7 +1519,7 @@ if display_single and sum(ravel_ragged(mask_intime_plot))>0:
 dict_linevis['diago_color']=diago_color
 # breakpoint()
 custom_states_color=deepcopy(hid_plot[1][0])
-if display_single and sum(ravel_ragged(mask_intime_plot))>0:
+if display_single and choice_source[0]=='4U1630-47' and sum(ravel_ragged(mask_intime_plot))>0:
     for i_obj in range(len(custom_states_color)):
         if obj_list[i_obj]=='4U1630-47':
             for i_obs in range(len(custom_states_color[i_obj])):

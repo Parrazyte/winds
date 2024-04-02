@@ -245,12 +245,16 @@ def kev_to_PI(e_val):
     '''
     return round((e_val-1.6)/0.04)
 
+
 def set_var(spawn):
     '''
-    Sets starting environment variables for NICER data analysis
+    Sets starting environment variables for data analysis
     '''
-    spawn.sendline(heasoft_init_alias)
-    spawn.sendline(caldbinit_init_alias)
+    if heasoft_init_alias is not None:
+        spawn.sendline(heasoft_init_alias)
+
+    if caldbinit_init_alias is not None:
+        spawn.sendline(caldbinit_init_alias)
 
 
 def file_evt_selector(filetype, cameras='all', bright=False):

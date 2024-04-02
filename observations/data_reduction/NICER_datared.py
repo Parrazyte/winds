@@ -103,7 +103,7 @@ ap.add_argument('-catch','--catch_errors',help='Catch errors while running the d
 
 #global choices
 ap.add_argument("-a","--action",nargs='?',help='Give which action(s) to proceed,separated by comas.',
-                default='c,1,gti,',type=str)
+                default='1,gti,fs,l,g,m',type=str)
 #default: 1,gti,fs,l,g,m,c
 
 ap.add_argument("-over",nargs=1,help='overwrite computed tasks (i.e. with products in the batch, or merge directory\
@@ -180,6 +180,8 @@ ap.add_argument('-relax_SAA_bg',help='Increase the maximum of the nxb.saa_norm m
 
 ap.add_argument('-bg',"--bgmodel",help='Give the background model to use for the data reduction',
                 default='scorpeon_script',type=str)
+
+#python or default
 ap.add_argument('-bg_lang',"--bg_language",
         help='Gives the language output for the script generated to load spectral data into either PyXspec or Xspec',
                 default='python',type=str)
@@ -190,11 +192,14 @@ ap.add_argument('-gtype',"--grouptype",help='Give the group type to use in regro
 ap.add_argument('-baddet','--bad_detectors',help='List detectors to exclude from the data reduction',
                 default='-14,-34,-54',type=str)
 
-    
+#set to None to deactivate
 ap.add_argument('-heasoft_init_alias',help="name of the heasoft initialisation script alias",
                 default="heainit",type=str)
+#set to none to deactivate
 ap.add_argument('-caldbinit_init_alias',help="name of the caldbinit initialisation script alias",
                 default="caldbinit",type=str)
+
+#only necessary if using 3C50
 ap.add_argument('-alias_3C50',help="bash alias for the 3C50 directory",default='$NICERBACK3C50',type=str)
 
 args=ap.parse_args()
@@ -264,10 +269,13 @@ create_gtis_done=threading.Event()
 def set_var(spawn):
     
     '''
-    Sets starting environment variables for NICER data analysis
+    Sets starting environment variables for data analysis
     '''
-    spawn.sendline(heasoft_init_alias)
-    spawn.sendline(caldbinit_init_alias)
+    if heasoft_init_alias is not None:
+        spawn.sendline(heasoft_init_alias)
+
+    if caldbinit_init_alias is not None:
+        spawn.sendline(caldbinit_init_alias)
     
 #function to remove (most) control chars
 def _remove_control_chars(message):
@@ -1314,6 +1322,7 @@ def extract_all_spectral(directory,bkgmodel='scorpeon_script',language='python',
     specific option for scorpeon_script:
         
         -language: if set to python, the generated scripts are made for Pyxspec instead of standard xspec
+                   if set to default, the generated scripts are made for standard xspec
         
     Note: can produce no output without error if no gti in the event file
     '''
@@ -1342,10 +1351,13 @@ def extract_all_spectral(directory,bkgmodel='scorpeon_script',language='python',
             if bkgmodel_mode=='script':
                 if language=='python':
                     bkg_outlang_str='outlang=PYTHON'
+                elif language=='default':
+                    bkg_outlang_str=''
                 else:
-                    print('NICER_datared_error: only python is implemented for the language output of scorpeon in script mode')
-                    return 'NICER_datared_error: only python is implemented for the language output of scorpeon in script mode'
-            
+                    print(
+                        'NICER_datared_error: only "python" and "default" is implemented for the language output of scorpeon in script mode')
+                    return 'NICER_datared_error: only "python" and "default" is implemented for the language output of scorpeon in script mode'
+
         else:
             bkgmodel_str=bkgmodel
             bkgmodel_mode='file'

@@ -165,7 +165,7 @@ ap.add_argument('-satellite',nargs=1,help='telescope to fetch spectra from',defa
 
 #used for NICER and multi for now
 ap.add_argument('-group_max_timedelta',nargs=1,
-                help='maximum time delta for epoch/gti grouping in dd_hh_mm_ss_ms',default='00_00_00_00_001',type=str)
+                help='maximum time delta for epoch/gti grouping in dd_hh_mm_ss_ms',default='01_00_00_00_000',type=str)
 
 #00_00_00_10 for NICER TR
 #00_00_15_00 for NuSTAR individual orbits
@@ -184,7 +184,7 @@ ap.add_argument("-prefix",nargs=1,help='restrict analysis to a specific prefix',
 
 ####output directory
 ap.add_argument("-outdir",nargs=1,help="name of output directory for line plots",
-                default="lineplots_opt_manual",type=str)
+                default="lineplots_opt_test",type=str)
 
 #overwrite
 #global overwrite based on recap PDF
@@ -277,7 +277,7 @@ NICER no abslines: 4130010128-001_4130010129-001
 
 '''
 ap.add_argument('-force_epochs',nargs=1,help='force epochs to given set of spectra instead of auto matching',
-                default=True,type=bool)
+                default=False,type=bool)
 
 force_epochs_str=\
 '''
@@ -5205,7 +5205,7 @@ dict_linevis['custom_states_color']=None
 dict_linevis['hr_high_plot_restrict']=None
 dict_linevis['lum_high_1sig_plot_restrict']=None
 dict_linevis['lum_high_sign_plot_restrict']=None
-
+dict_linevis['hid_log_HR']=True
 #individual plotting options for the graph that will create the PDF
 display_single=not multi_obj
 display_upper=True

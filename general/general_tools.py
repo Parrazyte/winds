@@ -100,7 +100,7 @@ def str_orbit(i_orbit):
     return regular str expression of orbit
     '''
     return ('%3.f' % (i_orbit + 1)).replace(' ', '0')
-def rescale_log(ax,xlims,ylims,margin,std_x=None,std_y=None):
+def rescale_flex(ax,xlims,ylims,margin,std_x=None,std_y=None):
 
     '''
 
@@ -109,24 +109,51 @@ def rescale_log(ax,xlims,ylims,margin,std_x=None,std_y=None):
     variant for negative symlog (aka with 0 as max value) not implemented
     '''
 
-    xrange=xlims[1]/(ax.get_xticks()[1] if ax.get_xscale()=='symlog' else xlims[0])
 
-    del_xrange=np.log10(xrange)*margin
+    
+    if ax.get_xscale()=='linear':
+        
+        xrange = xlims[1] - xlims[0]
 
-    if std_x is not None:
-        ax.set_xlim((min(xlims[0]*10**(-del_xrange),std_x[0]),max(xlims[1]*10**(del_xrange),std_x[1])))
-    else:
-        ax.set_xlim((xlims[0] * 10 ** (-del_xrange)), xlims[1] * 10 ** (del_xrange))
+        del_xrange = xrange * margin
+        
+        if std_x is not None:
+            ax.set_xlim((min(xlims[0]- del_xrange,std_x[0]),max(xlims[1]+ del_xrange,std_x[1])))
+        else:
+            ax.set_xlim((xlims[0]-del_xrange, xlims[1]+del_xrange))
+            
+    elif ax.get_xscale() in ['log','symlog']:
 
+        xrange = xlims[1] / (ax.get_xticks()[1] if ax.get_xscale() == 'symlog' else xlims[0])
 
-    yrange=ylims[1]/(ax.get_yticks()[1] if ax.get_yscale()=='symlog' else ylims[0])
+        del_xrange = np.log10(xrange) * margin
+        
+        if std_x is not None:
+            ax.set_xlim((min(xlims[0]*10**(-del_xrange),std_x[0]),max(xlims[1]*10**(del_xrange),std_x[1])))
+        else:
+            ax.set_xlim((xlims[0] * 10 ** (-del_xrange)), xlims[1] * 10 ** (del_xrange))
 
-    del_yrange=np.log10(yrange)*margin
+    if ax.get_yscale() == 'linear':
 
-    if std_y is not None:
-        ax.set_ylim((min(ylims[0]*10**(-del_yrange),std_y[0]),max(ylims[1]*10**(del_yrange),std_y[1])))
-    else:
-        ax.set_ylim((ylims[0] * 10 ** (-del_yrange)), ylims[1] * 10 ** (del_yrange))
+        yrange = ylims[1] - ylims[0]
+
+        del_yrange = yrange * margin
+
+        if std_y is not None:
+            ax.set_ylim((min(ylims[0] - del_yrange, std_y[0]), max(ylims[1] + del_yrange, std_y[1])))
+        else:
+            ax.set_ylim((ylims[0] - del_yrange, ylims[1] + del_yrange))
+
+    elif ax.get_yscale() in ['log', 'symlog']:
+
+        yrange = ylims[1] / (ax.get_yticks()[1] if ax.get_yscale() == 'symlog' else ylims[0])
+
+        del_yrange = np.log10(yrange) * margin
+
+        if std_y is not None:
+            ax.set_ylim((min(ylims[0] * 10 ** (-del_yrange), std_y[0]), max(ylims[1] * 10 ** (del_yrange), std_y[1])))
+        else:
+            ax.set_ylim((ylims[0] * 10 ** (-del_yrange)), ylims[1] * 10 ** (del_yrange))
 
 def ravel_ragged(array,mode=None):
 

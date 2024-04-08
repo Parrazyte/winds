@@ -110,8 +110,10 @@ ap.add_argument("-over",nargs=1,help='overwrite computed tasks (i.e. with produc
                 if "m" is in the actions) in a folder',default=True,type=bool)
 
 #directory level overwrite (not active in local)
-ap.add_argument('-folder_over',nargs=1,help='relaunch action through folders with completed analysis',default=True,type=bool)
-ap.add_argument('-folder_cont',nargs=1,help='skip all but the last 2 directories in the summary folder file',default=False,type=bool)
+ap.add_argument('-folder_over',nargs=1,help='relaunch action through folders with completed analysis',
+                default=True,type=bool)
+ap.add_argument('-folder_cont',nargs=1,help='skip all but the last 2 directories in the summary folder file',
+                default=False,type=bool)
 #note : we keep the previous 2 directories because bug or breaks can start actions on a directory following the initially stopped one
 
 #action specific overwrite
@@ -122,14 +124,14 @@ ap.add_argument('-folder_cont',nargs=1,help='skip all but the last 2 directories
 #the summary of temporal filtering logged in process_obsdir, and the resulting spectra
 
 #should only be done in very extreme cases
-ap.add_argument('-keep_SAA',nargs=1,help='keep South Atlantic Anomaly (SAA) Periods',type=bool,default=True)
+ap.add_argument('-keep_SAA',nargs=1,help='keep South Atlantic Anomaly (SAA) Periods',type=bool,default=False)
 
 ap.add_argument('-overshoot_limit',nargs=1,help='overshoot event rate limit',type=float,default=100)
 
 ap.add_argument('-undershoot_limit',nargs=1,help='undershoot event rate limit',type=float,default=500)
 
 ap.add_argument('-keep_lowmem',nargs=1,help='disable the memory discarding filtering for high count rates',type=bool,
-                default=True)
+                default=False)
 
 #default to keep the base value of NICERDAS (30 as of the writing of this)
 ap.add_argument('-br_earth_min',nargs=1,help='bright earth minimum angle',type=str,default='default')
@@ -1390,7 +1392,8 @@ def extract_all_spectral(directory,bkgmodel='scorpeon_script',language='python',
             bashproc.sendline('nicerl3-spect indir='+directory+' bkgmodeltype='+bkgmodel_str+' bkgformat='+bkgmodel_mode+' '+bkg_outlang_str+
                               ' clobber='+('YES' if overwrite else 'FALSE')+gti_str+relaxed_SAA_bg_str)
 
-            process_state=bashproc.expect(['DONE','ERROR: could not find UFA file','Task aborting due to zero EXPOSURE'],timeout=None)
+            process_state=bashproc.expect(['DONE','ERROR: could not find UFA file','Task aborting due to zero EXPOSURE',
+                                           'Task aborting due to zero response'],timeout=None)
 
             #raising an error to stop the process if the command has crashed for some reason
             if process_state>2:

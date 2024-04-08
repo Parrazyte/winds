@@ -8,9 +8,12 @@ ap = argparse.ArgumentParser(description='Script to plot line detectability from
 
 '''GENERAL OPTIONS'''
 
+mpl.rcParams.update({'font.size': 18})
+
+
 #currently can be EW or bshift
 ap.add_argument("-mode",nargs=1,help='plot the results of the simulations for different modes',
-                default='bshift',type=str)
+                default='ew',type=str)
 
 ap.add_argument("-fakestats",nargs=1,help='use run with or without fakeit statistical fluctuations',
                 default=True,type=str)
@@ -18,7 +21,7 @@ ap.add_argument("-fakestats",nargs=1,help='use run with or without fakeit statis
 ap.add_argument('-n_iter',nargs=1,help='number of iterations of each flux level for XRISM/XMM/Chandra',
                 default=[10,100,100],type=str)
 
-ap.add_argument('-expos',nargs=1,help='Exposure time in ks for XRISM/XMM/Chandra',default=[10,35,35],type=str)
+ap.add_argument('-expos',nargs=1,help='Exposure time in ks for XRISM/XMM/Chandra',default=[35,35,35],type=str)
 
 ap.add_argument('-flux_str',nargs=1,help='flux logspace parameters for file fetching',default='1_100_10',type=str)
 
@@ -115,8 +118,6 @@ arr_XRISM=arr_XRISM[mask_vals_XRISM]
 arr_XMM=arr_XMM[mask_vals_XMM]
 arr_Chandra=arr_Chandra[mask_vals_Chandra]
 
-mpl.rcParams.update({'font.size': 14})
-
 fig_EW,ax_EW=plt.subplots(figsize=(8,8))
 
 #ax_EW.set_xscale('log')
@@ -137,13 +138,13 @@ marker_sigmas=['+','x','d']
 ls_sigmas=[':','--','-']
 
 
-[ax_EW.plot(arr_Chandra.T[1+i_sigma],arr_Chandra.T[0],label='Chandra '+str(expos[1]) + 'ks',
+[ax_EW.plot(arr_Chandra.T[1+i_sigma],arr_Chandra.T[0],label='Chandra '+str(expos[2]) + 'ks',
                marker=marker_sigmas[i_sigma],ls=ls_sigmas[i_sigma],color='blue') for i_sigma in id_sigmas]
 
-[ax_EW.plot(arr_XRISM.T[1+i_sigma],arr_XRISM.T[0],label='XRISM '+str(expos[2]) + 'ks',
+[ax_EW.plot(arr_XRISM.T[1+i_sigma],arr_XRISM.T[0],label='XRISM '+str(expos[0]) + 'ks',
                marker=marker_sigmas[i_sigma],ls=ls_sigmas[i_sigma],color='violet') for i_sigma in id_sigmas]
 
-[ax_EW.plot(arr_XMM.T[1+i_sigma],arr_XMM.T[0],label='XMM '+str(expos[0]) + 'ks' ,
+[ax_EW.plot(arr_XMM.T[1+i_sigma],arr_XMM.T[0],label='XMM '+str(expos[1]) + 'ks' ,
                marker=marker_sigmas[i_sigma],ls=ls_sigmas[i_sigma],color='red') for i_sigma in id_sigmas]
 
 

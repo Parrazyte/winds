@@ -70,7 +70,7 @@ sys.path.append('/mount/src/winds/general/')
 #custom script with some lines and fit utilities and variables
 from fitting_tools import lines_std,c_light,lines_std_names,lines_e_dict,ang2kev
 
-from general_tools import ravel_ragged,MinorSymLogLocator,rescale_log,expand_epoch
+from general_tools import ravel_ragged,MinorSymLogLocator,rescale_flex,expand_epoch
 
 #Catalogs and manipulation
 from astroquery.vizier import Vizier
@@ -2074,7 +2074,7 @@ def hid_graph(ax_hid,dict_linevis,
     diago_color=dict_linevis['diago_color']
     custom_states_color=dict_linevis['custom_states_color']
     hr_high_plot_restrict=dict_linevis['hr_high_plot_restrict']
-
+    hid_log_HR=dict_linevis['hid_log_HR']
     if not broad_mode==False:
         HR_broad_bands=dict_linevis['HR_broad_bands']
         lum_broad_bands= dict_linevis['lum_broad_bands']
@@ -2255,7 +2255,15 @@ def hid_graph(ax_hid,dict_linevis,
     else:
 
         # log x scale for an easier comparison with Ponti diagrams
-        ax_hid.set_xscale('log')
+        if hid_log_HR:
+            ax_hid.set_xscale('log')
+            if ax_hid.get_xlim()[0]>0.1:
+                ax_hid.xaxis.set_major_formatter(mpl.ticker.StrMethodFormatter("{x:.1f}"))
+                ax_hid.xaxis.set_minor_formatter(mpl.ticker.StrMethodFormatter("{x:.1f}"))
+            else:
+                ax_hid.xaxis.set_major_formatter(mpl.ticker.StrMethodFormatter("{x:.2f}"))
+                ax_hid.xaxis.set_minor_formatter(mpl.ticker.StrMethodFormatter("{x:.2f}"))
+
         ax_hid.set_xlabel('Hardness Ratio ([6-10]/[3-6] keV bands)')
         ax_hid.set_ylabel(r'Luminosity in the [3-10] keV band in (L/L$_{Edd}$) units')
         ax_hid.set_yscale('log')
@@ -2399,7 +2407,7 @@ def hid_graph(ax_hid,dict_linevis,
         ylims=(min(ravel_ragged(hid_plot_restrict[1][0])[broad_notBAT_mask]),
                         max(ravel_ragged(hid_plot_restrict[1][0])[broad_notBAT_mask]))
 
-        rescale_log(ax_hid,xlims,ylims,0.05)
+        rescale_flex(ax_hid,xlims,ylims,0.05)
 
     if type(zoom)==list:
         ax_hid.set_xlim(zoom[0][0],zoom[0][1])
@@ -2407,7 +2415,7 @@ def hid_graph(ax_hid,dict_linevis,
 
     if not zoom and not broad_mode:
 
-        rescale_log(ax_hid,bounds_x,bounds_y,0.05,std_x=[0.1,2],std_y=[1e-5,1])
+        rescale_flex(ax_hid,bounds_x,bounds_y,0.05,std_x=[0.1,2],std_y=[1e-5,1])
 
     # creating space for the colorbar
     if radio_info_cmap not in type_1_colorcode:
@@ -4364,8 +4372,8 @@ def correl_graph(data_perinfo,infos,data_ener,dict_linevis,mode='intrinsic',mode
         if mode!='source' and ((mode=='observ' and scale_log_hr and not time_mode and not ind_infos[1]==[3])\
                                or ((ind_infos[0 if time_mode else 1] in [0,3] or line_comp_mode) and scale_log_ew)):
                             
-            ax_scat.set_yscale('log')                
-                
+            ax_scat.set_yscale('log')
+
         #putting a logarithmic x scale if it shows equivalent widths
         if ind_infos[0] in [0,3] and scale_log_ew and not time_mode:
             ax_scat.set_xscale('log')
@@ -4892,16 +4900,18 @@ def correl_graph(data_perinfo,infos,data_ener,dict_linevis,mode='intrinsic',mode
                 y_error=[np.array([y_error[0][bool_det][bool_sign],y_error[1][bool_det][bool_sign]]).astype(float),
                           np.array([y_error[0][bool_det][~bool_sign],y_error[1][bool_det][~bool_sign]]).astype(float)]
 
-        # changing the second brightest substructure point for the EW ratio plot to the manually fitted one
-        # with relaxed SAA filtering
-        if color_scatter == 'custom_line_struct' and 'ewratio' in infos_split[0]:
-            x_point = 1.6302488583411436
-            id_point_refit=np.argwhere(x_data[0]==x_point)[0][0]
-
-            #computed manually
-            x_data[0][id_point_refit]=2.41
-            x_error[0][0][id_point_refit]=1.09
-            x_error[0][1][id_point_refit]=2.59
+        id_point_refit=999999999999999
+        # # changing the second brightest substructure point for the EW ratio plot to the manually fitted one
+        # # with relaxed SAA filtering
+        # #now modified directly in the files
+        # if color_scatter == 'custom_line_struct' and 'ewratio' in infos_split[0]:
+        #     x_point = 1.6302488583411436
+        #     id_point_refit=np.argwhere(x_data[0]==x_point)[0][0]
+        #
+        #     #computed manually
+        #     x_data[0][id_point_refit]=2.41
+        #     x_error[0][0][id_point_refit]=1.09
+        #     x_error[0][1][id_point_refit]=2.59
 
         #no need to do anything for y error in hid mode since it's already set to None
         
@@ -5457,15 +5467,16 @@ def correl_graph(data_perinfo,infos,data_ener,dict_linevis,mode='intrinsic',mode
 
                             elem_children.set_linestyles(ls_dist)
 
-                        #dashing the errorbar for the 4U point with adjusted manual values for the EW ratio
-                        elif color_scatter == 'custom_line_struct' and 'ewratio' in infos_split[0]:
-                            ls_dist=np.repeat('-',len(x_data[s]))
-                            #to avoid issues due to the type of the array
-                            ls_dist = ls_dist.tolist()
-
-                            ls_dist[id_point_refit]='--'
-
-                            elem_children.set_linestyles(ls_dist)
+                        # deprecated
+                        # #dashing the errorbar for the 4U point with adjusted manual values for the EW ratio
+                        # elif color_scatter == 'custom_line_struct' and 'ewratio' in infos_split[0]:
+                        #     ls_dist=np.repeat('-',len(x_data[s]))
+                        #     #to avoid issues due to the type of the array
+                        #     ls_dist = ls_dist.tolist()
+                        #
+                        #     ls_dist[id_point_refit]='--'
+                        #
+                        #     elem_children.set_linestyles(ls_dist)
                             
                     else:
                         elem_children.set_visible(False)
@@ -5830,6 +5841,14 @@ def correl_graph(data_perinfo,infos,data_ener,dict_linevis,mode='intrinsic',mode
                                 intercept_pos='auto',inter_color=['lightgrey','silver','darkgrey'],
                                 infer_log_scale=True, xbounds=plt.xlim(), ybounds=plt.ylim(),
                                 line_color='black')
+
+        #updating the ticks of the y axis to avoid powers of ten when unnecessary
+        if ax_scat.get_yscale()=='log':
+            if ax_scat.get_ylim()[0]>0.01:
+                ax_scat.yaxis.set_major_formatter(mpl.ticker.StrMethodFormatter("{x:.2f}"))
+                ax_scat.yaxis.set_minor_formatter(mpl.ticker.StrMethodFormatter("{x:.2f}"))
+
+
 
         #### legend display
         if show_linked or (compute_correl and mode!='source' and len(x_data[0])>1 and not time_mode) or color_scatter not in ['Time','HR','width','nH','L_3-10',None]:

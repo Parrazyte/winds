@@ -918,7 +918,7 @@ with st.sidebar.expander('Visualisation'):
 
     skip_HID=st.toggle('Skip HID computation',value=False)
     
-    display_dicho=st.toggle('Display favourable zone',value=True)
+    display_dicho=st.toggle('Display favourable zone',value=not display_single)
     
     color_nondet=st.toggle('Color non-detections',value=True)
     
@@ -932,6 +932,8 @@ with st.sidebar.expander('Visualisation'):
     
     global_colors=st.toggle('Normalize colors/colormaps over the entire sample',value=False)
         
+    hid_log_HR=st.toggle('Use log scale for the Hardness Ratio',value=True)
+    
     if not online:
         paper_look=st.toggle('Paper look',value=False)
 
@@ -1709,7 +1711,7 @@ dict_linevis['Edd_factor_restrict'] = Edd_factor_restrict
 dict_linevis['lum_plot'] = lum_plot
 dict_linevis['use_obsids'] = use_obsids
 dict_linevis['exptime_list'] = exptime_list
-
+dict_linevis['hid_log_HR'] = hid_log_HR
 if len(global_plotted_datetime)==0:
     st.warning('No points remaining with current sample/date selection')
 elif not skip_HID:

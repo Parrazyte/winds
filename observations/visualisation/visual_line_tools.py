@@ -2075,6 +2075,8 @@ def hid_graph(ax_hid,dict_linevis,
     custom_states_color=dict_linevis['custom_states_color']
     hr_high_plot_restrict=dict_linevis['hr_high_plot_restrict']
     hid_log_HR=dict_linevis['hid_log_HR']
+    flag_single_obj=dict_linevis['flag_single_obj']
+
     if not broad_mode==False:
         HR_broad_bands=dict_linevis['HR_broad_bands']
         lum_broad_bands= dict_linevis['lum_broad_bands']
@@ -2201,10 +2203,19 @@ def hid_graph(ax_hid,dict_linevis,
 
         #now we combine the BAT non-significant elements and the already existing significant elements in
         #lum_high_plot_restrict
-        lum_broad_single=np.array([elem for elem in lum_high_1sig_plot_restrict.T[0]])
 
-        #mask to highlight non-significant high Energy detections
-        mask_sign_high_E=~np.isnan(np.array([elem for elem in lum_high_sign_plot_restrict.T[0]])[0])
+        if flag_single_obj:
+            lum_broad_single=np.array([elem for elem in np.transpose(lum_high_1sig_plot_restrict,(1,0,2))[0]])
+
+            #mask to highlight non-significant high Energy detections
+            mask_sign_high_E=~np.isnan(np.array([elem for elem in np.transpose(lum_high_sign_plot_restrict,(1,0,2))[0]],
+                                                dtype=float)[0])
+
+        else:
+            lum_broad_single=np.array([elem for elem in lum_high_1sig_plot_restrict.T[0]])
+
+            #mask to highlight non-significant high Energy detections
+            mask_sign_high_E=~np.isnan(np.array([elem for elem in lum_high_sign_plot_restrict.T[0]])[0])
 
         lum_broad_single=lum_broad_single.T
 

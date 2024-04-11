@@ -308,32 +308,116 @@ def load_mod(path,load_xspec=True):
 mod_sky=None
 mod_nxb=None
 
-def fit_broader(epoch_id,add_gaussem=False):
+def fit_broader(epoch_id,add_gaussem=False,bat_interp_dir='/media/parrama/SSD/Observ/BHLMXB/Swift/BAT_interp_restrict',
+                n_add=1,outdir='fit_broader',bat_emin=15.,bat_emax=50.):
     '''
     for quick refitting in broader bands
+
+    bat_interp_dir is the directory where bat interpolation spectra (created with ftflx2xsp from the regression vals)
+     are stored
+
+    n_add is the number of times the spectrum is added (to give it more weight in the fit)
     '''
 
-    Plot.xLog=False
+    # Plot.xLog=False
+
+    reset()
+    AllModels.clear()
+    AllData.clear()
+    Plot.xLog=True
+    Plot.xAxis='keV'
 
     Xset.restore('lineplots_opt/'+epoch_id+'_mod_broadband_post_auto.xcm')
+    #adding the swift info
+    groups=AllData.nGroups
+
+    currdir=os.getcwd()
+    os.chdir(bat_interp_dir)
+
+    #loading n_add times the BAT spectrum of the observation if it exists
+    if not os.path.isfile(epoch_id+'_BAT_regr_sp_'+str(bat_emin)+'_'+str(bat_emax)+'.pi'):
+        print('No concurrent daily BAT regression spectrum available. Skipping this step...')
+    else:
+        add_str=' '.join([str(groups+i)+':'+str(groups+i)+' '+epoch_id+'_BAT_regr_sp_'
+                          +str(bat_emin)+'_'+str(bat_emax)+'.pi' for i in range(1,n_add+1)])
+        AllData(add_str)
+
+
+    os.chdir(currdir)
+
+    os.system('mkdir -p '+outdir)
+
+    curr_logfile_write = Xset.openLog(os.path.join(outdir, epoch_id + '_broader.log'))
+
+    # ensuring the log information gets in the correct place in the log file by forcing line to line buffering
+    curr_logfile_write.reconfigure(line_buffering=True)
+
+    curr_logfile = open(curr_logfile_write.name, 'r')
+
     AllModels.clear()
-    xscorpeon.load('auto',frozen=True)
+    AllModels.setEnergies('0.1 100. 2000 log')
+
+    print('Loading base model...')
+
+    Xset.chatter=0
+
     addcomp('cont_diskbb')
-    addcomp('disk_nthcomp')
+    addcomp('glob_thcomp')
+    AllModels(1).thcomp.kT_e.values=100
+    AllModels(1).thcomp.kT_e.frozen=True
+    AllModels(1).thcomp.Gamma_tau.values=[2.,0.01,1.5,1.5,3.5,3.5]
     addcomp('glob_TBabs')
-    addcomp('calNICERSiem_gaussian')
     addcomp('glob_constant')
+
+    #locking the constant factor(s) of the BAT elements
+    for i in range(groups+1,AllData.nGroups+1):
+        AllModels(i)(1).frozen=True
+
     AllData.notice('0.3-3.')
+
+    xscorpeon.load('auto',frozen=True)
+
+    Xset.chatter=10
+
+    Fit.perform()
+
+    addcomp('calNICERSiem_gaussian',position='lastin')
+
     calc_fit()
 
     if add_gaussem:
-        addcomp('FeKa0em_bgaussian', position='diskbb')
+        addcomp('FeKa0em_bgaussian', position='thcomp')
         calc_fit()
 
     xscorpeon.load('auto',frozen=False)
     calc_fit()
     xscorpeon.freeze()
 
+    mod=allmodel_data()
+
+    Plot.xLog=True
+    xPlot('ldata,ratio,delchi')
+
+    if os.path.isfile(os.path.join(outdir,epoch_id+'_mod_broader.xcm')):
+        os.remove(os.path.join(outdir,epoch_id+'_mod_broader.xcm'))
+
+    if os.path.isfile(os.path.join(outdir,epoch_id+'_mod_broader_mod.xcm')):
+        os.remove(os.path.join(outdir,epoch_id+'_mod_broader_mod.xcm'))
+
+    Xset.save(os.path.join(outdir,epoch_id+'_mod_broader.xcm'),info='a')
+
+    Xset.save(os.path.join(outdir,epoch_id+'_mod_broader_mod.xcm'),info='m')
+
+    Plot_screen('ldata,ratio,delchi',os.path.join(outdir,epoch_id+'_mod_broader_screen'))
+
+    # saving the model str
+    catch_model_str(curr_logfile, savepath=outdir + '/' + epoch_id + '_mod_broader.txt')
+
+    #creating the SEDs
+    save_broad_SED(path=os.path.join(outdir,epoch_id+'_mod_broader_SED.xcm'),
+                   e_low=0.1,e_high=100,nbins=1e3,retain_session=False,
+                   remove_abs=True,remove_gaussian=True,remove_cal=True,
+                   remove_scorpeon=True)
 
 class model_data:
 
@@ -612,7 +696,7 @@ class scorpeon_data:
 
                     mod_sky(i_par+1).frozen=False if not load_frozen and not curr_par_frozen else sky_save.frozen[i_par]
 
-    
+
 class scorpeon_group_save:
 
     '''
@@ -688,6 +772,10 @@ def save_broad_SED(path=None,e_low=0.1,e_high=100,nbins=1e3,retain_session=False
 
     AllModels.setEnergies(str(e_low)+' '+str(e_high)+' '+str(int(nbins))+" log")
 
+    #computing and storing the broadband flux
+    AllModels.calcFlux(str(e_low)+' '+str(e_high))
+    broad_flux=AllData(1).flux[0]
+
     Plot.xAxis='hz'
 
     Plot('emo')
@@ -705,6 +793,7 @@ def save_broad_SED(path=None,e_low=0.1,e_high=100,nbins=1e3,retain_session=False
     if path is not None:
         np.savetxt(path, save_arr, header='save of '+cleaned_expression+' with '+str(int(nbins))+
                                           ' log bins in the [%.2e'%e_low+',%.2e'%e_high+'] keV band'+
+                                          ' | %.2e'%e_low+'-%.2e'%e_high+' flux: %.3e'%broad_flux+' ergs/cm²/s'
                                           '\n'+data_groups_str+'\nnu (Hz) \tnuErr (Hz) \tLnu (erg/s/Hz)',
                    delimiter=' ')
     else:
@@ -770,6 +859,7 @@ def model_load(model_saves,mod_name='',mod_number=1,gap_par=None,in_add=False,ta
     if model_save is a list, loads all model_saves into the model data groups of the AllModels() data class
 
     can be used to lad custom models through model_name and mod_number. The default values update the "standard" xspec model
+
 
     gap par:    introduces a gap in the parameter loading. Used for loading with new expressions
                 including new components in the middle of the model.
@@ -1101,7 +1191,7 @@ def calc_EW(x_vals,y_cont,y_line,broad_vs_resol=True):
     x_vals_use=np.array(x_vals)
     y_cont_use=np.array(y_cont)
     y_line_use=np.array(y_line)
-    
+
     line_int=trapezoid(y_line_use-y_cont_use,x_vals_use)
 
     line_type='em' if line_int>0 else 'abs'

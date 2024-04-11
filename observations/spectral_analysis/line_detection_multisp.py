@@ -161,7 +161,7 @@ ap = argparse.ArgumentParser(description='Script to perform line detection in X-
 
 '''GENERAL OPTIONS'''
 
-ap.add_argument('-satellite',nargs=1,help='telescope to fetch spectra from',default='NICER',type=str)
+ap.add_argument('-satellite',nargs=1,help='telescope to fetch spectra from',default='multi',type=str)
 
 #used for NICER and multi for now
 ap.add_argument('-group_max_timedelta',nargs=1,
@@ -220,7 +220,7 @@ ap.add_argument('-xspec_window',nargs=1,help='xspec window id (auto tries to pic
 '''MODELS'''
 #### Models and abslines lock
 ap.add_argument('-cont_model',nargs=1,help='model list to use for the autofit computation',
-                default='nthcont_NICER',type=str)
+                default='nthcont',type=str)
 
 ap.add_argument('-autofit_model',nargs=1,help='model list to use for the autofit computation',
                 default='lines_narrow',type=str)
@@ -292,7 +292,8 @@ ap.add_argument('-SNR_min',nargs=1,help='minimum source Signal to Noise Ratio',d
 #shouldn't be needed now that we have a counts min limit + sometimes false especially in timing when the bg is the source
 
 ap.add_argument('-counts_min',nargs=1,
-                help='minimum source counts in the source region in the line continuum range',default=500,type=float)
+                help='minimum source counts in the source region in the line continuum range',default=2500,type=float)
+
 ap.add_argument('-fit_lowSNR',nargs=1,
                 help='fit the continuum of low quality data to get the HID values',default=False,type=str)
 
@@ -417,16 +418,16 @@ ap.add_argument('-restrict_fakes',nargs=1,
                 help='restrict range of fake computation to 8keV max',default=False,type=bool)
 
 '''MULTI'''
-ap.add_argument('-plot_multi_overlap',nargs=1,help='plot overlap between different epochs',default=True)
+ap.add_argument('-plot_multi_overlap',nargs=1,help='plot overlap between different epochs',default=False)
 
 #in this case other epochs from other instruments are matched against the obs of this one
 #useful to center epoch matching on a specific instrument
 #off value is False
 ap.add_argument('-multi_focus',nargs=1,help='restricts epoch matching to having a specific telescope',
-                default="NuSTAR",type=str)
+                default=False,type=str)
 
 ap.add_argument('-skip_single_instru',nargs=1,help='skip epochs with a single instrument',
-                default=True,type=bool)
+                default=False,type=bool)
 
 #for multi focus
 ap.add_argument('-match_closest_NICER',nargs=1,help='only add the closest NICER obsid',default=False,type=bool)
@@ -441,7 +442,7 @@ ap.add_argument('-single_obsid_NuSTAR',nargs=1,
 ap.add_argument('-diff_bands_NuSTAR_NICER',nargs=1,help='different energy bounds for multi NuSTAR/NICER combinations',
                 default=True,type=bool)
 
-ap.add_argument('-force_nosplit_fit_multi',nargs=1,help='force no split fit for multi satellites',default=True)
+ap.add_argument('-force_nosplit_fit_multi',nargs=1,help='force no split fit for multi satellites',default=False)
 
 #note: the NuSTAR SNR filtering is included by default in multi
 
@@ -901,7 +902,7 @@ def file_to_obs(file,sat):
             return file.split('_src')[0].split('_gti')[0]
     elif sat in ['XMM','NuSTAR']:
         return file.split('_sp')[0]
-    elif sat in ['Chandra','Swift']:
+    elif sat in ['Chandra','Swift','SWIFT']:
         return file.split('_grp_opt')[0]
     elif sat in ['NICER']:
         return file.split('_sp_grp_opt')[0]
@@ -1003,7 +1004,7 @@ def pdf_summary(epoch_files,fit_ok=False,summary_epoch=None,e_sat_low_list=None,
             else:
                 is_sp+=[False]
                 is_cleanevt+=[False]
-        elif elem_sat in ['Chandra','NICER','Swift','NuSTAR']:
+        elif elem_sat in ['Chandra','NICER','Swift','SWIFT','NuSTAR']:
             is_sp+=[True]
             is_cleanevt+=[False]
 
@@ -1064,7 +1065,7 @@ def pdf_summary(epoch_files,fit_ok=False,summary_epoch=None,e_sat_low_list=None,
 
                 pdf.cell(1,1,'grating: '+epoch_grating+' | mode: '+expmode_list[0]+
                          ' clean exposure time: '+str(round(exposure_list[i_obs]))+'s',align='C',center=True)
-            elif elem_sat in ['NICER','Suzaku','Swift','NuSTAR']:
+            elif elem_sat in ['NICER','Suzaku','Swift','SWIFT','NuSTAR']:
                 pdf.cell(1,1,'mode: '+expmode_list[0]+
                          ' clean exposure time: '+str(round(exposure_list[i_obs]))+'s',align='C',center=True)
 
@@ -1614,14 +1615,14 @@ def line_e_ranges(sat,det=None):
         e_sat_low=8. if (sat_glob=='multi' and diff_bands_NuSTAR_NICER) else 4.
         e_sat_high=79.
 
-    if sat in ['XMM', 'NICER', 'Swift']:
+    if sat.upper() in ['XMM', 'NICER', 'SWIFT']:
 
         if sat == 'NICER':
             e_sat_low = 0.3 if (sat_glob=='multi' and diff_bands_NuSTAR_NICER) else low_E_NICER
         else:
             e_sat_low = 0.3
 
-        if sat in ['XMM', 'Swift']:
+        if sat.upper() in ['XMM', 'SWIFT']:
             if sat == 'XMM':
                 e_sat_low = 2.
 
@@ -1661,7 +1662,7 @@ def line_e_ranges(sat,det=None):
 
     if line_cont_ig_arg == 'iron':
 
-        if sat in ['XMM', 'Chandra', 'NICER', 'Swift', 'Suzaku', 'NuSTAR']:
+        if sat in ['XMM', 'Chandra', 'NICER', 'Swift', 'SWIFT', 'Suzaku', 'NuSTAR']:
 
             line_cont_ig = ''
 
@@ -1908,8 +1909,6 @@ def line_detect(epoch_id):
                 .replace('SUZAKU', 'Suzaku')
     else:
         sat_indiv_init = np.repeat([sat_glob], len(epoch_files))
-
-
 
 
     #Step 0 is to readjust the response and bg file names if necessary (i.e. files got renamed)
@@ -2178,7 +2177,7 @@ def line_detect(epoch_id):
                 data_load_str=data_load_str[:-len(index_str)]
                 continue
             data_load_str+=' '+elem_sp+' '
-        if elem_sat in ['NICER','Suzaku','Swift','NuSTAR']:
+        if elem_sat in ['NICER','Suzaku','Swift','SWIFT','NuSTAR']:
             data_load_str+=' '+elem_sp+' '
 
     AllData(data_load_str)
@@ -2198,7 +2197,7 @@ def line_detect(epoch_id):
                     #loading the background and storing the bg python path in xscorpeon
                     #note that here we assume that all files have a valid scorpeon background
                     scorpeon_list_indiv[i_sp]=elem_sp.replace('_sp_grp_opt.pha','_bg.py')
-        if elem_sat=='Swift':
+        if elem_sat in ['Swift','SWIFT']:
 
             AllData(i_sp+1).response.arf=epoch_observ[0].replace('source','')+'.arf'
             AllData(i_sp+1).background=epoch_observ[0].replace('source','')+('back.pi')
@@ -2237,7 +2236,7 @@ def line_detect(epoch_id):
     else:
         Plot.xLog=False
 
-    if 'NuSTAR' in sat_indiv_good:
+    if 'NuSTAR' in sat_indiv_good or 'SWIFT' in sat_indiv_good:
         Plot.background = True
 
     #Putting the right energy bands and screening the spectra (note that we don't ignore the ignore bands here on purpose)
@@ -2300,7 +2299,7 @@ def line_detect(epoch_id):
         #re-adjusting the line cont range to esathigh to allow fitting up to higher energies if needed
         line_cont_range[1] = min(np.array(args.line_cont_range.split(' ')).astype(float)[1], max(e_sat_high_indiv))
 
-    #limiting to the line search energy range
+    #limiting to the HID energy range
     ignore_data_indiv(hid_cont_range[0],hid_cont_range[1],reset=True,sat_low_groups=e_sat_low_indiv,sat_high_groups=e_sat_high_indiv,glob_ignore_bands=ignore_bands_indiv)
 
     glob_counts=0
@@ -3055,6 +3054,8 @@ def line_detect(epoch_id):
 
         #frozen Scorpeon for now (unfreezed during the broad fit)
         xscorpeon.load(frozen=True)
+
+        ignore_data_indiv(e_sat_low_indiv,e_sat_high_indiv,reset=True,glob_ignore_bands=ignore_bands_indiv)
 
         baseload_path=outdir+'/'+epoch_observ[0]+'_baseload.xcm'
         if os.path.isfile(baseload_path):
@@ -4513,6 +4514,8 @@ elif sat_glob=='multi':
         from visual_line_tools import telescope_colors
         import matplotlib.dates as mdates
 
+        print('Plotting multi epoch overlaps...')
+
         for elem_epoch in epoch_list:
 
             fig_exp, ax_exp = plt.subplots(figsize=(17, 6))
@@ -4598,7 +4601,6 @@ elif sat_glob=='multi':
 
     epoch_list_started=started_expos
     epoch_list_done=done_expos
-
 
 if force_epochs:
     epoch_list=force_epochs_list
@@ -5206,6 +5208,7 @@ dict_linevis['hr_high_plot_restrict']=None
 dict_linevis['lum_high_1sig_plot_restrict']=None
 dict_linevis['lum_high_sign_plot_restrict']=None
 dict_linevis['hid_log_HR']=True
+dict_linevis['flag_single_obj']=True
 #individual plotting options for the graph that will create the PDF
 display_single=not multi_obj
 display_upper=True

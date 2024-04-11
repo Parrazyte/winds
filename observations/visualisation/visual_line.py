@@ -1197,6 +1197,8 @@ if np.ndim(hid_plot)==4:
 else:
     flag_single_obj=False
 
+dict_linevis['flag_single_obj']=flag_single_obj
+
 if flag_single_obj:
     hid_plot_restrict=hid_plot
     lum_plot_restrict=lum_plot
@@ -1248,6 +1250,10 @@ lum_high_1sig_list=deepcopy(lum_high_list)
 BAT_rate_list=np.array([np.array([np.repeat(np.nan,3) for i_obs in range(len(flux_high_list[i_obj]))])\
           for i_obj in range(len(flux_high_list))],dtype=object)
 
+#exposure array
+BAT_expos_list=np.array([np.repeat(np.nan,len(flux_high_list[i_obj]))\
+          for i_obj in range(len(flux_high_list))],dtype=object)
+
 #variable for checking if BAT values have been added
 
 if sum(mask_obj)>0:
@@ -1265,6 +1271,8 @@ if add_BAT_flux_corr and display_single and choice_source[0]=='4U1630-47' and su
     bat_lc_arr_rate=np.array([bat_lc_df_scat[bat_lc_df_scat.columns[1]],
                               bat_lc_df_scat[bat_lc_df_scat.columns[2]],
                               bat_lc_df_scat[bat_lc_df_scat.columns[2]]]).clip(0)
+
+    bat_lc_expos_rate=np.array(bat_lc_df_scat['TIMEDEL_CODED'])
 
     # converting to 15-50keV luminosity in Eddington units, removing negative values
     bat_lc_lum_nocorr_scat = bat_lc_arr_rate.T \
@@ -1288,7 +1296,9 @@ if add_BAT_flux_corr and display_single and choice_source[0]=='4U1630-47' and su
         BAT_rate_list[mask_obj][0][i_obs_match]=np.array([bat_lc_arr_rate.T[id_match_BAT_scat[id_obs_match]][0],
                                                           bat_lc_arr_rate.T[id_match_BAT_scat[id_obs_match]][1]*1.65,
                                                           bat_lc_arr_rate.T[id_match_BAT_scat[id_obs_match]][1]*1.65])
-        
+
+        BAT_expos_list[mask_obj][0][i_obs_match]=bat_lc_expos_rate[id_match_BAT_scat[id_obs_match]]
+
         #only overwritting the values without already existing measured fluxes
         if np.isnan(lum_high_list[mask_obj][0][i_obs_match][0]):
 
@@ -1402,23 +1412,36 @@ lum_high_sign_plot=values_manip_high_E(lum_high_sign_list)
 
 #secondary parameters
 Tin_diskbb_plot=values_manip_high_E(Tin_diskbb_list)
+
 BAT_lc_plot=values_manip_high_E(BAT_rate_list)
+
+#no need to change this one since it only has 2D
+BAT_expos_plot=BAT_expos_list
 
 #masking the selected objects in each array
 BAT_lc_plot_restrict=deepcopy(BAT_lc_plot)
-BAT_lc_plot_restrict=BAT_lc_plot_restrict.T[mask_obj].T
+
+BAT_expos_plot_restrict=deepcopy(BAT_expos_plot)
 
 Tin_diskbb_plot_restrict=deepcopy(Tin_diskbb_plot)
-Tin_diskbb_plot_restrict=Tin_diskbb_plot_restrict.T[mask_obj].T
 
 lum_high_1sig_plot_restrict=deepcopy(lum_high_1sig_plot)
-lum_high_1sig_plot_restrict=lum_high_1sig_plot_restrict.T[mask_obj].T
 
 lum_high_plot_restrict=deepcopy(lum_high_plot)
-lum_high_plot_restrict=lum_high_plot_restrict.T[mask_obj].T
 
 lum_high_sign_plot_restrict=deepcopy(lum_high_sign_plot)
-lum_high_sign_plot_restrict=lum_high_sign_plot_restrict.T[mask_obj].T
+
+gamma_nthcomp_plot_restrict=deepcopy(gamma_nthcomp_plot)
+
+#to avoid issues with single object
+if not flag_single_obj:
+    BAT_lc_plot_restrict = BAT_lc_plot_restrict.T[mask_obj].T
+    BAT_expos_plot_restrict=BAT_expos_plot_restrict.T[mask_obj].T
+    Tin_diskbb_plot_restrict=Tin_diskbb_plot_restrict.T[mask_obj].T
+    lum_high_1sig_plot_restrict=lum_high_1sig_plot_restrict.T[mask_obj].T
+    lum_high_plot_restrict=lum_high_plot_restrict.T[mask_obj].T
+    lum_high_sign_plot_restrict=lum_high_sign_plot_restrict.T[mask_obj].T
+    gamma_nthcomp_plot_restrict=gamma_nthcomp_plot_restrict.T[mask_obj].T
 
 #we create this one solely for the sake of the scatter plots
 hr_high_plot_restrict=deepcopy(lum_high_plot_restrict)
@@ -1469,8 +1492,6 @@ for i_obj in range(len(hr_high_sign_plot_restrict[2])):
 
     hr_high_sign_plot_restrict[2][i_obj]=np.where(no_det_vals,hr_high_sign_UL_whennovalue,hr_high_sign_UL_whenvalue)
 
-gamma_nthcomp_plot_restrict=deepcopy(gamma_nthcomp_plot)
-gamma_nthcomp_plot_restrict=gamma_nthcomp_plot_restrict.T[mask_obj].T
 
 dict_linevis['lum_high_1sig_plot_restrict']=lum_high_1sig_plot_restrict
 
@@ -1519,7 +1540,7 @@ if display_single and choice_source[0]=='4U1630-47' and sum(ravel_ragged(mask_in
                     diago_color[i_obj][i_obs]='grey'
 
 dict_linevis['diago_color']=diago_color
-# breakpoint()
+
 custom_states_color=deepcopy(hid_plot[1][0])
 if display_single and choice_source[0]=='4U1630-47' and sum(ravel_ragged(mask_intime_plot))>0:
     for i_obj in range(len(custom_states_color)):
@@ -2379,12 +2400,25 @@ for i_obj_r in range(n_obj_r):
     tr_order=(2,0,1,3) if flag_single_obj else (2,0,1)
 
     #recreating an individual non ragged array (similar to abslines_perobj) in construction for each object
-    hid_plot_indiv=np.array([[subelem for subelem in elem] for elem in hid_plot_restrict.transpose(tr_order)[i_obj_r]],dtype=float)
+    hid_plot_indiv=np.array([[subelem for subelem in elem] for elem in hid_plot_restrict.transpose(tr_order)[i_obj_r]],
+                            dtype=float)
 
-    hr_high_plot_indiv=np.array([elem for elem in hr_high_plot_restrict.T[i_obj_r]],dtype=float)
-    lum_high_plot_indiv=np.array([elem for elem in lum_high_plot_restrict.T[i_obj_r]],dtype=float)
+    if flag_single_obj:
+        hr_high_plot_indiv=np.array([elem for elem in np.transpose(hr_high_plot_restrict, (1, 0, 2))[i_obj_r]],
+                                    dtype=float)
+        lum_high_plot_indiv = np.array([elem for elem in np.transpose(lum_high_plot_restrict, (1, 0, 2))[i_obj_r]],
+                                     dtype=float)
+        BAT_lc_plot_indiv = np.array([elem for elem in np.transpose(BAT_lc_plot_restrict, (1, 0, 2))[i_obj_r]],
+                                     dtype=float)
 
-    BAT_lc_plot_indiv=np.array([elem for elem in BAT_lc_plot_restrict.T[i_obj_r]],dtype=float)
+    else:
+        hr_high_plot_indiv=np.array([elem for elem in hr_high_plot_restrict.T[i_obj_r]],dtype=float)
+        lum_high_plot_indiv=np.array([elem for elem in lum_high_plot_restrict.T[i_obj_r]],dtype=float)
+
+        BAT_lc_plot_indiv=np.array([elem for elem in BAT_lc_plot_restrict.T[i_obj_r]],dtype=float)
+
+    #this one is always 2D
+    BAT_expos_plot_indiv=BAT_expos_plot_restrict[i_obj_r]
 
     #this one is put back to non-Eddington values, and we remove the first flux measurement whose band can change between instruments or computations
     flux_plot_indiv=np.array([[subelem for subelem in elem] for elem in lum_plot_restrict[1:].transpose(tr_order)[i_obj_r]],dtype=float)/Edd_factor_restrict[i_obj_r]
@@ -2406,6 +2440,9 @@ for i_obj_r in range(n_obj_r):
                           [order_intime_plot_restrict[i_obj_r].astype(int)].T
     BAT_lc_plot_indiv = BAT_lc_plot_indiv.T[mask_intime_plot[i_obj_r].astype(bool)]\
                           [order_intime_plot_restrict[i_obj_r].astype(int)].T
+
+    BAT_expos_plot_indiv=BAT_expos_plot_indiv[mask_intime_plot[i_obj_r].astype(bool)]\
+                                             [order_intime_plot_restrict[i_obj_r].astype(int)]
 
     '''
     # splitting information to take off 1 dimension and only take specific information    
@@ -2450,7 +2487,7 @@ for i_obj_r in range(n_obj_r):
     iter_columns=[['HR [6-10]/[3-10]','L_3-10/LEdd','Flux_3-6','Flux_6-10','Flux_1-3','Flux_3-10'],
                   ['main','90% err-','90% err+']]
 
-    iter_columns_high=[['HR [15-50]/[3-6]','L_15-50/LEdd','Flux_15-50','BAT_rate_15-50'],
+    iter_columns_high=[['HR [15-50]/[3-6]','L_15-50/LEdd','Flux_15-50','BAT_rate_15-50','BAT_expos_coded'],
                        ['main','90% err-','90% err+']]
 
     #but not for the line df
@@ -2466,7 +2503,10 @@ for i_obj_r in range(n_obj_r):
     observ_col_reshaped=observ_col.reshape(n_obs_r,len(iter_columns[0])*len(iter_columns[1]))
 
     observ_col_high=np.array([hr_high_plot_indiv,lum_high_plot_indiv,lum_high_plot_indiv/Edd_factor_restrict[i_obj_r],
-                              BAT_lc_plot_indiv])\
+                              BAT_lc_plot_indiv,
+                              np.array([BAT_expos_plot_indiv,
+                                        np.zeros(len(BAT_expos_plot_indiv)),
+                                        np.zeros(len(BAT_expos_plot_indiv))])])\
                     .transpose(2,0,1)
 
     observ_col_high_reshaped=observ_col_high.reshape(n_obs_r,len(iter_columns_high[0])*len(iter_columns_high[1]))
@@ -2480,6 +2520,9 @@ for i_obj_r in range(n_obj_r):
     curr_df_observ_high=produce_df(observ_col_high_reshaped, iter_rows,iter_columns_high,
                                    row_names=['Source','Instrument','ObsID','date'],
                                 column_names=['measure','value'],row_index=row_index_obs).astype(str)
+
+    #removing the last two columns of the high-E since the exposure is only a main value
+    curr_df_observ_high=curr_df_observ_high[curr_df_observ_high.columns[:-2]]
 
     pd.set_option('display.float_format', lambda x: '%.3e' % x)
 

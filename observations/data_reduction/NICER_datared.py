@@ -103,7 +103,7 @@ ap.add_argument('-catch','--catch_errors',help='Catch errors while running the d
 
 #global choices
 ap.add_argument("-a","--action",nargs='?',help='Give which action(s) to proceed,separated by comas.',
-                default='1,gti,fs,l,g,m',type=str)
+                default='c,1,gti,fs,l,g,m',type=str)
 #default: 1,gti,fs,l,g,m,c
 
 ap.add_argument("-over",nargs=1,help='overwrite computed tasks (i.e. with products in the batch, or merge directory\
@@ -124,7 +124,7 @@ ap.add_argument('-folder_cont',nargs=1,help='skip all but the last 2 directories
 #the summary of temporal filtering logged in process_obsdir, and the resulting spectra
 
 #should only be done in very extreme cases
-ap.add_argument('-keep_SAA',nargs=1,help='keep South Atlantic Anomaly (SAA) Periods',type=bool,default=False)
+ap.add_argument('-keep_SAA',nargs=1,help='keep South Atlantic Anomaly (SAA) Periods',type=bool,default=True)
 
 ap.add_argument('-overshoot_limit',nargs=1,help='overshoot event rate limit',type=float,default=100)
 
@@ -136,10 +136,10 @@ ap.add_argument('-keep_lowmem',nargs=1,help='disable the memory discarding filte
 #default to keep the base value of NICERDAS (30 as of the writing of this)
 ap.add_argument('-br_earth_min',nargs=1,help='bright earth minimum angle',type=str,default='default')
 
-ap.add_argument('-min_gti',nargs=1,help='minimum gti size',type=float,default=5.0)
+ap.add_argument('-min_gti',nargs=1,help='minimum gti size',type=float,default=1.0)
 
 ap.add_argument('-erodedilate',nargs=1,help='Erodes increasingly more gtis around the excluded intervals',
-                type=float,default=5.0)
+                type=float,default=1.0)
 
 #gti
 #keyword for split: split_timeinsec
@@ -2068,7 +2068,7 @@ def clean_all(directory):
 
     '''
 
-    clean products in the xti/event_cl directory
+    clean products in the xti/event_cl directory and main directory
 
     Useful to avoid bloating with how big these files are
     '''

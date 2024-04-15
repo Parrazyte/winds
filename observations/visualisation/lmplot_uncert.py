@@ -28,8 +28,7 @@ def lmplot_uncert_a(ax, x, y, dx, dy, xlim=None,ylim=None, percent=68.26,percent
      or most purposes this is not necessary, so we simply return the slope and intercept computed where desired
 
     Notes:
-        -the "central" regression and scatter values are computed from the non-perturbated values
-        (and could differ from the median in case of non-symmetric uncertainties) and DO NOT consider upper limits
+        -the "central" regression and scatter values are computed from the median of the perturbated values
 
     Method:
 
@@ -57,7 +56,8 @@ def lmplot_uncert_a(ax, x, y, dx, dy, xlim=None,ylim=None, percent=68.26,percent
     -xlim,ylim:         upper limit information. Either None or a N-size mask with a 1 for upper/lower limits.
                         In this case, the values will be perturbated between x and xlim with a uniform distribution
 
-    -percent:           percent of the posterior distributions returned (the main value is the median)
+    -percent:           percent of the posterior distributions returned (the main value is the median so 50%)
+                        Default value is for 1 sigma
 
     -percent_regions:   percent or list of percent of the line distributions to use for the shaded regions.
                         use "auto" to keep the same value as percent
@@ -68,10 +68,12 @@ def lmplot_uncert_a(ax, x, y, dx, dy, xlim=None,ylim=None, percent=68.26,percent
                         "best": takes the actual lowest intercept error
                         value:  forced at that value
 
-    -return_linreg:     returns the slope, intercept,scatter, and x_intercept
+    -return_linreg:     returns the slope, intercept,scatter, and x_intercept (otherwise returns nothing)
 
     -infer_log_scale:   automatically adjust the linear regression to log-linear or log-log linear depending on whether
                         the axis are in log scale
+
+    -log_sampling:      Force X axis log scale sampling when creating the regression curves
 
     -nanzero_err:       consider uncertainty values of nan as if there was no error
 
@@ -80,12 +82,14 @@ def lmplot_uncert_a(ax, x, y, dx, dy, xlim=None,ylim=None, percent=68.26,percent
                         (normalized to 68.26)
 
     -xbounds,ybounds:   resizes the graph manually instead of automatically
-        -'auto': auto resize
-        -values: resize manually to these values
-        -None: no resize
+                        -'auto': auto resize
+                        -values: resize manually to these values
+                        -None: no resize
+
     -line_color, lw:     displays for the main plotted line
+
     -inter_color:        confidence interval region color. If list like, use the different colors
-                         for different intervals
+                         for different intervals but should be the same size as the percent_regions list
 
     -check_indiv:
            -True         plot a few elements of the perturbation, to check results

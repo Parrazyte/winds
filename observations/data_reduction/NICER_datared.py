@@ -103,7 +103,7 @@ ap.add_argument('-catch','--catch_errors',help='Catch errors while running the d
 
 #global choices
 ap.add_argument("-a","--action",nargs='?',help='Give which action(s) to proceed,separated by comas.',
-                default='c,1,gti,fs,l,g,m',type=str)
+                default='fc,c,1,gti,l',type=str)
 #default: 1,gti,fs,l,g,m,c
 
 ap.add_argument("-over",nargs=1,help='overwrite computed tasks (i.e. with products in the batch, or merge directory\
@@ -143,8 +143,11 @@ ap.add_argument('-erodedilate',nargs=1,help='Erodes increasingly more gtis aroun
 
 #gti
 #keyword for split: split_timeinsec
-ap.add_argument('-gti_split',nargs=1,help='GTI split method',default='orbit+flare',type=str)
+ap.add_argument('-gti_split',nargs=1,help='GTI split method',default='orbit+flare+split_10',type=str)
 ap.add_argument('-flare_method',nargs=1,help='Flare extraction method(s)',default='clip+peak',type=str)
+
+#previous version was with a SAS, tool, which required installing SAS. Now the default is NICER directly
+ap.add_argument('-gti_tool',nargs=1,help='GTI tool used to make the gti file itself',default='NICERDAS',type=str)
 
 
 '''Flare methods '''
@@ -180,6 +183,7 @@ ap.add_argument('-hr_bands_str',nargs=1,help='Gives the list of bands to create 
 ap.add_argument('-relax_SAA_bg',help='Increase the maximum of the nxb.saa_norm model to a higher value',
                 default=False,type=str)
 
+#for scorpeon, scorpeon_script for the model and scorpeon_default for the static
 ap.add_argument('-bg',"--bgmodel",help='Give the background model to use for the data reduction',
                 default='scorpeon_script',type=str)
 
@@ -580,7 +584,7 @@ def plot_event_diag(mode,obs_start_str,time_obs,id_gti_orbit,
 def create_gtis(directory,split='orbit+flare',band='3-15',flare_method='clip+peak',clip_method='median',
                 clip_sigma=2.,clip_band='8-12',peak_score_thresh=2.,
                 int_split_band='0.3-10.',int_split_bin=0.1,clip_int_delta=True,
-                flare_factor=2):
+                flare_factor=2,gti_tool='NICERDAS'):
     '''
     wrapper for a function to split nicer obsids into indivudal portions with different methods
     the default binning is 1s because the NICER mkf file time resolution is 1s
@@ -652,12 +656,14 @@ def create_gtis(directory,split='orbit+flare',band='3-15',flare_method='clip+pea
                     peak score threshold to exlcude peaks as flares in the data
 
 
-
+    gti_tool:
+        software used for gti creation. Can be "SAS" (first version from before nigti existed)\
+        or "NICERDAS" (now default)
     NOTE: requires sas and a sasinit alias to initialize it (to use tabgtigen)
 
     '''
 
-    def create_gti_files(id_gti, data_lc, orbit_prefix, suffix, file_base,time_gtis):
+    def create_gti_files(id_gti, data_lc, orbit_prefix, suffix, file_base,time_gtis,gti_tool='NICERDAS'):
 
         '''
         creates a gti file from a list of indexes of times which will be picked in data_lc
@@ -666,7 +672,11 @@ def create_gtis(directory,split='orbit+flare',band='3-15',flare_method='clip+pea
                 (typically this is either the mkf file for classic cuts (so 1 second resolution)
                 or a lightcurve file for more flexible resolution
 
-        2.creates the gti file itself using sas's tabgtigen
+        2.creates the gti file itself
+
+        gti_tool:
+            -SAS         uses sas's tabgtigen
+            -NICERDAS    uses nicerdas nigti tool
         '''
 
         if len(id_gti) == 0:
@@ -675,84 +685,110 @@ def create_gtis(directory,split='orbit+flare',band='3-15',flare_method='clip+pea
         # Here we use the housekeeping file as the fits base for the gti mask file
         fits_gti = fits.open(file_base)
 
-        # creating a custom gti 'mask' file
-        gti_column = fits.ColDefs([fits.Column(name='IS_GTI', format='I',
-                                               array=np.array([1 if i in id_gti else 0 for i in range(len(data_lc))]))])
-
-        # replacing the hdu with a hdu containing it
-        fits_gti[1] = fits.BinTableHDU.from_columns(fits_gti[1].columns[:2] + gti_column)
-        fits_gti[1].name = 'IS_GTI'
-
-        lc_mask_path = os.path.join(directory, 'xti', obsid + '_gti_mask_' + orbit_prefix + suffix) + '.fits'
-
-        if os.path.isfile(lc_mask_path):
-            os.remove(lc_mask_path)
-
-        fits_gti.writeto(lc_mask_path)
-
-        # waiting for the file to be created
-        while not os.path.isfile(lc_mask_path):
-            time.sleep(0.1)
-
         # creating the orbit gti expression
         gti_path = os.path.join(directory, 'xti', obsid + '_gti_' + orbit_prefix + suffix) + '.gti'
-
-        print(gti_path)
-        bashproc.sendline('tabgtigen table=' + lc_mask_path + ' expression="IS_GTI==1" gtiset=' + gti_path)
-
-        # this shouldn't take too long so we keep the timeout
-        # two expects because there's one for the start and another for the end
-        bashproc.expect('tabgtigen:- tabgtigen')
-        bashproc.expect('tabgtigen:- tabgtigen')
-
-        '''
-        There is an issue with the way tabgtigen creates the exposure due to a lacking keyword
-        To ensure things work correctly, we remake the contents of the file and keep the header
-        '''
 
         # preparing the list of gtis to replace manually
         gti_intervals = np.array(list(interval_extract(id_gti))).T
 
-        delta_time_gtis=(time_gtis[1]-time_gtis[0])/2
-        # opening and modifying the content of the header in the gti file for NICER
-        with fits.open(gti_path, mode='update') as hdul:
+        delta_time_gtis = (time_gtis[1] - time_gtis[0]) / 2
 
-            # for some reason we don't get the right values here so we recreate them
+        if gti_tool=='NICERDAS':
+
+            '''
+            the task nigti doesn't accept ISOT formats with decimal seconds so we use NICER MET instead 
+            (see https://heasarc.gsfc.nasa.gov/lheasoft/ftools/headas/nigti.html)
+            '''
+
+            start_obs_s=fits_gti[1].header['TSTART']+fits_gti[1].header['TIMEZERO']
+            #saving for titles later
+            mjd_ref=Time(fits_gti[1].header['MJDREFI']+fits_gti[1].header['MJDREFF'],format='mjd')
+
+            obs_start=mjd_ref+TimeDelta(start_obs_s,format='sec')
+
+            gti_input_path=os.path.join(directory, 'xti', obsid + '_gti_input_' + orbit_prefix + suffix) + '.txt'
+            with open(gti_input_path,'w+') as f_input:
+                f_input.writelines([str(start_obs_s+time_gtis[gti_intervals[0][i]])+' '+
+                                    str(start_obs_s+time_gtis[gti_intervals[1][i]])+'\n'\
+                                    for i in range(len(gti_intervals.T))])
+
+            bashproc.sendline('nigti @'+gti_input_path+' '+gti_path+' clobber=YES chatter=4')
+            bashproc.expect('ngti=')
+
+        if gti_tool=='SAS':
+
             # creating a custom gti 'mask' file
+            gti_column = fits.ColDefs([fits.Column(name='IS_GTI', format='I',
+                                                   array=np.array(
+                                                       [1 if i in id_gti else 0 for i in range(len(data_lc))]))])
 
-            # storing the current header
-            prev_header = hdul[1].header
+            # replacing the hdu with a hdu containing it
+            fits_gti[1] = fits.BinTableHDU.from_columns(fits_gti[1].columns[:2] + gti_column)
+            fits_gti[1].name = 'IS_GTI'
 
-            # creating a START and a STOP column in "standard" GTI fashion
-            # note: the 0.5 is there to allow the initial and final second bounds
+            lc_mask_path = os.path.join(directory, 'xti', obsid + '_gti_mask_' + orbit_prefix + suffix) + '.fits'
 
-            ####note that the start_obs_s-0.5 might need to be modified
+            if os.path.isfile(lc_mask_path):
+                os.remove(lc_mask_path)
 
-            gti_column_start = fits.ColDefs([fits.Column(name='START', format='D',
-                                                         array=np.array([time_gtis[elem] + start_obs_s -delta_time_gtis for elem in
-                                                                         gti_intervals[0]]))])
-            gti_column_stop = fits.ColDefs([fits.Column(name='STOP', format='D',
-                                                        array=np.array([time_gtis[elem] + start_obs_s + delta_time_gtis for elem in
-                                                                        gti_intervals[1]]))])
+            fits_gti.writeto(lc_mask_path)
 
-            # replacing the hdu
-            hdul[1] = fits.BinTableHDU.from_columns(gti_column_start + gti_column_stop)
+            # waiting for the file to be created
+            while not os.path.isfile(lc_mask_path):
+                time.sleep(0.1)
 
-            # replacing the header
-            hdul[1].header = prev_header
+            bashproc.sendline('tabgtigen table=' + lc_mask_path + ' expression="IS_GTI==1" gtiset=' + gti_path)
 
-            # Changing the reference times
-            hdul[1].header['MJDREF'] = 56658 + 7.775925925925930E-04
+            # this shouldn't take too long so we keep the timeout
+            # two expects because there's one for the start and another for the end
+            bashproc.expect('tabgtigen:- tabgtigen')
+            bashproc.expect('tabgtigen:- tabgtigen')
 
-            # hdul[1].header['MJDREFI']=56658
-            # hdul[1].header['MJDREFF']=7.775925925925930E-04
+            '''
+            There is an issue with the way tabgtigen creates the exposure due to a lacking keyword
+            To ensure things work correctly, we remake the contents of the file and keep the header
+            '''
 
-            # and the gti keywords
-            hdul[1].header['ONTIME'] = len(id_gti)
-            hdul[1].header['TSTART'] = hdul[1].data['START'][0] - start_obs_s
-            hdul[1].header['TSTOP'] = hdul[1].data['STOP'][-1] - start_obs_s
 
-            hdul.flush()
+            # opening and modifying the content of the header in the gti file for NICER
+            with fits.open(gti_path, mode='update') as hdul:
+
+                # for some reason we don't get the right values here so we recreate them
+                # creating a custom gti 'mask' file
+
+                # storing the current header
+                prev_header = hdul[1].header
+
+                # creating a START and a STOP column in "standard" GTI fashion
+                # note: the 0.5 is there to allow the initial and final second bounds
+
+                ####note that the start_obs_s-0.5 might need to be modified
+
+                gti_column_start = fits.ColDefs([fits.Column(name='START', format='D',
+                                                             array=np.array([time_gtis[elem] + start_obs_s -delta_time_gtis for elem in
+                                                                             gti_intervals[0]]))])
+                gti_column_stop = fits.ColDefs([fits.Column(name='STOP', format='D',
+                                                            array=np.array([time_gtis[elem] + start_obs_s + delta_time_gtis for elem in
+                                                                            gti_intervals[1]]))])
+
+                # replacing the hdu
+                hdul[1] = fits.BinTableHDU.from_columns(gti_column_start + gti_column_stop)
+
+                # replacing the header
+                hdul[1].header = prev_header
+
+                # Changing the reference times
+                hdul[1].header['MJDREF'] = 56658 + 7.775925925925930E-04
+
+                # hdul[1].header['MJDREFI']=56658
+                # hdul[1].header['MJDREFF']=7.775925925925930E-04
+
+                # and the gti keywords
+                hdul[1].header['ONTIME'] = len(id_gti)
+                hdul[1].header['TSTART'] = hdul[1].data['START'][0] - start_obs_s
+                hdul[1].header['TSTOP'] = hdul[1].data['STOP'][-1] - start_obs_s
+
+                hdul.flush()
 
     #ensuring a good obsid name even in local
     if directory=='./':
@@ -1181,12 +1217,15 @@ def create_gtis(directory,split='orbit+flare',band='3-15',flare_method='clip+pea
                 #create the gti files with a "S" keyword and keeping the orbit information in the name
                 for i_split,split_gtis in enumerate(split_gti_arr[i_orbit]):
                     if len(split_gtis)>0:
-                        create_gti_files(split_gtis,flare_lc,str_orbit(i_orbit),split_str+str_orbit(i_split),file_base=file_mkf,time_gtis=time_obs)
+                        create_gti_files(split_gtis,flare_lc,str_orbit(i_orbit),split_str+str_orbit(i_split),
+                                         file_base=file_mkf,time_gtis=time_obs,gti_tool=gti_tool)
             else:
-                create_gti_files(id_gti[i_orbit],flare_lc,str_orbit(i_orbit),'',file_base=file_mkf,time_gtis=time_obs)
+                create_gti_files(id_gti[i_orbit],flare_lc,str_orbit(i_orbit),'',
+                                 file_base=file_mkf,time_gtis=time_obs,gti_tool=gti_tool)
 
             if len(id_flares[i_orbit])>0:
-                create_gti_files(id_flares[i_orbit],flare_lc,str_orbit(i_orbit), 'F',file_base=file_mkf,time_gtis=time_obs)
+                create_gti_files(id_flares[i_orbit],flare_lc,str_orbit(i_orbit), 'F',
+                                 file_base=file_mkf,time_gtis=time_obs,gti_tool=gti_tool)
 
 
         if 'intensity' in split:
@@ -1287,7 +1326,8 @@ def create_gtis(directory,split='orbit+flare',band='3-15',flare_method='clip+pea
                 for i_split,split_gtis in enumerate(split_gti_arr[i_orbit]):
                     if len(split_gtis)>0:
                         create_gti_files(split_gtis,int_lc_orbit_time,str_orbit(i_orbit),split_str+str_orbit(i_split),
-                                         file_base=int_lc_orbit_path,time_gtis=int_lc_orbit_time)
+                                         file_base=int_lc_orbit_path,time_gtis=int_lc_orbit_time,
+                                         gti_tool=gti_tool)
 
                 #removing the non-split gti file
                 os.remove(os.path.join(directory,'xti',obsid+'_gti_'+str_orbit(i_orbit)+'.gti'))
@@ -1393,7 +1433,8 @@ def extract_all_spectral(directory,bkgmodel='scorpeon_script',language='python',
                               ' clobber='+('YES' if overwrite else 'FALSE')+gti_str+relaxed_SAA_bg_str)
 
             process_state=bashproc.expect(['DONE','ERROR: could not find UFA file','Task aborting due to zero EXPOSURE',
-                                           'Task aborting due to zero response'],timeout=None)
+                                           'Task aborting due to zero response',
+                                           'PIL ERROR PIL_UNSPECIFIED_ERROR: non-specific pil error'],timeout=None)
 
             #raising an error to stop the process if the command has crashed for some reason
             if process_state>2:
@@ -1428,7 +1469,7 @@ def extract_all_spectral(directory,bkgmodel='scorpeon_script',language='python',
             file_dir=spfile[:spfile.rfind('/')]
             file_suffix=file_id.split(directory)[-1]
 
-            copyfile_suffixes=['_sr.pha','_bg.rmf','_bg.py','_sk.arf','.arf','.rmf']
+            copyfile_suffixes=['_sr.pha','_bg.rmf','_bg.py','_sk.arf','.arf','.rmf','_bg.pha']
             copyfile_list=['ni'+file_id+elem for elem in copyfile_suffixes]
 
             #copying the spectral products into the main directory

@@ -236,6 +236,8 @@ gti_split=args.gti_split
 gti_lc_band=args.gti_lc_band
 flare_method=args.flare_method
 
+gti_tool=args.gti_tool
+
 clip_sigma=args.clip_sigma
 flare_factor=args.flare_factor
 peak_score_thresh=args.peak_score_thresh
@@ -693,23 +695,25 @@ def create_gtis(directory,split='orbit+flare',band='3-15',flare_method='clip+pea
 
         delta_time_gtis = (time_gtis[1] - time_gtis[0]) / 2
 
+        start_obs_s = fits_gti[1].header['TSTART'] + fits_gti[1].header['TIMEZERO']
+        # saving for titles later
+        mjd_ref = Time(fits_gti[1].header['MJDREFI'] + fits_gti[1].header['MJDREFF'], format='mjd')
+
+        obs_start = mjd_ref + TimeDelta(start_obs_s, format='sec')
+
         if gti_tool=='NICERDAS':
 
             '''
             the task nigti doesn't accept ISOT formats with decimal seconds so we use NICER MET instead 
             (see https://heasarc.gsfc.nasa.gov/lheasoft/ftools/headas/nigti.html)
+            
+            we still add a -0.5*delta and +0.5*delta on each side to avoid issues with losing the last bins of lightcurves
             '''
-
-            start_obs_s=fits_gti[1].header['TSTART']+fits_gti[1].header['TIMEZERO']
-            #saving for titles later
-            mjd_ref=Time(fits_gti[1].header['MJDREFI']+fits_gti[1].header['MJDREFF'],format='mjd')
-
-            obs_start=mjd_ref+TimeDelta(start_obs_s,format='sec')
 
             gti_input_path=os.path.join(directory, 'xti', obsid + '_gti_input_' + orbit_prefix + suffix) + '.txt'
             with open(gti_input_path,'w+') as f_input:
-                f_input.writelines([str(start_obs_s+time_gtis[gti_intervals[0][i]])+' '+
-                                    str(start_obs_s+time_gtis[gti_intervals[1][i]])+'\n'\
+                f_input.writelines([str(start_obs_s+time_gtis[gti_intervals[0][i]]-delta_time_gtis)+' '+
+                                    str(start_obs_s+time_gtis[gti_intervals[1][i]]+delta_time_gtis)+'\n'\
                                     for i in range(len(gti_intervals.T))])
 
             bashproc.sendline('nigti @'+gti_input_path+' '+gti_path+' clobber=YES chatter=4')
@@ -2234,7 +2238,8 @@ if not local:
                                         int_split_band=int_split_band,int_split_bin=int_split_bin,
                                                    flare_factor=flare_factor,
                                                    clip_sigma=clip_sigma,
-                                                   peak_score_thresh=peak_score_thresh)
+                                                   peak_score_thresh=peak_score_thresh,
+                                                   gti_tool=gti_tool)
                             if type(output_err)==str:
                                 raise ValueError
                             create_gtis_done.wait()
@@ -2308,7 +2313,8 @@ if not local:
                                     flare_method=flare_method,
                                         int_split_band=int_split_band,int_split_bin=int_split_bin,
                                                flare_factor=flare_factor,
-                                               clip_sigma=clip_sigma,peak_score_thresh=peak_score_thresh)
+                                               clip_sigma=clip_sigma,peak_score_thresh=peak_score_thresh,
+                                                   gti_tool=gti_tool)
                         if type(output_err) == str:
                             folder_state=output_err
                         else:
@@ -2399,7 +2405,8 @@ else:
                                          flare_method=flare_method,
                                         int_split_band=int_split_band,int_split_bin=int_split_bin,
                                          flare_factor=flare_factor,
-                                         clip_sigma=clip_sigma,peak_score_thresh=peak_score_thresh)
+                                         clip_sigma=clip_sigma,peak_score_thresh=peak_score_thresh,
+                                                   gti_tool=gti_tool)
                 create_gtis_done.wait()
 
             if curr_action == 'l':

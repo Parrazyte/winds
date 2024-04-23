@@ -2071,8 +2071,12 @@ def hid_graph(ax_hid,dict_linevis,
     cmap_color_det=dict_linevis['cmap_color_det']
     cmap_color_nondet=dict_linevis['cmap_color_nondet']
     exptime_list=dict_linevis['exptime_list']
+
     diago_color=dict_linevis['diago_color']
     custom_states_color=dict_linevis['custom_states_color']
+    custom_outburst_color=dict_linevis['custom_outburst_color']
+    custom_outburst_number=dict_linevis['custom_outburst_number']
+
     hr_high_plot_restrict=dict_linevis['hr_high_plot_restrict']
     hid_log_HR=dict_linevis['hid_log_HR']
     flag_single_obj=dict_linevis['flag_single_obj']
@@ -2107,7 +2111,7 @@ def hid_graph(ax_hid,dict_linevis,
     type_1_cm = ['Inclination', 'Time', 'nH', 'kT']
 
     # parameters without actual colorbars
-    type_1_colorcode = ['Source', 'Instrument','custom_line_struct','custom_acc_states']
+    type_1_colorcode = ['Source', 'Instrument','custom_line_struct','custom_acc_states','custom_outburst']
 
     fig_hid=ax_hid.get_figure()
 
@@ -2638,6 +2642,8 @@ def hid_graph(ax_hid,dict_linevis,
                                     if radio_info_cmap=='custom_line_struct' else \
                                 custom_states_color[mask_obj][i_obj][obj_val_mask_sign][obj_order_sign] \
                                         if radio_info_cmap == 'custom_acc_states' else \
+                                custom_outburst_color[mask_obj][i_obj][obj_val_mask_sign][obj_order_sign] \
+                                        if radio_info_cmap=='custom_outburst' else\
                                 obj_val_cmap_sign[obj_val_mask_sign][obj_order_sign]
 
         #### TODO : test the dates here with just IGRJ17451 to solve color problem
@@ -2723,7 +2729,9 @@ def hid_graph(ax_hid,dict_linevis,
                                     if radio_info_cmap == 'custom_line_struct' else \
                                     custom_states_color[mask_obj][i_obj][obj_val_mask_nonsign] \
                                         if radio_info_cmap == 'custom_acc_states' else \
-                                    obj_val_cmap[obj_val_mask_nonsign]
+                                        custom_outburst_color[mask_obj][i_obj][obj_val_mask_nonsign] \
+                                        if radio_info_cmap=='custom_outburst' else \
+                    obj_val_cmap[obj_val_mask_nonsign]
 
             # adding a failsafe to avoid problems when nothing is displayed
             if c_scat is not None and len(c_scat) == 0:
@@ -3082,8 +3090,10 @@ def hid_graph(ax_hid,dict_linevis,
                                         diago_color[mask_obj][i_obj_base][mask_nondet_ul] \
                                             if radio_info_cmap == 'custom_line_struct' else \
                                             custom_states_color[mask_obj][i_obj_base][mask_nondet_ul] \
-                                                if radio_info_cmap == 'custom_acc_states' \
-                                            else 'grey'
+                                                if radio_info_cmap == 'custom_acc_states' else \
+                                            custom_outburst_color[mask_obj][i_obj_base][mask_nondet_ul] \
+                                                if radio_info_cmap=='custom_outburst' else \
+                                            'grey'
 
                 # adding a failsafe to avoid problems when nothing is displayed
                 if len(edgec_scat) == 0:
@@ -3143,8 +3153,10 @@ def hid_graph(ax_hid,dict_linevis,
                                     diago_color[mask_obj][i_obj_base][mask_nondet] \
                                         if radio_info_cmap == 'custom_line_struct' else \
                                     custom_states_color[mask_obj][i_obj_base][mask_nondet] \
-                                        if radio_info_cmap == 'custom_acc_states' \
-                                        else 'grey'
+                                        if radio_info_cmap == 'custom_acc_states' else \
+                                    custom_outburst_color[mask_obj][i_obj_base][mask_nondet] \
+                                        if radio_info_cmap == 'custom_outburst' else \
+                                        'grey'
 
                 if broad_mode == 'BAT' and not sign_broad_hid_BAT:
                     alpha_nondet_full = np.where(mask_sign_high_E, 1, 0.3)
@@ -3736,7 +3748,9 @@ def distrib_graph(data_perinfo,info,dict_linevis,data_ener=None,conf_thresh=0.99
     if scale_log_ew:
         bins_ew=np.geomspace(1,min(100,(max(ravel_ragged(data_perinfo[0][0]))//5+1)*5),20)
     else:
-        bins_ew=np.linspace(5,min(100,(max(ravel_ragged(data_perinfo[0][0]))//5+1)*5),20)
+        bins_ew=np.arange(5, min(100, (max(ravel_ragged(data_perinfo[0][0])) // 5 + 1) * 5), 2.5)
+        # bins_ew=np.linspace(5,min(100,(max(ravel_ragged(data_perinfo[0][0]))//5+1)*5),20)
+
         
     bins_ewratio=np.linspace(0.2,4,20)
     
@@ -4092,6 +4106,7 @@ def correl_graph(data_perinfo,infos,data_ener,dict_linevis,mode='intrinsic',mode
             -Time
             'nthcomp-gamma' (only for high-energy obs)
             'highE-flux' (15-50 keV)
+            'highE-HR' (15-50keV/3-6keV)
 
         source:
             -inclin
@@ -4111,7 +4126,10 @@ def correl_graph(data_perinfo,infos,data_ener,dict_linevis,mode='intrinsic',mode
         -Time
         -HR
         -width
-        
+        -line structures (for 4U1630-47)
+        -accretion states (for 4U1630-47)
+        -outbursts
+
     (Note : displaying non significant results overrides the coloring)
     
     Use the 'indiv' keyword to plot for all lines simultaneously or 6 plots for the 6 single lines
@@ -4121,12 +4139,18 @@ def correl_graph(data_perinfo,infos,data_ener,dict_linevis,mode='intrinsic',mode
     
     Detections above and below the given threshold and linked values are highlighted if the checkbox to display non significant detectoins is set, else 
     only significant detections are displayed
-    
-    The person and spearman coefficients are computed from significant detections only, with MC propagation of their uncertainties through a custom library
-    (https://github.com/privong/pymccorrelation)
+
+    It is possible to compute the spearman and pearson coefficients,
+            to compute linear regressions for significantly correlated graphs, and to restrict the range of both
+            computations with x and y bounds
+
+    The person and spearman coefficients and the regressions are computed from significant detections only,
+     with MC propagation of their uncertainties through a custom library adapted from
+      https://github.com/privong/pymccorrelation
     As such, the distribution of the errors are assumed to be gaussian 
     (which is not the case, but using the distributions themselves would be a nightmare)
-    
+
+
     we ravel the last 2 dimensions with a custom function since for multi object plots the sequences can be ragged and the custom .ravel function
     doesn't work
 
@@ -4155,7 +4179,9 @@ def correl_graph(data_perinfo,infos,data_ener,dict_linevis,mode='intrinsic',mode
         glob_col_source=dict_linevis['glob_col_source']
         display_th_width_ew=dict_linevis['display_th_width_ew']
         cmap_color_det=dict_linevis['cmap_color_det']
-        common_observ_bounds=dict_linevis['common_observ_bounds']
+        common_observ_bounds_lines=dict_linevis['common_observ_bounds_lines']
+        common_observ_bounds_dates=dict_linevis['common_observ_bounds_dates']
+
     else:
 
         display_nonsign=True
@@ -4169,8 +4195,8 @@ def correl_graph(data_perinfo,infos,data_ener,dict_linevis,mode='intrinsic',mode
         glob_col_source=False
         display_th_width_ew=False
         cmap_color_det=mpl.cm.plasma
-        common_observ_bounds=False
-        
+        common_observ_bounds_lines=False
+        common_observ_bounds_dates=False
         
     
     mask_obj=dict_linevis['mask_obj']
@@ -4187,7 +4213,10 @@ def correl_graph(data_perinfo,infos,data_ener,dict_linevis,mode='intrinsic',mode
         slider_date=dict_linevis['slider_date']
         instru_list=dict_linevis['instru_list'][mask_obj]
         diago_color=dict_linevis['diago_color'][mask_obj]
-        custom_states_color = dict_linevis['custom_states_color']
+        custom_states_color = dict_linevis['custom_states_color'][mask_obj]
+        custom_outburst_color=dict_linevis['custom_outburst_color'][mask_obj]
+        custom_outburst_number=dict_linevis['custom_outburst_number'][mask_obj]
+        custom_outburst_dict=dict_linevis['custom_outburst_dict'][mask_obj]
 
     if 'color_scatter' in dict_linevis:    
         color_scatter=dict_linevis['color_scatter']
@@ -4224,15 +4253,20 @@ def correl_graph(data_perinfo,infos,data_ener,dict_linevis,mode='intrinsic',mode
     #note: quantities here are already restricted
     mask_intime_norepeat=(Time(ravel_ragged(date_list))>=slider_date[0]) & (Time(ravel_ragged(date_list))<=slider_date[1])
 
-    mask_sign_restrict=mask_obs_sign & mask_intime_norepeat
+    mask_sign_intime_norepeat=mask_obs_sign & mask_intime_norepeat
 
-    mask_bounds=mask_intime_norepeat if show_ul_ew and not lock_lims_det else mask_sign_restrict
+    mask_bounds=((mask_intime_norepeat) if not common_observ_bounds_dates else  np.repeat(True,len(mask_intime_norepeat))) & \
+                ((mask_obs_sign) if (common_observ_bounds_lines and not (show_ul_ew and not lock_lims_det))\
+                 else np.repeat(True,len(mask_intime_norepeat)))
+
+
 
     if sum(mask_bounds)>0:
         bounds_hr=[0.9*min(ravel_ragged(hid_plot[0][0])[mask_bounds]-ravel_ragged(hid_plot[0][1])[mask_bounds]),
                 1/0.9*max(ravel_ragged(hid_plot[0][0])[mask_bounds]+ravel_ragged(hid_plot[0][2])[mask_bounds])]
         bounds_flux=[0.9*min(ravel_ragged(hid_plot[1][0])[mask_bounds]-ravel_ragged(hid_plot[1][1])[mask_bounds]),
                 1/0.9*max(ravel_ragged(hid_plot[1][0])[mask_bounds]+ravel_ragged(hid_plot[1][2])[mask_bounds])]
+
     else:
         bounds_hr=None
         bounds_flux=None
@@ -4526,7 +4560,12 @@ def correl_graph(data_perinfo,infos,data_ener,dict_linevis,mode='intrinsic',mode
             
             #standard detection mask
             bool_det=(bool_sign!=0.) & (~np.isnan(bool_sign)) & (mask_intime) &\
-                     (True if not high_E_mode else mask_lum_high_valid_repeat  )
+                     (True if not high_E_mode else mask_lum_high_valid_repeat)
+
+            bool_detsign_bounds=(bool_sign!=0.) & (~np.isnan(bool_sign)) & \
+                            (mask_intime if not common_observ_bounds_dates else True) &\
+                            (True if not high_E_mode else mask_lum_high_valid_repeat) & (bool_sign>=conf_thresh)
+
             
             #mask used for upper limits only
             bool_nondetsign=((bool_sign<conf_thresh) | (np.isnan(bool_sign))) & (mask_intime) & \
@@ -4547,14 +4586,25 @@ def correl_graph(data_perinfo,infos,data_ener,dict_linevis,mode='intrinsic',mode
                 x_data=np.array([mdates.date2num(ravel_ragged(date_list_repeat))[bool_det][bool_sign],
                                  mdates.date2num(ravel_ragged(date_list_repeat))[bool_det][~bool_sign]],
                                 dtype=object)
+
                 y_data=np.array([ravel_ragged(data_plot[1][0][i])[bool_det][bool_sign],
                                  ravel_ragged(data_plot[1][0][i])[bool_det][~bool_sign]],
                         dtype=object)
+
+                if len(x_data[0])>0:
+                    x_data_bounds=mdates.date2num(ravel_ragged(date_list_repeat))[bool_detsign_bounds]
+                else:
+                    x_data_bounds=None
 
             else:
                 x_data=np.array([ravel_ragged(data_plot[0][0][i])[bool_det][bool_sign],
                                  ravel_ragged(data_plot[0][0][i])[bool_det][~bool_sign]],
                     dtype=object)
+
+                if len(x_data[0])>0:
+                    x_data_bounds=ravel_ragged(data_plot[0][0][i])[bool_detsign_bounds]
+                else:
+                    x_data_bounds=None
 
         #applying the same thing to the y axis if ratios are also plotted there
         if type(ind_infos[1]) not in [int,np.int64] and 'ratio' in ind_infos[1]:
@@ -4847,7 +4897,7 @@ def correl_graph(data_perinfo,infos,data_ener,dict_linevis,mode='intrinsic',mode
             else:
                 x_error=np.array([[elem if type(elem)!=str else linked_uncer(ind_val,j,ind_infos[0])\
                                                             for ind_val,elem in enumerate(ravel_ragged(data_plot[0][j][i]))] for j in [1,2]])
-                    
+
             if mode=='intrinsic':
                 y_error=np.array([[elem if type(elem)!=str else linked_uncer(ind_val,j,ind_infos[0])\
                                    for ind_val,elem in enumerate(ravel_ragged(data_plot[1][j][i]))] for j in [1,2]])
@@ -4899,6 +4949,12 @@ def correl_graph(data_perinfo,infos,data_ener,dict_linevis,mode='intrinsic',mode
                 y_error=[np.array([y_error[0][bool_det][bool_sign],y_error[1][bool_det][bool_sign]]),
                           np.array([y_error[0][bool_det][~bool_sign],y_error[1][bool_det][~bool_sign]])]
             else:
+
+                if len(x_data[0])>0:
+                    x_err_bounds=[x_error[0][bool_detsign_bounds],x_error[1][bool_detsign_bounds]]
+                else:
+                    x_err_bounds=None
+
                 x_error=[np.array([x_error[0][bool_det][bool_sign],x_error[1][bool_det][bool_sign]]),
                       np.array([x_error[0][bool_det][~bool_sign],x_error[1][bool_det][~bool_sign]])]
             
@@ -4951,7 +5007,8 @@ def correl_graph(data_perinfo,infos,data_ener,dict_linevis,mode='intrinsic',mode
                                            linewidth=1,
                           c=data_cols[s],label=data_labels[s] if color_scatter=='None' else '',linestyle='',
                           uplims=uplims_mask,
-                          marker='D' if color_scatter=='None' else None,alpha=1,zorder=1)\
+                          marker='D' if color_scatter=='None' else None,
+                          alpha=None if color_scatter=='custom_outburst' else 1,zorder=1)\
          for s in ([0,1] if display_nonsign else [0])]
 
            
@@ -4965,7 +5022,7 @@ def correl_graph(data_perinfo,infos,data_ener,dict_linevis,mode='intrinsic',mode
                           color=data_link_cols[s],label='linked '+data_labels[s]  if color_scatter=='None' else '',linestyle='',
                           marker='D' if color_scatter=='None' else None,
                           uplims=False,
-                          alpha=0.6 if show_linked else 1.0,zorder=1000)\
+                          alpha=None if color_scatter=='custom_outburst' else 0.6 if show_linked else 1.0,zorder=1000)\
          for s in ([0,1] if display_nonsign else [0])]        
             
                 
@@ -5099,31 +5156,34 @@ def correl_graph(data_perinfo,infos,data_ener,dict_linevis,mode='intrinsic',mode
 
         elif 'custom' in color_scatter:
 
-            custom_color=diago_color if color_scatter=='custom_line_struct' else custom_states_color
-            # there's no need to repeat in ewratio since the masks are computed for a single line                
+            custom_color=diago_color if color_scatter=='custom_line_struct' else\
+                         custom_states_color if color_scatter=='custom_acc_states' else\
+                         custom_outburst_color if color_scatter=='custom_outburst' else 'grey'
+
+            # there's no need to repeat in ewratio since the masks are computed for a single line
             if line_comp_mode or ratio_mode:
                 color_data_repeat = custom_color
             else:
                 color_data_repeat = np.array([custom_color for repeater in (i if type(i) == range else [i])])
 
             if ratio_mode:
-                color_data = np.array([ravel_ragged(color_data_repeat)[bool_det_ratio][bool_sign_ratio],
-                                       ravel_ragged(color_data_repeat)[bool_det_ratio][~bool_sign_ratio]], dtype=object)
+                color_data = np.array([ravel_ragged(color_data_repeat,ragtuples=False)[bool_det_ratio][bool_sign_ratio],
+                                       ravel_ragged(color_data_repeat,ragtuples=False)[bool_det_ratio][~bool_sign_ratio]], dtype=object)
 
             else:
 
-                color_data = np.array([ravel_ragged(color_data_repeat)[bool_det][bool_sign],
-                                       ravel_ragged(color_data_repeat)[bool_det][~bool_sign]],
+                color_data = np.array([ravel_ragged(color_data_repeat,ragtuples=False)[bool_det][bool_sign],
+                                       ravel_ragged(color_data_repeat,ragtuples=False)[bool_det][~bool_sign]],
                                       dtype=object)
 
                 if not line_comp_mode:
                     # same thing for the upper limits
-                    color_data_ul = ravel_ragged(color_data_repeat)[bool_nondetsign]
+                    color_data_ul = ravel_ragged(color_data_repeat,ragtuples=False)[bool_nondetsign]
 
             if line_comp_mode or ratio_mode:
                 # same thing for the upper limits in x and y
-                color_data_ul_x = ravel_ragged(color_data_repeat)[bool_nondetsign_x]
-                color_data_ul_y = ravel_ragged(color_data_repeat)[bool_nondetsign_y]
+                color_data_ul_x = ravel_ragged(color_data_repeat,ragtuples=False)[bool_nondetsign_x]
+                color_data_ul_y = ravel_ragged(color_data_repeat,ragtuples=False)[bool_nondetsign_y]
 
             # computing the actual color array for the detections
             color_arr = np.array([np.array([elem for elem in color_data[s]]) for s in [0, 1]],
@@ -5144,11 +5204,14 @@ def correl_graph(data_perinfo,infos,data_ener,dict_linevis,mode='intrinsic',mode
                 label_dict={'main structure':'grey','substructure':'orange','outliers':'blue'}
             elif color_scatter=='custom_acc_states':
                 label_dict = {'undecided': 'grey',
-                              'thermal dominated': 'yellow',
+                              'thermal dominated': 'green',
                               'intermediate': 'orange',
                               'SPL': 'red',
                               'canonical hard':'blue',
                               'QRM':'violet'}
+            elif color_scatter=='custom_outburst':
+                # note: 0 here because this is only used in display_single mode
+                label_dict=custom_outburst_dict[0]
 
         elif color_scatter in ['Time','HR','width','nH','L_3-10']:
             
@@ -5573,7 +5636,49 @@ def correl_graph(data_perinfo,infos,data_ener,dict_linevis,mode='intrinsic',mode
                 #scatter plot on top of the errorbars to be able to map the marker colors
                 #The loop allows to create scatter with colors according to the labels
                 for s in ([0,1] if display_nonsign else [0]):
-                    for i_col,color_label in enumerate(label_dict.keys()):
+
+
+                    # for this we must split differently to ensure we keep the labeling for the
+                    # first point displayed in each outburst while keeping the alpha colors for everything
+                    #we do it now to make a dictionnary containing only the currently displayed points
+                    if color_scatter == 'custom_outburst':
+
+                        #creating a new dictionnary
+                        label_dict_use={}
+
+                        for outburst in list(label_dict.keys()):
+                            # selecting the obs part of this outburst
+                            outburst_select_mask=[elem.all() for elem in (color_arr[s].T[:-1].T==label_dict[outburst][:-1])]
+
+                            #skipping outbursts with no observations
+                            if sum(outburst_select_mask)==0:
+                                continue
+
+                            color_arr_outburst=color_arr[s][outburst_select_mask]
+                            #computing the first point of the outburst (aka darkest) from the alpha orders
+                            #we invert it to get the argosrt from the first to the last
+                            outburst_order= (1-color_arr_outburst.T[-1]).argsort()
+                            outburst_init_id=outburst_order[0]
+                            for i in range(len(color_arr_outburst)):
+                                if outburst_init_id==i:
+                                    #giving the outburst name
+                                    label_dict_use[outburst]=color_arr_outburst[i]
+
+                                #only adding dictionnary entries for element with different dates/colors
+                                elif not np.array([(color_arr_outburst[i]==elem).all()\
+                                      for elem in np.array(list(label_dict_use.values()))]).any():
+                                    #giving a modified outburst name with a . to now it shouldn't be displayed
+                                    #point number in the displayed ones
+                                    outburst_id=np.argwhere(outburst_order==i)[0][0]
+                                    label_dict_use[outburst+'.'+str(outburst_id)] = color_arr_outburst[i]
+
+                        #replacing the dictionnary with this one
+                        label_dict=label_dict_use
+                        order_disp=np.array(list(label_dict.keys())).argsort()
+                    else:
+                        order_disp=np.arange(np.array(list(label_dict.keys())))
+
+                    for i_col,color_label in enumerate(np.array(list(label_dict.keys()))[order_disp]):
         
                         #creating a mask for the points of the right color
                         if color_scatter=='Instrument':
@@ -5585,11 +5690,20 @@ def correl_graph(data_perinfo,infos,data_ener,dict_linevis,mode='intrinsic',mode
                                                color_arr[s][(linked_mask[s].astype(bool))]]
 
                         elif 'custom' in color_scatter:
-                            color_mask = [elem == label_dict[color_label] for elem in
-                                          color_arr[s][~(linked_mask[s].astype(bool))]]
 
-                            color_mask_linked=[elem==label_dict[color_label] for elem in
-                                               color_arr[s][(linked_mask[s].astype(bool))]]
+                            if color_scatter=='custom_outburst':
+                                color_mask = [(elem == label_dict[color_label]).all() for elem in
+                                              color_arr[s][~(linked_mask[s].astype(bool))]]
+
+                                color_mask_linked = [(elem == label_dict[color_label]).all() for elem in
+                                                     color_arr[s][(linked_mask[s].astype(bool))]]
+                            else:
+
+                                color_mask = [elem == label_dict[color_label] for elem in
+                                              color_arr[s][~(linked_mask[s].astype(bool))]]
+
+                                color_mask_linked=[elem==label_dict[color_label] for elem in
+                                                   color_arr[s][(linked_mask[s].astype(bool))]]
 
                         #same idea but here since the color is an RGB tuple we need to convert the element before the comparison
                         elif color_scatter=='Source':
@@ -5647,36 +5761,41 @@ def correl_graph(data_perinfo,infos,data_ener,dict_linevis,mode='intrinsic',mode
                                         y_data[s].astype(float)[~(linked_mask[s].astype(bool))][color_mask][id_GRS],
                                               color=label_dict[color_label] if id_GRS not in index_bshift_GRS_indiv else None,
                                               facecolor=None if id_GRS not in index_bshift_GRS_indiv else 'none',
-                                              label=color_label if id_GRS==0 else '',
+                                              label='' if color_scatter=='custom_outburst' and "." in color_label else\
+                                                    color_label if id_GRS==0 else '',
                                               marker='D',edgecolor=None if id_GRS not in index_bshift_GRS_indiv else\
                                             label_dict[color_label],
-                                              alpha=1,zorder=1)
+                                              alpha=None if color_scatter=='custom_outburst' else 1,zorder=1)
 
-                            # changing the marker color for the 4U point with adjusted manual values for the EW ratio
-                            elif  color_scatter == 'custom_line_struct' and 'ewratio' in infos_split[0]:
-
-                                for id_obs,id_obs_full in enumerate(np.arange(len(y_data[s]))[color_mask]):
-                                    ax_scat.scatter(
-                                        x_data[s].astype(float)[~(linked_mask[s].astype(bool))][color_mask][id_obs],
-                                        y_data[s].astype(float)[~(linked_mask[s].astype(bool))][color_mask][id_obs],
-                                        color=label_dict[color_label] if id_obs_full!=id_point_refit else None,
-                                        facecolor='none' if id_obs_full==id_point_refit else None,
-                                        label=color_label if id_obs == 0 else '',
-                                        marker='D',
-                                        edgecolor=label_dict[color_label] if id_obs_full==id_point_refit else None,
-                                        alpha=1, zorder=1)
+                            # # changing the marker color for the 4U point with adjusted manual values for the EW ratio
+                            # elif  color_scatter == 'custom_line_struct' and 'ewratio' in infos_split[0]:
+                            #
+                            #     for id_obs,id_obs_full in enumerate(np.arange(len(y_data[s]))[color_mask]):
+                            #         ax_scat.scatter(
+                            #             x_data[s].astype(float)[~(linked_mask[s].astype(bool))][color_mask][id_obs],
+                            #             y_data[s].astype(float)[~(linked_mask[s].astype(bool))][color_mask][id_obs],
+                            #             color=label_dict[color_label] if id_obs_full!=id_point_refit else None,
+                            #             facecolor='none' if id_obs_full==id_point_refit else None,
+                            #             label=color_label if id_obs == 0 else '',
+                            #             marker='D',
+                            #             edgecolor=label_dict[color_label] if id_obs_full==id_point_refit else None,
+                            #             alpha=1, zorder=1)
                             
                             else:
                                 ax_scat.scatter(
                                 x_data[s].astype(float)[~(linked_mask[s].astype(bool))][color_mask],
                                 y_data[s].astype(float)[~(linked_mask[s].astype(bool))][color_mask],
-                                      color=label_dict[color_label],label=color_label,marker='D',alpha=1,zorder=1)
+                                      color=label_dict[color_label],
+                                label='' if color_scatter=='custom_outburst' and "." in color_label else color_label,
+                                    marker='D',alpha=None if color_scatter=='custom_outburst' else 1,zorder=1)
 
                         else:
                             ax_scat.scatter(
                                 x_data[s].astype(float)[~(linked_mask[s].astype(bool))][~uplims_mask][np.array(color_mask)[~uplims_mask]],
                                 y_data[s].astype(float)[~(linked_mask[s].astype(bool))][~uplims_mask][np.array(color_mask)[~uplims_mask]],
-                                      color=label_dict[color_label],label=color_label,marker='D',alpha=1,zorder=1)
+                                      color=label_dict[color_label],
+                                label='' if color_scatter=='custom_outburst' and "." in color_label else color_label,
+                                marker='D',alpha=None if color_scatter=='custom_outburst' else 1,zorder=1)
                         
                         
                         #No label for the second plot to avoid repetitions
@@ -5745,9 +5864,17 @@ def correl_graph(data_perinfo,infos,data_ener,dict_linevis,mode='intrinsic',mode
 
         ####forcing common observ bounds if asked 
         #computing the common bounds if necessary
-        if common_observ_bounds:
-            if mode=='observ' and sum(mask_bounds)>0:
+        if common_observ_bounds_lines:
+            if mode=='observ' and sum(mask_bounds)>0 and not time_mode:
                 plt.ylim(bounds_hr if infos_split[1]=='HR' else bounds_flux if infos_split[1]=='flux' else None)
+
+        if common_observ_bounds_dates :
+            if mode=='observ' and not ratio_mode and not time_mode and x_data_bounds is not None:
+
+                #for linspace only for now
+                delta_x=(max(x_data_bounds+x_err_bounds[1])-min(x_data_bounds-x_err_bounds[0]))*0.05
+
+                plt.xlim(min(x_data_bounds-x_err_bounds[0])-delta_x,max(x_data_bounds+x_err_bounds[1])+delta_x)
 
         #### Correlation values
 

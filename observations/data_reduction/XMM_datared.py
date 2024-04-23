@@ -157,8 +157,9 @@ ap.add_argument("-evtname",nargs='?',help='substring present in previously proce
 
 #global choices
 ap.add_argument("-a","--action",nargs='?',help='Give which action(s) to proceed,separated by comas.'+
-                '\n1.evt_build\n2.filter_evt\n3.extract_reg...',default='1,2std,3,l,s,m',type=str)
+                '\n1.evt_build\n2.filter_evt\n3.extract_reg...',default='2n,3,l,s,m',type=str)
 
+#,2n,3,l,s,m
 #std : '1' puis '2n,3,l,s,m'
 
 ap.add_argument("-c","--cameras",nargs='?',help='Cameras to reduce',default='all',type=str)
@@ -168,7 +169,7 @@ ap.add_argument("-l","--local",nargs=1,help='Launch actions directly in the curr
 #note: local mode has no error handling
 
 #directory level overwrite (not active in local)
-ap.add_argument('-folder_over',nargs=1,help='relaunch action through folders with completed analysis',default=False,type=bool)
+ap.add_argument('-folder_over',nargs=1,help='relaunch action through folders with completed analysis',default=True,type=bool)
 ap.add_argument('-folder_cont',nargs=1,help='skip all but the last 2 directories in the summary folder file',default=False,type=bool)
     
 #action specific overwrite
@@ -581,7 +582,7 @@ def filter_evt(directory,mode='std',cams='all',expos_mode='all',overwrite=True):
     
     For flares, depending on the manual argument, the process either uses 
     
-    'std' mode : the standard rate limits given in argument (usuallyy :
+    'std' mode : the standard rate limits given in argument (usually :
         -0.35 for PN
         -0.4 for MOS
         

@@ -21,7 +21,7 @@ from astropy.stats import sigma_clip
 import matplotlib as mpl
 
 #using agg because qtagg still generates backends with plt.ioff()
-mpl.use('qtagg')
+mpl.use('agg')
 
 #mpl.use('qt5agg')
 
@@ -43,11 +43,7 @@ from astropy.io import fits
 
 '''peak detection'''
 from findpeaks import findpeaks
-#mask to polygon conversion
-from imantics import Mask
-from shapely.geometry import Polygon,Point
-#mask propagation for the peak detection
-from scipy.ndimage import binary_dilation
+
 
 """
 Created on Thu Sep  1 23:18:16 2022
@@ -99,11 +95,11 @@ ap.add_argument("-dir", "--startdir", nargs='?', help="starting directory. Curre
 ap.add_argument("-l","--local",nargs=1,help='Launch actions directly in the current directory instead',
                 default=False,type=bool)
 ap.add_argument('-catch','--catch_errors',help='Catch errors while running the data reduction and continue',
-                default=False,type=bool)
+                default=True,type=bool)
 
 #global choices
 ap.add_argument("-a","--action",nargs='?',help='Give which action(s) to proceed,separated by comas.',
-                default='fc,c,1,gti,l',type=str)
+                default='fc,1,gti,fs,l,g,m,c',type=str)
 #default: 1,gti,fs,l,g,m,c
 
 ap.add_argument("-over",nargs=1,help='overwrite computed tasks (i.e. with products in the batch, or merge directory\
@@ -111,7 +107,7 @@ ap.add_argument("-over",nargs=1,help='overwrite computed tasks (i.e. with produc
 
 #directory level overwrite (not active in local)
 ap.add_argument('-folder_over',nargs=1,help='relaunch action through folders with completed analysis',
-                default=True,type=bool)
+                default=False,type=bool)
 ap.add_argument('-folder_cont',nargs=1,help='skip all but the last 2 directories in the summary folder file',
                 default=False,type=bool)
 #note : we keep the previous 2 directories because bug or breaks can start actions on a directory following the initially stopped one
@@ -143,7 +139,7 @@ ap.add_argument('-erodedilate',nargs=1,help='Erodes increasingly more gtis aroun
 
 #gti
 #keyword for split: split_timeinsec
-ap.add_argument('-gti_split',nargs=1,help='GTI split method',default='orbit+flare+split_10',type=str)
+ap.add_argument('-gti_split',nargs=1,help='GTI split method',default='orbit+flare',type=str)
 ap.add_argument('-flare_method',nargs=1,help='Flare extraction method(s)',default='clip+peak',type=str)
 
 #previous version was with a SAS, tool, which required installing SAS. Now the default is NICER directly
@@ -1473,7 +1469,9 @@ def extract_all_spectral(directory,bkgmodel='scorpeon_script',language='python',
             file_dir=spfile[:spfile.rfind('/')]
             file_suffix=file_id.split(directory)[-1]
 
-            copyfile_suffixes=['_sr.pha','_bg.rmf','_bg.py','_sk.arf','.arf','.rmf','_bg.pha']
+            copyfile_suffixes=['_sr.pha','_bg.rmf','_sk.arf','.arf','.rmf']+\
+                            (['_bg.py'] if bkgmodel=='scorpeon_script' and language=='python' else [])+ \
+                            (['_bg.pha'] if bkgmodel=='scorpeon_file' else [])
             copyfile_list=['ni'+file_id+elem for elem in copyfile_suffixes]
 
             #copying the spectral products into the main directory

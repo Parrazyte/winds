@@ -155,20 +155,31 @@ def rescale_flex(ax,xlims,ylims,margin,std_x=None,std_y=None):
         else:
             ax.set_ylim((ylims[0] * 10 ** (-del_yrange)), ylims[1] * 10 ** (del_yrange))
 
-def ravel_ragged(array,mode=None):
+def ravel_ragged(array,mode=None,ragtuples=True):
 
-    '''ravels a multi dimensional ragged nested sequence'''
+    '''
+    ravels a multi dimensional ragged nested sequence
+    only considers tuples if ragtuples is set to True
+    '''
 
     list_elem=[]
 
     for elem in array:
-        if type(elem) in (np.ndarray,list,tuple):
+        if type(elem) in [np.ndarray,list] + ([tuple] if ragtuples else []):
             if len(elem)!=0:
-                list_elem+=ravel_ragged(elem,mode=None).tolist()
+                list_elem+=ravel_ragged(elem,mode=None,ragtuples=ragtuples).tolist()
             else:
                 continue
         else:
             list_elem+=[elem]
+
+    #necessary to avoid converting tuples into arrays if ragtuples is not set to True
+    if np.all(type(elem)==tuple for elem in list_elem) and not ragtuples:
+        return_arr=np.array([None]*len(list_elem))
+        for i_elem in range(len(list_elem)):
+            return_arr[i_elem]=list_elem[i_elem]
+        return return_arr
+
     return np.array(list_elem,dtype=mode)
 
 def interval_extract(list):

@@ -315,7 +315,10 @@ for elem_sp in NICER_sp:
                                                     e_sat_low_indiv=[0.3],
                                                     scorpeon_save=mod_1zone.scorpeon, data_fluxcont=mod_1zone_nolines)
 
-        plot_line_search(chi_dict_1zone_nolines, outdir, 'NICER', suffix='1zone_nolines', epoch_observ=epoch_observ)
+        try:
+            plot_line_search(chi_dict_1zone_nolines, outdir, 'NICER', suffix='1zone_nolines', epoch_observ=epoch_observ)
+        except:
+            breakpoint()
 
     Xset.chatter = 1
 

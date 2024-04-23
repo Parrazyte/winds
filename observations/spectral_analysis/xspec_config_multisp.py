@@ -308,8 +308,8 @@ def load_mod(path,load_xspec=True):
 mod_sky=None
 mod_nxb=None
 
-def fit_broader(epoch_id,add_gaussem=False,bat_interp_dir='/media/parrama/SSD/Observ/BHLMXB/Swift/BAT_interp_restrict',
-                n_add=1,outdir='fit_broader',bat_emin=15.,bat_emax=50.):
+def fit_broader(epoch_id,add_gaussem=True,bat_interp_dir='/home/parrama/Documents/Observ/copy_SSD/Swift/BAT_interp',
+                n_add=1,outdir='fit_broader',bat_emin=15.,bat_emax=50.,avg_BAT_norm=True):
     '''
     for quick refitting in broader bands
 
@@ -320,6 +320,8 @@ def fit_broader(epoch_id,add_gaussem=False,bat_interp_dir='/media/parrama/SSD/Ob
     '''
 
     # Plot.xLog=False
+
+    plt.ioff()
 
     reset()
     AllModels.clear()
@@ -355,7 +357,7 @@ def fit_broader(epoch_id,add_gaussem=False,bat_interp_dir='/media/parrama/SSD/Ob
     curr_logfile = open(curr_logfile_write.name, 'r')
 
     AllModels.clear()
-    AllModels.setEnergies('0.1 100. 2000 log')
+    AllModels.setEnergies('0.01 1000. 10000 log')
 
     print('Loading base model...')
 
@@ -383,11 +385,26 @@ def fit_broader(epoch_id,add_gaussem=False,bat_interp_dir='/media/parrama/SSD/Ob
 
     addcomp('calNICERSiem_gaussian',position='lastin')
 
+    if avg_BAT_norm and not add_gaussem:
+        AllModels(i)(1).link = str(groups) + '.' + ' /(' + '+'.join([str(1 + AllModels(1).nParameters * id_grp) \
+                                                                     for id_grp in range(groups)]) + ')'
     calc_fit()
 
     if add_gaussem:
         addcomp('FeKa0em_bgaussian', position='thcomp')
+
+        #not that here the NICER edge is not removed for the BAT datagroup, but we don't care considering the energy
+        addcomp('calNICER_edge')
+
+        # locking the constant factor(s) of the BAT elements
+        for i in range(groups + 1, AllData.nGroups + 1):
+
+            if avg_BAT_norm:
+                AllModels(i)(1).link = str(groups)+'.'+' /('+'+'.join([str(1+AllModels(1).nParameters*id_grp)\
+                                                                         for id_grp in range(groups)])+')'
+
         calc_fit()
+
 
     xscorpeon.load('auto',frozen=False)
     calc_fit()
@@ -410,14 +427,26 @@ def fit_broader(epoch_id,add_gaussem=False,bat_interp_dir='/media/parrama/SSD/Ob
 
     Plot_screen('ldata,ratio,delchi',os.path.join(outdir,epoch_id+'_mod_broader_screen'))
 
+    Plot.xLog=False
+    Plot_screen('ldata,ratio,delchi',os.path.join(outdir,epoch_id+'_mod_broader_zoom_NICER_screen'),xlims=[0.3,10.0])
+    Plot.xLog=True
+
     # saving the model str
     catch_model_str(curr_logfile, savepath=outdir + '/' + epoch_id + '_mod_broader.txt')
 
+    # locking the constant factor(s) of the BAT elements
+    for i in range(groups + 1, AllData.nGroups + 1):
+
+        if avg_BAT_norm:
+            AllModels(i)(1).link = ''
+
     #creating the SEDs
     save_broad_SED(path=os.path.join(outdir,epoch_id+'_mod_broader_SED.xcm'),
-                   e_low=0.1,e_high=100,nbins=1e3,retain_session=False,
+                   e_low=0.01,e_high=1000,nbins=2e3,retain_session=False,
                    remove_abs=True,remove_gaussian=True,remove_cal=True,
                    remove_scorpeon=True)
+
+    plt.ion()
 
 class model_data:
 
@@ -1978,6 +2007,9 @@ def addcomp(compname,position='last',endmult=None,return_pos=False,modclass=AllM
                 first_group_use=True
                 #using the edge only for NICER datagroups, otherwise freezing the normalization at 0
                 for i_grp in range(1,AllData.nGroups+1):
+                    #skipping non-local files
+                    if not os.path.isfile(group_sp[i_grp-1]):
+                        continue
                     with fits.open(group_sp[i_grp-1]) as hdul:
                         if 'TELESCOP' not in hdul[1].header or hdul[1].header['TELESCOP']!='NICER':
                             AllModels(i_grp)(gap_end).link=''
@@ -6031,7 +6063,7 @@ def store_fit(mode, epoch_id, outdir, logfile, fitmod=None):
     # storing the current configuration and model
     Xset.save(outdir + '/' + epoch_id + '_mod_' + mode + '.xcm', info='a')
 
-def Plot_screen(datatype,path,mode='matplotlib',xspec_windid=None,includedlist=None):
+def Plot_screen(datatype,path,mode='matplotlib',xspec_windid=None,includedlist=None,xlims=None,ylims=None):
 
     '''Saves a specific xspec plot, either through matplotlib or through direct plotting through xspec's interface'''
 
@@ -6039,7 +6071,7 @@ def Plot_screen(datatype,path,mode='matplotlib',xspec_windid=None,includedlist=N
         path_use=path+('.pdf' if mode=='matplotlib' else '.png')
 
     if mode=='matplotlib':
-        xPlot(datatype,includedlist=includedlist)
+        xPlot(datatype,includedlist=includedlist,xlims=xlims,ylims=ylims)
 
 
         if not path.endswith('.png') or path.endswith('.svg') or path.endswith('.pdf'):

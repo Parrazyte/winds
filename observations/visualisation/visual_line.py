@@ -826,14 +826,15 @@ else:
         
 HID_options_str=np.array(['Source','Inclination','Instrument','Time',
                           r'line $V_{shift}$',r'line $\Delta$C',r'line $EW$ ratio',
-                          r'$nH$',r'$T_{in}$','Custom: Line substructures','Custom: accretion states'])
-radio_info_cmap_options=['Source','Inclination','Instrument','Time','Velocity shift','Del-C','EW ratio','nH','kT',
-                         'custom_line_struct','custom_acc_states']
+                          r'$nH$',r'$T_{in}$'] \
+                          + (['Custom: Line substructures', 'Custom: accretion states'] if \
+                                 display_single and obj_list[mask_obj_select][0] == '4U1630-47' else []) \
+                          + (['Custom: Outbursts'] if display_single else []))
 
-#only putting the custom colormap for 4U for now
-if not (display_single and obj_list[mask_obj_select][0]=='4U1630-47'):
-    HID_options_str=HID_options_str[:-1]
-    radio_info_cmap_options=radio_info_cmap_options[:-1]
+radio_info_cmap_options=['Source','Inclination','Instrument','Time','Velocity shift','Del-C','EW ratio','nH','kT'] \
+                        + (['custom_line_struct', 'custom_acc_states'] if \
+                               display_single and obj_list[mask_obj_select][0] == '4U1630-47' else []) \
+                        + (['custom_outburst'] if display_single else [])
 
 radio_info_cmap_str=st.sidebar.radio('HID colormap',HID_options_str,index=0)
 
@@ -1526,15 +1527,27 @@ if display_single and choice_source[0]=='4U1630-47' and sum(ravel_ragged(mask_in
                 is_below_broad=not np.isnan(hr_high_plot_restrict[0][0][i_obs]) and hr_high_plot_restrict[0][0][i_obs]<0.1
 
                 is_substructure=(hid_plot[1][0][i_obj][i_obs]<4.2e-2 and hid_plot[1][0][i_obj][i_obs]>2e-2 \
-                                 and hid_plot[0][0][i_obj][i_obs]<0.35 and (is_line or is_below_broad)) or \
-                                                (((is_line and abslines_plot[4][0][1][i_obj][i_obs]>slider_sign) and \
+                                 and hid_plot[0][0][i_obj][i_obs]<0.35 and (is_line or is_below_broad))
+
+                #suzaku start of the substructure
+                is_outlier_suzaku=(((is_line and abslines_plot[4][0][1][i_obj][i_obs]>slider_sign) and \
                                                  abslines_plot[0][0][1][i_obj][i_obs]\
                                                  /abslines_plot[0][0][0][i_obj][i_obs]>3.8) and\
                                                 instru_list[i_obj][i_obs]=='Suzaku')
+
+                #spl outlier with Feka25 det
+                is_outlier_SPL=abslines_plot[4][0][0][i_obj][i_obs]>slider_sign and hid_plot[1][0][i_obj][i_obs]>1e-1
+
+                #XMM transition
+                is_outlier_XMM=instru_list[i_obj][i_obs]=='XMM' and \
+                               hid_plot[1][0][i_obj][i_obs] < 0.09 and hid_plot[1][0][i_obj][i_obs] > 0.075
+
+                # hid_plot[0][0][i_obj][i_obs]>0.43 and  hid_plot[0][0][i_obj][i_obs]<0.45 and \
+
                 if is_substructure:
                     diago_color[i_obj][i_obs]='orange'
                 #outlier SPL detection
-                elif abslines_plot[4][0][0][i_obj][i_obs]>slider_sign and hid_plot[1][0][i_obj][i_obs]>1e-1:
+                elif is_outlier_suzaku or is_outlier_SPL or is_outlier_XMM:
                     diago_color[i_obj][i_obs]='blue'
                 else:
                     diago_color[i_obj][i_obs]='grey'
@@ -1592,6 +1605,106 @@ if display_single and choice_source[0]=='4U1630-47' and sum(ravel_ragged(mask_in
                     custom_states_color[i_obj][i_obs] = 'purple'
 
 dict_linevis['custom_states_color']=custom_states_color
+
+#outburst coloring
+color_cmap_outburst = mpl.cm.tab10
+
+#note that this means the 2010 suzaku obs doesn't have a different color, but it makes everything else better
+c_norm_outburst = mpl.colors.Normalize(vmin=1,
+                              vmax=9)
+
+colors_func_date = mpl.cm.ScalarMappable(norm=c_norm_outburst,cmap=color_cmap_outburst)
+
+# computing the actual color array for the detections for later
+color_outburst_arr = np.array([colors_func_date.to_rgba(elem) for elem in range(10)])
+
+custom_outburst_number = deepcopy(hid_plot[1][0])
+custom_outburst_color = deepcopy(hid_plot[1][0])
+
+custom_outburst_dict=np.repeat(None,len(hid_plot[1][0]))
+
+if display_single and choice_source[0] == '4U1630-47' and sum(ravel_ragged(mask_intime_plot)) > 0:
+    for i_obj in range(len(custom_states_color)):
+
+        #Here the idea is threefold.
+        # 1: split automatically each source obs into different outburst assuming
+        #    a minimum time step between 2 obs means a new outburst (and store it)
+        # 2: color each outburst differently
+        # 3: add a decreasing alpha to represent the time evolution within the outburst, normalized to the time
+        #    between the first and last observation of each outburst
+        outburst_dict={}
+
+        date_list_obj=np.array([Time(elem) for elem in date_list[i_obj]])
+        date_list_obj_order=date_list_obj.argsort()
+        date_list_obj_sorted=date_list_obj.copy()
+        date_list_obj_sorted.sort()
+
+        #creating the sorted outburst number with (for now) a 1 year outburst delta treshold
+        outburst_number_obj_arr=[]
+        n_outburst=1
+
+        manual_add=True
+
+        #here we go through the sorted arr
+        for i in range(len(date_list_obj)):
+
+            #for 4U1630-47, adding a single addition for the 2022 outburst start:
+            if obj_list[i_obj]=='4U1630-47' and manual_add and date_list_obj_sorted[i]>Time('2022-06-01'):
+                n_outburst+=1
+                manual_add=False
+
+
+            outburst_number_obj_arr+=[n_outburst]
+
+            if i!=len(date_list_obj)-1 and date_list_obj_sorted[i+1]-date_list_obj_sorted[i]>=TimeDelta(365,format='jd'):
+                n_outburst+=1
+
+
+
+        outburst_number_obj_arr=np.array(outburst_number_obj_arr)
+        for i_obs in range(len(date_list_obj)):
+
+            i_obs_sorted=np.argwhere(date_list_obj_order == i_obs)[0][0]
+
+            #storing the outburst number an dcolor
+            custom_outburst_number[i_obj][i_obs]=outburst_number_obj_arr[i_obs_sorted]
+
+            #changed to array to modify the alpha below
+            custom_outburst_color[i_obj][i_obs]=np.array(colors_func_date.to_rgba(custom_outburst_number[i_obj][i_obs]))
+
+
+            #computing the max time delta between the observation of the outburst to which belongs the observation
+            obs_curr_outburst=date_list_obj_sorted[outburst_number_obj_arr==custom_outburst_number[i_obj][i_obs]]
+
+            #adding the outburst to the dictionnary for the first date of the outburst
+            if obs_curr_outburst[0]==date_list_obj_sorted[i_obs_sorted]:
+                outburst_start_y=obs_curr_outburst[0].iso.split('-')[0]
+                outburst_end_y=obs_curr_outburst[-1].iso.split('-')[0]
+
+                if outburst_start_y==outburst_end_y:
+                    outburst_str=outburst_start_y
+                else:
+                    outburst_str=outburst_start_y+'-'+outburst_end_y
+
+                outburst_dict[outburst_str]=custom_outburst_color[i_obj][i_obs]
+
+            curr_outburst_max_delta=obs_curr_outburst[-1]-obs_curr_outburst[0]
+
+            #computing the delta fraction, with a safeguard for single observations
+            curr_outburst_delta_frac=0 if len(obs_curr_outburst)==1 else \
+                                (date_list_obj_sorted[i_obs_sorted]-obs_curr_outburst[0])/curr_outburst_max_delta
+
+            #changing the alpha linearly down to 0.3 for the last observation
+            custom_outburst_color[i_obj][i_obs][-1]=1.-0.7*float(curr_outburst_delta_frac)
+
+            #changing back into a tuple to avoid issues with transpositions later
+            custom_outburst_color[i_obj][i_obs]=tuple(custom_outburst_color[i_obj][i_obs])
+
+        custom_outburst_dict[i_obj]=outburst_dict
+
+dict_linevis['custom_outburst_color'] = custom_outburst_color
+dict_linevis['custom_outburst_number'] = custom_outburst_number
+dict_linevis['custom_outburst_dict'] = custom_outburst_dict
 
 #defining the dataset that will be used in the plots for the colormap limits
 if radio_info_cmap in ['Velocity shift','Del-C']:
@@ -2867,13 +2980,16 @@ with st.sidebar.expander('Parameter analysis'):
     
     st.header('Visualisation')
     radio_color_scatter_options=np.array(['None','Source','Instrument','Time',
-                                          r'line $FWHM$',r'$nH$',r'$HR_{soft}$',r'$L_{3-10}$',
-                                          'Custom: Line substructures','Custom: accretion states'])
-    color_scatter_options=['None','Source','Instrument','Time',
-                           'width','nH','HR','L_3-10','custom_line_struct','custom_acc_states']
-    if not (display_single and obj_list[mask_obj_select][0]=='4U1630-47'):
-        radio_color_scatter_options=radio_color_scatter_options[:-1]
-        color_scatter_options=color_scatter_options[:-1]
+                                          r'line $FWHM$',r'$nH$',r'$HR_{soft}$',r'$L_{3-10}$']\
+                                         + (['Custom: Line substructures','Custom: accretion states'] if \
+                                         display_single and obj_list[mask_obj_select][0]=='4U1630-47' else [])\
+                                         + (['Custom: Outbursts'] if display_single else []))
+
+    color_scatter_options=['None','Source','Instrument','Time','width','nH','HR','L_3-10']\
+                        + (['custom_line_struct','custom_acc_states'] if\
+                            display_single and obj_list[mask_obj_select][0]=='4U1630-47' else [])\
+                        + (['custom_outburst'] if display_single else [])
+
 
     radio_color_scatter=st.radio('Scatter plot color options:',radio_color_scatter_options,index=1)
     color_scatter= np.array(color_scatter_options)[radio_color_scatter_options==radio_color_scatter][0]
@@ -2882,7 +2998,9 @@ with st.sidebar.expander('Parameter analysis'):
     scale_log_hr=st.toggle('Use a log scale for the HID parameters',value=True)
     display_std_abserr_bshift=st.toggle('Display mean and std of Chandra velocity shift distribution',value=True)
     display_abserr_bshift=st.toggle('Display mean and std of current velocity shift distribution',value=False)
-    common_observ_bounds=st.toggle('Use common observation parameter bounds for all lines',value=True)
+    common_observ_bounds_dates=st.toggle('Use common observation parameter bounds independantly of the dates restriction',
+                                   value=False)
+    common_observ_bounds_lines=st.toggle('Use common observation parameter bounds for all lines',value=True)
     display_pearson = st.toggle('Display Pearson rank', value=False)
 
     st.header('Upper limits')
@@ -2959,7 +3077,9 @@ dict_linevis['display_abserr_bshift']=display_abserr_bshift
 dict_linevis['display_std_abserr_bshift']=display_std_abserr_bshift
 dict_linevis['glob_col_source']=glob_col_source
 dict_linevis['display_th_width_ew']=display_th_width_ew
-dict_linevis['common_observ_bounds']=common_observ_bounds
+dict_linevis['common_observ_bounds_lines']=common_observ_bounds_lines
+dict_linevis['common_observ_bounds_dates']=common_observ_bounds_dates
+
 dict_linevis['split_dist_method']=split_dist_method
 
 os.system('mkdir -p '+save_dir+'/graphs')
@@ -3455,7 +3575,7 @@ if display_single and choice_source[0]=='4U1630-47' and plot_gamma_correl:
                               yerr=count_bat_err_match_int[i_int_withBAT],
                               # alpha=1,
                               alpha=int_fit_gamma_alpha[i_int_withBAT],
-                              label='integral' if i_int_withBAT==i_max_alpha_gamma else '',color='black',ls='')
+                              label='INTEGRAL' if i_int_withBAT==i_max_alpha_gamma else '',color='black',ls='')
 
     r_spearman_gamma_bat_rate= np.array(pymccorrelation(int_fit_gamma[mask_int_withBAT], count_bat_match_int,
                                           dx_init=int_fit_gamma_err.T[mask_int_withBAT],
@@ -3519,7 +3639,7 @@ if display_single and choice_source[0]=='4U1630-47' and plot_gamma_correl:
         ax_gamma_flux_int.errorbar(int_fit_gamma[i_revol],int_fit_flux[i_revol],
                 xerr=np.array([[int_fit_gamma_err.T[i_revol].T[0]],[int_fit_gamma_err.T[i_revol].T[1]]]),
                 yerr=int_fit_flux_err[i_revol],color='black',alpha=int_fit_flux_alpha[i_revol],
-                label='integral' if i_revol==i_max_alpha_flux else '',ls='')
+                label='INTEGRAL' if i_revol==i_max_alpha_flux else '',ls='')
 
     r_spearman_gamma_flux_int= np.array(pymccorrelation(int_fit_gamma, int_fit_flux,
                                           dx_init=int_fit_gamma_err.T,
@@ -3558,7 +3678,7 @@ if display_single and choice_source[0]=='4U1630-47' and plot_gamma_correl:
         ax_gamma_rate_int.errorbar(int_fit_gamma[i_revol],int_fit_rate_30_50[i_revol],
                 xerr=np.array([[int_fit_gamma_err.T[i_revol].T[0]],[int_fit_gamma_err.T[i_revol].T[1]]]),
                 yerr=int_fit_rate_30_50_err[i_revol],color='black',alpha=int_fit_rate_30_50_alpha[i_revol],
-                label='integral' if i_revol==i_max_alpha_rate else '',ls='')
+                label='INTEGRAL' if i_revol==i_max_alpha_rate else '',ls='')
 
     r_spearman_gamma_rate_int= np.array(pymccorrelation(int_fit_gamma, int_fit_rate_30_50,
                                           dx_init=int_fit_gamma_err.T,
@@ -3598,7 +3718,7 @@ if display_single and choice_source[0]=='4U1630-47' and plot_gamma_correl:
         ax_rate_flux_int.errorbar(int_fit_rate_30_50[i_revol],int_fit_flux[i_revol],
                 xerr=int_fit_rate_30_50_err[i_revol],
                 yerr=int_fit_flux_err[i_revol],color='black',alpha=int_fit_rate_30_50_alpha[i_revol],
-                label='integral' if i_revol==i_max_alpha_rate else '',ls='')
+                label='INTEGRAL' if i_revol==i_max_alpha_rate else '',ls='')
 
     r_spearman_rate_flux_int= np.array(pymccorrelation(int_fit_rate_30_50,int_fit_flux,
                                           dx_init=int_fit_rate_30_50_err,
@@ -3638,7 +3758,7 @@ if display_single and choice_source[0]=='4U1630-47' and plot_gamma_correl:
         ax_rate_flux_15_50_int.errorbar(int_fit_rate_30_50[i_revol],int_fit_flux_15_50[i_revol],
                 xerr=int_fit_rate_30_50_err[i_revol],
                 yerr=int_fit_flux_15_50_err.T[[i_revol]].T,color='black',alpha=int_fit_rate_30_50_alpha[i_revol],
-                label='integral' if i_revol==i_max_alpha_rate else '',ls='')
+                label='INTEGRAL' if i_revol==i_max_alpha_rate else '',ls='')
 
     r_spearman_rate_flux_15_50_int= np.array(pymccorrelation(int_fit_rate_30_50,int_fit_flux_15_50,
                                           dx_init=int_fit_rate_30_50_err,
@@ -3715,7 +3835,7 @@ if display_single and choice_source[0]=='4U1630-47' and plot_gamma_correl:
                               yerr=np.array([lum_int_15_50_err.T[mask_int_withBAT][i_int_withBAT]]).T,
                               # alpha=1,
                               alpha=int_fit_gamma_alpha[i_int_withBAT],
-                              label='integral (powerlaw)' if i_int_withBAT==i_max_alpha_gamma else '',
+                              label='INTEGRAL (powerlaw)' if i_int_withBAT==i_max_alpha_gamma else '',
                                     color='black',ls='')
 
     plt.errorbar(lum_BAT_single[0][flux_high_list_single_mask & mask_match_BAT_main],

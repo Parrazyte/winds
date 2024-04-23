@@ -158,7 +158,9 @@ def convert_BAT_flux_spectra(observ_high_table_path,err_percent=90,e_low=15., e_
         #modyfing the exposure of the file to match the exposure according to the daily BAT value
         with fits.open(obsid+'_BAT_regr_sp_'+str(e_low)+'_'+str(e_high)+'.pi',mode='update') as hdul:
             hdul[1].header['EXPOSURE']=csv_BAT_expos[i_sp]
-def fetch_BAT(date_start='2021-09-20',date_stop='2021-09-21',object_name = '4U1630-47',minexposure=1000):
+            hdul.flush()
+
+def fetch_BAT(date_start='2021-09-20',date_stop='2021-09-21',object_name = '4U 1630-47',minexposure=1000):
 
     '''
     wrapper around batanalysis to download some data
@@ -169,8 +171,10 @@ def fetch_BAT(date_start='2021-09-20',date_stop='2021-09-21',object_name = '4U16
     '''
 
 
-    object_location = swiftbat.simbadlocation(object_name)
-    object_batsource = swiftbat.source(ra=object_location[0], dec=object_location[1], name=object_name)
+    # object_location = swiftbat.simbadlocation(object_name)
+    # object_batsource = swiftbat.source(ra=object_location[0], dec=object_location[1], name=object_name)
+    object_batsource = swiftbat.source(name=object_name)
+
 
     queryargs = dict(time=date_start+' .. '+date_stop, fields='All', resultmax=0)
     table_everything = ba.from_heasarc(**queryargs)

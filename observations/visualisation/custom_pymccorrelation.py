@@ -95,7 +95,7 @@ def perturb_values(x, y, dx, dy,xlim=None,ylim=None, Nperturb=10000):
         
         xp_disjointed=_np.array([[((-1)**(j+1)*abs(rng.normal(loc=0,scale=abs(dx[i][j]),size=(Nperturb)))\
                                        if (xlim is None or xlim[i]==0) else\
-                                   rng.uniform(low=x[i],high=x[i]+dx[i][1],size=Nperturb)) if dx[i][j]!=0\
+                                   rng.uniform(low=0,high=x[i][1],size=Nperturb)) if dx[i][1]!=0\
                                       else _np.repeat(0,Nperturb)\
                                   for i in range(len(dx))] for j in [0,1]],dtype=object)
 
@@ -133,10 +133,10 @@ def perturb_values(x, y, dx, dy,xlim=None,ylim=None, Nperturb=10000):
             #Note : we take the absolute values of the uncertainties to make sure they are valid scale parameters
             yp_disjointed=_np.array([[(((-1)**(j+1)*abs(rng.normal(loc=0,scale=abs(dy[i][j]),size=(Nperturb))))\
                                            if (ylim is None or ylim[i]==0) else\
-                                       rng.uniform(low=y[i],high=y[i]+dy[i][1],size=Nperturb)) if dy[i][j]!=0\
+                                       rng.uniform(low=0,high=dy[i][1],size=Nperturb)) if dy[i][1]!=0\
                                          else _np.repeat(0,Nperturb)\
                                       for i in range(len(dy))] for j in [0,1]],dtype=object)
-            
+
             #different transpositions depending on if the array ends up with Nones or not
             if _np.ndim(yp_disjointed)==2:
                 yp_disjointed=yp_disjointed.T

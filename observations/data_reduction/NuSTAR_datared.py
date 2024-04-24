@@ -23,10 +23,14 @@ import matplotlib as mpl
 import matplotlib.pyplot as plt
 from shapely.geometry import Polygon
 
-# note: might need to install opencv-python-headless to avoid dependancies issues with mpl
+# note: might need to install opencv-python-headless to avoid dependencies issues with mpl
 
 # import matplotlib.cm as cm
 from matplotlib.collections import LineCollection
+
+#using agg because qtagg still generates backends with plt.ioff()
+mpl.use('agg')
+plt.ioff()
 
 # astro imports
 from astropy.time import Time,TimeDelta
@@ -85,7 +89,7 @@ m.      batch_mover: copies all products to a global directory to prepare for la
 
 '''~~~~~~~~~~ ARGUMENTS ~~~~~~~~~~'''
 
-ap = argparse.ArgumentParser(description='Script to reduce NICER files.\n)')
+ap = argparse.ArgumentParser(description='Script to reduce NuSTAR files.\n)')
 
 # the basics
 
@@ -99,7 +103,7 @@ ap.add_argument('-catch', '--catch_errors', help='Catch errors while running the
 
 # global choices
 ap.add_argument("-a", "--action", nargs='?', help='Give which action(s) to proceed,separated by comas.',
-                default='lc,m', type=str)
+                default='build,reg,lc,sp,g,m', type=str)
 # default: build,reg,lc,sp,g,m
 
 ap.add_argument("-over", nargs=1, help='overwrite computed tasks (i.e. with products in the batch, or merge directory\
@@ -110,7 +114,7 @@ ap.add_argument('-cameras',nargs=1,help='which cameras to restrict the analysis 
 ap.add_argument('-bright_check',nargs=1,help='recompute the entire set of actions in bright mode if the source lightcurve'+
                                              'is above the standard count limits',default=True,type=bool)
 
-ap.add_argument('-force_bright',help="Force bright mode for the tasks from the get go",default=True)
+ap.add_argument('-force_bright',help="Force bright mode for the tasks from the get go",default=False)
 
 # directory level overwrite (not active in local)
 ap.add_argument('-folder_over', nargs=1, help='relaunch action through folders with completed analysis', default=False,
@@ -155,6 +159,10 @@ ap.add_argument('-point_source', nargs=1,
 ap.add_argument('-max_rad_source', nargs=1, help='maximum source radius for faint sources in units of PSF sigmas',
                 default=5, type=float)
 
+#if set to true, wil ask for sudo mdp at script launch
+ap.add_argument('-sudo_mode',nargs=1,help='put to true if the ds9 installation needs to be run in sudo',
+               default=False,type=bool)
+
 '''lightcurve'''
 ap.add_argument('-lc_bin', nargs=1, help='Gives the binning of all lightcurces/HR evolutions (in s)', default='100',
                 type=str)
@@ -162,7 +170,7 @@ ap.add_argument('-lc_bin', nargs=1, help='Gives the binning of all lightcurces/H
 
 ap.add_argument('-lc_bands_str', nargs=1, help='Gives the list of bands to create lightcurves from', default='3-79',
                 type=str)
-ap.add_argument('-hr_bands_str', nargs=1, help='Gives the list of bands to create hrsfrom', default='10-50/3-10',
+ap.add_argument('-hr_bands_str', nargs=1, help='Gives the list of bands to create hrs from', default='10-50/3-10',
                 type=str)
 
 #note: also makes the spectrum function create spectra uniquely from GTIs
@@ -194,6 +202,8 @@ overwrite_glob=args.over
 catch_errors=args.catch_errors
 e_low_img,e_high_img=np.array(args.image_band.split('-'),dtype=float)
 
+sudo_mode=args.sudo_mode
+
 bright_check=args.bright_check
 force_bright=args.force_bright
 
@@ -215,7 +225,8 @@ bigger_fit=args.bigger_fit
 point_source=args.point_source
 max_rad_source=args.max_rad_source
 
-
+if sudo_mode:
+    sudo_mdp=input('Sudo mode activated. Enter sudo password for ds9')
 
 '''''''''''''''''
 ''''FUNCTIONS''''
@@ -383,13 +394,18 @@ def process_obsdir(directory, overwrite=True, bright=False):
         if process_state != 0:
             raise ValueError
 
-def disp_ds9(spawn, file, zoom='auto', scale='log', regfile='', screenfile='', give_pid=False, kill_last=''):
+def disp_ds9(spawn, file, zoom='auto', scale='log', regfile='', screenfile='', give_pid=False, kill_last='',
+             sudo_mode=False,sudo_mdp=''):
     '''
     Regfile is an input, screenfile is an output. Both can be paths
     If "screenfile" is set to a non empty str, we make a screenshot of the ds9 window in the given path
     This is done manually since the ds9 png saving command is bugged
 
     if give_pid is set to True, returns the pid of the newly created ds9 process
+
+    In some installations like mine ds9 struggles to start outside of sudo, so there is a sudo mode where a sudo command
+    (with password) is used to launch and remove ds9
+
     '''
 
     if scale == 'linear 99.5':
@@ -412,13 +428,20 @@ def disp_ds9(spawn, file, zoom='auto', scale='log', regfile='', screenfile='', g
     if screenfile != '' or give_pid:
         windows_before = subprocess.run(['wmctrl', '-l'], stdout=subprocess.PIPE).stdout.decode('utf-8').split('\n')
 
-    spawn.sendline(
-        'echo "Ph0t1n0s" | sudo -S ds9 -view buttons no -cmap Heat -geometry 1080x1080 -scale ' + scale + ' -mode region ' + file + ' -zoom ' + str(
-            zoom) +
-        ' ' + regfile + ' &')
+    if sudo_mode:
+        spawn.sendline(
+            'echo "'+sudo_mdp+'" | sudo -S ds9 -view buttons no -cmap Heat -geometry 1080x1080 -scale ' + scale + ' -mode region ' + file + ' -zoom ' + str(
+                zoom) +
+            ' ' + regfile + ' &')
 
-    # the timeout limit could be increased for slower computers or heavy images
-    spawn.expect(['password', pexpect.TIMEOUT], timeout=1)
+        # the timeout limit could be increased for slower computers or heavy images
+        spawn.expect(['password', pexpect.TIMEOUT], timeout=1)
+
+    else:
+        spawn.sendline('ds9 -view buttons no -cmap Heat -geometry 1080x1080 -scale ' + scale + ' -mode region '
+                       + file + ' -zoom ' + str(zoom) + ' ' + regfile + ' &')
+
+
 
     # second part of the windows parsing
 
@@ -671,7 +694,9 @@ def xsel_img(bashproc,evt_path,save_path,e_low,e_high):
 
     #commands to save image
     bashproc.sendline('save image')
-    bashproc.expect('Give output file name')
+
+    #can take time so increased timeout
+    bashproc.expect('Give output file name',timeout=120)
 
     bashproc.sendline(save_path)
 
@@ -714,7 +739,7 @@ def ds9_to_reg(ds9_regfile):
     return reg_coords
 
 def extract_reg(directory, cams='all', use_file_coords=False,
-                overwrite=True,e_low_img=3,e_high_img=79,rad_crop=120,bright=False):
+                overwrite=True,e_low_img=3,e_high_img=79,rad_crop=120,bright=False,sudo_mode=False,sudo_mdp=''):
     '''
     Extracts the optimal source/bg regions for a given exposure
 
@@ -983,7 +1008,7 @@ def extract_reg(directory, cams='all', use_file_coords=False,
         #opening the image file and saving it for verification purposes
         ds9_pid_sp_start=disp_ds9(spawn,os.path.join(spawndir,img_file),
                                   screenfile=os.path.join(filedir,img_file).replace('.ds','_screen.png'),
-                                  give_pid=True)
+                                  give_pid=True,sudo_mode=sudo_mode,sudo_mdp=sudo_mdp)
 
         try:
             fits_img = fits.open(os.path.join(filedir,img_file))
@@ -1042,10 +1067,11 @@ def extract_reg(directory, cams='all', use_file_coords=False,
                           '\n' + spatial_expression((obj_deg, str(rad_crop)))
                           + ' # text={' + obj_auto['MAIN_ID'] + ' initial cropping zone}')
 
-        ds9_pid_sp_start = disp_ds9(spawn, os.path.join(spawndir,img_file), regfile=os.path.join(spawndir,reg_catal_name), zoom=1.2,
+        ds9_pid_sp_start = disp_ds9(spawn, os.path.join(spawndir,img_file), regfile=os.path.join(spawndir,reg_catal_name),
+                                    zoom=1.2,
                                     screenfile=filedir + '/' +file_id + prefix + '_reg_catal_screen.png',
                                     give_pid=True,
-                                    kill_last=ds9_pid_sp_start)
+                                    kill_last=ds9_pid_sp_start,sudo_mode=sudo_mode,sudo_mdp=sudo_mdp)
 
         rad_crop_use=rad_crop
 
@@ -1212,7 +1238,7 @@ def extract_reg(directory, cams='all', use_file_coords=False,
         ds9_pid_sp_reg = disp_ds9(spawn,os.path.join(spawndir,img_file), regfile=os.path.join(spawndir,reg_name),
                                     screenfile=filedir + '/' +file_id + prefix + '_reg_screen.png',
                                     give_pid=True,
-                                    kill_last=ds9_pid_sp_start)
+                                    kill_last=ds9_pid_sp_start,sudo_mode=sudo_mode,sudo_mdp=sudo_mdp)
 
         '''
         and in individual region files for the extraction
@@ -1240,6 +1266,14 @@ def extract_reg(directory, cams='all', use_file_coords=False,
                           '\nfk5' +
                           '\n' + spatial_expression(bg_coords_im)
                           + ' # text={automatic background}')
+
+        if sudo_mode:
+            bashproc.sendline('\necho "' + sudo_mdp + '" |sudo -S pkill sudo')
+        else:
+            os.system('wmctrl -ic ' + ds9_pid_sp_reg)
+
+        # this sometimes doesn't proc before the exit for whatever reason so we add a buffer just in case
+        # bashproc.expect([pexpect.TIMEOUT],timeout=2)
 
         return 'Region extraction complete.'
 
@@ -1324,10 +1358,6 @@ def extract_reg(directory, cams='all', use_file_coords=False,
                 file_edit(os.path.join(directory, 'summary_extract_reg.log'), obsid + '\t' + clean_evtid,
                           summary_content + '\n',
                           summary_header)
-
-    bashproc.sendline('\necho "Ph0t1n0s" |sudo -S pkill sudo')
-    # this sometimes doesn't proc before the exit for whatever reason so we add a buffer just in case
-    # bashproc.expect([pexpect.TIMEOUT],timeout=2)
 
     # closing the spawn
     bashproc.sendline('exit')
@@ -2301,7 +2331,8 @@ if not local:
                         #note: the first actions are not performed with bright mode
                         if curr_action=='reg':
                             output_err=extract_reg(dirname,cams=cameras_glob,use_file_coords=use_file_coords,overwrite=overwrite_glob,
-                                                   e_low_img=e_low_img,e_high_img=e_high_img,rad_crop=rad_crop,bright=force_bright or bright_flag_dir)
+                                                   e_low_img=e_low_img,e_high_img=e_high_img,rad_crop=rad_crop,bright=force_bright or bright_flag_dir,
+                                                   sudo_mode=sudo_mode,sudo_mdp=sudo_mdp)
                             if type(output_err)==str:
                                 raise ValueError
                             extract_reg_done.wait()
@@ -2381,7 +2412,8 @@ if not local:
                         output_err = extract_reg(dirname, cams=cameras_glob, use_file_coords=use_file_coords,
                                                  overwrite=overwrite_glob,
                                                  e_low_img=e_low_img, e_high_img=e_high_img, rad_crop=rad_crop,
-                                                 bright=force_bright or bright_flag_dir)
+                                                 bright=force_bright or bright_flag_dir,
+                                                 sudo_mode=sudo_mode, sudo_mdp=sudo_mdp)
                         if type(output_err) == str:
                             raise ValueError
                         extract_reg_done.wait()
@@ -2463,7 +2495,8 @@ else:
             output_err = extract_reg(absdir, cams=cameras_glob, use_file_coords=use_file_coords,
                                      overwrite=overwrite_glob,
                                      e_low_img=e_low_img, e_high_img=e_high_img, rad_crop=rad_crop,
-                                     bright=force_bright or bright_flag_dir)
+                                     bright=force_bright or bright_flag_dir,
+                                     sudo_mode=sudo_mode, sudo_mdp=sudo_mdp)
             if type(output_err) == str:
                 raise ValueError
             extract_reg_done.wait()

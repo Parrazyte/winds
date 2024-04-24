@@ -3377,6 +3377,8 @@ def hid_graph(ax_hid,dict_linevis,
             xdir[x_arr_log_ok] = 10**(np.log10(xarr_end[x_arr_log_ok]) - np.log10(xarr_start[x_arr_log_ok]))
             ydir[x_arr_log_ok] = 10**(np.log10(yarr_end[x_arr_log_ok]) - np.log10(yarr_start[x_arr_log_ok]))
 
+            # this is the offset from the position, since we make the arrow start at the middle point of
+            # the segment we don't want it to go any further so we put it almost at the same value
             arrow_size_frac=0.001
 
             for X, Y, dX, dY,log_ok in zip(xpos, ypos, xdir, ydir,x_arr_log_ok):
@@ -5646,9 +5648,14 @@ def correl_graph(data_perinfo,infos,data_ener,dict_linevis,mode='intrinsic',mode
                         #creating a new dictionnary
                         label_dict_use={}
 
+                        outburst_mask_list=[]
+                        outburst_order_list=[]
                         for outburst in list(label_dict.keys()):
                             # selecting the obs part of this outburst
                             outburst_select_mask=[elem.all() for elem in (color_arr[s].T[:-1].T==label_dict[outburst][:-1])]
+
+                            #saving the outburst masks for connectors
+                            outburst_mask_list+=[outburst_select_mask]
 
                             #skipping outbursts with no observations
                             if sum(outburst_select_mask)==0:
@@ -5658,7 +5665,11 @@ def correl_graph(data_perinfo,infos,data_ener,dict_linevis,mode='intrinsic',mode
                             #computing the first point of the outburst (aka darkest) from the alpha orders
                             #we invert it to get the argosrt from the first to the last
                             outburst_order= (1-color_arr_outburst.T[-1]).argsort()
+
+                            outburst_order_list+=[outburst_order]
+
                             outburst_init_id=outburst_order[0]
+
                             for i in range(len(color_arr_outburst)):
                                 if outburst_init_id==i:
                                     #giving the outburst name
@@ -5672,11 +5683,58 @@ def correl_graph(data_perinfo,infos,data_ener,dict_linevis,mode='intrinsic',mode
                                     outburst_id=np.argwhere(outburst_order==i)[0][0]
                                     label_dict_use[outburst+'.'+str(outburst_id)] = color_arr_outburst[i]
 
+                            #putting the connector with the outburst color
+                            #note that we overwrite the alpha so we don't care about which color we're taking
+
+                            x_outburst=x_data[s].astype(float)[~(linked_mask[s].astype(bool))]\
+                                [outburst_select_mask][outburst_order]
+                            y_outburst=y_data[s].astype(float)[~(linked_mask[s].astype(bool))]\
+                                [outburst_select_mask][outburst_order]
+                            ax_scat.plot(x_outburst,y_outburst,
+                                color=color_arr_outburst[0],
+                                label='', alpha=0.3, zorder=0)
+
+                            xscale_lin=ax_scat.get_xscale()=='linear'
+                            yscale_lin=ax_scat.get_yscale()=='linear'
+                            #and arrows, using annotate to avoid issues with ax limits and resizing
+
+                            x_pos=(x_outburst[1:]+x_outburst[:-1])/2 if xscale_lin else \
+                                10 ** ((np.log10(x_outburst[1:]) + np.log10(x_outburst[:-1])) / 2)
+
+                            y_pos=(y_outburst[1:]+y_outburst[:-1])/2 if yscale_lin else \
+                                10 ** ((np.log10(y_outburst[1:]) + np.log10(y_outburst[:-1])) / 2)
+
+                            x_dir =x_outburst[1:]-x_outburst[:-1] if xscale_lin else \
+                                10 ** (np.log10(x_outburst[1:]) - np.log10(x_outburst[:-1]))
+                            y_dir = y_outburst[1:]-y_outburst[:-1] if yscale_lin else \
+                                10 ** (np.log10(y_outburst[1:]) - np.log10(y_outburst[:-1]))
+
+                            #this is the offset from the position, since we make the arrow start at the middle point of
+                            #the segment we don't want it to go any further so we put it almost at the same value
+                            #note that for some reason this ends up with non uniform proportions in log scale, but
+                            #that remains good enough for now
+
+                            arrow_size_frac = 0.1
+
+                            for X, Y, dX, dY in zip(x_pos, y_pos, x_dir, y_dir):
+                                ax_scat.annotate("", xytext=(X, Y),
+                                                xy=(X + arrow_size_frac * dX if xscale_lin else\
+                                                    10 ** (np.log10(X) + arrow_size_frac * np.log10(dX)),
+                                                    Y + arrow_size_frac * dY if yscale_lin else\
+                                                    10 ** (np.log10(Y) + arrow_size_frac * np.log10(dY))),
+                                                arrowprops=dict(arrowstyle='->', color=color_arr_outburst[0],
+                                                                alpha=0.3), size=10)
+
+
                         #replacing the dictionnary with this one
                         label_dict=label_dict_use
                         order_disp=np.array(list(label_dict.keys())).argsort()
+
+
+
+
                     else:
-                        order_disp=np.arange(np.array(list(label_dict.keys())))
+                        order_disp=np.arange(len(np.array(list(label_dict.keys()))))
 
                     for i_col,color_label in enumerate(np.array(list(label_dict.keys()))[order_disp]):
         

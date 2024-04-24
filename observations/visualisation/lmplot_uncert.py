@@ -54,12 +54,13 @@ def lmplot_uncert_a(ax, x, y, dx, dy, xlim=None,ylim=None, percent=68.26,percent
     -dx,dy:             uncertainties. can be of size [2,N] for asymmetric
 
     -xlim,ylim:         upper limit information. Either None or a N-size mask with a True for upper/lower limits.
-                        In this case, the values will be perturbated between x and xlim with a uniform distribution
-                        independantly of whether the limit is upper or lower,
-                         x should always be set at the bottom treshold,
-                         and xlim should be set as the upper limit interval
+                        In this case, the values will be perturbated between x and xlim[1]
+                        (this requires [2,N] uncertainties)
+                        with a uniform distribution.
+                        Independantly of whether the limit is upper or lower, x should always be set at the bottom
+                        treshold, and xlim should be set as the upper limit interval
 
-                         For now, upper and lower limits are not considered in the scatter computation
+                        For now, upper and lower limits are not considered in the scatter computation
 
     -percent:           percent of the posterior distributions returned (the main value is the median so 50%)
                         Default value is for 1 sigma

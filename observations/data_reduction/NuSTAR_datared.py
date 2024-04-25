@@ -227,7 +227,8 @@ max_rad_source=args.max_rad_source
 
 if sudo_mode:
     sudo_mdp=input('Sudo mode activated. Enter sudo password for ds9')
-
+else:
+    sudo_mdp=''
 '''''''''''''''''
 ''''FUNCTIONS''''
 '''''''''''''''''
@@ -1003,7 +1004,15 @@ def extract_reg(directory, cams='all', use_file_coords=False,
         try:
             fits_img = fits.open(os.path.join(filedir,img_file))
         except:
+
             time.sleep(5)
+
+            try:
+                fits_img = fits.open(os.path.join(filedir, img_file))
+            except:
+
+                #even longer waiting time if there's a very big file
+                time.sleep(15)
 
         #opening the image file and saving it for verification purposes
         ds9_pid_sp_start=disp_ds9(spawn,os.path.join(spawndir,img_file),

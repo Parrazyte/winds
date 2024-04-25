@@ -1695,7 +1695,7 @@ if display_single and choice_source[0] == '4U1630-47' and sum(ravel_ragged(mask_
                                 (date_list_obj_sorted[i_obs_sorted]-obs_curr_outburst[0])/curr_outburst_max_delta
 
             #changing the alpha linearly down to 0.3 for the last observation
-            custom_outburst_color[i_obj][i_obs][-1]=1.-0.7*float(curr_outburst_delta_frac)
+            custom_outburst_color[i_obj][i_obs][-1]=1.-0.7*np.sqrt(float(curr_outburst_delta_frac))
 
             #changing back into a tuple to avoid issues with transpositions later
             custom_outburst_color[i_obj][i_obs]=tuple(custom_outburst_color[i_obj][i_obs])

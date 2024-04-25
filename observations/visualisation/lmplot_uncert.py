@@ -53,8 +53,14 @@ def lmplot_uncert_a(ax, x, y, dx, dy, xlim=None,ylim=None, percent=68.26,percent
 
     -dx,dy:             uncertainties. can be of size [2,N] for asymmetric
 
-    -xlim,ylim:         upper limit information. Either None or a N-size mask with a 1 for upper/lower limits.
-                        In this case, the values will be perturbated between x and xlim with a uniform distribution
+    -xlim,ylim:         upper limit information. Either None or a N-size mask with a True for upper/lower limits.
+                        In this case, the values will be perturbated between x and xlim[1]
+                        (this requires [2,N] uncertainties)
+                        with a uniform distribution.
+                        Independantly of whether the limit is upper or lower, x should always be set at the bottom
+                        treshold, and xlim should be set as the upper limit interval
+
+                        For now, upper and lower limits are not considered in the scatter computation
 
     -percent:           percent of the posterior distributions returned (the main value is the median so 50%)
                         Default value is for 1 sigma
@@ -151,7 +157,7 @@ def lmplot_uncert_a(ax, x, y, dx, dy, xlim=None,ylim=None, percent=68.26,percent
     xlim_arr_mask=xlim_mask[mask_values]
     ylim_arr_mask=ylim_mask[mask_values]
 
-    tot_nonlim_mask=~ ((xlim_arr_mask) & (ylim_arr_mask))
+    tot_nonlim_mask=~ ((xlim_arr_mask) | (ylim_arr_mask))
 
     if log_x:
 
@@ -275,7 +281,7 @@ def lmplot_uncert_a(ax, x, y, dx, dy, xlim=None,ylim=None, percent=68.26,percent
     else:
         x_line=np.linspace(ax.get_xlim()[0],ax.get_xlim()[1],2*nsim)
 
-    #saving the first set of peturbated values to allow checks if needed
+    #saving the first set of perturbated values to allow checks if needed
     # the slope should be the same in the second perturbation round
     slope_vals_save=slope_vals.copy()
     intercept_vals_save=intercept_vals.copy()
@@ -360,13 +366,13 @@ def lmplot_uncert_a(ax, x, y, dx, dy, xlim=None,ylim=None, percent=68.26,percent
     else:
         x_intercept=intercept_pos
 
-    #recomputing the LR with the intercept this time
-    #base regression without upper limits
-
-    base_regress=linregress(x_arr[tot_nonlim_mask]-x_intercept,y_arr[tot_nonlim_mask])
-
-    base_regress_slope=base_regress.slope
-    base_regress_intercept=base_regress.intercept
+    # #recomputing the LR with the intercept this time
+    # #base regression without upper limits
+    #
+    # base_regress=linregress(x_arr[tot_nonlim_mask]-x_intercept,y_arr[tot_nonlim_mask])
+    #
+    # base_regress_slope=base_regress.slope
+    # base_regress_intercept=base_regress.intercept
 
     for i in range(nsim):
 
@@ -376,8 +382,6 @@ def lmplot_uncert_a(ax, x, y, dx, dy, xlim=None,ylim=None, percent=68.26,percent
 
         slope_vals[i] = curr_regress.slope
         intercept_vals[i] = curr_regress.intercept
-
-
 
     #tests to check individual realizations
     # prop_cycle = plt.rcParams['axes.prop_cycle']

@@ -1436,19 +1436,20 @@ def extract_all_spectral(directory,bkgmodel='scorpeon_script',language='python',
                                            'Task aborting due to zero response',
                                            'PIL ERROR PIL_UNSPECIFIED_ERROR: non-specific pil error'],timeout=None)
 
+
+            if process_state in [2,3]:
+
+                #skipping the computation
+                return 'skip'
+
             #raising an error to stop the process if the command has crashed for some reason
-            if process_state>2:
+            if process_state>0:
                 with open(directory+'/extract_all_spectral.log') as file:
                     lines=file.readlines()
 
                 bashproc.sendline('exit')
                 extract_all_spectral_done.set()
                 return lines[-1].replace('\n','')
-
-            if process_state in [1,2]:
-
-                #skipping the computation
-                return 'skip'
 
             allfiles=glob.glob(os.path.join(directory,'xti/**'),recursive=True)
 

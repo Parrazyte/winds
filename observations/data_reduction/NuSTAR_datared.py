@@ -711,6 +711,10 @@ def xsel_img(bashproc,evt_path,save_path,e_low,e_high):
     #giving some time to create the file
     time.sleep(5)
 
+    if not os.path.isfile(save_path):
+        print('File still not ready. Letting more time...')
+        time.sleep(30)
+
     bashproc.sendline('exit')
     bashproc.sendline('no')
 
@@ -1279,7 +1283,7 @@ def extract_reg(directory, cams='all', use_file_coords=False,
         if sudo_mode:
             bashproc.sendline('\necho "' + sudo_mdp + '" |sudo -S pkill sudo')
         else:
-            os.system('wmctrl -ic ' + ds9_pid_sp_reg)
+            os.system('wmctrl -ic ' + str(ds9_pid_sp_reg))
 
         # this sometimes doesn't proc before the exit for whatever reason so we add a buffer just in case
         # bashproc.expect([pexpect.TIMEOUT],timeout=2)

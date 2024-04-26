@@ -66,6 +66,8 @@ g. group_spectra: group spectra using the optimized Kastra et al. binning
 
 m.merge: merge all spectral products in the subdirectories to a bigbatch directory
 
+ml. merge_lightcurve: merge all lightcurve products in the subdirectories to a lcbatch directory 
+
 c. clean_products: clean event products in the observation's event_cl directory
 
 fc. clean_all: clean all files including standard products and products of this script from the directory
@@ -99,7 +101,7 @@ ap.add_argument('-catch','--catch_errors',help='Catch errors while running the d
 
 #global choices
 ap.add_argument("-a","--action",nargs='?',help='Give which action(s) to proceed,separated by comas.',
-                default='fc,1,gti,fs,l,g,m,c',type=str)
+                default='ml',type=str)
 #default: 1,gti,fs,l,g,m,c
 
 ap.add_argument("-over",nargs=1,help='overwrite computed tasks (i.e. with products in the batch, or merge directory\
@@ -266,6 +268,7 @@ extract_response_done=threading.Event()
 extract_background_done=threading.Event()
 regroup_spectral_done=threading.Event()
 batch_mover_done=threading.Event()
+
 select_detector_done=threading.Event()
 
 extract_lc_done=threading.Event()
@@ -273,6 +276,10 @@ clean_products_done=threading.Event()
 clean_all_done=threading.Event()
 
 create_gtis_done=threading.Event()
+
+batch_mover_timing_done=threading.Event()
+
+
 def set_var(spawn):
     
     '''
@@ -2084,6 +2091,31 @@ def batch_mover(directory):
     bashproc.sendline('exit')
     batch_mover_done.set()
 
+def batch_mover_timing(directory):
+    '''
+    copies all lc products in a directory to a lcbatch directory above the obsid directory to prepare for lc analysis
+    '''
+
+    bashproc = pexpect.spawn("/bin/bash", encoding='utf-8')
+
+    bashproc.logfile_read = sys.stdout
+
+    print('\n\n\nCopying lc products to a merging directory...')
+
+    set_var(bashproc)
+
+    bashproc.sendline('mkdir -p lcbatch')
+
+    bashproc.sendline('cd ' + directory)
+
+    bashproc.sendline('cp --verbose ./xti/'+directory+'*.lc ../lcbatch' + ' >batch_mover_timing.log')
+
+    # reasonable waiting time to make sure files can be copied
+    time.sleep(2)
+
+    bashproc.sendline('exit')
+    batch_mover_timing_done.set()
+
 def clean_products(directory):
 
     '''
@@ -2279,6 +2311,10 @@ if not local:
                             batch_mover(dirname)
                             batch_mover_done.wait()
 
+                        if curr_action=='ml':
+                            batch_mover_timing(dirname)
+                            batch_mover_timing_done.wait()
+
                         if curr_action=='c':
                             clean_products(dirname)
                             clean_products_done.wait()
@@ -2364,6 +2400,10 @@ if not local:
                         batch_mover(dirname)
                         batch_mover_done.wait()
 
+                    if curr_action=='ml':
+                        batch_mover_timing(dirname)
+                        batch_mover_timing_done.wait()
+
                     if curr_action=='c':
                         clean_products(dirname)
                         clean_products_done.wait()
@@ -2383,7 +2423,7 @@ else:
     #OUTDATED
     assert True,'local mode currently outdated'
     #taking of the merge action if local is set since there is no point to merge in local (the batch directory acts as merge)
-    action_list=[elem for elem in action_list if elem!='m']
+    action_list=[elem for elem in action_list if elem in ['m','ml']]
     
     absdir=os.getcwd()
     
@@ -2433,6 +2473,11 @@ else:
             if curr_action=='m':
                 batch_mover(absdir)
                 batch_mover_done.wait()
+
+            if curr_action == 'ml':
+                batch_mover_timing(absdir)
+                batch_mover_timing_done.wait()
+
             if curr_action == 'c':
                 clean_products(absdir)
                 clean_products_done.wait()

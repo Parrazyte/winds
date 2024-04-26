@@ -107,7 +107,7 @@ ap.add_argument("-over",nargs=1,help='overwrite computed tasks (i.e. with produc
 
 #directory level overwrite (not active in local)
 ap.add_argument('-folder_over',nargs=1,help='relaunch action through folders with completed analysis',
-                default=False,type=bool)
+                default=True,type=bool)
 ap.add_argument('-folder_cont',nargs=1,help='skip all but the last 2 directories in the summary folder file',
                 default=False,type=bool)
 #note : we keep the previous 2 directories because bug or breaks can start actions on a directory following the initially stopped one
@@ -122,7 +122,7 @@ ap.add_argument('-folder_cont',nargs=1,help='skip all but the last 2 directories
 #should only be done in very extreme cases
 ap.add_argument('-keep_SAA',nargs=1,help='keep South Atlantic Anomaly (SAA) Periods',type=bool,default=True)
 
-ap.add_argument('-overshoot_limit',nargs=1,help='overshoot event rate limit',type=float,default=100)
+ap.add_argument('-overshoot_limit',nargs=1,help='overshoot event rate limit',type=float,default=2.)
 
 ap.add_argument('-undershoot_limit',nargs=1,help='undershoot event rate limit',type=float,default=500)
 
@@ -154,7 +154,7 @@ ap.add_argument('-flare_factor',nargs=1,help='minimum flare multiplication facto
 
 #for peak
 ap.add_argument('-peak_score_thresh',nargs=1,help='topological peak score treshold for peak exclusion',
-                default=10,type=float)
+                default=3.,type=float)
 #note: not used currently
 ap.add_argument('-gti_lc_band',nargs=1,help='Band for the lightcurve used for GTI splitting',
                 default='12-15',type=str)
@@ -171,7 +171,10 @@ ap.add_argument('-int_split_bin',nargs=1,help='binning of the light curve used f
 ap.add_argument('-lc_bin',nargs=1,help='Gives the binning of all lightcurces/HR evolutions (in s)',default=1,type=str)
 #note: also defines the binning used for the gti definition
 
-ap.add_argument('-lc_bands_str',nargs=1,help='Gives the list of bands to create lightcurves from',default='3-10',type=str)
+# lc_bands_list_det=['1-2','2-3','3-4','4-5','5-6','6-7','7-8','8-9','9-10']
+lc_bands_list_det=['1-3']
+ap.add_argument('-lc_bands_str',nargs=1,help='Gives the list of bands to create lightcurves from',
+                default='3-10'+','+','.join(lc_bands_list_det),type=str)
 ap.add_argument('-hr_bands_str',nargs=1,help='Gives the list of bands to create hrsfrom',default='6-10/3-6',type=str)
 
 
@@ -1720,7 +1723,7 @@ s
                 plt.ylabel('Hardness Ratio ('+HR+' keV)')
 
                 plt.tight_layout()
-                plt.savefig('./'+directory+'/'+directory+gti_suffix+'_hr_'+indiv_band+'_bin_'+str(binning)+'.png')
+                plt.savefig('./'+directory+'/'+directory+gti_suffix+'_hr_'+'_'.join(HR.split('/'))+'_'+'_bin_'+str(binning)+'.png')
                 plt.close()
 
         if len(gti_files)==0:

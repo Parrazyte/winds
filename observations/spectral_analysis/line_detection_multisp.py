@@ -165,7 +165,7 @@ ap.add_argument('-satellite',nargs=1,help='telescope to fetch spectra from',defa
 
 #used for NICER and multi for now
 ap.add_argument('-group_max_timedelta',nargs=1,
-                help='maximum time delta for epoch/gti grouping in dd_hh_mm_ss_ms',default='01_00_00_00_000',type=str)
+                help='maximum time delta for epoch/gti grouping in dd_hh_mm_ss_ms',default='00_8_00_00_000',type=str)
 
 #00_00_00_10 for NICER TR
 #00_00_15_00 for NuSTAR individual orbits
@@ -184,7 +184,7 @@ ap.add_argument("-prefix",nargs=1,help='restrict analysis to a specific prefix',
 
 ####output directory
 ap.add_argument("-outdir",nargs=1,help="name of output directory for line plots",
-                default="lineplots_opt_test",type=str)
+                default="NuSTAR_epochs_8h",type=str)
 
 #overwrite
 #global overwrite based on recap PDF
@@ -198,6 +198,9 @@ ap.add_argument('-skip_started',nargs=1,help='skip all exposures listed in the l
 
 ap.add_argument('-skip_complete',nargs=1,help='skip completed exposures listed in the local summary_line_det file',
                 default=False,type=bool)
+
+ap.add_argument('-save_epoch_list',nargs=1,help='Save epoch list in a file before starting the line detections',
+                default=True,type=bool)
 
 ap.add_argument('-see_search',nargs=1,help='plot every single iteration of the line search',default=False,type=bool)
 
@@ -316,6 +319,7 @@ ap.add_argument('-write_aborted_pdf',nargs=1,help='create aborted pdfs at the en
 
 '''MODES'''
 
+ap.add_argument('-load_epochs',nargs=1,help='prepare epochs then exit',default=True)
 #options: "opt" (tests the significance of each components and add them accordingly)
 # and "force_all" to force all components
 ap.add_argument('-cont_fit_method',nargs=1,help='fit logic for the broadband fits',
@@ -418,13 +422,13 @@ ap.add_argument('-restrict_fakes',nargs=1,
                 help='restrict range of fake computation to 8keV max',default=False,type=bool)
 
 '''MULTI'''
-ap.add_argument('-plot_multi_overlap',nargs=1,help='plot overlap between different epochs',default=False)
+ap.add_argument('-plot_multi_overlap',nargs=1,help='plot overlap between different epochs',default=True)
 
 #in this case other epochs from other instruments are matched against the obs of this one
 #useful to center epoch matching on a specific instrument
 #off value is False
 ap.add_argument('-multi_focus',nargs=1,help='restricts epoch matching to having a specific telescope',
-                default=False,type=str)
+                default='NuSTAR',type=str)
 
 ap.add_argument('-skip_single_instru',nargs=1,help='skip epochs with a single instrument',
                 default=False,type=bool)
@@ -633,8 +637,12 @@ suzaku_pin_range=np.array(args.suzaku_pin_range.split(' ')).astype(float)
 
 compute_highflux_only=args.compute_highflux_only
 
+load_epochs=args.load_epochs
+
 if compute_highflux_only:
     assert reload_autofit,'Reload autofit required for this mode'
+
+save_epoch_list=args.save_epoch_list
 
 low_E_NICER=args.low_E_NICER
 
@@ -4557,7 +4565,7 @@ elif sat_glob=='multi':
                 ax_exp.axvspan(xmin=num_date_start_file,
                                xmax=num_date_stop_file,
                                ymin=0.5, ymax=1, color=epoch_color,
-                               label='', alpha=0.2)
+                               label='', alpha=0.4)
 
             ax_exp.xaxis.set_major_formatter(date_format)
             for label in ax_exp.get_xticklabels(which='major'):
@@ -4585,7 +4593,7 @@ elif sat_glob=='multi':
                     ax_exp.axvspan(xmin=num_dates_start[mask_tel[i_det]][i_exp],
                                    xmax=num_dates_stop[mask_tel[i_det]][i_exp],
                                    ymin=0, ymax=0.5, color=telescope_colors[tel_col_list[i_det]],
-                                   label=tel_col_list[i_det] if (bar_in_plot and tel_col_list[i_det] not in tel_col_shown) else '', alpha=0.2)
+                                   label=tel_col_list[i_det] if (bar_in_plot and tel_col_list[i_det] not in tel_col_shown) else '', alpha=0.4)
 
                     if bar_in_plot:
                         tel_col_shown+=[tel_col_list[i_det]]
@@ -4601,6 +4609,10 @@ elif sat_glob=='multi':
 
     epoch_list_started=started_expos
     epoch_list_done=done_expos
+
+if save_epoch_list:
+    with open(os.path.join(outdir,'epoch_list.txt'),'w+') as f:
+        f.writelines([str(elem_epoch.tolist())+'\n'  for elem_epoch in epoch_list])
 
 if force_epochs:
     epoch_list=force_epochs_list
@@ -4654,6 +4666,10 @@ if rewind_epoch_list:
         suffix_str='_sp_src_grp_opt.pha'
 
         epoch_list=[[elem+suffix_str for elem in expand_epoch(started_expos[i])] for i in range(len(started_expos))]
+
+if load_epochs:
+    print('Loading functions mode activated. Stopping here...')
+    breakpoint()
 
 #### line detections for exposure with a spectrum
 for epoch_id,epoch_files in enumerate(epoch_list):

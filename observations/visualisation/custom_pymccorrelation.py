@@ -92,10 +92,10 @@ def perturb_values(x, y, dx, dy,xlim=None,ylim=None, Nperturb=10000):
     if _np.ndim(dx)==2:
         #drawing two independant samples with gaussian shape on each side (or None if there is no uncertainty)
         #Note : we take the absolute values of the uncertainties to make sure they are valid scale parameters
-        
+
         xp_disjointed=_np.array([[((-1)**(j+1)*abs(rng.normal(loc=0,scale=abs(dx[i][j]),size=(Nperturb)))\
                                        if (xlim is None or xlim[i]==0) else\
-                                   rng.uniform(low=0,high=x[i][1],size=Nperturb)) if dx[i][1]!=0\
+                                   rng.uniform(low=0,high=dx[i][1],size=Nperturb)) if dx[i][1]!=0\
                                       else _np.repeat(0,Nperturb)\
                                   for i in range(len(dx))] for j in [0,1]],dtype=object)
 

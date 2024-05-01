@@ -103,7 +103,7 @@ ap.add_argument('-catch', '--catch_errors', help='Catch errors while running the
 
 # global choices
 ap.add_argument("-a", "--action", nargs='?', help='Give which action(s) to proceed,separated by comas.',
-                default='build,reg,lc,sp,g,m', type=str)
+                default='lc,sp', type=str)
 # default: build,reg,lc,sp,g,m
 
 ap.add_argument("-over", nargs=1, help='overwrite computed tasks (i.e. with products in the batch, or merge directory\
@@ -164,7 +164,7 @@ ap.add_argument('-sudo_mode',nargs=1,help='put to true if the ds9 installation n
                default=False,type=bool)
 
 '''lightcurve'''
-ap.add_argument('-lc_bin', nargs=1, help='Gives the binning of all lightcurces/HR evolutions (in s)', default='100',
+ap.add_argument('-lc_bin', nargs=1, help='Gives the binning of all lightcurces/HR evolutions (in s)', default='1',
                 type=str)
 # note: also defines the binning used for the gti definition
 
@@ -174,8 +174,10 @@ ap.add_argument('-hr_bands_str', nargs=1, help='Gives the list of bands to creat
                 type=str)
 
 #note: also makes the spectrum function create spectra uniquely from GTIs
-ap.add_argument('-make_gti_orbit',nargs=1,help='cut individual observations per orbits with gtis',default=False,
+ap.add_argument('-make_gti_orbit',nargs=1,help='cut individual observations per orbits with gtis',default=True,
                 type=bool)
+
+ap.add_argument('-gti_tool',nargs=1,help='tool to make gti files',default='NICERDAS',type=str)
 '''spectra'''
 
 ap.add_argument('-spectral_band',nargs=1,help='Energy band to compute the spectra in (format "x-y" in keV).'+
@@ -211,6 +213,7 @@ lc_bin=args.lc_bin
 lc_bands_str=args.lc_bands_str
 hr_bands_str=args.hr_bands_str
 make_gti_orbit=args.make_gti_orbit
+gti_tool=args.gti_tool
 
 e_low_sp,e_high_sp=[None,None] if args.spectral_band==None else args.spectral_band.split('-')
 
@@ -1579,7 +1582,7 @@ def extract_lc_single(spawn, directory, binning, instru, steminput, src_reg, bg_
         return lc_src_path
 
 def extract_lc(directory,binning='1',lc_bands_str='3-79',hr_bands='10-50/3-10',cams='all',bright=False,
-               make_gtis=False,gti_binning='1'):
+               make_gtis=False,gti_binning='1',gti_tool='NICERDAS'):
 
     '''
     Wrapper for a version of nuproducts to computes only lightcurves in the desired bands,
@@ -1704,7 +1707,7 @@ def extract_lc(directory,binning='1',lc_bands_str='3-79',hr_bands='10-50/3-10',c
                                                 e_low=lc_bands[0].split('-')[0],e_high=lc_bands[0].split('-')[1],
                                                 bright=bright,backscale=backscale,gti_mode=True)
 
-                gti_list=create_gtis(bashproc,lc_cut_path,lc_cut_fig)
+                gti_list=create_gtis(bashproc,lc_cut_path,lc_cut_fig,gti_tool=gti_tool)
             else:
                 gti_list=[None]
 
@@ -1785,7 +1788,7 @@ def extract_lc(directory,binning='1',lc_bands_str='3-79',hr_bands='10-50/3-10',c
 
     return bright_flag_tot
 
-def create_gtis(spawn,cut_lc,fig_cut_lc):
+def create_gtis(spawn,cut_lc,fig_cut_lc,gti_tool='NICERDAS'):
 
     '''
     wrapper for a function to create gti files from an individual lightcurve nicer obsids into indivudal portions
@@ -1793,6 +1796,9 @@ def create_gtis(spawn,cut_lc,fig_cut_lc):
     before:
     first creates a lightcurve with the chosen binning then uses it to define
     individual gtis from orbits
+
+    gtitool: -NICERDAS for NICER's nigti
+             -SAS for XMM SAS tabgtigen
     '''
 
     with fits.open(cut_lc) as fits_mkf:
@@ -1842,49 +1848,84 @@ def create_gtis(spawn,cut_lc,fig_cut_lc):
         fig_cut_lc.legend()
         fig_cut_lc.savefig(cut_lc.split('_lc')[0]+'_lc_orbit_screen.png')
 
-        # creating the gti files for each part of the obsid
-        spawn.sendline('sasinit')
+        if gti_tool=='SAS':
+            # creating the gti files for each part of the obsid
+            spawn.sendline('sasinit')
 
         def create_gti_files(id_orbit,id_gti, data_lc):
 
             if len(id_gti) > 0:
 
-                # Here we use the housekeeping file as the fits base for the gti mask file
-                fits_gti = fits.open(cut_lc)
+                fits_gti = fits.open(data_lc)
 
-                # creating a custom gti 'mask' file
-                gti_column = fits.ColDefs([\
-                    fits.Column(name='IS_GTI', format='I',
-                                array=np.array([1 if i in id_gti else 0 for i in range(len(data_lc))]))])
-
-                # replacing the hdu with a hdu containing it
-                fits_gti[1] = fits.BinTableHDU.from_columns(fits_gti[1].columns[:2] + gti_column)
-                fits_gti[1].name = 'IS_GTI'
-
-                lc_mask_path=cut_lc.split('_lc')[0]+'_gti_mask_' + str_orbit(id_orbit)+ '.fits'
-
-                if os.path.isfile(lc_mask_path):
-                    os.remove(lc_mask_path)
-
-                fits_gti.writeto(lc_mask_path)
-
-                # waiting for the file to be created
-                while not os.path.isfile(lc_mask_path):
-                    time.sleep(0.1)
+                time_gtis=fits_gti[1].data['TIME']
 
                 # creating the orbit gti expression
-                gti_path = lc_mask_path.split('_gti_mask')[0]+'_gti_' +str_orbit(id_orbit) + '.gti'
+                gti_path = cut_lc.split('_lc')[0]+'_gti_' +str_orbit(id_orbit) + '.gti'
+                gti_spawn_path = '/'.join(gti_path.split('/')[1:])
 
-                lc_mask_spawn_path='/'.join(lc_mask_path.split('/')[1:])
-                gti_spawn_path='/'.join(gti_path.split('/')[1:])
+                # preparing the list of gtis to replace manually
+                gti_intervals = np.array(list(interval_extract(id_gti))).T
 
-                spawn.sendline('tabgtigen table=' + lc_mask_spawn_path +
-                               ' expression="IS_GTI==1" gtiset=' + gti_spawn_path)
+                delta_time_gtis = (time_gtis[1] - time_gtis[0]) / 2
 
-                # this shouldn't take too long so we keep the timeout
-                # two expects because there's one for the start and another for the end
-                spawn.expect('tabgtigen:- tabgtigen')
-                spawn.expect('tabgtigen:- tabgtigen')
+                start_obs_s = fits_gti[1].header['TSTART'] + fits_gti[1].header['TIMEZERO']
+
+                # saving for titles later
+                mjd_ref = Time(fits_gti[1].header['MJDREFI'] + fits_gti[1].header['MJDREFF'], format='mjd')
+
+                obs_start = mjd_ref + TimeDelta(start_obs_s, format='sec')
+
+                if gti_tool == 'NICERDAS':
+                    '''
+                    the task nigti doesn't accept ISOT formats with decimal seconds so we use NICER MET instead 
+                    (see https://heasarc.gsfc.nasa.gov/lheasoft/ftools/headas/nigti.html)
+
+                    we still add a -0.5*delta and +0.5*delta on each side to avoid issues with losing the last bins of lightcurves
+                    '''
+
+                    gti_input_path =  cut_lc.split('_lc')[0]+'_gti_input_' + str_orbit(id_orbit) + '.txt'
+
+                    gti_input_spawn_path='/'.join(gti_input_path.split('/')[1:])
+
+                    with open(gti_input_path, 'w+') as f_input:
+                        f_input.writelines([str(start_obs_s + time_gtis[gti_intervals[0][i]] - delta_time_gtis) + ' ' +
+                                            str(start_obs_s + time_gtis[gti_intervals[1][i]] + delta_time_gtis) + '\n' \
+                                            for i in range(len(gti_intervals.T))])
+
+                    spawn.sendline('nigti @' + gti_input_spawn_path + ' ' + gti_spawn_path + ' clobber=YES chatter=4')
+                    spawn.expect('ngti=')
+
+                elif gti_tool=='SAS':
+                    # creating a custom gti 'mask' file
+                    gti_column = fits.ColDefs([\
+                        fits.Column(name='IS_GTI', format='I',
+                                    array=np.array([1 if i in id_gti else 0 for i in range(len(data_lc))]))])
+
+                    # replacing the hdu with a hdu containing it
+                    fits_gti[1] = fits.BinTableHDU.from_columns(fits_gti[1].columns[:2] + gti_column)
+                    fits_gti[1].name = 'IS_GTI'
+
+                    lc_mask_path=cut_lc.split('_lc')[0]+'_gti_mask_' + str_orbit(id_orbit)+ '.fits'
+
+                    if os.path.isfile(lc_mask_path):
+                        os.remove(lc_mask_path)
+
+                    fits_gti.writeto(lc_mask_path)
+
+                    # waiting for the file to be created
+                    while not os.path.isfile(lc_mask_path):
+                        time.sleep(0.1)
+
+                    lc_mask_spawn_path='/'.join(lc_mask_path.split('/')[1:])
+
+                    spawn.sendline('tabgtigen table=' + lc_mask_spawn_path +
+                                   ' expression="IS_GTI==1" gtiset=' + gti_spawn_path)
+
+                    # this shouldn't take too long so we keep the timeout
+                    # two expects because there's one for the start and another for the end
+                    spawn.expect('tabgtigen:- tabgtigen')
+                    spawn.expect('tabgtigen:- tabgtigen')
 
                 '''
                 There is an issue with the way tabgtigen creates the exposure due to a lacking keyword
@@ -1921,10 +1962,15 @@ def create_gtis(spawn,cut_lc,fig_cut_lc):
                     hdul[1].header = prev_header
 
                     # and the gti keywords
-                    hdul[1].header['ONTIME'] = len(id_gti)
-                    hdul[1].header['TSTART'] = hdul[1].data['START'][0] - start_obs_s
-                    hdul[1].header['TSTOP'] = hdul[1].data['STOP'][-1] - start_obs_s
+                    #only if binning with 1s, careful
+                    hdul[1].header['ONTIME'] = 2 * delta_time_gtis * len(id_gti)
 
+                    # hdul[1].header['TSTART'] = hdul[1].data['START'][0] - start_obs_s
+                    # hdul[1].header['TSTOP'] = hdul[1].data['STOP'][-1] - start_obs_s
+
+                    #NuSTAR values
+                    hdul[1].header['MJDREFI'] = 55197
+                    hdul[1].header['MJDREFF']=0.00076601852
                     hdul.flush()
 
                 return gti_path
@@ -2352,7 +2398,8 @@ if not local:
 
                         if curr_action=='lc':
                             output_lc=extract_lc(dirname,binning=lc_bin,lc_bands_str=lc_bands_str,hr_bands=hr_bands_str,cams=cameras_glob,
-                                                  bright=force_bright or bright_flag_dir,make_gtis=make_gti_orbit)
+                                                  bright=force_bright or bright_flag_dir,make_gtis=make_gti_orbit,
+                                                 gti_tool=gti_tool)
 
                             if type(output_lc)==str:
                                 raise ValueError
@@ -2365,7 +2412,7 @@ if not local:
 
                                 if bright_check and output_lc:
 
-                                    print("bright obsd detected. Restarting the computations in bright mode...")
+                                    print("bright obs detected. Restarting the computations in bright mode...")
                                     #resetting the position to the start of the actions to relaunch the computations now that the bright flag has
                                     #and ensuring we rebuild first
                                     if action_list[0]!='build':
@@ -2434,7 +2481,8 @@ if not local:
                     if curr_action == 'lc':
                         output_lc = extract_lc(dirname, binning=lc_bin, lc_bands_str=lc_bands_str, hr_bands=hr_bands_str,
                                                cams=cameras_glob,
-                                               bright=force_bright or bright_flag_dir,make_gtis=make_gti_orbit)
+                                               bright=force_bright or bright_flag_dir,make_gtis=make_gti_orbit,
+                                                 gti_tool=gti_tool)
 
                         if type(output_lc) == str:
                             raise ValueError
@@ -2517,7 +2565,8 @@ else:
         if curr_action == 'lc':
             output_lc = extract_lc(absdir, binning=lc_bin, lc_bands_str=lc_bands_str, hr_bands=hr_bands_str,
                                    cams=cameras_glob,
-                                   bright=force_bright or bright_flag_dir,make_gtis=make_gti_orbit)
+                                   bright=force_bright or bright_flag_dir,make_gtis=make_gti_orbit,
+                                                 gti_tool=gti_tool)
 
             if type(output_lc) == str:
                 raise ValueError

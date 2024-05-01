@@ -101,7 +101,7 @@ ap.add_argument('-catch','--catch_errors',help='Catch errors while running the d
 
 #global choices
 ap.add_argument("-a","--action",nargs='?',help='Give which action(s) to proceed,separated by comas.',
-                default='ml',type=str)
+                default='1,l,ml,c',type=str)
 #default: 1,gti,fs,l,g,m,c
 
 ap.add_argument("-over",nargs=1,help='overwrite computed tasks (i.e. with products in the batch, or merge directory\
@@ -124,7 +124,7 @@ ap.add_argument('-folder_cont',nargs=1,help='skip all but the last 2 directories
 #should only be done in very extreme cases
 ap.add_argument('-keep_SAA',nargs=1,help='keep South Atlantic Anomaly (SAA) Periods',type=bool,default=True)
 
-ap.add_argument('-overshoot_limit',nargs=1,help='overshoot event rate limit',type=float,default=2.)
+ap.add_argument('-overshoot_limit',nargs=1,help='overshoot event rate limit',type=float,default=100.)
 
 ap.add_argument('-undershoot_limit',nargs=1,help='undershoot event rate limit',type=float,default=500)
 
@@ -173,8 +173,8 @@ ap.add_argument('-int_split_bin',nargs=1,help='binning of the light curve used f
 ap.add_argument('-lc_bin',nargs=1,help='Gives the binning of all lightcurces/HR evolutions (in s)',default=1,type=str)
 #note: also defines the binning used for the gti definition
 
-# lc_bands_list_det=['1-2','2-3','3-4','4-5','5-6','6-7','7-8','8-9','9-10']
-lc_bands_list_det=['1-3']
+lc_bands_list_det=['1-2','2-3','3-4','4-5','5-6','6-7','7-8','8-9','9-10']
+# lc_bands_list_det=['1-3']
 ap.add_argument('-lc_bands_str',nargs=1,help='Gives the list of bands to create lightcurves from',
                 default='3-10'+','+','.join(lc_bands_list_det),type=str)
 ap.add_argument('-hr_bands_str',nargs=1,help='Gives the list of bands to create hrsfrom',default='6-10/3-6',type=str)
@@ -755,7 +755,7 @@ def create_gtis(directory,split='orbit+flare',band='3-15',flare_method='clip+pea
             bashproc.expect('tabgtigen:- tabgtigen')
 
             '''
-            There is an issue with the way tabgtigen creates the exposure due to a lacking keyword
+            There is an issue with the way both tabgtigen and nicer creates the exposure due to a lacking keyword
             To ensure things work correctly, we remake the contents of the file and keep the header
             '''
 
@@ -794,7 +794,7 @@ def create_gtis(directory,split='orbit+flare',band='3-15',flare_method='clip+pea
                 # hdul[1].header['MJDREFF']=7.775925925925930E-04
 
                 # and the gti keywords
-                hdul[1].header['ONTIME'] = len(id_gti)
+                hdul[1].header['ONTIME'] = 2*delta_time_gtis*len(id_gti)
                 hdul[1].header['TSTART'] = hdul[1].data['START'][0] - start_obs_s
                 hdul[1].header['TSTOP'] = hdul[1].data['STOP'][-1] - start_obs_s
 

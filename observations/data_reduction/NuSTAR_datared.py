@@ -103,13 +103,14 @@ ap.add_argument('-catch', '--catch_errors', help='Catch errors while running the
 
 # global choices
 ap.add_argument("-a", "--action", nargs='?', help='Give which action(s) to proceed,separated by comas.',
-                default='lc,sp', type=str)
+                default='lc', type=str)
 # default: build,reg,lc,sp,g,m
 
 ap.add_argument("-over", nargs=1, help='overwrite computed tasks (i.e. with products in the batch, or merge directory\
                 if "m" is in the actions) in a folder', default=True, type=bool)
 
-ap.add_argument('-cameras',nargs=1,help='which cameras to restrict the analysis to. "all" takes both FPMA and FPMB',default='all',type=str)
+ap.add_argument('-cameras',nargs=1,help='which cameras to restrict the analysis to. "all" takes both FPMA and FPMB',
+                default='all',type=str)
 
 ap.add_argument('-bright_check',nargs=1,help='recompute the entire set of actions in bright mode if the source lightcurve'+
                                              'is above the standard count limits',default=True,type=bool)
@@ -146,6 +147,22 @@ ap.add_argument('-rad_crop', nargs=1,
                 help='croppind radius around the theoretical source position before fit, in arcsecs', default=120,
                 type=float)
 
+# if equal to crop, is set to rad_crop
+ap.add_argument('-max_rad_source', nargs=1, help='maximum source radius for faint sources in units of PSF sigmas',
+                default=10, type=float)
+
+#can be varied for crowded fields or stray lights
+ap.add_argument('-bg_area_factor',nargs=1,
+                help='gives the maximum radius of the background in units of rad_crop',default=2,type=float)
+
+#note: value of 0 to deactivate
+ap.add_argument('-bg_rm_src_sigmas',nargs=1,
+                help='remove N sigmas of the source PSF sigmas in the background image before treating the bg image',
+                default=10.,type=float)
+
+ap.add_argument('-bg_distrib_cut',nargs=1,help='Distribution portion of the bg camera to remove',
+                default=0.997,type=float)
+
 ap.add_argument('-bigger_fit', nargs=1,
                 help='allows to incease the crop window used before the gaussian fit for bright sources',
                 default=True, type=bool)
@@ -155,13 +172,9 @@ ap.add_argument('-point_source', nargs=1,
                 default=True, type=bool)
 # helps to avoid the gaussian center shifting in case of diffuse emission
 
-# if equal to crop, is set to rad_crop
-ap.add_argument('-max_rad_source', nargs=1, help='maximum source radius for faint sources in units of PSF sigmas',
-                default=5, type=float)
-
 #if set to true, wil ask for sudo mdp at script launch
 ap.add_argument('-sudo_mode',nargs=1,help='put to true if the ds9 installation needs to be run in sudo',
-               default=False,type=bool)
+               default=True,type=bool)
 
 '''lightcurve'''
 ap.add_argument('-lc_bin', nargs=1, help='Gives the binning of all lightcurces/HR evolutions (in s)', default='1',
@@ -227,6 +240,9 @@ rad_crop=args.rad_crop
 bigger_fit=args.bigger_fit
 point_source=args.point_source
 max_rad_source=args.max_rad_source
+bg_area_factor=args.bg_area_factor
+bg_rm_src_sigmas=args.bg_rm_src_sigmas
+bg_distrib_cut=args.bg_distrib_cut
 
 if sudo_mode:
     sudo_mdp=input('Sudo mode activated. Enter sudo password for ds9')
@@ -714,9 +730,14 @@ def xsel_img(bashproc,evt_path,save_path,e_low,e_high):
     #giving some time to create the file
     time.sleep(5)
 
-    if not os.path.isfile(save_path):
-        print('File still not ready. Letting more time...')
-        time.sleep(30)
+    for i_sleep in range(20):
+        if not os.path.isfile(os.path.join(directory,save_path)):
+            print('File still not ready. Letting more time...')
+            time.sleep(5)
+
+    if not os.path.isfile(os.path.join(directory,save_path)):
+        print('Issue with file check or file creation')
+        breakpoint()
 
     bashproc.sendline('exit')
     bashproc.sendline('no')
@@ -747,13 +768,17 @@ def ds9_to_reg(ds9_regfile):
     return reg_coords
 
 def extract_reg(directory, cams='all', use_file_coords=False,
-                overwrite=True,e_low_img=3,e_high_img=79,rad_crop=120,bright=False,sudo_mode=False,sudo_mdp=''):
+                overwrite=True,e_low_img=3,e_high_img=79,rad_crop=120,bg_area_factor=2.,bg_rm_src_sigmas=10.,
+                bg_distrib_cut=0.99,
+                bright=False,sudo_mode=False,sudo_mdp=''):
     '''
     Extracts the optimal source/bg regions for a given exposure
 
     As of now, only takes input formatted through the evt_filter function
 
     Only accepts circular regions (in manual mode)
+
+    bg_area_factor: gives the radius maximum background as rad_crop*bg_area_factor (if it can go that far)
     '''
 
     def extract_reg_single(spawn, file, filedir):
@@ -917,34 +942,52 @@ def extract_reg(directory, cams='all', use_file_coords=False,
             print('\nComputing the CCD masked image...')
             # array which we will have the outside of the CCD masked with nans
             CCD_data_cut = np.copy(CCD_data).astype(float)
-            # This other array stores the values inside the CCD, for an easy evaluation of the sigma limits
-            CCD_data_line = []
-            for i in range(np.size(CCD_data, 0)):
-                for j in range(np.size(CCD_data, 1)):
-                    if not CCD_mask[i][j]:
-                        CCD_data_cut[i][j] = np.nan
-                    else:
-                        CCD_data_line.append(CCD_data_cut[i][j])
 
             print('\nSaving the corresponding image...')
             imgarr_to_png(CCD_data_cut, file_id+'_vis_CCD_3_cut', astropy_wcs=src_astro_WCS,
                     mpdaf_wcs=src_mpdaf_WCS,
                     directory=filedir, title='Source image after CCD masking', imgtype='ccd_crop')
 
+
+            #source cut if asked to
+            if bg_rm_src_sigmas!=0:
+                #masking the region through mpdaf
+                #note: we don't put the units here because
+                CCD_img_obj.mask_region(gfit.center, max(gfit.fwhm)/2.355*bg_rm_src_sigmas,
+                                  inside=True, posangle=0.0)
+
+                mpdaf_mask=CCD_img_obj.mask[::-1]
+                #replacing the pixels in the data array
+                CCD_data_cut[CCD_img_obj.mask]=np.nan
+
+                print('\nSaving the source-cut image...')
+                imgarr_to_png(CCD_data_cut, file_id+'_vis_CCD_3b_src_rm', astropy_wcs=src_astro_WCS,
+                        mpdaf_wcs=src_mpdaf_WCS,
+                        directory=filedir, title='Source image after Source region removal', imgtype='ccd_crop')
+
+            # This other array stores the values inside the CCD, for an easy evaluation of the sigma limits
+            CCD_data_line = []
+            for i in range(np.size(CCD_data_cut, 0)):
+                for j in range(np.size(CCD_data_cut, 1)):
+                    if not CCD_mask[i][j]:
+                        CCD_data_cut[i][j] = np.nan
+                    else:
+                        CCD_data_line.append(CCD_data_cut[i][j])
+
             # sigma cut, here at 0.95 (2 sigma) which seems to be a good compromise
             CCD_data_line.sort()
 
             # for some extreme cases we have only 1 count/pixel max, in which case we don't want that
-            cut_sig = max(CCD_data_line[int(0.95 * len(CCD_data_line))], 1.)
+            cut_sig = max(CCD_data_line[int(bg_distrib_cut * len(CCD_data_line))], 1.)
 
-            sigval = '2'
-            perval = '5'
+            # sigval = '2'
+            # perval = '5'
 
-            # sometimes for very bright sources there might be too much noise so we cut at 1 sigma instead
-            if cut_sig > 50:
-                cut_sig = CCD_data_line[int(0.90 * len(CCD_data_line))]
-                sigval = '1'
-                perval = '32'
+            # # sometimes for very bright sources there might be too much noise so we cut at a different percentage
+            # if cut_sig > 50 and bg_distrib_cut_bright!=0:
+            #     cut_sig = CCD_data_line[int(bg_distrib_cut_bright * len(CCD_data_line))]
+            #     # sigval = '1'
+            #     # perval = '32'
 
             print('\nComputing the CCD bg mask...')
             # array which will contain the background mask
@@ -961,7 +1004,7 @@ def extract_reg(directory, cams='all', use_file_coords=False,
             imgarr_to_png(CCD_bg, file_id+'_vis_CCD_4_bg', astropy_wcs=src_astro_WCS,
                     mpdaf_wcs=src_mpdaf_WCS,
                     directory=filedir,
-                    title='Source image background mask remaining after ' + sigval + ' sigma (top ' + perval +
+                    title='Source image background mask remaining after %.2f'%(100*bg_distrib_cut)+
                           '% cts) counts removal', imgtype='ccd_crop_mask')
 
             bg_max_pix = reg_optimiser(CCD_bg)
@@ -1179,8 +1222,8 @@ def extract_reg(directory, cams='all', use_file_coords=False,
             spawn.sendline('\ncd $currdir')
             return bg_coords_im
 
-        #capping the bg size to 1.5 times radcrop
-        bg_coords_im[1]=str(round(min(float(bg_coords_im[1]),rad_crop),4))
+        #capping the bg size to a given number of times radcrop
+        bg_coords_im[1]=str(round(min(float(bg_coords_im[1]),bg_area_factor*rad_crop),4))
 
         #bg_coords_im[0]=bg_coords_im[0].tolist()
 
@@ -1216,7 +1259,7 @@ def extract_reg(directory, cams='all', use_file_coords=False,
 
         #computing the SNR for a range of radiuses
 
-        rad_test_arr=np.arange(4,min(rad_crop,max(gfit.fwhm)*max_rad_source*2.355),2)
+        rad_test_arr=np.arange(4,min(rad_crop,max(gfit.fwhm)*max_rad_source/2.355),2)
 
         snr_vals=np.repeat(0,len(rad_test_arr))
 
@@ -1504,7 +1547,9 @@ def extract_lc_single(spawn, directory, binning, instru, steminput, src_reg, bg_
                    ' clobber=YES cleanup=YES'+(' usrgtifile='+gti_spawn if gti is not None else ''))
 
     ####TODO: check what's the standard message here
-    err_code=spawn.expect(['nuproducts_0.3.3: Exit with success','nuproducts error'],timeout=None)
+    err_code=spawn.expect(['nuproducts_0.3.3: Exit with success',"nuproducts_0.3.3: ERROR running 'nulivetime'",
+                           '-------------------- nuproducts  error',
+                           "nuproducts_0.3.3: Error: running 'lcurve'"],timeout=None)
 
     if err_code!=0:
         return 'Nuproduct error','',''
@@ -1869,12 +1914,21 @@ def create_gtis(spawn,cut_lc,fig_cut_lc,gti_tool='NICERDAS'):
 
                 delta_time_gtis = (time_gtis[1] - time_gtis[0]) / 2
 
-                start_obs_s = fits_gti[1].header['TSTART'] + fits_gti[1].header['TIMEZERO']
+                start_obs_s = fits_gti[1].header['TIMEZERO']
 
                 # saving for titles later
-                mjd_ref = Time(fits_gti[1].header['MJDREFI'] + fits_gti[1].header['MJDREFF'], format='mjd')
+                mjd_ref_nustar = Time(fits_gti[1].header['MJDREFI'] + fits_gti[1].header['MJDREFF'], format='mjd')
 
-                obs_start = mjd_ref + TimeDelta(start_obs_s, format='sec')
+                #adding the delta with the NuSTAR mjdrefs
+                mjd_ref_nicer= Time(56658 + 7.775925925925930E-04,format='mjd')
+
+
+                obs_start = mjd_ref_nustar + TimeDelta(start_obs_s, format='sec') +(mjd_ref_nustar-mjd_ref_nicer)
+
+                start_obs_s_nicer=start_obs_s+(mjd_ref_nustar-mjd_ref_nicer).to('s').to_value()
+
+                start_obs_s_nicer=start_obs_s
+
 
                 if gti_tool == 'NICERDAS':
                     '''
@@ -1889,12 +1943,14 @@ def create_gtis(spawn,cut_lc,fig_cut_lc,gti_tool='NICERDAS'):
                     gti_input_spawn_path='/'.join(gti_input_path.split('/')[1:])
 
                     with open(gti_input_path, 'w+') as f_input:
-                        f_input.writelines([str(start_obs_s + time_gtis[gti_intervals[0][i]] - delta_time_gtis) + ' ' +
-                                            str(start_obs_s + time_gtis[gti_intervals[1][i]] + delta_time_gtis) + '\n' \
+                        f_input.writelines([str(start_obs_s_nicer + time_gtis[gti_intervals[0][i]] - delta_time_gtis) + ' ' +
+                                            str(start_obs_s_nicer + time_gtis[gti_intervals[1][i]] + delta_time_gtis) + '\n' \
                                             for i in range(len(gti_intervals.T))])
 
                     spawn.sendline('nigti @' + gti_input_spawn_path + ' ' + gti_spawn_path + ' clobber=YES chatter=4')
                     spawn.expect('ngti=')
+
+                    #TODO: test to remove the GTI manual edition below
 
                 elif gti_tool=='SAS':
                     # creating a custom gti 'mask' file
@@ -1927,51 +1983,51 @@ def create_gtis(spawn,cut_lc,fig_cut_lc,gti_tool='NICERDAS'):
                     spawn.expect('tabgtigen:- tabgtigen')
                     spawn.expect('tabgtigen:- tabgtigen')
 
-                '''
-                There is an issue with the way tabgtigen creates the exposure due to a lacking keyword
-                To ensure things work correctly, we remake the contents of the file and keep the header
-                '''
+                    '''
+                    There is an issue with the way tabgtigen creates the exposure due to a lacking keyword
+                    To ensure things work correctly, we remake the contents of the file and keep the header
+                    '''
 
-                # preparing the list of gtis to replace manually
-                gti_intervals = np.array(list(interval_extract(id_gti))).T
+                    # preparing the list of gtis to replace manually
+                    gti_intervals = np.array(list(interval_extract(id_gti))).T
 
-                # opening and modifying the content of the header in the gti file for NICER
-                with fits.open(gti_path, mode='update') as hdul:
+                    # opening and modifying the content of the header in the gti file for NICER
+                    with fits.open(gti_path, mode='update') as hdul:
 
-                    # for some reason we don't get the right values here so we recreate them
-                    # creating a custom gti 'mask' file
+                        # for some reason we don't get the right values here so we recreate them
+                        # creating a custom gti 'mask' file
 
-                    # storing the current header
-                    prev_header = hdul[1].header
+                        # storing the current header
+                        prev_header = hdul[1].header
 
-                    # creating a START and a STOP column in "standard" GTI fashion
-                    # note: the 0.5 is there to allow the initial and final second bounds
-                    gti_column_start = fits.ColDefs([fits.Column(name='START', format='D',
-                                                                 array=np.array(
-                                                                     [time_obs[elem] + start_obs_s - 0.5 for elem in
-                                                                      gti_intervals[0]]))])
-                    gti_column_stop = fits.ColDefs([fits.Column(name='STOP', format='D',
-                                                                array=np.array(
-                                                                    [time_obs[elem] + start_obs_s + 0.5 for elem in
-                                                                     gti_intervals[1]]))])
+                        # creating a START and a STOP column in "standard" GTI fashion
+                        # note: the 0.5 is there to allow the initial and final second bounds
+                        gti_column_start = fits.ColDefs([fits.Column(name='START', format='D',
+                                                                     array=np.array(
+                                                                         [time_obs[elem] + start_obs_s - 0.5 for elem in
+                                                                          gti_intervals[0]]))])
+                        gti_column_stop = fits.ColDefs([fits.Column(name='STOP', format='D',
+                                                                    array=np.array(
+                                                                        [time_obs[elem] + start_obs_s + 0.5 for elem in
+                                                                         gti_intervals[1]]))])
 
-                    # replacing the hdu
-                    hdul[1] = fits.BinTableHDU.from_columns(gti_column_start + gti_column_stop)
+                        # replacing the hdu
+                        hdul[1] = fits.BinTableHDU.from_columns(gti_column_start + gti_column_stop)
 
-                    # replacing the header
-                    hdul[1].header = prev_header
+                        # replacing the header
+                        hdul[1].header = prev_header
 
-                    # and the gti keywords
-                    #only if binning with 1s, careful
-                    hdul[1].header['ONTIME'] = 2 * delta_time_gtis * len(id_gti)
+                        # and the gti keywords
+                        #only if binning with 1s, careful
+                        hdul[1].header['ONTIME'] = 2 * delta_time_gtis * len(id_gti)
 
-                    # hdul[1].header['TSTART'] = hdul[1].data['START'][0] - start_obs_s
-                    # hdul[1].header['TSTOP'] = hdul[1].data['STOP'][-1] - start_obs_s
+                        # hdul[1].header['TSTART'] = hdul[1].data['START'][0] - start_obs_s
+                        # hdul[1].header['TSTOP'] = hdul[1].data['STOP'][-1] - start_obs_s
 
-                    #NuSTAR values
-                    hdul[1].header['MJDREFI'] = 55197
-                    hdul[1].header['MJDREFF']=0.00076601852
-                    hdul.flush()
+                        #NuSTAR values
+                        # hdul[1].header['MJDREFI'] = 55197
+                        # hdul[1].header['MJDREFF']=0.00076601852
+                        hdul.flush()
 
                 return gti_path
 
@@ -2126,7 +2182,7 @@ def extract_sp(directory,cams='all',e_low=None,e_high=None,bright=False,gti_mode
                                                      gti=elem_gti,id_orbit=i_gti)
 
                     summary_content = obsid + '\t' + camlist[i_cam] +'\t'+ summary_line
-                    file_edit(os.path.join(directory, 'summary_extract_lc.log'), obsid +id_orbit_str+
+                    file_edit(os.path.join(directory, 'summary_extract_sp.log'), obsid +id_orbit_str+
                               '\t' + camlist[i_cam],
                               summary_content + '\n',
                               summary_header)
@@ -2390,7 +2446,11 @@ if not local:
                         #note: the first actions are not performed with bright mode
                         if curr_action=='reg':
                             output_err=extract_reg(dirname,cams=cameras_glob,use_file_coords=use_file_coords,overwrite=overwrite_glob,
-                                                   e_low_img=e_low_img,e_high_img=e_high_img,rad_crop=rad_crop,bright=force_bright or bright_flag_dir,
+                                                   e_low_img=e_low_img,e_high_img=e_high_img,rad_crop=rad_crop,
+                                                   bg_area_factor=bg_area_factor,
+                                                   bg_rm_src_sigmas=bg_rm_src_sigmas,
+                                                   bg_distrib_cut=bg_distrib_cut,
+                                                   bright=force_bright or bright_flag_dir,
                                                    sudo_mode=sudo_mode,sudo_mdp=sudo_mdp)
                             if type(output_err)==str:
                                 raise ValueError
@@ -2472,6 +2532,9 @@ if not local:
                         output_err = extract_reg(dirname, cams=cameras_glob, use_file_coords=use_file_coords,
                                                  overwrite=overwrite_glob,
                                                  e_low_img=e_low_img, e_high_img=e_high_img, rad_crop=rad_crop,
+                                                 bg_area_factor=bg_area_factor,
+                                                 bg_rm_src_sigmas=bg_rm_src_sigmas,
+                                                 bg_distrib_cut=bg_distrib_cut,
                                                  bright=force_bright or bright_flag_dir,
                                                  sudo_mode=sudo_mode, sudo_mdp=sudo_mdp)
                         if type(output_err) == str:
@@ -2556,6 +2619,9 @@ else:
             output_err = extract_reg(absdir, cams=cameras_glob, use_file_coords=use_file_coords,
                                      overwrite=overwrite_glob,
                                      e_low_img=e_low_img, e_high_img=e_high_img, rad_crop=rad_crop,
+                                     bg_area_factor=bg_area_factor,
+                                     bg_rm_src_sigmas=bg_rm_src_sigmas,
+                                     bg_distrib_cut=bg_distrib_cut,
                                      bright=force_bright or bright_flag_dir,
                                      sudo_mode=sudo_mode, sudo_mdp=sudo_mdp)
             if type(output_err) == str:

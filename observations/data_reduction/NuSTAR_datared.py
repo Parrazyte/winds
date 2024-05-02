@@ -177,8 +177,14 @@ ap.add_argument('-sudo_mode',nargs=1,help='put to true if the ds9 installation n
                default=True,type=bool)
 
 '''lightcurve'''
-ap.add_argument('-lc_bin', nargs=1, help='Gives the binning of all lightcurces/HR evolutions (in s)', default='1',
-                type=str)
+
+#note: this binning will also be used to CREATE the gtis
+ap.add_argument('-lc_bin_std', nargs=1, help='Gives the binning of all standard lightcurces/HR evolutions (in s)',
+                default='1',type=str)
+
+ap.add_argument('-lc_bin_gti', nargs=1, help='Gives the binning of all lightcurves used for gti cutting (in s)',
+                default='1',type=str)
+
 # note: also defines the binning used for the gti definition
 
 ap.add_argument('-lc_bands_str', nargs=1, help='Gives the list of bands to create lightcurves from', default='3-79',
@@ -222,7 +228,9 @@ sudo_mode=args.sudo_mode
 bright_check=args.bright_check
 force_bright=args.force_bright
 
-lc_bin=args.lc_bin
+lc_bin_std=args.lc_bin_std
+lc_bin_gti=args.lc_bin_gti
+
 lc_bands_str=args.lc_bands_str
 hr_bands_str=args.hr_bands_str
 make_gti_orbit=args.make_gti_orbit
@@ -1544,7 +1552,7 @@ def extract_lc_single(spawn, directory, binning, instru, steminput, src_reg, bg_
                    ' pilow=' + pi_low + ' pihigh=' + pi_high + ' binsize=' + binning+
                    ' outdir=./products'+('_bright' if bright else '')+
                    ' barycorr=no phafile=NONE bkgphafile=NONE' + ' imagefile=NONE runmkarf=no runmkrmf=no'+
-                   ' clobber=YES cleanup=YES'+(' usrgtifile='+gti_spawn if gti is not None else ''))
+                   ' clobber=YES cleanup=YES'+(' usrgtifile=./'+gti_spawn if gti is not None else ''))
 
     ####TODO: check what's the standard message here
     err_code=spawn.expect(['nuproducts_0.3.3: Exit with success',"nuproducts_0.3.3: ERROR running 'nulivetime'",
@@ -1758,16 +1766,12 @@ def extract_lc(directory,binning='1',lc_bands_str='3-79',hr_bands='10-50/3-10',c
 
             for id_orbit,elem_gti in enumerate(gti_list):
 
-                if elem_gti is None:
-                    binning_use=binning
-                else:
-                    binning_use = str(int(binning) // 10)
                 lc_prods=np.array([None]*len(lc_bands))
 
                 for id_band,band in enumerate(lc_bands):
 
                     summary_line,lc_prods[id_band],bright_flag_single = extract_lc_single(bashproc,directory=directory,
-                                                    binning=binning_use,instru=camlist[i_cam],steminput='nu'+obsid,
+                                                    binning=binning,instru=camlist[i_cam],steminput='nu'+obsid,
                                                     src_reg=src_reg_indiv_spawn,bg_reg=bg_reg_indiv_spawn,
                                                     e_low=band.split('-')[0],e_high=band.split('-')[1],
                                                     bright=bright,backscale=backscale,
@@ -1815,18 +1819,18 @@ def extract_lc(directory,binning='1',lc_bands_str='3-79',hr_bands='10-50/3-10',c
                                      (rate_err_den_HR / rate_den_HR) ** 2) ** (
                                                 1 / 2))
 
-                plt.errorbar(time_HR, hr_vals, xerr=float(binning_use), yerr=hr_err.clip(0), ls='-', lw=1,
+                plt.errorbar(time_HR, hr_vals, xerr=float(binning), yerr=hr_err.clip(0), ls='-', lw=1,
                          color='grey', ecolor='blue')
 
                 plt.suptitle('NuSTAR '+camlist[i_cam]+' net HR evolution for observation ' + obsid + id_orbit_str+' in the ' + hr_bands + ' keV band'+
-                             'with '+binning_use+' s binning')
+                             'with '+binning+' s binning')
 
                 plt.xlabel('Time (s) after ' + time_zero_HR)
                 plt.ylabel('Hardness Ratio (' + hr_bands + ' keV)')
 
                 plt.tight_layout()
                 plt.savefig(os.path.join(directory,'products'+('_bright' if bright else ''),
-                            'nu'+obsid + id_orbit_str+'_' + camlist[i_cam]+ '_hr_screen_'+hr_bands.replace('/','_')+'_bin_' + binning_use + '.png'))
+                            'nu'+obsid + id_orbit_str+'_' + camlist[i_cam]+ '_hr_screen_'+hr_bands.replace('/','_')+'_bin_' + binning + '.png'))
                 plt.close()
 
     extract_lc_done.set()
@@ -2018,15 +2022,14 @@ def create_gtis(spawn,cut_lc,fig_cut_lc,gti_tool='NICERDAS'):
                         hdul[1].header = prev_header
 
                         # and the gti keywords
-                        #only if binning with 1s, careful
                         hdul[1].header['ONTIME'] = 2 * delta_time_gtis * len(id_gti)
 
-                        # hdul[1].header['TSTART'] = hdul[1].data['START'][0] - start_obs_s
-                        # hdul[1].header['TSTOP'] = hdul[1].data['STOP'][-1] - start_obs_s
+                        hdul[1].header['TSTART'] = hdul[1].data['START'][0] - start_obs_s
+                        hdul[1].header['TSTOP'] = hdul[1].data['STOP'][-1] - start_obs_s
 
                         #NuSTAR values
-                        # hdul[1].header['MJDREFI'] = 55197
-                        # hdul[1].header['MJDREFF']=0.00076601852
+                        hdul[1].header['MJDREFI'] = 55197
+                        hdul[1].header['MJDREFF']=0.00076601852
                         hdul.flush()
 
                 return gti_path
@@ -2296,13 +2299,16 @@ def regroup_spectral(directory, group='opt'):
 def batch_mover(directory,bright_check=True,force_bright=False):
 
     '''
-    copies all products in a directory to a bigbatch directory
+    copies all spectral products in a directory to a bigbatch directory
     above the obsid directory to prepare for spectrum analysis
+
+    copies the lc files independantly to a lcbatch folder
 
     can copy either the products_bright or the products folder depending on the bright keywords:
         -if force_bright is set to True, copies ONLY the products_bright folder
         -if bright_check is set to True and force_bright to False, copies products_bright if it's there else output
         -if both are set to False, copies ONLY the products folder
+
 
     '''
 
@@ -2315,6 +2321,9 @@ def batch_mover(directory,bright_check=True,force_bright=False):
     set_var(bashproc)
 
     os.system('mkdir -p bigbatch')
+
+    os.system('mkdir -p lcbatch')
+
 
     time.sleep(1)
 
@@ -2331,6 +2340,7 @@ def batch_mover(directory,bright_check=True,force_bright=False):
 
     copy_files=[elem for elem in glob.glob(os.path.join(directory,merge_dir,'**')) if elem.endswith('.png') or \
                 elem.endswith('.pha') or elem.endswith('.rmf') or elem.endswith('.arf')]
+    copy_files_lc=[elem for elem in glob.glob(os.path.join(directory,merge_dir,'**')) if elem.endswith('.lc')]
 
     #also adding the region crops
     copy_files+=[elem for elem in glob.glob(os.path.join(directory,dr_dir,'**')) if elem.endswith('.png')]
@@ -2345,6 +2355,17 @@ def batch_mover(directory,bright_check=True,force_bright=False):
 
         while not os.path.isfile(os.path.join('bigbatch',elem_file.split('/')[-1])):
             print('waiting for file '+elem_file+' to copy...')
+            time.sleep(1)
+
+    for elem_file_lc in copy_files_lc:
+
+        print('Copying lc file '+elem_file_lc)
+
+        print('cp --verbose ' + elem_file_lc + ' lcbatch')
+        os.system('cp --verbose ' + elem_file_lc + ' lcbatch')
+
+        while not os.path.isfile(os.path.join('lcbatch',elem_file_lc.split('/')[-1])):
+            print('waiting for file '+elem_file_lc+' to copy...')
             time.sleep(1)
 
     time.sleep(1)
@@ -2457,9 +2478,9 @@ if not local:
                             extract_reg_done.wait()
 
                         if curr_action=='lc':
-                            output_lc=extract_lc(dirname,binning=lc_bin,lc_bands_str=lc_bands_str,hr_bands=hr_bands_str,cams=cameras_glob,
+                            output_lc=extract_lc(dirname,binning=lc_bin_std,lc_bands_str=lc_bands_str,hr_bands=hr_bands_str,cams=cameras_glob,
                                                   bright=force_bright or bright_flag_dir,make_gtis=make_gti_orbit,
-                                                 gti_tool=gti_tool)
+                                                 gti_tool=gti_tool,gti_binning=lc_bin_gti)
 
                             if type(output_lc)==str:
                                 raise ValueError
@@ -2542,10 +2563,10 @@ if not local:
                         extract_reg_done.wait()
 
                     if curr_action == 'lc':
-                        output_lc = extract_lc(dirname, binning=lc_bin, lc_bands_str=lc_bands_str, hr_bands=hr_bands_str,
+                        output_lc = extract_lc(dirname, binning=lc_bin_std, lc_bands_str=lc_bands_str, hr_bands=hr_bands_str,
                                                cams=cameras_glob,
                                                bright=force_bright or bright_flag_dir,make_gtis=make_gti_orbit,
-                                                 gti_tool=gti_tool)
+                                                 gti_tool=gti_tool,gti_binning=lc_bin_gti)
 
                         if type(output_lc) == str:
                             raise ValueError
@@ -2629,10 +2650,10 @@ else:
             extract_reg_done.wait()
 
         if curr_action == 'lc':
-            output_lc = extract_lc(absdir, binning=lc_bin, lc_bands_str=lc_bands_str, hr_bands=hr_bands_str,
+            output_lc = extract_lc(absdir, binning=lc_bin_std, lc_bands_str=lc_bands_str, hr_bands=hr_bands_str,
                                    cams=cameras_glob,
                                    bright=force_bright or bright_flag_dir,make_gtis=make_gti_orbit,
-                                                 gti_tool=gti_tool)
+                                                 gti_tool=gti_tool,gti_binning=lc_bin_gti)
 
             if type(output_lc) == str:
                 raise ValueError

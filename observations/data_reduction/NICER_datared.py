@@ -116,7 +116,7 @@ ap.add_argument('-folder_cont',nargs=1,help='skip all but the last 2 directories
 
 #action specific overwrite
 
-#1. process
+'''1. process'''
 
 #These arguments should be adjusted with lots of attention after looking at both the flare plots
 #the summary of temporal filtering logged in process_obsdir, and the resulting spectra
@@ -139,7 +139,7 @@ ap.add_argument('-min_gti',nargs=1,help='minimum gti size',type=float,default=1.
 ap.add_argument('-erodedilate',nargs=1,help='Erodes increasingly more gtis around the excluded intervals',
                 type=float,default=1.0)
 
-#gti
+'''gti creation'''
 #keyword for split: split_timeinsec
 ap.add_argument('-gti_split',nargs=1,help='GTI split method',default='orbit+flare',type=str)
 ap.add_argument('-flare_method',nargs=1,help='Flare extraction method(s)',default='clip+peak',type=str)
@@ -169,7 +169,8 @@ ap.add_argument('-int_split_band',nargs=1,help='band of the lightcurve used for 
 ap.add_argument('-int_split_bin',nargs=1,help='binning of the light curve used for GTI intensity splitting in s',
                 default=0.1)
 
-#lightcurve
+'''lightcurves'''
+
 ap.add_argument('-lc_bin',nargs=1,help='Gives the binning of all lightcurces/HR evolutions (in s)',default=1,type=str)
 #note: also defines the binning used for the gti definition
 
@@ -180,7 +181,12 @@ ap.add_argument('-lc_bands_str',nargs=1,help='Gives the list of bands to create 
 ap.add_argument('-hr_bands_str',nargs=1,help='Gives the list of bands to create hrsfrom',default='6-10/3-6',type=str)
 
 
-#spectra (note that this doesn't work right not because the keyword isn't implemented yet)
+'''spectra'''
+
+#note that the default of nicerl3-spect is True
+ap.add_argument('-sp_systematics',help='put systematics in the spectrum',default=True,type=str)
+
+#(note that this doesn't work right not because the keyword isn't implemented yet)
 ap.add_argument('-relax_SAA_bg',help='Increase the maximum of the nxb.saa_norm model to a higher value',
                 default=False,type=str)
 
@@ -248,6 +254,8 @@ int_split_bin=args.int_split_bin
 lc_bin=args.lc_bin
 lc_bands_str=args.lc_bands_str
 hr_bands_str=args.hr_bands_str
+
+sp_systematics=args.sp_systematics
 
 
 grouptype=args.grouptype
@@ -1347,7 +1355,8 @@ def create_gtis(directory,split='orbit+flare',band='3-15',flare_method='clip+pea
         create_gtis_done.set()
 
 #### extract_all_spectral
-def extract_all_spectral(directory,bkgmodel='scorpeon_script',language='python',overwrite=True,relax_SAA_bg=True):
+def extract_all_spectral(directory,bkgmodel='scorpeon_script',language='python',overwrite=True,relax_SAA_bg=True,
+                         sp_systematics=True):
     
     '''
     Wrapper for nicerl3-spect, extracts spectra, creates bkg and rmfs
@@ -1375,7 +1384,11 @@ def extract_all_spectral(directory,bkgmodel='scorpeon_script',language='python',
         
         -language: if set to python, the generated scripts are made for Pyxspec instead of standard xspec
                    if set to default, the generated scripts are made for standard xspec
-        
+
+    misc:
+        -sp_systematics: Add systematics to the spectra. This is the default option with NICERL3, but can be removed
+                         to test things or compare with other people's DR
+
     Note: can produce no output without error if no gti in the event file
     '''
     
@@ -1439,8 +1452,10 @@ def extract_all_spectral(directory,bkgmodel='scorpeon_script',language='python',
 
             relaxed_SAA_bg_str=' bkgconfigs="nxb.saa_norm.max=6000"' if relax_SAA_bg else ''
 
+            systematics_str=' syserrfile=NONE' if not sp_systematics else ''
+
             bashproc.sendline('nicerl3-spect indir='+directory+' bkgmodeltype='+bkgmodel_str+' bkgformat='+bkgmodel_mode+' '+bkg_outlang_str+
-                              ' clobber='+('YES' if overwrite else 'FALSE')+gti_str+relaxed_SAA_bg_str)
+                              ' clobber='+('YES' if overwrite else 'FALSE')+gti_str+relaxed_SAA_bg_str+systematics_str)
 
             process_state=bashproc.expect(['DONE','ERROR: could not find UFA file','Task aborting due to zero EXPOSURE',
                                            'Task aborting due to zero response',
@@ -2279,7 +2294,10 @@ if not local:
                             create_gtis_done.wait()
 
                         if curr_action=='fs':
-                            output_err=extract_all_spectral(dirname,bkgmodel=bgmodel,language=bglanguage,overwrite=overwrite_glob,relax_SAA_bg=relax_SAA_bg)
+                            output_err=extract_all_spectral(dirname,bkgmodel=bgmodel,
+                                                            language=bglanguage,overwrite=overwrite_glob,
+                                                            relax_SAA_bg=relax_SAA_bg,
+                                                            sp_systematics=sp_systematics)
                             if type(output_err)==str:
                                 raise ValueError
                             extract_all_spectral_done.wait()
@@ -2361,7 +2379,9 @@ if not local:
 
                     if curr_action == 'fs':
                         output_err = extract_all_spectral(dirname, bkgmodel=bgmodel, language=bglanguage,
-                                                          overwrite=overwrite_glob,relax_SAA_bg=relax_SAA_bg)
+                                                          overwrite=overwrite_glob,
+                                                          relax_SAA_bg=relax_SAA_bg,
+                                                          sp_systematics=sp_systematics)
                         if type(output_err) == str:
                             folder_state=output_err
                         else:

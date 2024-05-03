@@ -103,7 +103,7 @@ ap.add_argument('-catch', '--catch_errors', help='Catch errors while running the
 
 # global choices
 ap.add_argument("-a", "--action", nargs='?', help='Give which action(s) to proceed,separated by comas.',
-                default='lc', type=str)
+                default='g,m', type=str)
 # default: build,reg,lc,sp,g,m
 
 ap.add_argument("-over", nargs=1, help='overwrite computed tasks (i.e. with products in the batch, or merge directory\
@@ -115,7 +115,7 @@ ap.add_argument('-cameras',nargs=1,help='which cameras to restrict the analysis 
 ap.add_argument('-bright_check',nargs=1,help='recompute the entire set of actions in bright mode if the source lightcurve'+
                                              'is above the standard count limits',default=True,type=bool)
 
-ap.add_argument('-force_bright',help="Force bright mode for the tasks from the get go",default=False)
+ap.add_argument('-force_bright',help="Force bright mode for the tasks from the get go",default=True)
 
 # directory level overwrite (not active in local)
 ap.add_argument('-folder_over', nargs=1, help='relaunch action through folders with completed analysis', default=False,
@@ -2259,6 +2259,8 @@ def regroup_spectral(directory, group='opt'):
         # listing spectral files in the folder
         spfile_paths= np.array([elem for elem in glob.glob(os.path.join(directory,'**'), recursive=True) if
                               elem.endswith('_sr.pha')])
+
+        spfile_paths.sort()
 
         if len(spfile_paths)==0:
             print('No spectral file detected.')

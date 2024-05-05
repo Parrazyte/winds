@@ -50,26 +50,26 @@ from matplotlib.gridspec import GridSpec
 model_dir='/home/parrama/Soft/Xspec/Models'
 
 #custom model loads
-if not streamlit_mode:
-    AllModels.lmod('relxill',dirPath=model_dir+'/relxill')
-
-    #swiftJ1658 dust scattering halo model from Jin2019
-    AllModels.lmod('dscor', dirPath=model_dir + '/dscor')
-    #which needs an absolute path to a directory
-    Xset.addModelString('DSCOR_MODEL_DIR', '/home/parrama/Soft/Xspec/Models/dscor/mtables_swf1658m42')
-    # instype is the
-    # type
-    # of
-    # instrument:
-    # 0: XMM - Newton / pn
-    # 1: XMM - Newton / MOS1
-    # 2: XMM - Newton / MOS2
-    # 3: Chandra / ACIS
-    # 4: Swift / XRT
-    # 5: NuSTAR / FPMA
-    # 6: NuSTAR / FPMB
-
-    AllModels.mdefine('crabcorr (1./E^dGamma)crabcorrNorm : mul')
+# if not streamlit_mode:
+#     AllModels.lmod('relxill',dirPath=model_dir+'/relxill')
+#
+#     #swiftJ1658 dust scattering halo model from Jin2019
+#     AllModels.lmod('dscor', dirPath=model_dir + '/dscor')
+#     #which needs an absolute path to a directory
+#     Xset.addModelString('DSCOR_MODEL_DIR', '/home/parrama/Soft/Xspec/Models/dscor/mtables_swf1658m42')
+#     # instype is the
+#     # type
+#     # of
+#     # instrument:
+#     # 0: XMM - Newton / pn
+#     # 1: XMM - Newton / MOS1
+#     # 2: XMM - Newton / MOS2
+#     # 3: Chandra / ACIS
+#     # 4: Swift / XRT
+#     # 5: NuSTAR / FPMA
+#     # 6: NuSTAR / FPMB
+#
+#     AllModels.mdefine('crabcorr (1./E^dGamma)crabcorrNorm : mul')
 
 #example of model loading
 # AllModels.initpackage('tbnew_mod',"lmodel_tbnew.dat",dirPath=model_dir+'/tbnew')
@@ -588,17 +588,25 @@ class scorpeon_manager:
 
                 # extending the range for the SAA_norm parameter (note: might need to go above that for obs
                 # with really high overshoots, but then careful about the spectrum...)
+
+                #identifying the nxb saa norm parameter
+                nxb_par_id_list=[i_par for i_par in range(1,mod_nxb.nParameters+1) if 'saa_norm' in mod_nxb(i_par).name]
+                assert len(nxb_par_id_list)==1,'Issue in saa_norm parameter identification'
+                nxb_par_id=nxb_par_id_list[0]
+
+                #here there's several parameters with the "nom" parameter name so we need to use the component
+                comp_nxb_noise=getattr(mod_nxb,[elem for elem in mod_nxb.componentNames if '_noise' in elem][0])
+                noisenorm_par_id=comp_nxb_noise.norm.index
+
                 if extend_SAA_norm:
-                    mod_nxb(7).values = mod_nxb(7).values[:4] + [6000, 6000]
+                    mod_nxb(nxb_par_id).values = mod_nxb(7).values[:4] + [6000, 6000]
                 if fit_SAA_norm:
-                    mod_nxb(7).frozen = False
+                    mod_nxb(nxb_par_id).frozen = False
 
                 if curr_grp_sp.energies[0][0]>0.5:
 
-                    mod_nxb=AllModels(i_grp+1,modName='nxb')
-
                     #freezing noise_norm
-                    mod_nxb(11).frozen=True
+                    mod_nxb(noisenorm_par_id).frozen=True
 
             except:
                 pass
@@ -606,17 +614,29 @@ class scorpeon_manager:
             try:
                 mod_sky=AllModels(i_grp+1,modName='sky')
 
+                gal_nh_par_id_list=[i_par for i_par in range(1,mod_sky.nParameters+1) if 'gal_nh' in mod_sky(i_par).name]
+                assert len(gal_nh_par_id_list) == 1, 'Issue in gal_nh_par_id parameter identification'
+                gal_nh_par_id=gal_nh_par_id_list[0]
+
+                halo_em_par_id_list=[i_par for i_par in range(1,mod_sky.nParameters+1) if 'halo_em' in mod_sky(i_par).name]
+                assert len(halo_em_par_id_list) == 1, 'Issue in halo_em_par_id parameter identification'
+                halo_em_par_id=halo_em_par_id_list[0]
+
+                lhb_em_par_id_list=[i_par for i_par in range(1,mod_sky.nParameters+1) if 'lhb_em' in mod_sky(i_par).name]
+                assert len(lhb_em_par_id_list) == 1, 'Issue in lhb_em_par_id parameter identification'
+                lhb_em_par_id=lhb_em_par_id_list[0]
+
                 if curr_grp_sp.energies[0][0]>0.5:
 
                     #freezing gal_nh
-                    mod_sky(1).frozen=True
+                    mod_sky(gal_nh_par_id).frozen=True
 
                     #freezing lhb_em
-                    mod_sky(8).frozen=True
+                    mod_sky( lhb_em_par_id).frozen=True
 
                 if curr_grp_sp.energies[0][0]>1.:
                     #freezing halo_em
-                    mod_sky(6).frozen=True
+                    mod_sky(halo_em_par_id).frozen=True
             except:
                 pass
 

@@ -103,7 +103,7 @@ ap.add_argument('-catch', '--catch_errors', help='Catch errors while running the
 
 # global choices
 ap.add_argument("-a", "--action", nargs='?', help='Give which action(s) to proceed,separated by comas.',
-                default='g,m', type=str)
+                default='lc,m', type=str)
 # default: build,reg,lc,sp,g,m
 
 ap.add_argument("-over", nargs=1, help='overwrite computed tasks (i.e. with products in the batch, or merge directory\
@@ -180,7 +180,7 @@ ap.add_argument('-sudo_mode',nargs=1,help='put to true if the ds9 installation n
 
 #note: this binning will also be used to CREATE the gtis
 ap.add_argument('-lc_bin_std', nargs=1, help='Gives the binning of all standard lightcurces/HR evolutions (in s)',
-                default='1',type=str)
+                default='10',type=str)
 
 ap.add_argument('-lc_bin_gti', nargs=1, help='Gives the binning of all lightcurves used for gti cutting (in s)',
                 default='1',type=str)
@@ -193,10 +193,13 @@ ap.add_argument('-hr_bands_str', nargs=1, help='Gives the list of bands to creat
                 type=str)
 
 #note: also makes the spectrum function create spectra uniquely from GTIs
-ap.add_argument('-make_gti_orbit',nargs=1,help='cut individual observations per orbits with gtis',default=True,
+ap.add_argument('-make_gti_orbit',nargs=1,help='cut individual observations per orbits with gtis',default=False,
                 type=bool)
 
 ap.add_argument('-gti_tool',nargs=1,help='tool to make gti files',default='NICERDAS',type=str)
+
+ap.add_argument('-use_gtis',nargs=1,help='use already existing gti files to make lightcurves if available',
+                default=True,type=bool)
 '''spectra'''
 
 ap.add_argument('-spectral_band',nargs=1,help='Energy band to compute the spectra in (format "x-y" in keV).'+
@@ -235,6 +238,7 @@ lc_bands_str=args.lc_bands_str
 hr_bands_str=args.hr_bands_str
 make_gti_orbit=args.make_gti_orbit
 gti_tool=args.gti_tool
+use_gtis=args.use_gtis
 
 e_low_sp,e_high_sp=[None,None] if args.spectral_band==None else args.spectral_band.split('-')
 
@@ -1635,7 +1639,7 @@ def extract_lc_single(spawn, directory, binning, instru, steminput, src_reg, bg_
         return lc_src_path
 
 def extract_lc(directory,binning='1',lc_bands_str='3-79',hr_bands='10-50/3-10',cams='all',bright=False,
-               make_gtis=False,gti_binning='1',gti_tool='NICERDAS'):
+               make_gtis=False,use_gtis=True,gti_binning='1',gti_tool='NICERDAS'):
 
     '''
     Wrapper for a version of nuproducts to computes only lightcurves in the desired bands,
@@ -1656,6 +1660,10 @@ def extract_lc(directory,binning='1',lc_bands_str='3-79',hr_bands='10-50/3-10',c
              A single plot is possible for now. Creates its own lightcurve bands if necessary
 
         -overwrite: overwrite products or not
+
+        -make_gtis: Cuts the nustar observations by orbit
+
+        -use_gtis: uses previously existing gtis if available
 
     NOTE THAT THE BACKSCALE CORRECTION IS APPLIED MANUALLY
 
@@ -1762,7 +1770,19 @@ def extract_lc(directory,binning='1',lc_bands_str='3-79',hr_bands='10-50/3-10',c
 
                 gti_list=create_gtis(bashproc,lc_cut_path,lc_cut_fig,gti_tool=gti_tool)
             else:
-                gti_list=[None]
+                if use_gtis:
+                    # checking if gti files exist in the folder
+                    gti_list = np.array([elem for elem in
+                                          glob.glob(os.path.join(directory, 'products_bright' if bright else 'products',
+                                                                 '**'),
+                                                    recursive=True) \
+                                          if elem.endswith('.gti') and '_gti_' in elem \
+                                          and camlist[i_cam] in elem \
+                                          and '_gti_mask_' not in elem and '_gti_input' not in elem])
+
+                    gti_list.sort()
+                else:
+                    gti_list=[None]
 
             for id_orbit,elem_gti in enumerate(gti_list):
 
@@ -1775,7 +1795,7 @@ def extract_lc(directory,binning='1',lc_bands_str='3-79',hr_bands='10-50/3-10',c
                                                     src_reg=src_reg_indiv_spawn,bg_reg=bg_reg_indiv_spawn,
                                                     e_low=band.split('-')[0],e_high=band.split('-')[1],
                                                     bright=bright,backscale=backscale,
-                                                    gti=elem_gti if make_gtis else None,id_orbit=id_orbit)
+                                                    gti=elem_gti,id_orbit=id_orbit)
 
                     #adding a flag to skip the computation of the HR if the lc computation crashed in at least
                     #one band
@@ -2482,7 +2502,7 @@ if not local:
                         if curr_action=='lc':
                             output_lc=extract_lc(dirname,binning=lc_bin_std,lc_bands_str=lc_bands_str,hr_bands=hr_bands_str,cams=cameras_glob,
                                                   bright=force_bright or bright_flag_dir,make_gtis=make_gti_orbit,
-                                                 gti_tool=gti_tool,gti_binning=lc_bin_gti)
+                                                 gti_tool=gti_tool,gti_binning=lc_bin_gti,use_gtis=use_gtis)
 
                             if type(output_lc)==str:
                                 raise ValueError
@@ -2568,7 +2588,7 @@ if not local:
                         output_lc = extract_lc(dirname, binning=lc_bin_std, lc_bands_str=lc_bands_str, hr_bands=hr_bands_str,
                                                cams=cameras_glob,
                                                bright=force_bright or bright_flag_dir,make_gtis=make_gti_orbit,
-                                                 gti_tool=gti_tool,gti_binning=lc_bin_gti)
+                                                 gti_tool=gti_tool,gti_binning=lc_bin_gti,use_gtis=use_gtis)
 
                         if type(output_lc) == str:
                             raise ValueError
@@ -2655,7 +2675,7 @@ else:
             output_lc = extract_lc(absdir, binning=lc_bin_std, lc_bands_str=lc_bands_str, hr_bands=hr_bands_str,
                                    cams=cameras_glob,
                                    bright=force_bright or bright_flag_dir,make_gtis=make_gti_orbit,
-                                                 gti_tool=gti_tool,gti_binning=lc_bin_gti)
+                                                 gti_tool=gti_tool,gti_binning=lc_bin_gti,use_gtis=use_gtis)
 
             if type(output_lc) == str:
                 raise ValueError

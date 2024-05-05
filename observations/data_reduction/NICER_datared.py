@@ -97,12 +97,12 @@ ap.add_argument("-dir", "--startdir", nargs='?', help="starting directory. Curre
 ap.add_argument("-l","--local",nargs=1,help='Launch actions directly in the current directory instead',
                 default=False,type=bool)
 ap.add_argument('-catch','--catch_errors',help='Catch errors while running the data reduction and continue',
-                default=True,type=bool)
+                default=False,type=bool)
 
 #global choices
 ap.add_argument("-a","--action",nargs='?',help='Give which action(s) to proceed,separated by comas.',
-                default='1,l,ml,c',type=str)
-#default: 1,gti,fs,l,g,m,c
+                default='fc,1,gti',type=str)
+#default: 1,gti,fs,l,g,m,ml,c
 
 ap.add_argument("-over",nargs=1,help='overwrite computed tasks (i.e. with products in the batch, or merge directory\
                 if "m" is in the actions) in a folder',default=True,type=bool)
@@ -121,10 +121,13 @@ ap.add_argument('-folder_cont',nargs=1,help='skip all but the last 2 directories
 #These arguments should be adjusted with lots of attention after looking at both the flare plots
 #the summary of temporal filtering logged in process_obsdir, and the resulting spectra
 
-#should only be done in very extreme cases
+#Better to be coupled with overdyn filtering
 ap.add_argument('-keep_SAA',nargs=1,help='keep South Atlantic Anomaly (SAA) Periods',type=bool,default=True)
 
-ap.add_argument('-overshoot_limit',nargs=1,help='overshoot event rate limit',type=float,default=100.)
+#-1 means deactivated for both over and undershoot limits
+
+#note: should be set to -1 if overdyn is activated in the gti filtering options
+ap.add_argument('-overshoot_limit',nargs=1,help='overshoot event rate limit',type=float,default=-1)
 
 ap.add_argument('-undershoot_limit',nargs=1,help='undershoot event rate limit',type=float,default=500)
 
@@ -141,7 +144,7 @@ ap.add_argument('-erodedilate',nargs=1,help='Erodes increasingly more gtis aroun
 
 '''gti creation'''
 #keyword for split: split_timeinsec
-ap.add_argument('-gti_split',nargs=1,help='GTI split method',default='orbit+flare',type=str)
+ap.add_argument('-gti_split',nargs=1,help='GTI split method',default='orbit+flare+overdyn',type=str)
 ap.add_argument('-flare_method',nargs=1,help='Flare extraction method(s)',default='clip+peak',type=str)
 
 #previous version was with a SAS, tool, which required installing SAS. Now the default is NICER directly
@@ -157,6 +160,11 @@ ap.add_argument('-flare_factor',nargs=1,help='minimum flare multiplication facto
 #for peak
 ap.add_argument('-peak_score_thresh',nargs=1,help='topological peak score treshold for peak exclusion',
                 default=3.,type=float)
+
+#for overdyn, in s since based on the mkf
+ap.add_argument('-erodedilate_overdyn',nargs=1,help='Erodes increasingly more gtis around the overshoot excluded intervals',
+                type=int,default=5)
+
 #note: not used currently
 ap.add_argument('-gti_lc_band',nargs=1,help='Band for the lightcurve used for GTI splitting',
                 default='12-15',type=str)
@@ -205,12 +213,17 @@ ap.add_argument('-gtype',"--grouptype",help='Give the group type to use in regro
 ap.add_argument('-baddet','--bad_detectors',help='List detectors to exclude from the data reduction',
                 default='-14,-34,-54',type=str)
 
-#set to None to deactivate
+#set to '' to deactivate
 ap.add_argument('-heasoft_init_alias',help="name of the heasoft initialisation script alias",
                 default="heainit",type=str)
-#set to none to deactivate
-ap.add_argument('-caldbinit_init_alias',help="name of the caldbinit initialisation script alias",
+
+#set to '' to deactivate
+ap.add_argument('-caldb_init_alias',help="name of the caldbinit initialisation script alias",
                 default="caldbinit",type=str)
+
+#set to '' to deactivate. Only necessary (and used) with gti_tool=SAS for gti creation
+ap.add_argument('-sas_init_alias',help="name of the caldbinit initialisation script alias",
+                default="sasinit",type=str)
 
 #only necessary if using 3C50
 ap.add_argument('-alias_3C50',help="bash alias for the 3C50 directory",default='$NICERBACK3C50',type=str)
@@ -257,11 +270,13 @@ hr_bands_str=args.hr_bands_str
 
 sp_systematics=args.sp_systematics
 
+erodedilate_overdyn=args.erodedilate_overdyn
 
 grouptype=args.grouptype
 bad_detectors=args.bad_detectors
 heasoft_init_alias=args.heasoft_init_alias
-caldbinit_init_alias=args.caldbinit_init_alias
+caldb_init_alias=args.caldb_init_alias
+sas_init_alias=args.sas_init_alias
 alias_3C50=args.alias_3C50
 
 '''''''''''''''''
@@ -293,11 +308,11 @@ def set_var(spawn):
     '''
     Sets starting environment variables for data analysis
     '''
-    if heasoft_init_alias is not None:
+    if heasoft_init_alias!='':
         spawn.sendline(heasoft_init_alias)
 
-    if caldbinit_init_alias is not None:
-        spawn.sendline(caldbinit_init_alias)
+    if caldb_init_alias!='':
+        spawn.sendline(caldb_init_alias)
     
 #function to remove (most) control chars
 def _remove_control_chars(message):
@@ -319,6 +334,7 @@ def process_obsdir(directory,overwrite=True,keep_SAA=False,overshoot_limit=30.,u
                 Should only be done in specific cases, see
 
     -overshoot/undershoot limit: limit above which to filter the events depending on these quantities
+        if set to -1, deactivates the criterium by filtering below 1e6 (which will never be reached)
 
     -min_gti minimum gti
 
@@ -339,7 +355,17 @@ def process_obsdir(directory,overwrite=True,keep_SAA=False,overshoot_limit=30.,u
     print('\n\n\nEvent filtering...')
     
     set_var(bashproc)
-        
+
+    if overshoot_limit==-1:
+        overshoot_limit_use=1e6
+    else:
+        overshoot_limit_use=overshoot_limit
+
+    if undershoot_limit==-1:
+        undershoot_limit_use=1e6
+    else:
+        undershoot_limit_use=undershoot_limit
+
     if os.path.isfile(directory+'/process_obsdir.log'):
         os.system('rm '+directory+'/process_obsdir.log')
         
@@ -350,8 +376,8 @@ def process_obsdir(directory,overwrite=True,keep_SAA=False,overshoot_limit=30.,u
 
         bashproc.sendline('nicerl2 indir=' + directory +' clobber=' + ('YES' if overwrite else 'FALSE') +
                           ' nicersaafilt=' + ('NO' if keep_SAA else 'YES') +
-                          ' overonly_range=0-%.1f'%overshoot_limit +
-                          ' underonly_range=0-%.1f'%undershoot_limit +
+                          ' overonly_range=0-%.1f'%overshoot_limit_use +
+                          ' underonly_range=0-%.1f'%undershoot_limit_use +
                           ' mingti=%.1f' % min_gti +
                           ' erodedilate=%.1f' % erodedilate+
                           (' max_lowmem=0' if keep_lowmem else '')+
@@ -420,7 +446,7 @@ def plot_event_diag(mode,obs_start_str,time_obs,id_gti_orbit,
                     counts_035_8,counts_8_12,counts_overshoot,counts_undershoot,cutoff_rigidity,
                     counts_035_8_glob=None,
                     save_path=None,
-                    id_gti=None,id_flares=None,
+                    id_gti=None,id_flares=None,id_over=None,
                     gti_nimkt_arr=None,split_str=None,split_gti_arr=None,
                     orbit_cut_times=None):
     
@@ -499,12 +525,16 @@ def plot_event_diag(mode,obs_start_str,time_obs,id_gti_orbit,
 
     # flare and gti intervals
     for id_inter, list_inter in enumerate(list(interval_extract(id_gti))):
-        ax_rigidity.axvspan(time_obs[min(list_inter)], time_obs[max(list_inter)], color='grey', alpha=0.2,
+        ax_rigidity.axvspan(time_obs[min(list_inter)]-1/2, time_obs[max(list_inter)]+1/2, color='grey', alpha=0.2,
                             label='standard gtis' if id_inter == 0 else '')
 
     for id_inter, list_inter in enumerate(list(interval_extract(id_flares))):
-        ax_rigidity.axvspan(time_obs[min(list_inter)], time_obs[max(list_inter)], color='blue', alpha=0.2,
+        ax_rigidity.axvspan(time_obs[min(list_inter)]-1/2, time_obs[max(list_inter)]+1/2, color='blue', alpha=0.2,
                             label='flare gtis' if id_inter == 0 else '')
+
+    for id_inter, list_inter in enumerate(list(interval_extract(id_over))):
+        ax_rigidity.axvspan(time_obs[min(list_inter)]-1/2, time_obs[max(list_inter)]+1/2, color='orange', alpha=0.2,
+                            label='overshoot filtered gtis' if id_inter == 0 else '')
 
     # computing the non-gti intervals from nimaketime
     id_nongti_nimkt = []
@@ -517,8 +547,8 @@ def plot_event_diag(mode,obs_start_str,time_obs,id_gti_orbit,
 
     # and plotting
     for id_inter, list_inter in enumerate(list(interval_extract(id_nongti_nimkt))):
-        ax_rigidity.axvspan(time_obs[min(list_inter)], time_obs[max(list_inter)], color='red', alpha=0.1,
-                            label='std nimaketime excluded intervals' if id_inter == 0 else '')
+        ax_rigidity.axvspan(time_obs[min(list_inter)]-1/2, time_obs[max(list_inter)]+1/2, color='red', alpha=0.1,
+                            label='nicerl2 nimaketime exclusion' if id_inter == 0 else '')
 
     # plotting the split gti intervals if in the right mode
     if split_gti_arr is not None:
@@ -536,7 +566,7 @@ def plot_event_diag(mode,obs_start_str,time_obs,id_gti_orbit,
         else:
             #showing splits vertically
             for id_inter, list_inter in enumerate(split_gti_arr):
-                ax_rigidity.axvspan(time_obs[min(list_inter)], time_obs[max(list_inter)],
+                ax_rigidity.axvspan(time_obs[min(list_inter)]-1/2, time_obs[max(list_inter)]+1/2,
                                     color='green', alpha=0.1,
                                     label='split intervals ' +
                                           ('(flare cuts excluded)' if 'flare' in split_str else '') \
@@ -600,18 +630,29 @@ def plot_event_diag(mode,obs_start_str,time_obs,id_gti_orbit,
 def create_gtis(directory,split='orbit+flare',band='3-15',flare_method='clip+peak',clip_method='median',
                 clip_sigma=2.,clip_band='8-12',peak_score_thresh=2.,
                 int_split_band='0.3-10.',int_split_bin=0.1,clip_int_delta=True,
-                flare_factor=2,gti_tool='NICERDAS'):
+                flare_factor=2,gti_tool='NICERDAS',erodedilate_overdyn=1):
     '''
     wrapper for a function to split nicer obsids into indivudal portions with different methods
     the default binning is 1s because the NICER mkf file time resolution is 1s
 
     overwrite is always on here since we don't use a specific nicerdas task with the overwrite option
     split modes (combinable):
-        -orbit:split each obs into each individual nicer observation period
+
+
+        filtering:
+
+        -orbit:split each obs into each individual nicer observation period. Generally, should always be enabled.
                GTIs naming: obsid-XXX chronologically for each split
 
         -flare: isolates background flare periods in each observation from the main data
                 GTI naming: obsid-XXXFYYY
+
+        -overdyn: dynamically filters high overshoot regions by comparing the 0.35-8keV count rate and the overhsoot rate
+
+                  When the 0.35-8 count rate is <1 cts/s, filters when the overshoot rate is >2* the count rate
+                  When the 0.35-8 count rate is >1 ct/s, filters when the overshoot rate is >5* the count rate
+
+                 dilates the resulting exclusion using the erodedilate_overdyn parameter (in s)
 
         -split_X: on top of cutting splits and flares, splits each orbit in individual periods of X seconds for
                   time-resolved spectroscopy
@@ -850,7 +891,7 @@ def create_gtis(directory,split='orbit+flare',band='3-15',flare_method='clip+pea
         bashproc.logfile_read = sys.stdout
 
         '''
-        new method for the overshoots following https://heasarc.gsfc.nasa.gov/docs/nicer/analysis_threads/flares/
+        new method for the flares following https://heasarc.gsfc.nasa.gov/docs/nicer/analysis_threads/flares/
         '''
         #should always be in auxil but we cover rank -2 directories this way. Also testing both gunzipped and non-gunzipped
         # (one is enough assuming they're the same)
@@ -1147,12 +1188,49 @@ def create_gtis(directory,split='orbit+flare',band='3-15',flare_method='clip+pea
                 if 'split' in split:
                     for i_split in range(len(split_gti_arr[i_orbit])):
                         split_gti_arr[i_orbit][i_split]=[elem for elem in split_gti_arr[i_orbit][i_split]\
-                                                     if elem not in id_flares[i_orbit]]
+                                                     if elem not in elem_id_flares]
 
         else:
             id_gti=id_gti_orbit
             id_flares=[]
             id_dips=[]
+
+        if 'overdyn' in split:
+
+            id_over=np.array([None]*n_orbit)
+            for i_orbit,elem_gti_orbit in enumerate(id_gti):
+
+                #note that here we're only filtering what's not in the flares
+
+                #we cut with different criteria for high and low bg rates to have better filtering
+                mask_over=((counts_035_8[elem_gti_orbit]<=1) & \
+                         (counts_overshoot[elem_gti_orbit]>2*counts_035_8[elem_gti_orbit])) | \
+                             ((counts_035_8[elem_gti_orbit]>1) & \
+                              (counts_overshoot[elem_gti_orbit] > 5 * counts_035_8[elem_gti_orbit]))
+
+                id_over_orbit=np.array(elem_gti_orbit)[mask_over].tolist()
+
+                if erodedilate_overdyn>0:
+                    id_over_orbit_eroded=np.unique(ravel_ragged([\
+                                         np.arange(elem-erodedilate_overdyn,elem+erodedilate_overdyn+1)\
+                                                                for elem in id_over_orbit]))
+
+                    #limiting to the initial range of gtis to avoid eroded beyond the bounds
+                    id_over_orbit_eroded=[elem for elem in elem_gti_orbit if elem in id_over_orbit_eroded]
+                else:
+                    id_over_orbit_eroded=id_over_orbit
+
+                id_over[i_orbit]=id_over_orbit_eroded
+
+                #redefining the gtis after the flares have been defined
+                id_gti[i_orbit] = [elem for elem in elem_gti_orbit if elem not in id_over_orbit_eroded]
+
+
+                #this one for is for the automatic split
+                if 'split' in split:
+                    for i_split in range(len(split_gti_arr[i_orbit])):
+                        split_gti_arr[i_orbit][i_split]=[elem for elem in split_gti_arr[i_orbit][i_split]\
+                                                     if elem not in id_over_orbit_eroded]
 
         if 'manual' in split:
 
@@ -1172,7 +1250,7 @@ def create_gtis(directory,split='orbit+flare',band='3-15',flare_method='clip+pea
                                 counts_undershoot=counts_undershoot[id_gti_orbit[i_orbit]],
                                 cutoff_rigidity=cutoff_rigidity[id_gti_orbit[i_orbit]],
                                 save_path=save_path_str,
-                                id_gti=id_gti[i_orbit], id_flares=id_flares[i_orbit],
+                                id_gti=id_gti[i_orbit], id_flares=id_flares[i_orbit],id_over=id_over[i_orbit],
                                 gti_nimkt_arr=gti_nimkt_arr, split_str=split,
                                 split_gti_arr=split_gti_arr[i_orbit],orbit_cut_times=orbit_cut_times)]
 
@@ -1192,6 +1270,12 @@ def create_gtis(directory,split='orbit+flare',band='3-15',flare_method='clip+pea
                         split_gti_arr[i_orbit][i_split] = np.array([elem for elem in split_gti_arr[i_orbit][i_split] \
                                                            if elem not in id_flares[i_orbit]])
 
+                #removing overdyn if necesary
+                if 'overdyn' in split:
+                    for i_split in range(len(split_gti_arr[i_orbit])):
+                        split_gti_arr[i_orbit][i_split] = np.array([elem for elem in split_gti_arr[i_orbit][i_split] \
+                                                           if elem not in id_over[i_orbit]])
+
         #creating individual orbit figures
         for i_orbit in range(n_orbit):
             
@@ -1205,12 +1289,14 @@ def create_gtis(directory,split='orbit+flare',band='3-15',flare_method='clip+pea
                             counts_undershoot=counts_undershoot[id_gti_orbit[i_orbit]],
                             cutoff_rigidity=cutoff_rigidity[id_gti_orbit[i_orbit]],
                             save_path=save_path_str,
-                            id_gti=id_gti[i_orbit],id_flares=id_flares[i_orbit],
+                            id_gti=id_gti[i_orbit],id_flares=id_flares[i_orbit],id_over=id_over[i_orbit],
                             gti_nimkt_arr=gti_nimkt_arr,split_str=split,
                             split_gti_arr=split_gti_arr[i_orbit])
 
         #creating the gti files for each part of the obsid
-        bashproc.sendline('sasinit')
+        # (note that this won't make anything if there's no sas keyword)
+        if gti_tool=='SAS' and sas_init_alias!='':
+            bashproc.sendline(sas_init_alias)
 
         # NOTE: this doesn't work nor it did back then with XMM_datared, so using masks instead
         # def expr_gti(time_arr,id_arr):
@@ -1334,7 +1420,7 @@ def create_gtis(directory,split='orbit+flare',band='3-15',flare_method='clip+pea
                                 counts_035_8_glob=counts_035_8,
                                 save_path=save_path_str,
                                 id_gti=id_gti[i_orbit], id_flares=id_flares[i_orbit],
-                                gti_nimkt_arr=gti_nimkt_arr, split_str=split,
+                                gti_nimkt_arr=gti_nimkt_arr, split_str=split,id_over=id_over[i_orbit],
                                 split_gti_arr=None)
 
                 split_str='I'
@@ -2288,7 +2374,7 @@ if not local:
                                                    flare_factor=flare_factor,
                                                    clip_sigma=clip_sigma,
                                                    peak_score_thresh=peak_score_thresh,
-                                                   gti_tool=gti_tool)
+                                                   gti_tool=gti_tool,erodedilate_overdyn=erodedilate_overdyn)
                             if type(output_err)==str:
                                 raise ValueError
                             create_gtis_done.wait()
@@ -2370,7 +2456,7 @@ if not local:
                                         int_split_band=int_split_band,int_split_bin=int_split_bin,
                                                flare_factor=flare_factor,
                                                clip_sigma=clip_sigma,peak_score_thresh=peak_score_thresh,
-                                                   gti_tool=gti_tool)
+                                                   gti_tool=gti_tool,erodedilate_overdyn=erodedilate_overdyn)
                         if type(output_err) == str:
                             folder_state=output_err
                         else:
@@ -2468,7 +2554,7 @@ else:
                                         int_split_band=int_split_band,int_split_bin=int_split_bin,
                                          flare_factor=flare_factor,
                                          clip_sigma=clip_sigma,peak_score_thresh=peak_score_thresh,
-                                                   gti_tool=gti_tool)
+                                                   gti_tool=gti_tool,erodedilate_overdyn=erodedilate_overdyn)
                 create_gtis_done.wait()
 
             if curr_action == 'l':

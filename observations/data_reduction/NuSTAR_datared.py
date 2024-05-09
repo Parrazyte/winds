@@ -84,7 +84,7 @@ g.      regroup_spectral: regroups spectral products according to the requiremen
 
 m.      batch_mover: copies all products to a global directory to prepare for large scale analysis
 
-
+fc.     clean_all:  deletes all products in out(bright), products(bright) and the log files in an obsid directory
 """
 
 '''~~~~~~~~~~ ARGUMENTS ~~~~~~~~~~'''
@@ -103,7 +103,7 @@ ap.add_argument('-catch', '--catch_errors', help='Catch errors while running the
 
 # global choices
 ap.add_argument("-a", "--action", nargs='?', help='Give which action(s) to proceed,separated by comas.',
-                default='lc,m', type=str)
+                default='build,reg,lc,sp,g,m', type=str)
 # default: build,reg,lc,sp,g,m
 
 ap.add_argument("-over", nargs=1, help='overwrite computed tasks (i.e. with products in the batch, or merge directory\
@@ -113,12 +113,12 @@ ap.add_argument('-cameras',nargs=1,help='which cameras to restrict the analysis 
                 default='all',type=str)
 
 ap.add_argument('-bright_check',nargs=1,help='recompute the entire set of actions in bright mode if the source lightcurve'+
-                                             'is above the standard count limits',default=True,type=bool)
+                                             'is above the standard count limits',default=False,type=bool)
 
-ap.add_argument('-force_bright',help="Force bright mode for the tasks from the get go",default=True)
+ap.add_argument('-force_bright',help="Force bright mode for the tasks from the get go",default=False)
 
 # directory level overwrite (not active in local)
-ap.add_argument('-folder_over', nargs=1, help='relaunch action through folders with completed analysis', default=False,
+ap.add_argument('-folder_over', nargs=1, help='relaunch action through folders with completed analysis', default=True,
                 type=bool)
 ap.add_argument('-folder_cont', nargs=1, help='skip all but the last 2 directories in the summary folder file',
                 default=False, type=bool)
@@ -144,7 +144,7 @@ ap.add_argument('-image_band',nargs=1,help='band in which to extract the image f
                 type=str)
 
 ap.add_argument('-rad_crop', nargs=1,
-                help='croppind radius around the theoretical source position before fit, in arcsecs', default=120,
+                help='cropping radius around the theoretical source position before fit, in arcsecs', default=120,
                 type=float)
 
 # if equal to crop, is set to rad_crop
@@ -174,7 +174,7 @@ ap.add_argument('-point_source', nargs=1,
 
 #if set to true, wil ask for sudo mdp at script launch
 ap.add_argument('-sudo_mode',nargs=1,help='put to true if the ds9 installation needs to be run in sudo',
-               default=True,type=bool)
+               default=False,type=bool)
 
 '''lightcurve'''
 
@@ -275,6 +275,8 @@ extract_lc_done=threading.Event()
 extract_sp_done=threading.Event()
 regroup_spectral_done=threading.Event()
 batch_mover_done=threading.Event()
+clean_all_done=threading.Event()
+
 
 # function to remove (most) control chars
 def _remove_control_chars(message):
@@ -1781,6 +1783,9 @@ def extract_lc(directory,binning='1',lc_bands_str='3-79',hr_bands='10-50/3-10',c
                                           and '_gti_mask_' not in elem and '_gti_input' not in elem])
 
                     gti_list.sort()
+
+                    if len(gti_list)==0:
+                        gti_list=[None]
                 else:
                     gti_list=[None]
 
@@ -2396,7 +2401,50 @@ def batch_mover(directory,bright_check=True,force_bright=False):
     bashproc.sendline('exit')
     batch_mover_done.set()
 
+def clean_all(directory):
 
+    '''
+
+    clean products in the products and out directories and the logs in the main  directory
+
+    Useful to avoid bloating with how big these files are
+    '''
+
+    log_files=[elem for elem in glob.glob(os.path.join(directory,'**'),recursive=False)\
+                   if (not os.path.isdir(elem) and elem.endswith('.log') and 'pipe.log' not in elem) ]
+
+    product_files=[elem for elem in glob.glob(os.path.join(directory,'products**/**'),recursive=True) if not elem.endswith('/')]
+
+    product_dirs=[elem for elem in glob.glob(os.path.join(directory,'products**/'),recursive=True)]
+
+    out_files=[elem for elem in glob.glob(os.path.join(directory,'out**/**'),recursive=True) if not elem.endswith('/')]
+
+    out_dirs=[elem for elem in glob.glob(os.path.join(directory,'out**/'),recursive=True)]
+
+    clean_files=product_files+out_files+log_files
+
+    clean_dirs=out_dirs+product_dirs
+
+    print('Cleaning ' + str(len(clean_files)+len(clean_dirs)) + ' elements in directory ' + directory)
+
+    if len(clean_files)>0 or len(clean_dirs)>0:
+
+        for elem_product in clean_files:
+            os.remove(elem_product)
+
+        #removing directories
+        try:
+            for elem_dir in clean_dirs:
+                os.system('rmdir '+elem_dir)
+        except:
+            breakpoint()
+
+        #reasonable waiting time to make sure big files can be deleted
+        time.sleep(10)
+
+        print('Cleaning complete.')
+
+    clean_all_done.set()
 '''''''''''''''''''''
 ''''MAIN PROCESS'''''
 '''''''''''''''''''''
@@ -2546,6 +2594,10 @@ if not local:
                             batch_mover(dirname,bright_check=bright_check,force_bright=force_bright)
                             batch_mover_done.wait()
 
+                        if curr_action=='fc':
+                            clean_all(dirname)
+                            clean_all_done.wait()
+
                         os.chdir(startdir)
 
                         id_action+=1
@@ -2630,6 +2682,10 @@ if not local:
                     if curr_action=='m':
                         batch_mover(dirname,bright_check=bright_check,force_bright=force_bright)
                         batch_mover_done.wait()
+
+                    if curr_action=='fc':
+                        clean_all(dirname)
+                        clean_all_done.wait()
 
                     os.chdir(startdir)
 
@@ -2716,5 +2772,9 @@ else:
         if curr_action == 'm':
             batch_mover(absdir, bright_check=bright_check, force_bright=force_bright)
             batch_mover_done.wait()
+
+        if curr_action == 'fc':
+            clean_all(absdir)
+            clean_all_done.wait()
 
         id_action+=1

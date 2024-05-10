@@ -47,16 +47,18 @@ from ast import literal_eval
 # import time
 
 import dill
-'''Astro'''
+'''
+#Astro
+'''
 
 #Catalogs and manipulation
 from astroquery.vizier import Vizier
 
 #visualisation functions
-from visual_line_tools import load_catalogs,dist_mass,obj_values,abslines_values,values_manip,distrib_graph,correl_graph,incl_dic,\
+from visual_line_tools import load_catalogs,dist_mass,obj_values,abslines_values,values_manip,distrib_graph,correl_graph,\
     n_infos, plot_lightcurve, hid_graph, sources_det_dic, dippers_list,telescope_list,load_integral,telescope_colors,\
     convert_BAT_count_flux,flux_erg_pow,err_flux_erg_pow,values_manip_high_E,corr_factor_lbat,fetch_bat_lightcurve,\
-    int_rate_to_flux
+    int_rate_to_flux,incl_dyn_dict,incl_jet_dict,incl_misc_dict,incl_refl_dict,Porb_dict,wind_det_dict,wind_det_sources
 
 from lmplot_uncert import lmplot_uncert_a
 # import mpld3
@@ -66,7 +68,9 @@ from lmplot_uncert import lmplot_uncert_a
 
 ap = argparse.ArgumentParser(description='Script to display lines in XMM Spectra.\n)')
 
-'''GENERAL OPTIONS'''
+'''
+#GENERAL OPTIONS
+'''
 
 
 ap.add_argument("-cameras",nargs=1,help='Cameras to use for the spectral analysis',default='all',type=str)
@@ -74,16 +78,22 @@ ap.add_argument("-expmodes",nargs=1,help='restrict the analysis to a single type
 ap.add_argument("-prefix",nargs=1,help='restrict analysis to a specific prefix',default='auto',type=str)
 ap.add_argument("-outdir",nargs=1,help="name of output directory for line plots",default="lineplots_opt",type=str)
 
-'''DIRECTORY SPECIFICS'''
+'''
+#DIRECTORY SPECIFICS
+'''
 
 ap.add_argument("-local",nargs=1,help='launch analysis in the current directory instead',default=True,type=bool)
 
-'''MODES'''
+'''
+#MODES
+'''
 
 ap.add_argument('-multi_obj',nargs=1,help='compute the hid for multiple obj directories inside the current directory',
                 default=True)
 
-'''SPECTRUM PARAMETERS'''
+'''
+#SPECTRUM PARAMETERS
+'''
 
 
 ap.add_argument("-line_cont_range",nargs=1,help='min and max energies of the line continuum broand band fit',default='4 10',type=str)
@@ -94,7 +104,8 @@ ap.add_argument("-line_search_e",nargs=1,help='min, max and step of the line ene
 ap.add_argument("-line_search_norm",nargs=1,help='min, max and nsteps (for one sign)  of the line norm search (which operates in log scale)',
                 default='0.01 10 500',type=str)
 
-'''VISUALISATION'''
+'''#VISUALISATION
+'''
 
 args=ap.parse_args()
 
@@ -200,7 +211,9 @@ def convert_df(df):
         
 #     return launched_expos,completed_expos
 
-'''initialisation'''
+'''
+#Initialisation
+'''
 
 # #for the current directory:
 # started_expos,done_expos=folder_state()
@@ -290,6 +303,8 @@ else:
         include_full=st.toggle('Include problematic data (_full) folders')
         include_untested= st.toggle('Include untested and preliminary NICER sources')
 
+use_unsure_mass_dist=st.sidebar.toggle('Use tentative mass and distance measurements',value=True)
+
 if not online:
     os.system('mkdir -p glob_batch/visual_line_dumps/')
 
@@ -301,7 +316,9 @@ if online:
     dump_path='/mount/src/winds/observations/visualisation/visual_line_dumps/dump_'+join_telescope_str+\
               use_orbit_obs_str+time_resolved_dump_str+\
               ('_full' if include_full else '')+\
-              ('_untested' if include_untested else '')+'.pkl'
+              ('_untested' if include_untested else '')+ \
+              ('_with_md_unsure' if use_unsure_mass_dist else '')+\
+              '.pkl'
 
     
     update_dump=False
@@ -309,7 +326,9 @@ else:
     dump_path='./glob_batch/visual_line_dumps/dump_'+join_telescope_str+\
               use_orbit_obs_str+time_resolved_dump_str+\
               ('_full' if include_full else '')+\
-              ('_untested' if include_untested else '')+'.pkl'
+              ('_untested' if include_untested else '')+ \
+              ('_with_md_unsure' if use_unsure_mass_dist else '')+\
+              '.pkl'
 
     update_dump=st.sidebar.button('Update dump')
 
@@ -443,7 +462,7 @@ if update_dump or not os.path.isfile(dump_path):
         #### main arrays computation
         
         #getting the single parameters
-        dist_obj_list,mass_obj_list=dist_mass(dict_linevis)
+        dist_obj_list,mass_obj_list=dist_mass(dict_linevis,use_unsure_mass_dist=use_unsure_mass_dist)
         
         #distance factor for the flux conversion later on
         dist_factor=4*np.pi*(dist_obj_list*1e3*3.086e18)**2
@@ -623,7 +642,9 @@ if multi_obj:
 else:
     save_str_prefix=obj_list[0]+'_'
 
-'''Page creation'''
+'''
+#Page creation
+'''
 #### Streamlit page creation
 
 line_display_str=np.array([r'FeXXV Ka (6.70 keV)',r'FeXXVI  Ka (6.97 keV)','NiXXVII Ka (7.80 keV)',
@@ -717,8 +738,17 @@ with st.sidebar.expander('Absorption lines restriction'):
 mask_lines=np.array([elem in selectbox_abstype for elem in line_display_str])
 
 with st.sidebar.expander('Inclination'):
+
+    #these two should match
+    inclination_options = np.array(['dynamical', 'jet', 'misc', 'reflection'])
+    inclination_dict_lis = [incl_dyn_dict, incl_jet_dict, incl_misc_dict, incl_refl_dict]
+
+    inclination_prio = np.array(st.multiselect('Inclination methods and priority', options=inclination_options,
+                                      default=['dynamical', 'jet', 'misc', 'reflection']))
+    use_inclination_unsure = st.toggle('Use unsure inclination estimates', value=True)
+
     slider_inclin=st.slider('Inclination restriction (°)',min_value=0.,max_value=90.,step=0.5,value=[0.,90.])
-    
+
     include_noinclin=st.toggle('Include Sources with no inclination information',value=True)
     
     incl_inside=st.toggle('Only include sources with uncertainties strictly compatible with the current limits',value=False)
@@ -788,7 +818,28 @@ if replace_high_e_multi:
             Tin_diskbb_list[i_obj][i_epoch]=Tin_diskbb_list_multi[i_obj][id_match_multi[0]]
 
 
-'''RESTRICTION MASKING AND TRANSPOSING'''
+
+# creating the global inclination dictionnary depending on what options have been selected
+
+# first a list of the dictionnaries selected, ordered according to the selection order
+inclination_dict_list_use = [inclination_dict_lis[np.argwhere(inclination_options == elem)[0][0]] for elem in
+                             inclination_prio]
+
+# then creating a global dictionnary from this order:
+incl_dict_use = {}
+
+for elem_dict in inclination_dict_list_use:
+    for elem_source in list(elem_dict.keys()):
+        # adding the elements not already in the global dictionnary
+        # with an option according to the surety option selected
+        if elem_source not in list(incl_dict_use.keys()) and (elem_dict[elem_source][3] == 1 or use_inclination_unsure):
+            incl_dict_use[elem_source] = elem_dict[elem_source][:-1]
+
+dict_linevis['incl_dict_use'] = incl_dict_use
+
+'''
+#RESTRICTION MASKING AND TRANSPOSING
+'''
 
 n_obj_init=len(obj_list)
 
@@ -934,7 +985,9 @@ with st.sidebar.expander('Visualisation'):
     global_colors=st.toggle('Normalize colors/colormaps over the entire sample',value=False)
         
     hid_log_HR=st.toggle('Use log scale for the Hardness Ratio',value=True)
-    
+
+    display_minorticks=st.toggle('Display minor ticks for the Hardness Ratio',value=False)
+
     if not online:
         paper_look=st.toggle('Paper look',value=False)
 
@@ -973,7 +1026,7 @@ with st.sidebar.expander('Broad band HID'):
     HR_broad_bands=st.radio('HID Hardness Ratio',('[BAND]/[3-6]','([6-10]+[BAND])/[3-6]'))
     lum_broad_bands=st.radio('HID Luminosity',('[3-10]','[3-10]+[BAND]'))
 
-    sign_broad_hid_BAT=st.toggle('Restrict Broad hID to 2 sigma significant highE measurements',value=False)
+    sign_broad_hid_BAT=st.toggle('Restrict Broad HID to 2 sigma significant highE measurements',value=False)
 
 
 expander_monit=st.sidebar.expander('Monitoring')
@@ -1051,7 +1104,9 @@ else:
     fig_hid,ax_hid=plt.subplots(1,1,figsize=(8,6))
 ax_hid.clear()
 
-'''Dichotomy'''
+'''
+#Dichotomy
+'''
 
 #some warnings to avoid crashes
 if radio_single !='All Objects' and len(choice_source)<1:
@@ -1073,14 +1128,19 @@ if radio_info_cmap=='EW ratio' and len(ew_ratio_ids)<2:
 #string of the colormap legend for the informations
 radio_info_label=['Velocity shift', r'$\Delta-C$', 'Equivalent width ratio']
 
+
 #masking the objects depending on inclination
-mask_inclin=[include_noinclin if elem not in incl_dic else getoverlap((incl_dic[elem][0]-incl_dic[elem][1],incl_dic[elem][0]+incl_dic[elem][2]),slider_inclin)>0 for elem in obj_list]
+mask_inclin=[include_noinclin if elem not in incl_dict_use else getoverlap((incl_dict_use[elem][0]-incl_dict_use[elem][1],incl_dict_use[elem][0]+incl_dict_use[elem][2]),slider_inclin)>0 for elem in obj_list]
 
 #creating the mask for highlighting objects whose inclination limits go beyond the inclination restrictions if asked to
-bool_incl_inside=np.array([False if elem not in incl_dic else round(getoverlap((incl_dic[elem][0]-incl_dic[elem][1],
-            incl_dic[elem][0]+incl_dic[elem][2]),slider_inclin),3)==incl_dic[elem][1]+incl_dic[elem][2] for elem in obj_list])
+bool_incl_inside=np.array([False if elem not in incl_dict_use else\
+                           round(getoverlap((incl_dict_use[elem][0]-incl_dict_use[elem][1],
+                                 incl_dict_use[elem][0]+incl_dict_use[elem][2]),slider_inclin),3)==\
+                           incl_dict_use[elem][1]+incl_dict_use[elem][2] and\
+                           (incl_dict_use[elem][0]>=slider_inclin[0] and incl_dict_use[elem][0]<=slider_inclin[1])\
+                           for elem in obj_list])
 
-bool_noincl=np.array([True if elem not in incl_dic else False for elem in obj_list])
+bool_noincl=np.array([True if elem not in incl_dict_use else False for elem in obj_list])
 
 
 if incl_inside:
@@ -1846,6 +1906,8 @@ dict_linevis['lum_plot'] = lum_plot
 dict_linevis['use_obsids'] = use_obsids
 dict_linevis['exptime_list'] = exptime_list
 dict_linevis['hid_log_HR'] = hid_log_HR
+dict_linevis['display_minorticks']=display_minorticks
+
 if len(global_plotted_datetime)==0:
     st.warning('No points remaining with current sample/date selection')
 elif not skip_HID:
@@ -3007,9 +3069,9 @@ with st.sidebar.expander('Parameter analysis'):
     show_scatter_ul=st.toggle('Display upper limits in EW plots',value=False)
     lock_lims_det=not(st.toggle('Include upper limits in graph bounds computations',value=True))
 
-    st.header('High-energy')
+    st.header('Non-standard plots')
     plot_gamma_correl=st.toggle('Plot powerlaw index correlations',value=False)
-
+    plot_physical_compa=st.toggle('Plot physical parameter correlations for the global sample',value=False)
 
 if compute_only_withdet:
 
@@ -3092,7 +3154,9 @@ os.system('mkdir -p '+save_dir+'/graphs/inclin')
 # AUTOFIT LINES
 '''
 
-'''Distributions'''
+'''
+#Distributions
+'''
 
 def streamlit_distrib():
     distrib_ew=distrib_graph(abslines_plot_restrict,'ew',dict_linevis,conf_thresh=slider_sign,streamlit=True,bigger_text=bigger_text,split=split_distrib)
@@ -3158,9 +3222,9 @@ def streamlit_distrib():
                 with col_list['width']:
                     st.pyplot(distrib_width)
                 
-'''1-1 Correlations'''
-
-'''Intrinsic line parameters'''
+'''
+#1-1 Correlations
+'''
 
 def streamlit_scat(mode):
     
@@ -3932,7 +3996,7 @@ if display_single and choice_source[0]=='4U1630-47' and plot_gamma_correl:
     plt.yscale('log')
 
     with tab_param:
-        with st.expander('High energy correlations'):
+        with st.expander('High energy derivation correlations'):
             he_cols=st.columns(2)
             with he_cols[0]:
                 st.pyplot(fig_gamma_bat_rate)
@@ -3963,3 +4027,409 @@ if display_single and choice_source[0]=='4U1630-47' and plot_gamma_correl:
             #
             # with he_cols[2]:
             #     st.pyplot(fig_flux_BAT_native)
+
+if plot_physical_compa:
+
+    sources_refl=np.array(list(incl_refl_dict.keys()))
+    sources_dyn=np.array(list(incl_dyn_dict.keys()))
+    sources_jet=np.array(list(incl_jet_dict.keys()))
+    sources_misc=np.array(list(incl_misc_dict.keys()))
+
+    sources_incl_refl_dyn=[elem for elem in sources_refl if elem in sources_dyn]
+    sources_incl_refl_jet=[elem for elem in sources_refl if elem in sources_jet]
+    sources_incl_refl_misc=[elem for elem in sources_refl if elem in sources_misc]
+
+    '''
+    #reflection-dynamical inclination plot
+    '''
+    
+    fig_refl_dyn,ax_refl_dyn=plt.subplots(figsize=(6,6))
+
+    ax_refl_dyn.set_xlim(0,90)
+    ax_refl_dyn.set_ylim(0,90)
+
+    ax_refl_dyn.set_title('Reflection vs dynamical inclination comparison',fontsize=14)
+    ax_refl_dyn.set_xlabel('reflection inclination (°)')
+    ax_refl_dyn.set_ylabel('dynamical inclination (°)')
+
+    cmap_refl_dyn=mpl.cm.plasma
+    norm_colors_refl_dyn = mpl.colors.Normalize(vmin=0, vmax=len(sources_incl_refl_dyn)-1)
+    colors_func_refl_dyn = mpl.cm.ScalarMappable(norm=norm_colors_refl_dyn , cmap=cmap_refl_dyn)
+
+    color_arr_refl_dyn = np.array([colors_func_refl_dyn.to_rgba(i) for i in range(len(sources_incl_refl_dyn))])
+
+    ax_refl_dyn.plot([0,90],[0,90],color='grey',ls='--',lw=0.5)
+
+    for i_source,elem_source in enumerate(sources_incl_refl_dyn):
+
+        elem_xuplim=incl_refl_dict[elem_source][0] == incl_refl_dict[elem_source][1]
+        elem_xlolim=incl_refl_dict[elem_source][0] + incl_refl_dict[elem_source][2] >= 90
+        elem_uplim=incl_dyn_dict[elem_source][0] == incl_dyn_dict[elem_source][1]
+        elem_lolim=incl_dyn_dict[elem_source][0] + incl_dyn_dict[elem_source][2] >= 90
+
+        # axis errorbars
+        err_refl_dyn=ax_refl_dyn.errorbar(incl_refl_dict[elem_source][0],incl_dyn_dict[elem_source][0],
+                     xerr=5 if elem_xuplim or elem_xlolim else np.array([incl_refl_dict[elem_source][1:-1]]).T,
+                     yerr=5 if elem_uplim or elem_lolim else np.array([incl_dyn_dict[elem_source][1:-1]]).T,
+                     ls='',label=elem_source,color=color_arr_refl_dyn[i_source],
+                      xuplims=elem_xuplim,
+                      xlolims=elem_xlolim,
+                      uplims=elem_uplim,
+                      lolims=elem_lolim,
+                      marker='d' if elem_source in dippers_list else '.')
+
+        #dashing unsure measurements
+        if incl_refl_dict[elem_source][-1]==0:
+            err_refl_dyn[-1][0].set_linestyle('--')
+
+        if incl_dyn_dict[elem_source][-1]==1:
+            err_refl_dyn[-1][1].set_linestyle('--')
+
+    ax_refl_dyn.legend(loc='lower left')
+
+
+    '''
+    #reflection-jet inclination plot
+    '''
+    fig_refl_jet,ax_refl_jet=plt.subplots(figsize=(6,6))
+
+    ax_refl_jet.set_xlim(0,90)
+    ax_refl_jet.set_ylim(0,90)
+
+    ax_refl_jet.set_title('Reflection vs jet inclination comparison',fontsize=14)
+    ax_refl_jet.set_xlabel('reflection inclination (°)')
+    ax_refl_jet.set_ylabel('jet inclination (°)')
+
+    cmap_refl_jet=mpl.cm.plasma
+    norm_colors_refl_jet = mpl.colors.Normalize(vmin=0, vmax=len(sources_incl_refl_jet) - 1)
+    colors_func_refl_jet = mpl.cm.ScalarMappable(norm=norm_colors_refl_jet , cmap=cmap_refl_jet)
+
+    color_arr_refl_jet = np.array([colors_func_refl_jet.to_rgba(i) for i in range(len(sources_incl_refl_jet))])
+
+    ax_refl_jet.plot([0,90],[0,90],color='grey',ls='--',lw=0.5)
+
+    for i_source,elem_source in enumerate(sources_incl_refl_jet):
+
+        elem_xuplim=incl_refl_dict[elem_source][0] == incl_refl_dict[elem_source][1]
+        elem_xlolim=incl_refl_dict[elem_source][0] + incl_refl_dict[elem_source][2] >= 90
+        elem_uplim=incl_jet_dict[elem_source][0] == incl_jet_dict[elem_source][1]
+        elem_lolim=incl_jet_dict[elem_source][0] + incl_jet_dict[elem_source][2] >= 90
+
+        # axis errorbars
+        err_refl_jet=ax_refl_jet.errorbar(incl_refl_dict[elem_source][0],incl_jet_dict[elem_source][0],
+                     xerr=5 if elem_xuplim or elem_xlolim else np.array([incl_refl_dict[elem_source][1:-1]]).T,
+                     yerr=5 if elem_uplim or elem_lolim else np.array([incl_jet_dict[elem_source][1:-1]]).T,
+                     ls='',label=elem_source,color=color_arr_refl_jet[i_source],
+                      xuplims=elem_xuplim,
+                      xlolims=elem_xlolim,
+                      uplims=elem_uplim,
+                      lolims=elem_lolim,
+                      marker='d' if elem_source in dippers_list else '.')
+
+        #dashing unsure measurements
+        if incl_refl_dict[elem_source][-1]==0:
+            err_refl_jet[-1][0].set_linestyle('--')
+
+        if incl_jet_dict[elem_source][-1]==0:
+            err_refl_jet[-1][1].set_linestyle('--')
+
+    ax_refl_jet.legend(loc='lower left')
+
+            
+    '''
+    #reflection-misc inclination plot
+    '''
+    
+    fig_refl_misc,ax_refl_misc=plt.subplots(figsize=(6,6))
+
+    ax_refl_misc.set_xlim(0,90)
+    ax_refl_misc.set_ylim(0,90)
+
+    ax_refl_misc.set_title('Reflection vs other inclination comparison',fontsize=14)
+    ax_refl_misc.set_xlabel('reflection inclination (°)')
+    ax_refl_misc.set_ylabel('other inclination (°)')
+
+    cmap_refl_misc=mpl.cm.plasma
+    norm_colors_refl_misc = mpl.colors.Normalize(vmin=0, vmax=len(sources_incl_refl_misc) - 1)
+    colors_func_refl_misc = mpl.cm.ScalarMappable(norm=norm_colors_refl_misc , cmap=cmap_refl_misc)
+
+    color_arr_refl_misc = np.array([colors_func_refl_misc.to_rgba(i) for i in range(len(sources_incl_refl_misc))])
+
+    ax_refl_misc.plot([0,90],[0,90],color='grey',ls='--',lw=0.5)
+
+    for i_source,elem_source in enumerate(sources_incl_refl_misc):
+
+        elem_xuplim=incl_refl_dict[elem_source][0] == incl_refl_dict[elem_source][1]
+        elem_xlolim=incl_refl_dict[elem_source][0] + incl_refl_dict[elem_source][2] >= 90
+        elem_uplim=incl_misc_dict[elem_source][0] == incl_misc_dict[elem_source][1]
+        elem_lolim=incl_misc_dict[elem_source][0] + incl_misc_dict[elem_source][2] >= 90
+
+        # axis errorbars
+        err_refl_misc=ax_refl_misc.errorbar(incl_refl_dict[elem_source][0],incl_misc_dict[elem_source][0],
+                     xerr=5 if elem_xuplim or elem_xlolim else np.array([incl_refl_dict[elem_source][1:-1]]).T,
+                     yerr=5 if elem_uplim or elem_lolim else np.array([incl_misc_dict[elem_source][1:-1]]).T,
+                     ls='',label=elem_source,color=color_arr_refl_misc[i_source],
+                      xuplims=elem_xuplim,
+                      xlolims=elem_xlolim,
+                      uplims=elem_uplim,
+                      lolims=elem_lolim,
+                      marker='d' if elem_source in dippers_list else '.')
+
+        #dashing unsure measurements
+        if incl_refl_dict[elem_source][-1]==0:
+            err_refl_misc[-1][0].set_linestyle('--')
+
+        if incl_misc_dict[elem_source][-1]==0:
+            err_refl_misc[-1][1].set_linestyle('--')
+
+    ax_refl_misc.legend(loc='lower left')
+
+
+    '''
+    #Porb_incl plot
+    '''
+
+    sources_incl_all=np.array(list(incl_dict_use.keys()))
+    sources_porb=np.array(list(Porb_dict.keys()))
+
+    sources_incl_porb=[elem for elem in sources_porb if elem in sources_incl_all]
+
+    fig_Porb_incl, ax_Porb_incl = plt.subplots(figsize=(6, 6))
+
+    ax_Porb_incl.set_xlim(1, 1e3)
+    ax_Porb_incl.set_xscale('log')
+    ax_Porb_incl.set_ylim(0, 90)
+
+    ax_Porb_incl.set_title('Distribution of Orbital period and inclination', fontsize=14)
+    ax_Porb_incl.set_xlabel('Orbital Period (h)')
+    ax_Porb_incl.set_ylabel('Inclination (°)')
+
+    # cmap_Porb_incl = mpl.cm.plasma
+    # norm_colors_Porb_incl = mpl.colors.Normalize(vmin=0, vmax=len(sources_incl_Porb) - 1)
+    # colors_func_Porb_incl = mpl.cm.ScalarMappable(norm=norm_colors_Porb_incl, cmap=cmap_Porb_incl)
+    #
+    # color_arr_Porb_incl = np.array([colors_func_Porb_incl.to_rgba(i) for i in range(len(sources_incl_Porb))])
+
+    for i_source, elem_source in enumerate(sources_incl_porb):
+
+        elem_xuplim = Porb_dict[elem_source][0] == Porb_dict[elem_source][1]
+        elem_xlolim = False
+        elem_uplim = incl_dict_use[elem_source][0] ==incl_dict_use[elem_source][1]
+        elem_lolim = incl_dict_use[elem_source][0] + incl_dict_use[elem_source][2] >= 90
+
+        # axis errorbars
+        err_Porb_incl = ax_Porb_incl.errorbar(Porb_dict[elem_source][0], incl_dict_use[elem_source][0],
+                                              xerr=5 if elem_xuplim or elem_xlolim else np.array(
+                                                  [Porb_dict[elem_source][1:-1]]).T,
+                                              yerr=5 if elem_uplim or elem_lolim else np.array(
+                                                  [incl_dict_use[elem_source][1:-1]]).T,
+                                              ls='', label=elem_source, color='grey',
+                                              xuplims=elem_xuplim,
+                                              xlolims=elem_xlolim,
+                                              uplims=elem_uplim,
+                                              lolims=elem_lolim,
+                                              marker='d' if elem_source in dippers_list else '.')
+
+        # dashing unsure measurements
+        if Porb_dict[elem_source][-1] == 0:
+            err_Porb_incl[-1][0].set_linestyle('--')
+
+        if incl_dict_use[elem_source][-1] == 0:
+            err_Porb_incl[-1][1].set_linestyle('--')
+
+    # ax_Porb_incl.legend(loc='lower left')
+
+    '''
+    #iron band wind detections
+    '''
+
+    fig_wind_ib, ax_wind_ib = plt.subplots(figsize=(6, 6))
+
+    ax_wind_ib.set_xlim(1, 1e3)
+    ax_wind_ib.set_xscale('log')
+    ax_wind_ib.set_ylim(0, 90)
+
+    ax_wind_ib.set_title('Iron band wind detections', fontsize=14)
+    ax_wind_ib.set_xlabel('Orbital Period (h)')
+    ax_wind_ib.set_ylabel('Inclination (°)')
+
+    sources_wind_ib=[elem for elem in wind_det_sources if wind_det_dict[elem].iron_band is not False]
+
+    sources_wind_ib_sure=[elem for elem in wind_det_sources if wind_det_dict[elem].iron_band is not False and\
+                          wind_det_dict[elem].iron_band.trust_noem]
+
+    sources_wind_ib_porb=[elem for elem in sources_wind_ib if elem in sources_incl_porb]
+
+    cmap_wind_ib = mpl.cm.plasma
+    norm_colors_wind_ib = mpl.colors.Normalize(vmin=0, vmax=len(sources_wind_ib_porb) - 1)
+    colors_func_wind_ib = mpl.cm.ScalarMappable(norm=norm_colors_wind_ib, cmap=cmap_wind_ib)
+
+    color_arr_wind_ib = np.array([colors_func_wind_ib.to_rgba(i) for i in range(len(sources_wind_ib_porb))])
+
+    for i_source, elem_source in enumerate(sources_wind_ib_porb):
+
+        elem_xuplim = Porb_dict[elem_source][0] == Porb_dict[elem_source][1]
+        elem_xlolim = False
+        elem_uplim = incl_dict_use[elem_source][0] ==incl_dict_use[elem_source][1]
+        elem_lolim = incl_dict_use[elem_source][0] + incl_dict_use[elem_source][2] >= 90
+
+        # axis errorbars
+        err_wind_ib = ax_wind_ib.errorbar(Porb_dict[elem_source][0], incl_dict_use[elem_source][0],
+                                              xerr=5 if elem_xuplim or elem_xlolim else np.array(
+                                                  [Porb_dict[elem_source][1:-1]]).T,
+                                              yerr=5 if elem_uplim or elem_lolim else np.array(
+                                                  [incl_dict_use[elem_source][1:-1]]).T,
+                                              ls='', label=elem_source, color=color_arr_wind_ib[i_source],
+                                              alpha=1 if elem_source in sources_wind_ib_sure else 0.3,
+                                              xuplims=elem_xuplim,
+                                              xlolims=elem_xlolim,
+                                              uplims=elem_uplim,
+                                              lolims=elem_lolim,
+                                              marker='d' if elem_source in dippers_list else '.')
+
+        # dashing unsure measurements
+        if Porb_dict[elem_source][-1] == 0:
+            err_wind_ib[-1][0].set_linestyle('--')
+
+        if incl_dict_use[elem_source][-1] == 0:
+            err_wind_ib[-1][1].set_linestyle('--')
+
+    ax_wind_ib.legend(loc='lower left')
+
+
+    '''
+    #soft x wind detections
+    '''
+
+    fig_wind_softx, ax_wind_softx = plt.subplots(figsize=(6, 6))
+
+    ax_wind_softx.set_xlim(1, 1e3)
+    ax_wind_softx.set_xscale('log')
+    ax_wind_softx.set_ylim(0, 90)
+
+    ax_wind_softx.set_title('Soft X wind detections', fontsize=14)
+    ax_wind_softx.set_xlabel('Orbital Period (h)')
+    ax_wind_softx.set_ylabel('Inclination (°)')
+
+    sources_wind_softx=[elem for elem in wind_det_sources if wind_det_dict[elem].soft_x is not False]
+
+    sources_wind_softx_sure=[elem for elem in wind_det_sources if wind_det_dict[elem].iron_band is not False and\
+                          wind_det_dict[elem].iron_band.trust_noem]
+
+    sources_wind_softx_porb=[elem for elem in sources_wind_softx if elem in sources_incl_porb]
+
+    cmap_wind_softx = mpl.cm.plasma
+    norm_colors_wind_softx = mpl.colors.Normalize(vmin=0, vmax=len(sources_wind_softx_porb) - 1)
+    colors_func_wind_softx = mpl.cm.ScalarMappable(norm=norm_colors_wind_softx, cmap=cmap_wind_softx)
+
+    color_arr_wind_softx = np.array([colors_func_wind_softx.to_rgba(i) for i in range(len(sources_wind_softx_porb))])
+
+    for i_source, elem_source in enumerate(sources_wind_softx_porb):
+
+        elem_xuplim = Porb_dict[elem_source][0] == Porb_dict[elem_source][1]
+        elem_xlolim = False
+        elem_uplim = incl_dict_use[elem_source][0] ==incl_dict_use[elem_source][1]
+        elem_lolim = incl_dict_use[elem_source][0] + incl_dict_use[elem_source][2] >= 90
+
+        # axis errorbars
+        err_wind_softx = ax_wind_softx.errorbar(Porb_dict[elem_source][0], incl_dict_use[elem_source][0],
+                                              xerr=5 if elem_xuplim or elem_xlolim else np.array(
+                                                  [Porb_dict[elem_source][1:-1]]).T,
+                                              yerr=5 if elem_uplim or elem_lolim else np.array(
+                                                  [incl_dict_use[elem_source][1:-1]]).T,
+                                              ls='', label=elem_source, color=color_arr_wind_softx[i_source],
+                                              alpha=1 if elem_source in sources_wind_softx_sure else 0.3,
+                                              xuplims=elem_xuplim,
+                                              xlolims=elem_xlolim,
+                                              uplims=elem_uplim,
+                                              lolims=elem_lolim,
+                                              marker='d' if elem_source in dippers_list else '.')
+
+        # dashing unsure measurements
+        if Porb_dict[elem_source][-1] == 0:
+            err_wind_softx[-1][0].set_linestyle('--')
+
+        if incl_dict_use[elem_source][-1] == 0:
+            err_wind_softx[-1][1].set_linestyle('--')
+
+    ax_wind_softx.legend(loc='lower left')
+
+
+    '''
+     #OIR wind detections
+    '''
+
+    fig_wind_oir, ax_wind_oir = plt.subplots(figsize=(6, 6))
+
+    ax_wind_oir.set_xlim(1, 1e3)
+    ax_wind_oir.set_xscale('log')
+    ax_wind_oir.set_ylim(0, 90)
+
+    ax_wind_oir.set_title('OIR wind detections', fontsize=14)
+    ax_wind_oir.set_xlabel('Orbital Period (h)')
+    ax_wind_oir.set_ylabel('Inclination (°)')
+
+    sources_wind_oir=[elem for elem in wind_det_sources if (wind_det_dict[elem].visible is not False or\
+                                                           wind_det_dict[elem].infrared is not False)]
+
+    sources_wind_oir_sure=[elem for elem in wind_det_sources if ((wind_det_dict[elem].visible is not False and\
+                          wind_det_dict[elem].visible.trust_noem) or (wind_det_dict[elem].infrared is not False and\
+                          wind_det_dict[elem].infrared.trust_noem))]
+
+    sources_wind_oir_porb=[elem for elem in sources_wind_oir if elem in sources_incl_porb]
+
+    cmap_wind_oir = mpl.cm.plasma
+    norm_colors_wind_oir = mpl.colors.Normalize(vmin=0, vmax=len(sources_wind_oir_porb) - 1)
+    colors_func_wind_oir = mpl.cm.ScalarMappable(norm=norm_colors_wind_oir, cmap=cmap_wind_oir)
+
+    color_arr_wind_oir = np.array([colors_func_wind_oir.to_rgba(i) for i in range(len(sources_wind_oir_porb))])
+
+    for i_source, elem_source in enumerate(sources_wind_oir_porb):
+
+        elem_xuplim = Porb_dict[elem_source][0] == Porb_dict[elem_source][1]
+        elem_xlolim = False
+        elem_uplim = incl_dict_use[elem_source][0] ==incl_dict_use[elem_source][1]
+        elem_lolim = incl_dict_use[elem_source][0] + incl_dict_use[elem_source][2] >= 90
+
+        # axis errorbars
+        err_wind_oir = ax_wind_oir.errorbar(Porb_dict[elem_source][0], incl_dict_use[elem_source][0],
+                                              xerr=5 if elem_xuplim or elem_xlolim else np.array(
+                                                  [Porb_dict[elem_source][1:-1]]).T,
+                                              yerr=5 if elem_uplim or elem_lolim else np.array(
+                                                  [incl_dict_use[elem_source][1:-1]]).T,
+                                              ls='', label=elem_source, color=color_arr_wind_oir[i_source],
+                                              alpha=1 if elem_source in sources_wind_oir_sure else 0.3,
+                                              xuplims=elem_xuplim,
+                                              xlolims=elem_xlolim,
+                                              uplims=elem_uplim,
+                                              lolims=elem_lolim,
+                                              marker='d' if elem_source in dippers_list else '.')
+
+        # dashing unsure measurements
+        if Porb_dict[elem_source][-1] == 0:
+            err_wind_oir[-1][0].set_linestyle('--')
+
+        if incl_dict_use[elem_source][-1] == 0:
+            err_wind_oir[-1][1].set_linestyle('--')
+
+    ax_wind_oir.legend(loc='lower left')
+
+    #streamlit display
+
+    with tab_param:
+        with st.expander('Physical parameter correlations'):
+            phys_cols=st.columns(3)
+            with phys_cols[0]:
+                st.pyplot(fig_refl_dyn)
+                st.pyplot(fig_wind_ib)
+                st.pyplot(fig_Porb_incl)
+
+            with phys_cols[1]:
+                st.pyplot(fig_refl_jet)
+                st.pyplot(fig_wind_softx)
+
+            with phys_cols[2]:
+                st.pyplot(fig_refl_misc)
+                st.pyplot(fig_wind_oir)
+
+

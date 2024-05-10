@@ -108,53 +108,239 @@ telescope_colors={'Chandra':colors_func_instru.to_rgba(0),
 
 #note: in order to make sure we can use our overlap function, we add a very slight uncertainty to inclinations without uncertainties, 
 #to make sur the overlap result with the inclination constraints is not 0
-incl_dic={
-        '1H1659-487':[57.5,20.5,20.5],
-        'GX339-4':[57.5,20.5,20.5],
-        #grs with both ortographs to swap colors sometimes
-        'GRS1915+105':[64,4,4],
-        'GRS 1915+105':[64,4,4],
-        'MAXIJ1820+070':[74,7,7],
-        'H1743-322':[75,3,3],
-        '4U1630-472':[67.5,7.5,7.5],
-        '4U1630-47':[67.5,7.5,7.5],
-        'SwiftJ1658.2-4242':[64,3,2],
-        'IGRJ17091-3624':[70,0,0.001],
-        'MAXIJ1535-571':[45,45,0],
-        '1E1740.7-2942':[50,0,40],
-        'GROJ1655-40':[69,2,2],
-        'SwiftJ1753.5-0127':[55,7,2],
-         #mixed both reflection measurements here
-        'EXO1846-031':[56.5,16.5,16.5],
-        '4U1957+115':[13,0,0.001],
-        'MAXIJ1348-630':[28,3,44],
-        'XTEJ1752-223':[49,49,0],
-        'MAXIJ1659-152':[70,10,10],
-        'GS1354-64':[70,0,0.001],
-        'XTEJ1650-500':[47,0,43],
-        #for 17451 we only have eclipses constraints
-        'IGRJ17451-3022':[70,0,20],
-        'SwiftJ1357.2-0933':[80,0,10],
-        'XTEJ1652-453':[32,32,0],
-        'MAXIJ1803-298':[70,0,20],
-        'V4641Sgr':[72,4,4],
-        'V404Cyg':[67,1,3],
-        'XTEJ1550-564':[75,4,4],
-        'MAXIJ1305-704':[72,8,5],
-        'AT2019wey':[30,30,0],
-        '4U1543-475':[21,2,2],
-        'GRS1739-278':[33,0,0.001],
-        'XTEJ1118+480':[72,2,2],
-        'GRS1716-249':[50,10,10],
-        'MAXIJ0637-430':[64,6,6]
+# incl_dic={
+#         '1H1659-487':[57.5,20.5,20.5],
+#         'GX339-4':[57.5,20.5,20.5],
+#         #grs with both ortographs to swap colors sometimes
+#         'GRS1915+105':[64,4,4],
+#         'GRS 1915+105':[64,4,4],
+#         'MAXIJ1820+070':[74,7,7],
+#         'H1743-322':[75,3,3],
+#         '4U1630-472':[67.5,7.5,7.5],
+#         '4U1630-47':[67.5,7.5,7.5],
+#         'SwiftJ1658.2-4242':[64,3,2],
+#         'IGRJ17091-3624':[70,0,0.001],
+#         'MAXIJ1535-571':[45,45,0],
+#         '1E1740.7-2942':[50,0,40],
+#         'GROJ1655-40':[69,2,2],
+#         'SwiftJ1753.5-0127':[55,7,2],
+#          #mixed both reflection measurements here
+#         'EXO1846-031':[56.5,16.5,16.5],
+#         '4U1957+115':[13,0,0.001],
+#         'MAXIJ1348-630':[28,3,44],
+#         'XTEJ1752-223':[49,49,0],
+#         'MAXIJ1659-152':[70,10,10],
+#         'GS1354-64':[70,0,0.001],
+#         'XTEJ1650-500':[47,0,43],
+#         #for 17451 we only have eclipses constraints
+#         'IGRJ17451-3022':[70,0,20],
+#         'SwiftJ1357.2-0933':[80,0,10],
+#         'XTEJ1652-453':[32,32,0],
+#         'MAXIJ1803-298':[70,0,20],
+#         'V4641Sgr':[72,4,4],
+#         'V404Cyg':[67,1,3],
+#         'XTEJ1550-564':[75,4,4],
+#         'MAXIJ1305-704':[72,8,5],
+#         'AT2019wey':[30,30,0],
+#         '4U1543-475':[21,2,2],
+#         'GRS1739-278':[33,0,0.001],
+#         'XTEJ1118+480':[72,2,2],
+#         'GRS1716-249':[50,10,10],
+#         'MAXIJ0637-430':[64,6,6]
+#          }
+
+incl_dyn_dict={
+        '4U1543-475':[20.7,1.5,1.5,1],
+        '4U1630-47':[67.5,7.5,7.5,1],
+        '4U1957+115':[13,0,0,0],
+        'A0620-00':[52.6,2.5,2.5,1],
+        'A1524-61':[57,13,13,1],
+        'GROJ0422+32':[56,4,4,1],
+        'GROJ1655-40':[69,2,2,1],
+        'GRS1009-45':[59,22,22,0],
+        'GRS1716-249':[61,15,15,1],
+        'GRS1915+105':[64,4,4,1],
+        'GS1354-64':[79,79,0,0],
+        'GS2000+251':[68,6,6,1],
+        'GX339-4':[57,20,20,0],
+        'H1705-250':[64,16,16,1],
+        'IGRJ17451-3022':[70,0,20,1],
+        'MAXIJ1305-704':[72,8,5,1],
+        'MAXIJ1659-152':[70,10,10,1],
+        'MAXIJ1803-298':[67,8,8,1],
+        'MAXIJ1820+070':[74,7,7,1],
+        'MAXIJ1836-194':[9,5,6,1],
+        'MAXIJ1848-015':[77,2,2,1],
+        'NovaMuscae1991':[43,3,2,1],
+        'SwiftJ1357.2-0933':[81,12,9,1],
+        'V404Cyg':[67,1,2,1],
+        'V4641Sgr':[72,4,4,1],
+        'XTEJ1118+480':[72,2,2,1],
+        'XTEJ1550-564':[75,4,4,1],
+        'XTEJ1650-500':[47,0,43,0],
+        'XTEJ1859+226':[67,4,4,1]
+}
+
+incl_jet_dict={'H1743-322':[75,3,3,1],
+              'MAXIJ1348-630':[28,3,3,1],
+              'MAXIJ1535-571':[45,45,0,0],
+              'XTEJ1752-223':[49,49,0,0],}
+
+incl_misc_dict={'IGRJ17091-3624':[70,0,0,0],
+               'MAXIJ1348-630':[65,7,7,0]
+               }
+
+incl_refl_dict={
+        '1E1740.7-2942':[31,18,29,1],
+        '4U1543-475':[67,8,7,1],
+        '4U1630-47':[55,11,8,1],
+        '4U1957+115':[52,13,12,1],
+        'AT2019wey':[14,10,12,1],
+        'EXO1846-031':[62,9,10,1],
+        'GRS1716-249':[59,12,7,1],
+        'GRS1739-278':[70,11,5,1],
+        'GRS1758-258':[67,13,8,1],
+        'GRS1915+105':[60,8,8,1],
+        'GS1354-64':[47,10,11,1],
+        'GX339-4':[49,14,14,1],
+        'H1743-322':[54,13,12,1],
+        'IGRJ17091-3624':[47,11,10,1],
+        'IGRJ17454-3019':[54,14,15,1],
+        'MAXIJ0637-430':[63,10,9,1],
+        'MAXIJ1348-630':[52,11,8,1],
+        'MAXIJ1535-571':[44,19,17,1],
+        'MAXIJ1631-479':[22,12,10,1],
+        'MAXIJ1727-203':[65,14,11,1],
+        'MAXIJ1803-298':[72,9,6,1],
+        'MAXIJ1813-095':[42,13,11,1],
+        'MAXIJ1820+070':[64,9,8,1],
+        'MAXIJ1848-015':[29,10,13,1],
+        'SwiftJ1658.2-4242':[50,10,9,1],
+        'SwiftJ1728.9-3613':[7,3,8,1],
+        'SwiftJ174540.2-290037':[31,9,8,1],
+        'SwiftJ174540.7-290015':[63,8,10,1],
+        'SwiftJ1753.5-0127':[73,8,8,1],
+        'V404Cyg':[37,8,9,0],
+        'V4641Sgr':[66,11,7,1],
+        'XTEJ1550-564':[40,10,10,1],
+        'XTEJ1652-453':[32,32,0,0],
+        'XTEJ1752-223':[35,4,4,1],
+        'XTEJ1859+226':[71,1,1,1],
+        'XTEJ1908+094':[28,11,11,1],
+        'XTEJ2012+381':[68,11,6,1]
          }
+
+Porb_dict={'1E1740.7-2942':[303,2,1,1],
+           '4U1543-475':[26.8,0,0,1],
+           '4U1957+115':[9.33,0,0,1],
+           'A0620-00':[7.75,0,0,1],
+           'A1524-61':[6.2,2,2,1],
+           'CXOGC174540.0-290031':[7.8,0,0,1],
+           'GROJ0422+32':[5.09,0,0,1],
+           'GROJ1655-40':[62.9,0,0,1],
+           'GRS1009-45':[6.85,0,0,1],
+           'GRS1716-249':[6.67,0,0,1],
+           'GRS1915+105':[812,4,4,1],
+           'GS1354-64':[61.1,0,0,1],
+           'GS2000+251':[8.26,0,0,1],
+           'GX339-4':[42.2,0,0,1],
+           'H1705-250':[12.51,0,0,1],
+           'IGRJ17451-3022':[6.3,0,0,1],
+           'MAXIJ0637-430':[2.2,1,1,0],
+           'MAXIJ1305-704':[9.5,0.1,0.1,1],
+           'MAXIJ1659-152':[2.4,0,0,1],
+           'MAXIJ1803-298':[7,0.2,0.2,1],
+           'MAXIJ1820+270':[16.5,0,0,1],
+           'NovaMuscae1991':[10.4,0,0,1],
+           'SwiftJ1357.2-0933':[2.8,0.3,0.3,1],
+           'SwiftJ1727.8-1613':[7.6,0.2,0.2,1],
+           'SwiftJ174510.8-262411':[11.3,11.3,0,0],
+           'SwiftJ1753.5-0127':[3.2,0,0,1],
+           'SwiftJ1910.2-0546':[2.4,0.1,0.1,1],
+           'V404Cyg':[155.3,0,0,1],
+           'V4641Sgr':[67.6,0,0,1],
+           'XTEJ1118+480':[4.1,0,0,1],
+           'XTEJ1550-564':[37.0,0,0,1],
+           'XTEJ1650-500':[7.7,0,0,1],
+           'XTEJ1752-223':[7,7,0,0],
+           'XTEJ1859+226':[6.6,0,0,1]}
+
+dist_dict={
+    '4U1543-475':[7.5,0.5,0.5,1],
+    '4U1630-47':[8.1,3.4,3.4,1],
+    '4U1755-388':[6.5,2.5,2.5,1],
+    'A0620-00':[1.06,1,1,1],
+    'A1524-61':[8,0.9,0.9,1],
+    'EXO1846-031':[7,0,0,0],
+    'GROJ0422+32':[2.5,0.3,0.3,1],
+    'GROJ1655-40':[3.2,0.2,0.2,1],
+    'GRS1009-45':[3.8,0.3,0.3,1],
+    'GRS1716-249':[6.9,1.1,1.1,1],
+    'GRS1739-278':[7.3,1.3,1.3,1],
+    'GRS1915+105':[9.4,1.6,1.6,1],
+    'GS1354-64':[25,0,0,0],
+    'GS2000+251':[2.7,0.7,0.7,1],
+    'H1705-250':[8.6,2.1,2.1,1],
+    'H1743-322':[8.5,0.8,0.8,1],
+    'IGRJ17098-3628':[10.5,0,0,0],
+    'MAXIJ1305-704':[7.5,1.4,1.8,1],
+    'MAXIJ1348-630':[3.4,0.4,0.4,1],
+    'MAXIJ1535-571':[4.1,0.5,0.6,1],
+    'MAXIJ1659-152':[8.6,3.7,3.7,1],
+    'MAXIJ1820+070':[2.96,0.33,0.33,1],
+    'MAXIJ1836-194':[7,3,3,1],
+    'MAXIJ1848-015':[3.4,0.3,0.3,1],
+    'NovaMuscae1991':[5,0.7,0.7,1],
+    'SwiftJ1727.8-1613':[2.7,0.3,0.3,1],
+    'SwiftJ1728.9-3613':[8.4,0.8,0.8,1],
+    'SwiftJ174510.8-262411':[3.7,1.1,1.1,0],
+    'SwiftJ1753.5-0127':[5.6,2.8,1.6,1],
+    'V404Cyg':[2.4,0.2,0.2,1],
+    'V4641Sgr':[6.2,0.7,0.7,1],
+    'XTEJ1118+480':[1.7,0.1,0.1,1],
+    'XTEJ1550-564':[4.4,0.4,0.6,1],
+    'XTEJ1650-500':[2.6,0.7,0.7,1],
+    'XTEJ1720-318':[6.5,3.5,3.5,1],
+    'XTEJ1752-223':[6,2,2,1],
+
+    #here there is no estimate (the one quoted in BlackCAT is utter garbage) so we keep this at 8kpc
+    'XTEJ1817-330':[8,8,8,1],
+
+    'XTEJ1818-245':[3.6,0.8,0.8],
+    'XTEJ1859+226':[12.5,1.5,1.5],
+    'XTEJ1908+094':[6.5,3.5,3.5]
+}
+
+mass_dict={
+    '4U1543-475':[8.4,1,1,1],
+    '4U1957+115':[3,1,2.5,1],
+    'A0620-00':[6.6,0.3,0.3,1],
+    'A1524-61':[5.8,2.4,3,1],
+    'GROJ0422+32':[2.7,0.5,0.7,1],
+    'GROJ1655-40':[5.4,0.3,0.3,1],
+    'GRS1716-249':[6.4,2,3.2,1],
+    'GRS1915+105':[11.2,1.8,2,1],
+    'GS2000+251':[7.2,1.7,1.7,1],
+    'GX339-4':[5.9,3.6,3.6,1],
+    'H1705-250':[5.4,1.5,1.5,1],
+    'MAXIJ1305-704':[8.9,1.,1.6,1],
+    'MAXIJ1820+070':[6.9,1.2,1.2,1],
+    'NovaMuscae1991':[11,1.4,2.1,1],
+    'SwiftJ1357.2-0933':[11.6,1.9,2.5,1],
+    'V404Cyg':[9,0.6,0.2,1],
+    'V4641Sgr':[6.4,0.6,0.6,1],
+    'XTEJ1118+480':[7.1,0.1,0.1,1],
+    'XTEJ1550-564':[11.7,3.9,3.9,1],
+    'XTEJ1859+226':[8,2,2,1]}
 
 dippers_list=['4U1543-475',
               '4U1630-47',
+              'A0620-00',
+              'CXOGC174540.0-290031',
               'GROJ1655-40',
-              'H1743-322',
               'GRS1915+105',
               'GRS 1915+105',
+              'H1743-322',
               'IGRJ17091-3624',
               'IGRJ17451-3022',
               'MAXIJ1305-704',
@@ -163,35 +349,161 @@ dippers_list=['4U1543-475',
               'MAXIJ1820+070',
               'SwiftJ1357.2-0933',
               'SwiftJ1658.2-4242',
-              'XTEJ1817-330']
+              'XTEJ1817-330',
+              'XTEJ1859+226']
 
+
+class wind_det:
+    def __init__(self,state,reflmix=False,trust=True):
+        self.state=state
+        self.reflmix=bool(int(reflmix))
+        self.trust=bool(int(trust))
+
+class band_det:
+    def __init__(self,wind_det_str):
+        '''
+        order should be 1:soft, 2:hard, 3+: weird if needed
+        '''
+
+        n_wind_det=wind_det_str.split(',')
+        self.soft=None
+        self.hard=None
+        self.trust=False
+        self.trust_noem=False
+
+        for i_det,elem_wind_det in enumerate(wind_det_str.split(',')):
+            wind_det_state=elem_wind_det.split('_')[0]
+            wind_det_reflmix=False if len(elem_wind_det.split('_'))<=1 else elem_wind_det.split('_')[1]
+            wind_det_trust=True if len(elem_wind_det.split('_'))<=2 else elem_wind_det.split('_')[2]
+
+            setattr(self,wind_det_state,wind_det(wind_det_state,wind_det_reflmix,wind_det_trust))
+
+            wind_obj=getattr(self,elem_wind_det.split('_')[0])
+            #setting a global trust for the band if at least one detection is ok
+            if wind_obj.trust:
+                self.trust=True
+
+            #setting a global trust with no reflection for the band
+            if wind_obj.trust and not wind_obj.reflmix:
+                self.trust_noem=True
+
+class source_wind:
+    '''
+    Source wind detections class
+
+    form of the values for each band: state_bool1_bool2
+
+    with bool1 for reflmix, bool2 for trust
+    '''
+    def __init__(self,iron_band=None,soft_x=None,visible=None,infrared=None):
+
+        self.trust=False
+        self.trust_noem=False
+        if iron_band is None:
+            self.iron_band=False
+        else:
+            self.iron_band=band_det(iron_band)
+
+            if self.iron_band.trust:
+                self.trust = True
+
+            if self.iron_band.trust_noem:
+                self.trust_noem=True
+
+
+        if soft_x is None:
+            self.soft_x=False
+        else:
+            self.soft_x=band_det(soft_x)
+
+            if self.soft_x.trust:
+                self.trust = True
+
+            if self.soft_x.trust_noem:
+                self.trust_noem=True
+
+        if visible is None:
+            self.visible=False
+        else:
+            self.visible=band_det(visible)
+
+            if self.visible.trust:
+                self.trust = True
+
+            if self.visible.trust_noem:
+                self.trust_noem=True
+
+        if infrared is None:
+            self.infrared=False
+        else:
+            self.infrared=band_det(infrared)
+
+            if self.infrared.trust:
+                self.trust = True
+
+            if self.infrared.trust_noem:
+                self.trust_noem=True
+
+#note: we don't list SwiftJ1658.2-4242 because for now all of its NuSTAR wind signatures have been reclassified as edges
+#otherwise we would have
+# 'SwiftJ1658.2-4242':source_wind('soft,hard'),
+
+wind_det_dict={'4U1543-47':source_wind('soft_1_0','soft_1_0'),
+              '4U1630-47':source_wind('soft','soft'),
+              'EXO1846-031':source_wind('hard_1'),
+              'GROJ1655-40':source_wind('soft','soft'),
+              'GRS1716-249':source_wind(visible='hard'),
+              'GRS1758-258':source_wind('hard_0_0'),
+              'GRS1915+105':source_wind('soft,hard','soft',infrared='hard_0_0'),
+              'GX339-4':source_wind(soft_x='hard',visible='soft,hard'),
+              'H1743-322':source_wind('soft'),
+              'IGRJ17091-3624':source_wind('soft,hard_1_0',soft_x='hard'),
+              'IGRJ17451-3022':source_wind('soft','soft'),
+              'MAXIJ1305-704':source_wind('soft,hard_1','soft,hard'),
+              'MAXIJ1348-630':source_wind('soft_1,hard_1',soft_x='hard_0_0',visible='hard',infrared='soft,hard'),
+              'MAXIJ1535-571':source_wind('soft_1,hard_1'),
+              'MAXIJ1631-479':source_wind('soft_1'),
+              'MAXIJ1803-298':source_wind('soft',visible='hard'),
+              'MAXIJ1810-222':source_wind(soft_x='soft_0_1,hard_0_1'),
+              'MAXIJ1820+070':source_wind('soft',visible='hard',infrared='soft,hard'),
+              'SwiftJ1727.8-1613':source_wind(visible='soft_0_0,hard'),
+              'SwiftJ1357.2-0933':source_wind(visible='hard'),
+              'SwiftJ151857.0-572147':source_wind('soft'),
+              'SwiftJ174540.7-290015':source_wind('soft_1_0'),
+              'V404Cyg':source_wind('hard','hard','hard'),
+              'V4641Sgr':source_wind(soft_x='soft',visible='hard'),
+              'XTEJ1550-564':source_wind('soft_1'),
+              'XTEJ1652-453':source_wind('soft_1_0')
+              }
+
+wind_det_sources=list(wind_det_dict.keys())
 #custom distande dictionnary for measurements which are not up to date in blackcat/watchdog
-dist_dic={
-    'MAXIJ1535-571':[4.1,0.6,0.5],
-    'GRS 1915+105':[9.4,1.4,1.4],
-    'GRS1915+105':[9.4,1.4,1.4],
-    'MAXIJ1348-630':[3.39,0.385,0.382],
-    'H1743-322':[8.5,0.8,0.8],
-    'SwiftJ1357.2-0933':[8,0,0],
-    }
+# dist_dic={
+#     'MAXIJ1535-571':[4.1,0.6,0.5],
+#     'GRS 1915+105':[9.4,1.4,1.4],
+#     'GRS1915+105':[9.4,1.4,1.4],
+#     'MAXIJ1348-630':[3.39,0.385,0.382],
+#     'H1743-322':[8.5,0.8,0.8],
+#     'SwiftJ1357.2-0933':[8,0,0],
+#     }
 
 #note : only dynamical measurements for BHs
-mass_dic={
-    '1H1659-487':[5.9,3.6,3.6],
-    'GRS 1915+105':[11.2,1.8,2],
-    'GRS1915+105':[11.2,1.8,2],
-    'MAXIJ1820+070':[6.9,1.2,1.2],
-    'GROJ1655-40':[5.4,0.3,0.3],
-    'SAXJ1819.3-2525':[6.4,0.6,0.6],
-    'GS2023+338':[9,0.6,0.2],
-    'XTEJ1550-564':[11.7,3.9,3.9],
-    'MAXIJ1305-704':[8.9,1.,1.6],
-    '4U1543-475':[8.4,1,1],
-    'XTEJ1118+480':[7.55,0.65,0.65],
-    # 'IGRJ17451-3022':[1.5,0,0],
-    #NS:
-    'XTEJ1701-462':[1.4,0,0]
-    }
+# mass_dic={
+#     '1H1659-487':[5.9,3.6,3.6],
+#     'GRS 1915+105':[11.2,1.8,2],
+#     'GRS1915+105':[11.2,1.8,2],
+#     'MAXIJ1820+070':[6.9,1.2,1.2],
+#     'GROJ1655-40':[5.4,0.3,0.3],
+#     'SAXJ1819.3-2525':[6.4,0.6,0.6],
+#     'GS2023+338':[9,0.6,0.2],
+#     'XTEJ1550-564':[11.7,3.9,3.9],
+#     'MAXIJ1305-704':[8.9,1.,1.6],
+#     '4U1543-475':[8.4,1,1],
+#     'XTEJ1118+480':[7.55,0.65,0.65],
+#     # 'IGRJ17451-3022':[1.5,0,0],
+#     #NS:
+#     'XTEJ1701-462':[1.4,0,0]
+#     }
 
 #BAT conversion factors for 1 cts/s in 15-50 keV counts to 15-50keV flux
 convert_BAT_count_flux={
@@ -201,14 +513,15 @@ convert_BAT_count_flux={
 
 sources_det_dic=['GRS1915+105','GRS 1915+105','GROJ1655-40','H1743-322','4U1630-47','IGRJ17451-3022']
 
-rxte_lc_path='/media/parrama/SSD/Observ/BHLMXB/RXTE/RXTE_lc_dict.pickle'
+#should be moved somewhere for online
+rxte_lc_path='/media/parrama/crucial_SSD/Observ/BHLMXB/RXTE/RXTE_lc_dict.pickle'
 
 if os.path.exists(rxte_lc_path):
     with open(rxte_lc_path,'rb') as rxte_lc_file:
         dict_lc_rxte=pickle.load(rxte_lc_file)
 else:
     dict_lc_rxte=None
-    
+
 #current number of informations in abslines_infos
 n_infos=9
 
@@ -1095,7 +1408,15 @@ def plot_lightcurve(dict_linevis,ctl_maxi_df,ctl_maxi_simbad,name,ctl_bat_df,ctl
     return fig_lc
 
 # @st.cache_data
-def dist_mass(dict_linevis):
+def dist_mass(dict_linevis,use_unsure_mass_dist=True):
+
+    '''
+    Fetches local data and blackcat/watchdog to retrieve the mass and distances of sources.
+    Local is > BC/WD because it is (currently) more up to date.
+
+    -use_unsure_mass_dist: use mass and distance measurements set as unsure in the local dictionnary
+        (with 0 for the last element of their measurement array)
+    '''
     
     ctl_blackcat=dict_linevis['ctl_blackcat']
     ctl_blackcat_obj=dict_linevis['ctl_blackcat_obj']
@@ -1109,10 +1430,14 @@ def dist_mass(dict_linevis):
     for i in range(len(names)):
         d_obj[i]='nan'
 
-        if names[i] in dist_dic:
-            #putting manual/updated distance values first
-            d_obj[i]=dist_dic[names[i]][0]
-
+        if names[i] in dist_dict:
+            try:
+                if dist_dict[names[i]][3]==1 or use_unsure_mass_dist:
+                    #putting manual/updated distance values first
+                    d_obj[i]=dist_dict[names[i]][0]
+            except:
+                breakpoint()
+                pass
         else:
             
             obj_row=None
@@ -1121,24 +1446,33 @@ def dist_mass(dict_linevis):
                 if names[i] in elem:
                     obj_row=np.argwhere(ctl_blackcat_obj==elem)[0][0]
                     break                    
-            
+
+            # breakpoint()
             if obj_row is not None:
-                d_obj[i]=ctl_blackcat.iloc[obj_row]['d [kpc]']
-                
-            #formatting : using only the main values + we do not want to use this catalog's results if they are simply upper/lower limits
-            d_obj[i]=str(d_obj[i])
-            d_obj[i]=d_obj[i].split('/')[-1].split('±')[0].split('~')[-1].split('∼')[-1]
-            
-            if '≥' in d_obj[i] or '>' in d_obj[i] or '<' in d_obj[i] or '≤' in d_obj[i]:
-                d_obj[i]='nan'
-                
-            if '-' in d_obj[i]:
-                if '+' in d_obj[i]:
-                    #taking the mean value if it's an uncertainty
-                    d_obj[i]=float(d_obj[i].split('+')[0].split('-')[0])
-                else:
-                    #taking the mean if it's an interval
-                    d_obj[i]=(float(d_obj[i].split('-')[0])+float(d_obj[i].split('-')[-1]))/2
+
+                obj_d_key = ctl_blackcat.iloc[obj_row]['d [kpc]']
+
+                if not (type(obj_d_key)==str or np.isnan(obj_d_key)) and \
+                    ('≥' not in obj_d_key and '>' not in obj_d_key):
+
+                    print('New measurement found in BlackCAT, not found in the biblio. Please check.')
+                    breakpoint()
+                    d_obj[i]=ctl_blackcat.iloc[obj_row]['d [kpc]']
+
+                    #formatting : using only the main values + we do not want to use this catalog's results if they are simply upper/lower limits
+                    d_obj[i]=str(d_obj[i])
+                    d_obj[i]=d_obj[i].split('/')[-1].split('±')[0].split('~')[-1].split('∼')[-1]
+
+                    if '≥' in d_obj[i] or '>' in d_obj[i] or '<' in d_obj[i] or '≤' in d_obj[i]:
+                        d_obj[i]='nan'
+
+                    if '-' in d_obj[i]:
+                        if '+' in d_obj[i]:
+                            #taking the mean value if it's an uncertainty
+                            d_obj[i]=float(d_obj[i].split('+')[0].split('-')[0])
+                        else:
+                            #taking the mean if it's an interval
+                            d_obj[i]=(float(d_obj[i].split('-')[0])+float(d_obj[i].split('-')[-1]))/2
             
             
             #searching in the second catalog if nothing was found in the first one
@@ -1147,20 +1481,29 @@ def dist_mass(dict_linevis):
                     
                     #watchdog assigns by default 5+-3 kpc to sources with no distance estimate so we need to check for that
                     #(there is no source with an actual 5kpc distance)
-                    if float(ctl_watchdog[np.argwhere(ctl_watchdog_obj==names[i])[0][0]]['Dist1'])!=5:
-                        d_obj[i]=float(ctl_watchdog[np.argwhere(ctl_watchdog_obj==names[i])[0][0]]['Dist1'])
-                        
-            if d_obj[i]=='nan':
-                #giving a default value of 8kpc to the objects for which we do not have good distance measurements
-                d_obj[i]=8
+                    watchdog_d_val=float(ctl_watchdog[np.argwhere(ctl_watchdog_obj==names[i])[0][0]]['Dist1'])
 
-            else:
-                d_obj[i]=float(d_obj[i])
-        
-        #fixing the source mass at 10 solar Masses since we have very few reliable estimates of the BH masses anyway
-        #except for NS whose masses are in a dictionnary
-        if names[i] in mass_dic:
-            m_obj[i]=mass_dic[names[i]][0]
+                    #these ones are false/outdated
+                    # here same, the lower limit quoted in WATCHDOG has been disproved in Charles19
+                    watchdog_d_exclu=['SwiftJ1357.2-0933']
+
+                    if names[i] not in watchdog_d_exclu and watchdog_d_val not in [5.,8.]:
+
+                        print('New measurement found in WATCHDOG, not found in the biblio. Please check.')
+                        breakpoint()
+                        d_obj[i]=watchdog_d_val
+                        
+        if d_obj[i]=='nan':
+            #giving a default value of 8kpc to the objects for which we do not have good distance measurements
+            d_obj[i]=8
+
+        else:
+            d_obj[i]=float(d_obj[i])
+
+        #fixing the source mass at 8 solar Masses if not in the local list since we have very few reliable estimates
+        # of the BH masses anyway except for NS whose masses are in a dictionnary
+        if names[i] in mass_dict and (mass_dict[names[i]][3]==1 or use_unsure_mass_dist):
+            m_obj[i]=mass_dict[names[i]][0]
         else:
             m_obj[i]=8
     
@@ -1698,6 +2041,7 @@ def values_manip(abslines_infos,dict_linevis,autofit_infos,lum_list_infos,mask_i
     n_infos=dict_linevis['n_infos']
     obj_list=dict_linevis['obj_list']
     multi_obj=dict_linevis['multi_obj']
+    incl_dict_use=dict_linevis['incl_dict_use']
 
     n_obj=len(obj_list)
 
@@ -1917,7 +2261,7 @@ def values_manip(abslines_infos,dict_linevis,autofit_infos,lum_list_infos,mask_i
     hid_plt=np.array([[hid_plt_vals,hid_errors[0],hid_errors[1]],[lum_plt[4][i] for i in range(3)]])
 
     #computing an array of the object inclinations
-    incl_plt=np.array([[np.nan,np.nan,np.nan] if elem not in incl_dic else incl_dic[elem] for elem in obj_list])
+    incl_plt=np.array([[np.nan,np.nan,np.nan] if elem not in incl_dict_use else incl_dict_use[elem] for elem in obj_list])
 
     #computing an array of the line widths from the autofit computations
     
@@ -2071,6 +2415,7 @@ def hid_graph(ax_hid,dict_linevis,
     cmap_color_det=dict_linevis['cmap_color_det']
     cmap_color_nondet=dict_linevis['cmap_color_nondet']
     exptime_list=dict_linevis['exptime_list']
+    display_minorticks=dict_linevis['display_minorticks']
 
     diago_color=dict_linevis['diago_color']
     custom_states_color=dict_linevis['custom_states_color']
@@ -2272,12 +2617,14 @@ def hid_graph(ax_hid,dict_linevis,
         # log x scale for an easier comparison with Ponti diagrams
         if hid_log_HR:
             ax_hid.set_xscale('log')
-            if ax_hid.get_xlim()[0]>0.1:
-                ax_hid.xaxis.set_major_formatter(mpl.ticker.StrMethodFormatter("{x:.1f}"))
-                ax_hid.xaxis.set_minor_formatter(mpl.ticker.StrMethodFormatter("{x:.1f}"))
-            else:
-                ax_hid.xaxis.set_major_formatter(mpl.ticker.StrMethodFormatter("{x:.2f}"))
-                ax_hid.xaxis.set_minor_formatter(mpl.ticker.StrMethodFormatter("{x:.2f}"))
+
+            if display_minorticks:
+                if ax_hid.get_xlim()[0]>0.1:
+                    ax_hid.xaxis.set_major_formatter(mpl.ticker.StrMethodFormatter("{x:.1f}"))
+                    ax_hid.xaxis.set_minor_formatter(mpl.ticker.StrMethodFormatter("{x:.1f}"))
+                else:
+                    ax_hid.xaxis.set_major_formatter(mpl.ticker.StrMethodFormatter("{x:.2f}"))
+                    ax_hid.xaxis.set_minor_formatter(mpl.ticker.StrMethodFormatter("{x:.2f}"))
 
         ax_hid.set_xlabel('Hardness Ratio ([6-10]/[3-6] keV bands)')
         ax_hid.set_ylabel(r'Luminosity in the [3-10] keV band in (L/L$_{Edd}$) units')
@@ -2402,7 +2749,7 @@ def hid_graph(ax_hid,dict_linevis,
         cmap_norm_info = colors.LogNorm()
     else:
         # keeping a linear norm for the inclination
-        cmap_norm_info = colors.Normalize()
+        cmap_norm_info = colors.Normalize(0,90)
 
 
     # putting the axis limits at standard bounds or the points if the points extend further
@@ -4386,7 +4733,7 @@ def correl_graph(data_perinfo,infos,data_ener,dict_linevis,mode='intrinsic',mode
             ax_scat.set_ylim(0,5500)
         elif 'width' in infos_split[0]:
             ax_scat.set_xlim(0,5500)
-            
+
         if not bigger_text:
             if indiv:
                 fig_scat.suptitle(info_str[ind_infos[0]]+' - '+(info_str[ind_infos[1]] if mode=='intrinsic' else\

@@ -5227,6 +5227,8 @@ dict_linevis['lum_high_1sig_plot_restrict']=None
 dict_linevis['lum_high_sign_plot_restrict']=None
 dict_linevis['hid_log_HR']=True
 dict_linevis['flag_single_obj']=True
+dict_linevis['display_minorticks']=False
+
 #individual plotting options for the graph that will create the PDF
 display_single=not multi_obj
 display_upper=True

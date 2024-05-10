@@ -330,7 +330,7 @@ mask_ylims=np.array([0,0,0,0,0,0,1]).astype(bool)
 fig,ax=plt.subplots()
 ax.errorbar(x,y,xerr=x_err,yerr=y_err,uplims=mask_ylims,ls='')
 
-lmplot_uncert_a(ax,x,y,x_err,y_err,xlim=None,ylim=mask_ylims,nsim=2000,intercept_pos='auto',percent=68)
+lmplot_uncert_a(ax,x,y,x_err,y_err,xlim=mask_ylims,ylim=mask_ylims,nsim=2000,intercept_pos='auto',percent=68)
 
 #
 # fig3,ax3=plt.subplots()

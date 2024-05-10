@@ -187,7 +187,7 @@ def fetch_BAT(date_start='2021-09-20',date_stop='2021-09-21',object_name = '4U 1
 
     result = ba.download_swiftdata(table_exposed)
 
-def DR_BAT(noise_map_dir='/home/parrama/Soft/Swift-BAT/pattern_maps/',nprocs=10):
+def DR_BAT(noise_map_dir='/home/parrama/Soft/Swift-BAT/pattern_maps/',nprocs=8):
 
     '''
     wrapper around batanalysis to analyse some data
@@ -195,6 +195,8 @@ def DR_BAT(noise_map_dir='/home/parrama/Soft/Swift-BAT/pattern_maps/',nprocs=10)
     requires UNTARED noise maps in noise_map_dir
 
     see https://github.com/parsotat/BatAnalysis for installation
+
+    Note: if nothing gets out and no gti are recognized, it could be due to a lack of caldb initalization
     '''
 
 

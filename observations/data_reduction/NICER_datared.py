@@ -97,11 +97,11 @@ ap.add_argument("-dir", "--startdir", nargs='?', help="starting directory. Curre
 ap.add_argument("-l","--local",nargs=1,help='Launch actions directly in the current directory instead',
                 default=False,type=bool)
 ap.add_argument('-catch','--catch_errors',help='Catch errors while running the data reduction and continue',
-                default=True,type=bool)
+                default=False,type=bool)
 
 #global choices
 ap.add_argument("-a","--action",nargs='?',help='Give which action(s) to proceed,separated by comas.',
-                default='fc,1,gti,fs,l,g,m,ml,c',type=str)
+                default='m',type=str)
 #default: 1,gti,fs,l,g,m,ml,c
 
 ap.add_argument("-over",nargs=1,help='overwrite computed tasks (i.e. with products in the batch, or merge directory\
@@ -127,7 +127,7 @@ ap.add_argument('-keep_SAA',nargs=1,help='keep South Atlantic Anomaly (SAA) Peri
 #-1 means deactivated for both over and undershoot limits
 
 #note: should be set to -1 if overdyn is activated in the gti filtering options
-ap.add_argument('-overshoot_limit',nargs=1,help='overshoot event rate limit',type=float,default=-1)
+ap.add_argument('-overshoot_limit',nargs=1,help='overshoot event rate limit',type=float,default=30)
 
 ap.add_argument('-undershoot_limit',nargs=1,help='undershoot event rate limit',type=float,default=500)
 
@@ -144,7 +144,7 @@ ap.add_argument('-erodedilate',nargs=1,help='Erodes increasingly more gtis aroun
 
 '''gti creation'''
 #keyword for split: split_timeinsec
-ap.add_argument('-gti_split',nargs=1,help='GTI split method',default='orbit+flare+overdyn',type=str)
+ap.add_argument('-gti_split',nargs=1,help='GTI split method',default='orbit+flare',type=str)
 ap.add_argument('-flare_method',nargs=1,help='Flare extraction method(s)',default='clip+peak',type=str)
 
 #previous version was with a SAS, tool, which required installing SAS. Now the default is NICER directly
@@ -207,7 +207,7 @@ ap.add_argument('-bg',"--bgmodel",help='Give the background model to use for the
 #python or default
 ap.add_argument('-bg_lang',"--bg_language",
         help='Gives the language output for the script generated to load spectral data into either PyXspec or Xspec',
-                default='python',type=str)
+                default='default',type=str)
 
 ap.add_argument('-gtype',"--grouptype",help='Give the group type to use in regroup_spectral',default='opt',type=str)
 
@@ -533,10 +533,10 @@ def plot_event_diag(mode,obs_start_str,time_obs,id_gti_orbit,
     for id_inter, list_inter in enumerate(list(interval_extract(id_flares))):
         ax_rigidity.axvspan(time_obs[min(list_inter)]-1/2, time_obs[max(list_inter)]+1/2, color='blue', alpha=0.2,
                             label='flare gtis' if id_inter == 0 else '')
-
-    for id_inter, list_inter in enumerate(list(interval_extract(id_over))):
-        ax_rigidity.axvspan(time_obs[min(list_inter)]-1/2, time_obs[max(list_inter)]+1/2, color='orange', alpha=0.2,
-                            label='overshoot filtered gtis' if id_inter == 0 else '')
+    if id_over is not None:
+        for id_inter, list_inter in enumerate(list(interval_extract(id_over))):
+            ax_rigidity.axvspan(time_obs[min(list_inter)]-1/2, time_obs[max(list_inter)]+1/2, color='orange', alpha=0.2,
+                                label='overshoot filtered gtis' if id_inter == 0 else '')
 
     # computing the non-gti intervals from nimaketime
     id_nongti_nimkt = []
@@ -1197,9 +1197,9 @@ def create_gtis(directory,split='orbit+flare',band='3-15',flare_method='clip+pea
             id_flares=[]
             id_dips=[]
 
-        if 'overdyn' in split:
+        id_over=np.array([None]*n_orbit)
 
-            id_over=np.array([None]*n_orbit)
+        if 'overdyn' in split:
             for i_orbit,elem_gti_orbit in enumerate(id_gti):
 
                 #note that here we're only filtering what's not in the flares
@@ -1602,6 +1602,7 @@ def extract_all_spectral(directory,bkgmodel='scorpeon_script',language='python',
             #updating the file names in the bg load files
             bg_file_replace=[directory+'/'+directory+gti_suffix+'_bg.py',directory+'/'+directory+gti_suffix+'_bg.xcm']
             for elem_file_bg in bg_file_replace:
+
                 if os.path.isfile(elem_file_bg):
 
                     with open(elem_file_bg) as old_bgload_file:
@@ -1611,7 +1612,7 @@ def extract_all_spectral(directory,bkgmodel='scorpeon_script',language='python',
                     os.remove(elem_file_bg)
 
                     #and rewritting one with updated variables
-                    with open(elem_file_bg) as new_bgload_file:
+                    with open(elem_file_bg,'w+') as new_bgload_file:
                         for line in old_bgload_lines:
 
                             #for python

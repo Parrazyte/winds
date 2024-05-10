@@ -97,11 +97,11 @@ ap.add_argument("-dir", "--startdir", nargs='?', help="starting directory. Curre
 ap.add_argument("-l","--local",nargs=1,help='Launch actions directly in the current directory instead',
                 default=False,type=bool)
 ap.add_argument('-catch','--catch_errors',help='Catch errors while running the data reduction and continue',
-                default=False,type=bool)
+                default=True,type=bool)
 
 #global choices
 ap.add_argument("-a","--action",nargs='?',help='Give which action(s) to proceed,separated by comas.',
-                default='fc,1,gti',type=str)
+                default='fc,1,gti,fs,l,g,m,ml,c',type=str)
 #default: 1,gti,fs,l,g,m,ml,c
 
 ap.add_argument("-over",nargs=1,help='overwrite computed tasks (i.e. with products in the batch, or merge directory\
@@ -153,13 +153,14 @@ ap.add_argument('-gti_tool',nargs=1,help='GTI tool used to make the gti file its
 
 '''Flare methods '''
 #for clip
-ap.add_argument('-clip_sigma',nargs=1,help='clipping minimum variance treshold in sigmas',default=3,type=float)
+ap.add_argument('-clip_sigma',nargs=1,help='clipping minimum variance treshold in sigmas',default=2.,type=float)
+
 ap.add_argument('-flare_factor',nargs=1,help='minimum flare multiplication factor for flare clipping',
-                default=2,type=float)
+                default=2.,type=float)
 
 #for peak
 ap.add_argument('-peak_score_thresh',nargs=1,help='topological peak score treshold for peak exclusion',
-                default=3.,type=float)
+                default=2.,type=float)
 
 #for overdyn, in s since based on the mkf
 ap.add_argument('-erodedilate_overdyn',nargs=1,help='Erodes increasingly more gtis around the overshoot excluded intervals',
@@ -182,8 +183,9 @@ ap.add_argument('-int_split_bin',nargs=1,help='binning of the light curve used f
 ap.add_argument('-lc_bin',nargs=1,help='Gives the binning of all lightcurces/HR evolutions (in s)',default=1,type=str)
 #note: also defines the binning used for the gti definition
 
-lc_bands_list_det=['1-2','2-3','3-4','4-5','5-6','6-7','7-8','8-9','9-10']
-# lc_bands_list_det=['1-3']
+#lc_bands_list_det=['1-2','2-3','3-4','4-5','5-6','6-7','7-8','8-9','9-10']
+
+lc_bands_list_det=['1-3']
 ap.add_argument('-lc_bands_str',nargs=1,help='Gives the list of bands to create lightcurves from',
                 default='3-10'+','+','.join(lc_bands_list_det),type=str)
 ap.add_argument('-hr_bands_str',nargs=1,help='Gives the list of bands to create hrsfrom',default='6-10/3-6',type=str)
@@ -1583,7 +1585,8 @@ def extract_all_spectral(directory,bkgmodel='scorpeon_script',language='python',
 
             copyfile_suffixes=['_sr.pha','_bg.rmf','_sk.arf','.arf','.rmf']+\
                             (['_bg.py'] if bkgmodel=='scorpeon_script' and language=='python' else [])+ \
-                            (['_bg.pha'] if bkgmodel=='scorpeon_file' else [])
+                            (['_bg.pha'] if bkgmodel=='scorpeon_file' else [])+ \
+                            (['_bg.xcm'] if bkgmodel == 'scorpeon_script' and language=='default' else [])
             copyfile_list=['ni'+file_id+elem for elem in copyfile_suffixes]
 
             #copying the spectral products into the main directory
@@ -1596,24 +1599,39 @@ def extract_all_spectral(directory,bkgmodel='scorpeon_script',language='python',
             for elem in prod_files:
                 os.system('mv '+elem+' '+elem.replace('ni','').replace(file_suffix,gti_suffix))
 
-            #updating the file names in the bg load file
-            with open(directory+'/'+directory+gti_suffix+'_bg.py') as old_bgload_file:
-                old_bgload_lines=old_bgload_file.readlines()
+            #updating the file names in the bg load files
+            bg_file_replace=[directory+'/'+directory+gti_suffix+'_bg.py',directory+'/'+directory+gti_suffix+'_bg.xcm']
+            for elem_file_bg in bg_file_replace:
+                if os.path.isfile(elem_file_bg):
 
-            #removing the file
-            os.remove(directory+'/'+directory+gti_suffix+'_bg.py')
+                    with open(elem_file_bg) as old_bgload_file:
+                        old_bgload_lines=old_bgload_file.readlines()
 
-            #and rewritting one with updated variables
-            with open(directory+'/'+directory+gti_suffix+'_bg.py','w+') as new_bgload_file:
-                for line in old_bgload_lines:
-                    if line.startswith('nicer_srcrmf'):
-                        new_bgload_file.writelines('nicer_srcrmf="'+directory+gti_suffix+'.rmf"\n')
-                    elif line.startswith('nicer_skyarf'):
-                        new_bgload_file.writelines('nicer_skyarf="'+directory+gti_suffix+'_sk.arf"\n')
-                    elif line.startswith('nicer_diagrmf'):
-                        new_bgload_file.writelines('nicer_diagrmf="'+directory+gti_suffix+'_bg.rmf"\n')
-                    else:
-                        new_bgload_file.writelines(line)
+                    #removing the file
+                    os.remove(elem_file_bg)
+
+                    #and rewritting one with updated variables
+                    with open(elem_file_bg) as new_bgload_file:
+                        for line in old_bgload_lines:
+
+                            #for python
+                            if line.startswith('nicer_srcrmf'):
+                                new_bgload_file.writelines('nicer_srcrmf="'+directory+gti_suffix+'.rmf"\n')
+                            elif line.startswith('nicer_skyarf'):
+                                new_bgload_file.writelines('nicer_skyarf="'+directory+gti_suffix+'_sk.arf"\n')
+                            elif line.startswith('nicer_diagrmf'):
+                                new_bgload_file.writelines('nicer_diagrmf="'+directory+gti_suffix+'_bg.rmf"\n')
+
+                            #for xcm
+                            if line.startswith('set nicer_srcrmf'):
+                                new_bgload_file.writelines('set nicer_srcrmf "'+directory+gti_suffix+'.rmf"\n')
+                            elif line.startswith('set nicer_skyarf'):
+                                new_bgload_file.writelines('set nicer_skyarf "'+directory+gti_suffix+'_sk.arf"\n')
+                            elif line.startswith('set nicer_diagrmf'):
+                                new_bgload_file.writelines('set nicer_diagrmf "'+directory+gti_suffix+'_bg.rmf"\n')
+
+                            else:
+                                new_bgload_file.writelines(line)
 
         if len(gti_files)==0:
             print('no gti files detected. Computing spectral products from the entire obsid...')

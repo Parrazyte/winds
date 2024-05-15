@@ -354,7 +354,7 @@ def narrow_line_search(data_cont, suffix,e_sat_low_indiv,line_search_e=[4,10,0.0
     else:
         return chi_dict_plot
 
-def plot_line_search(chi_dict_plot,outdir,sat,save=True,suffix=None,epoch_observ=None):
+def plot_line_search(chi_dict_plot,outdir,sat,save=True,suffix=None,epoch_observ=None,format='png'):
 
     line_search_e=chi_dict_plot['line_search_e']
     line_search_norm=chi_dict_plot['line_search_norm']
@@ -391,7 +391,7 @@ def plot_line_search(chi_dict_plot,outdir,sat,save=True,suffix=None,epoch_observ
     if save==True:
         # saving it and closing it
         plt.savefig(os.path.join(outdir,epoch_observ[0] + '_' + suffix + '_line_comb_plot_' +\
-                    line_search_e_str.replace(' ','_') + '_' + line_search_norm_str.replace(' ', '_') + '.png'))
+                    line_search_e_str.replace(' ','_') + '_' + line_search_norm_str.replace(' ', '_') + '.'+format))
         plt.close(figure_comb)
 
     # putting the background plotting to its previous state
@@ -530,7 +530,7 @@ def plot_std_ener(ax_ratio, ax_contour=None, plot_em=False, mode='ratio',exclude
             continue
 
         # skipping some indexes for now
-        if i_line == 2 or i_line > 8-(1 if exclude_last else 0):
+        if line!= 'SiKa14abs' and (i_line == 2 or i_line > 8-(1 if exclude_last else 0)):
             continue
 
         # skipping Nika27:
@@ -556,7 +556,7 @@ def plot_std_ener(ax_ratio, ax_contour=None, plot_em=False, mode='ratio',exclude
                                color='blue' if em_bool else 'brown', linestyle='dashed', linewidth=0.5)
 
         # small left horizontal shift to help the Nika27 display
-        txt_hshift = 0.1 if 'Ni' in line else 0
+        txt_hshift = 0.1 if 'Ni' in line else 0.006 if 'Si' in line else 0
 
         if mode != 'noname':
             # but the legend on the top part only

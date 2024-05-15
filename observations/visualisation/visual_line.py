@@ -3068,6 +3068,7 @@ with st.sidebar.expander('Parameter analysis'):
     st.header('Upper limits')
     show_scatter_ul=st.toggle('Display upper limits in EW plots',value=False)
     lock_lims_det=not(st.toggle('Include upper limits in graph bounds computations',value=True))
+    use_alpha_ul=st.toggle('Use transparent upper limits',value=True)
 
     st.header('Non-standard plots')
     plot_gamma_correl=st.toggle('Plot powerlaw index correlations',value=False)
@@ -3141,6 +3142,7 @@ dict_linevis['glob_col_source']=glob_col_source
 dict_linevis['display_th_width_ew']=display_th_width_ew
 dict_linevis['common_observ_bounds_lines']=common_observ_bounds_lines
 dict_linevis['common_observ_bounds_dates']=common_observ_bounds_dates
+dict_linevis['use_alpha_ul']=use_alpha_ul
 
 dict_linevis['split_dist_method']=split_dist_method
 

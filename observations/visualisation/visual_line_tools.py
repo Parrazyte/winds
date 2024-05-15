@@ -920,6 +920,7 @@ def plot_lightcurve(dict_linevis,ctl_maxi_df,ctl_maxi_simbad,name,ctl_bat_df,ctl
     for RXTE/MAXI/BAT:
         -day: daily averages
         -orbit: orbit averages (only for MAXI and BAT), 1.5h for MAXI, and the column TIMDEL for BAT
+                note: the 90s RXTE lightcurves are also available online, just to heavy to be loaded dynamically
     for INTEGRAL:
         -sw: science window
         -revol: revolution (2.X days)
@@ -988,7 +989,7 @@ def plot_lightcurve(dict_linevis,ctl_maxi_df,ctl_maxi_simbad,name,ctl_bat_df,ctl
         ax_lc.set_ylabel(maxi_y_str)
 
     elif mode=='BAT':
-        ax_lc.set_title(name[0]+str_binning_monit+' BAT monitoring')
+        # ax_lc.set_title(name[0]+str_binning_monit+' BAT monitoring')
         bat_y_str = 'BAT count rate (15-50 keV)'
         ax_lc.set_ylabel(bat_y_str)
 
@@ -1322,10 +1323,34 @@ def plot_lightcurve(dict_linevis,ctl_maxi_df,ctl_maxi_simbad,name,ctl_bat_df,ctl
         
         #we add a condition for the label to only plot each instrument once
         ax_lc.axvline(x=num_date_obs,ymin=0,ymax=1,color=telescope_colors[instru_list[i_obs]],
-                        label=instru_list[i_obs]+' exposure' if instru_list[i_obs] not in label_tel_list else '',ls=':',lw=0.5)
+                        label=instru_list[i_obs]+' exposure' if instru_list[i_obs] not in label_tel_list else '',
+                      ls=':',lw=2.)
 
         if instru_list[i_obs] not in label_tel_list:
             label_tel_list+=[instru_list[i_obs]]
+
+    if name[0] == 'GROJ1655-40':
+        # showing the Swift photodiode exposures for GRO J1655-40 for the manuscript plots
+        mjd_arr_swift_1655 = [53448,
+                              53449.2,
+                              53450.2,
+                              53456.4,
+                              53463.5,
+                              53463.7,
+                              53470.4,
+                              53481.9,
+                              53494,
+                              53504.3,
+                              53505.4,
+                              53506.5,
+                              53511.4,
+                              53512.3,
+                              53512.9]
+        num_date_swift_1655 = mdates.date2num(Time(mjd_arr_swift_1655, format='mjd').datetime)
+
+        for i_obs_swift_1655,date_obs_swift_1655 in enumerate(num_date_swift_1655):
+            ax_lc.axvline(x=date_obs_swift_1655, ymin=0, ymax=1, color='grey',
+                          label='Swift PD exposure' if i_obs_swift_1655==0 else '', ls=':', lw=1.)
 
     #resizing the x axis and highlighting depending on wether we are zooming on a restricted time interval or not
     
@@ -1394,13 +1419,30 @@ def plot_lightcurve(dict_linevis,ctl_maxi_df,ctl_maxi_simbad,name,ctl_bat_df,ctl
         #prettier but takes too much space
         # label.set(rotation=45, horizontalalignment='right')
 
-    #contamination zone for 4U
+    #MAXI contamination zone for 4U1630-47
     if name[0]=='4U1630-47' and mode in ['full','HR_soft','HR_hard']:
         conta_start=mdates.date2num(Time('2018-12-10').datetime)
         conta_end=mdates.date2num(Time('2019-06-20').datetime)
         plt.axvspan(xmin=conta_start,xmax=conta_end,color='grey',zorder=1000,alpha=0.3)
 
-    ax_lc.legend(loc='upper left',ncols=2)
+    #MAXI contamination zone for H1743-322
+    if name[0]=='H1743-322' and mode in ['full','HR_soft','HR_hard']:
+        #contamination zone for H1743-322 in 2023: see https://www.astronomerstelegram.org/?read=15919
+        conta_start=mdates.date2num(Time('2023-03-01').datetime)
+        conta_end=mdates.date2num(Time('2023-05-03').datetime)
+        plt.axvspan(xmin=conta_start,xmax=conta_end,color='grey',zorder=1000,alpha=0.3)
+
+    if name[0]=='GROJ1655-40':
+
+        #conservative limit acording to the continuous "stable" interval defined in Uttley2015
+        # see https://academic.oup.com/mnras/article/451/1/475/1375790 page 3
+        hypersoft_start=mdates.date2num(Time('53459',format='mjd').datetime)
+        hypersoft_end=mdates.date2num(Time('53494',format='mjd').datetime)
+        plt.axvspan(xmin=hypersoft_start,xmax=hypersoft_end,color='green',zorder=1000,alpha=0.3,
+                    label='hypersoft state')
+
+    #hypersoft state for GROJ1655-40
+    ax_lc.legend(loc='upper right' if name[0]=="GROJ1655-40" else 'upper left',ncols=2)
 
     if superpose_ew:
         ax_lc_ew.legend(loc='upper right')
@@ -1447,7 +1489,6 @@ def dist_mass(dict_linevis,use_unsure_mass_dist=True):
                     obj_row=np.argwhere(ctl_blackcat_obj==elem)[0][0]
                     break                    
 
-            # breakpoint()
             if obj_row is not None:
 
                 obj_d_key = ctl_blackcat.iloc[obj_row]['d [kpc]']
@@ -4530,7 +4571,7 @@ def correl_graph(data_perinfo,infos,data_ener,dict_linevis,mode='intrinsic',mode
         cmap_color_det=dict_linevis['cmap_color_det']
         common_observ_bounds_lines=dict_linevis['common_observ_bounds_lines']
         common_observ_bounds_dates=dict_linevis['common_observ_bounds_dates']
-
+        use_alpha_ul=dict_linevis['use_alpha_ul']
     else:
 
         display_nonsign=True
@@ -4546,7 +4587,7 @@ def correl_graph(data_perinfo,infos,data_ener,dict_linevis,mode='intrinsic',mode
         cmap_color_det=mpl.cm.plasma
         common_observ_bounds_lines=False
         common_observ_bounds_dates=False
-        
+        use_alpha_ul=False
     
     mask_obj=dict_linevis['mask_obj']
     abslines_ener=dict_linevis['abslines_ener']
@@ -4623,7 +4664,7 @@ def correl_graph(data_perinfo,infos,data_ener,dict_linevis,mode='intrinsic',mode
     n_obj=len(observ_list)
     
     infos_split=infos.split('_')
-    alpha_ul=0.3
+    alpha_ul=0.3 if use_alpha_ul else 1.
     
     x_error=None
     y_error=None
@@ -5024,7 +5065,29 @@ def correl_graph(data_perinfo,infos,data_ener,dict_linevis,mode='intrinsic',mode
         
         if show_ul_ew:
             
-            if line_comp_mode or ratio_mode:
+            if line_comp_mode :
+                # we use the same double definition here
+                # in ratio_mode, x is the numerator so the ul_x case amounts to an upper limit
+                y_data_ul_x = np.array(ravel_ragged(data_perinfo[5][0][ind_ratio[0]])[bool_nondetsign_x],
+                                       dtype=object)
+                x_data_ul_x = np.array(ravel_ragged(data_perinfo[0][0][ind_ratio[1]])[bool_nondetsign_x],
+                                       dtype=object)
+
+                # here in ratio mode ul_y amounts to a lower limit
+                y_data_ul_y = np.array(ravel_ragged(data_perinfo[0][0][ind_ratio[0]])[bool_nondetsign_y],
+                                       dtype=object)
+                x_data_ul_y = np.array(ravel_ragged(data_perinfo[5][0][ind_ratio[1]])[bool_nondetsign_y],
+                                       dtype=object)
+
+                # same way of defining the errors
+                y_error_ul_x = np.array(
+                    [ravel_ragged(data_perinfo[0][l][ind_ratio[1]])[bool_nondetsign_x] for l in [1, 2]],
+                    dtype=object)
+                x_error_ul_y = np.array(
+                    [ravel_ragged(data_perinfo[0][l][ind_ratio[0]])[bool_nondetsign_y] for l in [1, 2]],
+                    dtype=object)
+
+            elif ratio_mode:
 
                 #we use the same double definition here
                 #in ratio_mode, x is the numerator so the ul_x case amounts to an upper limit
@@ -5053,13 +5116,13 @@ def correl_graph(data_perinfo,infos,data_ener,dict_linevis,mode='intrinsic',mode
                 #this is only in ratio_mode
                 if ratio_mode:
                     if time_mode:
-                        #switching x/y and ll/ul in time mode since the ratio is now on the y axis
-                        
-                        y_data_ll=x_data_ul_y/y_data_ul_y
-                        y_data_ul=x_data_ul_x/y_data_ul_x
+
+                        y_data_ll=y_data_ul_y/x_data_ul_y
+                        y_data_ul=y_data_ul_x/x_data_ul_x
                         
                         x_data_ll=np.array(mdates.date2num(ravel_ragged(date_list_repeat))[bool_nondetsign_y],dtype=object)
                         x_data_ul=np.array(mdates.date2num(ravel_ragged(date_list_repeat))[bool_nondetsign_x],dtype=object)
+
                     else:
                         x_data_ll=y_data_ul_y/x_data_ul_y
                         y_data_ll=np.array(ravel_ragged(y_data_repeat[ind_ratio[1]])[bool_nondetsign_y],dtype=object)
@@ -5269,7 +5332,7 @@ def correl_graph(data_perinfo,infos,data_ener,dict_linevis,mode='intrinsic',mode
             else:
                 y_error=np.array([[ravel_ragged(y_err_repeat[l])[bool_det][bool_sign] for l in [0,1]],
                                 [ravel_ragged(y_err_repeat[l])[bool_det][~bool_sign] for l in [0,1]]],dtype=object)
-            
+
         if mode=='source':
             y_err_repeat=np.array([[data_plot[1][i_obj][l] for j in (i if type(i)==range else [i])\
                                     for i_obj in range(n_obj) for i_obs in range(len(data_plot[0][0][j][i_obj]))]\
@@ -5282,8 +5345,12 @@ def correl_graph(data_perinfo,infos,data_ener,dict_linevis,mode='intrinsic',mode
 
         #maybe missing something for time mode here
         ###TODO
-        if show_ul_ew and not line_comp_mode and not time_mode:
-            if ratio_mode:
+        if show_ul_ew and not time_mode:
+            if line_comp_mode:
+                pass
+                #note: pass because we rebuild it later anyway
+
+            elif ratio_mode:
                 #creation of y errors from both masks for upper and lower limits
                 y_error_ul=np.array([ravel_ragged(y_err_repeat[l][ind_ratio[0]])[bool_nondetsign_x] for l in [0,1]],dtype=object)
                 y_error_ll=np.array([ravel_ragged(y_err_repeat[l][ind_ratio[1]])[bool_nondetsign_y] for l in [0,1]],dtype=object)
@@ -5748,11 +5815,13 @@ def correl_graph(data_perinfo,infos,data_ener,dict_linevis,mode='intrinsic',mode
         if show_ul_ew and ('ew' in infos or line_comp_mode):
             
             if line_comp_mode:
+
+                #inverted because here we're not primarily using the x axis for the ratio
                 #xuplims here
-                plot_ul_err([1,0],x_data_ul_x,y_data_ul_x,x_data_ul_x*0.05,y_error_ul_x.T,color_arr_ul_x)
+                plot_ul_err([1,0],y_data_ul_x,x_data_ul_x,y_data_ul_x*0.05,y_error_ul_x.T,color_arr_ul_x)
                 
                 #uplims here
-                plot_ul_err([0,1],x_data_ul_y,y_data_ul_y,x_error_ul_y.T,y_data_ul_y*0.05,color_arr_ul_y)
+                plot_ul_err([0,1],y_data_ul_y,x_data_ul_y,x_error_ul_y.T,x_data_ul_y*0.05,color_arr_ul_y)
                 
             else:
 
@@ -5828,12 +5897,15 @@ def correl_graph(data_perinfo,infos,data_ener,dict_linevis,mode='intrinsic',mode
         #complicated restriction to take off all the elements of x_data no matter their dimension if they are empty arrays
         x_data_use=[elem for elem in x_data if len(np.array(np.shape(elem)).nonzero()[0])==np.ndim(elem)]
 
-        if ratio_mode and len(x_data)>0:          
+        if ratio_mode and len(x_data)>0:
             
             if len(x_data_use)!=0:
                 if width_mode:
                     if min(ravel_ragged(x_data_use))>0.28 and max(ravel_ragged(x_data_use))<3.5:
                         ax_scat.set_xlim(0.28,3.5)
+                elif time_mode:
+                    if min(ravel_ragged(x_data_use))>0.28:
+                        ax_scat.set_ylim(0.28,ax_scat.get_ylim()[1])
                 else:
                     if min(ravel_ragged(x_data_use))>0.28:
                         ax_scat.set_xlim(0.28,ax_scat.get_xlim()[1])

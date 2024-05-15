@@ -44,7 +44,8 @@ lines_std={         #don't change the first 8, there are explicit calls in the c
                   #have restrained energy ranges compared to their broad counterparts
                   'FeKa0em':r'Fe K$\alpha$',
                   'FeKb0em':r'Fe K$\beta$',
-                  'calNICERSiem':r'Nicer Cal'}
+                  'calNICERSiem':r'Nicer Cal',
+                  'SiKa14abs': r'SiXIV K$\alpha$'}
 
 lines_std_names=list(lines_std.keys())
 
@@ -73,7 +74,9 @@ lines_e_dict={
                   #have restrained energy ranges compared to their broad counterparts
                    'FeKa0em':[6.4,-10000,10000],
                    'FeKb0em':[7.06,-10000,10000],
-                   'calNICERSiem':[1.74]}
+                   'calNICERSiem':[1.74],
+                  #energy from http://www.atomdb.org/Webguide/transition_information.php?lower=1s&upper=2p&z0=14&z1=13
+                  'SiKa14abs':[2.0043928,-3000,3000]}
     
 #+ line resolved
 
@@ -124,7 +127,8 @@ lines_w_dict={
                   'FeKa25em':[1e-2,0.,0.05],
                   'FeKa26em':[1e-2,0.,0.05],
                   'calNICERSiem':[0.1,0.05,0.2],
-                  }
+                  'SiKa14abs': [1e-2,0.,0.05]}
+
 
 lines_broad_w_dict={
                   'FeKa0em':[0.3,0.2,0.7],

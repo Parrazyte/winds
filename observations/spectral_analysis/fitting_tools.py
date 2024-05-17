@@ -52,7 +52,8 @@ lines_std_names=list(lines_std.keys())
 #Note : some line positions are explicitely assumed in some parts of the code (notably the first 3 being the broad emission lines)
 
 #number of absorption lines in the current model list
-n_absline=len([elem for elem in lines_std_names if 'abs' in elem])
+#for now restricting to the iron lines to avoid issues when using visual_line
+n_absline=len([elem for elem in lines_std_names if 'abs' in elem and 'Si' not in elem])
 
 range_absline=range(n_absline)
 
@@ -77,7 +78,11 @@ lines_e_dict={
                    'calNICERSiem':[1.74],
                   #energy from http://www.atomdb.org/Webguide/transition_information.php?lower=1s&upper=2p&z0=14&z1=13
                   'SiKa14abs':[2.0043928,-3000,3000]}
-    
+
+#note: if find a line at 2.47 keV, careful about confusion with an interstellar gas S2 3p line at 2.47 keV
+#for galactic sources
+# see https://ui.adsabs.harvard.edu/abs/2009ApJ...695..888U/abstract p. 892 (3.2)
+
 #+ line resolved
 
 # higher bshift range for IGRJ17091-3624

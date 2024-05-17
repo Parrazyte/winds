@@ -4296,6 +4296,37 @@ if plot_physical_compa:
         if incl_dict_use[elem_source][-1] == 0:
             err_wind_ib[-1][1].set_linestyle('--')
 
+    #overplotting the rest of the sources
+    for i_source, elem_source in enumerate(sources_incl_porb):
+
+        if elem_source in sources_wind_ib_porb:
+            continue
+
+        elem_xuplim = Porb_dict[elem_source][0] == Porb_dict[elem_source][1]
+        elem_xlolim = False
+        elem_uplim = incl_dict_use[elem_source][0] ==incl_dict_use[elem_source][1]
+        elem_lolim = incl_dict_use[elem_source][0] + incl_dict_use[elem_source][2] >= 90
+
+        # axis errorbars
+        err_Porb_incl = ax_wind_ib.errorbar(Porb_dict[elem_source][0], incl_dict_use[elem_source][0],
+                                              xerr=5 if elem_xuplim or elem_xlolim else np.array(
+                                                  [Porb_dict[elem_source][1:-1]]).T,
+                                              yerr=5 if elem_uplim or elem_lolim else np.array(
+                                                  [incl_dict_use[elem_source][1:-1]]).T,
+                                              ls='', label='', color='grey',
+                                              xuplims=elem_xuplim,
+                                              xlolims=elem_xlolim,
+                                              uplims=elem_uplim,
+                                              lolims=elem_lolim,
+                                              marker='d' if elem_source in dippers_list else '.',zorder=-1)
+
+        # dashing unsure measurements
+        if Porb_dict[elem_source][-1] == 0:
+            err_Porb_incl[-1][0].set_linestyle('--')
+
+        if incl_dict_use[elem_source][-1] == 0:
+            err_Porb_incl[-1][1].set_linestyle('--')
+
     ax_wind_ib.legend(loc='lower left')
 
 
@@ -4353,6 +4384,37 @@ if plot_physical_compa:
 
         if incl_dict_use[elem_source][-1] == 0:
             err_wind_softx[-1][1].set_linestyle('--')
+
+    # overplotting the rest of the sources
+    for i_source, elem_source in enumerate(sources_incl_porb):
+
+        if elem_source in sources_wind_softx_porb:
+            continue
+
+        elem_xuplim = Porb_dict[elem_source][0] == Porb_dict[elem_source][1]
+        elem_xlolim = False
+        elem_uplim = incl_dict_use[elem_source][0] == incl_dict_use[elem_source][1]
+        elem_lolim = incl_dict_use[elem_source][0] + incl_dict_use[elem_source][2] >= 90
+
+        # axis errorbars
+        err_Porb_incl = ax_wind_softx.errorbar(Porb_dict[elem_source][0], incl_dict_use[elem_source][0],
+                                            xerr=5 if elem_xuplim or elem_xlolim else np.array(
+                                                [Porb_dict[elem_source][1:-1]]).T,
+                                            yerr=5 if elem_uplim or elem_lolim else np.array(
+                                                [incl_dict_use[elem_source][1:-1]]).T,
+                                            ls='', label='', color='grey',
+                                            xuplims=elem_xuplim,
+                                            xlolims=elem_xlolim,
+                                            uplims=elem_uplim,
+                                            lolims=elem_lolim,
+                                            marker='d' if elem_source in dippers_list else '.',zorder=-1)
+
+        # dashing unsure measurements
+        if Porb_dict[elem_source][-1] == 0:
+            err_Porb_incl[-1][0].set_linestyle('--')
+
+        if incl_dict_use[elem_source][-1] == 0:
+            err_Porb_incl[-1][1].set_linestyle('--')
 
     ax_wind_softx.legend(loc='lower left')
 
@@ -4413,6 +4475,37 @@ if plot_physical_compa:
 
         if incl_dict_use[elem_source][-1] == 0:
             err_wind_oir[-1][1].set_linestyle('--')
+
+    # overplotting the rest of the sources
+    for i_source, elem_source in enumerate(sources_incl_porb):
+
+        if elem_source in sources_wind_oir_porb:
+            continue
+
+        elem_xuplim = Porb_dict[elem_source][0] == Porb_dict[elem_source][1]
+        elem_xlolim = False
+        elem_uplim = incl_dict_use[elem_source][0] == incl_dict_use[elem_source][1]
+        elem_lolim = incl_dict_use[elem_source][0] + incl_dict_use[elem_source][2] >= 90
+
+        # axis errorbars
+        err_Porb_incl = ax_wind_oir.errorbar(Porb_dict[elem_source][0], incl_dict_use[elem_source][0],
+                                            xerr=5 if elem_xuplim or elem_xlolim else np.array(
+                                                [Porb_dict[elem_source][1:-1]]).T,
+                                            yerr=5 if elem_uplim or elem_lolim else np.array(
+                                                [incl_dict_use[elem_source][1:-1]]).T,
+                                            ls='', label='', color='grey',
+                                            xuplims=elem_xuplim,
+                                            xlolims=elem_xlolim,
+                                            uplims=elem_uplim,
+                                            lolims=elem_lolim,
+                                            marker='d' if elem_source in dippers_list else '.',zorder=-1)
+
+        # dashing unsure measurements
+        if Porb_dict[elem_source][-1] == 0:
+            err_Porb_incl[-1][0].set_linestyle('--')
+
+        if incl_dict_use[elem_source][-1] == 0:
+            err_Porb_incl[-1][1].set_linestyle('--')
 
     ax_wind_oir.legend(loc='lower left')
 

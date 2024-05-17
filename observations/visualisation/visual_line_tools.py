@@ -454,7 +454,7 @@ wind_det_dict={'4U1543-47':source_wind('soft_1_0','soft_1_0'),
               'GROJ1655-40':source_wind('soft','soft'),
               'GRS1716-249':source_wind(visible='hard'),
               'GRS1758-258':source_wind('hard_0_0'),
-              'GRS1915+105':source_wind('soft,hard','soft',infrared='hard_0_0'),
+              'GRS1915+105':source_wind('soft,hard','soft',infrared='hard_0_1'),
               'GX339-4':source_wind(soft_x='hard',visible='soft,hard'),
               'H1743-322':source_wind('soft'),
               'IGRJ17091-3624':source_wind('soft,hard_1_0',soft_x='hard'),
@@ -2119,9 +2119,9 @@ def values_manip(abslines_infos,dict_linevis,autofit_infos,lum_list_infos,mask_i
                         array_obs=np.array([elem if len(np.shape(elem))==2\
                                             else np.array([[elem[i],None,None] for i in range(len(elem))]).astype(float)\
                                                 for elem in abslines_inf[i_obj][i_obs]])
-                        
+
                         arr_part_obs[i_obs]=np.transpose(array_obs,axes=[1,0,2])[i_line]
-                        
+
                     else:
                         arr_part_obs[i_obs]=np.repeat(np.nan,repeats=n_infos*3).reshape((n_infos,3))
                         
@@ -3947,13 +3947,26 @@ def hid_graph(ax_hid,dict_linevis,
     # to be put in the 5 sources
     custom=False
 
+    #upper left
+    # fig_hid.legend(handles=hid_det_examples, loc='center left',
+    #                labels=['upper limit' if display_upper else 'non detection ',
+    #                        'absorption line detection\n above ' + (r'3$\sigma$' if slider_sign == 0.997 else str(
+    #                            slider_sign * 100) + '%') + ' significance',
+    #                        'absorption line detection below ' + str(slider_sign * 100) + ' significance.'],
+    #                title='',
+    #                bbox_to_anchor=(0.125, 0.829 - (
+    #                    0.012 if paper_look and not zoom else 0)) if bigger_text and square_mode else (
+    #                0.125, 0.82), handler_map={tuple: mpl.legend_handler.HandlerTuple(None)},
+    #                handlelength=2, handleheight=2., columnspacing=1.)
+
+    #upper right
     fig_hid.legend(handles=hid_det_examples, loc='center left',
                    labels=['upper limit' if display_upper else 'non detection ',
                            'absorption line detection\n above ' + (r'3$\sigma$' if slider_sign == 0.997 else str(
                                slider_sign * 100) + '%') + ' significance',
                            'absorption line detection below ' + str(slider_sign * 100) + ' significance.'],
                    title='',
-                   bbox_to_anchor=(0.125, 0.829 - (
+                   bbox_to_anchor=(0.69, 0.829 - (
                        0.012 if paper_look and not zoom else 0)) if bigger_text and square_mode else (
                    0.125, 0.82), handler_map={tuple: mpl.legend_handler.HandlerTuple(None)},
                    handlelength=2, handleheight=2., columnspacing=1.)

@@ -194,7 +194,7 @@ def lmplot_uncert_a(ax, x, y, dx, dy, xlim=None,ylim=None, percent=68.26,percent
         # plotting a first regression with no perturbations for the central line
         sns.regplot(x=x_arr, y=y_arr, ax=ax, truncate=False, ci=90)
 
-        # # fetching the absciss of the intercept ticks for late
+        # # fetching the absciss of the intercept ticks for later
         x_intercept_ticks = ax.xaxis.get_ticklocs()
 
         # fetching the newly added elements to the axis list

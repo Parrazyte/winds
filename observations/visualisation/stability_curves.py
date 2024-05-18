@@ -5,7 +5,7 @@ import numpy as np
 import glob
 
 def plot_scurve(x,y,ax=None,ion_range=None,ion_range_stable=True,color=None,
-                 color_ion_range=None,return_plot=False):
+                 color_ion_range=None,return_plot=False,label=''):
     '''
     Plots a stability curve onto an already existing ax (or creates it if it doesn't exist
 
@@ -42,11 +42,11 @@ def plot_scurve(x,y,ax=None,ion_range=None,ion_range_stable=True,color=None,
         ion_range_mask=(x+y>=ion_range[0]) & (x+y<=ion_range[1])
         ion_plot = ax_use.plot(np.array(x)[ion_range_mask], np.array(y)[ion_range_mask],
                            color=main_color if color_ion_range is None else color_ion_range,lw=5,
-                           alpha=0.5 if not ion_range_stable else 1.)
+                           alpha=0.5 if not ion_range_stable else 1.,label=label)
 
     if return_plot:
         return curve_plot
-def plot_4U_curves(save_path_curves=None,save_path_SEDs=None):
+def plot_4U_curves(save_path_curves=None,save_path_SEDs=None,label=False):
 
     os.chdir('/home/parrama/Documents/Work/PhD/docs/papers/wind_4U/global/SEDs/stability/2021/curves/scurves')
 
@@ -84,13 +84,15 @@ def plot_4U_curves(save_path_curves=None,save_path_SEDs=None):
         plot=plot_scurve(s_curves[i][0],s_curves[i][1],ax=ax_use,
                     ion_range=ion_ranges.T[i][1:].astype(float),
                     ion_range_stable=not ion_ranges[0][i] in unstable,
-                    color=indiv_color,return_plot=True)
+                    color=indiv_color,return_plot=True,label= ion_ranges[0][i] if label else None)
 
     sm = plt.cm.ScalarMappable(cmap=color_cmap, norm=c_norm)
 
     date_format=mpl.dates.DateFormatter('%Y-%m-%d')
     plt.colorbar(sm,ticks=mpl.dates.AutoDateLocator(),
                                format=date_format)
+    if label:
+        plt.legend()
 
     plt.tight_layout()
 

@@ -988,6 +988,14 @@ with st.sidebar.expander('Visualisation'):
 
     display_minorticks=st.toggle('Display minor ticks for the Hardness Ratio',value=False)
 
+    if display_single and choice_source[0]=='4U1630-47':
+
+        hatch_unstable=st.toggle('Hash unstable 2021 observations',value=False)
+    else:
+        hatch_unstable=False
+
+    change_legend_position=st.toggle('Change legend position',value=False)
+
     if not online:
         paper_look=st.toggle('Paper look',value=False)
 
@@ -1659,6 +1667,8 @@ if display_single and choice_source[0]=='4U1630-47' and sum(ravel_ragged(mask_in
                 if is_SPL:
                     custom_states_color[i_obj][i_obs]='red'
 
+                #note: the two hard points with wrong hard position due to too much BAT variability:
+                # 4130010111-004 and 4130010114-004
                 if is_standard_hard:
                     custom_states_color[i_obj][i_obs] = 'blue'
                 if is_QRM:
@@ -1882,7 +1892,7 @@ obj_list, date_list, instru_list, lum_list, choice_telescope, telescope_list,
 bool_incl_inside, bool_noincl,
 slider_date, slider_sign,
 radio_info_cmap, radio_cmap_i,
-cmap_color_source, cmap_color_det, cmap_color_nondet]
+cmap_color_source, cmap_color_det, cmap_color_nondet,observ_list,hatch_unstable,change_legend_position]
 
 items_str_list=['abslines_infos_perobj',
 'abslines_plot','nh_plot','kt_plot','hid_plot','incl_plot',
@@ -1891,7 +1901,7 @@ items_str_list=['abslines_infos_perobj',
 'bool_incl_inside', 'bool_noincl',
 'slider_date', 'slider_sign',
 'radio_info_cmap', 'radio_cmap_i',
-'cmap_color_source', 'cmap_color_det', 'cmap_color_nondet']
+'cmap_color_source', 'cmap_color_det', 'cmap_color_nondet','observ_list','hatch_unstable','change_legend_position']
 
 for dict_key, dict_item in zip(items_str_list,items_list):
     dict_linevis[dict_key]=dict_item
@@ -3462,7 +3472,6 @@ dict_linevis['restrict_comput_scatter']=restrict_comput_scatter
 dict_linevis['comput_scatter_lims']=[[comput_scatter_xmin,comput_scatter_xmax],[comput_scatter_ymin,comput_scatter_ymax]]
 
 dict_linevis['color_scatter']=color_scatter
-dict_linevis['observ_list']=observ_list
 dict_linevis['lum_plot_restrict']=lum_plot_restrict
 dict_linevis['hid_plot_restrict']=hid_plot_restrict
 dict_linevis['width_plot_restrict']=width_plot_restrict

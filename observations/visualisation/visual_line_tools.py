@@ -2463,6 +2463,9 @@ def hid_graph(ax_hid,dict_linevis,
     custom_outburst_color=dict_linevis['custom_outburst_color']
     custom_outburst_number=dict_linevis['custom_outburst_number']
 
+    hatch_unstable=dict_linevis['hatch_unstable']
+    change_legend_position=dict_linevis['change_legend_position']
+
     hr_high_plot_restrict=dict_linevis['hr_high_plot_restrict']
     hid_log_HR=dict_linevis['hid_log_HR']
     flag_single_obj=dict_linevis['flag_single_obj']
@@ -2481,6 +2484,9 @@ def hid_graph(ax_hid,dict_linevis,
     if restrict_match_INT:
         lc_int_sw_dict = dict_linevis['lc_int_sw_dict']
         fit_int_revol_dict = dict_linevis['fit_int_revol_dict']
+
+    observ_list=dict_linevis['observ_list']
+
 
     #note that these one only get the significant BAT detections so no need to refilter
     lum_high_1sig_plot_restrict=dict_linevis['lum_high_1sig_plot_restrict']
@@ -3501,6 +3507,41 @@ def hid_graph(ax_hid,dict_linevis,
 
                     color_val_nondet_ul=[0.,0.,0.,0.]
 
+                if hatch_unstable:
+
+                    #for now done this way because hatch_color hasn't been introduced to matplotlib yet so linked to
+                    #edgecolor
+                    #displaying the 2021 unstable SEDs differently
+                    unstable_list=['4130010101-001',
+                                    '4130010102-008',
+                                    '4130010104-001',
+                                    '4130010105-002',
+                                    '4130010106-001',
+                                    '4130010107-002',
+                                    '4130010108-002',
+                                    '4130010109-001',
+                                    '4130010112-006',
+                                    '4130010114-001']
+                    hatch_mask=[elem in unstable_list for elem in observ_list[mask_obj][i_obj][mask_nondet_ul]]
+
+                    # try:
+                    #unstable scatter, sames as below but with zorder below and black hatch, no facecolor
+                    #smaller zorder to only show the hatch inside of non-colored markers
+                    #note that having no edgecolor and a hatch color only works with alpha=None, a repeating
+                    #facolor and no edgecolor
+                    elem_scatter_unstable = ax_hid.scatter(
+                        x_hid_base[mask_nondet_ul][hatch_mask], y_hid_base[mask_nondet_ul][hatch_mask],
+                        marker=marker_ul_curr,
+                        facecolor=np.repeat('None', sum(hatch_mask)),
+                        hatch='////',
+                        s=norm_s_lin * obj_size_ul[mask_nondet_ul][hatch_mask] ** norm_s_pow,
+                        label='',
+                        zorder=0, alpha=None,
+                        ls='--' if (
+                                    display_incl_inside and not bool_incl_inside[mask_obj][
+                                i_obj_base] or dash_noincl and bool_noincl[mask_obj][i_obj_base]) else 'solid',
+                        plotnonfinite=True)
+
                 elem_scatter_nondet = ax_hid.scatter(
                     x_hid_base[mask_nondet_ul], y_hid_base[mask_nondet_ul], marker=marker_ul_curr,
                     facecolor=color_val_nondet_ul, edgecolor=edgec_scat,
@@ -3939,6 +3980,10 @@ def hid_graph(ax_hid,dict_linevis,
             (Line2D([0], [0], marker=marker_abs, color='white', markersize=50 ** (1 / 2), linestyle='None',
                     markeredgecolor='grey', markeredgewidth=2))]
 
+    if hatch_unstable:
+        hid_det_examples += [
+            (mpl.patches.Patch(facecolor='white',hatch='///'))]
+
     mpl.rcParams['legend.fontsize'] = 7 + (2 if paper_look and not zoom else 0)
 
     # marker legend
@@ -3947,29 +3992,36 @@ def hid_graph(ax_hid,dict_linevis,
     # to be put in the 5 sources
     custom=False
 
-    #upper left
-    # fig_hid.legend(handles=hid_det_examples, loc='center left',
-    #                labels=['upper limit' if display_upper else 'non detection ',
-    #                        'absorption line detection\n above ' + (r'3$\sigma$' if slider_sign == 0.997 else str(
-    #                            slider_sign * 100) + '%') + ' significance',
-    #                        'absorption line detection below ' + str(slider_sign * 100) + ' significance.'],
-    #                title='',
-    #                bbox_to_anchor=(0.125, 0.829 - (
-    #                    0.012 if paper_look and not zoom else 0)) if bigger_text and square_mode else (
-    #                0.125, 0.82), handler_map={tuple: mpl.legend_handler.HandlerTuple(None)},
-    #                handlelength=2, handleheight=2., columnspacing=1.)
-
-    #upper right
     fig_hid.legend(handles=hid_det_examples, loc='center left',
                    labels=['upper limit' if display_upper else 'non detection ',
                            'absorption line detection\n above ' + (r'3$\sigma$' if slider_sign == 0.997 else str(
-                               slider_sign * 100) + '%') + ' significance',
-                           'absorption line detection below ' + str(slider_sign * 100) + ' significance.'],
+                               slider_sign * 100) + '%') + ' significance']+
+                          (['absorption line detection below ' + str(slider_sign * 100) + ' significance.']\
+                               if display_nonsign else [])+
+                          (['Unstable SED'] if hatch_unstable else []),
                    title='',
-                   bbox_to_anchor=(0.69, 0.829 - (
-                       0.012 if paper_look and not zoom else 0)) if bigger_text and square_mode else (
+                   bbox_to_anchor=(0.69 if change_legend_position else 0.125, 0.829 - (
+                       0.012 if paper_look and not zoom else 0) - (0.018 if hatch_unstable else 0)) if bigger_text and square_mode else (
                    0.125, 0.82), handler_map={tuple: mpl.legend_handler.HandlerTuple(None)},
                    handlelength=2, handleheight=2., columnspacing=1.)
+
+    if radio_info_cmap == 'custom_acc_states':
+        #making a legend for the accretion state colors
+        custom_acc_states_example=[(mpl.patches.Patch(color='green')),
+                                   (mpl.patches.Patch(color='orange')),
+                                   (mpl.patches.Patch(color='red')),
+                                   (mpl.patches.Patch(color='purple')),
+                                   (mpl.patches.Patch(color='blue')),
+                                   (mpl.patches.Patch(color='grey'))]
+
+        fig_hid.legend(handles=custom_acc_states_example, loc='center left',
+                       labels=['Soft','Intermediate','SPL','QRM','Hard','Unknown'],
+                       title='Spectral state',
+                       bbox_to_anchor=(0.125 if change_legend_position else 0.756, 0.754 - (
+                           0.012 if paper_look and not zoom else 0) - (0.018 if hatch_unstable else 0)) if bigger_text and square_mode else (
+                       0.125, 0.82), handler_map={tuple: mpl.legend_handler.HandlerTuple(None)},
+                       handlelength=2, handleheight=2., columnspacing=1.)
+
 
     # note: upper left anchor (0.125,0.815)
     # note : upper right anchor (0.690,0.815)

@@ -47,29 +47,30 @@ import dill
 
 from matplotlib.gridspec import GridSpec
 
-model_dir='/home/parrama/Soft/Xspec/Models'
+#example '/home/parrama/Soft/Xspec/Models'
+model_dir=os.environ['xspec_models_dir']
 
-#custom model loads
-# if not streamlit_mode:
-#     AllModels.lmod('relxill',dirPath=model_dir+'/relxill')
-#
-#     #swiftJ1658 dust scattering halo model from Jin2019
-#     AllModels.lmod('dscor', dirPath=model_dir + '/dscor')
-#     #which needs an absolute path to a directory
-#     Xset.addModelString('DSCOR_MODEL_DIR', '/home/parrama/Soft/Xspec/Models/dscor/mtables_swf1658m42')
-#     # instype is the
-#     # type
-#     # of
-#     # instrument:
-#     # 0: XMM - Newton / pn
-#     # 1: XMM - Newton / MOS1
-#     # 2: XMM - Newton / MOS2
-#     # 3: Chandra / ACIS
-#     # 4: Swift / XRT
-#     # 5: NuSTAR / FPMA
-#     # 6: NuSTAR / FPMB
-#
-#     AllModels.mdefine('crabcorr (1./E^dGamma)crabcorrNorm : mul')
+# custom model loads
+if not streamlit_mode:
+    AllModels.lmod('relxill',dirPath=model_dir+'/relxill')
+    AllModels.lmod('fullkerr',dirPath=model_dir+'/fullkerr')
+    #swiftJ1658 dust scattering halo model from Jin2019
+    AllModels.lmod('dscor', dirPath=model_dir + '/dscor')
+    #which needs an absolute path to a directory
+    Xset.addModelString('DSCOR_MODEL_DIR', os.path.join(model_dir,'dscor/mtables_swf1658m42'))
+    # instype is the
+    # type
+    # of
+    # instrument:
+    # 0: XMM - Newton / pn
+    # 1: XMM - Newton / MOS1
+    # 2: XMM - Newton / MOS2
+    # 3: Chandra / ACIS
+    # 4: Swift / XRT
+    # 5: NuSTAR / FPMA
+    # 6: NuSTAR / FPMB
+
+    AllModels.mdefine('crabcorr (1./E^dGamma)crabcorrNorm : mul')
 
 #example of model loading
 # AllModels.initpackage('tbnew_mod',"lmodel_tbnew.dat",dirPath=model_dir+'/tbnew')

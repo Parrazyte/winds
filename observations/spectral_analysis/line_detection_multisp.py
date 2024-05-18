@@ -5228,6 +5228,8 @@ dict_linevis['lum_high_sign_plot_restrict']=None
 dict_linevis['hid_log_HR']=True
 dict_linevis['flag_single_obj']=True
 dict_linevis['display_minorticks']=False
+dict_linevis['hatch_unstable']=False
+dict_linevis['change_legend_position']=False
 
 #individual plotting options for the graph that will create the PDF
 display_single=not multi_obj

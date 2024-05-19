@@ -101,7 +101,7 @@ ap.add_argument('-catch','--catch_errors',help='Catch errors while running the d
 
 #global choices
 ap.add_argument("-a","--action",nargs='?',help='Give which action(s) to proceed,separated by comas.',
-                default='fc,1,gti,fs,l,g,m,ml,c',type=str)
+                default='1,fs,m',type=str)
 #default: fc,1,gti,fs,l,g,m,ml,c
 
 #note: should be kept to true for most complicated tasks
@@ -110,7 +110,7 @@ ap.add_argument("-over",nargs=1,help='overwrite computed tasks (i.e. with produc
 
 #directory level overwrite (not active in local)
 ap.add_argument('-folder_over',nargs=1,help='relaunch action through folders with completed analysis',
-                default=True,type=bool)
+                default=False,type=bool)
 ap.add_argument('-folder_cont',nargs=1,help='skip all but the last 2 directories in the summary folder file',
                 default=False,type=bool)
 #note : we keep the previous 2 directories because bug or breaks can start actions on a directory following the initially stopped one
@@ -1713,21 +1713,26 @@ def extract_all_spectral(directory,bkgmodel='scorpeon_script',language='python',
                             #for python
                             if line.startswith('nicer_srcrmf'):
                                 new_bgload_file.writelines('nicer_srcrmf="'+directory+gti_suffix+'.rmf"\n')
+                                continue
                             elif line.startswith('nicer_skyarf'):
                                 new_bgload_file.writelines('nicer_skyarf="'+directory+gti_suffix+'_sk.arf"\n')
+                                continue
                             elif line.startswith('nicer_diagrmf'):
                                 new_bgload_file.writelines('nicer_diagrmf="'+directory+gti_suffix+'_bg.rmf"\n')
+                                continue
 
                             #for xcm
                             if line.startswith('set nicer_srcrmf'):
                                 new_bgload_file.writelines('set nicer_srcrmf "'+directory+gti_suffix+'.rmf"\n')
+                                continue
                             elif line.startswith('set nicer_skyarf'):
                                 new_bgload_file.writelines('set nicer_skyarf "'+directory+gti_suffix+'_sk.arf"\n')
+                                continue
                             elif line.startswith('set nicer_diagrmf'):
                                 new_bgload_file.writelines('set nicer_diagrmf "'+directory+gti_suffix+'_bg.rmf"\n')
+                                continue
 
-                            else:
-                                new_bgload_file.writelines(line)
+                            new_bgload_file.writelines(line)
 
         if len(gti_files)==0:
             print('no gti files detected. Computing spectral products from the entire obsid...')

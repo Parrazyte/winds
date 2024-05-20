@@ -168,13 +168,15 @@ def fetch_BAT(date_start='2021-09-20',date_stop='2021-09-21',object_name = '4U 1
     see https://github.com/parsotat/BatAnalysis for installation
 
     -minexposure   # cm^2 after cos adjust
+
+    may need to add uksdc=True to download_swiftdata for old datasets
     '''
 
 
-    # object_location = swiftbat.simbadlocation(object_name)
-    # object_batsource = swiftbat.source(ra=object_location[0], dec=object_location[1], name=object_name)
-    object_batsource = swiftbat.source(name=object_name)
+    object_location = swiftbat.simbadlocation(object_name)
+    object_batsource = swiftbat.source(ra=object_location[0], dec=object_location[1], name=object_name)
 
+    # object_batsource = swiftbat.source(name=object_name)
 
     queryargs = dict(time=date_start+' .. '+date_stop, fields='All', resultmax=0)
     table_everything = ba.from_heasarc(**queryargs)
@@ -187,10 +189,10 @@ def fetch_BAT(date_start='2021-09-20',date_stop='2021-09-21',object_name = '4U 1
 
     result = ba.download_swiftdata(table_exposed)
 
-def DR_BAT(noise_map_dir='/home/parrama/Soft/Swift-BAT/pattern_maps/',nprocs=8):
+def DR_BAT(noise_map_dir='/home/parrama/Soft/Swift-BAT/pattern_maps/',nprocs=2):
 
     '''
-    wrapper around batanalysis to analyse some data
+    wrapper around batanalysis to reduce data in the current folder
 
     requires UNTARED noise maps in noise_map_dir
 
@@ -201,12 +203,28 @@ def DR_BAT(noise_map_dir='/home/parrama/Soft/Swift-BAT/pattern_maps/',nprocs=8):
 
 
     obs_ids = [i.name for i in sorted(ba.datadir().glob("*")) if i.name.isnumeric()]
-    # input_dict=dict(cleansnr=6,cleanexpr='ALWAYS_CLEAN==T')
-    input_dict=None
+    input_dict=dict(cleansnr=6,cleanexpr='ALWAYS_CLEAN==T')
+    # input_dict=None
     batsurvey_obs=ba.parallel.batsurvey_analysis(obs_ids,input_dict=input_dict,
                                                  patt_noise_dir=noise_map_dir, nprocs=nprocs)
 
     return batsurvey_obs
+
+def SA_BAT(survey_obs_list,object_name,ul_pl_index=2.5,recalc=True,nprocs=2):
+
+    '''
+    Wrapper around batanalysis to perform spectral analysis of data in the current folder
+
+    split from DR_BAT because each step can take very long
+
+    survey_obs_list should be the output of DR_BAT
+
+    '''
+
+    sa_obs_list=ba.parallel.batspectrum_analysis(survey_obs_list, object_name, ul_pl_index=ul_pl_index,
+                                                 recalc=recalc,nprocs=nprocs)
+
+    return sa_obs_list
 
 
 # noise_map_dir=Path("/Users/tparsota/Documents/PATTERN_MAPS/")

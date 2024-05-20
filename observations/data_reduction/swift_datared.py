@@ -17,6 +17,8 @@ import pexpect
 import sys
 import time
 from scipy.stats import norm as scinorm
+from tee import StdoutTee,StderrTee
+import re
 
 ##for batanalysis (see https://github.com/parsotat/BatAnalysis/blob/main/notebooks/trial_NGC2992.ipynb)
 import glob
@@ -33,6 +35,10 @@ import swiftbat
 import swiftbat.swutil as sbu
 import pickle
 
+#function to remove (most) control chars
+def _remove_control_chars(message):
+    ansi_escape =re.compile(r'(\x9B|\x1B\[)[0-?]*[ -\/]*[@-~]')
+    return ansi_escape.sub('', message)
 
 def merge_swift_spectra():
 
@@ -160,7 +166,7 @@ def convert_BAT_flux_spectra(observ_high_table_path,err_percent=90,e_low=15., e_
             hdul[1].header['EXPOSURE']=csv_BAT_expos[i_sp]
             hdul.flush()
 
-def fetch_BAT(date_start='2021-09-20',date_stop='2021-09-21',object_name = '4U 1630-47',minexposure=1000):
+def fetch_BAT(object_name,date_start,date_stop,minexposure=1000):
 
     '''
     wrapper around batanalysis to download some data
@@ -172,22 +178,27 @@ def fetch_BAT(date_start='2021-09-20',date_stop='2021-09-21',object_name = '4U 1
     may need to add uksdc=True to download_swiftdata for old datasets
     '''
 
+    logfile_name='./fetch_BAT_'+object_name+'_'+date_start+'_'+date_stop+'_minexp_'+str(minexposure)+'.log'
 
-    object_location = swiftbat.simbadlocation(object_name)
-    object_batsource = swiftbat.source(ra=object_location[0], dec=object_location[1], name=object_name)
+    with StdoutTee(logfile_name,
+                   mode="a",buff=1,file_filters=[_remove_control_chars]),\
+        StderrTee(logfile_name,buff=1,file_filters=[_remove_control_chars]):
 
-    # object_batsource = swiftbat.source(name=object_name)
+        object_location = swiftbat.simbadlocation(object_name)
+        object_batsource = swiftbat.source(ra=object_location[0], dec=object_location[1], name=object_name)
 
-    queryargs = dict(time=date_start+' .. '+date_stop, fields='All', resultmax=0)
-    table_everything = ba.from_heasarc(**queryargs)
+        # object_batsource = swiftbat.source(name=object_name)
 
-    exposures = np.array([object_batsource.exposure(ra=row['RA'], dec=row['DEC'], roll=row['ROLL_ANGLE'])[0] for row in
-                          table_everything])
-    table_exposed = table_everything[exposures > minexposure]
-    print(
-        f"Finding everything finds {len(table_everything)} observations, of which {len(table_exposed)} have more than {minexposure:0} cm^2 coded")
+        queryargs = dict(time=date_start+' .. '+date_stop, fields='All', resultmax=0)
+        table_everything = ba.from_heasarc(**queryargs)
 
-    result = ba.download_swiftdata(table_exposed)
+        exposures = np.array([object_batsource.exposure(ra=row['RA'], dec=row['DEC'], roll=row['ROLL_ANGLE'])[0] for row in
+                              table_everything])
+        table_exposed = table_everything[exposures > minexposure]
+        print(
+            f"Finding everything finds {len(table_everything)} observations, of which {len(table_exposed)} have more than {minexposure:0} cm^2 coded")
+
+        result = ba.download_swiftdata(table_exposed)
 
 def DR_BAT(noise_map_dir='/home/parrama/Soft/Swift-BAT/pattern_maps/',nprocs=2):
 

@@ -319,6 +319,16 @@ def model_list(model_id='lines',give_groups=False):
 
         interact_groups = None
 
+    if model_id == 'thcont_NICER':
+        '''
+        subset of continuum with thcomp for better broad band work + NICER calibration components
+        '''
+
+        avail_comps = ['cont_diskbb', 'disk_thcomp', 'glob_TBabs', 'glob_constant',
+                       'calNICERSiem_gaussian','calNICER_edge']
+
+        interact_groups = None
+
     if model_id=='nthcont_detailed':
 
         '''

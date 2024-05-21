@@ -407,7 +407,8 @@ def fit_broader(epoch_id,add_gaussem=True,bat_interp_dir='/home/parrama/Document
         calc_fit()
 
 
-    xscorpeon.load('auto',frozen=False)
+    xscorpeon.load('auto',frozen=False,extend_SAA_norm=True,fit_SAA_norm=True)
+
     calc_fit()
     xscorpeon.freeze()
 
@@ -1371,6 +1372,10 @@ def addcomp(compname,position='last',endmult=None,return_pos=False,modclass=AllM
                             NOTE: assumes that all currently existing absorption and edge components are at the
                             beginning of the model
 
+        -disk_nthcomp: Continuum nthcomp with Te fixed to the disk's
+
+        -disk_thcomp: thcomp multiplicating the disk, with frozen cutoff at 100 keV
+
     Dust scattering
         -globOBJNAME_xscat: scattering component linked with existing absorption if any
                             regions extraction sizes extracted automatically
@@ -1478,9 +1483,12 @@ def addcomp(compname,position='last',endmult=None,return_pos=False,modclass=AllM
                 if AllModels(1).componentNames[0] in xspec_globcomps:
                     start_position+=1
 
+    if 'thcomp' in comp_split:
+        #increasing the energies
+        AllModels.setEnergies('0.01 1000.0 5000 log')
 
     #continuum type components
-    if comp_custom=='cont' or comp_split.lower()=='nthcomp':
+    if comp_custom=='cont' or comp_split.lower() in ['nthcomp','thcomp']:
         start_position=1
         try:
 
@@ -1876,6 +1884,13 @@ def addcomp(compname,position='last',endmult=None,return_pos=False,modclass=AllM
 
         xspec_model(gap_end-5).values=[1.7,0.017,1.001,1.001,3.5,3.5]
 
+    if comp_split=='thcomp' and comp_custom is not None:
+        if comp_custom=='disk':
+            xspec_model(gap_end-2).values=100.
+            xspec_model(gap_end-2).frozen=True
+            xspec_model(gap_end-3).values=[1.7, 0.017, 1.001, 1.001, 3.5,3.5]
+
+
     if 'abs' in comp_split and comp_split!='gabs' and comp_custom is not None and 'glob' in comp_custom:
         xspec_model(gap_end).values=[1.,0.01,0.,0.,100,100]
 
@@ -1966,6 +1981,8 @@ def addcomp(compname,position='last',endmult=None,return_pos=False,modclass=AllM
             else:
                 AllModels(i_grp)(gap_start).link=''
                 AllModels(i_grp)(gap_start).frozen=False
+                AllModels(i_grp)(gap_start).values=[1]+ [0.01, 0.7,0.7,1.3,1.3]
+
 
         return_pars+=[gap_start+AllModels(1).nParameters*i_grp for i_grp in range(1,AllData.nGroups)]
 
@@ -2024,6 +2041,7 @@ def addcomp(compname,position='last',endmult=None,return_pos=False,modclass=AllM
             if comp_custom=='calNICER':
                 xspec_model(gap_end-1).values=2.42
                 xspec_model(gap_end-1).frozen=True
+                xspec_model(gap_end).values=1e-2
 
                 first_group_use=True
                 #using the edge only for NICER datagroups, otherwise freezing the normalization at 0
@@ -3247,6 +3265,9 @@ class fitmod:
             comp.logfile = self.logfile
             comp.logfile_write = self.logfile_write
 
+        #making our life easier for when we don't need to know about the secondary components
+        self.includedlist_main=[elem for elem in self.includedlist if elem is not None]
+
     def list_comps_errlocked(self):
 
         '''
@@ -3465,15 +3486,15 @@ class fitmod:
 
         self.update_fitcomps()
 
+        calc_fit()
+
         #fitting the scorpeon model if asked to
         if fit_scorpeon and 'NICER' in self.sat_list:
             # unfreezing the scorpeon model by resetting it
-            xscorpeon.load('auto',frozen=False,fit_SAA_norm=fit_SAA_norm)
+            xscorpeon.load('auto',frozen=False,extend_SAA_norm=True,fit_SAA_norm=fit_SAA_norm)
 
-        mod_test=allmodel_data()
-
-        #computing a fit with the scorpeon model on
-        calc_fit()
+            # computing a fit with the scorpeon model on
+            calc_fit()
 
         #adding calibration components
         for i_excomp,component in enumerate(curr_exclist):
@@ -3495,11 +3516,14 @@ class fitmod:
                                                               else None,incl_list=self.includedlist)
             self.update_fitcomps()
 
-            component.fit(split_fit=False)
+            component.fit(split_fit=False,compute_errors=False,fit_to=120)
 
             component.fitted_mod=allmodel_data()
 
+        #refreezing the scorpeon model
+        xscorpeon.freeze()
         self.update_fitcomps()
+
 
     def test_addcomp(self,chain=False,lock_lines=False,no_abslines=False,nomixline=True,split_fit=True,
                      ftest_threshold=def_ftest_threshold,ftest_leeway=def_ftest_leeway):
@@ -4228,7 +4252,7 @@ class fitmod:
 
         if method in ['force_all','force_add']:
             self.add_allcomps(chain=chain,lock_lines=lock_lines,no_abslines=no_abslines,nomixline=nomixline,
-                              split_fit=split_fit,fit_scorpeon=fit_scorpeon,fit_SAA_norm=fit_SAA_norm)
+                              split_fit=False,fit_scorpeon=fit_scorpeon,fit_SAA_norm=fit_SAA_norm)
         elif method=='opt':
             while [elem for elem in self.includedlist if elem is not None]!=self.complist:
 
@@ -4255,7 +4279,8 @@ class fitmod:
 
                 # unfreezing the scorpeon model by resetting it (here considering previous saves but with the freeze
                 # state of the first auto load)
-                xscorpeon.load('auto',frozen=False, scorpeon_save=curr_scorpeon,fit_SAA_norm=fit_SAA_norm,
+                xscorpeon.load('auto',frozen=False, scorpeon_save=curr_scorpeon,extend_SAA_norm=True,
+                               fit_SAA_norm=fit_SAA_norm,
                                load_save_freeze=False)
 
                 calc_fit()
@@ -4648,7 +4673,7 @@ class fitmod:
                 #computing the flux of the line
                 #(should be negligbly affected by the energy limits of instruments since we don't have lines close to these anyway)
                 '''
-                note that this could be an issue for lowwer energy lines if a high-energy telescope is loaded first
+                note that this could be an issue for lower energy lines if a high-energy telescope is loaded first
                 there could be a need to extend its rmf
                 '''
                 AllModels.calcFlux('0.3 10')
@@ -4969,10 +4994,14 @@ class fitcomp:
         if np.any([elem in comp_split for elem in xspec_globcomps]) or self.calibration:
             self.mandatory=True
 
-        #ensuring we won't lose the diskbb if there is a nthcomp in the other proposed components
+        #ensuring we won't lose the diskbb if there is a linked nthcomp or thcomp in the other proposed components
         if 'diskbb' in comp_split and self.fitcomp_names is not None:
-            if 'disk_nthcomp' in self.fitcomp_names:
+            if 'disk_nthcomp' in self.fitcomp_names or 'disk_thcomp' in self.fitcomp_names:
                 self.mandatory=True
+
+        #also ensuring the thcomp stays mandatory
+        if self.compname=='disk_thcomp':
+            self.mandatory=True
 
         if comp_split in xspec_multmods:
            self.multipl=True
@@ -5183,7 +5212,7 @@ class fitcomp:
         Xset.chatter=prev_chatter
         Xset.logChatter=prev_logchatter
 
-    def fit(self,split_fit=True):
+    def fit(self,split_fit=True,compute_errors=True,fit_to=30):
 
         '''
         Fit + errors of this component
@@ -5211,14 +5240,15 @@ class fitcomp:
             self.print_xlog('\nlog:Fitting the new component with the whole model...')
 
         #Fitting
-        calc_fit(logfile=self.logfile)
+        calc_fit(logfile=self.logfile,timeout=fit_to)
 
-        if split_fit:
-            #computing errors for the component parameters only
-            calc_error(logfile=self.logfile,param=str(self.parlist[0])+'-'+str(self.parlist[-1]),indiv=True)
-        else:
-            #computing errors for all models
-            calc_error(logfile=self.logfile,param='1-'+str(AllData.nGroups*AllModels(1).nParameters),indiv=True)
+        if compute_errors:
+            if split_fit:
+                #computing errors for the component parameters only
+                calc_error(logfile=self.logfile,param=str(self.parlist[0])+'-'+str(self.parlist[-1]),indiv=True)
+            else:
+                #computing errors for all models
+                calc_error(logfile=self.logfile,param='1-'+str(AllData.nGroups*AllModels(1).nParameters),indiv=True)
 
         self.fitted_mod=allmodel_data()
 

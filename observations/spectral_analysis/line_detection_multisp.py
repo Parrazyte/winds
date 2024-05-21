@@ -161,11 +161,11 @@ ap = argparse.ArgumentParser(description='Script to perform line detection in X-
 
 '''GENERAL OPTIONS'''
 
-ap.add_argument('-satellite',nargs=1,help='telescope to fetch spectra from',default='multi',type=str)
+ap.add_argument('-satellite',nargs=1,help='telescope to fetch spectra from',default='NICER',type=str)
 
 #used for NICER and multi for now
 ap.add_argument('-group_max_timedelta',nargs=1,
-                help='maximum time delta for epoch/gti grouping in dd_hh_mm_ss_ms',default='00_8_00_00_000',type=str)
+                help='maximum time delta for epoch/gti grouping in dd_hh_mm_ss_ms',default='01_00_00_00_000',type=str)
 
 #00_00_00_10 for NICER TR
 #00_00_15_00 for NuSTAR individual orbits
@@ -184,7 +184,7 @@ ap.add_argument("-prefix",nargs=1,help='restrict analysis to a specific prefix',
 
 ####output directory
 ap.add_argument("-outdir",nargs=1,help="name of output directory for line plots",
-                default="NuSTAR_epochs_8h",type=str)
+                default="lineplots_opt",type=str)
 
 #overwrite
 #global overwrite based on recap PDF
@@ -223,7 +223,7 @@ ap.add_argument('-xspec_window',nargs=1,help='xspec window id (auto tries to pic
 '''MODELS'''
 #### Models and abslines lock
 ap.add_argument('-cont_model',nargs=1,help='model list to use for the autofit computation',
-                default='nthcont',type=str)
+                default='thcont_NICER',type=str)
 
 ap.add_argument('-autofit_model',nargs=1,help='model list to use for the autofit computation',
                 default='lines_narrow',type=str)
@@ -319,11 +319,11 @@ ap.add_argument('-write_aborted_pdf',nargs=1,help='create aborted pdfs at the en
 
 '''MODES'''
 
-ap.add_argument('-load_epochs',nargs=1,help='prepare epochs then exit',default=True)
+ap.add_argument('-load_epochs',nargs=1,help='prepare epochs then exit',default=False)
 #options: "opt" (tests the significance of each components and add them accordingly)
 # and "force_all" to force all components
 ap.add_argument('-cont_fit_method',nargs=1,help='fit logic for the broadband fits',
-                default='force_add')
+                default='force_all')
 
 ap.add_argument('-reload_autofit',nargs=1,
                 help='Reload existing autofit save files to gain time if a computation has crashed',
@@ -471,10 +471,11 @@ ap.add_argument('-NICER_lc_binning',nargs=1,help='NICER LC binning',default='1',
 #in this case the continuum components require the NICER calibration components to get a decent fit
 ap.add_argument('-low_E_NICER',nargs=1,help='NICER lower energy threshold for broadband fits',default=0.3,type=str)
 
-#note: Important to correctly assess the background of observations within the SAA
-ap.add_argument('-extend_scorpeon_nxb_SAA',nargs=1,help='Extend scorpeon nxb_SAA range',default=True)
+# ap.add_argument('-extend_scorpeon_nxb_SAA',nargs=1,help='Extend scorpeon nxb_SAA range',default=True)
 
 #ueseful when the SAA values/overshoots are high and thus the default parameter value is underestimated
+#note that the nxb SAA norm is automatically extended when this is set to true because its default range used to
+#be way too small. This has been fixed since
 ap.add_argument('-fit_SAA_norm',nargs=1,help='unfreeze the nxb_saa_norm parameter to fit it',default=True)
 
 '''NuSTAR'''
@@ -604,7 +605,7 @@ no_abslines=args.no_abslines
 NICER_bkg=args.NICER_bkg
 line_ul_only=args.line_ul_only
 NICER_lc_binning=args.NICER_lc_binning
-extend_scorpeon_nxb_SAA=args.extend_scorpeon_nxb_SAA
+# extend_scorpeon_nxb_SAA=args.extend_scorpeon_nxb_SAA
 fit_SAA_norm=args.fit_SAA_norm
 
 reload_autofit=args.reload_autofit
@@ -2577,56 +2578,94 @@ def line_detect(epoch_id):
 
         fitmodel.update_fitcomps()
 
-        if not broad_HID_mode:
-            # Creating a chain to avoid problems when computing the errors
-            Chain(outdir + '/' + epoch_observ[0] + '_chain_hid' + add_str + '.fits')
-
-        # computing and storing the flux for the full luminosity and two bands for the HR
+        # computing and storing the flux in several bands
         spflux_single = [None] * 5
+        spflux_high=None
 
-        '''the first computation is ONLY to get the errors, the main values are overwritten below'''
-        # we still only compute the flux of the first model even with NICER because the rest is BG
+        #adding a cflux component after all calibration and absorption components
+        #we need to parse the components in the model to know where to place it
 
-        AllModels.calcFlux(str(hid_cont_range[0]) + ' ' + str(hid_cont_range[1]) + " err 1000 90")
+        first_stdcomp=[elem for elem in fitmodel.includedlist_main if not elem.absorption
+                       and not elem.xcomps[0].name in xspec_globcomps and not elem.calibration][0].compnumbers[0]
 
-        spflux_single[0] = AllData(1).flux[0], AllData(1).flux[0] - AllData(1).flux[1], AllData(1).flux[2] - \
-                                               AllData(1).flux[0]
-        AllModels.calcFlux("3. 6. err 1000 90")
-        spflux_single[1] = AllData(1).flux[0], AllData(1).flux[0] - AllData(1).flux[1], AllData(1).flux[2] - \
-                                               AllData(1).flux[0]
-        AllModels.calcFlux("6. 10. err 1000 90")
-        spflux_single[2] = AllData(1).flux[0], AllData(1).flux[0] - AllData(1).flux[1], AllData(1).flux[2] - \
-                                               AllData(1).flux[0]
-        AllModels.calcFlux("1. 3. err 1000 90")
-        spflux_single[3] = AllData(1).flux[0], AllData(1).flux[0] - AllData(1).flux[1], AllData(1).flux[2] - \
-                                               AllData(1).flux[0]
-        AllModels.calcFlux("3. 10. err 1000 90")
-        spflux_single[4] = AllData(1).flux[0], AllData(1).flux[0] - AllData(1).flux[1], AllData(1).flux[2] - \
-                                               AllData(1).flux[0]
+        last_stdcomp=[elem for elem in fitmodel.includedlist_main if not elem.absorption
+                       and not elem.xcomps[0].name in xspec_globcomps and not elem.calibration][-1].compnumbers[0]
 
-        #easier to save the fit here to reload it without having changed the energies
-        if os.path.isfile(outdir + '/' + epoch_observ[0] + '_mod_broadhid' + add_str + '_withignore.xcm'):
-            os.remove(outdir + '/' + epoch_observ[0] + '_mod_broadhid' + add_str + '_withignore.xcm')
-        Xset.save(outdir + '/' + epoch_observ[0] + '_mod_broadhid' + add_str + '_withignore.xcm', info='a')
 
+        flux_bands=[[hid_cont_range[0],hid_cont_range[1]],[3,6],[6.,10.],[1.,3.],[3.,10]]
+
+        #adding the high energy band if it is relevant
         if max(e_sat_high_indiv)>=20:
-            #re-arranging the energies array to compute a high energy flux value
-            AllModels.setEnergies('0.1 100. 1000 log')
-            #need to remake a new fit after that
+            flux_bands+=[[15,50]]
+
+        #loop in each band:
+        for i_band, elem_band in enumerate(flux_bands):
+
+            mod_hid.load()
+
+            #increasing the energy range if necessary (computing high-E flux) and no thcomp has been loaded
+            if i_band>4 and AllModels(1).energies(1)[-1]<50:
+                AllModels.setEnergies('0.1 100. 1000 log')
+
+            #first addition of the cflux component to compute the main value
+            allfreeze()
+
+            #addding the component
+            cflux_compnumber=addcomp('cflux',position=first_stdcomp,endmult=last_stdcomp,return_pos=True)[1][0]
+
+            cflux_comp=getattr(AllModels(1),AllModels(1).componentNames[cflux_compnumber-1])
+
+            #setting the energies and a decent starting flux
+            cflux_comp.Emin.values=elem_band[0]
+            cflux_comp.Emax.values = elem_band[1]
+            cflux_comp.lg10Flux.values=-10
+
+            #fitting to get a first idea of the value
             calc_fit()
-            AllModels.calcFlux("15. 50. err 1000 90")
-            spflux_high = np.array([AllData(1).flux[0], AllData(1).flux[0] - AllData(1).flux[1], AllData(1).flux[2] - \
-                                                   AllData(1).flux[0]])
-        else:
-            spflux_high=None
+            cflux_stval=cflux_comp.lg10Flux.values[0]
 
-        Xset.restore(outdir + '/' + epoch_observ[0] + '_mod_broadhid' + add_str + '_withignore.xcm')
+            #resetting the model
+            mod_hid.load()
 
-        spflux_single = np.array(spflux_single)
+            #freezing the first normalisation parameter found in the main components if there is one
+            #to avoid issues when fitting cflux
+            for i_comp in range(first_stdcomp,last_stdcomp+1):
+                stdcomp=getattr(AllModels(1),AllModels(1).componentNames[i_comp-1])
+                print(i_comp)
+                print('stdcomp.parameterNames')
+                if 'norm' in stdcomp.parameterNames:
+                    fitmodel.print_xlog('Freezing norm for component '+stdcomp.name)
+                    stdcomp.norm.frozen=True
+                    break
 
-        AllChains.clear()
+            #reloading the component
+            addcomp('cflux', position=first_stdcomp, endmult=last_stdcomp, return_pos=True)
+            cflux_comp=getattr(AllModels(1),AllModels(1).componentNames[cflux_compnumber-1])
+
+            #setting the energies and a decent starting flux
+            cflux_comp.Emin.values=elem_band[0]
+            cflux_comp.Emax.values = elem_band[1]
+            cflux_comp.lg10Flux.values=cflux_stval
+
+            #fitting
+            calc_fit()
+
+            #computing the errors
+            par_index=cflux_comp.lg10Flux.index
+            err_vals=calc_error(fitmodel.logfile,param=str(par_index),give_errors=True,timeout=120)
+
+            err_vals_decimal=10**(np.array([cflux_comp.lg10Flux.values[0],
+                                               cflux_comp.lg10Flux.values[0]-err_vals[0][par_index-1][0],
+                                               cflux_comp.lg10Flux.values[0]+err_vals[0][par_index-1][1]]))
+
+            if i_band>4:
+                spflux_high=np.array(err_vals_decimal)
+            else:
+                spflux_single[i_band]=[err_vals_decimal[0],err_vals_decimal[0]-err_vals_decimal[1],err_vals_decimal[2]-err_vals_decimal[1]]
 
         mod_hid.load()
+
+        spflux_single=np.array(spflux_single).T
 
         for i_sp in range(len(epoch_files_good)):
             if line_cont_ig_indiv[i_sp] != '':
@@ -2640,63 +2679,121 @@ def line_detect(epoch_id):
         # storing the fitmod class into a file
         fitmodel.dump(outdir + '/' + epoch_observ[0] + '_fitmod_broadhid' + add_str + '.pkl')
 
-        # taking off the absorption (if it is in the final included components) before computing the flux
-        abs_incl_comps = (np.array(fitmodel.complist)[[elem.absorption and elem.included for elem in \
-                                                       [elem_comp for elem_comp in fitmodel.complist if
-                                                        elem_comp is not None]]])
-        if len(abs_incl_comps)!=0:
-            main_abs_comp=abs_incl_comps[0]
-            main_abs_comp.xcomps[0].nH.values=0
-        else:
-            main_abs_comp=None
-
-        #removing the calibration components and absorption lines, reverse included order to not have to update the fitcomps
-        for comp in [elem for elem in fitmodel.includedlist if elem is not None][::-1]:
-            if comp.calibration or comp.named_absline:
-                comp.delfrommod(rollback=False)
-
-        #removing the absorption lines
-        # and replacing the main values with the unabsorbed flux values
-        # (conservative choice since the other uncertainties are necessarily higher)
-
-        #this value is fully useless at this point
-        AllModels.calcFlux(str(hid_cont_range[0]) + ' ' + str(hid_cont_range[1]))
-
-        spflux_single[0][0] = AllData(1).flux[0]
-        AllModels.calcFlux("3. 6.")
-        spflux_single[1][0] = AllData(1).flux[0]
-        AllModels.calcFlux("6. 10.")
-        spflux_single[2][0] = AllData(1).flux[0]
-        AllModels.calcFlux("1. 3.")
-        spflux_single[3][0] = AllData(1).flux[0]
-        AllModels.calcFlux("3. 10.")
-        spflux_single[4][0] = AllData(1).flux[0]
-
-        #re-arranging the energies array to compute a high energy flux value
-        if max(e_sat_high_indiv)>=20:
-            AllModels.setEnergies('0.1 100. 1000 log')
-            AllModels.calcFlux("15. 50.")
-            spflux_high[0]=AllData(1).flux[0]
-
-        #and resetting the energies
-        Xset.restore(outdir + '/' + epoch_observ[0] + '_mod_broadhid' + add_str + '.xcm')
-
-        '''
-        Note that the errors are significantly underestimated, should do a cflux*continuum and freeze one of the
-        norms of the parts of the continuum
-        issues are:
-            -potential issues with cflux computation (as a convolution component could be imprecise)
-            -what to put in cflux (do we consider e.g. emission lines ? might need to re-organize the components then)
-            -cflux needs to be initialized quite precisely or fitted first independantly, 
-                otherwise it'll block the fit due to too high statistics
-            -remake a chian just for this?
-        '''
-
-        spflux_single = spflux_single.T
-
-        mod_hid.load()
-
         fitmodel.update_fitcomps()
+
+
+        # if not broad_HID_mode:
+        #     # Creating a chain to avoid problems when computing the errors
+        #     Chain(outdir + '/' + epoch_observ[0] + '_chain_hid' + add_str + '.fits')
+        #
+        # # computing and storing the flux for the full luminosity and two bands for the HR
+        # spflux_single = [None] * 5
+        #
+        # '''the first computation is ONLY to get the errors, the main values are overwritten below'''
+        # # we still only compute the flux of the first model even with NICER because the rest is BG
+        #
+        # AllModels.calcFlux(str(hid_cont_range[0]) + ' ' + str(hid_cont_range[1]) + " err 1000 90")
+        #
+        # spflux_single[0] = AllData(1).flux[0], AllData(1).flux[0] - AllData(1).flux[1], AllData(1).flux[2] - \
+        #                                        AllData(1).flux[0]
+        # AllModels.calcFlux("3. 6. err 1000 90")
+        # spflux_single[1] = AllData(1).flux[0], AllData(1).flux[0] - AllData(1).flux[1], AllData(1).flux[2] - \
+        #                                        AllData(1).flux[0]
+        # AllModels.calcFlux("6. 10. err 1000 90")
+        # spflux_single[2] = AllData(1).flux[0], AllData(1).flux[0] - AllData(1).flux[1], AllData(1).flux[2] - \
+        #                                        AllData(1).flux[0]
+        # AllModels.calcFlux("1. 3. err 1000 90")
+        # spflux_single[3] = AllData(1).flux[0], AllData(1).flux[0] - AllData(1).flux[1], AllData(1).flux[2] - \
+        #                                        AllData(1).flux[0]
+        # AllModels.calcFlux("3. 10. err 1000 90")
+        # spflux_single[4] = AllData(1).flux[0], AllData(1).flux[0] - AllData(1).flux[1], AllData(1).flux[2] - \
+        #                                        AllData(1).flux[0]
+
+        # #easier to save the fit here to reload it without having changed the energies
+        # if os.path.isfile(outdir + '/' + epoch_observ[0] + '_mod_broadhid' + add_str + '_withignore.xcm'):
+        #     os.remove(outdir + '/' + epoch_observ[0] + '_mod_broadhid' + add_str + '_withignore.xcm')
+        # Xset.save(outdir + '/' + epoch_observ[0] + '_mod_broadhid' + add_str + '_withignore.xcm', info='a')
+        #
+        # if max(e_sat_high_indiv)>=20:
+        #     #re-arranging the energies array to compute a high energy flux value
+        #     AllModels.setEnergies('0.1 100. 1000 log')
+        #     #need to remake a new fit after that
+        #     calc_fit()
+        #     AllModels.calcFlux("15. 50. err 1000 90")
+        #     spflux_high = np.array([AllData(1).flux[0], AllData(1).flux[0] - AllData(1).flux[1], AllData(1).flux[2] - \
+        #                                            AllData(1).flux[0]])
+        # else:
+        #     spflux_high=None
+        #
+        # Xset.restore(outdir + '/' + epoch_observ[0] + '_mod_broadhid' + add_str + '_withignore.xcm')
+        #
+        # spflux_single = np.array(spflux_single)
+        #
+        # AllChains.clear()
+        #
+        # mod_hid.load()
+        #
+        # for i_sp in range(len(epoch_files_good)):
+        #     if line_cont_ig_indiv[i_sp] != '':
+        #         try:
+        #             AllData(i_sp+1).notice(line_cont_ig_indiv[i_sp])
+        #         except:
+        #             breakpoint()
+        #             pass
+        # curr_store_fit(mode='broadhid' + add_str, fitmod=fitmodel)
+        #
+        # # storing the fitmod class into a file
+        # fitmodel.dump(outdir + '/' + epoch_observ[0] + '_fitmod_broadhid' + add_str + '.pkl')
+        #
+        # # taking off the absorption (if it is in the final included components) before computing the flux
+        # abs_incl_comps = (np.array(fitmodel.complist)[[elem.absorption and elem.included for elem in \
+        #                                                [elem_comp for elem_comp in fitmodel.complist if
+        #                                                 elem_comp is not None]]])
+        # if len(abs_incl_comps)!=0:
+        #     main_abs_comp=abs_incl_comps[0]
+        #     main_abs_comp.xcomps[0].nH.values=0
+        # else:
+        #     main_abs_comp=None
+        #
+        # #removing the calibration components and absorption lines, reverse included order to not have to update the fitcomps
+        # for comp in [elem for elem in fitmodel.includedlist if elem is not None][::-1]:
+        #     if comp.calibration or comp.named_absline:
+        #         comp.delfrommod(rollback=False)
+        #
+        # #removing the absorption lines
+        # # and replacing the main values with the unabsorbed flux values
+        # # (conservative choice since the other uncertainties are necessarily higher)
+        #
+        # #this value is fully useless at this point
+        # AllModels.calcFlux(str(hid_cont_range[0]) + ' ' + str(hid_cont_range[1]))
+        #
+        # spflux_single[0][0] = AllData(1).flux[0]
+        # AllModels.calcFlux("3. 6.")
+        # spflux_single[1][0] = AllData(1).flux[0]
+        # AllModels.calcFlux("6. 10.")
+        # spflux_single[2][0] = AllData(1).flux[0]
+        # AllModels.calcFlux("1. 3.")
+        # spflux_single[3][0] = AllData(1).flux[0]
+        # AllModels.calcFlux("3. 10.")
+        # spflux_single[4][0] = AllData(1).flux[0]
+        #
+        # #re-arranging the energies array to compute a high energy flux value
+        # if max(e_sat_high_indiv)>=20:
+        #     AllModels.setEnergies('0.1 100. 1000 log')
+        #     AllModels.calcFlux("15. 50.")
+        #     spflux_high[0]=AllData(1).flux[0]
+        #
+        # #and resetting the energies
+        # Xset.restore(outdir + '/' + epoch_observ[0] + '_mod_broadhid' + add_str + '.xcm')
+        #
+        #
+        # spflux_single = spflux_single.T
+        #
+        # mod_hid.load()
+        #
+        # fitmodel.update_fitcomps()
+
+        breakpoint()
 
         return spflux_single,spflux_high
 
@@ -2957,7 +3054,8 @@ def line_detect(epoch_id):
                 main_abscomp.mandatory = True
 
             #fitting
-            fitcont_broad.global_fit(split_fit=split_fit,method=cont_fit_method,fit_scorpeon=True,fit_SAA_norm=True)
+            fitcont_broad.global_fit(split_fit=split_fit,method=cont_fit_method,fit_scorpeon=True,
+                                     fit_SAA_norm=fit_SAA_norm)
 
             mod_fitcont=allmodel_data()
 
@@ -2989,8 +3087,10 @@ def line_detect(epoch_id):
             if 'disk_nthcomp' in [comp.compname for comp in \
                                   [elem for elem in fitcont_broad.includedlist if elem is not None]]:
                 broad_gamma_nthcomp=fitcont_broad.disk_nthcomp.xcomps[0].Gamma.values[0]
-            else:
-                broad_gamma_nthcomp=2.5
+            elif 'disk_thcomp' in [comp.compname for comp in \
+                                  [elem for elem in fitcont_broad.includedlist if elem is not None]]:
+                broad_gamma_nthcomp=fitcont_broad.disk_thcomp.xcomps[0].Gamma_tau.values[0]
+
             for i_sp in range(len(epoch_files_good)):
                 if line_cont_ig_indiv[i_sp] != '':
                     AllData(i_sp+1).notice(line_cont_ig_indiv[i_sp])
@@ -4212,14 +4312,19 @@ elif sat_glob=='NICER':
     epoch_list=[]
     tstart_list=[]
     for elem_file in spfile_list:
-        with fits.open(elem_file) as hdul:
 
-            start_obs_s = hdul[1].header['TSTART'] + hdul[1].header['TIMEZERO']
+        try:
+            with fits.open(elem_file) as hdul:
 
-            # saving for titles later
-            mjd_ref = Time(hdul[1].header['MJDREFI'] + hdul[1].header['MJDREFF'], format='mjd')
+                start_obs_s = hdul[1].header['TSTART'] + hdul[1].header['TIMEZERO']
 
-            obs_start = mjd_ref + TimeDelta(start_obs_s, format='sec')
+                # saving for titles later
+                mjd_ref = Time(hdul[1].header['MJDREFI'] + hdul[1].header['MJDREFF'], format='mjd')
+
+                obs_start = mjd_ref + TimeDelta(start_obs_s, format='sec')
+        except:
+            print('Issue with fits opening for file:'+elem_file)
+            continue
 
         tstart_list+=[obs_start.to_value('jd')]
 
@@ -4612,7 +4717,7 @@ elif sat_glob=='multi':
 
 if save_epoch_list:
     with open(os.path.join(outdir,'epoch_list.txt'),'w+') as f:
-        f.writelines([str(elem_epoch.tolist())+'\n'  for elem_epoch in epoch_list])
+        f.writelines([str(np.array(elem_epoch).tolist())+'\n'  for elem_epoch in epoch_list])
 
 if force_epochs:
     epoch_list=force_epochs_list
@@ -4668,7 +4773,7 @@ if rewind_epoch_list:
         epoch_list=[[elem+suffix_str for elem in expand_epoch(started_expos[i])] for i in range(len(started_expos))]
 
 if load_epochs:
-    print('Loading functions mode activated. Stopping here...')
+    print('Epoch loading mode activated. Stopping here...')
     breakpoint()
 
 #### line detections for exposure with a spectrum

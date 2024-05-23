@@ -93,7 +93,7 @@ telescope_colors={'Chandra':colors_func_instru.to_rgba(0),
                   'NuSTAR':colors_func_instru.to_rgba(2**(norm_pow)),
                   'Suzaku':colors_func_instru.to_rgba(3**(norm_pow)),
                    'XMM':colors_func_instru.to_rgba(4**(norm_pow)),
-                  'Swift':colors_func_instru.to_rgba(5**(norm_pow))}
+                  'SWIFT':colors_func_instru.to_rgba(5**(norm_pow))}
 
 
 #previous non colorblind-friendly mode
@@ -448,6 +448,8 @@ class source_wind:
 #otherwise we would have
 # 'SwiftJ1658.2-4242':source_wind('soft,hard'),
 
+#note that here we don't put the reports for the broad abslines since we don't know if they are associated to winds
+
 wind_det_dict={'4U1543-47':source_wind('soft_1_0','soft_1_0'),
               '4U1630-47':source_wind('soft','soft'),
               'EXO1846-031':source_wind('hard_1'),
@@ -455,7 +457,7 @@ wind_det_dict={'4U1543-47':source_wind('soft_1_0','soft_1_0'),
               'GRS1716-249':source_wind(visible='hard'),
               'GRS1758-258':source_wind('hard_0_0'),
               'GRS1915+105':source_wind('soft,hard','soft',infrared='hard_0_1'),
-              'GX339-4':source_wind(soft_x='hard',visible='soft,hard'),
+              'GX339-4':source_wind(soft_x='hard'),
               'H1743-322':source_wind('soft'),
               'IGRJ17091-3624':source_wind('soft,hard_1_0',soft_x='hard'),
               'IGRJ17451-3022':source_wind('soft','soft'),

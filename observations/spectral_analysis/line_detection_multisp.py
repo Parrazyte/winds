@@ -161,11 +161,12 @@ ap = argparse.ArgumentParser(description='Script to perform line detection in X-
 
 '''GENERAL OPTIONS'''
 
-ap.add_argument('-satellite',nargs=1,help='telescope to fetch spectra from',default='NICER',type=str)
+ap.add_argument('-satellite',nargs=1,help='telescope to fetch spectra from',default='multi',type=str)
 
-#used for NICER and multi for now
+#used for NICER, NuSTAR and multi for now
+#can also be set for "day" to finish the current day
 ap.add_argument('-group_max_timedelta',nargs=1,
-                help='maximum time delta for epoch/gti grouping in dd_hh_mm_ss_ms',default='01_00_00_00_000',type=str)
+                help='maximum time delta for epoch/gti grouping in dd_hh_mm_ss_ms',default='day',type=str)
 
 #00_00_00_10 for NICER TR
 #00_00_15_00 for NuSTAR individual orbits
@@ -224,6 +225,10 @@ ap.add_argument('-xspec_window',nargs=1,help='xspec window id (auto tries to pic
 #### Models and abslines lock
 ap.add_argument('-cont_model',nargs=1,help='model list to use for the autofit computation',
                 default='thcont_NICER',type=str)
+
+#useful to gain time when the abs components can be constrained for sure
+ap.add_argument('-mandatory_abs',nargs=1,help='Consider absorption component as mandatory',
+                default=True,type=bool)
 
 ap.add_argument('-autofit_model',nargs=1,help='model list to use for the autofit computation',
                 default='lines_narrow',type=str)
@@ -319,7 +324,8 @@ ap.add_argument('-write_aborted_pdf',nargs=1,help='create aborted pdfs at the en
 
 '''MODES'''
 
-ap.add_argument('-load_epochs',nargs=1,help='prepare epochs then exit',default=False)
+ap.add_argument('-load_epochs',nargs=1,help='prepare epochs then exit',default=True)
+
 #options: "opt" (tests the significance of each components and add them accordingly)
 # and "force_all" to force all components
 ap.add_argument('-cont_fit_method',nargs=1,help='fit logic for the broadband fits',
@@ -422,13 +428,18 @@ ap.add_argument('-restrict_fakes',nargs=1,
                 help='restrict range of fake computation to 8keV max',default=False,type=bool)
 
 '''MULTI'''
-ap.add_argument('-plot_multi_overlap',nargs=1,help='plot overlap between different epochs',default=True)
+
+
+ap.add_argument('-plot_epoch_overlap',nargs=1,help='plot overlap between different epochs',default=True)
 
 #in this case other epochs from other instruments are matched against the obs of this one
 #useful to center epoch matching on a specific instrument
 #off value is False
 ap.add_argument('-multi_focus',nargs=1,help='restricts epoch matching to having a specific telescope',
-                default='NuSTAR',type=str)
+                default='NICER',type=str)
+
+ap.add_argument('-add_ungrouped_BAT',nargs=1,help='add ungrouped Swift-BAT spectra to the epoch creation',
+                default=True,type=str)
 
 ap.add_argument('-skip_single_instru',nargs=1,help='skip epochs with a single instrument',
                 default=False,type=bool)
@@ -620,6 +631,10 @@ broad_HID_mode=args.broad_HID_mode
 freeze_nH=args.freeze_nH
 freeze_nH_val=args.freeze_nH_val
 
+mandatory_abs=args.mandatory_abs
+
+add_ungrouped_BAT=args.add_ungrouped_BAT
+
 cont_fit_method=args.cont_fit_method
 xchatter=args.xchatter
 
@@ -659,7 +674,7 @@ group_max_timedelta=args.group_max_timedelta
 single_obsid_NuSTAR=args.single_obsid_NuSTAR
 restrict_combination=args.restrict_combination
 match_closest_NICER=args.match_closest_NICER
-plot_multi_overlap=args.plot_multi_overlap
+plot_epoch_overlap=args.plot_epoch_overlap
 skip_single_instru=args.skip_single_instru
 
 xspec_query=args.xspec_query
@@ -845,6 +860,9 @@ if multi_obj==False:
                      +glob.glob('*_grp_' + grouping + '.pha')\
                     +[elem for elem in \
                     glob.glob('*_'+prefix+'_sp_src_grp_'+grouping+'.*') if 'bgtested' not in elem]
+
+        if add_ungrouped_BAT:
+            spfile_list+=[elem for elem in  glob.glob('*_survey_point_*.pha')]
 
     if launch_cpd:
         #obtaining the xspec window id. It is important to call the variable xspec_id, since it is called by default in other functions
@@ -2585,11 +2603,14 @@ def line_detect(epoch_id):
         #adding a cflux component after all calibration and absorption components
         #we need to parse the components in the model to know where to place it
 
+        #first component from the first non calibration fitcomp
         first_stdcomp=[elem for elem in fitmodel.includedlist_main if not elem.absorption
                        and not elem.xcomps[0].name in xspec_globcomps and not elem.calibration][0].compnumbers[0]
 
+        #last component from the last non calibration fitcomp
+        # (could be vashift*gaussian here for example, hence the second [-1])
         last_stdcomp=[elem for elem in fitmodel.includedlist_main if not elem.absorption
-                       and not elem.xcomps[0].name in xspec_globcomps and not elem.calibration][-1].compnumbers[0]
+                       and not elem.xcomps[0].name in xspec_globcomps and not elem.calibration][-1].compnumbers[-1]
 
 
         flux_bands=[[hid_cont_range[0],hid_cont_range[1]],[3,6],[6.,10.],[1.,3.],[3.,10]]
@@ -2631,8 +2652,7 @@ def line_detect(epoch_id):
             #to avoid issues when fitting cflux
             for i_comp in range(first_stdcomp,last_stdcomp+1):
                 stdcomp=getattr(AllModels(1),AllModels(1).componentNames[i_comp-1])
-                print(i_comp)
-                print('stdcomp.parameterNames')
+
                 if 'norm' in stdcomp.parameterNames:
                     fitmodel.print_xlog('Freezing norm for component '+stdcomp.name)
                     stdcomp.norm.frozen=True
@@ -2793,8 +2813,6 @@ def line_detect(epoch_id):
         #
         # fitmodel.update_fitcomps()
 
-        breakpoint()
-
         return spflux_single,spflux_high
 
     #reload previously stored autofits to gain time if asked to
@@ -2904,7 +2922,7 @@ def line_detect(epoch_id):
     else:
 
         '''Continuum fits'''
-        def high_fit(broad_absval,broad_abscomp,broad_gamma_nthcomp):
+        def high_fit(broad_absval,broad_abscomp,broad_gamma_nthcomp,thcomp_frac_frozen=False):
 
             '''
             high energy fit and flux array computation
@@ -2913,7 +2931,7 @@ def line_detect(epoch_id):
             print_xlog('\nComputing line continuum fit...')
 
             AllModels.clear()
-            xscorpeon.load(scorpeon_save=data_broad.scorpeon,frozen=True)
+            xscorpeon.load('auto',scorpeon_save=data_broad.scorpeon,frozen=True)
 
             #limiting to the line search energy range
             ignore_data_indiv(line_cont_range[0], line_cont_range[1], reset=True,
@@ -2939,23 +2957,30 @@ def line_detect(epoch_id):
             # curr_logfile_write.reconfigure(line_buffering=True)
             # curr_logfile = open(curr_logfile_write.name, 'r')
 
+            #initial informations:
+            # gamma to freeze the nthcomp to avoid nonsenses
+            #and giving the info on whether the thcomp should be nullified if there is one
+
             if broad_absval!=0:
                 fitcont_high=fitmod(comp_cont,
-                                    curr_logfile,curr_logfile_write,absval=broad_absval)
+                                    curr_logfile,curr_logfile_write,absval=broad_absval,
+                                    fixed_gamma=broad_gamma_nthcomp,thcomp_frac_frozen=thcomp_frac_frozen,
+                                    mandatory_abs=mandatory_abs)
             else:
 
                 #creating the fitcont without the absorption component if it didn't exist in the broad model
                 fitcont_high=fitmod([elem for elem in comp_cont if elem!=broad_abscomp],
-                                    curr_logfile,curr_logfile_write)
+                                    curr_logfile,curr_logfile_write,
+                fixed_gamma = broad_gamma_nthcomp, thcomp_frac_frozen = thcomp_frac_frozen)
 
-            #freezing the gamma of the nthcomp to avoid nonsenses:
-            fitcont_high.fixed_gamma=broad_gamma_nthcomp
 
             # forcing the absorption component to be included for the broad band fit
             if sat_glob == 'NuSTAR' and freeze_nH:
                 main_abscomp = (np.array(fitcont_high.complist)[[elem.absorption for elem in \
                                                                 fitcont_high.complist]])[0]
                 main_abscomp.mandatory = True
+
+            #check the thcomp_frac_frozen
 
             fitcont_high.global_fit(split_fit=split_fit,method=cont_fit_method)
 
@@ -3045,7 +3070,9 @@ def line_detect(epoch_id):
                 broad_absval=None
 
             #creating the automatic fit class for the standard continuum
-            fitcont_broad=fitmod(comp_cont,curr_logfile,curr_logfile_write,absval=broad_absval,sat_list=sat_indiv_good)
+            fitcont_broad=fitmod(comp_cont,curr_logfile,curr_logfile_write,
+                                 absval=broad_absval,sat_list=sat_indiv_good,
+                                 mandatory_abs=mandatory_abs)
 
             # forcing the absorption component to be included for the broad band fit
             if sat_glob == 'NuSTAR' and freeze_nH:
@@ -3056,6 +3083,30 @@ def line_detect(epoch_id):
             #fitting
             fitcont_broad.global_fit(split_fit=split_fit,method=cont_fit_method,fit_scorpeon=True,
                                      fit_SAA_norm=fit_SAA_norm)
+
+            #checking whether the comptonisation component is useless
+            if 'disk_thcomp' in [elem.compname for elem in fitcont_broad.includedlist_main]:
+
+                #checking if the component was pegged during the fit
+                thcomp_frac_frozen=AllModels(1).thcomp.Gamma_tau.frozen
+                if thcomp_frac_frozen:
+                    #forcing the component to 0 values and freezing it
+                    AllModels(1).thcomp.cov_frac.values=0.
+                    AllModels(1).thcomp.Gamma_tau.values=3.5
+                    AllModels(1).thcomp.Gamma_tau.frozen=True
+                    calc_fit()
+
+            else:
+                thcomp_frac_frozen=False
+
+            if 'disk_nthcomp' in [comp.compname for comp in \
+                                  [elem for elem in fitcont_broad.includedlist if elem is not None]]:
+                broad_gamma_compt=fitcont_broad.disk_nthcomp.xcomps[0].Gamma.values[0]
+            elif 'disk_thcomp' in [comp.compname for comp in \
+                                  [elem for elem in fitcont_broad.includedlist if elem is not None]]:
+                broad_gamma_compt=fitcont_broad.disk_thcomp.xcomps[0].Gamma_tau.values[0]
+            else:
+                broad_gamma_compt=None
 
             mod_fitcont=allmodel_data()
 
@@ -3084,13 +3135,6 @@ def line_detect(epoch_id):
                 broad_absval=0
                 broad_abscomp=''
 
-            if 'disk_nthcomp' in [comp.compname for comp in \
-                                  [elem for elem in fitcont_broad.includedlist if elem is not None]]:
-                broad_gamma_nthcomp=fitcont_broad.disk_nthcomp.xcomps[0].Gamma.values[0]
-            elif 'disk_thcomp' in [comp.compname for comp in \
-                                  [elem for elem in fitcont_broad.includedlist if elem is not None]]:
-                broad_gamma_nthcomp=fitcont_broad.disk_thcomp.xcomps[0].Gamma_tau.values[0]
-
             for i_sp in range(len(epoch_files_good)):
                 if line_cont_ig_indiv[i_sp] != '':
                     AllData(i_sp+1).notice(line_cont_ig_indiv[i_sp])
@@ -3116,7 +3160,7 @@ def line_detect(epoch_id):
 
                 #reloading the scorpeon save (if there is one, aka if with NICER),
                 # from the broad fit and freezing it to avoid further variations
-                xscorpeon.load(scorpeon_save=data_broad.scorpeon,frozen=True)
+                xscorpeon.load('auto',scorpeon_save=data_broad.scorpeon,frozen=True)
 
                 ignore_data_indiv(hid_cont_range[0], hid_cont_range[1], reset=True, sat_low_groups=e_sat_low_indiv,
                                   sat_high_groups=e_sat_high_indiv,glob_ignore_bands=ignore_bands_indiv)
@@ -3130,7 +3174,8 @@ def line_detect(epoch_id):
                 #creating the automatic fit class for the standard continuum
                 # (without absorption if it didn't get included)
                 if broad_absval!=0:
-                    fitcont_hid=fitmod(comp_cont,curr_logfile,curr_logfile_write,absval=broad_absval)
+                    fitcont_hid=fitmod(comp_cont,curr_logfile,curr_logfile_write,absval=broad_absval,
+                                       mandatory_abs=mandatory_abs)
                 else:
                     #creating the fitcont without the absorption component if it didn't exist in the broad model
                     fitcont_hid=fitmod([elem for elem in comp_cont if elem!=broad_abscomp],
@@ -3156,12 +3201,13 @@ def line_detect(epoch_id):
 
             spflux_single,spflux_high=hid_fit_infos(fitcont_hid,broad_absval)
 
-            return spflux_single,broad_absval,broad_abscomp,data_broad,fitcont_broad,broad_gamma_nthcomp,spflux_high
+            return spflux_single,broad_absval,broad_abscomp,data_broad,fitcont_broad,broad_gamma_compt,spflux_high,\
+                thcomp_frac_frozen
 
         AllModels.clear()
 
         #frozen Scorpeon for now (unfreezed during the broad fit)
-        xscorpeon.load(frozen=True)
+        xscorpeon.load('auto',frozen=True)
 
         ignore_data_indiv(e_sat_low_indiv,e_sat_high_indiv,reset=True,glob_ignore_bands=ignore_bands_indiv)
 
@@ -3176,15 +3222,15 @@ def line_detect(epoch_id):
         if len(result_broad_fit)==1:
             return fill_result(result_broad_fit)
         else:
-            main_spflux,broad_absval,broad_abscomp,data_broad,fitcont_broad,broad_gamma_nthcomp,main_spflux_high\
-                =result_broad_fit
+            main_spflux,broad_absval,broad_abscomp,data_broad,fitcont_broad,broad_gamma_compt,main_spflux_high,\
+                thcomp_frac_frozen=result_broad_fit
 
         if max(e_sat_high_indiv)>=20:
             np.savetxt(outdir + '/' + epoch_observ[0] + '_main_spflux_high.txt',main_spflux_high)
 
         #reloading the frozen scorpeon data\
         # (which won't change anything if it hasn't been fitted but will help otherwise)
-        xscorpeon.load(scorpeon_save=data_broad.scorpeon,frozen=True)
+        xscorpeon.load('auto',scorpeon_save=data_broad.scorpeon,frozen=True)
 
         '''
         more advanced automatic detector exclusions to avoid crashing xspec should be done later if needed
@@ -3198,7 +3244,8 @@ def line_detect(epoch_id):
         else:
             mask_nodeload = np.repeat(True,AllData.nGroups)
 
-        result_high_fit=high_fit(broad_absval,broad_abscomp,broad_gamma_nthcomp)
+        result_high_fit=high_fit(broad_absval,broad_abscomp,broad_gamma_compt,
+                                 thcomp_frac_frozen=thcomp_frac_frozen)
 
         #if the function returns an array of length 1, it means it returned an error message
         if len(result_high_fit)==1:
@@ -3256,11 +3303,11 @@ def line_detect(epoch_id):
             curr_logfile=open(curr_logfile_write.name,'r')
 
             #creating the fitmod object with the desired components (we currently do not use comp groups)
-            fitlines=fitmod(comp_lines,curr_logfile,curr_logfile_write,prev_fitmod=fitmod_cont,sat_list=sat_indiv_good)
+            fitlines=fitmod(comp_lines,curr_logfile,curr_logfile_write,prev_fitmod=fitmod_cont,
+                            sat_list=sat_indiv_good,fixed_gamma=broad_gamma_compt,
+                                                    thcomp_frac_frozen=thcomp_frac_frozen,
+                            mandatory_abs=mandatory_abs)
 
-            # (just in case) inputting the fixed values to avoid issues during component deletion
-            fitlines.fixed_abs = broad_absval
-            fitlines.fixed_gamma = broad_gamma_nthcomp
 
             #global fit, with MC only if no continuum refitting
             fitlines.global_fit(chain=not refit_cont,directory=outdir,observ_id=epoch_observ[0],split_fit=split_fit,
@@ -3348,16 +3395,26 @@ def line_detect(epoch_id):
                     fitlines.update_fitcomps()
                     main_abscomp.n_unlocked_pars_base=len(main_abscomp.unlocked_pars)
 
-                #thawing similarly the nthcomp gamma (note that we can't just pars
-                if 'disk_nthcomp' in fitlines.name_complist:
+                #thawing similarly the nthcomp gamma and removing the fixed restriction
+                if 'disk_nthcomp' in fitlines.name_complist or \
+                        ('disk_thcomp' in fitlines.name_complist and not fitlines.thcomp_frac_frozen):
                     fitlines.fixed_gamma=None
 
                 if 'disk_nthcomp' in [comp.compname for comp in \
-                                      [elem for elem in fitlines.includedlist if elem is not None]]:
+                                      fitlines.includedlist_main]:
                     fitlines.disk_nthcomp.xcomps[0].Gamma.frozen=False
 
                     fitlines.update_fitcomps()
                     fitlines.disk_nthcomp.n_unlocked_pars_base=len(fitlines.disk_nthcomp.unlocked_pars)
+
+                #same thing for thcomp, but only if the thcomp was not negligible to begin with
+                elif 'disk_thcomp' in [comp.compname for comp in \
+                                      fitlines.includedlist_main] and not fitlines.thcomp_frac_frozen:
+
+                    fitlines.disk_thcomp.xcomps[0].Gamma_tau.frozen=False
+
+                    fitlines.update_fitcomps()
+                    fitlines.disk_thcomp.n_unlocked_pars_base=len(fitlines.disk_thcomp.unlocked_pars)
 
                 #fitting the model to the new energy band first
                 calc_fit(logfile=fitlines.logfile)
@@ -3418,21 +3475,29 @@ def line_detect(epoch_id):
                 '''
                 Refitting in the autofit range to get the newer version of the autofit and continuum
                 
-                first: freezing the nthcomp gamma if necessary
+                first: freezing the nthcomp/thcomp gamma if necessary
                  
                 second: restoring the line freeze states
                 here we restore the INITIAL component freeze state, effectively thawing all components pegged during the first autofit
                 '''
 
                 # freezing the gamma of the nthcomp to avoid nonsenses:
-                fitlines.fixed_gamma = broad_gamma_nthcomp
+                fitlines.fixed_gamma = broad_gamma_compt
 
                 if 'disk_nthcomp' in [comp.compname for comp in \
-                                      [elem for elem in fitlines.includedlist if elem is not None]]:
+                                      fitlines.incluedlist_main]:
                     fitlines.disk_nthcomp.xcomps[0].Gamma.frozen = True
 
                     fitlines.update_fitcomps()
                     fitlines.disk_nthcomp.n_unlocked_pars_base = len(fitlines.disk_nthcomp.unlocked_pars)
+
+                if 'disk_nthcomp' in [comp.compname for comp in \
+                                      fitlines.incluedlist_main]:
+
+                    fitlines.disk_thcomp.xcomps[0].Gamma_tau.frozen = True
+
+                    fitlines.update_fitcomps()
+                    fitlines.disk_thcomp.n_unlocked_pars_base = len(fitlines.disk_thcomp.unlocked_pars)
 
                 for comp in [elem for elem in fitlines.includedlist if elem is not None]:
 
@@ -4244,252 +4309,294 @@ def line_detect(epoch_id):
 #### Epoch matching
 '''
 
-if sat_glob=='XMM':
-    spfile_dates=np.array([[None,None]]*len(spfile_list))
-
-    #storing the dates of all the exposures
-    for file_index,elem_sp in enumerate(spfile_list):
-        with fits.open(elem_sp) as fits_spec:
-            spfile_dates[file_index][0]=Time(fits_spec[0].header['DATE-OBS'])
-            spfile_dates[file_index][1]=Time(fits_spec[0].header['DATE-END'])
-
-    def overlap_fraction(dates_1,dates_2):
-        duration_1=dates_1[1]-dates_1[0]
-        duration_2=dates_2[1]-dates_2[0]
-
-        max_overlap=max(0,min(dates_1[1],dates_2[1])-max(dates_1[0],dates_2[0]))
-
-        return max(max_overlap/duration_1,max_overlap/duration_2)
-
-    epoch_list=[]
-    #and matching them
-    while len(ravel_ragged(epoch_list))!=len(spfile_list):
-
-        elem_epoch=[]
-
-        #taking a new spectrum
-        curr_sp_id,curr_sp=[[i,spfile_list[i]] for i in range(len(spfile_list)) if spfile_list[i] not in ravel_ragged(epoch_list)][0]
-
-        #adding it to a new epoch
-        elem_epoch+=[curr_sp]
-
-        #testing all remaining spectrum for overlap
-        #we do this incrementally to test overlap between with all the spectra in the epoch
-        id_ep=0
-        while id_ep<len(elem_epoch):
-            curr_tested_epoch=elem_epoch[id_ep]
-            curr_tested_epoch_id=np.argwhere(spfile_list==curr_tested_epoch)[0][0]
-            for elem_sp_id,elem_sp in [[i,spfile_list[i]] for i in range(len(spfile_list)) if
-                                       (spfile_list[i] not in ravel_ragged(epoch_list) and spfile_list[i] not in elem_epoch)]:
-                #fetching the index of each
-                if overlap_fraction(spfile_dates[curr_tested_epoch_id],spfile_dates[elem_sp_id]).value>0.5:
-                    elem_epoch+=[elem_sp]
-            id_ep+=1
-
-        '''
-        ordering the epoch files with pn, mos1, mos2 (or any part of this)
-        '''
-        elem_epoch_sorted=[]
-        for cam in ['pn','mos1','mos2']:
-            for elem_sp in elem_epoch:
-                if elem_sp.split('_')[1]==cam:
-                    elem_epoch_sorted+=[elem_sp]
-
-        epoch_list+=[elem_epoch_sorted]
-
-elif sat_glob=='Chandra':
-    epoch_list=[]
-    epoch_list_started=[]
-    obsid_list_chandra=np.unique([elem.split('_')[0] for elem in spfile_list])
-    for obsid in obsid_list_chandra:
-        epoch_list+=[[elem for elem in spfile_list if elem.startswith(obsid)]]
-
-    obsid_list_started_chandra=np.unique([elem.split('_')[0] for elem in started_expos[1:]])
-    for obsid in obsid_list_started_chandra.tolist():
-        epoch_list_started+=[[elem,elem.replace('-1','1')] for elem in started_expos if elem.startswith(obsid)]
-
-elif sat_glob=='NICER':
-    epoch_list=[]
-    tstart_list=[]
-    for elem_file in spfile_list:
-
-        try:
-            with fits.open(elem_file) as hdul:
-
-                start_obs_s = hdul[1].header['TSTART'] + hdul[1].header['TIMEZERO']
-
-                # saving for titles later
-                mjd_ref = Time(hdul[1].header['MJDREFI'] + hdul[1].header['MJDREFF'], format='mjd')
-
-                obs_start = mjd_ref + TimeDelta(start_obs_s, format='sec')
-        except:
-            print('Issue with fits opening for file:'+elem_file)
-            continue
-
-        tstart_list+=[obs_start.to_value('jd')]
-
-    #max delta between gti starts in sec
-    max_delta=(TimeDelta(group_max_timedelta.split('_')[0],format='jd')+\
-              TimeDelta(group_max_timedelta.split('_')[1],format='jd')/24+ \
-              TimeDelta(group_max_timedelta.split('_')[2], format='jd')/(24*60)+ \
-              TimeDelta(group_max_timedelta.split('_')[3], format='jd')/(24*3600)+ \
-              TimeDelta(group_max_timedelta.split('_')[4], format='jd')/(24*3600*1e3)).to_value('jd')
-
-    epoch_id_list_ravel=[]
-    epoch_id_list=[]
-
-    with tqdm(total=len(tstart_list)) as pbar:
-        for id_elem,elem_tstart in enumerate(tstart_list):
-
-            #skipping computation for already grouped elements
-            if id_elem in epoch_id_list_ravel:
-                continue
-
-            elem_delta=[(elem-elem_tstart) for elem in tstart_list]
-
-            elem_epoch_id=[id for id in range(len(tstart_list)) if\
-                                     id not in epoch_id_list_ravel and elem_delta[id]>=0 and elem_delta[id]<max_delta]
-
-            epoch_id_list_ravel+=elem_epoch_id
-
-            if len(elem_epoch_id)>0:
-                epoch_id_list+=[elem_epoch_id]
-
-            pbar.update(n=len(elem_epoch_id))
-
-    epoch_list=[spfile_list[elem] for elem in epoch_id_list]
-
-
-    #skipping flares if asked for
-    if skip_flares:
-        epoch_list=[[subelem for subelem in elem if "F_sp" not in subelem] for elem in epoch_list]
-        epoch_list=[elem for elem in epoch_list if len(elem)>0]
-
-    epoch_list=np.array(epoch_list,dtype=object)
-
-    #not needed atm
-    # def str_to_epoch(str_epoch):
-    #     str_epoch_list=[]
-    #     for elem_obsid_str in str_epoch:
-    #         if '-' not in elem_obsid_str:
-    #             str_epoch_list+=elem_obsid_str
-    #         else:
-    #             str_epoch_list+=[elem_obsid_str.split('-')[0]+elem_obsid_str.split('-')[i]\
-    #                              for i in range(1,len(elem_obsid_str.split('-')))]
-
-    epoch_list_started=started_expos
-    epoch_list_done=done_expos
-
-elif sat_glob in ['Suzaku','Swift']:
-    epoch_list=[]
-    epoch_list_started=[]
-    if sat_glob=='Swift':
-        obsid_list=np.unique([elem[:11] for elem in spfile_list])
-    else:
-        obsid_list=np.unique([elem.split('_')[0] for elem in spfile_list])
-
-    for obsid in obsid_list:
-
-        epoch_list+=[[elem for elem in spfile_list if elem.startswith(obsid+'_')]]
-
-    if sat_glob=='Swift':
-        obsid_list_started=np.unique([elem.split('_')[0][:11] for elem in started_expos[1:]])
-        for obsid in obsid_list_started.tolist():
-            epoch_list_started+=[[elem] for elem in started_expos if elem.startswith(obsid)]
-
-    if sat_glob=='Suzaku':
-        #reversing the order to have the FI xis first, then the BI xis, then pin instead of the opposite
-        epoch_list=[elem[::-1] for elem in epoch_list]
-
-        epoch_list_started=[literal_eval(elem.split(']')[0]+']') for elem in started_expos[1:]]
-
-elif sat_glob=='NuSTAR':
-
-    epoch_list = []
-
-    # skipping flares if asked for
-    if skip_flares:
-        spfile_list = np.array([elem for elem in spfile_list if "F_sp" not in elem])
-
-    tstart_list = np.array([None] * len(spfile_list))
-    det_list = np.array([None] * len(spfile_list))
-    tstop_list = np.array([None] * len(spfile_list))
-
-    for i_file, elem_file in enumerate(spfile_list):
-
-        # for Suzaku this won't work for meugmi's xis0_xis3 files bc their header has been replaced
-        # so we replace them by the xis1 to be able to load the exposure
-        elem_file_load = elem_file.replace('xis0_xis3', 'xis1')
-
-        with fits.open(elem_file_load) as hdul:
-            if 'TELESCOP' in hdul[1].header:
-                det_list[i_file] = hdul[1].header['TELESCOP'].replace('SUZAKU', 'Suzaku')
-            else:
-                # the only files without TELESCOP in the header should be the fused megumi_files suzaku sp
-                assert megumi_files, 'Issue with detector handling'
-
-                det_list[i_file] = 'Suzaku'
-
-            if 'TIMEZERO' in hdul[1].header:
-                start_obs_s = hdul[1].header['TSTART'] + hdul[1].header['TIMEZERO']
-                stop_obs_s = hdul[1].header['TSTOP'] + hdul[1].header['TIMEZERO']
-            else:
-                start_obs_s = hdul[1].header['TSTART']
-                stop_obs_s = hdul[1].header['TSTOP']
-            # saving for titles later
-            mjd_ref = Time(hdul[1].header['MJDREFI'] + hdul[1].header['MJDREFF'], format='mjd')
-
-            obs_start = mjd_ref + TimeDelta(start_obs_s, format='sec')
-            obs_stop = mjd_ref + TimeDelta(stop_obs_s, format='sec')
-
-        tstart_list[i_file] = obs_start.to_value('jd')
-        tstop_list[i_file] = obs_stop.to_value('jd')
-
-    # max delta between gti starts in sec
-    max_delta=(TimeDelta(group_max_timedelta.split('_')[0],format='jd')+\
-              TimeDelta(group_max_timedelta.split('_')[1],format='jd')/24+ \
-              TimeDelta(group_max_timedelta.split('_')[2], format='jd')/(24*60)+ \
-              TimeDelta(group_max_timedelta.split('_')[3], format='jd')/(24*3600)+ \
-              TimeDelta(group_max_timedelta.split('_')[4], format='jd')/(24*3600*1e3)).to_value('jd')
-
-    epoch_id_list_ravel = []
-    epoch_id_list = []
-
-    tstart_list_base = tstart_list
-    tstop_list_base = tstop_list
-    det_list_base = det_list
-    id_base = np.arange(len(spfile_list))
-
-    with tqdm(total=len(tstart_list)) as pbar:
-        for id_elem, (elem_tstart, elem_tstop, elem_det) in enumerate(
-                zip(tstart_list_base, tstop_list_base, det_list_base)):
-
-            # skipping computation for already grouped elements
-            if id_base[id_elem] in epoch_id_list_ravel:
-                continue
-
-            elem_delta = np.array([-get_overlap([elem_tstart, elem_tstop], [other_start, other_stop], distance=True) for
-                                   other_start, other_stop in zip(tstart_list, tstop_list)])
-
-            # list of matchable epochs
-            elem_epoch_id = np.array([id for id in range(len(tstart_list)) if \
-                                      id not in epoch_id_list_ravel and elem_delta[id] < max_delta])
-
-            epoch_id_list_ravel += elem_epoch_id.tolist()
-
-            if len(elem_epoch_id) > 0:
-                epoch_id_list += [elem_epoch_id]
-
-            pbar.update(n=len(elem_epoch_id))
-
-    epoch_list = [spfile_list[elem] for elem in epoch_id_list]
-
-    epoch_list = np.array(epoch_list, dtype=object)
-
-    epoch_list_started = started_expos
-    epoch_list_done = done_expos
-
-elif sat_glob=='multi':
+# if sat_glob=='XMM':
+#     spfile_dates=np.array([[None,None]]*len(spfile_list))
+#
+#     #storing the dates of all the exposures
+#     for file_index,elem_sp in enumerate(spfile_list):
+#         with fits.open(elem_sp) as fits_spec:
+#             spfile_dates[file_index][0]=Time(fits_spec[0].header['DATE-OBS'])
+#             spfile_dates[file_index][1]=Time(fits_spec[0].header['DATE-END'])
+#
+#     def overlap_fraction(dates_1,dates_2):
+#         duration_1=dates_1[1]-dates_1[0]
+#         duration_2=dates_2[1]-dates_2[0]
+#
+#         max_overlap=max(0,min(dates_1[1],dates_2[1])-max(dates_1[0],dates_2[0]))
+#
+#         return max(max_overlap/duration_1,max_overlap/duration_2)
+#
+#     epoch_list=[]
+#     #and matching them
+#     while len(ravel_ragged(epoch_list))!=len(spfile_list):
+#
+#         elem_epoch=[]
+#
+#         #taking a new spectrum
+#         curr_sp_id,curr_sp=[[i,spfile_list[i]] for i in range(len(spfile_list)) if spfile_list[i] not in ravel_ragged(epoch_list)][0]
+#
+#         #adding it to a new epoch
+#         elem_epoch+=[curr_sp]
+#
+#         #testing all remaining spectrum for overlap
+#         #we do this incrementally to test overlap between with all the spectra in the epoch
+#         id_ep=0
+#         while id_ep<len(elem_epoch):
+#             curr_tested_epoch=elem_epoch[id_ep]
+#             curr_tested_epoch_id=np.argwhere(spfile_list==curr_tested_epoch)[0][0]
+#             for elem_sp_id,elem_sp in [[i,spfile_list[i]] for i in range(len(spfile_list)) if
+#                                        (spfile_list[i] not in ravel_ragged(epoch_list) and spfile_list[i] not in elem_epoch)]:
+#                 #fetching the index of each
+#                 if overlap_fraction(spfile_dates[curr_tested_epoch_id],spfile_dates[elem_sp_id]).value>0.5:
+#                     elem_epoch+=[elem_sp]
+#             id_ep+=1
+#
+#         '''
+#         ordering the epoch files with pn, mos1, mos2 (or any part of this)
+#         '''
+#         elem_epoch_sorted=[]
+#         for cam in ['pn','mos1','mos2']:
+#             for elem_sp in elem_epoch:
+#                 if elem_sp.split('_')[1]==cam:
+#                     elem_epoch_sorted+=[elem_sp]
+#
+#         epoch_list+=[elem_epoch_sorted]
+#
+# elif sat_glob=='Chandra':
+#     epoch_list=[]
+#     epoch_list_started=[]
+#     obsid_list_chandra=np.unique([elem.split('_')[0] for elem in spfile_list])
+#     for obsid in obsid_list_chandra:
+#         epoch_list+=[[elem for elem in spfile_list if elem.startswith(obsid)]]
+#
+#     obsid_list_started_chandra=np.unique([elem.split('_')[0] for elem in started_expos[1:]])
+#     for obsid in obsid_list_started_chandra.tolist():
+#         epoch_list_started+=[[elem,elem.replace('-1','1')] for elem in started_expos if elem.startswith(obsid)]
+#
+# elif sat_glob=='NICER':
+#     epoch_list=[]
+#     tstart_list=[]
+#     tstop_list=[]
+#     for elem_file in spfile_list:
+#
+#         try:
+#             with fits.open(elem_file) as hdul:
+#
+#                 start_obs_s = hdul[1].header['TSTART'] + hdul[1].header['TIMEZERO']
+#                 stop_obs_s = hdul[1].header['TSTOP'] + hdul[1].header['TIMEZERO']
+#
+#                 # saving for titles later
+#                 mjd_ref = Time(hdul[1].header['MJDREFI'] + hdul[1].header['MJDREFF'], format='mjd')
+#
+#                 obs_start = mjd_ref + TimeDelta(start_obs_s, format='sec')
+#                 obs_stop = mjd_ref + TimeDelta(stop_obs_s, format='sec')
+#
+#
+#         except:
+#             print('Issue with fits opening for file:'+elem_file)
+#             continue
+#
+#         #note: don't convert to jd, jd have 0 at 12:00 instead of 00:00
+#         tstart_list+=[obs_start.mjd]
+#         tstop_list+=[obs_stop.mjd]
+#
+#     epoch_id_list_ravel=[]
+#     epoch_id_list=[]
+#
+#     with tqdm(total=len(tstart_list)) as pbar:
+#         for id_elem,elem_tstart in enumerate(tstart_list):
+#
+#             #skipping computation for already grouped elements
+#             if id_elem in epoch_id_list_ravel:
+#                 continue
+#
+#             elem_delta=np.array([-get_overlap([elem_tstart,elem_tstop],[other_start,other_stop],distance=True) for other_start,other_stop in zip(tstart_list,tstop_list)])
+#
+#             #list of matchable epochs
+#             # we automatically match epochs that have some time in common
+#             #if they don't, the maximum gap is symmetrical for time values, and otherwise
+#             #it is the distance to the beginning of the day where the obs started/the end of the day where the obs
+#             # finishes
+#             elem_epoch_id=np.array([id for id in range(len(tstart_list)) if\
+#                                      id not in epoch_id_list_ravel and\
+#                                     (elem_delta[id]<=0 or \
+#                                      (elem_delta[id]<max_delta_bef and tstop_list[id]<elem_tstart) or \
+#                                      (elem_delta[id]<max_delta_aft and elem_tstop<tstart_list[id])) ])
+#
+#             # max delta between gti starts in sec
+#             if group_max_timedelta == 'day':
+#                 max_delta_bef = TimeDelta(np.ceil(elem_tstop)-elem_tstop,format='jd')
+#                 max_delta_aft = TimeDelta(elem_tstart-np.floor(elem_tstart),format='jd')
+#             else:
+#                 max_delta_bef = max_delta_aft = (TimeDelta(group_max_timedelta.split('_')[0], format='jd') + \
+#                              TimeDelta(group_max_timedelta.split('_')[1], format='jd') / 24 + \
+#                              TimeDelta(group_max_timedelta.split('_')[2], format='jd') / (24 * 60) + \
+#                              TimeDelta(group_max_timedelta.split('_')[3], format='jd') / (24 * 3600) + \
+#                              TimeDelta(group_max_timedelta.split('_')[4], format='jd') / (24 * 3600 * 1e3)).to_value(
+#                     'jd')
+#
+#             #note that here,
+#             elem_delta=np.array([-get_overlap([elem_tstart,elem_tstop],[other_start,other_stop],distance=True) for other_start,other_stop in zip(tstart_list,tstop_list)])
+#
+#             #list of matchable epochs
+#             # we automatically match epochs that have some time in common
+#             #if they don't, the maximum gap is symmetrical for time values, and otherwise
+#             #it is the distance to the beginning of the day where the obs started/the end of the day where the obs
+#             # finishes
+#             elem_epoch_id=np.array([id for id in range(len(tstart_list)) if\
+#                                      id not in epoch_id_list_ravel and\
+#                                     (elem_delta[id]<=0 or \
+#                                      (elem_delta[id]<max_delta_bef and tstop_list[id]<elem_tstart) or \
+#                                      (elem_delta[id]<max_delta_aft and elem_tstop<tstart_list[id])) ])
+#
+#             epoch_id_list_ravel+=elem_epoch_id
+#
+#             if len(elem_epoch_id)>0:
+#                 epoch_id_list+=[elem_epoch_id]
+#
+#             pbar.update(n=len(elem_epoch_id))
+#
+#     epoch_list=[spfile_list[elem] for elem in epoch_id_list]
+#
+#
+#     #skipping flares if asked for
+#     if skip_flares:
+#         epoch_list=[[subelem for subelem in elem if "F_sp" not in subelem] for elem in epoch_list]
+#         epoch_list=[elem for elem in epoch_list if len(elem)>0]
+#
+#     epoch_list=np.array(epoch_list,dtype=object)
+#
+#     #not needed atm
+#     # def str_to_epoch(str_epoch):
+#     #     str_epoch_list=[]
+#     #     for elem_obsid_str in str_epoch:
+#     #         if '-' not in elem_obsid_str:
+#     #             str_epoch_list+=elem_obsid_str
+#     #         else:
+#     #             str_epoch_list+=[elem_obsid_str.split('-')[0]+elem_obsid_str.split('-')[i]\
+#     #                              for i in range(1,len(elem_obsid_str.split('-')))]
+#
+#     epoch_list_started=started_expos
+#     epoch_list_done=done_expos
+#
+# elif sat_glob in ['Suzaku','Swift']:
+#     epoch_list=[]
+#     epoch_list_started=[]
+#     if sat_glob=='Swift':
+#         obsid_list=np.unique([elem[:11] for elem in spfile_list])
+#     else:
+#         obsid_list=np.unique([elem.split('_')[0] for elem in spfile_list])
+#
+#     for obsid in obsid_list:
+#
+#         epoch_list+=[[elem for elem in spfile_list if elem.startswith(obsid+'_')]]
+#
+#     if sat_glob=='Swift':
+#         obsid_list_started=np.unique([elem.split('_')[0][:11] for elem in started_expos[1:]])
+#         for obsid in obsid_list_started.tolist():
+#             epoch_list_started+=[[elem] for elem in started_expos if elem.startswith(obsid)]
+#
+#     if sat_glob=='Suzaku':
+#         #reversing the order to have the FI xis first, then the BI xis, then pin instead of the opposite
+#         epoch_list=[elem[::-1] for elem in epoch_list]
+#
+#         epoch_list_started=[literal_eval(elem.split(']')[0]+']') for elem in started_expos[1:]]
+#
+# elif sat_glob=='NuSTAR':
+#
+#     epoch_list = []
+#
+#     # skipping flares if asked for
+#     if skip_flares:
+#         spfile_list = np.array([elem for elem in spfile_list if "F_sp" not in elem])
+#
+#     tstart_list = np.array([None] * len(spfile_list))
+#     det_list = np.array([None] * len(spfile_list))
+#     tstop_list = np.array([None] * len(spfile_list))
+#
+#     for i_file, elem_file in enumerate(spfile_list):
+#
+#         # for Suzaku this won't work for meugmi's xis0_xis3 files bc their header has been replaced
+#         # so we replace them by the xis1 to be able to load the exposure
+#         elem_file_load = elem_file.replace('xis0_xis3', 'xis1')
+#
+#         with fits.open(elem_file_load) as hdul:
+#             if 'TELESCOP' in hdul[1].header:
+#                 det_list[i_file] = hdul[1].header['TELESCOP'].replace('SUZAKU', 'Suzaku')
+#             else:
+#                 # the only files without TELESCOP in the header should be the fused megumi_files suzaku sp
+#                 assert megumi_files, 'Issue with detector handling'
+#
+#                 det_list[i_file] = 'Suzaku'
+#
+#             if 'TIMEZERO' in hdul[1].header:
+#                 start_obs_s = hdul[1].header['TSTART'] + hdul[1].header['TIMEZERO']
+#                 stop_obs_s = hdul[1].header['TSTOP'] + hdul[1].header['TIMEZERO']
+#             else:
+#                 start_obs_s = hdul[1].header['TSTART']
+#                 stop_obs_s = hdul[1].header['TSTOP']
+#
+#             # saving for titles later
+#             mjd_ref = Time(hdul[1].header['MJDREFI'] + hdul[1].header['MJDREFF'], format='mjd')
+#
+#             obs_start = mjd_ref + TimeDelta(start_obs_s, format='sec')
+#             obs_stop = mjd_ref + TimeDelta(stop_obs_s, format='sec')
+#
+#         #note: don't convert to jd, jd have 0 at 12:00 instead of 00:00
+#         tstart_list[i_file] = obs_start.mjd
+#         tstop_list[i_file] = obs_stop.mjd
+#
+#     epoch_id_list_ravel = []
+#     epoch_id_list = []
+#
+#     tstart_list_base = tstart_list
+#     tstop_list_base = tstop_list
+#     det_list_base = det_list
+#     id_base = np.arange(len(spfile_list))
+#
+#     with tqdm(total=len(tstart_list)) as pbar:
+#         for id_elem, (elem_tstart, elem_tstop, elem_det) in enumerate(
+#                 zip(tstart_list_base, tstop_list_base, det_list_base)):
+#
+#             # skipping computation for already grouped elements
+#             if id_base[id_elem] in epoch_id_list_ravel:
+#                 continue
+#
+#             # max delta between gti starts in sec
+#             if group_max_timedelta == 'day':
+#                 TimeDelta(np.ceil(elem_tstart) - elem_tstart, format='jd')
+#             else:
+#                 max_delta = (TimeDelta(group_max_timedelta.split('_')[0], format='jd') + \
+#                              TimeDelta(group_max_timedelta.split('_')[1], format='jd') / 24 + \
+#                              TimeDelta(group_max_timedelta.split('_')[2], format='jd') / (24 * 60) + \
+#                              TimeDelta(group_max_timedelta.split('_')[3], format='jd') / (24 * 3600) + \
+#                              TimeDelta(group_max_timedelta.split('_')[4], format='jd') / (24 * 3600 * 1e3)).to_value(
+#                     'jd')
+#
+#             elem_delta = np.array([-get_overlap([elem_tstart, elem_tstop], [other_start, other_stop], distance=True) for
+#                                    other_start, other_stop in zip(tstart_list, tstop_list)])
+#
+#             # list of matchable epochs
+#             elem_epoch_id = np.array([id for id in range(len(tstart_list)) if \
+#                                       id not in epoch_id_list_ravel and elem_delta[id] < max_delta])
+#
+#             epoch_id_list_ravel += elem_epoch_id.tolist()
+#
+#             if len(elem_epoch_id) > 0:
+#                 epoch_id_list += [elem_epoch_id]
+#
+#             pbar.update(n=len(elem_epoch_id))
+#
+#     epoch_list = [spfile_list[elem] for elem in epoch_id_list]
+#
+#     epoch_list = np.array(epoch_list, dtype=object)
+#
+#     epoch_list_started = started_expos
+#     epoch_list_done = done_expos
+#
+
+#currently testing to apply the multi matching permanently
+if 1:
     epoch_list=[]
 
     #skipping flares if asked for
@@ -4522,21 +4629,26 @@ elif sat_glob=='multi':
             else:
                 start_obs_s=hdul[1].header['TSTART']
                 stop_obs_s=hdul[1].header['TSTOP']
+
             # saving for titles later
-            mjd_ref = Time(hdul[1].header['MJDREFI'] + hdul[1].header['MJDREFF'], format='mjd')
+            if 'MJDREFI' not in hdul[1].header:
+                if det_list[i_file]=='SWIFT' and hdul[1].header['INSTRUME']=='BAT':
+                    MJDREFI = 51910
+                    MJDREFF = 7.4287037E-4
+                else:
+                    print('Error: Cannot file MJDREF information in spectrum header')
+                    breakpoint()
+            else:
+                MJDREFI=hdul[1].header['MJDREFI']
+                MJDREFF=hdul[1].header['MJDREFF']
+            mjd_ref = Time(MJDREFI+MJDREFF, format='mjd')
 
             obs_start = mjd_ref + TimeDelta(start_obs_s, format='sec')
             obs_stop=mjd_ref+TimeDelta(stop_obs_s,format='sec')
 
-        tstart_list[i_file]=obs_start.to_value('jd')
-        tstop_list[i_file]=obs_stop.to_value('jd')
-
-    #max delta between gti starts in sec
-    max_delta=(TimeDelta(group_max_timedelta.split('_')[0],format='jd')+\
-              TimeDelta(group_max_timedelta.split('_')[1],format='jd')/24+ \
-              TimeDelta(group_max_timedelta.split('_')[2], format='jd')/(24*60)+ \
-              TimeDelta(group_max_timedelta.split('_')[3], format='jd')/(24*3600)+ \
-              TimeDelta(group_max_timedelta.split('_')[4], format='jd')/(24*3600*1e3)).to_value('jd')
+        #note: don't convert to jd, jd have 0 at 12:00 instead of 00:00
+        tstart_list[i_file]=obs_start.mjd
+        tstop_list[i_file]=obs_stop.mjd
 
     epoch_id_list_ravel=[]
     epoch_id_list=[]
@@ -4561,47 +4673,71 @@ elif sat_glob=='multi':
             if id_base[id_elem] in epoch_id_list_ravel:
                 continue
 
+            # max delta between gti starts in sec
+            if group_max_timedelta == 'day':
+                max_delta_bef = TimeDelta(np.ceil(elem_tstop)-elem_tstop,format='jd')
+                max_delta_aft = TimeDelta(elem_tstart-np.floor(elem_tstart),format='jd')
+            else:
+                max_delta_bef = max_delta_aft = (TimeDelta(group_max_timedelta.split('_')[0], format='jd') + \
+                             TimeDelta(group_max_timedelta.split('_')[1], format='jd') / 24 + \
+                             TimeDelta(group_max_timedelta.split('_')[2], format='jd') / (24 * 60) + \
+                             TimeDelta(group_max_timedelta.split('_')[3], format='jd') / (24 * 3600) + \
+                             TimeDelta(group_max_timedelta.split('_')[4], format='jd') / (24 * 3600 * 1e3)).to_value(
+                    'jd')
+
             elem_delta=np.array([-get_overlap([elem_tstart,elem_tstop],[other_start,other_stop],distance=True) for other_start,other_stop in zip(tstart_list,tstop_list)])
 
             #list of matchable epochs
+            # we automatically match epochs that have some time in common
+            #if they don't, the maximum gap is symmetrical for time values, and otherwise
+            #it is the distance to the beginning of the day where the obs started/the end of the day where the obs
+            # finishes
             elem_epoch_id=np.array([id for id in range(len(tstart_list)) if\
-                                     id not in epoch_id_list_ravel and elem_delta[id]<max_delta])
+                                     id not in epoch_id_list_ravel and\
+                                    (elem_delta[id]<=0 or \
+                                     (elem_delta[id]<max_delta_aft and tstop_list[id]<elem_tstart) or \
+                                     (elem_delta[id]<max_delta_bef and elem_tstop<tstart_list[id])) ])
 
-            #restricting match to single NICER epoch if required
-            if match_closest_NICER and len(elem_epoch_id)>0:
-                match_det_NICER=elem_epoch_id[det_list[elem_epoch_id]=='NICER']
-                #restricting to the observations with overlap AND the closest non-overlapping
-                match_valid_NICER=elem_delta[match_det_NICER]
+            #multi options
+            if sat_glob=='multi':
+                #restricting match to single NICER epoch if required
+                if match_closest_NICER and len(elem_epoch_id)>0:
+                    match_det_NICER=elem_epoch_id[det_list[elem_epoch_id]=='NICER']
+                    #restricting to the observations with overlap AND the closest non-overlapping
+                    match_valid_NICER=elem_delta[match_det_NICER]
 
-                if len(match_valid_NICER)>0:
-                    #computing NICER obs with some overlap
-                    mask_overlaps_NICER=match_valid_NICER<0
+                    if len(match_valid_NICER)>0:
+                        #computing NICER obs with some overlap
+                        mask_overlaps_NICER=match_valid_NICER<0
 
-                    #and the closest non-overlapping one
-                    if len(match_valid_NICER[match_valid_NICER>=0])>0:
-                        id_closest_NICER=match_valid_NICER[match_valid_NICER>=0].argmin()
+                        #and the closest non-overlapping one
+                        if len(match_valid_NICER[match_valid_NICER>=0])>0:
+                            id_closest_NICER=match_valid_NICER[match_valid_NICER>=0].argmin()
 
-                        #merging both
-                        match_det_NICER_restrict=match_det_NICER[mask_overlaps_NICER].tolist()+\
-                                                 [match_det_NICER[id_closest_NICER]]
-                    else:
-                        match_det_NICER_restrict=match_det_NICER[mask_overlaps_NICER].tolist()
+                            #merging both
+                            match_det_NICER_restrict=match_det_NICER[mask_overlaps_NICER].tolist()+\
+                                                     [match_det_NICER[id_closest_NICER]]
+                        else:
+                            match_det_NICER_restrict=match_det_NICER[mask_overlaps_NICER].tolist()
 
-                    #and replacing the initial NICER matches by this in the elem_epoch_id array
-                    elem_epoch_id=np.array([elem for elem in elem_epoch_id if elem not in match_det_NICER\
-                                            or elem in match_det_NICER_restrict])
+                        #and replacing the initial NICER matches by this in the elem_epoch_id array
+                        elem_epoch_id=np.array([elem for elem in elem_epoch_id if elem not in match_det_NICER\
+                                                or elem in match_det_NICER_restrict])
 
-            if single_obsid_NuSTAR:
-                elem_epoch_obsids_NuSTAR=np.unique([elem.split('_')[0].split('-')[0][:-3] for elem in\
-                    spfile_list[elem_epoch_id] if elem.startswith('nu')])
+                if single_obsid_NuSTAR:
+                    elem_epoch_obsids_NuSTAR=np.unique([elem.split('_')[0].split('-')[0][:-3] for elem in\
+                        spfile_list[elem_epoch_id] if elem.startswith('nu')])
 
-                mask_obsid_restrict=[not elem.startswith('nu') or elem.startswith(elem_epoch_obsids_NuSTAR[0])
-                                     for elem in spfile_list[elem_epoch_id]]
+                    mask_obsid_restrict=[not elem.startswith('nu') or elem.startswith(elem_epoch_obsids_NuSTAR[0])
+                                         for elem in spfile_list[elem_epoch_id]]
 
-                elem_epoch_id=np.array([elem_epoch_id])[[mask_obsid_restrict]].tolist()
+                    elem_epoch_id=np.array([elem_epoch_id])[[mask_obsid_restrict]].tolist()
 
-            if skip_single_instru and len(np.unique(det_list[elem_epoch_id]))==1:
-                continue
+                if skip_single_instru and len(np.unique(det_list[elem_epoch_id]))==1:
+                    continue
+            else:
+                #restricting to the obs of that telescope
+                elem_epoch_id = elem_epoch_id[det_list[elem_epoch_id].lower() == sat_glob.lower()]
 
             epoch_id_list_ravel+=elem_epoch_id
 
@@ -4614,10 +4750,10 @@ elif sat_glob=='multi':
 
     epoch_list=np.array(epoch_list,dtype=object)
 
-    if restrict_combination:
+    if sat_glob=='multi' and restrict_combination:
         epoch_list=[epoch_list[id_epoch] for id_epoch in range(len(epoch_list)) if (np.unique(det_list[epoch_id_list[id_epoch]])==restrict_combination.split('+')).all()]
 
-    if plot_multi_overlap:
+    if plot_epoch_overlap:
 
         '''
         We plot both the initial telescope overlaps with colors for each instrument, 
@@ -4642,8 +4778,8 @@ elif sat_glob=='multi':
             tel_col_list = list(telescope_colors.keys())
             mask_tel = np.array([np.array(det_list[epoch_mask]) == elem for elem in tel_col_list])
 
-            num_dates_start = mdates.date2num(Time(tstart_list.astype(float)[epoch_mask], format='jd').datetime)
-            num_dates_stop = mdates.date2num(Time(tstop_list.astype(float)[epoch_mask], format='jd').datetime)
+            num_dates_start_epoch = mdates.date2num(Time(tstart_list.astype(float)[epoch_mask], format='mjd').datetime)
+            num_dates_stop_epoch = mdates.date2num(Time(tstop_list.astype(float)[epoch_mask], format='mjd').datetime)
 
             #not needed now that we plot everything afterwards
             # #cylcing through each telescope and their respective epochs to get different colors
@@ -4662,15 +4798,15 @@ elif sat_glob=='multi':
             epoch_color = 'blue'
             # epoch_color=mpl_cycle_colors[i_epoch%len(mpl_cycle_colors)]
 
-            for i_fome,elem_file in enumerate(elem_epoch):
+            for i_file,elem_file in enumerate(elem_epoch):
 
-                num_date_start_file=num_dates_start[spfile_list[epoch_mask]==elem_file][0]
-                num_date_stop_file=num_dates_stop[spfile_list[epoch_mask]==elem_file][0]
+                num_date_start_file=num_dates_start_epoch[spfile_list[epoch_mask]==elem_file][0]
+                num_date_stop_file=num_dates_stop_epoch[spfile_list[epoch_mask]==elem_file][0]
 
                 ax_exp.axvspan(xmin=num_date_start_file,
                                xmax=num_date_stop_file,
                                ymin=0.5, ymax=1, color=epoch_color,
-                               label='', alpha=0.4)
+                               label='selected epochs' if i_file==0 else '', alpha=0.4)
 
             ax_exp.xaxis.set_major_formatter(date_format)
             for label in ax_exp.get_xticklabels(which='major'):
@@ -4682,8 +4818,8 @@ elif sat_glob=='multi':
             #plotting the rest of the exposures (cheap way to show them without having to sort them
             mask_tel = np.array([np.array(det_list) == elem for elem in tel_col_list])
 
-            num_dates_start = mdates.date2num(Time(tstart_list.astype(float), format='jd').datetime)
-            num_dates_stop = mdates.date2num(Time(tstop_list.astype(float), format='jd').datetime)
+            num_dates_start_all = mdates.date2num(Time(tstart_list.astype(float), format='mjd').datetime)
+            num_dates_stop_all = mdates.date2num(Time(tstop_list.astype(float), format='mjd').datetime)
 
             #cylcing through each telescope and their respective epochs to get different colors
 
@@ -4693,10 +4829,10 @@ elif sat_glob=='multi':
 
                 for i_exp in range(sum(mask_tel[i_det])):
 
-                    bar_in_plot=get_overlap([num_dates_start[mask_tel[i_det]][i_exp],num_dates_stop[mask_tel[i_det]][i_exp]],ax_exp.get_xlim())>0
+                    bar_in_plot=get_overlap([num_dates_start_all[mask_tel[i_det]][i_exp],num_dates_stop_all[mask_tel[i_det]][i_exp]],ax_exp.get_xlim())>0
 
-                    ax_exp.axvspan(xmin=num_dates_start[mask_tel[i_det]][i_exp],
-                                   xmax=num_dates_stop[mask_tel[i_det]][i_exp],
+                    ax_exp.axvspan(xmin=num_dates_start_all[mask_tel[i_det]][i_exp],
+                                   xmax=num_dates_stop_all[mask_tel[i_det]][i_exp],
                                    ymin=0, ymax=0.5, color=telescope_colors[tel_col_list[i_det]],
                                    label=tel_col_list[i_det] if (bar_in_plot and tel_col_list[i_det] not in tel_col_shown) else '', alpha=0.4)
 
@@ -4708,8 +4844,8 @@ elif sat_glob=='multi':
 
             #short epoch id
             short_ep_str=shorten_epoch([elem_sp.split('_gti')[0].split('_sp')[0].split('src')[0] for elem_sp in elem_epoch])
-            plt.savefig(os.path.join(outdir,'_'.join(short_ep_str)+'_multi_matching.png'))
-            plt.savefig(os.path.join(outdir,'_'.join(short_ep_str)+'_multi_matching.pdf'))
+            plt.savefig(os.path.join(outdir,'_'.join(short_ep_str)+'_epoch_matching.png'))
+            plt.savefig(os.path.join(outdir,'_'.join(short_ep_str)+'_epoch_matching.pdf'))
             plt.close()
 
     epoch_list_started=started_expos

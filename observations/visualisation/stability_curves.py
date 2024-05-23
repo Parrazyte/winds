@@ -46,7 +46,7 @@ def plot_scurve(x,y,ax=None,ion_range=None,ion_range_stable=True,color=None,
 
     if return_plot:
         return curve_plot
-def plot_4U_curves(save_path_curves=None,save_path_SEDs=None,label=False):
+def plot_4U_curves(save_path_curves=None,save_path_SEDs=None,label=False,colormap='plasma'):
 
     os.chdir('/home/parrama/Documents/Work/PhD/docs/papers/wind_4U/global/SEDs/stability/2021/curves/scurves')
 
@@ -61,7 +61,7 @@ def plot_4U_curves(save_path_curves=None,save_path_SEDs=None,label=False):
     unstable = np.loadtxt('unstable_seds.dat', dtype='str')
 
     # making a dates colormap
-    color_cmap = mpl.cm.plasma
+    color_cmap = getattr(mpl.cm,colormap)
     c_norm= mpl.colors.Normalize(vmin=min(dates_range),
                                          vmax=max(dates_range))
 

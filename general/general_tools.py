@@ -46,16 +46,38 @@ def shorten_epoch(file_ids_init):
         file_ids=file_ids_init
 
     # splitting obsids
-    obsids = np.unique([elem.split('-')[0] for elem in file_ids])
-    obsids_list = [elem.split('-')[0] for elem in file_ids]
-    # returning the obsids directly if there's no gtis in the obsids
-    obsids_ravel = ''.join(file_ids)
-    if '-' not in obsids_ravel:
-        return file_ids
+    # obsids_list = [elem.split('-')[0] for elem in file_ids]
+
+    #we split some weirder names, like bat files, to avoid splitting them incorrectly
+    obsids = np.unique([elem.split('-')[0] for elem in file_ids if 'survey_point' not in elem])
+    bat_survey_files=[elem for elem in file_ids if 'survey_point' in elem]
+
+    if len(bat_survey_files)==0:
+        # returning the obsids directly if there's no gtis in the obsids
+        obsids_ravel = ''.join(file_ids)
+        if '-' not in obsids_ravel:
+            return file_ids
+
+    #only adding one element of the bat survey file because we will add them all at once
+    obsids=obsids.tolist()+bat_survey_files[:1]
 
     # according the gtis in a shortened way
     epoch_str_list = []
     for elem_obsid in obsids:
+
+        if 'survey_point' in elem_obsid:
+
+            #computing how much of the pointings can be compacted
+            survey_ids = [elem.split('_survey_point_')[1].split('.')[0] for elem in bat_survey_files]
+            survey_ids_char = np.array([[subelem for subelem in elem] for elem in survey_ids])
+            survey_id_common_char=np.argwhere([len(np.unique(elem)) != 1 for elem in survey_ids_char.T]).T[0][0]
+
+            #and compacting
+            str_obsid=survey_ids[0][:survey_id_common_char]+'-'.join(elem[survey_id_common_char:] for elem in survey_ids)
+
+            #recognizing BAT_analysis point, and adding them accordingly
+            epoch_str_list+=[str_obsid]
+            continue
 
         str_gti_add = ''
 

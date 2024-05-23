@@ -228,6 +228,8 @@ Model modification and utility commands.
 Most of these are created because once a model is unloaded in PyXspec, everything but the component/parameter names is lost
 '''
 
+def load_list(iterable):
+    AllData(' '.join([str(i+1)+':'+str(i+1)+' '+elem for i,elem in enumerate(iterable)]))
 
 class allmodel_data:
 
@@ -284,7 +286,20 @@ class allmodel_data:
         Xset.logChatter=10 if verbose else 0
 
         if 'scorpeon' in dir(self) and load_scorpeon:
-            xscorpeon.load(scorpeon_save=self.scorpeon)
+
+            is_scorpeon=False
+
+            for i_grp in range(AllData.nGroups):
+                try:
+                    AllModels(i_grp+1,'nxb')
+                    is_scorpeon=True
+                except:
+                    pass
+
+            if not is_scorpeon:
+                print('No scorpeon model detected but save exists. Reloading in auto first...')
+
+            xscorpeon.load('auto' if is_scorpeon else None,scorpeon_save=self.scorpeon)
 
         Xset.chatter=xchatter
         Xset.logChatter=xlogchatter
@@ -644,7 +659,10 @@ class scorpeon_manager:
 
         #loading all of the saves
         if scorpeon_save is not None:
-            scorpeon_save.load(load_frozen=load_save_freeze)
+            try:
+                scorpeon_save.load(load_frozen=load_save_freeze)
+            except:
+                breakpoint()
 
         #freezing the model if asked to
         if frozen:
@@ -3084,10 +3102,15 @@ class fitmod:
 
     If absval is not set to none, forces a specific value for the absorption
 
+    fixed_gamma can be a value to freeze Gamma/Gamma_tau for the nthcomp/thcomp component
+
+    thcomp_frac_frozen will freeze the thcomp component to 0 contribution and 3.5 gamma
+
+    mandatory abs determines whether the absorption components will be forced to be mandatory
     '''
 
     def __init__(self,complist,logfile,logfile_write,absval=None,interact_groups=None,idlist=None,prev_fitmod=None,
-                 nth_gamma=None,sat_list=None):
+                 fixed_gamma=None,sat_list=None,thcomp_frac_frozen=False,mandatory_abs=False):
 
         #defining empty variables
         self.name_complist=complist
@@ -3099,7 +3122,9 @@ class fitmod:
         self.interact_groups=interact_groups
         self.complist=[]
         self.fixed_abs=absval
-        self.fixed_gamma=nth_gamma
+        self.fixed_gamma=fixed_gamma
+        self.thcomp_frac_frozen=thcomp_frac_frozen
+        self.mandatory_abs=mandatory_abs
 
         self.progressive_delchis=[]
 
@@ -3185,6 +3210,9 @@ class fitmod:
                                                            self.idlist[i],
                                                            fitcomp_names=self.name_complist,
                                                            fitmod=self))
+                new_comp=getattr(self,self.name_complist[i])
+                if new_comp.absorption and mandatory_abs:
+                    new_comp.mandatory=True
 
                 self.complist+=[getattr(self,self.name_complist[i])]
 
@@ -3360,9 +3388,20 @@ class fitmod:
                 norm_vals=[AllModels(i_grp+1)(1).values[0] for i_grp in range(AllData.nGroups)]
                 delcomp('constant')
 
-            self.includedlist = component.addtomod(fixed_vals=[self.fixed_abs] if component.absorption else \
-                                                              [self.fixed_gamma] if 'nthcomp' in component.compname\
-                                                              else None,incl_list=self.includedlist)
+            if component.absorption:
+                fixed_vals=[self.fixed_abs]
+            elif "nthcomp" in component.compname or "thcomp" in component.compname:
+                fixed_vals=[self.fixed_gamma]
+            elif component.compname=="disk_thcomp" and self.thcomp_frac_frozen:
+                #fixing the gamma and the covering fraction
+                fixed_vals=[3.5,None,0.,None]
+
+                breakpoint()
+
+            else:
+                fixed_vals=None
+
+            self.includedlist = component.addtomod(fixed_vals=fixed_vals,incl_list=self.includedlist)
 
             # updating the fitcomps before anything else
             self.update_fitcomps()
@@ -3511,9 +3550,19 @@ class fitmod:
             if not component.cal_e-1>=ener_bounds[0] and component.cal_e+1<=ener_bounds[1]:
                 continue
 
-            self.includedlist = component.addtomod(fixed_vals=[self.fixed_abs] if component.absorption else \
-                                                              [self.fixed_gamma] if 'nthcomp' in component.compname.lower()\
-                                                              else None,incl_list=self.includedlist)
+            if component.absorption:
+                fixed_vals=[self.fixed_abs]
+            elif "nthcomp" in component.compname or "thcomp" in component.compname:
+                fixed_vals=[self.fixed_gamma]
+            elif component.compname=="disk_thcomp" and self.thcomp_frac_frozen:
+                #fixing the gamma and the covering fraction
+                fixed_vals=[3.5,None,0.,None]
+
+                breakpoint()
+
+            else:
+                fixed_vals=None
+            self.includedlist = component.addtomod(fixed_vals=fixed_vals,incl_list=self.includedlist)
             self.update_fitcomps()
 
             component.fit(split_fit=False,compute_errors=False,fit_to=120)
@@ -3619,9 +3668,20 @@ class fitmod:
             #copy of the includedlist for rollback after testing the component significance
             prev_includedlist=copy(self.includedlist)
 
-            self.includedlist=component.addtomod(fixed_vals=[self.fixed_abs] if component.absorption else \
-                                                              [self.fixed_gamma] if 'nthcomp' in component.compname.lower()\
-                                                              else None,incl_list=self.includedlist)
+            if component.absorption:
+                fixed_vals=[self.fixed_abs]
+            elif "nthcomp" in component.compname or "thcomp" in component.compname:
+                fixed_vals=[self.fixed_gamma]
+            elif component.compname=="disk_thcomp" and self.thcomp_frac_frozen:
+                #fixing the gamma and the covering fraction
+                fixed_vals=[3.5,None,0.,None]
+
+                breakpoint()
+
+            else:
+                fixed_vals=None
+
+            self.includedlist=component.addtomod(fixed_vals=fixed_vals,incl_list=self.includedlist)
 
             #updating the fitcomps before anything else
             self.update_fitcomps()
@@ -3917,7 +3977,10 @@ class fitmod:
 
             #restricting the test to components which are not 'very' significant
             #we fix the limit to 10 times the delchi for the significance threshold with their corresponding number of parameters
-            ftest_val=Fit.ftest(new_chi,new_dof,del_chi,new_dof+n_unlocked_pars_with_unlink)
+            try:
+                ftest_val=Fit.ftest(new_chi,new_dof,del_chi,new_dof+n_unlocked_pars_with_unlink)
+            except:
+                breakpoint()
 
             if ftest_val<ftest_threshold/100 and ftest_val>0:
                 self.print_xlog('\nlog:Very significant component detected. Skipping deletion test.')
@@ -5093,11 +5156,12 @@ class fitcomp:
             self.unlocked_pars_base_mask=[(not AllModels(par_degroup(i)[0])(par_degroup(i)[1]).frozen and\
                                                             AllModels(par_degroup(i)[0])(par_degroup(i)[1]).link=='') for i in self.parlist]
 
-            #this parameter is creating for the sole purpose of significance testing, to avoid using unlocked pars which is modified when
+            #this parameter is created for the sole purpose of significance testing, to avoid using unlocked pars which is modified when
             #parameters are pegged (something which shouldn't affect the significance testing are pegged parameters were still variable initially)
             #with this test, the value is overwritten only the first time the component is added
             if self.n_unlocked_pars_base==0:
-                self.n_unlocked_pars_base=len(self.unlocked_pars)
+                #to avoid issues with ftests for fully fixed components
+                self.n_unlocked_pars_base=min(len(self.unlocked_pars),1)
 
             #switching the included state
             self.included=True
@@ -5160,7 +5224,7 @@ class fitcomp:
                 #reloading the NICER bg if any
                 # if the scorpeon model is entirely frozen, we assume it is not being frozen and thus
                 # restore the iteration after cleaning the model
-                xscorpeon.load(scorpeon_save=prev_scorp if prev_scorp.all_frozen else None)
+                xscorpeon.load('auto',scorpeon_save=prev_scorp if prev_scorp.all_frozen else None)
 
             else:
                 self.init_model.load()

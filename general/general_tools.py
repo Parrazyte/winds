@@ -69,14 +69,18 @@ def shorten_epoch(file_ids_init):
 
             #computing how much of the pointings can be compacted
             survey_ids = [elem.split('_survey_point_')[1].split('.')[0] for elem in bat_survey_files]
-            survey_ids_char = np.array([[subelem for subelem in elem] for elem in survey_ids])
-            survey_id_common_char=np.argwhere([len(np.unique(elem)) != 1 for elem in survey_ids_char.T]).T[0][0]
 
-            #and compacting
-            str_obsid=survey_ids[0][:survey_id_common_char]+'-'.join(elem[survey_id_common_char:] for elem in survey_ids)
+            if len(survey_ids)==1:
+                epoch_str_list+=survey_ids
+            else:
+                survey_ids_char = np.array([[subelem for subelem in elem] for elem in survey_ids])
+                survey_id_common_char=np.argwhere([len(np.unique(elem)) != 1 for elem in survey_ids_char.T]).T[0][0]
 
-            #recognizing BAT_analysis point, and adding them accordingly
-            epoch_str_list+=[str_obsid]
+                #and compacting
+                str_obsid=survey_ids[0][:survey_id_common_char]+'-'.join(elem[survey_id_common_char:] for elem in survey_ids)
+
+                #recognizing BAT_analysis point, and adding them accordingly
+                epoch_str_list+=[str_obsid]
             continue
 
         str_gti_add = ''

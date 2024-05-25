@@ -200,7 +200,7 @@ def fetch_BAT(object_name,date_start,date_stop,minexposure=1000):
 
         result = ba.download_swiftdata(table_exposed)
 
-def DR_BAT(noise_map_dir='/home/parrama/Soft/Swift-BAT/pattern_maps/',nprocs=2):
+def DR_BAT(noise_map_dir='environ',nprocs=2,test_mode=False):
 
     '''
     wrapper around batanalysis to reduce data in the current folder
@@ -209,15 +209,44 @@ def DR_BAT(noise_map_dir='/home/parrama/Soft/Swift-BAT/pattern_maps/',nprocs=2):
 
     see https://github.com/parsotat/BatAnalysis for installation
 
+    -noise_map_dir: directory where the patttern maps are untarred
+                    if set to 'environ', fetches the BAT_NOISE_MAP_DIR environment variable instead
+
+    -test_mode: use _BAT_survey instead of parallel functions to allow debugging
+
     Note: if nothing gets out and no gti are recognized, it could be due to a lack of caldb initalization
+
+    to tests things out if there is an issue and no GTIs are ever created:
+
+    add in _call_batsurvey of BatSurvey in bat_survey.py
+        from heasoftpy.swift import batsurvey
+        input_dict['chatter']=5
+        result=batsurvey(**input_dict)
     '''
 
 
     obs_ids = [i.name for i in sorted(ba.datadir().glob("*")) if i.name.isnumeric()]
     input_dict=dict(cleansnr=6,cleanexpr='ALWAYS_CLEAN==T')
     # input_dict=None
-    batsurvey_obs=ba.parallel.batsurvey_analysis(obs_ids,input_dict=input_dict,
-                                                 patt_noise_dir=noise_map_dir, nprocs=nprocs)
+
+    logfile_name='./DR_BAT.log'
+
+    if noise_map_dir=='environ':
+        noise_map_dir_use=os.environ['BAT_NOISE_MAP_DIR']
+    else:
+        noise_map_dir_use=noise_map_dir
+
+    with StdoutTee(logfile_name,
+                   mode="a",buff=1,file_filters=[_remove_control_chars]),\
+        StderrTee(logfile_name,buff=1,file_filters=[_remove_control_chars]):
+
+        if test_mode:
+            for obsid in obs_ids:
+                batsurvey_obs=ba.parallel._create_BatSurvey(obsid,input_dict=input_dict,
+                                                     patt_noise_dir=noise_map_dir_use)
+        else:
+            batsurvey_obs=ba.parallel.batsurvey_analysis(obs_ids,input_dict=input_dict,
+                                                     patt_noise_dir=noise_map_dir_use, nprocs=nprocs)
 
     return batsurvey_obs
 

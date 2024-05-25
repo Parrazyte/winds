@@ -237,6 +237,25 @@ def SA_BAT(survey_obs_list,object_name,ul_pl_index=2.5,recalc=True,nprocs=2):
 
     return sa_obs_list
 
+def merge_BAT_full(merge_ULs=False):
+    '''
+    Merges all spectral products in a bigbatch directory
+    '''
+
+    os.system('mkdir -p bigbatch')
+
+    for elem_pha_dir in glob.glob('**/PHA_files/'):
+
+        print('Copying files from directory '+elem_pha_dir)
+
+        elem_sp_files=[elem for elem in glob.glob(elem_pha_dir+'**') if elem.split('.')[-1] in ['pha','rsp']]
+        if not merge_ULs:
+            elem_sp_files=[elem for elem in elem_sp_files if 'upperlim' not in elem]
+
+        for elem_file in elem_sp_files:
+            os.system('cp '+elem_file+' bigbatch')
+
+        time.sleep(1)
 
 # noise_map_dir=Path("/Users/tparsota/Documents/PATTERN_MAPS/")
 # batsurvey_obs=ba.parallel.batsurvey_analysis(obs_ids, patt_noise_dir=noise_map_dir, nprocs=30)

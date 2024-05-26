@@ -1979,7 +1979,7 @@ def extract_lc(directory,binning=10,bands='3-12',HR='6-10/3-6',overwrite=True,da
                 plt.ylabel('Hardness Ratio ('+HR+' keV)')
 
                 plt.tight_layout()
-                plt.savefig('./'+directory+'/'+directory+gti_suffix+'_hr_'+'_'.join(HR.split('/'))+'_'+'_bin_'+str(binning)+'.png')
+                plt.savefig('./'+directory+'/'+directory+gti_suffix+'_hr_'+'_'.join(HR.split('/'))+'_bin_'+str(binning)+'.png')
                 plt.close()
 
         if len(gti_files)==0:

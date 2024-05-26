@@ -19,6 +19,7 @@ import time
 from scipy.stats import norm as scinorm
 from tee import StdoutTee,StderrTee
 import re
+from general_tools import file_edit
 
 ##for batanalysis (see https://github.com/parsotat/BatAnalysis/blob/main/notebooks/trial_NGC2992.ipynb)
 import glob
@@ -166,7 +167,7 @@ def convert_BAT_flux_spectra(observ_high_table_path,err_percent=90,e_low=15., e_
             hdul[1].header['EXPOSURE']=csv_BAT_expos[i_sp]
             hdul.flush()
 
-def fetch_BAT(object_name,date_start,date_stop,minexposure=1000):
+def fetch_BAT(object_name,date_start,date_stop,minexposure=1000,return_result=False):
 
     '''
     wrapper around batanalysis to download some data
@@ -179,6 +180,9 @@ def fetch_BAT(object_name,date_start,date_stop,minexposure=1000):
     '''
 
     logfile_name='./fetch_BAT_'+object_name+'_'+date_start+'_'+date_stop+'_minexp_'+str(minexposure)+'.log'
+
+    if os.path.isfile(logfile_name):
+        os.remove(logfile_name)
 
     with StdoutTee(logfile_name,
                    mode="a",buff=1,file_filters=[_remove_control_chars]),\
@@ -200,7 +204,10 @@ def fetch_BAT(object_name,date_start,date_stop,minexposure=1000):
 
         result = ba.download_swiftdata(table_exposed)
 
-def DR_BAT(noise_map_dir='environ',nprocs=2,test_mode=False):
+    if return_result:
+        return result
+
+def DR_BAT(obsids='auto',noise_map_dir='environ',nprocs=2,single_mode=False):
 
     '''
     wrapper around batanalysis to reduce data in the current folder
@@ -209,6 +216,8 @@ def DR_BAT(noise_map_dir='environ',nprocs=2,test_mode=False):
 
     see https://github.com/parsotat/BatAnalysis for installation
 
+    -obsids: obsids to run the DR for. If set to auto, automatically detectes the obsid from numeric directories in the
+             local folder
     -noise_map_dir: directory where the patttern maps are untarred
                     if set to 'environ', fetches the BAT_NOISE_MAP_DIR environment variable instead
 
@@ -224,33 +233,37 @@ def DR_BAT(noise_map_dir='environ',nprocs=2,test_mode=False):
         result=batsurvey(**input_dict)
     '''
 
-
-    obs_ids = [i.name for i in sorted(ba.datadir().glob("*")) if i.name.isnumeric()]
-    input_dict=dict(cleansnr=6,cleanexpr='ALWAYS_CLEAN==T')
-    # input_dict=None
-
-    logfile_name='./DR_BAT.log'
-
     if noise_map_dir=='environ':
         noise_map_dir_use=os.environ['BAT_NOISE_MAP_DIR']
     else:
         noise_map_dir_use=noise_map_dir
 
+    obs_ids = [i.name for i in sorted(ba.datadir().glob("*")) if i.name.isnumeric()]
+    input_dict=dict(cleansnr=6,cleanexpr='ALWAYS_CLEAN==T')
+
+    logfile_name='./DR_BAT.log'
+
+    if os.path.isfile(logfile_name):
+        os.system('rm '+logfile_name)
+
     with StdoutTee(logfile_name,
                    mode="a",buff=1,file_filters=[_remove_control_chars]),\
         StderrTee(logfile_name,buff=1,file_filters=[_remove_control_chars]):
 
-        if test_mode:
+        if single_mode:
+            batsurvey_obs=[]
             for obsid in obs_ids:
-                batsurvey_obs=ba.parallel._create_BatSurvey(obsid,input_dict=input_dict,
+                batsurvey_obs_indiv=ba.parallel._create_BatSurvey(obsid,input_dict=input_dict,
                                                      patt_noise_dir=noise_map_dir_use)
+                if batsurvey_obs_indiv is not None:
+                    batsurvey_obs+=[batsurvey_obs_indiv]
         else:
             batsurvey_obs=ba.parallel.batsurvey_analysis(obs_ids,input_dict=input_dict,
                                                      patt_noise_dir=noise_map_dir_use, nprocs=nprocs)
 
     return batsurvey_obs
 
-def SA_BAT(survey_obs_list,object_name,ul_pl_index=2.5,recalc=True,nprocs=2):
+def SA_BAT(survey_obs_list,object_name,ul_pl_index=2.5,recalc=False,nprocs=2):
 
     '''
     Wrapper around batanalysis to perform spectral analysis of data in the current folder
@@ -261,8 +274,17 @@ def SA_BAT(survey_obs_list,object_name,ul_pl_index=2.5,recalc=True,nprocs=2):
 
     '''
 
-    sa_obs_list=ba.parallel.batspectrum_analysis(survey_obs_list, object_name, ul_pl_index=ul_pl_index,
-                                                 recalc=recalc,nprocs=nprocs)
+    logfile_name='./SA_BAT.log'
+
+    if os.path.isfile(logfile_name):
+        os.system('rm '+logfile_name)
+
+    with StdoutTee(logfile_name,
+                   mode="a",buff=1,file_filters=[_remove_control_chars]),\
+        StderrTee(logfile_name,buff=1,file_filters=[_remove_control_chars]):
+
+        sa_obs_list=ba.parallel.batspectrum_analysis(survey_obs_list, object_name, ul_pl_index=ul_pl_index,
+                                                     recalc=recalc,nprocs=nprocs)
 
     return sa_obs_list
 
@@ -288,3 +310,295 @@ def merge_BAT_full(merge_ULs=False):
 
 # noise_map_dir=Path("/Users/tparsota/Documents/PATTERN_MAPS/")
 # batsurvey_obs=ba.parallel.batsurvey_analysis(obs_ids, patt_noise_dir=noise_map_dir, nprocs=30)
+
+def clean_events_BAT(source_dir):
+    start_dir=os.getcwd()
+
+    os.chdir(source_dir)
+
+    logfile_name='./clean_events_BAT.log'
+
+    if os.path.isfile(logfile_name):
+        os.system('rm '+logfile_name)
+
+    with StdoutTee(logfile_name,
+                   mode="a",buff=1,file_filters=[_remove_control_chars]),\
+        StderrTee(logfile_name,buff=1,file_filters=[_remove_control_chars]):
+
+        print('Cleaning events in directory '+source_dir)
+
+        # removing all of the heavy folders created during the DR and SA
+        for elem_dir in glob.glob('**/'):
+            print(elem_dir)
+            if 'surveyresult' in elem_dir:
+                print('cleaning directory ' + elem_dir)
+                if 'mosaiced' in elem_dir:
+
+                    # removing the total mosaic which we're not using
+                    os.system('rm -rf ' + os.path.join(elem_dir, 'total_mosaic'))
+
+                    # letting some time to clean the directory
+                    time.sleep(5)
+
+                    # removing the heavy files in the remaining mosaic dir
+                    mosaic_dir = [elem for elem in glob.glob('mosaiced_surveyresults/**') if
+                                  'mosaic' in elem.split('/')[-1]]
+
+                    # removing only the files to let the PHA directory in peace
+                    os.system('rm ' + os.path.join(mosaic_dir[0]) + '/*')
+
+                    # letting some time to clean the directory
+                    time.sleep(5)
+
+                else:
+                    os.system('rm -rf ' + elem_dir)
+
+                    # letting some time to clean the directory
+                    time.sleep(1)
+
+    os.chdir(start_dir)
+
+def inter_to_dir(date_start,date_stop):
+    time_date_start=Time(date_start)
+    time_date_stop=Time(date_stop)
+
+    #testing whether the interval is 1 day
+    if (time_date_stop-time_date_start).jd==1.0 and time_date_start.mjd==int(time_date_start.mjd) and time_date_stop.mjd==int(time_date_stop.mjd) :
+        daily_inter=True
+    else:
+        daily_inter=False
+
+    cycle_dir=date_start if daily_inter else '-'.join([date_start,date_stop])
+
+    return cycle_dir
+
+def integ_cycle_BAT(object_name,date_start,date_stop,minexposure=1000,noise_map_dir='environ',ul_pl_index=2.5,recalc=False,merge=True):
+
+    '''
+    Performs a full data reduction download and cycle for a given object between date_start and date_stop
+
+    only the start date is used if the date_stop-date_start interval is one day
+
+    Also mosaics all of the images together for the given duration
+
+    Most arguments are the basic arguments of the other functions
+
+        -merge: merge the PHA files to a bigbatch at the end
+
+    '''
+
+    plt.ioff()
+
+    init_dir=os.getcwd()
+
+    cycle_dir=inter_to_dir(date_start,date_stop)
+
+    os.system('mkdir -p '+cycle_dir)
+
+    os.chdir(cycle_dir)
+
+    logfile_name='./integ_cycle_BAT.log'
+
+    if os.path.isfile(logfile_name):
+        os.system('rm '+logfile_name)
+
+    with StdoutTee(logfile_name,
+                   mode="a",buff=1,file_filters=[_remove_control_chars]),\
+        StderrTee(logfile_name,buff=1,file_filters=[_remove_control_chars]):
+
+        fetched_pointings=fetch_BAT(object_name,date_start,date_stop,minexposure,return_result=True)
+
+        if len(fetched_pointings)==0:
+            os.chdir(init_dir)
+            return 'No valid pointing downloaded'
+
+        dr_pointings=DR_BAT(noise_map_dir=noise_map_dir,single_mode=True)
+
+        if len(dr_pointings)==0:
+            os.chdir(init_dir)
+            print('No valid pointings after data reduction')
+            return 'No valid pointings after data reduction'
+
+        outventory_file=ba.merge_outventory(dr_pointings)
+
+        '''
+        from batanalysis docs:
+        the start_datetime value is automatically set to be the first BAT survey observation rounded to the nearest hole timedelta value (ie the floor function applied to the earliest BAT survey date to the start of that month in this case).
+        '''
+
+        #this one needs to be in daetime64
+        time_delta=np.datetime64(date_stop)-np.datetime64(date_start)
+
+        time_bins=ba.group_outventory(outventory_file,time_delta, end_datetime=Time(date_stop))
+
+        #note that here we should get a single mosaic
+        mosaic_list, total_mosaic = ba.parallel.batmosaic_analysis(dr_pointings, outventory_file, time_bins,nprocs=1)
+
+        if len(mosaic_list)==0:
+            os.chdir(init_dir)
+            print('No valid pointings after mosaic creation')
+            return 'No valid pointings after mosaic creation'
+
+        if len(mosaic_list)!=1:
+            os.chdir(init_dir)
+            print('Alert: more than one mosaic created. Check mosaic process')
+
+            return "Alert: more than one mosaic created. Check mosaic process"
+
+        mosaic_list=ba.parallel.batspectrum_analysis(mosaic_list, object_name, ul_pl_index=ul_pl_index,
+                                                     recalc=False,nprocs=1)
+
+        if len(mosaic_list)==0:
+            os.chdir(init_dir)
+            print('No valid mosaic after mosaic spectrum analysis')
+
+            return 'No valid mosaic after mosaic spectrum analysis'
+
+        pha_outputs=mosaic_list[0].pha_file_names_list
+
+        if len(pha_outputs)==0:
+            os.chdir(init_dir)
+            print('No valid spectra after mosaic spectrum analysis')
+
+            return 'No valid spectra after mosaic spectrum analysis'
+
+        #copying spectral products to the bigbatch directory
+
+        try:
+            pha_dir=str(mosaic_list[0].pha_file_names_list[0])
+        except:
+            breakpoint()
+
+        pha_dir=pha_dir[:pha_dir.rfind('/')]
+
+        #removing the previously renamed spectral elements
+        for elem in glob.glob(pha_dir+'/**'):
+            if cycle_dir in elem.split('/')[-1]:
+                os.system('rm '+elem)
+        sp_products=[elem for elem in glob.glob(pha_dir+'/**') if elem.endswith('.pha') or elem.endswith('.rsp')]
+
+        #testing if there was an non-ul file created
+        if sum([elem.endswith('mosaic.pha') for elem in sp_products]):
+            only_ul=False
+        else:
+            only_ul=True
+
+        os.system('mkdir -p ../bigbatch')
+
+        #renaming spectral files
+        for elem in sp_products:
+
+            if 'upperlim' in elem and not only_ul:
+                    continue
+
+            #renaming the file:
+            if elem.endswith('upperlim.pha'):
+
+                new_name=pha_dir+'/'+'BAT_'+cycle_dir+'_upperlim.pha'
+                os.system('cp '+elem+' '+new_name)
+
+                with fits.open(new_name,mode='update') as hdul:
+                    hdul[1].header['RESPFILE']='BAT_'+cycle_dir+'.rmf'
+                    hdul.flush()
+
+            if elem.endswith('mosaic.pha'):
+
+                new_name=pha_dir+'/'+'BAT_'+cycle_dir+'_mosaic.pha'
+                os.system('cp '+elem+' '+new_name)
+
+                with fits.open(new_name,mode='update') as hdul:
+                    hdul[1].header['RESPFILE']='BAT_'+cycle_dir+'.rmf'
+                    hdul.flush()
+
+            if elem.endswith('.rsp'):
+                os.system('cp '+elem+' '+pha_dir+'/'+'BAT_'+cycle_dir+'.rmf')
+
+        if merge:
+            #and copying them to the bigbatch directory
+            sp_products_renamed=[elem for elem in glob.glob(pha_dir+'/**') if cycle_dir in elem.split('/')[-1]]
+
+            for elem_renamed in sp_products_renamed:
+                os.system('cp '+elem_renamed+' '+os.path.join(init_dir,'bigbatch'))
+
+
+    os.system('cd '+init_dir)
+    plt.ion()
+
+    return 'Done'
+
+def summary_state(summary_file):
+
+    # fetching the previously computed directories from the summary folder file
+    if not os.path.isfile(summary_file):
+        return [],[]
+
+    try:
+        with open(summary_file) as summary_folder:
+            launched_intervals = summary_folder.readlines()
+
+            # restricting to intervals with completed analysis
+            completed_intervals = [elem.split('\t')[0] for elem in launched_intervals if 'Done' in elem]
+            launched_intervals = [elem.split('\t')[0] for elem in launched_intervals]
+    except:
+        launched_intervals = []
+        completed_intervals = []
+
+    return launched_intervals,completed_intervals
+
+
+def loop_cycle_BAT(object_name,interval_start,interval_stop,interval_delta='1',interval_delta_unit='jd',minexposure=1000,noise_map_dir='environ',ul_pl_index=2.5,recalc=False,merge=True,clean_events=True,
+                   rerun_intervals=False):
+    '''
+    Bigger wrapper around integ_cycle_BAT
+
+    loops differents integ_cycle_BAT by incrementing the intervals between interval_start and interval_stop
+    with interval_delta astropy TimeDelta objects (of format interval_delta_unit)
+
+    for now restricted to day dates
+
+    return_intervals:
+        rerun or not intervals already logged in the summary_interval file
+    '''
+
+
+    time_date_start=Time(interval_start)
+    time_date_stop=Time(interval_stop)
+
+    delta=TimeDelta(interval_delta,format=interval_delta_unit)
+    dates_increments = []
+
+    summary_file='summary_interval_analysis_' + object_name+\
+                  '_'+interval_start+'_'+interval_stop+'_'+interval_delta+'_'+interval_delta_unit+\
+                  '.log'
+
+    launched_intervals,completed_intervals=summary_state(summary_file)
+
+    # summary header for the previously computed directories file
+    summary_intervals_header = 'Interval\tAnalysis state\n'
+
+    for i in np.arange(((time_date_stop - time_date_start) / delta)+1):
+        dates_increments += [(time_date_start + i * delta).iso.split(' ')[0]]
+
+    for i_increment in range(len(dates_increments)-1):
+
+        increment_start=dates_increments[i_increment]
+        increment_stop=dates_increments[i_increment+1]
+
+        header_name='_'.join([increment_start,increment_stop])
+
+        inter_dir=inter_to_dir(increment_start,increment_stop)
+
+        if not rerun_intervals and header_name in launched_intervals:
+            print('interval '+header_name+' already computed. Skipping...')
+            continue
+
+        interval_state=integ_cycle_BAT(object_name,increment_start,increment_stop,minexposure=minexposure,noise_map_dir=noise_map_dir,ul_pl_index=ul_pl_index,recalc=recalc,merge=merge)
+
+        # adding the directory to the list of already computed directories
+        file_edit(summary_file, header_name, header_name + '\t' + interval_state + '\n',
+                  summary_intervals_header)
+
+        #cleaning the events if required
+        if clean_events:
+            clean_events_BAT(inter_dir)
+

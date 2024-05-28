@@ -32,6 +32,9 @@ import numpy as np
 from astropy.time import Time, TimeDelta
 from astropy.io import fits
 from pathlib import Path
+
+#currently cloned from fork to allow modifs
+#pip install git+https://github.com/Parrazyte/BatAnalysis
 import swiftbat
 import swiftbat.swutil as sbu
 import pickle
@@ -167,7 +170,7 @@ def convert_BAT_flux_spectra(observ_high_table_path,err_percent=90,e_low=15., e_
             hdul[1].header['EXPOSURE']=csv_BAT_expos[i_sp]
             hdul.flush()
 
-def fetch_BAT(object_name,date_start,date_stop,minexposure=1000,return_result=False):
+def fetch_BAT(object_name,date_start,date_stop,minexposure=1000,return_result=False,uksdc=False):
 
     '''
     wrapper around batanalysis to download some data
@@ -176,8 +179,16 @@ def fetch_BAT(object_name,date_start,date_stop,minexposure=1000,return_result=Fa
 
     -minexposure   # cm^2 after cos adjust
 
-    may need to add uksdc=True to download_swiftdata for old datasets
+    -return_result
+                return the downloaded obsids
+    -uksdc: from the doc:
+            "        uksdc : boolean
+                    Set to True to download from the UK Swift SDC"
+            Useful because some old data might not exist on heasarc.
+
     '''
+
+    # ba.datadir(os.getcwd())
 
     logfile_name='./fetch_BAT_'+object_name+'_'+date_start+'_'+date_stop+'_minexp_'+str(minexposure)+'.log'
 
@@ -202,7 +213,9 @@ def fetch_BAT(object_name,date_start,date_stop,minexposure=1000,return_result=Fa
         print(
             f"Finding everything finds {len(table_everything)} observations, of which {len(table_exposed)} have more than {minexposure:0} cm^2 coded")
 
-        result = ba.download_swiftdata(table_exposed)
+        print(table_exposed['OBSID'])
+
+        result = ba.download_swiftdata(table_exposed,uksdc=uksdc)
 
     if return_result:
         return result
@@ -232,6 +245,8 @@ def DR_BAT(obsids='auto',noise_map_dir='environ',nprocs=2,single_mode=False):
         input_dict['chatter']=5
         result=batsurvey(**input_dict)
     '''
+
+    # ba.datadir(os.getcwd())
 
     if noise_map_dir=='environ':
         noise_map_dir_use=os.environ['BAT_NOISE_MAP_DIR']
@@ -274,6 +289,8 @@ def SA_BAT(survey_obs_list,object_name,ul_pl_index=2.5,recalc=False,nprocs=2):
 
     '''
 
+    # ba.datadir(os.getcwd())
+
     logfile_name='./SA_BAT.log'
 
     if os.path.isfile(logfile_name):
@@ -312,6 +329,7 @@ def merge_BAT_full(merge_ULs=False):
 # batsurvey_obs=ba.parallel.batsurvey_analysis(obs_ids, patt_noise_dir=noise_map_dir, nprocs=30)
 
 def clean_events_BAT(source_dir):
+
     start_dir=os.getcwd()
 
     os.chdir(source_dir)
@@ -397,6 +415,8 @@ def integ_cycle_BAT(object_name,date_start,date_stop,minexposure=1000,noise_map_
 
     os.chdir(cycle_dir)
 
+    ba.datadir(os.getcwd())
+
     logfile_name='./integ_cycle_BAT.log'
 
     if os.path.isfile(logfile_name):
@@ -429,10 +449,12 @@ def integ_cycle_BAT(object_name,date_start,date_stop,minexposure=1000,noise_map_
         #this one needs to be in daetime64
         time_delta=np.datetime64(date_stop)-np.datetime64(date_start)
 
-        time_bins=ba.group_outventory(outventory_file,time_delta, end_datetime=Time(date_stop))
+        time_bins = ba.group_outventory(outventory_file, binning_timedelta=time_delta,
+                                        start_datetime=Time(date_start),end_datetime=Time(date_stop))
 
         #note that here we should get a single mosaic
-        mosaic_list, total_mosaic = ba.parallel.batmosaic_analysis(dr_pointings, outventory_file, time_bins,nprocs=1)
+        mosaic_list = ba.parallel.batmosaic_analysis(dr_pointings, outventory_file, time_bins,nprocs=1,
+                                                                   compute_total_mosaic=False)
 
         if len(mosaic_list)==0:
             os.chdir(init_dir)
@@ -442,7 +464,6 @@ def integ_cycle_BAT(object_name,date_start,date_stop,minexposure=1000,noise_map_
         if len(mosaic_list)!=1:
             os.chdir(init_dir)
             print('Alert: more than one mosaic created. Check mosaic process')
-
             return "Alert: more than one mosaic created. Check mosaic process"
 
         mosaic_list=ba.parallel.batspectrum_analysis(mosaic_list, object_name, ul_pl_index=ul_pl_index,
@@ -483,8 +504,6 @@ def integ_cycle_BAT(object_name,date_start,date_stop,minexposure=1000,noise_map_
         else:
             only_ul=True
 
-        os.system('mkdir -p ../bigbatch')
-
         #renaming spectral files
         for elem in sp_products:
 
@@ -514,6 +533,9 @@ def integ_cycle_BAT(object_name,date_start,date_stop,minexposure=1000,noise_map_
                 os.system('cp '+elem+' '+pha_dir+'/'+'BAT_'+cycle_dir+'.rmf')
 
         if merge:
+
+            os.system('mkdir -p ../bigbatch')
+
             #and copying them to the bigbatch directory
             sp_products_renamed=[elem for elem in glob.glob(pha_dir+'/**') if cycle_dir in elem.split('/')[-1]]
 
@@ -521,7 +543,7 @@ def integ_cycle_BAT(object_name,date_start,date_stop,minexposure=1000,noise_map_
                 os.system('cp '+elem_renamed+' '+os.path.join(init_dir,'bigbatch'))
 
 
-    os.system('cd '+init_dir)
+    os.chdir(init_dir)
     plt.ion()
 
     return 'Done'
@@ -594,11 +616,11 @@ def loop_cycle_BAT(object_name,interval_start,interval_stop,interval_delta='1',i
 
         interval_state=integ_cycle_BAT(object_name,increment_start,increment_stop,minexposure=minexposure,noise_map_dir=noise_map_dir,ul_pl_index=ul_pl_index,recalc=recalc,merge=merge)
 
-        # adding the directory to the list of already computed directories
-        file_edit(summary_file, header_name, header_name + '\t' + interval_state + '\n',
-                  summary_intervals_header)
 
         #cleaning the events if required
         if clean_events:
             clean_events_BAT(inter_dir)
 
+        # adding the directory to the list of already computed directories
+        file_edit(summary_file, header_name, header_name + '\t' + interval_state + '\n',
+                  summary_intervals_header)

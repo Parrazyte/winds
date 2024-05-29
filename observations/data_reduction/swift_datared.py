@@ -269,7 +269,7 @@ def fetch_BAT(object_name,date_start,date_stop,minexposure=1000,return_result=Fa
         return result
 
 def DR_BAT(obsids='auto',noise_map_dir='environ',nprocs=2,single_mode=False,clean_SNR=6,
-           clean_expr='ALWAYS_CLEAN==T',custom_cat_path=None):
+           clean_expr='ALWAYS_CLEAN==T',custom_cat_path=None,reset_datadir=False):
 
     '''
     wrapper around batanalysis to reduce data in the current folder
@@ -304,7 +304,8 @@ def DR_BAT(obsids='auto',noise_map_dir='environ',nprocs=2,single_mode=False,clea
         result=batsurvey(**input_dict)
     '''
 
-    # ba.datadir(os.getcwd())
+    if reset_datadir:
+        ba.datadir(os.getcwd())
 
     if noise_map_dir=='environ':
         noise_map_dir_use=os.environ['BAT_NOISE_MAP_DIR']
@@ -343,7 +344,7 @@ def DR_BAT(obsids='auto',noise_map_dir='environ',nprocs=2,single_mode=False,clea
 
     return batsurvey_obs
 
-def SA_BAT(survey_obs_list,object_name,ul_pl_index=2.5,recalc=False,nprocs=2):
+def SA_BAT(survey_obs_list,object_name,ul_pl_index=2.5,recalc=False,nprocs=2,reset_datadir=False):
 
     '''
     Wrapper around batanalysis to perform spectral analysis of data in the current folder
@@ -354,7 +355,8 @@ def SA_BAT(survey_obs_list,object_name,ul_pl_index=2.5,recalc=False,nprocs=2):
 
     '''
 
-    # ba.datadir(os.getcwd())
+    if reset_datadir:
+        ba.datadir(os.getcwd())
 
     logfile_name='./SA_BAT.log'
 

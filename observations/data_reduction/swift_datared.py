@@ -32,18 +32,66 @@ import numpy as np
 from astropy.time import Time, TimeDelta
 from astropy.io import fits
 from pathlib import Path
-
 #currently cloned from fork to allow modifs
 #pip install git+https://github.com/Parrazyte/BatAnalysis
 import swiftbat
 import swiftbat.swutil as sbu
 import pickle
 
+import astropy.units as u
+from astropy.coordinates import SkyCoord
+from astroquery.simbad import Simbad
+import warnings
+
 #function to remove (most) control chars
 def _remove_control_chars(message):
     ansi_escape =re.compile(r'(\x9B|\x1B\[)[0-?]*[ -\/]*[@-~]')
     return ansi_escape.sub('', message)
 
+
+def source_catal(dirpath):
+    '''
+    Tries to identify a Simbad object from the directory structure
+    '''
+
+    # splitting the directories and searching every name in Simbad
+    dir_list = dirpath.split('/')[1:]
+
+    # removing a few problematic names
+    crash_sources = ['M2', 'home', 'outputmos', 'BlackCAT', '']
+    # as well as obsid type names that can cause crashes
+    for elem_dir in dir_list:
+        if len(elem_dir) == 10 and elem_dir.isdigit() or elem_dir in crash_sources:
+            dir_list.remove(elem_dir)
+
+    # Simbad.query_object gives a warning for a lot of folder names so we just skip them
+    obj_list = []
+    for elem_dir in dir_list:
+        try:
+            with warnings.catch_warnings():
+                # warnings.filterwarnings('ignore','.*No known catalog could be found.*',)
+                # warnings.filterwarnings('ignore','.*Identifier not found.*',)
+                warnings.filterwarnings('ignore', category=UserWarning)
+                elem_obj = Simbad.query_object(elem_dir)
+                if type(elem_obj) != type(None):
+                    obj_list +=[elem_obj]
+        except:
+            breakpoint()
+            print('\nProblem during the Simbad query. This is the current directory list:')
+            print(dir_list)
+            return 'Problem during the Simbad query.'
+
+    if len(obj_list)==0:
+        print("\nSimbad didn't recognize any object name in the directories.")
+        breakpoint()
+
+
+    # if we have at least one detections, it is assumed the "last" find is the name of the object
+    obj_catal = obj_list[-1]
+
+    print('\nValid source(s) detected. Object name assumed to be ' + obj_catal['MAIN_ID'])
+
+    return obj_catal
 def merge_swift_spectra():
 
     '''
@@ -220,7 +268,8 @@ def fetch_BAT(object_name,date_start,date_stop,minexposure=1000,return_result=Fa
     if return_result:
         return result
 
-def DR_BAT(obsids='auto',noise_map_dir='environ',nprocs=2,single_mode=False):
+def DR_BAT(obsids='auto',noise_map_dir='environ',nprocs=2,single_mode=False,clean_SNR=6,
+           clean_expr='ALWAYS_CLEAN==T',custom_cat_path=None):
 
     '''
     wrapper around batanalysis to reduce data in the current folder
@@ -231,10 +280,19 @@ def DR_BAT(obsids='auto',noise_map_dir='environ',nprocs=2,single_mode=False):
 
     -obsids: obsids to run the DR for. If set to auto, automatically detectes the obsid from numeric directories in the
              local folder
+
     -noise_map_dir: directory where the patttern maps are untarred
                     if set to 'environ', fetches the BAT_NOISE_MAP_DIR environment variable instead
 
-    -test_mode: use _BAT_survey instead of parallel functions to allow debugging
+    -nprocs: parallel number of procs
+
+    -single_mode: use the non-parallelized function instead
+
+    -clean_SNR : argument for inpuct_dict
+    -clean_expr : argument for input_dict
+
+    -custom_cat_path: path of a custom catalog file created previously with create_custom_catalog
+                        (allows to analyze sources which aren't in the current catalog)
 
     Note: if nothing gets out and no gti are recognized, it could be due to a lack of caldb initalization
 
@@ -253,8 +311,15 @@ def DR_BAT(obsids='auto',noise_map_dir='environ',nprocs=2,single_mode=False):
     else:
         noise_map_dir_use=noise_map_dir
 
-    obs_ids = [i.name for i in sorted(ba.datadir().glob("*")) if i.name.isnumeric()]
-    input_dict=dict(cleansnr=6,cleanexpr='ALWAYS_CLEAN==T')
+    if type(obsids)==str and obsids=='auto':
+        obs_ids = [i.name for i in sorted(ba.datadir().glob("*")) if i.name.isnumeric()]
+    else:
+        obs_ids=obsids
+
+    input_dict=dict(cleansnr=clean_SNR,cleanexpr=clean_expr)
+
+    if custom_cat_path is not None:
+        input_dict['incatalog']=custom_cat_path
 
     logfile_name='./DR_BAT.log'
 
@@ -390,7 +455,7 @@ def inter_to_dir(date_start,date_stop):
 
     return cycle_dir
 
-def integ_cycle_BAT(object_name,date_start,date_stop,minexposure=1000,noise_map_dir='environ',ul_pl_index=2.5,recalc=False,merge=True):
+def integ_cycle_BAT(object_name,date_start,date_stop,minexposure=1000,noise_map_dir='environ',ul_pl_index=2.5,recalc=False,merge=True,custom_cat_coords=None):
 
     '''
     Performs a full data reduction download and cycle for a given object between date_start and date_stop
@@ -403,6 +468,10 @@ def integ_cycle_BAT(object_name,date_start,date_stop,minexposure=1000,noise_map_
 
         -merge: merge the PHA files to a bigbatch at the end
 
+        -custom_cat_coords: [ra,dec,l,b] in degrees array, or None
+                            if not None, creates a new custom catalog for the current object name and passes it
+                            to DR_BAT
+                            (useful to analyze sources which aren't in the list of sources of the standard surveys)
     '''
 
     plt.ioff()
@@ -432,7 +501,24 @@ def integ_cycle_BAT(object_name,date_start,date_stop,minexposure=1000,noise_map_
             os.chdir(init_dir)
             return 'No valid pointing downloaded'
 
-        dr_pointings=DR_BAT(noise_map_dir=noise_map_dir,single_mode=True)
+        if custom_cat_coords is not None:
+
+            #removing a potential previous catalog to avoid issues
+            if os.path.isfile('./custom_catalog.cat'):
+                os.system('rm custom_catalog.cat')
+
+            custom_cat_posix = ba.create_custom_catalog(object_name,
+                                                            custom_cat_coords[0],custom_cat_coords[1],custom_cat_coords[2],custom_cat_coords[3])
+
+            if custom_cat_posix is None:
+                os.chdir(init_dir)
+                return 'Couldnt create custom catalog file'
+            else:
+                custom_cat_path=str(custom_cat_posix)
+        else:
+            custom_cat_path=None
+
+        dr_pointings=DR_BAT(noise_map_dir=noise_map_dir,single_mode=True,custom_cat_path=custom_cat_path)
 
         if len(dr_pointings)==0:
             os.chdir(init_dir)
@@ -569,7 +655,7 @@ def summary_state(summary_file):
 
 
 def loop_cycle_BAT(object_name,interval_start,interval_stop,interval_delta='1',interval_delta_unit='jd',minexposure=1000,noise_map_dir='environ',ul_pl_index=2.5,recalc=False,merge=True,clean_events=True,
-                   rerun_intervals=False):
+                   rerun_intervals=False,use_custom_cat=True):
     '''
     Bigger wrapper around integ_cycle_BAT
 
@@ -578,10 +664,31 @@ def loop_cycle_BAT(object_name,interval_start,interval_stop,interval_delta='1',i
 
     for now restricted to day dates
 
+    object_name:
+        -a string which will be searched in Simbad,
+        -'auto' -> fetches the closest directory in the current arborescence with a name in Simbad
+
     return_intervals:
         rerun or not intervals already logged in the summary_interval file
+
+    use_custom_cat:
+        passes source coordinates to integ_cycle_BAT, to create a custom catalog with the source position, which
+        allows analysis of any source (and not just the ones pre-existing in the BAT surveys)
+
     '''
 
+
+    if object_name!='auto':
+        object_name_use=object_name
+        object_simbad=Simbad.query_object(object_name)[0]
+    else:
+        object_simbad=source_catal(object_name)
+        object_name_use=object_simbad['MAIN_ID'].replace(' ','')
+
+    object_sky = SkyCoord(ra=object_simbad.columns['RA'], dec=object_simbad.columns['DEC'],
+                          unit=(u.hourangle, u.deg))
+
+    object_coords=object_sky.ra.value[0],object_sky.dec.value[0],object_sky.galactic.l.value[0],object_sky.galactic.b.value[0]
 
     time_date_start=Time(interval_start)
     time_date_stop=Time(interval_stop)
@@ -614,7 +721,8 @@ def loop_cycle_BAT(object_name,interval_start,interval_stop,interval_delta='1',i
             print('interval '+header_name+' already computed. Skipping...')
             continue
 
-        interval_state=integ_cycle_BAT(object_name,increment_start,increment_stop,minexposure=minexposure,noise_map_dir=noise_map_dir,ul_pl_index=ul_pl_index,recalc=recalc,merge=merge)
+        interval_state=integ_cycle_BAT(object_name,increment_start,increment_stop,minexposure=minexposure,noise_map_dir=noise_map_dir,ul_pl_index=ul_pl_index,recalc=recalc,merge=merge,
+          custom_cat_coords=object_coords if use_custom_cat else None)
 
 
         #cleaning the events if required

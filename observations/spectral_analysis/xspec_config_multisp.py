@@ -465,6 +465,117 @@ def fit_broader(epoch_id,add_gaussem=True,bat_interp_dir='/home/parrama/Document
 
     plt.ion()
 
+def fit_broader_BAT(epoch_list,
+                    add_gaussem=True,
+                    outdir='fit_broader'):
+    '''
+
+    for quick refitting in broader bands with BAT
+
+    '''
+
+
+    plt.ioff()
+
+    reset()
+    AllModels.clear()
+    AllData.clear()
+    Plot.xLog=True
+    Plot.xAxis='keV'
+
+    load_list(epoch_list)
+
+    epoch_id='_'.join(shorten_epoch([elem.split('_sp')[0] for elem in epoch_list]))
+
+    #adding the swift info
+    groups=AllData.nGroups
+
+    currdir=os.getcwd()
+
+    os.system('mkdir -p '+outdir)
+
+    curr_logfile_write = Xset.openLog(os.path.join(outdir, epoch_id + '_broader.log'))
+
+    # ensuring the log information gets in the correct place in the log file by forcing line to line buffering
+    curr_logfile_write.reconfigure(line_buffering=True)
+
+    curr_logfile = open(curr_logfile_write.name, 'r')
+
+    AllModels.clear()
+
+    print('Loading base model...')
+
+    Xset.chatter=0
+
+    try:
+        addcomp('cont_diskbb')
+    except:
+        breakpoint()
+    addcomp('disk_thcomp')
+    addcomp('glob_TBabs')
+    addcomp('glob_constant')
+    for i_grp in range(groups):
+        if AllData(i_grp+1).fileinfo('TELESCOP')=='NICER':
+            AllData(i_grp+1).ignore('**-0.3 10.-**')
+        if i_grp!=0:
+            AllModels(i_grp+1)(1).values=[1.,0.01,0.95,0.95,1.05,1.05]
+
+    xscorpeon.load('auto',frozen=True)
+
+    Xset.chatter=10
+
+    calc_fit()
+
+    addcomp('calNICERSiem_gaussian',position='lastin')
+
+    calc_fit()
+
+    if add_gaussem:
+        addcomp('FeKa0em_bgaussian', position='thcomp')
+
+        #not that here the NICER edge is not removed for the BAT datagroup, but we don't care considering the energy
+        addcomp('calNICER_edge')
+
+        calc_fit()
+
+
+    xscorpeon.load('auto',frozen=False,extend_SAA_norm=True,fit_SAA_norm=True)
+
+    calc_fit()
+    xscorpeon.freeze()
+
+    mod=allmodel_data()
+
+    Plot.xLog=True
+    xPlot('ldata,ratio,delchi')
+
+    if os.path.isfile(os.path.join(outdir,epoch_id+'_mod_broader.xcm')):
+        os.remove(os.path.join(outdir,epoch_id+'_mod_broader.xcm'))
+
+    if os.path.isfile(os.path.join(outdir,epoch_id+'_mod_broader_mod.xcm')):
+        os.remove(os.path.join(outdir,epoch_id+'_mod_broader_mod.xcm'))
+
+    Xset.save(os.path.join(outdir,epoch_id+'_mod_broader.xcm'),info='a')
+
+    Xset.save(os.path.join(outdir,epoch_id+'_mod_broader_mod.xcm'),info='m')
+
+    Plot_screen('ldata,ratio,delchi',os.path.join(outdir,epoch_id+'_mod_broader_screen'))
+
+    Plot.xLog=False
+    Plot_screen('ldata,ratio,delchi',os.path.join(outdir,epoch_id+'_mod_broader_zoom_NICER_screen'),xlims=[0.3,10.0])
+    Plot.xLog=True
+
+    # saving the model str
+    catch_model_str(curr_logfile, savepath=outdir + '/' + epoch_id + '_mod_broader.txt')
+
+    #creating the SEDs
+    save_broad_SED(path=os.path.join(outdir,epoch_id+'_mod_broader_SED.xcm'),
+                   e_low=0.01,e_high=1000,nbins=2e3,retain_session=False,
+                   remove_abs=True,remove_gaussian=True,remove_cal=True,
+                   remove_scorpeon=True)
+
+    plt.ion()
+
 class model_data:
 
     '''
@@ -568,7 +679,8 @@ class scorpeon_manager:
                 bgloads_auto=np.array([None]*AllData.nGroups)
                 for id_grp in range(AllData.nGroups):
                     if AllData(id_grp+1).fileinfo('TELESCOP')=='NICER':
-                        bgloads_auto[id_grp]=AllData(id_grp+1).fileName.replace('_sp_grp_opt.pha','_bg.py')
+                        bgloads_auto[id_grp]=AllData(id_grp+1).fileName.replace('_sp_grp_opt.pha','_bg.py')\
+                                                              .replace('_sr.pha','_bg.py')
                 self.bgload_paths=bgloads_auto
 
             # converting the input into an array like for easier manipulation
@@ -3392,11 +3504,10 @@ class fitmod:
                 fixed_vals=[self.fixed_abs]
             elif "nthcomp" in component.compname or "thcomp" in component.compname:
                 fixed_vals=[self.fixed_gamma]
-            elif component.compname=="disk_thcomp" and self.thcomp_frac_frozen:
+
+            if component.compname=="disk_thcomp" and self.thcomp_frac_frozen:
                 #fixing the gamma and the covering fraction
                 fixed_vals=[3.5,None,0.,None]
-
-                breakpoint()
 
             else:
                 fixed_vals=None
@@ -3554,11 +3665,9 @@ class fitmod:
                 fixed_vals=[self.fixed_abs]
             elif "nthcomp" in component.compname or "thcomp" in component.compname:
                 fixed_vals=[self.fixed_gamma]
-            elif component.compname=="disk_thcomp" and self.thcomp_frac_frozen:
+            if component.compname=="disk_thcomp" and self.thcomp_frac_frozen:
                 #fixing the gamma and the covering fraction
                 fixed_vals=[3.5,None,0.,None]
-
-                breakpoint()
 
             else:
                 fixed_vals=None
@@ -3672,11 +3781,9 @@ class fitmod:
                 fixed_vals=[self.fixed_abs]
             elif "nthcomp" in component.compname or "thcomp" in component.compname:
                 fixed_vals=[self.fixed_gamma]
-            elif component.compname=="disk_thcomp" and self.thcomp_frac_frozen:
+            if component.compname=="disk_thcomp" and self.thcomp_frac_frozen:
                 #fixing the gamma and the covering fraction
                 fixed_vals=[3.5,None,0.,None]
-
-                breakpoint()
 
             else:
                 fixed_vals=None
@@ -4715,12 +4822,21 @@ class fitmod:
             '''
 
             #loop on all the components to delete them, in reverse order to avoid having to update them
-            for comp in [elem for elem in self.includedlist if elem is not None][::-1]:
+            for comp in self.includedlist_main[::-1]:
+
                 #skipping the current component, already removed absorptions
                 if comp is fitcomp_line or (comp.absorption and comp.xcompnames[0] not in AllModels(1).componentNames):
                     continue
 
+                #skipping multiplicative non-calibration components, which will be deleted anyway with the additive ones
+                if not comp.calibration and comp.multipl and not comp.absorption\
+                        and not comp.xcompnames[0] in xspec_globcomps:
+                    continue
+
+                print(comp.compname)
+
                 comp.delfrommod(rollback=False)
+                #fix this
 
             #loop on the parameters
             flux_line_dist=np.zeros(len(par_draw))

@@ -43,6 +43,8 @@ from astropy.coordinates import SkyCoord
 from astroquery.simbad import Simbad
 import warnings
 
+from joblib import Parallel, delayed
+
 #function to remove (most) control chars
 def _remove_control_chars(message):
     ansi_escape =re.compile(r'(\x9B|\x1B\[)[0-?]*[ -\/]*[@-~]')
@@ -268,7 +270,7 @@ def fetch_BAT(object_name,date_start,date_stop,minexposure=1000,return_result=Fa
     if return_result:
         return result
 
-def DR_BAT(obsids='auto',noise_map_dir='environ',nprocs=2,single_mode=False,clean_SNR=6,
+def DR_BAT(obsids='auto',noise_map_dir='environ',nprocs=1,clean_SNR=6,
            clean_expr='ALWAYS_CLEAN==T',custom_cat_path=None,reset_datadir=False):
 
     '''
@@ -285,9 +287,7 @@ def DR_BAT(obsids='auto',noise_map_dir='environ',nprocs=2,single_mode=False,clea
                     if set to 'environ', fetches the BAT_NOISE_MAP_DIR environment variable instead
 
     -nprocs: parallel number of procs
-
-    -single_mode: use the non-parallelized function instead
-
+             if set to 1, doesn't parallelize
     -clean_SNR : argument for inpuct_dict
     -clean_expr : argument for input_dict
 
@@ -331,7 +331,7 @@ def DR_BAT(obsids='auto',noise_map_dir='environ',nprocs=2,single_mode=False,clea
                    mode="a",buff=1,file_filters=[_remove_control_chars]),\
         StderrTee(logfile_name,buff=1,file_filters=[_remove_control_chars]):
 
-        if single_mode:
+        if nprocs==1:
             batsurvey_obs=[]
             for obsid in obs_ids:
                 batsurvey_obs_indiv=ba.parallel._create_BatSurvey(obsid,input_dict=input_dict,
@@ -457,7 +457,7 @@ def inter_to_dir(date_start,date_stop):
 
     return cycle_dir
 
-def integ_cycle_BAT(object_name,date_start,date_stop,minexposure=1000,noise_map_dir='environ',ul_pl_index=2.5,recalc=False,merge=True,custom_cat_coords=None):
+def integ_cycle_BAT(object_name,date_start,date_stop,minexposure=1000,noise_map_dir='environ',ul_pl_index=2.5,recalc=False,merge=True,custom_cat_coords=None,nprocs=1):
 
     '''
     Performs a full data reduction download and cycle for a given object between date_start and date_stop
@@ -520,7 +520,7 @@ def integ_cycle_BAT(object_name,date_start,date_stop,minexposure=1000,noise_map_
         else:
             custom_cat_path=None
 
-        dr_pointings=DR_BAT(noise_map_dir=noise_map_dir,single_mode=True,custom_cat_path=custom_cat_path)
+        dr_pointings=DR_BAT(noise_map_dir=noise_map_dir,custom_cat_path=custom_cat_path,nprocs=nprocs)
 
         if len(dr_pointings)==0:
             os.chdir(init_dir)
@@ -540,9 +540,11 @@ def integ_cycle_BAT(object_name,date_start,date_stop,minexposure=1000,noise_map_
         time_bins = ba.group_outventory(outventory_file, binning_timedelta=time_delta,
                                         start_datetime=Time(date_start),end_datetime=Time(date_stop))
 
+        #procs=1 to avoid issue with parallelization over it
         #note that here we should get a single mosaic
-        mosaic_list = ba.parallel.batmosaic_analysis(dr_pointings, outventory_file, time_bins,nprocs=1,
-                                                                   compute_total_mosaic=False)
+        mosaic_list = ba.parallel.batmosaic_analysis(dr_pointings, outventory_file, time_bins,nprocs=nprocs,
+                                                                   compute_total_mosaic=False,
+                                                     catalog_file=custom_cat_path)
 
         if len(mosaic_list)==0:
             os.chdir(init_dir)
@@ -554,8 +556,9 @@ def integ_cycle_BAT(object_name,date_start,date_stop,minexposure=1000,noise_map_
             print('Alert: more than one mosaic created. Check mosaic process')
             return "Alert: more than one mosaic created. Check mosaic process"
 
+        #procs=1 to avoid issue with parallelization over it
         mosaic_list=ba.parallel.batspectrum_analysis(mosaic_list, object_name, ul_pl_index=ul_pl_index,
-                                                     recalc=False,nprocs=1)
+                                                     recalc=False,nprocs=nprocs)
 
         if len(mosaic_list)==0:
             os.chdir(init_dir)
@@ -655,9 +658,38 @@ def summary_state(summary_file):
 
     return launched_intervals,completed_intervals
 
+def full_cycle_BAT(object_name,increment_start,increment_stop,minexposure,noise_map_dir,ul_pl_index,recalc,
+                   merge,custom_cat_coords,clean_events_dir=None,
+                   summary_file=None,header_name=None,summary_intervals_header=None,launched_intervals=None,nprocs=1):
+
+    '''
+    this function is mostly here to be parallelized
+
+    clean_events_dir can be None or the directory to clean
+    same for summary file
+
+    launched_intervals is to test whether to skip if return_intervals is set to False
+    '''
+
+    if launched_intervals is not None and header_name in launched_intervals:
+        print('interval ' + header_name + ' already computed. Skipping...')
+        return
+
+    interval_state = integ_cycle_BAT(object_name, increment_start, increment_stop, minexposure=minexposure,
+                                     noise_map_dir=noise_map_dir, ul_pl_index=ul_pl_index, recalc=recalc, merge=merge,
+                                     custom_cat_coords=custom_cat_coords,nprocs=nprocs)
+
+    # cleaning the events if required
+    if clean_events_dir is not None:
+        clean_events_BAT(clean_events_dir)
+
+    if summary_file is not None:
+        # adding the directory to the list of already computed directories
+        file_edit(summary_file, header_name, header_name + '\t' + interval_state + '\n',
+                  summary_intervals_header)
 
 def loop_cycle_BAT(object_name,interval_start,interval_stop,interval_delta='1',interval_delta_unit='jd',minexposure=1000,noise_map_dir='environ',ul_pl_index=2.5,recalc=False,merge=True,clean_events=True,
-                   rerun_intervals=False,use_custom_cat=True):
+                   rerun_intervals=False,use_custom_cat=True,parallel=1,nprocs=1):
     '''
     Bigger wrapper around integ_cycle_BAT
 
@@ -677,6 +709,10 @@ def loop_cycle_BAT(object_name,interval_start,interval_stop,interval_delta='1',i
         passes source coordinates to integ_cycle_BAT, to create a custom catalog with the source position, which
         allows analysis of any source (and not just the ones pre-existing in the BAT surveys)
 
+    parallel:
+        parallelisation of the full_cycle_BAT function (currently doesn't work)
+    nprocs:
+        parallelization inside the integ_cycle_BAT function
     '''
 
 
@@ -710,27 +746,61 @@ def loop_cycle_BAT(object_name,interval_start,interval_stop,interval_delta='1',i
     for i in np.arange(((time_date_stop - time_date_start) / delta)+1):
         dates_increments += [(time_date_start + i * delta).iso.split(' ')[0]]
 
-    for i_increment in range(len(dates_increments)-1):
+    increment_start_list=dates_increments[:-1]
+    increment_stop_list=dates_increments[1:]
 
-        increment_start=dates_increments[i_increment]
-        increment_stop=dates_increments[i_increment+1]
+    inter_dir_list=[inter_to_dir(elem_start,elem_stop) for elem_start,elem_stop in \
+                    zip(increment_start_list,increment_stop_list)]
 
-        header_name='_'.join([increment_start,increment_stop])
-
-        inter_dir=inter_to_dir(increment_start,increment_stop)
-
-        if not rerun_intervals and header_name in launched_intervals:
-            print('interval '+header_name+' already computed. Skipping...')
-            continue
-
-        interval_state=integ_cycle_BAT(object_name,increment_start,increment_stop,minexposure=minexposure,noise_map_dir=noise_map_dir,ul_pl_index=ul_pl_index,recalc=recalc,merge=merge,
-          custom_cat_coords=object_coords if use_custom_cat else None)
+    header_name_list=['_'.join([elem_start,elem_stop]) for elem_start,elem_stop in \
+                      zip(increment_start_list,increment_stop_list)]
 
 
-        #cleaning the events if required
-        if clean_events:
-            clean_events_BAT(inter_dir)
 
-        # adding the directory to the list of already computed directories
-        file_edit(summary_file, header_name, header_name + '\t' + interval_state + '\n',
-                  summary_intervals_header)
+
+    if parallel==1:
+
+        for i_increment in range(len(dates_increments)-1):
+
+            increment_start=dates_increments[i_increment]
+            increment_stop=dates_increments[i_increment+1]
+
+            header_name='_'.join([increment_start,increment_stop])
+
+            inter_dir=inter_to_dir(increment_start,increment_stop)
+
+            if not rerun_intervals and header_name in launched_intervals:
+                print('interval '+header_name+' already computed. Skipping...')
+                continue
+
+            interval_state=integ_cycle_BAT(object_name,increment_start,increment_stop,minexposure=minexposure,noise_map_dir=noise_map_dir,ul_pl_index=ul_pl_index,recalc=recalc,merge=merge,
+              custom_cat_coords=object_coords if use_custom_cat else None,nprocs=nprocs)
+
+
+            #cleaning the events if required
+            if clean_events:
+                clean_events_BAT(inter_dir)
+
+            # adding the directory to the list of already computed directories
+            file_edit(summary_file, header_name, header_name + '\t' + interval_state + '\n',
+                      summary_intervals_header)
+
+    else:
+        res = Parallel(n_jobs=parallel)(
+            delayed(full_cycle_BAT)(
+                object_name=object_name,
+                increment_start=elem_start,
+                increment_stop=elem_stop,
+                minexposure=minexposure,
+                noise_map_dir=noise_map_dir,
+                ul_pl_index=ul_pl_index,
+                recalc=recalc,
+                merge=merge,
+                custom_cat_coords=object_coords if use_custom_cat else None,
+                clean_events_dir=elem_inter_dir,
+                summary_file=summary_file, header_name=elem_header_name,
+                summary_intervals_header=summary_intervals_header,
+                launched_intervals=launched_intervals if not rerun_intervals else None,
+                nprocs=1)
+            for elem_start,elem_stop,elem_inter_dir,elem_header_name \
+                    in zip(increment_start_list,increment_stop_list,inter_dir_list,header_name_list))

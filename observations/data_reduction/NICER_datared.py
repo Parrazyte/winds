@@ -97,11 +97,11 @@ ap.add_argument("-dir", "--startdir", nargs='?', help="starting directory. Curre
 ap.add_argument("-l","--local",nargs=1,help='Launch actions directly in the current directory instead',
                 default=False,type=bool)
 ap.add_argument('-catch','--catch_errors',help='Catch errors while running the data reduction and continue',
-                default=True,type=bool)
+                default=False,type=bool)
 
 #global choices
 ap.add_argument("-a","--action",nargs='?',help='Give which action(s) to proceed,separated by comas.',
-                default='1,fs,m',type=str)
+                default='l,ml',type=str)
 #default: fc,1,gti,fs,l,g,m,ml,c
 
 #note: should be kept to true for most complicated tasks
@@ -185,7 +185,9 @@ ap.add_argument('-int_split_bin',nargs=1,help='binning of the light curve used f
 
 '''lightcurves'''
 
-ap.add_argument('-lc_bin',nargs=1,help='Gives the binning of all lightcurces/HR evolutions (in s)',default=1,type=str)
+ap.add_argument('-lc_bin_list',nargs=1,
+                help='A list of binnings with which to generate all lightcurces/HR evolutions (in s)',
+                default=[1.,0.1],type=list)
 #note: also defines the binning used for the gti definition
 
 # lc_bands_list_det=['1-2','2-3','3-4','4-5','5-6','6-7','7-8','8-9','9-10']
@@ -205,9 +207,10 @@ ap.add_argument('-sp_systematics',help='put systematics in the spectrum',default
 ap.add_argument('-relax_SAA_bg',help='Increase the maximum of the nxb.saa_norm model to a higher value',
                 default=False,type=str)
 
+#if set to scorpeon_all, will clean the bg files in the directory before running since it uses the task with clobber=NO
 #for scorpeon, scorpeon_script for the model and scorpeon_default for the static
 ap.add_argument('-bg',"--bgmodel",help='Give the background model to use for the data reduction',
-                default='scorpeon_script',type=str)
+                default='scorpeon_all',type=str)
 
 #python or default
 ap.add_argument('-bg_lang',"--bg_language",
@@ -271,7 +274,7 @@ peak_score_thresh=args.peak_score_thresh
 int_split_band=args.int_split_band
 int_split_bin=args.int_split_bin
 
-lc_bin=args.lc_bin
+lc_bin_list=args.lc_bin_list
 lc_bands_str=args.lc_bands_str
 hr_bands_str=args.hr_bands_str
 
@@ -1529,7 +1532,10 @@ def extract_all_spectral(directory,bkgmodel='scorpeon_script',language='python',
         -scorpeon_script: uses scorpeon in script mode to create a variable xspec-compatible bg model
         
         -scorpeon_file: uses scorpeon in file mode to produce a static background file
-        
+
+        -scorpeon_all: first creates a model without background, then rerun the task 3 times to create
+                       the bg files in static, xspec and pyxspec modes
+
         -3c50: 3c50 model of Remillar et al., fetches data from the alias_3C50 argument
         
         -sw: Space weather model
@@ -1575,7 +1581,7 @@ def extract_all_spectral(directory,bkgmodel='scorpeon_script',language='python',
                     bkg_outlang_str='outlang=PYTHON'
                 elif language=='default':
                     bkg_outlang_str=''
-                else:
+                elif language!='all':
                     print(
                         'NICER_datared_error: only "python" and "default" is implemented for the language output of scorpeon in script mode')
                     return 'NICER_datared_error: only "python" and "default" is implemented for the language output of scorpeon in script mode'
@@ -1634,14 +1640,16 @@ def extract_all_spectral(directory,bkgmodel='scorpeon_script',language='python',
 
             systematics_str=' syserrfile=NONE' if not sp_systematics else ''
 
-            bashproc.sendline('nicerl3-spect indir='+directory+' bkgmodeltype='+bkgmodel_str+' bkgformat='+bkgmodel_mode+' '+bkg_outlang_str+
+            #no scorpeon model at first if in scorpeon_all mode to loop the creation of all afterwards
+            bkg_full_str=' bkgmodeltype='+('NONE' if bkgmodel=='scorpeon_all' else bkgmodel_str+' bkgformat='+bkgmodel_mode+' '+bkg_outlang_str)
+
+            bashproc.sendline('nicerl3-spect indir='+directory+bkg_full_str+
                               ' clobber='+('YES' if overwrite else 'FALSE')+gti_str+relaxed_SAA_bg_str+systematics_str+
                               ((" clfile='$CLDIR/ni$OBSID_0mpu7_cl_day.evt'  suffix="+extract_suffix) if extract_mode=='day' else ''))
 
             process_state=bashproc.expect(['DONE','ERROR: could not find UFA file','Task aborting due to zero EXPOSURE',
                                            'Task aborting due to zero response',
                                            'PIL ERROR PIL_UNSPECIFIED_ERROR: non-specific pil error'],timeout=None)
-
 
             if process_state in [2,3]:
 
@@ -1656,6 +1664,21 @@ def extract_all_spectral(directory,bkgmodel='scorpeon_script',language='python',
                 bashproc.sendline('exit')
                 extract_all_spectral_done.set()
                 return lines[-1].replace('\n','')
+
+            #creating all types of scorpeon models afterwards if need be we don't expect bugs since the function
+            #would have returned already otherwise
+            if bkgmodel=='scorpeon_all':
+
+                bkg_full_str_list=[' bkgmodeltype=scorpeon bkgformat=model outlang=PYTHON',
+                                    ' bkgmodeltype=scorpeon bkgformat=model outlang=xcm',
+                                    ' bkgmodeltype=scorpeon bkgformat=file']
+                for elem_bkg_str in bkg_full_str_list:
+                    bashproc.sendline('nicerl3-spect indir=' + directory + elem_bkg_str +
+                                      ' clobber=YES' + gti_str + relaxed_SAA_bg_str +
+                                      systematics_str +((" clfile='$CLDIR/ni$OBSID_0mpu7_cl_day.evt'  suffix=" +
+                                                         extract_suffix) if extract_mode == 'day' else ''))
+
+                    process_state = bashproc.expect(['DONE'], timeout=None)
 
             allfiles=glob.glob(os.path.join(directory,'xti/**'),recursive=True)
 
@@ -1676,7 +1699,8 @@ def extract_all_spectral(directory,bkgmodel='scorpeon_script',language='python',
             file_dir=spfile[:spfile.rfind('/')]
             file_suffix=file_id.split(directory)[-1]
 
-            copyfile_suffixes=['_sr.pha','_bg.rmf','_sk.arf','.arf','.rmf']+\
+            copyfile_suffixes=['_sr.pha','_bg.rmf','_sk.arf','.arf','.rmf']+ \
+                              (['_bg.py','_bg.pha','_bg.xcm'] if bkgmodel=='scorpeon_all' else [])+\
                             (['_bg.py'] if bkgmodel=='scorpeon_script' and language=='python' else [])+ \
                             (['_bg.pha'] if bkgmodel=='scorpeon_file' else [])+ \
                             (['_bg.xcm'] if bkgmodel == 'scorpeon_script' and language=='default' else [])
@@ -1760,7 +1784,7 @@ def extract_all_spectral(directory,bkgmodel='scorpeon_script',language='python',
         extract_all_spectral_done.set()
 
 #### extract_lc
-def extract_lc(directory,binning=10,bands='3-12',HR='6-10/3-6',overwrite=True,day_mode='both'):
+def extract_lc(directory,binning_list=[1],bands='3-12',HR='6-10/3-6',overwrite=True,day_mode='both'):
     
     '''
     Wrapper for nicerl3-lc, with added matplotlib plotting of requested lightcurves and HRs
@@ -1770,7 +1794,7 @@ def extract_lc(directory,binning=10,bands='3-12',HR='6-10/3-6',overwrite=True,da
     Processes a directory using the nicerl3-lc script for every band asked, then creates plots for every lc/HR requested
     
     options:
-        -binning: binning of the LC in seconds
+        -binning: list of binning of LCs to extract, in seconds
         
         -bands: bands for each lightcurve to be created. The numbers should be in keV, separated by "-", and different lightcurves by ","
                 ex: to create two lightcurves for, the 1-3 and 4-12 band, use '1-3,4-12'
@@ -1823,10 +1847,12 @@ def extract_lc(directory,binning=10,bands='3-12',HR='6-10/3-6',overwrite=True,da
                                                                '_gti_N' in elem if day_mode=='night' else 0)])
 
         gti_files.sort()
-        def extract_single_lc(gtifile=None):
+        def extract_single_lc(binning,gtifile=None):
 
             '''
             wrapper for individual gti or full obsid spectral computations
+
+            extracts the lightcruves in all bands with a single binning
 
             Note: automatically recognize if in day or night mode from the beginning of the gti keyword
             assumes night mode if no gti is provided
@@ -1989,17 +2015,19 @@ def extract_lc(directory,binning=10,bands='3-12',HR='6-10/3-6',overwrite=True,da
             print(str(len(gti_files))+' gti files detected. Computing lightcurve products from individual gtis...')
 
         for elem_gti in gti_files:
-            process_state=extract_single_lc(elem_gti)
 
-            #stopping the loop in case of crash
-            if process_state not in [None,'skip']:
+            for elem_binning in binning_list:
+                process_state=extract_single_lc(elem_binning,gtifile=elem_gti)
 
-                #exiting the bashproc
-                bashproc.sendline('exit')
-                extract_lc_done.set()
+                #stopping the loop in case of crash
+                if process_state not in [None,'skip']:
 
-                #raising an error to stop the process if the command has crashed for some reason
-                return 'GTI '+elem_gti.split('_gti_')[1].replace('.gti','')+': '+process_state
+                    #exiting the bashproc
+                    bashproc.sendline('exit')
+                    extract_lc_done.set()
+
+                    #raising an error to stop the process if the command has crashed for some reason
+                    return 'GTI '+elem_gti.split('_gti_')[1].replace('.gti','')+': '+process_state
 
         #exiting the bashproc
         bashproc.sendline('exit')
@@ -2538,7 +2566,9 @@ if not local:
                             extract_all_spectral_done.wait()
                             
                         if curr_action=='l':
-                            output_err=extract_lc(dirname,binning=lc_bin if 'intensity' not in gti_split else int_split_bin,bands=lc_bands_str,HR=hr_bands_str,overwrite=overwrite_glob,
+                            output_err=extract_lc(dirname,binning_list=lc_bin_list if 'intensity' \
+                                                            not in gti_split else [int_split_bin],
+                                                  bands=lc_bands_str,HR=hr_bands_str,overwrite=overwrite_glob,
                                                   day_mode=day_mode)
                             if type(output_err)==str:
                                 raise ValueError
@@ -2626,7 +2656,9 @@ if not local:
                         extract_all_spectral_done.wait()
 
                     if curr_action == 'l':
-                        output_err = extract_lc(dirname,binning=lc_bin if 'intensity' not in gti_split else int_split_bin, bands=lc_bands_str, HR=hr_bands_str,
+                        output_err = extract_lc(dirname,binning_list=lc_bin_list if \
+                                                'intensity' not in gti_split else [int_split_bin],
+                                                bands=lc_bands_str, HR=hr_bands_str,
                                                 overwrite=overwrite_glob,day_mode=day_mode)
                         if type(output_err) == str:
                             folder_state=output_err
@@ -2719,7 +2751,8 @@ else:
                 extract_all_spectral_done.wait()
 
             if curr_action == 'l':
-                output_err = extract_lc(absdir, binning=lc_bin if 'intensity' not in gti_split else int_split_bin,
+                output_err = extract_lc(absdir, binning_list=lc_bin_list if 'intensity' \
+                                        not in gti_split else [int_split_bin],
                                         bands=lc_bands_str, HR=hr_bands_str, overwrite=overwrite_glob,
                                         day_mode=day_mode)
                 if type(output_err) == str:

@@ -688,7 +688,7 @@ def full_cycle_BAT(object_name,increment_start,increment_stop,minexposure,noise_
         file_edit(summary_file, header_name, header_name + '\t' + interval_state + '\n',
                   summary_intervals_header)
 
-def loop_cycle_BAT(object_name,interval_start,interval_stop,interval_delta='1',interval_delta_unit='jd',minexposure=1000,noise_map_dir='environ',ul_pl_index=2.5,recalc=False,merge=True,clean_events=True,
+def loop_cycle_BAT(object_name,input_days_file=None,interval_start=None,interval_stop=None,interval_delta='1',interval_delta_unit='jd',minexposure=1000,noise_map_dir='environ',ul_pl_index=2.5,recalc=False,merge=True,clean_events=True,
                    rerun_intervals=False,use_custom_cat=True,parallel=1,nprocs=1):
     '''
     Bigger wrapper around integ_cycle_BAT
@@ -697,6 +697,8 @@ def loop_cycle_BAT(object_name,interval_start,interval_stop,interval_delta='1',i
     with interval_delta astropy TimeDelta objects (of format interval_delta_unit)
 
     for now restricted to day dates
+
+    if input_days_file is provided, use the list of days there instead of a full interval
 
     object_name:
         -a string which will be searched in Simbad,
@@ -728,42 +730,60 @@ def loop_cycle_BAT(object_name,interval_start,interval_stop,interval_delta='1',i
 
     object_coords=object_sky.ra.value[0],object_sky.dec.value[0],object_sky.galactic.l.value[0],object_sky.galactic.b.value[0]
 
-    time_date_start=Time(interval_start)
-    time_date_stop=Time(interval_stop)
-
-    delta=TimeDelta(interval_delta,format=interval_delta_unit)
-    dates_increments = []
-
-    summary_file='summary_interval_analysis_' + object_name+\
-                  '_'+interval_start+'_'+interval_stop+'_'+interval_delta+'_'+interval_delta_unit+\
-                  '.log'
-
-    launched_intervals,completed_intervals=summary_state(summary_file)
-
     # summary header for the previously computed directories file
     summary_intervals_header = 'Interval\tAnalysis state\n'
 
-    for i in np.arange(((time_date_stop - time_date_start) / delta)+1):
-        dates_increments += [(time_date_start + i * delta).iso.split(' ')[0]]
+    assert input_days_file is not None or (interval_start is not None and interval_stop is not None),\
+            'Error: lacking input date argument'
 
-    increment_start_list=dates_increments[:-1]
-    increment_stop_list=dates_increments[1:]
+    if input_days_file is not None:
+
+        with open(input_days_file) as f:
+            day_lines = f.readlines()
+
+        time_date_start=Time([elem.replace('\n', '') for elem in day_lines])
+        time_date_stop=time_date_start+TimeDelta(1,format='jd')
+
+        summary_file='summary_interval_analysis_' + object_name+\
+                      '_'+'.'.join(input_days_file.split('.')[:-1])+'.log'
+
+        launched_intervals,completed_intervals=summary_state(summary_file)
+
+        increment_start_list=[elem.split(' ')[0] for elem in time_date_start.iso]
+        increment_stop_list=[elem.split(' ')[0] for elem in time_date_stop.iso]
+
+    else:
+
+        time_date_start=Time(interval_start)
+        time_date_stop=Time(interval_stop)
+
+        delta=TimeDelta(interval_delta,format=interval_delta_unit)
+        dates_increments = []
+
+        summary_file='summary_interval_analysis_' + object_name+\
+                      '_'+interval_start+'_'+interval_stop+'_'+interval_delta+'_'+interval_delta_unit+\
+                      '.log'
+
+        launched_intervals,completed_intervals=summary_state(summary_file)
+
+        for i in np.arange(((time_date_stop - time_date_start) / delta)+1):
+            dates_increments += [(time_date_start + i * delta).iso.split(' ')[0]]
+
+        increment_start_list=dates_increments[:-1]
+        increment_stop_list=dates_increments[1:]
+
 
     inter_dir_list=[inter_to_dir(elem_start,elem_stop) for elem_start,elem_stop in \
                     zip(increment_start_list,increment_stop_list)]
 
     header_name_list=['_'.join([elem_start,elem_stop]) for elem_start,elem_stop in \
                       zip(increment_start_list,increment_stop_list)]
-
-
-
-
     if parallel==1:
 
-        for i_increment in range(len(dates_increments)-1):
+        for i_increment in range(len(increment_start_list)):
 
-            increment_start=dates_increments[i_increment]
-            increment_stop=dates_increments[i_increment+1]
+            increment_start=increment_start_list[i_increment]
+            increment_stop=increment_stop_list[i_increment]
 
             header_name='_'.join([increment_start,increment_stop])
 

@@ -11,6 +11,8 @@ from matplotlib.ticker import Locator
 import time
 import os
 
+import random
+import glob
 # def ravel_ragged_test(array,mode=None):
 #
 #     '''ravels a 2/3d array/list even with ragged nested sequences'''
@@ -249,7 +251,51 @@ def file_edit(path,line_id,line_data,header):
         line_content=[line_data]
     else:
         line_content=line_data
-        
+
+    '''
+    Complicated mess to avoid several edits to a single file with i.e. parallel processing
+    '''
+
+    path_dir = '/'.join(path.split('/')[:-1])
+    file_temp = path.split('/')[-1]
+    file_temp_prefix = file_temp[:file_temp.rfind('.')]
+
+    import random
+    random_n = random.random()
+
+    path_temp = os.path.join(path_dir, file_temp_prefix + '_temp_' + str(random_n) + file_temp[file_temp.rfind('.'):])
+
+    # creating the temp_file
+    with open(path_temp, 'w+') as f:
+        pass
+
+    # waiting 1 second (so that in case of parallel procs, all the temp files are created
+    time.sleep(1)
+
+    curr_files_temp = [elem for elem in glob.glob(os.path.join(path_dir, '**')) if
+                       file_temp_prefix + '_temp' in elem.split('/')[-1]]
+
+    curr_files_temp.sort()
+
+    iter_concu=0
+
+    while len(curr_files_temp) > 1:
+
+        # waiting if this is not the first of the temp file, otherwise going forward
+        if path_temp == curr_files_temp[0]:
+            break
+
+        time.sleep(0.1)
+        curr_files_temp = [elem for elem in glob.glob(os.path.join(path_dir, '**')) if
+                           file_temp_prefix + '_temp' in elem.split('/')[-1]]
+
+        curr_files_temp.sort()
+
+        iter_concu+=1
+
+        assert iter_concu<30,'Issue with '+path+' overwriting. Check for dead temps'
+    #only reading the file after the wait to get the last version
+
     if os.path.isfile(path):
         with open(path) as file:
             lines=file.readlines()
@@ -282,15 +328,6 @@ def file_edit(path,line_id,line_data,header):
     else:
         header_eff=[header]
 
-    path_dir='/'.join(path.split('/')[:-1])
-    file_temp=path.split('/')[-1]
-
-    path_temp=os.path.join(path_dir,file_temp[:file_temp.rfind('.')]+'_temp'+file_temp[file_temp.rfind('.'):])
-
-    #doing this to ensure we don't edit several times at once
-    if os.path.isfile(path_temp):
-        time.sleep(1)
-        assert not os.path.isfile(path_temp),'File edition shouldnt take more than one second'
 
     with open(path_temp,'w+') as file:
         #adding the header lines
@@ -303,6 +340,7 @@ def file_edit(path,line_id,line_data,header):
     if os.path.isfile(path):
         os.remove(path)
     os.system('mv '+path_temp+' '+path)
+
 def print_log(elem,logfile_io,silent=False):
 
     '''

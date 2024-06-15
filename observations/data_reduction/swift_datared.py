@@ -263,6 +263,10 @@ def fetch_BAT(object_name,date_start,date_stop,minexposure=1000,return_result=Fa
         print(
             f"Finding everything finds {len(table_everything)} observations, of which {len(table_exposed)} have more than {minexposure:0} cm^2 coded")
 
+
+        if len(table_exposed)==0:
+            return []
+
         print(table_exposed['OBSID'])
 
         result = ba.download_swiftdata(table_exposed,uksdc=uksdc)
@@ -457,7 +461,7 @@ def inter_to_dir(date_start,date_stop):
 
     return cycle_dir
 
-def integ_cycle_BAT(object_name,date_start,date_stop,minexposure=1000,noise_map_dir='environ',ul_pl_index=2.5,recalc=False,merge=True,custom_cat_coords=None,nprocs=1):
+def integ_cycle_BAT(object_name,date_start,date_stop,minexposure=1000,noise_map_dir='environ',ul_pl_index=2.5,recalc=False,merge=True,custom_cat_coords=None,nprocs=1,uksdc=False):
 
     '''
     Performs a full data reduction download and cycle for a given object between date_start and date_stop
@@ -497,7 +501,7 @@ def integ_cycle_BAT(object_name,date_start,date_stop,minexposure=1000,noise_map_
                    mode="a",buff=1,file_filters=[_remove_control_chars]),\
         StderrTee(logfile_name,buff=1,file_filters=[_remove_control_chars]):
 
-        fetched_pointings=fetch_BAT(object_name,date_start,date_stop,minexposure,return_result=True)
+        fetched_pointings=fetch_BAT(object_name,date_start,date_stop,minexposure,return_result=True,uksdc=uksdc)
 
         if len(fetched_pointings)==0:
             os.chdir(init_dir)
@@ -689,7 +693,7 @@ def full_cycle_BAT(object_name,increment_start,increment_stop,minexposure,noise_
                   summary_intervals_header)
 
 def loop_cycle_BAT(object_name,input_days_file=None,interval_start=None,interval_stop=None,interval_delta='1',interval_delta_unit='jd',minexposure=1000,noise_map_dir='environ',ul_pl_index=2.5,recalc=False,merge=True,clean_events=True,
-                   rerun_intervals=False,use_custom_cat=True,parallel=1,nprocs=1):
+                   rerun_started=False,rerun_completed=False,use_custom_cat=True,parallel=1,nprocs=1,uksdc=False):
     '''
     Bigger wrapper around integ_cycle_BAT
 
@@ -715,6 +719,8 @@ def loop_cycle_BAT(object_name,input_days_file=None,interval_start=None,interval
         parallelisation of the full_cycle_BAT function (currently doesn't work)
     nprocs:
         parallelization inside the integ_cycle_BAT function
+
+    uksdc: force uk download to avoid issues with older obs
     '''
 
 
@@ -772,7 +778,6 @@ def loop_cycle_BAT(object_name,input_days_file=None,interval_start=None,interval
         increment_start_list=dates_increments[:-1]
         increment_stop_list=dates_increments[1:]
 
-
     inter_dir_list=[inter_to_dir(elem_start,elem_stop) for elem_start,elem_stop in \
                     zip(increment_start_list,increment_stop_list)]
 
@@ -789,12 +794,16 @@ def loop_cycle_BAT(object_name,input_days_file=None,interval_start=None,interval
 
             inter_dir=inter_to_dir(increment_start,increment_stop)
 
-            if not rerun_intervals and header_name in launched_intervals:
-                print('interval '+header_name+' already computed. Skipping...')
+            if not rerun_started and header_name in launched_intervals:
+                print('interval '+header_name+' already started. Skipping...')
+                continue
+
+            if not rerun_completed and header_name in completed_intervals:
+                print('interval '+header_name+' already completed. Skipping...')
                 continue
 
             interval_state=integ_cycle_BAT(object_name,increment_start,increment_stop,minexposure=minexposure,noise_map_dir=noise_map_dir,ul_pl_index=ul_pl_index,recalc=recalc,merge=merge,
-              custom_cat_coords=object_coords if use_custom_cat else None,nprocs=nprocs)
+              custom_cat_coords=object_coords if use_custom_cat else None,nprocs=nprocs,uksdc=uksdc)
 
 
             #cleaning the events if required
@@ -820,7 +829,7 @@ def loop_cycle_BAT(object_name,input_days_file=None,interval_start=None,interval
                 clean_events_dir=elem_inter_dir,
                 summary_file=summary_file, header_name=elem_header_name,
                 summary_intervals_header=summary_intervals_header,
-                launched_intervals=launched_intervals if not rerun_intervals else None,
+                launched_intervals=launched_intervals if not rerun_started  else None,
                 nprocs=1)
             for elem_start,elem_stop,elem_inter_dir,elem_header_name \
                     in zip(increment_start_list,increment_stop_list,inter_dir_list,header_name_list))

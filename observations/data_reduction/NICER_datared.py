@@ -20,6 +20,9 @@ from matplotlib.widgets import Slider,Button
 from astropy.stats import sigma_clip
 import matplotlib as mpl
 
+#for no_op_context
+import contextlib
+
 #using agg because qtagg still generates backends with plt.ioff()
 mpl.use('agg')
 
@@ -43,6 +46,8 @@ from astropy.io import fits
 
 '''peak detection'''
 from findpeaks import findpeaks
+
+from joblib import Parallel, delayed
 
 
 """
@@ -99,9 +104,13 @@ ap.add_argument("-l","--local",nargs=1,help='Launch actions directly in the curr
 ap.add_argument('-catch','--catch_errors',help='Catch errors while running the data reduction and continue',
                 default=False,type=bool)
 
+#1 for no parallelization
+ap.add_argument('-parallel',help='number of processors for parallel directories',
+                default=4,type=bool)
+
 #global choices
 ap.add_argument("-a","--action",nargs='?',help='Give which action(s) to proceed,separated by comas.',
-                default='l,ml',type=str)
+                default='m,ml',type=str)
 #default: fc,1,gti,fs,l,g,m,ml,c
 
 #note: should be kept to true for most complicated tasks
@@ -158,14 +167,14 @@ ap.add_argument('-gti_tool',nargs=1,help='GTI tool used to make the gti file its
 
 '''Flare methods '''
 #for clip
-ap.add_argument('-clip_sigma',nargs=1,help='clipping minimum variance treshold in sigmas',default=2.,type=float)
+ap.add_argument('-clip_sigma',nargs=1,help='clipping minimum variance treshold in sigmas',default=3.,type=float)
 
 ap.add_argument('-flare_factor',nargs=1,help='minimum flare multiplication factor for flare clipping',
                 default=2.,type=float)
 
 #for peak
 ap.add_argument('-peak_score_thresh',nargs=1,help='topological peak score treshold for peak exclusion',
-                default=2.,type=float)
+                default=10.,type=float)
 
 #for overdyn, in s since based on the mkf
 ap.add_argument('-erodedilate_overdyn',nargs=1,help='Erodes increasingly more gtis around the overshoot excluded intervals',
@@ -238,6 +247,13 @@ ap.add_argument('-sas_init_alias',help="name of the caldbinit initialisation scr
 #only necessary if using 3C50
 ap.add_argument('-alias_3C50',help="bash alias for the 3C50 directory",default='$NICERBACK3C50',type=str)
 
+'''
+clean
+'''
+
+#useful for HDDs
+ap.add_argument('-clean_wait_value',help='waiting time after cleaning a folder',default=10,type=float)
+
 args=ap.parse_args()
 
 load_functions=args.load_functions
@@ -274,6 +290,8 @@ peak_score_thresh=args.peak_score_thresh
 int_split_band=args.int_split_band
 int_split_bin=args.int_split_bin
 
+parallel=args.parallel
+
 lc_bin_list=args.lc_bin_list
 lc_bands_str=args.lc_bands_str
 hr_bands_str=args.hr_bands_str
@@ -288,32 +306,13 @@ heasoft_init_alias=args.heasoft_init_alias
 caldb_init_alias=args.caldb_init_alias
 sas_init_alias=args.sas_init_alias
 alias_3C50=args.alias_3C50
+clean_wait_value=args.clean_wait_value
 
 day_mode=args.day_mode
 
 '''''''''''''''''
 ''''FUNCTIONS''''
 '''''''''''''''''
-
-#we insure each action will wait for the completion of the previous one by using threads
-process_obsdir_done=threading.Event()
-extract_all_spectral_done=threading.Event()
-extract_spectrum_done=threading.Event()
-extract_response_done=threading.Event()
-extract_background_done=threading.Event()
-regroup_spectral_done=threading.Event()
-batch_mover_done=threading.Event()
-
-select_detector_done=threading.Event()
-
-extract_lc_done=threading.Event()
-clean_products_done=threading.Event()
-clean_all_done=threading.Event()
-
-create_gtis_done=threading.Event()
-
-batch_mover_timing_done=threading.Event()
-
 
 def set_var(spawn):
     
@@ -325,7 +324,12 @@ def set_var(spawn):
 
     if caldb_init_alias!='':
         spawn.sendline(caldb_init_alias)
-    
+
+#to keep the same loops with or without the Tees in several functions
+@contextlib.contextmanager
+def no_op_context():
+    yield
+
 #function to remove (most) control chars
 def _remove_control_chars(message):
     ansi_escape =re.compile(r'(\x9B|\x1B\[)[0-?]*[ -\/]*[@-~]')
@@ -333,7 +337,7 @@ def _remove_control_chars(message):
 
 def process_obsdir(directory,overwrite=True,keep_SAA=False,overshoot_limit=30.,undershoot_limit=500.,
                                             min_gti=5.0,erodedilate=5.0,keep_lowmem=False,
-                                            br_earth_min='default',day_mode='both'):
+                                            br_earth_min='default',day_mode='both',thread=None,parallel=False):
     
     '''
     Processes a directory using the nicerl2 script
@@ -362,9 +366,13 @@ def process_obsdir(directory,overwrite=True,keep_SAA=False,overshoot_limit=30.,u
 
     -day_mode:      Apply screening according to the night settings of nicerl2
 
+    -parallel: bool:tells the function it's running in a parallel configuration.
+               Modifies the logging to avoid issues with redirections
     '''
-    
-    bashproc=pexpect.spawn("/bin/bash",encoding='utf-8')
+
+    io_log=open(directory+'/process_obsdir.log','w+')
+
+    bashproc=pexpect.spawn("/bin/bash",encoding='utf-8',logfile=io_log if parallel else None)
     
     print('\n\n\nEvent filtering...')
     
@@ -380,13 +388,11 @@ def process_obsdir(directory,overwrite=True,keep_SAA=False,overshoot_limit=30.,u
     else:
         undershoot_limit_use=undershoot_limit
 
-    if os.path.isfile(directory+'/process_obsdir.log'):
-        os.system('rm '+directory+'/process_obsdir.log')
-        
-    with StdoutTee(directory+'/process_obsdir.log',mode="a",buff=1,file_filters=[_remove_control_chars]),\
-        StderrTee(directory+'/process_obsdir.log',buff=1,file_filters=[_remove_control_chars]):
+    with (no_op_context() if parallel else StdoutTee(directory+'/process_obsdir.log',mode="a",buff=1,file_filters=[_remove_control_chars]),\
+        StderrTee(directory+'/process_obsdir.log',buff=1,file_filters=[_remove_control_chars])):
 
-        bashproc.logfile_read=sys.stdout
+        if not parallel:
+            bashproc.logfile_read=sys.stdout
 
         #initializing to pass errors if they aren't created
         process_state_night=1
@@ -425,22 +431,26 @@ def process_obsdir(directory,overwrite=True,keep_SAA=False,overshoot_limit=30.,u
         
         #exiting the bashproc
         bashproc.sendline('exit')
-        process_obsdir_done.set()
+        if thread is not None:
+            thread.set()
         
         #raising an error to stop the process if the command has crashed for some reason
         if (np.array([process_state_day,process_state_night])==0).any():
             raise ValueError
 
 ####THIS IS DEPRECATED            
-def select_detector(directory,detectors='-14,-34,-54'):
+def select_detector(directory,detectors='-14,-34,-54',thread=None,parallel=False):
     
     '''
     Removes specific detectors from the event file before continuing the analysis
     
     We follow the steps highlighted in https://heasarc.gsfc.nasa.gov/docs/nicer/analysis_threads/fpmsel-using/
     '''
-    
-    bashproc=pexpect.spawn("/bin/bash",encoding='utf-8')
+
+
+    io_log = open(directory + '/process_obsdir.log', 'w+')
+
+    bashproc=pexpect.spawn("/bin/bash",encoding='utf-8',logfile=io_log if parallel else None)
     
     print('\n\n\n Detector selection...')
     
@@ -455,13 +465,11 @@ def select_detector(directory,detectors='-14,-34,-54'):
     
     set_var(bashproc)
 
-    if os.path.isfile(directory+'/select_detector.log'):
-        os.system('rm '+directory+'/select_detector.log')
-        
-    with StdoutTee(directory+'/select_detector.log',mode="a",buff=1,file_filters=[_remove_control_chars]),\
-        StderrTee(directory+'/select_detector.log',buff=1,file_filters=[_remove_control_chars]):
+    with (no_op_context() if parallel else (StdoutTee(directory+'/select_detector.log',mode="a",buff=1,file_filters=[_remove_control_chars]),\
+        StderrTee(directory+'/select_detector.log',buff=1,file_filters=[_remove_control_chars]))):
 
-        bashproc.logfile_read=sys.stdout
+        if not parallel:
+            bashproc.logfile_read=sys.stdout
         
         bashproc.sendline('nifpmsel '+evt_name+' '+evt_name.replace('.evt','_sel.evt')+'detlist=launch,'+detectors)
         
@@ -470,7 +478,8 @@ def select_detector(directory,detectors='-14,-34,-54'):
         #raising an error to stop the process if the command has crashed for some reason
         if select_state!=0:
             bashproc.sendline('exit')
-            select_detector_done.set()
+            if thread is not None:
+                thread.set()
             raise ValueError
         
         #replacing the previous event file by the selected event file
@@ -478,7 +487,8 @@ def select_detector(directory,detectors='-14,-34,-54'):
         
         #exiting the bashproc
         bashproc.sendline('exit')
-        select_detector_done.set()
+        if thread is not None:
+            thread.set()
 
 def plot_event_diag(mode,obs_start_str,time_obs,id_gti_orbit,
                     counts_035_8,counts_8_12,counts_overshoot,counts_undershoot,cutoff_rigidity,
@@ -668,7 +678,7 @@ def plot_event_diag(mode,obs_start_str,time_obs,id_gti_orbit,
 def create_gtis(directory,split_arg='orbit+flare',band='3-15',flare_method='clip+peak',clip_method='median',
                 clip_sigma=2.,clip_band='8-12',peak_score_thresh=2.,
                 int_split_band='0.3-10.',int_split_bin=0.1,clip_int_delta=True,
-                flare_factor=2,gti_tool='NICERDAS',erodedilate_overdyn=1,day_mode='both'):
+                flare_factor=2,gti_tool='NICERDAS',erodedilate_overdyn=1,day_mode='both',thread=None,parallel=False):
     '''
     wrapper for a function to split nicer obsids into indivudal portions with different methods
     the default binning is 1s because the NICER mkf file time resolution is 1s
@@ -755,6 +765,9 @@ def create_gtis(directory,split_arg='orbit+flare',band='3-15',flare_method='clip
         software used for gti creation. Can be "SAS" (first version from before nigti existed)\
         or "NICERDAS" (now default)
     NOTE: requires sas and a sasinit alias to initialize it (to use tabgtigen)
+
+    -parallel: bool:tells the function it's running in a parallel configuration.
+               Modifies the logging to avoid issues with redirections
 
     '''
 
@@ -887,13 +900,15 @@ def create_gtis(directory,split_arg='orbit+flare',band='3-15',flare_method='clip
 
                 hdul.flush()
 
+    io_log=open(directory+'/create_gtis.log','w+')
+
     #ensuring a good obsid name even in local
     if directory=='./':
         obsid=os.getcwd().split('/')[-1]
     else:
         obsid=directory
 
-    bashproc = pexpect.spawn("/bin/bash", encoding='utf-8')
+    bashproc = pexpect.spawn("/bin/bash", encoding='utf-8',logfile=io_log if parallel else None)
 
     print('\n\n\nCreating gtis products...')
 
@@ -920,13 +935,11 @@ def create_gtis(directory,split_arg='orbit+flare',band='3-15',flare_method='clip
     for elem_file_gti in old_files_gti:
         os.remove(elem_file_gti)
 
-    if os.path.isfile(os.path.join(directory + '/create_gtis.log')):
-        os.system('rm ' + os.path.join(directory + '/create_gtis.log'))
+    with (no_op_context() if parallel else (StdoutTee(os.path.join(directory + '/create_gtis.log'), mode="a", buff=1, file_filters=[_remove_control_chars]), \
+            StderrTee(os.path.join(directory + '/create_gtis.log'), buff=1, file_filters=[_remove_control_chars]))):
 
-    with StdoutTee(os.path.join(directory + '/create_gtis.log'), mode="a", buff=1, file_filters=[_remove_control_chars]), \
-            StderrTee(os.path.join(directory + '/create_gtis.log'), buff=1, file_filters=[_remove_control_chars]):
-
-        bashproc.logfile_read = sys.stdout
+        if not parallel:
+            bashproc.logfile_read = sys.stdout
 
         '''
         new method for the flares following https://heasarc.gsfc.nasa.gov/docs/nicer/analysis_threads/flares/
@@ -1509,14 +1522,17 @@ def create_gtis(directory,split_arg='orbit+flare',band='3-15',flare_method='clip
 
         #exiting the bashproc
         bashproc.sendline('exit')
-        create_gtis_done.set()
+        if thread is not None:
+            thread.set()
 
 #### extract_all_spectral
 def extract_all_spectral(directory,bkgmodel='scorpeon_script',language='python',overwrite=True,relax_SAA_bg=True,
-                         sp_systematics=True,day_mode='both'):
+                         sp_systematics=True,day_mode='both',thread=None,parallel=False):
     
     '''
     Wrapper for nicerl3-spect, extracts spectra, creates bkg and rmfs
+
+    Note: can produce no output without error if no gti (in total, not files) in the event file
 
     if gti files created by create_gtis are present, instead of creating a full spectrum,
     creates individual spectral products for each gti
@@ -1552,22 +1568,24 @@ def extract_all_spectral(directory,bkgmodel='scorpeon_script',language='python',
         -day_mode:      (day, night, both) use day, night or both products
                         (both gti and events are day/night specific)
 
-    Note: can produce no output without error if no gti in the event file
+    -parallel: bool:tells the function it's running in a parallel configuration.
+               Modifies the logging to avoid issues with redirections
+
     '''
-    
-    bashproc=pexpect.spawn("/bin/bash",encoding='utf-8')
+
+    io_log=open(directory+'/extract_all_spectral.log','w+')
+
+    bashproc=pexpect.spawn("/bin/bash",encoding='utf-8',logfile=io_log if parallel else False)
     
     print('\n\n\nCreating spectral products...')
     
     set_var(bashproc)
-        
-    if os.path.isfile(directory+'/extract_all_spectral.log'):
-        os.system('rm '+directory+'/extract_all_spectral.log')
-        
-    with StdoutTee(directory+'/extract_all_spectral.log',mode="a",buff=1,file_filters=[_remove_control_chars]),\
-        StderrTee(directory+'/extract_all_spectral.log',buff=1,file_filters=[_remove_control_chars]):
 
-        bashproc.logfile_read=sys.stdout
+    with (no_op_context() if parallel else (StdoutTee(directory+'/extract_all_spectral.log',mode="a",buff=1,file_filters=[_remove_control_chars]),\
+        StderrTee(directory+'/extract_all_spectral.log',buff=1,file_filters=[_remove_control_chars]))):
+
+        if not parallel:
+            bashproc.logfile_read=sys.stdout
         
         bkg_outlang_str=''
         
@@ -1662,7 +1680,8 @@ def extract_all_spectral(directory,bkgmodel='scorpeon_script',language='python',
                     lines=file.readlines()
 
                 bashproc.sendline('exit')
-                extract_all_spectral_done.set()
+                if thread is not None:
+                    thread.set()
                 return lines[-1].replace('\n','')
 
             #creating all types of scorpeon models afterwards if need be we don't expect bugs since the function
@@ -1773,7 +1792,8 @@ def extract_all_spectral(directory,bkgmodel='scorpeon_script',language='python',
 
                 #exiting the bashproc
                 bashproc.sendline('exit')
-                extract_all_spectral_done.set()
+                if thread is not None:
+                    thread.set()
 
                 #raising an error to stop the process if the command has crashed for some reason
                 return 'GTI '+elem_gti.split('_gti_')[1].replace('.gti','')+': '+process_state
@@ -1781,10 +1801,12 @@ def extract_all_spectral(directory,bkgmodel='scorpeon_script',language='python',
 
         #exiting the bashproc
         bashproc.sendline('exit')
-        extract_all_spectral_done.set()
+        if thread is not None:
+            thread.set()
 
 #### extract_lc
-def extract_lc(directory,binning_list=[1],bands='3-12',HR='6-10/3-6',overwrite=True,day_mode='both'):
+def extract_lc(directory,binning_list=[1],bands='3-12',HR='6-10/3-6',overwrite=True,day_mode='both',
+               thread=None,parallel=False):
     
     '''
     Wrapper for nicerl3-lc, with added matplotlib plotting of requested lightcurves and HRs
@@ -1807,9 +1829,14 @@ def extract_lc(directory,binning_list=[1],bands='3-12',HR='6-10/3-6',overwrite=T
                         (both gti and events are day/night specific)
         
     Note: can produce no output without error if no gti in the event file
+
+    -parallel: bool:tells the function it's running in a parallel configuration.
+               Modifies the logging to avoid issues with redirections
     '''
-    
-    bashproc=pexpect.spawn("/bin/bash",encoding='utf-8')
+
+    io_log=open(directory+'/extract_lc.log','w+')
+
+    bashproc=pexpect.spawn("/bin/bash",encoding='utf-8',logfile=io_log if parallel else None)
     
     print('\n\n\nCreating lightcurves products...')
     
@@ -1827,13 +1854,12 @@ def extract_lc(directory,binning_list=[1],bands='3-12',HR='6-10/3-6',overwrite=T
     
     set_var(bashproc)
 
-    if os.path.isfile(directory+'/extract_lc.log'):
-        os.system('rm '+directory+'/extract_lc.log')
         
-    with StdoutTee(directory+'/extract_lc.log',mode="a",buff=1,file_filters=[_remove_control_chars]),\
-        StderrTee(directory+'/extract_lc.log',buff=1,file_filters=[_remove_control_chars]):
+    with (no_op_context() if parallel else (StdoutTee(directory+'/extract_lc.log',mode="a",buff=1,file_filters=[_remove_control_chars]),\
+        StderrTee(directory+'/extract_lc.log',buff=1,file_filters=[_remove_control_chars]))):
 
-        bashproc.logfile_read=sys.stdout
+        if not parallel:
+            bashproc.logfile_read=sys.stdout
 
         #checking if gti files exist in the folder
         gti_files= np.array([elem for elem in glob.glob(os.path.join(directory,'xti/**') , recursive=True) if
@@ -2024,16 +2050,18 @@ def extract_lc(directory,binning_list=[1],bands='3-12',HR='6-10/3-6',overwrite=T
 
                     #exiting the bashproc
                     bashproc.sendline('exit')
-                    extract_lc_done.set()
+                    if thread is not None:
+                        thread.set()
 
                     #raising an error to stop the process if the command has crashed for some reason
                     return 'GTI '+elem_gti.split('_gti_')[1].replace('.gti','')+': '+process_state
 
         #exiting the bashproc
         bashproc.sendline('exit')
-        extract_lc_done.set()
+        if thread is not None:
+            thread.set()
 
-def extract_spectrum(directory):
+def extract_spectrum(directory,thread=None):
     
     '''
     
@@ -2105,9 +2133,9 @@ def extract_spectrum(directory):
         
         #and exiting the bashproc
         bashproc.sendline('exit')
-        extract_spectrum_done.set()
-    
-def extract_background(directory,model):
+        if thread is not None:
+            thread.set()
+def extract_background(directory,model,thread=None):
     
     '''
     
@@ -2167,9 +2195,9 @@ def extract_background(directory,model):
         
         bashproc.sendline('exit')
         
-        extract_background_done.set()
-        
-def extract_response(directory):
+        if thread is not None:
+            thread.set()
+def extract_response(directory,thread=None):
     
     '''
     
@@ -2226,9 +2254,9 @@ def extract_response(directory):
         bashproc.expect(['DONE','terminating with status'],timeout=None)
         
         bashproc.sendline('exit')
-        extract_response_done.set()
-        
-def regroup_spectral(directory,group='opt'):
+        if thread is not None:
+            thread.set()
+def regroup_spectral(directory,group='opt',thread=None,parallel=False):
     
     '''
     Regroups NICER spectrum from an obsid directory using ftgrouppha
@@ -2237,23 +2265,23 @@ def regroup_spectral(directory,group='opt'):
         -opt: follows the Kastra and al. 2016 binning
         
     Currently only accepts input from extract_all_spectral
-    
+
+    -parallel: bool:tells the function it's running in a parallel configuration.
+               Modifies the logging to avoid issues with redirections
     '''
+
+    io_log=open(directory+'/regroup_spectral.log','w+')
 
     currdir = os.getcwd()
 
     print('\n\n\nRegrouping spectrum...')
-    
 
-    if os.path.isfile(directory+'/regroup_spectral.log'):
-        os.system('rm '+directory+'/regroup_spectral.log')
-        
     #deleting previously existing grouped spectra to avoid problems when testing their existence
     if os.path.isfile(os.path.join(currdir,directory,directory+'_sp_grp_'+group+'.pha')):
         os.remove(os.path.join(currdir,directory,directory+'_sp_grp_'+group+'.pha'))
 
-    with StdoutTee(directory+'/regroup_spectral.log',mode="a",buff=1,file_filters=[_remove_control_chars]),\
-        StderrTee(directory+'/regroup_spectral.log',buff=1,file_filters=[_remove_control_chars]):
+    with (no_op_context() if parallel else (StdoutTee(directory+'/regroup_spectral.log',mode="a",buff=1,file_filters=[_remove_control_chars]),\
+        StderrTee(directory+'/regroup_spectral.log',buff=1,file_filters=[_remove_control_chars]))):
 
         # there seems to be an issue with too many groupings in one console so we recreate it every time
 
@@ -2322,9 +2350,12 @@ def regroup_spectral(directory,group='opt'):
                 print('\nNo spectrum created for gti '+elem_gti+'. Continuing...\n')
                 continue
 
-            bashproc = pexpect.spawn("/bin/bash", encoding='utf-8')
+            bashproc = pexpect.spawn("/bin/bash", encoding='utf-8',logfile=io_log if parallel else None)
+
             set_var(bashproc)
-            bashproc.logfile_read = sys.stdout
+
+            if not parallel:
+                bashproc.logfile_read = sys.stdout
 
             process_state=regroup_single_spectral(bashproc,elem_gti)
 
@@ -2333,24 +2364,30 @@ def regroup_spectral(directory,group='opt'):
 
                 #exiting the bashproc
                 bashproc.sendline('exit')
-                regroup_spectral_done.set()
-
+                if thread is not None:
+                    thread.set()
                 #raising an error to stop the process if the command has crashed for some reason
                 return 'GTI '+elem_gti.split('_gti_')[1].replace('.gti','')+': '+process_state
 
             #exiting the bashproc
             bashproc.sendline('exit')
-        regroup_spectral_done.set()
-
-def batch_mover(directory):
+        if thread is not None:
+            thread.set()
+def batch_mover(directory,thread=None,parallel=False):
     
     '''
     copies all spectral products in a directory to a bigbatch directory above the obsid directory to prepare for spectrum analysis
+
+        -parallel: bool:tells the function it's running in a parallel configuration.
+               Modifies the logging to avoid issues with redirections
     '''
-    
-    bashproc=pexpect.spawn("/bin/bash",encoding='utf-8')
-    
-    bashproc.logfile_read=sys.stdout
+
+    io_log=open(directory+'/batch_mover.log','w+')
+
+    bashproc=pexpect.spawn("/bin/bash",encoding='utf-8',logfile=io_log if parallel else None)
+
+    if not parallel:
+        bashproc.logfile_read=sys.stdout
     
     print('\n\n\nCopying spectral products to a merging directory...')
     
@@ -2360,22 +2397,31 @@ def batch_mover(directory):
     
     bashproc.sendline('cd '+directory)
     
-    bashproc.sendline('cp --verbose '+directory+'* ../bigbatch'+' >batch_mover.log')
+    bashproc.sendline('cp --verbose '+directory+'* ../bigbatch'+' >batch_mover_list.log')
     
     #reasonable waiting time to make sure files can be copied
     time.sleep(2)
     
     bashproc.sendline('exit')
-    batch_mover_done.set()
+    if thread is not None:
+        thread.set()
 
-def batch_mover_timing(directory):
+def batch_mover_timing(directory,thread=None,parallel=False):
+
     '''
     copies all lc products in a directory to a lcbatch directory above the obsid directory to prepare for lc analysis
+
+    -parallel: bool:tells the function it's running in a parallel configuration.
+           Modifies the logging to avoid issues with redirections
+
     '''
 
-    bashproc = pexpect.spawn("/bin/bash", encoding='utf-8')
+    io_log=open(directory+'/batch_mover_timing.log','w+')
 
-    bashproc.logfile_read = sys.stdout
+    bashproc = pexpect.spawn("/bin/bash", encoding='utf-8',logfile=io_log if parallel else None)
+
+    if not parallel:
+        bashproc.logfile_read = sys.stdout
 
     print('\n\n\nCopying lc products to a merging directory...')
 
@@ -2385,15 +2431,16 @@ def batch_mover_timing(directory):
 
     bashproc.sendline('cd ' + directory)
 
-    bashproc.sendline('cp --verbose ./xti/'+directory+'*.lc ../lcbatch' + ' >batch_mover_timing.log')
+    bashproc.sendline('cp --verbose ./xti/'+directory+'*.lc ../lcbatch' + ' >batch_mover_timing_list.log')
 
     # reasonable waiting time to make sure files can be copied
     time.sleep(2)
 
     bashproc.sendline('exit')
-    batch_mover_timing_done.set()
+    if thread is not None:
+        thread.set()
 
-def clean_products(directory):
+def clean_products(directory,clean_wait_value=2,thread=None):
 
     '''
 
@@ -2414,13 +2461,14 @@ def clean_products(directory):
             os.remove(elem_product)
 
     #reasonable waiting time to make sure big files can be deleted
-    time.sleep(2)
+    time.sleep(clean_wait_value)
 
     print('Cleaning complete.')
 
-    clean_products_done.set()
+    if thread is not None:
+        thread.set()
 
-def clean_all(directory):
+def clean_all(directory,clean_wait_value=2,thread=None):
 
     '''
 
@@ -2447,12 +2495,12 @@ def clean_all(directory):
                 os.remove(elem_product)
 
         #reasonable waiting time to make sure big files can be deleted
-        time.sleep(2)
+        time.sleep(clean_wait_value)
 
         print('Cleaning complete.')
 
-    clean_all_done.set()
-
+    if thread is not None:
+        thread.set()
 '''''''''''''''''''''
 ''''MAIN PROCESS'''''
 '''''''''''''''''''''
@@ -2471,6 +2519,12 @@ startdir=os.getcwd()
 #listing all of the subdirectories
 subdirs=glob.glob('**/',recursive=True)
 subdirs.sort()
+
+# getting the last directory in the result (necessary if osbid folders are in subdirectories) (we take the last / of to avoid problems)
+
+subdirs_obsid=[elem_dir for elem_dir in subdirs if len(elem_dir[:-1].split('/')[-1]) == 10\
+                                                and elem_dir[:-1].split('/')[-1].isdigit()]
+
 
 #summary header for the previously computed directories file
 summary_folder_header='Subdirectory\tAnalysis state\n'
@@ -2496,293 +2550,523 @@ if load_functions:
 
 started_folders,done_folders=startdir_state(args.action)
 
-if not local:
-    #checking them in search for ODF directories
-    for directory in subdirs:
-        
-        #continue check
-        if directory in started_folders[:-2] and folder_cont:
-            print('Directory '+directory+' is not among the last two directories. Skipping...')
-            continue
-        
-        #directory overwrite check
-        if directory in done_folders and folder_over==False:
-            print('Actions already computed for directory '+directory+'\nSkipping...')
-            continue
-        
-        #getting the last directory in the result (necessary if osbid folders are in subdirectories) (we take the last / of to avoid problems)
-        dirname=directory[:-1].split('/')[-1]
-            
-        #checking if the directory has an obsid dir shape (10 numbers)
-        #and not a general or subdirectory
-        if len(dirname)==10 and dirname.isdigit() and "odf" not in os.listdir(directory):
-            
-            print('\nFound obsid directory '+dirname)
-                        
-            
-            above_obsdir=os.path.join(startdir,'/'.join(directory[-1].split('/')[:-1]))
+def run_actions(obs_dir,action_list,parallel=False):
 
-            os.chdir(above_obsdir)
-            
-            if catch_errors:
-                try:
-                #for loop to be able to use different orders if needed
-                    for curr_action in action_list:
-                        
-                        #resetting the error string message
-                        output_err=None
-                        folder_state='Running '+curr_action
-                        
-                        if curr_action=='1':
-                            process_obsdir(dirname,overwrite=overwrite_glob,keep_SAA=keep_SAA,overshoot_limit=overshoot_limit,
-                                                    undershoot_limit=undershoot_limit,
-                                           min_gti=min_gti,erodedilate=erodedilate,keep_lowmem=keep_lowmem,
-                                           br_earth_min=br_earth_min,day_mode=day_mode)
-                            process_obsdir_done.wait()
-                        if curr_action=='2':
-                            select_detector(dirname,detectors=bad_detectors)
-                            select_detector_done.wait()
+    '''
+    Wrapper to run a list of actions in a single directory
 
-                        if curr_action=='gti':
-                            output_err=create_gtis(dirname,split_arg=gti_split,band=gti_lc_band,
-                                        flare_method=flare_method,
-                                        int_split_band=int_split_band,int_split_bin=int_split_bin,
-                                                   flare_factor=flare_factor,
-                                                   clip_sigma=clip_sigma,
-                                                   peak_score_thresh=peak_score_thresh,
-                                                   gti_tool=gti_tool,erodedilate_overdyn=erodedilate_overdyn,
-                                                   day_mode=day_mode)
-                            if type(output_err)==str:
-                                raise ValueError
-                            create_gtis_done.wait()
+    obs_dir: directory where to run the actions
 
-                        if curr_action=='fs':
-                            output_err=extract_all_spectral(dirname,bkgmodel=bgmodel,
-                                                            language=bglanguage,overwrite=overwrite_glob,
-                                                            relax_SAA_bg=relax_SAA_bg,
-                                                            sp_systematics=sp_systematics,day_mode=day_mode)
-                            if type(output_err)==str:
-                                raise ValueError
-                            extract_all_spectral_done.wait()
-                            
-                        if curr_action=='l':
-                            output_err=extract_lc(dirname,binning_list=lc_bin_list if 'intensity' \
-                                                            not in gti_split else [int_split_bin],
-                                                  bands=lc_bands_str,HR=hr_bands_str,overwrite=overwrite_glob,
-                                                  day_mode=day_mode)
-                            if type(output_err)==str:
-                                raise ValueError
-                            extract_lc_done.wait()
+    action_list: list of action strings
 
-                        if curr_action=='s':
-                            extract_spectrum(dirname)
-                            extract_spectrum_done.wait()
-                            
-                        if curr_action=='b':
-                            extract_background(dirname,model=bgmodel)
-                            extract_background_done.wait()
-                        if curr_action=='r':
-                            extract_response(dirname)
-                            extract_response_done.wait()
+    parallel: boolean, will set all individual action parallel to avoid issues with logging if running in parallel
 
-                        if curr_action=='g':
-                            output_err=regroup_spectral(dirname,group=grouptype)
-                            if type(output_err)==str:
-                                raise ValueError
-                            regroup_spectral_done.wait()
+    '''
 
-                        if curr_action=='m':
-                            batch_mover(dirname)
-                            batch_mover_done.wait()
+    # we insure each action will wait for the completion of the previous one by using threads
+    process_obsdir_thread = threading.Event()
+    extract_all_spectral_thread = threading.Event()
+    extract_spectrum_thread = threading.Event()
+    extract_response_thread = threading.Event()
+    extract_background_thread = threading.Event()
+    regroup_spectral_thread = threading.Event()
+    batch_mover_thread = threading.Event()
 
-                        if curr_action=='ml':
-                            batch_mover_timing(dirname)
-                            batch_mover_timing_done.wait()
+    select_detector_thread = threading.Event()
 
-                        if curr_action=='c':
-                            clean_products(dirname)
-                            clean_products_done.wait()
+    extract_lc_thread = threading.Event()
+    clean_products_thread = threading.Event()
+    clean_all_thread = threading.Event()
 
-                        if curr_action=='fc':
-                            clean_all(dirname)
-                            clean_all_done.wait()
+    create_gtis_thread = threading.Event()
 
-                        os.chdir(startdir)
-                    folder_state='Done'
+    batch_mover_timing_thread = threading.Event()
 
-                except:
-                    #signaling unknown errors if they happened
-                    if 'Running' in folder_state:
-                        print('\nError while '+folder_state)
-                        folder_state=folder_state.replace('Running','Aborted at')+('' if output_err is None else ' --> '+output_err)
-                    os.chdir(startdir)
-            else:
-                #for loop to be able to use different orders if needed
-                for curr_action in action_list:
-                    folder_state='Running '+curr_action
-                    if curr_action=='1':
-                        process_obsdir(dirname,overwrite=overwrite_glob,keep_SAA=keep_SAA,overshoot_limit=overshoot_limit,
-                                                undershoot_limit=undershoot_limit,
-                                       min_gti=min_gti,erodedilate=erodedilate,keep_lowmem=keep_lowmem,
-                                       br_earth_min=br_earth_min,day_mode=day_mode)
-                        process_obsdir_done.wait()
-                    if curr_action=='2':
-                        select_detector(dirname,detectors=bad_detectors)
-                        select_detector_done.wait()
+    # process_obsdir_thread = None
+    # extract_all_spectral_thread = None
+    # extract_spectrum_thread = None
+    # extract_response_thread = None
+    # extract_background_thread = None
+    # regroup_spectral_thread = None
+    # batch_mover_thread = None
+    #
+    # select_detector_thread = None
+    #
+    # extract_lc_thread = None
+    # clean_products_thread = None
+    # clean_all_thread = None
+    #
+    # create_gtis_thread = None
+    #
+    # batch_mover_timing_thread = None
 
-                    if curr_action=='gti':
-                        output_err=create_gtis(dirname,split_arg=gti_split,band=gti_lc_band,
-                                    flare_method=flare_method,
-                                        int_split_band=int_split_band,int_split_bin=int_split_bin,
-                                               flare_factor=flare_factor,
-                                               clip_sigma=clip_sigma,peak_score_thresh=peak_score_thresh,
-                                                   gti_tool=gti_tool,erodedilate_overdyn=erodedilate_overdyn,
-                                               day_mode=day_mode)
-                        if type(output_err) == str:
-                            folder_state=output_err
-                        else:
-                            pass
-                        create_gtis_done.wait()
+    # continue check
+    if obs_dir in started_folders[:-2] and folder_cont:
+        print('Directory ' + obs_dir + ' is not among the last two directories. Skipping...')
+        return
 
-                    if curr_action == 'fs':
-                        output_err = extract_all_spectral(dirname, bkgmodel=bgmodel, language=bglanguage,
-                                                          overwrite=overwrite_glob,
-                                                          relax_SAA_bg=relax_SAA_bg,
-                                                          sp_systematics=sp_systematics,day_mode=day_mode)
-                        if type(output_err) == str:
-                            folder_state=output_err
-                        else:
-                            pass
-                        extract_all_spectral_done.wait()
+    # directory overwrite check
+    if obs_dir in done_folders and folder_over == False:
+        print('Actions already computed for directory ' + obs_dir + '\nSkipping...')
+        return
 
-                    if curr_action == 'l':
-                        output_err = extract_lc(dirname,binning_list=lc_bin_list if \
-                                                'intensity' not in gti_split else [int_split_bin],
-                                                bands=lc_bands_str, HR=hr_bands_str,
-                                                overwrite=overwrite_glob,day_mode=day_mode)
-                        if type(output_err) == str:
-                            folder_state=output_err
-                        else:
-                            pass
-                        extract_lc_done.wait()
-                            
-                    if curr_action=='s':
-                        extract_spectrum(dirname)
-                        extract_spectrum_done.wait()
-                    if curr_action=='b':
-                        extract_background(dirname,model=bgmodel)
-                        extract_background_done.wait()
-                    if curr_action=='r':
-                        extract_response(dirname)
-                        extract_response_done.wait()
+    # getting the last directory in the result (necessary if osbid folders are in subdirectories) (we take the last / of to avoid problems)
+    dirname = obs_dir[:-1].split('/')[-1]
 
-                    if curr_action=='g':
-                        output_err=regroup_spectral(dirname,group=grouptype)
 
-                        if type(output_err) == str:
-                            folder_state=output_err
-                        else:
-                            pass
-                        regroup_spectral_done.wait()
+    print('\nFound obsid directory ' + obs_dir)
 
-                    if curr_action=='m':
-                        batch_mover(dirname)
-                        batch_mover_done.wait()
+    above_obsdir = os.path.join(startdir, '/'.join(obs_dir[-1].split('/')[:-1]))
 
-                    if curr_action=='ml':
-                        batch_mover_timing(dirname)
-                        batch_mover_timing_done.wait()
+    os.chdir(above_obsdir)
 
-                    if curr_action=='c':
-                        clean_products(dirname)
-                        clean_products_done.wait()
+    def action_loop(action_list,output,output_err):
 
-                    if curr_action=='fc':
-                        clean_all(dirname)
-                        clean_all_done.wait()
+        # for loop to be able to use different orders if needed
+        for curr_action in action_list:
 
-                    os.chdir(startdir)
-                folder_state='Done'
-                        
-            #adding the directory to the list of already computed directories
-            file_edit('summary_folder_analysis_'+args.action+'.log',directory,directory+'\t'+folder_state+'\n',summary_folder_header)
-                
-else:
+            # resetting the error string message
+            output_err[0] = None
+            output[0]= 'Running ' + curr_action
 
-    #OUTDATED
-    assert True,'local mode currently outdated'
-    #taking of the merge action if local is set since there is no point to merge in local (the batch directory acts as merge)
-    action_list=[elem for elem in action_list if elem in ['m','ml']]
-    
-    absdir=os.getcwd()
-    
-    #just to avoid an error but not used since there is not merging in local
-    obsid=''
-    
-    #for loop to be able to use different orders if needed
-    for curr_action in action_list:
-            if curr_action=='1':
-                process_obsdir(absdir,overwrite=overwrite_glob,keep_SAA=keep_SAA,overshoot_limit=overshoot_limit,
-                                        undershoot_limit=undershoot_limit,
-                               min_gti=min_gti,erodedilate=erodedilate,keep_lowmem=keep_lowmem,
-                               br_earth_min=br_earth_min,day_mode=day_mode)
-                process_obsdir_done.wait()
-            if curr_action=='2':
-                select_detector(absdir,detectors=bad_detectors)
-                select_detector_done.wait()
+            if curr_action == '1':
+                print(os.getcwd())
 
-            if curr_action=='gti':
-                output_err = create_gtis(absdir, split_arg=gti_split, band=gti_lc_band,
+                process_obsdir(dirname, overwrite=overwrite_glob, keep_SAA=keep_SAA,
+                               overshoot_limit=overshoot_limit,
+                               undershoot_limit=undershoot_limit,
+                               min_gti=min_gti, erodedilate=erodedilate, keep_lowmem=keep_lowmem,
+                               br_earth_min=br_earth_min, day_mode=day_mode, thread=process_obsdir_thread,
+                               parallel=parallel)
+                process_obsdir_thread.wait()
+
+            if curr_action == '2':
+                select_detector(dirname, detectors=bad_detectors, thread=select_detector_thread,parallel=parallel)
+                select_detector_thread.wait()
+
+            if curr_action == 'gti':
+                output_err[0] = create_gtis(dirname, split_arg=gti_split, band=gti_lc_band,
                                          flare_method=flare_method,
-                                        int_split_band=int_split_band,int_split_bin=int_split_bin,
+                                         int_split_band=int_split_band, int_split_bin=int_split_bin,
                                          flare_factor=flare_factor,
-                                         clip_sigma=clip_sigma,peak_score_thresh=peak_score_thresh,
-                                                   gti_tool=gti_tool,erodedilate_overdyn=erodedilate_overdyn,
-                                         day_mode=day_mode)
-                create_gtis_done.wait()
+                                         clip_sigma=clip_sigma,
+                                         peak_score_thresh=peak_score_thresh,
+                                         gti_tool=gti_tool, erodedilate_overdyn=erodedilate_overdyn,
+                                         day_mode=day_mode, thread=create_gtis_thread,parallel=parallel)
+                if type(output_err[0]) == str:
+                    if catch_errors:
+                        raise ValueError
+                    else:
+                        output[0] = output_err
+
+                create_gtis_thread.wait()
 
             if curr_action == 'fs':
-                output_err = extract_all_spectral(absdir, bkgmodel=bgmodel, language=bglanguage,
-                                                  overwrite=overwrite_glob,
+                output_err[0] = extract_all_spectral(dirname, bkgmodel=bgmodel,
+                                                  language=bglanguage, overwrite=overwrite_glob,
                                                   relax_SAA_bg=relax_SAA_bg,
-                                                  sp_systematics=sp_systematics, day_mode=day_mode)
-                if type(output_err) == str:
-                    raise ValueError
-                extract_all_spectral_done.wait()
+                                                  sp_systematics=sp_systematics, day_mode=day_mode,
+                                                  thread=extract_all_spectral_thread,parallel=parallel)
+                if type(output_err[0]) == str:
+                    if catch_errors:
+                        raise ValueError
+                    else:
+                        output[0] = output_err
+
+                extract_all_spectral_thread.wait()
 
             if curr_action == 'l':
-                output_err = extract_lc(absdir, binning_list=lc_bin_list if 'intensity' \
-                                        not in gti_split else [int_split_bin],
+                output_err[0] = extract_lc(dirname, binning_list=lc_bin_list if 'intensity' \
+                                                                             not in gti_split else [
+                    int_split_bin],
                                         bands=lc_bands_str, HR=hr_bands_str, overwrite=overwrite_glob,
-                                        day_mode=day_mode)
-                if type(output_err) == str:
-                    raise ValueError
-                extract_lc_done.wait()
+                                        day_mode=day_mode, thread=extract_lc_thread,parallel=parallel)
+                if type(output_err[0]) == str:
+                    if catch_errors:
+                        raise ValueError
+                    else:
+                        output[0] = output_err
 
-            if curr_action=='s':
-                extract_spectrum(absdir)
-                extract_spectrum_done.wait()
-            if curr_action=='b':
-                extract_background(absdir,model=bgmodel)
-                extract_background_done.wait()
-            if curr_action=='r':
-                extract_response(absdir)
-                extract_response_done.wait()
-            if curr_action=='g':
-                regroup_spectral(absdir,group=grouptype)
-                regroup_spectral_done.wait()
-            if curr_action=='m':
-                batch_mover(absdir)
-                batch_mover_done.wait()
+                extract_lc_thread.wait()
+
+            if curr_action == 's':
+                extract_spectrum(dirname, thread=extract_spectrum_thread)
+                extract_spectrum_thread.wait()
+
+            if curr_action == 'b':
+                extract_background(dirname, model=bgmodel, thread=extract_background_thread)
+                extract_background_thread.wait()
+            if curr_action == 'r':
+                extract_response(dirname, thread=extract_response_thread)
+                extract_response_thread.wait()
+
+            if curr_action == 'g':
+                output_err[0] = regroup_spectral(dirname, group=grouptype, thread=regroup_spectral_thread,parallel=parallel)
+                if type(output_err[0]) == str:
+                    if catch_errors:
+                        raise ValueError
+                    else:
+                        output[0] = output_err
+
+                regroup_spectral_thread.wait()
+
+            if curr_action == 'm':
+                batch_mover(dirname, thread=batch_mover_thread,parallel=parallel)
+                batch_mover_thread.wait()
 
             if curr_action == 'ml':
-                batch_mover_timing(absdir)
-                batch_mover_timing_done.wait()
+                batch_mover_timing(dirname, thread=batch_mover_timing_thread,parallel=parallel)
+                batch_mover_timing_thread.wait()
 
             if curr_action == 'c':
-                clean_products(absdir)
-                clean_products_done.wait()
+                clean_products(dirname, clean_wait_value=clean_wait_value, thread=clean_products_thread)
+                clean_products_thread.wait()
 
             if curr_action == 'fc':
-                clean_all(absdir)
-                clean_all_done.wait()
+                clean_all(dirname, clean_wait_value=clean_wait_value, thread=clean_all_thread)
+                clean_all_thread.wait()
+
+            os.chdir(startdir)
+        output[0]= 'Done'
+
+    #just created for passing pointers and avoid issues with return and the try
+    output_list=[None]
+    output_err_list=[None]
+
+    if catch_errors:
+
+        try:
+            action_loop(action_list,output=output_list,output_err=output_err_list)
+            folder_state=output_list[0]
+
+        except:
+            # signaling unknown errors if they happened
+            if 'Running' in output_list[0]:
+                print('\nError while ' + output_list[0])
+                folder_state = output_list[0].replace('Running', 'Aborted at') + (
+                    '' if output_err_list[0] is None else ' --> ' + output_err_list[0])
+            os.chdir(startdir)
+
+    else:
+        action_loop(action_list, output=output_list, output_err=output_err_list)
+        folder_state=output_list[0]
+
+    # adding the directory to the list of already computed directories
+    file_edit('summary_folder_analysis_' + args.action + '.log', obs_dir,
+              obs_dir + '\t' + folder_state + '\n', summary_folder_header)
+    print( obs_dir + '\t' + folder_state + '\n', summary_folder_header)
+
+
+if not local:
+    #checking them in search for ODF directories
+
+    if parallel!=1:
+
+        res = Parallel(n_jobs=parallel)(
+            delayed(run_actions)(
+                obs_dir=elem_directory,
+                action_list=action_list,parallel=True)
+
+            for elem_directory in subdirs_obsid)
+
+    else:
+        for directory in subdirs_obsid:
+            run_actions(directory, action_list,parallel=False)
+
+
+breakpoint()
+
+
+#
+# if not local:
+#     #checking them in search for ODF directories
+#     for directory in subdirs:
+#
+#         #continue check
+#         if directory in started_folders[:-2] and folder_cont:
+#             print('Directory '+directory+' is not among the last two directories. Skipping...')
+#             continue
+#
+#         #directory overwrite check
+#         if directory in done_folders and folder_over==False:
+#             print('Actions already computed for directory '+directory+'\nSkipping...')
+#             continue
+#
+#         #getting the last directory in the result (necessary if osbid folders are in subdirectories) (we take the last / of to avoid problems)
+#         dirname=directory[:-1].split('/')[-1]
+#
+#         #checking if the directory has an obsid dir shape (10 numbers)
+#         #and not a general or subdirectory
+#         if len(dirname)==10 and dirname.isdigit() and "odf" not in os.listdir(directory):
+#
+#             print('\nFound obsid directory '+dirname)
+#
+#
+#             above_obsdir=os.path.join(startdir,'/'.join(directory[-1].split('/')[:-1]))
+#
+#             os.chdir(above_obsdir)
+#
+#             if catch_errors:
+#                 try:
+#                 #for loop to be able to use different orders if needed
+#                     for curr_action in action_list:
+#
+#                         #resetting the error string message
+#                         output_err=None
+#                         folder_state='Running '+curr_action
+#
+#                         if curr_action=='1':
+#                             process_obsdir(dirname,overwrite=overwrite_glob,keep_SAA=keep_SAA,overshoot_limit=overshoot_limit,
+#                                                     undershoot_limit=undershoot_limit,
+#                                            min_gti=min_gti,erodedilate=erodedilate,keep_lowmem=keep_lowmem,
+#                                            br_earth_min=br_earth_min,day_mode=day_mode)
+#                             process_obsdir_done.wait()
+#                         if curr_action=='2':
+#                             select_detector(dirname,detectors=bad_detectors)
+#                             select_detector_done.wait()
+#
+#                         if curr_action=='gti':
+#                             output_err=create_gtis(dirname,split_arg=gti_split,band=gti_lc_band,
+#                                         flare_method=flare_method,
+#                                         int_split_band=int_split_band,int_split_bin=int_split_bin,
+#                                                    flare_factor=flare_factor,
+#                                                    clip_sigma=clip_sigma,
+#                                                    peak_score_thresh=peak_score_thresh,
+#                                                    gti_tool=gti_tool,erodedilate_overdyn=erodedilate_overdyn,
+#                                                    day_mode=day_mode)
+#                             if type(output_err)==str:
+#                                 raise ValueError
+#                             create_gtis_done.wait()
+#
+#                         if curr_action=='fs':
+#                             output_err=extract_all_spectral(dirname,bkgmodel=bgmodel,
+#                                                             language=bglanguage,overwrite=overwrite_glob,
+#                                                             relax_SAA_bg=relax_SAA_bg,
+#                                                             sp_systematics=sp_systematics,day_mode=day_mode)
+#                             if type(output_err)==str:
+#                                 raise ValueError
+#                             extract_all_spectral_done.wait()
+#
+#                         if curr_action=='l':
+#                             output_err=extract_lc(dirname,binning_list=lc_bin_list if 'intensity' \
+#                                                             not in gti_split else [int_split_bin],
+#                                                   bands=lc_bands_str,HR=hr_bands_str,overwrite=overwrite_glob,
+#                                                   day_mode=day_mode)
+#                             if type(output_err)==str:
+#                                 raise ValueError
+#                             extract_lc_done.wait()
+#
+#                         if curr_action=='s':
+#                             extract_spectrum(dirname)
+#                             extract_spectrum_done.wait()
+#
+#                         if curr_action=='b':
+#                             extract_background(dirname,model=bgmodel)
+#                             extract_background_done.wait()
+#                         if curr_action=='r':
+#                             extract_response(dirname)
+#                             extract_response_done.wait()
+#
+#                         if curr_action=='g':
+#                             output_err=regroup_spectral(dirname,group=grouptype)
+#                             if type(output_err)==str:
+#                                 raise ValueError
+#                             regroup_spectral_done.wait()
+#
+#                         if curr_action=='m':
+#                             batch_mover(dirname)
+#                             batch_mover_done.wait()
+#
+#                         if curr_action=='ml':
+#                             batch_mover_timing(dirname)
+#                             batch_mover_timing_done.wait()
+#
+#                         if curr_action=='c':
+#                             clean_products(dirname,clean_wait_value=clean_wait_value)
+#                             clean_products_done.wait()
+#
+#                         if curr_action=='fc':
+#                             clean_all(dirname,clean_wait_value=clean_wait_value)
+#                             clean_all_done.wait()
+#
+#                         os.chdir(startdir)
+#                     folder_state='Done'
+#
+#                 except:
+#                     #signaling unknown errors if they happened
+#                     if 'Running' in folder_state:
+#                         print('\nError while '+folder_state)
+#                         folder_state=folder_state.replace('Running','Aborted at')+('' if output_err is None else ' --> '+output_err)
+#                     os.chdir(startdir)
+#             else:
+#
+#                 #for loop to be able to use different orders if needed
+#                 for curr_action in action_list:
+#
+#                     folder_state='Running '+curr_action
+#                     if curr_action=='1':
+#                         process_obsdir(dirname,overwrite=overwrite_glob,keep_SAA=keep_SAA,overshoot_limit=overshoot_limit,
+#                                                 undershoot_limit=undershoot_limit,
+#                                        min_gti=min_gti,erodedilate=erodedilate,keep_lowmem=keep_lowmem,
+#                                        br_earth_min=br_earth_min,day_mode=day_mode)
+#                         process_obsdir_done.wait()
+#                     if curr_action=='2':
+#                         select_detector(dirname,detectors=bad_detectors)
+#                         select_detector_done.wait()
+#
+#                     if curr_action=='gti':
+#                         output_err=create_gtis(dirname,split_arg=gti_split,band=gti_lc_band,
+#                                     flare_method=flare_method,
+#                                         int_split_band=int_split_band,int_split_bin=int_split_bin,
+#                                                flare_factor=flare_factor,
+#                                                clip_sigma=clip_sigma,peak_score_thresh=peak_score_thresh,
+#                                                    gti_tool=gti_tool,erodedilate_overdyn=erodedilate_overdyn,
+#                                                day_mode=day_mode)
+#                         if type(output_err) == str:
+#                             folder_state=output_err
+#                         else:
+#                             pass
+#                         create_gtis_done.wait()
+#
+#                     if curr_action == 'fs':
+#                         output_err = extract_all_spectral(dirname, bkgmodel=bgmodel, language=bglanguage,
+#                                                           overwrite=overwrite_glob,
+#                                                           relax_SAA_bg=relax_SAA_bg,
+#                                                           sp_systematics=sp_systematics,day_mode=day_mode)
+#                         if type(output_err) == str:
+#                             folder_state=output_err
+#                         else:
+#                             pass
+#                         extract_all_spectral_done.wait()
+#
+#                     if curr_action == 'l':
+#                         output_err = extract_lc(dirname,binning_list=lc_bin_list if \
+#                                                 'intensity' not in gti_split else [int_split_bin],
+#                                                 bands=lc_bands_str, HR=hr_bands_str,
+#                                                 overwrite=overwrite_glob,day_mode=day_mode)
+#                         if type(output_err) == str:
+#                             folder_state=output_err
+#                         else:
+#                             pass
+#                         extract_lc_done.wait()
+#
+#                     if curr_action=='s':
+#                         extract_spectrum(dirname)
+#                         extract_spectrum_done.wait()
+#                     if curr_action=='b':
+#                         extract_background(dirname,model=bgmodel)
+#                         extract_background_done.wait()
+#                     if curr_action=='r':
+#                         extract_response(dirname)
+#                         extract_response_done.wait()
+#
+#                     if curr_action=='g':
+#                         output_err=regroup_spectral(dirname,group=grouptype)
+#
+#                         if type(output_err) == str:
+#                             folder_state=output_err
+#                         else:
+#                             pass
+#                         regroup_spectral_done.wait()
+#
+#                     if curr_action=='m':
+#                         batch_mover(dirname)
+#                         batch_mover_done.wait()
+#
+#                     if curr_action=='ml':
+#                         batch_mover_timing(dirname)
+#                         batch_mover_timing_done.wait()
+#
+#                     if curr_action=='c':
+#                         clean_products(dirname,clean_wait_value=clean_wait_value)
+#                         clean_products_done.wait()
+#
+#                     if curr_action=='fc':
+#                         clean_all(dirname,clean_wait_value=clean_wait_value)
+#                         clean_all_done.wait()
+#
+#                     os.chdir(startdir)
+#                 folder_state='Done'
+#
+#             #adding the directory to the list of already computed directories
+#             file_edit('summary_folder_analysis_'+args.action+'.log',directory,directory+'\t'+folder_state+'\n',summary_folder_header)
+#
+# else:
+#
+#     #OUTDATED
+#     assert True,'local mode currently outdated'
+#     #taking of the merge action if local is set since there is no point to merge in local (the batch directory acts as merge)
+#     action_list=[elem for elem in action_list if elem in ['m','ml']]
+#
+#     absdir=os.getcwd()
+#
+#     #just to avoid an error but not used since there is not merging in local
+#     obsid=''
+#
+#     #for loop to be able to use different orders if needed
+#     for curr_action in action_list:
+#             if curr_action=='1':
+#                 process_obsdir(absdir,overwrite=overwrite_glob,keep_SAA=keep_SAA,overshoot_limit=overshoot_limit,
+#                                         undershoot_limit=undershoot_limit,
+#                                min_gti=min_gti,erodedilate=erodedilate,keep_lowmem=keep_lowmem,
+#                                br_earth_min=br_earth_min,day_mode=day_mode)
+#                 process_obsdir_done.wait()
+#             if curr_action=='2':
+#                 select_detector(absdir,detectors=bad_detectors)
+#                 select_detector_done.wait()
+#
+#             if curr_action=='gti':
+#                 output_err = create_gtis(absdir, split_arg=gti_split, band=gti_lc_band,
+#                                          flare_method=flare_method,
+#                                         int_split_band=int_split_band,int_split_bin=int_split_bin,
+#                                          flare_factor=flare_factor,
+#                                          clip_sigma=clip_sigma,peak_score_thresh=peak_score_thresh,
+#                                                    gti_tool=gti_tool,erodedilate_overdyn=erodedilate_overdyn,
+#                                          day_mode=day_mode)
+#                 create_gtis_done.wait()
+#
+#             if curr_action == 'fs':
+#                 output_err = extract_all_spectral(absdir, bkgmodel=bgmodel, language=bglanguage,
+#                                                   overwrite=overwrite_glob,
+#                                                   relax_SAA_bg=relax_SAA_bg,
+#                                                   sp_systematics=sp_systematics, day_mode=day_mode)
+#                 if type(output_err) == str:
+#                     raise ValueError
+#                 extract_all_spectral_done.wait()
+#
+#             if curr_action == 'l':
+#                 output_err = extract_lc(absdir, binning_list=lc_bin_list if 'intensity' \
+#                                         not in gti_split else [int_split_bin],
+#                                         bands=lc_bands_str, HR=hr_bands_str, overwrite=overwrite_glob,
+#                                         day_mode=day_mode)
+#                 if type(output_err) == str:
+#                     raise ValueError
+#                 extract_lc_done.wait()
+#
+#             if curr_action=='s':
+#                 extract_spectrum(absdir)
+#                 extract_spectrum_done.wait()
+#             if curr_action=='b':
+#                 extract_background(absdir,model=bgmodel)
+#                 extract_background_done.wait()
+#             if curr_action=='r':
+#                 extract_response(absdir)
+#                 extract_response_done.wait()
+#             if curr_action=='g':
+#                 regroup_spectral(absdir,group=grouptype)
+#                 regroup_spectral_done.wait()
+#             if curr_action=='m':
+#                 batch_mover(absdir)
+#                 batch_mover_done.wait()
+#
+#             if curr_action == 'ml':
+#                 batch_mover_timing(absdir)
+#                 batch_mover_timing_done.wait()
+#
+#             if curr_action == 'c':
+#                 clean_products(absdir,clean_wait_value=clean_wait_value)
+#                 clean_products_done.wait()
+#
+#             if curr_action == 'fc':
+#                 clean_all(absdir,clean_wait_value=clean_wait_value)
+#                 clean_all_done.wait()

@@ -124,7 +124,9 @@ def reload_sp(baseload_path,keyword_skip=None,write_baseload=True,newbl_keyword=
         from xspec_config_multisp import AllData
 
         for i in np.arange(1,AllData.nGroups+1)[~mask][::-1]:
-            AllData-=i
+
+            #argument calling since using AllData-=i doesn't work in the program
+            AllData.__isub__(i)
         if write_baseload:
             if os.path.isfile(new_baseload_path):
                 os.remove(new_baseload_path)

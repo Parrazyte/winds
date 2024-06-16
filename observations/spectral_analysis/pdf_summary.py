@@ -19,13 +19,11 @@ from astropy.time import Time,TimeDelta
 from astropy.io import fits
 from astropy.time import Time
 
-
 from general_tools import ravel_ragged,shorten_epoch
 
 def pdf_summary(epoch_files,arg_dict,fit_ok=False,summary_epoch=None,e_sat_low_list=None,e_sat_high_list=None):
 
     sat_glob=arg_dict['sat_glob']
-    line_e_ranges=arg_dict['line_e_ranges']
     megumi_files=arg_dict['megumi_files']
     pre_reduced_NICER=arg_dict['pre_reduced_NICER']
     obj_name=arg_dict['obj_name']
@@ -40,6 +38,107 @@ def pdf_summary(epoch_files,arg_dict,fit_ok=False,summary_epoch=None,e_sat_low_l
     line_cont_range_arg=arg_dict['line_cont_range_arg']
     line_search_e_arg=arg_dict['line_search_e_arg']
     line_search_norm_arg=arg_dict['line_search_norm_arg']
+
+    diff_bands_NuSTAR_NICER=arg_dict['diff_bands_NuSTAR_NICER']
+    low_E_NICER=arg_dict['low_E_NICER']
+    suzaku_xis_ignore=arg_dict['suzaku_xis_ignore']
+    suzaku_xis_range=arg_dict['suzaku_xis_range']
+    suzaku_pin_range=arg_dict['suzaku_pin_range']
+    line_cont_ig_arg=arg_dict['line_cont_ig_arg']
+
+    def line_e_ranges(sat, det=None):
+        '''
+        Determines the energy range allowed, as well as the ignore energies for a given satellite
+
+        DO NOT USE INTS else it will be taken as channels instead of energies
+        ignore_bands are bands that will be ignored on top of the rest, in ALL bands
+        '''
+        ignore_bands = None
+
+        if sat == 'NuSTAR':
+            e_sat_low = 8. if (sat_glob == 'multi' and diff_bands_NuSTAR_NICER) else 4.
+            e_sat_high = 79.
+
+        if sat.upper()=='SWIFT':
+            if det is not None and det.upper()=='BAT':
+                e_sat_low=14.
+                e_sat_high=195.
+            else:
+                e_sat_low=0.3
+                e_sat_high=10.
+
+        if sat.upper() in ['XMM', 'NICER']:
+
+            if sat == 'NICER':
+                e_sat_low = 0.3 if (sat_glob == 'multi' and diff_bands_NuSTAR_NICER) else low_E_NICER
+            else:
+                e_sat_low = 0.3
+
+            if sat.upper() in ['XMM']:
+                if sat == 'XMM':
+                    e_sat_low = 2.
+
+                e_sat_high = 10.
+            else:
+                if sat == 'NICER':
+                    e_sat_high = 10.
+                else:
+                    e_sat_high = 10.
+
+        elif sat == 'Suzaku':
+
+            if det == None:
+                e_sat_low = 1.9
+                e_sat_high = 40.
+
+                ignore_bands = suzaku_xis_ignore
+            else:
+
+                assert det in ['PIN', 'XIS'], 'Detector argument necessary to choose energy ranges for Suzaku'
+
+                e_sat_low = suzaku_xis_range[0] if det == 'XIS' else suzaku_pin_range[0]
+                e_sat_high = suzaku_xis_range[1] if det == 'XIS' else suzaku_pin_range[1]
+
+                # note: we don't care about ignoring these with pin since pin doesn't go that low
+                ignore_bands = suzaku_xis_ignore
+
+        elif sat == 'Chandra':
+            e_sat_low = 1.5
+            e_sat_high = 10.
+
+        '''
+        computing the line ignore values, which we cap from the lower and upper bound of the global energy ranges to avoid issues 
+        we also avoid getting upper bounds lower than the lower bounds because xspec reads it in reverse and still ignores the band you want to keep
+        ####should eventually be expanded to include the energies of each band as for the lower bound they are higher and we could have the opposite issue with re-noticing low energies
+        '''
+
+        line_cont_ig = ''
+
+        if line_cont_ig_arg == 'iron':
+
+            if sat in ['XMM', 'Chandra', 'NICER', 'Swift', 'SWIFT', 'Suzaku', 'NuSTAR']:
+
+
+                if e_sat_low > 6:
+                    # not ignoring this band for high-E only e.g. high-E only NuSTAR, BAT, INTEGRAL spectra
+                    pass
+                else:
+                    if e_sat_high > 6.5:
+
+                        line_cont_ig += '6.5-' + str(min(7.1, e_sat_high))
+
+                        if e_sat_high > 7.7:
+                            line_cont_ig += ',7.7-' + str(min(8.3, e_sat_high))
+                    else:
+                        # failsafe in case the e_sat_high is too low, we ignore the very first channel of the spectrum
+                        # which will be ignored anyway
+                        line_cont_ig = str(1)
+
+            else:
+                line_cont_ig = '6.-8.'
+
+        return e_sat_low, e_sat_high, ignore_bands, line_cont_ig
+
 
     if summary_epoch is None:
         glob_summary_linedet=arg_dict['glob_summary_linedet']

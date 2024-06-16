@@ -15,11 +15,10 @@ from xspec import AllData,Plot,AllModels,Fit,Xset
 
 from xspec_config_multisp import xcolors_grp,addcomp,store_plot,allfreeze,xscorpeon,\
                                 model_load
-from fitting_tools import sign_delchis_table,lines_std,lines_e_dict,lines_w_dict,lines_broad_w_dict,\
-        link_groups,lines_std_names,def_ftest_threshold,def_ftest_leeway,ang2kev
+from fitting_tools import lines_std,lines_e_dict, lines_std_names
 
 #bipolar colormap from a custom library (https://github.com/endolith/bipolar-colormap)
-#directly in the neighboring folder
+#in the general tools folder
 from bipolar import hotcold
 
 '''peak detection'''

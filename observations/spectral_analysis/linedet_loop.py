@@ -109,6 +109,11 @@ def linedet_loop(epoch_list,arg_dict,arg_dict_path=None,parallel=1,heasoft_init_
         #choosing the directory
         bashproc.sendline('cd '+os.getcwd())
 
+        #note: for all instances except the first, we add a delay to ensure the first one will start first
+        #and avoid conflicts with the creation of several instances at once
+        if epoch_id!=0:
+            time.sleep(2)
+
         if container_mode=='python':
 
             # default path for the container
@@ -256,7 +261,7 @@ def linedet_loop(epoch_list,arg_dict,arg_dict_path=None,parallel=1,heasoft_init_
         for elem_epoch_files in aborted_files:
 
             #list conversion since we use epochs as arguments
-            pdf_summary(elem_epoch_files)
+            pdf_summary(elem_epoch_files,arg_dict=arg_dict)
 
             #not used for now
             # if sat_glob=='XMM':
@@ -423,3 +428,71 @@ def linedet_loop_single(epoch_id,arg_dict):
 
         else:
             summary_lines=line_detect(epoch_id,arg_dict)
+
+
+def make_linedet_parfile(parallel,outdir,cont_model,autofit_model='lines_narrow',
+                        container='default',
+                        satellite='multi',group_max_timedelta='day',
+                        skip_started=True,catch_errors=False,
+                        multi_focus='NICER',nfakes=1000):
+
+    '''
+    Inserts a parfile for a linedet computation
+    '''
+
+    param_dict={'parallel':parallel,
+                'outdir':outdir,
+                'cont_model':cont_model,
+                'autofit_model':autofit_model,
+                'container':container,
+                'satellite':satellite,
+                'group_max_timedelta':group_max_timedelta,
+                'skip_started':skip_started,
+                'catch_errors':catch_errors,
+                'multi_focus':multi_focus,
+                'nfakes':nfakes}
+
+    parfile_name='./parfile'+'_outdir_'+outdir+'_satellite_'+satellite+'_cont_model_'+cont_model+'.par'
+    #writing in the file
+    with open(parfile_name,'w+')\
+            as file:
+
+        for param,val in zip(list(param_dict.keys()),list(param_dict.values())):
+            file.write('\t'.join([param,str(val)])+'\n')
+
+    return parfile_name
+
+def make_linedet_script(startdir,cores,parfile_path,cpus=2,nodes=1,
+                      walltime=300,mail="maxime.parra@univ-grenoble-alpes.fr"):
+
+    '''
+    Create standard oar script for ipag-calc computation
+
+    core value should be set to the same value than the "parallel" number in make_linedet_parfile
+
+    cpu/node value shouldn't be changed if in ipag-calc (all servers have two cpus,1 node)
+
+    walltime is in hours
+
+    to run:
+        oarsub -I -p "host='ipag-calcX interrupt=0'"
+    '''
+
+    wall_h='%02.f'%(int(walltime))
+    wall_m = '%02.f' % (int((walltime-int(walltime))*60))
+
+    script_str=\
+    "#OAR -l /nodes="+str(nodes)+"/cpu="+str(cpus)+"/core="+str(cores)+\
+    ",walltime="+wall_h+":"+wall_m+":00\n"+\
+    "#OAR --stdout "+startdir+".%jobid%.out\n"+\
+    "#OAR --stderr "+startdir+".%jobid%.err\n"+\
+    "#OAR --notify mail:"+mail+"\n"+\
+    "shopt -s expand_aliases\n"+\
+    "source /user/home/parrama/.bashrc\n"+\
+    "\npyload"+\
+    "\npyloadenv\n"+\
+    "\ncd "+startdir+"\n"+\
+    "\npython $linedet_script -parfile "+parfile_path
+
+    with open('./oar_script.sh','w+') as oar_file:
+        oar_file.write(script_str)

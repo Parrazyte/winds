@@ -125,8 +125,8 @@ def reload_sp(baseload_path,keyword_skip=None,write_baseload=True,newbl_keyword=
 
         for i in np.arange(1,AllData.nGroups+1)[~mask][::-1]:
 
-            #argument calling since using AllData-=i doesn't work in the program
-            AllData.__isub__(i)
+            #argument calling to be more explicit
+            AllData.__isub__(int(i))
         if write_baseload:
             if os.path.isfile(new_baseload_path):
                 os.remove(new_baseload_path)
@@ -994,7 +994,7 @@ def line_detect(epoch_id,arg_dict):
 
             try:
 
-                pdf_summary(epoch_files, fit_ok=True, summary_epoch=fill_result('Line detection complete.'),
+                pdf_summary(epoch_files,arg_dict=arg_dict, fit_ok=True, summary_epoch=fill_result('Line detection complete.'),
                             e_sat_low_list=e_sat_low_indiv, e_sat_high_list=e_sat_high_indiv)
 
                 # closing the logfile for both access and Xspec
@@ -1007,7 +1007,7 @@ def line_detect(epoch_id,arg_dict):
 
         else:
 
-            pdf_summary(epoch_files, fit_ok=True, summary_epoch=fill_result('Line detection complete.'),
+            pdf_summary(epoch_files,arg_dict=arg_dict, fit_ok=True, summary_epoch=fill_result('Line detection complete.'),
                         e_sat_low_list=e_sat_low_indiv, e_sat_high_list=e_sat_high_indiv)
 
             # closing the logfile for both access and Xspec
@@ -1109,7 +1109,7 @@ def line_detect(epoch_id,arg_dict):
         '''PDF creation'''
 
         if write_pdf:
-            pdf_summary(epoch_files, fit_ok=True, summary_epoch=fill_result('Line detection complete.'),
+            pdf_summary(epoch_files,arg_dict=arg_dict, fit_ok=True, summary_epoch=fill_result('Line detection complete.'),
                         e_sat_low_list=e_sat_low_indiv, e_sat_high_list=e_sat_high_indiv)
 
         # closing the logfile for both access and Xspec
@@ -2918,7 +2918,7 @@ def line_detect(epoch_id,arg_dict):
     '''PDF creation'''
 
     if write_pdf:
-        pdf_summary(epoch_files, fit_ok=True, summary_epoch=fill_result('Line detection complete.'),
+        pdf_summary(epoch_files,arg_dict=arg_dict,fit_ok=True, summary_epoch=fill_result('Line detection complete.'),
                     e_sat_low_list=e_sat_low_indiv, e_sat_high_list=e_sat_high_indiv)
 
     # closing the logfile for both access and Xspec

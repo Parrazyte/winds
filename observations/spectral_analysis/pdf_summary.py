@@ -2,30 +2,8 @@
 
 #general imports
 import os,sys
-import glob
-import argparse
 import re as re
-import time
-
 import numpy as np
-
-#matplotlib imports
-import matplotlib as mpl
-import matplotlib.pyplot as plt
-import matplotlib.colors as colors
-
-
-from matplotlib.gridspec import GridSpec
-
-#other stuff
-from ast import literal_eval
-from copy import deepcopy
-
-#powerful saves
-import dill
-
-#progress bar
-from tqdm import tqdm
 
 #pdf conversion with HTML parsin
 #install with fpdf2 NOT FPDF otherwise HTML won't work
@@ -42,7 +20,7 @@ from astropy.io import fits
 from astropy.time import Time
 
 
-from general_tools import ravel_ragged,shorten_epoch,expand_epoch,get_overlap
+from general_tools import ravel_ragged,shorten_epoch
 
 def pdf_summary(epoch_files,arg_dict,fit_ok=False,summary_epoch=None,e_sat_low_list=None,e_sat_high_list=None):
 

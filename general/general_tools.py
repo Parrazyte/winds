@@ -13,6 +13,7 @@ import os
 
 import random
 import glob
+
 # def ravel_ragged_test(array,mode=None):
 #
 #     '''ravels a 2/3d array/list even with ragged nested sequences'''

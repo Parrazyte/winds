@@ -4,7 +4,7 @@ import os
 import glob
 from general_tools import shorten_epoch
 from pdf_summary import pdf_summary
-from line_detect import line_detect
+
 from ast import literal_eval
 import sys
 import numpy as np
@@ -12,6 +12,7 @@ from general_tools import file_edit
 import subprocess
 from joblib import Parallel, delayed
 import pexpect
+
 import time
 def linedet_loop(epoch_list,arg_dict,arg_dict_path=None,parallel=1,heasoft_init_alias='heainit',
                  container_mode='python',container='default',job_id='default',
@@ -272,6 +273,9 @@ def linedet_loop(epoch_list,arg_dict,arg_dict_path=None,parallel=1,heasoft_init_
     return aborted_epochs
 
 def linedet_loop_single(epoch_id,arg_dict):
+
+        #importing in the function so this code can be used without xspec (useful for instance computations)
+        from line_detect import line_detect
 
         epoch_list=arg_dict['epoch_list']
         epoch_files=epoch_list[epoch_id]

@@ -112,7 +112,7 @@ def reload_sp(baseload_path,keyword_skip=None,write_baseload=True,newbl_keyword=
     -newbl_keyword: name for the new baseload file
 
 
-    -method: "new" simply edits the AllData class. Requires a mask of datagroups to ignore.
+    -method: "new" simply edits the AllData class. Requires a mask of datagroups to KEEP .
              "old" method was editing the baseload file
     '''
 
@@ -123,7 +123,7 @@ def reload_sp(baseload_path,keyword_skip=None,write_baseload=True,newbl_keyword=
         #to avoid definition problems
         from xspec_config_multisp import AllData
 
-        for i in range(1,AllData.nGroups+1)[mask][::-1]:
+        for i in np.arange(1,AllData.nGroups+1)[~mask][::-1]:
             AllData-=i
         if write_baseload:
             if os.path.isfile(new_baseload_path):
@@ -223,6 +223,7 @@ def line_detect(epoch_id,arg_dict):
     assess_line=arg_dict['assess_line']
     reload_fakes=arg_dict['reload_fakes']
     xchatter=arg_dict['xchatter']
+    xspec_query=arg_dict['xspec_query']
     line_store_path=arg_dict['line_store_path']
     assess_line_upper=arg_dict['assess_line_upper']
 
@@ -492,6 +493,16 @@ def line_detect(epoch_id,arg_dict):
                 result_arr[i] = string
 
         return result_arr
+
+    Pset(window=None,xlog=False,ylog=False)
+
+    # reducing the amount of data displayed in the terminal (doesn't affect the log file)
+    Xset.chatter = xchatter
+
+    # defining the standard number of fit iterations
+    Fit.nIterations = 100
+
+    Fit.query = xspec_query
 
     # deprecated
     obs_grating = False

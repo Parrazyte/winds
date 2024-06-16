@@ -116,47 +116,23 @@ class PDF(FPDF, HTMLMixin):
 #pdf merging
 from PyPDF2 import PdfMerger
 
-#trapezoid integration
-from scipy.integrate import trapezoid
-
-from astropy.time import Time,TimeDelta
-
 '''Astro'''
 #general astro importss
 from astropy.io import fits
-from astropy.time import Time
-from xspec import AllModels,AllData,Fit,Spectrum,Model,Plot,Xset,FakeitSettings,Chain
-from xspec import AllChains
+from astropy.time import Time,TimeDelta
 
 #custom script with a few shorter xspec commands
-from xspec_config_multisp import allmodel_data,model_load,addcomp,Pset,Pnull,rescale,reset,Plot_screen,store_plot,freeze,allfreeze,unfreeze,\
-                         calc_error,delcomp,fitmod,calc_fit,xcolors_grp,xPlot,xscorpeon,catch_model_str,\
-                         load_fitmod, ignore_data_indiv,par_degroup,xspec_globcomps,store_fit
-
-from linedet_utils import plot_line_comps,plot_line_search,plot_std_ener,coltour_chi2map,narrow_line_search,\
-                            plot_line_ratio
 
 #custom script with a some lines and fit utilities and variables
 from fitting_tools import c_light,lines_std_names,lines_e_dict,n_absline,range_absline,model_list
 
 from linedet_loop import linedet_loop
 
-from general_tools import file_edit,ravel_ragged,shorten_epoch,expand_epoch,get_overlap
+from general_tools import ravel_ragged,shorten_epoch,expand_epoch,get_overlap
 
-# #importing the pileup evaluation function
-# from XMM_datared import pileup_val
-#defined here instead because it tends to launch datared functions when importing from it
-
-#Catalogs and manipulation
-from astroquery.vizier import Vizier
 
 '''peak detection'''
-from findpeaks import findpeaks
-#mask to polygon conversion
-from imantics import Mask
-from shapely.geometry import Polygon,Point
-#mask propagation for the peak detection
-from scipy.ndimage import binary_dilation
+
 
 ap = argparse.ArgumentParser(description='Script to perform line detection in X-ray Spectra.\n)')
 
@@ -865,16 +841,6 @@ if multi_obj==False:
         if add_ungrouped_BAT:
             spfile_list+=[elem for elem in  glob.glob('*_survey_point_*.pha')]
 
-    if launch_cpd:
-        #obtaining the xspec window id. It is important to call the variable xspec_id, since it is called by default in other functions
-        #we set yLog as False to use ldata in the plot commands and avoid having log delchis
-        xspec_id=Pset(xlog=True,ylog=False)
-        if xspec_window!='auto':
-            xspec_id=xspec_window
-            Plot.xLog=True
-    else:
-        Pset(window=None,xlog=False,ylog=False)
-
     #creating the output directory
     os.system('mkdir -p '+outdir)
 
@@ -912,14 +878,6 @@ norm_nsteps=len(norm_par_space)
 '''''''''''''''''''''''''''''''''''''''
 ''''''''''''''Fitting Loop'''''''''''''
 '''''''''''''''''''''''''''''''''''''''
-
-#reducing the amount of data displayed in the terminal (doesn't affect the log file)
-Xset.chatter=xchatter
-
-#defining the standard number of fit iterations
-Fit.nIterations=100
-
-Fit.query=xspec_query
 
 #summary file header
 summary_header='Obsid\tFile identifier\tSpectrum extraction result\n'
@@ -1666,6 +1624,7 @@ arg_dict['write_aborted_pdf']=write_aborted_pdf
 arg_dict['write_pdf']=write_pdf
 arg_dict['xchatter']=xchatter
 arg_dict['epoch_list']=epoch_list
+arg_dict['xspec_query']=xspec_query
 
 arg_dict['diff_bands_NuSTAR_NICER']=diff_bands_NuSTAR_NICER
 arg_dict['low_E_NICER']=low_E_NICER
@@ -1684,9 +1643,15 @@ if not hid_only:
                                 container_mode=container_mode,container=container,force_instance=force_instance)
 else:
     aborted_epochs=[]
+
 '''''''''''''''''''''''''''''''''''''''
 ''''''Hardness-Luminosity Diagrams''''''
 '''''''''''''''''''''''''''''''''''''''
+
+#stopping the program before the final pdfs to avoid problems with server side computation
+# (which has issues with streamlit)
+if os.getcwd().startswith('/user/'):
+    sys.exit()
 
 #importing some graph tools from the streamlit script
 from visual_line_tools import load_catalogs,dist_mass,obj_values,abslines_values,values_manip,n_infos,telescope_list,hid_graph

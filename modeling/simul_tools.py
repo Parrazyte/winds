@@ -216,6 +216,8 @@ def oar_wrapper(solution_rel_dir,save_grid_dir,sim_grid_dir,
             -docker: uses an xstar version installed in a docker. Uses smart copying to avoid necessiting permissions
                     (besides the one to run the docker)
             -charliecloud: uses an xstar version installed in a charliecloud environment.
+            -singularity:
+                singularity container (docker wrapped inside it) because docker cannot be run on ipag-calc
 
             xstarid:
             in standalone: the path of the heasoft version to use. 'default' uses the standard version installed on the computer

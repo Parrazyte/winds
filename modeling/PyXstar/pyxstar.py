@@ -1130,7 +1130,7 @@ mode,s,h,'+str(hpar['mode'])+',,,"mode"\n'
         else:
             container_use=container
 
-        #testing the whether already existsid
+        #testing the whether already exists
         singul_list = str(subprocess.check_output("singularity instance list", shell=True)).split('\\n')
         singul_list_mask = [elem.startswith('xstar_' + identifier) for elem in singul_list]
 

@@ -17,6 +17,13 @@ oarsub -p "host='ipag-calc4'" -l /nodes=1/core=64,walltime=512:00:00 ./oar_scrip
 
 du -sh to see size of directories
 
+to convert docker to singularity
+first save the image from the create docker:
+docker save -o ./mydocker.tar heasoft:v6.33.2
+then convert the tar to singularity
+
+singularity build local_tar.sif docker-archive://local.tar
+
 '''
 import os
 

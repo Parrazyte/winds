@@ -106,11 +106,11 @@ ap.add_argument('-catch','--catch_errors',help='Catch errors while running the d
 
 #1 for no parallelization
 ap.add_argument('-parallel',help='number of processors for parallel directories',
-                default=4,type=bool)
+                default=16,type=bool)
 
 #global choices
 ap.add_argument("-a","--action",nargs='?',help='Give which action(s) to proceed,separated by comas.',
-                default='m,ml',type=str)
+                default='fc,1,gti,fs,l,g,m,ml,c',type=str)
 #default: fc,1,gti,fs,l,g,m,ml,c
 
 #note: should be kept to true for most complicated tasks
@@ -1993,8 +1993,10 @@ def extract_lc(directory,binning_list=[1],bands='3-12',HR='6-10/3-6',overwrite=T
                 new_files_lc = [elem for elem in glob.glob(os.path.join(directory, 'xti/**/*'), recursive=True) if
                                 '.lc' in elem and 'bin' not in elem]
 
+                #adding a condition to avoid issues if they were remaining temp files that god deleted along the way
                 for elem_file in new_files_lc:
-                    os.remove(elem_file)
+                    if os.path.isfile(elem_file):
+                        os.remove(elem_file)
 
                 #and plotting it
                 fig_lc,ax_lc=plt.subplots(1,figsize=(10,8))

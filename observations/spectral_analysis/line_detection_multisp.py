@@ -152,7 +152,13 @@ ap.add_argument('-container_mode',help='type of container to run pyxspec in',def
 ap.add_argument('-container',help='path of the container to use',default='default',type=str)
 
 #useful for debugging
-ap.add_argument('-force_instance',help='force instantiation even in parallel is set to 1',default=False,type=bool)
+ap.add_argument('-force_instance',help='force instantiation even in parallel is set to 1',default=True,type=bool)
+
+
+#parfile mode (empty string means not using this mode)
+ap.add_argument('-parfile',nargs=1,help="parfile to use instead of standard sets of arguments",
+                default='parfile_outdir_lineplots_opt_test_satellite_multi_cont_model_nthcont_NICER.par',
+                type=str)
 
 '''GENERAL OPTIONS'''
 
@@ -578,6 +584,7 @@ parallel=args.parallel
 container_mode=args.container_mode
 container=args.container
 force_instance=args.force_instance
+parfile=args.parfile
 
 sat_glob=args.satellite
 cameras=args.cameras
@@ -708,6 +715,26 @@ cont_model=args.cont_model
 
 force_nosplit_fit_multi=args.force_nosplit_fit_multi
 split_fit=args.split_fit and not (sat_glob=='multi' and force_nosplit_fit_multi)
+
+#replacing some arguments with those of the parameter file if it exists
+if parfile is not '':
+    # loading the file as an array
+    if type(parfile)==str:
+        param_arr = np.loadtxt(parfile, dtype=str)
+    else:
+        param_arr = np.loadtxt(parfile[0], dtype=str)
+
+    parallel=int(param_arr[0][1])
+    outdir=param_arr[1][1]
+    cont_model=param_arr[2][1]
+    autofit_model=param_arr[3][1]
+    container=param_arr[4][1]
+    satellite=param_arr[5][1]
+    groum_max_timedelta=param_arr[6][1]
+    skip_started=bool(param_arr[7][1])
+    catch_errors=bool(param_arr[8][1])
+    multi_focus=param_arr[9][1]
+    nfakes=int(param_arr[10][1])
 
 '''utility functions'''
 

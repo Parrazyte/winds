@@ -47,11 +47,13 @@ import dill
 
 from matplotlib.gridspec import GridSpec
 
-#example '/home/parrama/Soft/Xspec/Models'
-model_dir=os.environ['xspec_models_dir']
-
+if 'xspec_models_dirs' in os.environ:
+    #example '/home/parrama/Soft/Xspec/Models'
+    model_dir=os.environ['xspec_models_dir']
+else:
+    model_dir=None
 # custom model loads
-if not streamlit_mode:
+if not streamlit_mode and model_dir!=None:
     AllModels.lmod('relxill',dirPath=model_dir+'/relxill')
     AllModels.lmod('fullkerr',dirPath=model_dir+'/fullkerr')
     #swiftJ1658 dust scattering halo model from Jin2019

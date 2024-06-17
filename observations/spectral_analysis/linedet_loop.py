@@ -150,7 +150,7 @@ def linedet_loop(epoch_list,arg_dict,arg_dict_path=None,parallel=1,heasoft_init_
 
                 #note: doing it via the spawn because it doesn't work with subprocess for some reason
                 instance_create_line=' '.join(['singularity', 'instance', 'start', '--bind', os.getcwd() + ':/mnt',
-                                               container_use,singularity_instance_name])
+                                                   container_use,singularity_instance_name])
 
                 bashproc.sendline(instance_create_line)
 
@@ -475,7 +475,10 @@ def make_linedet_script(startdir,cores,parfile_path,cpus=2,nodes=1,
     walltime is in hours
 
     to run:
-        oarsub -I -p "host='ipag-calcX interrupt=0'"
+        oarsub -p "host='ipag-calcX'" interrupt=0 $(pwd)/oar_script.sh
+    ex:
+        oarsub -p "host='ipag-calc2'" $(pwd)/oar_script.sh
+
     '''
 
     wall_h='%02.f'%(int(walltime))
@@ -489,10 +492,10 @@ def make_linedet_script(startdir,cores,parfile_path,cpus=2,nodes=1,
     "#OAR --notify mail:"+mail+"\n"+\
     "shopt -s expand_aliases\n"+\
     "source /user/home/parrama/.bashrc\n"+\
-    "\npyload"+\
-    "\npyloadenv\n"+\
+    "\npyload_3.9"+\
+    "\npyloadenv_linedet\n"+\
     "\ncd "+startdir+"\n"+\
-    "\npython $linedet_script -parfile "+parfile_path
+    "\npython $linedet_script -parfile '"+parfile_path+"'"
 
     with open('./oar_script.sh','w+') as oar_file:
         oar_file.write(script_str)

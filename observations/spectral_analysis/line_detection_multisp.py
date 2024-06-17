@@ -717,7 +717,7 @@ force_nosplit_fit_multi=args.force_nosplit_fit_multi
 split_fit=args.split_fit and not (sat_glob=='multi' and force_nosplit_fit_multi)
 
 #replacing some arguments with those of the parameter file if it exists
-if parfile is not '':
+if parfile!='':
     # loading the file as an array
     if type(parfile)==str:
         param_arr = np.loadtxt(parfile, dtype=str)

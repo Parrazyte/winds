@@ -207,6 +207,11 @@ def model_list(model_id='lines',give_groups=False):
                       'FeKa25abs_nagaussian','FeKa26abs_nagaussian','NiKa27abs_nagaussian',
                       'FeKb25abs_nagaussian','FeKb26abs_nagaussian','FeKg26abs_nagaussian']
 
+    #for quicker autofit tests
+    if model_id=='single_line_narrow':
+        avail_comps=['FeKa26abs_nagaussian']
+
+
     if model_id=='lines_narrow_noem':
         avail_comps=['FeKa25abs_nagaussian','FeKa26abs_nagaussian','NiKa27abs_nagaussian',
                       'FeKb25abs_nagaussian','FeKb26abs_nagaussian','FeKg26abs_nagaussian']

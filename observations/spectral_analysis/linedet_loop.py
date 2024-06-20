@@ -195,8 +195,8 @@ def linedet_loop(epoch_list,arg_dict,arg_dict_path=None,parallel=1,heasoft_init_
 
             for epoch_id in range(len(epoch_list)))
 
-    #killing the singularity instance now thart the process is finished
-    if container_mode=='singularity':
+    #if necessary, killing the singularity instance now thart the process is finished
+    if container_mode=='singularity' and parallel!=1 or force_instance:
         # stopping the instance at the end
         subprocess.call(['singularity', 'instance', 'stop', singularity_instance_name])
 

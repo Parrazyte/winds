@@ -106,7 +106,7 @@ ap.add_argument('-catch','--catch_errors',help='Catch errors while running the d
 
 #1 for no parallelization
 ap.add_argument('-parallel',help='number of processors for parallel directories',
-                default=16,type=bool)
+                default=1,type=bool)
 
 #global choices
 ap.add_argument("-a","--action",nargs='?',help='Give which action(s) to proceed,separated by comas.',
@@ -465,8 +465,8 @@ def select_detector(directory,detectors='-14,-34,-54',thread=None,parallel=False
     
     set_var(bashproc)
 
-    with (no_op_context() if parallel else (StdoutTee(directory+'/select_detector.log',mode="a",buff=1,file_filters=[_remove_control_chars]),\
-        StderrTee(directory+'/select_detector.log',buff=1,file_filters=[_remove_control_chars]))):
+    with (no_op_context() if parallel else StdoutTee(directory+'/select_detector.log',mode="a",buff=1,file_filters=[_remove_control_chars]),\
+        StderrTee(directory+'/select_detector.log',buff=1,file_filters=[_remove_control_chars])):
 
         if not parallel:
             bashproc.logfile_read=sys.stdout
@@ -935,8 +935,8 @@ def create_gtis(directory,split_arg='orbit+flare',band='3-15',flare_method='clip
     for elem_file_gti in old_files_gti:
         os.remove(elem_file_gti)
 
-    with (no_op_context() if parallel else (StdoutTee(os.path.join(directory + '/create_gtis.log'), mode="a", buff=1, file_filters=[_remove_control_chars]), \
-            StderrTee(os.path.join(directory + '/create_gtis.log'), buff=1, file_filters=[_remove_control_chars]))):
+    with (no_op_context() if parallel else StdoutTee(os.path.join(directory + '/create_gtis.log'), mode="a", buff=1, file_filters=[_remove_control_chars]), \
+            StderrTee(os.path.join(directory + '/create_gtis.log'), buff=1, file_filters=[_remove_control_chars])):
 
         if not parallel:
             bashproc.logfile_read = sys.stdout
@@ -1575,14 +1575,14 @@ def extract_all_spectral(directory,bkgmodel='scorpeon_script',language='python',
 
     io_log=open(directory+'/extract_all_spectral.log','w+')
 
-    bashproc=pexpect.spawn("/bin/bash",encoding='utf-8',logfile=io_log if parallel else False)
+    bashproc=pexpect.spawn("/bin/bash",encoding='utf-8',logfile=io_log if parallel else None)
     
     print('\n\n\nCreating spectral products...')
     
     set_var(bashproc)
 
-    with (no_op_context() if parallel else (StdoutTee(directory+'/extract_all_spectral.log',mode="a",buff=1,file_filters=[_remove_control_chars]),\
-        StderrTee(directory+'/extract_all_spectral.log',buff=1,file_filters=[_remove_control_chars]))):
+    with (no_op_context() if parallel else StdoutTee(directory+'/extract_all_spectral.log',mode="a",buff=1,file_filters=[_remove_control_chars]),\
+        StderrTee(directory+'/extract_all_spectral.log',buff=1,file_filters=[_remove_control_chars])):
 
         if not parallel:
             bashproc.logfile_read=sys.stdout
@@ -1855,8 +1855,8 @@ def extract_lc(directory,binning_list=[1],bands='3-12',HR='6-10/3-6',overwrite=T
     set_var(bashproc)
 
         
-    with (no_op_context() if parallel else (StdoutTee(directory+'/extract_lc.log',mode="a",buff=1,file_filters=[_remove_control_chars]),\
-        StderrTee(directory+'/extract_lc.log',buff=1,file_filters=[_remove_control_chars]))):
+    with (no_op_context() if parallel else StdoutTee(directory+'/extract_lc.log',mode="a",buff=1,file_filters=[_remove_control_chars]),\
+        StderrTee(directory+'/extract_lc.log',buff=1,file_filters=[_remove_control_chars])):
 
         if not parallel:
             bashproc.logfile_read=sys.stdout
@@ -2282,8 +2282,8 @@ def regroup_spectral(directory,group='opt',thread=None,parallel=False):
     if os.path.isfile(os.path.join(currdir,directory,directory+'_sp_grp_'+group+'.pha')):
         os.remove(os.path.join(currdir,directory,directory+'_sp_grp_'+group+'.pha'))
 
-    with (no_op_context() if parallel else (StdoutTee(directory+'/regroup_spectral.log',mode="a",buff=1,file_filters=[_remove_control_chars]),\
-        StderrTee(directory+'/regroup_spectral.log',buff=1,file_filters=[_remove_control_chars]))):
+    with (no_op_context() if parallel else StdoutTee(directory+'/regroup_spectral.log',mode="a",buff=1,file_filters=[_remove_control_chars]),\
+        StderrTee(directory+'/regroup_spectral.log',buff=1,file_filters=[_remove_control_chars])):
 
         # there seems to be an issue with too many groupings in one console so we recreate it every time
 

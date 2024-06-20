@@ -2705,11 +2705,11 @@ def parse_xlog(log_lines,goal='lastmodel',no_display=False,replace_frozen=False,
                     if line.split()[1] not in par_peg:
                         par_peg+=[line.split()[1]]
 
-                if line.startswith(' Due to zero model norms') and 'fit parameters are temporarily frozen' in line:
-                    frozen_pars=line.split(':')[1].replace('\n','')
-                    for elem_par_frozen in frozen_pars.split():
-                        if elem_par_frozen not in par_peg:
-                            par_peg+=[elem_par_frozen]
+                # if line.startswith(' Due to zero model norms') and 'fit parameters are temporarily frozen' in line:
+                #     frozen_pars=line.split(':')[1].replace('\n','')
+                #     for elem_par_frozen in frozen_pars.split():
+                #         if elem_par_frozen not in par_peg:
+                #             par_peg+=[elem_par_frozen]
 
             #error lines start with 5 blank spaces
             if line.startswith('    '):
@@ -5019,9 +5019,8 @@ class fitmod:
         add_notincl: also includes the previous components if they are not included in the current model
                      (as long as they are part of complist)
 
-        load_frozen/links/valrage: options on how to loach each fitcomp's save
+        load_frozen/links/valragne: options on how to loach each fitcomp's save
         changing from the default can make things not work for automatic reloading
-        (frozen is needed to
         '''
 
         prev_inclist=[elem for elem in prev_fitmod.includedlist if elem is not None]
@@ -5482,7 +5481,7 @@ class fitcomp:
 
         self.save=[self.values,self.frozen,self.links,self.relative_links]
 
-    def reload(self,save=None,load_frozen=False,load_relative_links=True,load_links=False,load_valrange=False,):
+    def reload(self,save=None,load_frozen=False,load_relative_links=True,load_links=False,load_valrange=False):
 
         '''
         reload the component values according to an internal or provided save
@@ -5522,7 +5521,9 @@ class fitcomp:
             elem_par.link=''
 
             #reloading the main value or the whole value array
-            if load_valrange:
+            # (forcing it for global comps to avoid issues with the range of constant factors)
+
+            if load_valrange or self.compname.split('_')[-1] in xspec_globcomps:
                 elem_par.values=reload_values[id_par]
             else:
                 elem_par.values=[reload_values[id_par][0]]+elem_par.values[1:]

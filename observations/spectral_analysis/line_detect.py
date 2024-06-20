@@ -228,7 +228,7 @@ def line_detect(epoch_id,arg_dict):
     xspec_query=arg_dict['xspec_query']
     line_store_path=arg_dict['line_store_path']
     assess_line_upper=arg_dict['assess_line_upper']
-
+    fix_compt_gamma=arg_dict['fix_compt_gamma']
     diff_bands_NuSTAR_NICER=arg_dict['diff_bands_NuSTAR_NICER']
     low_E_NICER=arg_dict['low_E_NICER']
     suzaku_xis_ignore=arg_dict['suzaku_xis_ignore']
@@ -451,16 +451,14 @@ def line_detect(epoch_id,arg_dict):
         '''
 
         for i_line, line_name in enumerate(
-                [elem for elem in lines_e_dict.keys() if 'em' not in elem and 'Si' not in elem]):
+                [elem for elem in lines_e_dict.keys() if 'em' not in elem and 'Si' not in elem\
+                 and elem in [comp.compname.split('_')[0] for comp in fitlines.complist if comp is not None]]):
             html_summary += '''
           <tr>
             <td>''' + line_name + '''</td>
             <td>''' + str(lines_e_dict[line_name][0]) + '''</td>
             <td>''' + ('/' if strmaker(abslines_sign[i_line]) == '/' else \
-                                                                                                                                                 strmaker(
-                                                                                                                                                     abslines_em_overlap[
-                                                                                                                                                         i_line],
-                                                                                                                                                     is_overlap=True)) + '''</td>
+                     strmaker(abslines_em_overlap[i_line],is_overlap=True)) + '''</td>
             <td>''' + strmaker(abslines_flux[i_line] * 1e12) + '''</td>
             <td>''' + strmaker(abslines_bshift[i_line]) + '''</td>
             <td>''' + str('/' if abslines_bshift_distinct[i_line] is None else abslines_bshift_distinct[i_line]) + '''</td>
@@ -471,6 +469,7 @@ def line_detect(epoch_id,arg_dict):
             <td>''' + strmaker(abslines_delchi[i_line]) + '''</td>
           </tr>
           '''
+
         html_summary += '''
         </tbody>
         </table>
@@ -1302,6 +1301,7 @@ def line_detect(epoch_id,arg_dict):
                 except:
                     breakpoint()
                     pass
+
         curr_store_fit(mode='broadhid' + add_str, fitmod=fitmodel)
 
         # storing the fitmod class into a file
@@ -1431,7 +1431,7 @@ def line_detect(epoch_id,arg_dict):
         Xset.restore(outdir + '/' + epoch_observ[0] + '_mod_broadband_post_auto.xcm')
         fitlines_broad.update_fitcomps()
         data_broad = allmodel_data()
-
+        
         # re fixing the absorption parameter and storing the value to retain it
         # if the absorption gets taken off and tested again
         abs_incl_comps = (np.array(fitlines_broad.complist)[[elem.absorption and elem.included for elem in \
@@ -1447,8 +1447,8 @@ def line_detect(epoch_id,arg_dict):
         fitlines_broad = load_fitmod(outdir + '/' + epoch_observ[0] + '_fitmod_broadband_post_auto.pkl')
         Xset.restore(outdir + '/' + epoch_observ[0] + '_mod_broadhid_post_auto.xcm')
         fitlines_broad.update_fitcomps()
-        data_broad = allmodel_data()
-
+        data_broad_post_auto = allmodel_data()
+        
         if os.path.isfile(outdir + '/' + epoch_observ[0] + '_fitmod_broadhid_post_auto.pkl'):
             fitlines_hid = load_fitmod(outdir + '/' + epoch_observ[0] + '_fitmod_broadhid_post_auto.pkl')
             Xset.restore(outdir + '/' + epoch_observ[0] + '_mod_broadhid_post_auto.xcm')
@@ -1504,7 +1504,7 @@ def line_detect(epoch_id,arg_dict):
             narrow_line_search(data_mod_high, 'cont', line_search_e=line_search_e, line_search_norm=line_search_norm,
                                e_sat_low_indiv=e_sat_low_indiv, peak_thresh=peak_thresh, peak_clean=peak_clean,
                                line_cont_range=line_cont_range, trig_interval=trig_interval,
-                               scorpeon_save=data_broad.scorpeon)
+                               scorpeon_save=data_mod_high.scorpeon)
 
         with open(outdir + '/' + epoch_observ[0] + '_chi_dict_init.pkl', 'wb') as file:
             dill.dump(chi_dict_init, file)
@@ -1536,7 +1536,7 @@ def line_detect(epoch_id,arg_dict):
 
         '''Continuum fits'''
 
-        def high_fit(broad_absval, broad_abscomp, broad_gamma_nthcomp, thcomp_frac_frozen=False):
+        def high_fit(broad_absval, broad_abscomp, broad_gamma_nthcomp,scorpeon_deload, thcomp_frac_frozen=False):
 
             '''
             high energy fit and flux array computation
@@ -1545,7 +1545,7 @@ def line_detect(epoch_id,arg_dict):
             print_xlog('\nComputing line continuum fit...')
 
             AllModels.clear()
-            xscorpeon.load('auto', scorpeon_save=data_broad.scorpeon, frozen=True)
+            xscorpeon.load('auto', scorpeon_save=scorpeon_deload, frozen=True)
 
             # limiting to the line search energy range
             ignore_data_indiv(line_cont_range[0], line_cont_range[1], reset=True,
@@ -1712,14 +1712,17 @@ def line_detect(epoch_id,arg_dict):
             else:
                 thcomp_frac_frozen = False
 
-            if 'disk_nthcomp' in [comp.compname for comp in \
-                                  [elem for elem in fitcont_broad.includedlist if elem is not None]]:
-                broad_gamma_compt = fitcont_broad.disk_nthcomp.xcomps[0].Gamma.values[0]
-            elif 'disk_thcomp' in [comp.compname for comp in \
-                                   [elem for elem in fitcont_broad.includedlist if elem is not None]]:
-                broad_gamma_compt = fitcont_broad.disk_thcomp.xcomps[0].Gamma_tau.values[0]
+            if fix_compt_gamma:
+                if 'disk_nthcomp' in [comp.compname for comp in \
+                                      [elem for elem in fitcont_broad.includedlist if elem is not None]]:
+                    broad_gamma_compt = fitcont_broad.disk_nthcomp.xcomps[0].Gamma.values[0]
+                elif 'disk_thcomp' in [comp.compname for comp in \
+                                       [elem for elem in fitcont_broad.includedlist if elem is not None]]:
+                    broad_gamma_compt = fitcont_broad.disk_thcomp.xcomps[0].Gamma_tau.values[0]
+                else:
+                    broad_gamma_compt = None
             else:
-                broad_gamma_compt = None
+                broad_gamma_compt=None
 
             mod_fitcont = allmodel_data()
 
@@ -1848,9 +1851,19 @@ def line_detect(epoch_id,arg_dict):
         '''
         mask_nodeload = e_sat_low_indiv<10
         reload_sp(baseload_path, newbl_keyword='autofit',method='new',mask=mask_nodeload)
+        data_broad_deload=deepcopy(data_broad)
+        scorpeon_deload=data_broad_deload.scorpeon
 
+        data_broad_deload = deepcopy(data_broad)
+        data_broad_deload.default = data_broad_deload.default[mask_nodeload]
 
-        result_high_fit = high_fit(broad_absval, broad_abscomp, broad_gamma_compt,
+        #note always defined at least as a list of nones even if no scorpeon model exists, so can be masked
+        data_broad_deload.scorpeon.nxb_save_list = np.array(data_broad_deload.scorpeon.nxb_save_list)[mask_nodeload]
+        data_broad_deload.scorpeon.sky_save_list = np.array(data_broad_deload.scorpeon.sky_save_list)[mask_nodeload]
+
+        scorpeon_deload=data_broad_deload.scorpeon
+
+        result_high_fit = high_fit(broad_absval, broad_abscomp, broad_gamma_compt,scorpeon_deload,
                                    thcomp_frac_frozen=thcomp_frac_frozen)
 
         # if the function returns an array of length 1, it means it returned an error message
@@ -1876,7 +1889,7 @@ def line_detect(epoch_id,arg_dict):
                                e_sat_low_indiv=e_sat_low_indiv[mask_nodeload],
                                peak_thresh=peak_thresh, peak_clean=peak_clean,
                                line_cont_range=line_cont_range, trig_interval=trig_interval,
-                               scorpeon_save=data_broad.scorpeon)
+                               scorpeon_save=data_mod_high.scorpeon)
 
         with open(outdir + '/' + epoch_observ[0] + '_chi_dict_init.pkl', 'wb') as file:
             dill.dump(chi_dict_init, file)
@@ -2079,29 +2092,47 @@ def line_detect(epoch_id,arg_dict):
                 '''
                 Refitting in the autofit range to get the newer version of the autofit and continuum
 
-                first: freezing the nthcomp/thcomp gamma if necessary
+                first: refreezing the nthcomp/thcomp gamma if necessary
 
                 second: restoring the line freeze states
                 here we restore the INITIAL component freeze state, effectively thawing all components pegged during the first autofit
                 '''
 
-                # freezing the gamma of the nthcomp to avoid nonsenses:
+                if fix_compt_gamma:
+
+                    #getting the broad value in case of deletion
+                    if 'disk_nthcomp' in [comp.compname for comp in \
+                                          [elem for elem in fitcont_broad.includedlist if elem is not None]]:
+                        broad_gamma_compt = fitcont_broad.disk_nthcomp.xcomps[0].Gamma.values[0]
+                    elif 'disk_thcomp' in [comp.compname for comp in \
+                                           [elem for elem in fitcont_broad.includedlist if elem is not None]]:
+                        broad_gamma_compt = fitcont_broad.disk_thcomp.xcomps[0].Gamma_tau.values[0]
+                    else:
+                        broad_gamma_compt = None
+
+                    #and ajusting the current values
+                    if 'disk_nthcomp' in [comp.compname for comp in \
+                                          fitlines.includedlist_main]:
+                        fitlines.disk_nthcomp.xcomps[0].Gamma.frozen = True
+
+                        fitlines.update_fitcomps()
+                        fitlines.disk_nthcomp.n_unlocked_pars_base = len(fitlines.disk_nthcomp.unlocked_pars)
+
+                    if 'disk_nthcomp' in [comp.compname for comp in \
+                                          fitlines.includedlist_main]:
+                        fitlines.disk_thcomp.xcomps[0].Gamma_tau.frozen = True
+
+                        fitlines.update_fitcomps()
+                        fitlines.disk_thcomp.n_unlocked_pars_base = len(fitlines.disk_thcomp.unlocked_pars)
+
+                else:
+                    broad_gamma_compt = None
+
+                # setting the fixed gamma to its value it has been selected
                 fitlines.fixed_gamma = broad_gamma_compt
 
-                if 'disk_nthcomp' in [comp.compname for comp in \
-                                      fitlines.includedlist_main]:
-                    fitlines.disk_nthcomp.xcomps[0].Gamma.frozen = True
 
-                    fitlines.update_fitcomps()
-                    fitlines.disk_nthcomp.n_unlocked_pars_base = len(fitlines.disk_nthcomp.unlocked_pars)
-
-                if 'disk_nthcomp' in [comp.compname for comp in \
-                                      fitlines.includedlist_main]:
-                    fitlines.disk_thcomp.xcomps[0].Gamma_tau.frozen = True
-
-                    fitlines.update_fitcomps()
-                    fitlines.disk_thcomp.n_unlocked_pars_base = len(fitlines.disk_thcomp.unlocked_pars)
-
+                #removing irrelevant components
                 for comp in [elem for elem in fitlines.includedlist if elem is not None]:
 
                     if comp.line and not comp.calibration:
@@ -2122,6 +2153,8 @@ def line_detect(epoch_id,arg_dict):
                 # restoring the rest of the datagroups because reloading a different number of datagroup
                 # resets the links of all but the first DGs
                 mod_pre_autofit.default = mod_pre_autofit.default[mask_nodeload]
+                mod_pre_autofit.scorpeon.nxb_save_list=np.array(mod_pre_autofit.scorpeon.nxb_save_list)[mask_nodeload]
+                mod_pre_autofit.scorpeon.sky_save_list=np.array(mod_pre_autofit.scorpeon.sky_save_list)[mask_nodeload]
 
                 # note that more things would need to be done for NICER/Suzaku and
                 # some things might not work with NuSTAR edge's links but let's see
@@ -2143,6 +2176,7 @@ def line_detect(epoch_id,arg_dict):
 
                 # storing the final fit
                 data_autofit = allmodel_data()
+
 
             # storing the final plot and parameters
             # screening the xspec plot
@@ -2440,7 +2474,8 @@ def line_detect(epoch_id,arg_dict):
                                               e_sat_low_indiv=e_sat_low_indiv[mask_nodeload],
                                               peak_thresh=peak_thresh, peak_clean=peak_clean,
                                               line_cont_range=line_cont_range, trig_interval=trig_interval,
-                                              scorpeon_save=data_broad.scorpeon, data_fluxcont=data_autofit_noabs)
+                                              scorpeon_save=data_autofit.scorpeon,
+                                              data_fluxcont=data_autofit_noabs)
 
         with open(outdir + '/' + epoch_observ[0] + '_chi_dict_autofit.pkl', 'wb') as file:
             dill.dump(chi_dict_init, file)
@@ -2756,6 +2791,8 @@ def line_detect(epoch_id,arg_dict):
             # assessing the significance of each line
             for i_line in range(len(abslines_sign)):
 
+
+
                 '''
                 Now we just compute the indexes corresponding to the lower and upper bound of each line's interval and compute the 
                 probability from this space only (via a transposition)
@@ -2790,10 +2827,14 @@ def line_detect(epoch_id,arg_dict):
                                               len(str(nfakes))) if abslines_delchi[i_line] != 0 else 0
 
                 # giving the line a significance attribute
-                line_comp = [comp for comp in [elem for elem in fitlines.complist if elem is not None] if
-                             line_name in comp.compname][0]
+                line_comp_list = [comp for comp in [elem for elem in fitlines.complist if elem is not None] if
+                             line_name in comp.compname]
 
-                line_comp.significant = abslines_sign[i_line]
+                if len(line_comp_list)==0:
+                    continue
+                else:
+                    assert len(line_comp_list)==1,'Issue: should only be one matching line'
+                    line_comp_list[0].significant = abslines_sign[i_line]
 
                 # '''
                 # computing the UL for detectability at the given threshold

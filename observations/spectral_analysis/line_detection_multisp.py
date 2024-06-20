@@ -152,12 +152,12 @@ ap.add_argument('-container_mode',help='type of container to run pyxspec in',def
 ap.add_argument('-container',help='path of the container to use',default='default',type=str)
 
 #useful for debugging
-ap.add_argument('-force_instance',help='force instantiation even in parallel is set to 1',default=True,type=bool)
+ap.add_argument('-force_instance',help='force instantiation even in parallel is set to 1',default=False,type=bool)
 
 
 #parfile mode (empty string means not using this mode)
 ap.add_argument('-parfile',nargs=1,help="parfile to use instead of standard sets of arguments",
-                default='parfile_outdir_lineplots_opt_test_satellite_multi_cont_model_nthcont_NICER.par',
+                default='',
                 type=str)
 
 '''GENERAL OPTIONS'''
@@ -187,7 +187,7 @@ ap.add_argument("-prefix",nargs=1,help='restrict analysis to a specific prefix',
 
 ####output directory
 ap.add_argument("-outdir",nargs=1,help="name of output directory for line plots",
-                default="lineplots_opt_parallel",type=str)
+                default="lineplots_opt_update",type=str)
 
 #overwrite
 #global overwrite based on recap PDF
@@ -227,6 +227,9 @@ ap.add_argument('-xspec_window',nargs=1,help='xspec window id (auto tries to pic
 #### Models and abslines lock
 ap.add_argument('-cont_model',nargs=1,help='model list to use for the autofit computation',
                 default='thcont_NICER',type=str)
+
+ap.add_argument('-fix_compt_gamma',nargs=1,help='fix the gamma of the comptonization component in the iron band fit',
+                default=True,type=str)
 
 #useful to gain time when the abs components can be constrained for sure
 ap.add_argument('-mandatory_abs',nargs=1,help='Consider absorption component as mandatory',
@@ -641,6 +644,8 @@ reload_fakes=args.reload_fakes
 broad_HID_mode=args.broad_HID_mode
 freeze_nH=args.freeze_nH
 freeze_nH_val=args.freeze_nH_val
+
+fix_compt_gamma=args.fix_compt_gamma
 
 mandatory_abs=args.mandatory_abs
 
@@ -1652,6 +1657,7 @@ arg_dict['write_pdf']=write_pdf
 arg_dict['xchatter']=xchatter
 arg_dict['epoch_list']=epoch_list
 arg_dict['xspec_query']=xspec_query
+arg_dict['fix_compt_gamma']=fix_compt_gamma
 
 arg_dict['diff_bands_NuSTAR_NICER']=diff_bands_NuSTAR_NICER
 arg_dict['low_E_NICER']=low_E_NICER

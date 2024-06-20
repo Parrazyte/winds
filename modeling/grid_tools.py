@@ -316,7 +316,7 @@ def create_oar_script(grid_folder,parfile,cores,cpus=2,nodes=1,
     "#OAR -l /nodes="+str(nodes)+"/cpu="+str(cpus)+"/core="+str(cores)+\
     ",walltime="+wall_h+":"+wall_m+":00\n"+\
     "#OAR --stdout grid_folder.%jobid%.out\n"+\
-    "#OAR --stderr grid_dolder.%jobid%.err\n"+\
+    "#OAR --stderr grid_folder.%jobid%.err\n"+\
     "#OAR --notify mail:"+mail+"\n"+\
     "shopt -s expand_aliases\n"+\
     "source /user/home/parrama/.bashrc\n"+\

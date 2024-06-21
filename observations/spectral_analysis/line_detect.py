@@ -2102,11 +2102,11 @@ def line_detect(epoch_id,arg_dict):
 
                     #getting the broad value in case of deletion
                     if 'disk_nthcomp' in [comp.compname for comp in \
-                                          [elem for elem in fitcont_broad.includedlist if elem is not None]]:
-                        broad_gamma_compt = fitcont_broad.disk_nthcomp.xcomps[0].Gamma.values[0]
+                                          [elem for elem in fitlines.includedlist if elem is not None]]:
+                        broad_gamma_compt = fitlines.disk_nthcomp.xcomps[0].Gamma.values[0]
                     elif 'disk_thcomp' in [comp.compname for comp in \
-                                           [elem for elem in fitcont_broad.includedlist if elem is not None]]:
-                        broad_gamma_compt = fitcont_broad.disk_thcomp.xcomps[0].Gamma_tau.values[0]
+                                           [elem for elem in fitlines.includedlist if elem is not None]]:
+                        broad_gamma_compt = fitlines.disk_thcomp.xcomps[0].Gamma_tau.values[0]
                     else:
                         broad_gamma_compt = None
 

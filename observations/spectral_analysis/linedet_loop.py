@@ -88,7 +88,7 @@ def linedet_loop(epoch_list,arg_dict,arg_dict_path=None,parallel=1,heasoft_init_
     spread_str=arg_dict['spread_str']
 
     if job_id=='default':
-        job_id_use='_'.join(os.getcwd().split('/')[-4:]+[outdir,sat_glob,spread_str])
+        job_id_use='_'.join(os.getcwd().split('/')[-4:]+[outdir,sat_glob,spread_str.replace('_over_','-')])
     else:
         job_id_use=job_id
 
@@ -144,7 +144,7 @@ def linedet_loop(epoch_list,arg_dict,arg_dict_path=None,parallel=1,heasoft_init_
                 container_use = container
 
             if indiv_instances:
-                instance_name_indiv=singularity_instance_name+'_epoch_'+str(epoch_id)
+                instance_name_indiv=singularity_instance_name+'_epoch_'+str(epoch_id+1)+'-'+str(len(epoch_list))
             else:
                 instance_name_indiv =singularity_instance_name
 

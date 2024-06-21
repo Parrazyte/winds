@@ -151,8 +151,9 @@ ap.add_argument('-container_mode',help='type of container to run pyxspec in',def
 #if set to default, choose sys.executable for python, and the HEASOFT_SINGULARITY environment variable for singularity
 ap.add_argument('-container',help='path of the container to use',default='default',type=str)
 
+ap.add_argument('-indiv_instances',help='make individual instances for each computation run',default=True,type=bool)
 #useful for debugging
-ap.add_argument('-force_instance',help='force instantiation even in parallel is set to 1',default=False,type=bool)
+ap.add_argument('-force_instance',help='force instantiation even if parallel is set to 1',default=False,type=bool)
 
 
 #parfile mode (empty string means not using this mode)
@@ -197,7 +198,7 @@ ap.add_argument('-overwrite',nargs=1,
 
 #note : will skip exposures for which the exposure didn't compute or with logged errors
 ap.add_argument('-skip_started',nargs=1,help='skip all exposures listed in the local summary_line_det file',
-                default=False,type=bool)
+                default=True,type=bool)
 
 ap.add_argument('-skip_complete',nargs=1,help='skip completed exposures listed in the local summary_line_det file',
                 default=False,type=bool)
@@ -212,7 +213,7 @@ ap.add_argument('-log_console',nargs=1,help='log console output instead of displ
 
 ap.add_argument('-catch_errors',nargs=1,
                 help='catch errors when the line detection process crashes and continue for other exposures',
-                default=False,type=bool)
+                default=True,type=bool)
 
 ap.add_argument('-launch_cpd',nargs=1,
                 help='launch cpd /xs window to be able to plot elements through xspec native commands',default=False,
@@ -532,7 +533,7 @@ ap.add_argument('-peak_clean',nargs=1,
 
 ap.add_argument('-nfakes',nargs=1,
                 help='number of simulations used. Limits the maximal significance tested to >1-1/nfakes',
-                default=100,type=int)
+                default=1000,type=int)
 
 ap.add_argument('-sign_threshold',nargs=1,
                 help='data significance used to start the upper limit procedure and estimate the detectability',
@@ -588,6 +589,7 @@ container_mode=args.container_mode
 container=args.container
 force_instance=args.force_instance
 parfile=args.parfile
+indiv_instances=args.indiv_instances
 
 sat_glob=args.satellite
 cameras=args.cameras
@@ -740,6 +742,8 @@ if parfile!='':
     catch_errors=bool(param_arr[8][1])
     multi_focus=param_arr[9][1]
     nfakes=int(param_arr[10][1])
+    spread_comput=int(param_arr[11][1])
+    indiv_instances=bool(param_arr[12][1])
 
 '''utility functions'''
 
@@ -1519,6 +1523,8 @@ if save_epoch_list:
 if force_epochs:
     epoch_list=force_epochs_list
 
+spread_str=''
+
 if spread_comput!=1:
 
     epoch_list_save=epoch_list
@@ -1534,19 +1540,23 @@ if spread_comput!=1:
 
     assert len(files_spread)<spread_comput,'Computation already split over desired amount of elements'
 
-    for i in range(spread_comput):
-        file_spread=os.path.join(outdir,'spread_epoch_'+('rev_' if reverse_spread else '')+str(i+1)+'.txt')
+    for i_spread in range(spread_comput):
+
+        file_spread=os.path.join(outdir,'spread_epoch_'+('rev_' if reverse_spread else '')+str(i_spread+1)+
+                                 '_over_'+str(spread_comput)+'.txt')
         if not os.path.isfile(file_spread):
 
             if not spread_overwrite:
-                split_epoch=[epoch for epoch in spread_epochs[i] if shorten_epoch([elem.split('_sp')[0]\
+                split_epoch=[epoch for epoch in spread_epochs[i_spread] if shorten_epoch([elem.split('_sp')[0]\
                                                                               for elem in epoch]) not in started_expos]
             else:
-                split_epoch=spread_epochs[i]
+                split_epoch=spread_epochs[i_spread]
 
             with open(file_spread,'w+') as f:
                 f.writelines([str(elem)+'\n' for elem in split_epoch[::(-1 if reverse_spread else 1)]])
             epoch_list=split_epoch[::(-1 if reverse_spread else 1)]
+
+            spread_str='spread_epoch_'+('rev_' if reverse_spread else '')+str(i_spread+1)+'_over_'+str(spread_comput)
             break
 
 if reverse_epoch:
@@ -1666,14 +1676,17 @@ arg_dict['suzaku_xis_range'] =suzaku_xis_range
 arg_dict['suzaku_pin_range'] =suzaku_pin_range
 arg_dict['line_cont_ig_arg'] = line_cont_ig_arg
 
-arg_dict_path=os.path.join(outdir,'arg_dict_dump.dill')
+arg_dict['spread_str']=spread_str
 
-with open(os.path.join(outdir,'arg_dict_dump.dill'),'wb') as dump_file:
+arg_dict_path=os.path.join(outdir,'arg_dict_dump'+('' if spread_comput==1 else '_'+spread_str)+'.dill')
+
+with open(arg_dict_path,'wb+') as dump_file:
     dill.dump(arg_dict,dump_file)
 
 if not hid_only:
     aborted_epochs=linedet_loop(epoch_list,arg_dict,arg_dict_path=arg_dict_path,parallel=parallel,
-                                container_mode=container_mode,container=container,force_instance=force_instance)
+                                container_mode=container_mode,container=container,force_instance=force_instance,
+                                indiv_instances=indiv_instances)
 else:
     aborted_epochs=[]
 

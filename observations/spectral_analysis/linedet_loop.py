@@ -16,7 +16,7 @@ import pexpect
 import time
 def linedet_loop(epoch_list,arg_dict,arg_dict_path=None,parallel=1,heasoft_init_alias='heainit',
                  container_mode='python',container='default',job_id='default',
-                 force_instance=False):
+                 force_instance=False,indiv_instances=False):
     '''
 
     epoch_list:
@@ -74,6 +74,9 @@ def linedet_loop(epoch_list,arg_dict,arg_dict_path=None,parallel=1,heasoft_init_
             uses the 4 last directory elements + the outdir + the sat_glob
         -string:
         uses that strings
+
+    indiv_instances: bool
+                    If set to True, creates individual singularity instances for each epoch
     '''
 
 
@@ -82,9 +85,10 @@ def linedet_loop(epoch_list,arg_dict,arg_dict_path=None,parallel=1,heasoft_init_
     outdir=arg_dict['outdir']
     write_aborted_pdf=arg_dict['write_aborted_pdf']
     sat_glob=arg_dict['sat_glob']
+    spread_str=arg_dict['spread_str']
 
     if job_id=='default':
-        job_id_use='_'.join(os.getcwd().split('/')[-4:]+[outdir,sat_glob])
+        job_id_use='_'.join(os.getcwd().split('/')[-4:]+[outdir,sat_glob,spread_str])
     else:
         job_id_use=job_id
 
@@ -139,10 +143,15 @@ def linedet_loop(epoch_list,arg_dict,arg_dict_path=None,parallel=1,heasoft_init_
             else:
                 container_use = container
 
+            if indiv_instances:
+                instance_name_indiv=singularity_instance_name+'_epoch_'+str(epoch_id)
+            else:
+                instance_name_indiv =singularity_instance_name
+
             # testing the whether already exists
             singul_list = str(subprocess.check_output("singularity instance list", shell=True)).split('\\n')
 
-            singul_list_mask = [elem.startswith(singularity_instance_name) for elem in singul_list]
+            singul_list_mask = [elem.startswith(instance_name_indiv) for elem in singul_list]
 
             if sum(singul_list_mask) == 0:
                 # calling the docker with no mounts
@@ -150,7 +159,7 @@ def linedet_loop(epoch_list,arg_dict,arg_dict_path=None,parallel=1,heasoft_init_
 
                 #note: doing it via the spawn because it doesn't work with subprocess for some reason
                 instance_create_line=' '.join(['singularity', 'instance', 'start', '--bind', os.getcwd() + ':/mnt',
-                                                   container_use,singularity_instance_name])
+                                                   container_use,instance_name_indiv])
 
                 bashproc.sendline(instance_create_line)
 
@@ -161,7 +170,7 @@ def linedet_loop(epoch_list,arg_dict,arg_dict_path=None,parallel=1,heasoft_init_
 
 
             #starting a shell inside the instance
-            bashproc.sendline('singularity shell instance://'+singularity_instance_name)
+            bashproc.sendline('singularity shell instance://'+instance_name_indiv)
 
             #moving inside the right directory
             bashproc.sendline('cd /mnt')
@@ -173,10 +182,17 @@ def linedet_loop(epoch_list,arg_dict,arg_dict_path=None,parallel=1,heasoft_init_
 
             instance_run_code=bashproc.expect(['linedet_runner complete','(Pdb)','Aborted (core dumped)'],timeout=None)
 
-            if instance_run_code ==1:
+            #switching to breakpoint but only in non-parallel mode to avoid breaking everything
+            if instance_run_code ==1 and parallel==1:
                 breakpoint()
 
-            if instance_run_code > 1:
+            if indiv_instances:
+                subprocess.call(['singularity', 'instance', 'stop', instance_name_indiv])
+
+            if instance_run_code ==1:
+                raise ValueError('Breakpoint hit while running singularity instance')
+
+            elif instance_run_code>1:
                 raise ValueError('Error while running singularity instance')
 
     #### line detections for exposure with a spectrum
@@ -196,7 +212,7 @@ def linedet_loop(epoch_list,arg_dict,arg_dict_path=None,parallel=1,heasoft_init_
             for epoch_id in range(len(epoch_list)))
 
     #if necessary, killing the singularity instance now thart the process is finished
-    if container_mode=='singularity' and parallel!=1 or force_instance:
+    if container_mode=='singularity' and (parallel!=1 or force_instance) and not indiv_instances:
         # stopping the instance at the end
         subprocess.call(['singularity', 'instance', 'stop', singularity_instance_name])
 
@@ -433,8 +449,10 @@ def linedet_loop_single(epoch_id,arg_dict):
 def make_linedet_parfile(parallel,outdir,cont_model,autofit_model='lines_narrow',
                         container='default',
                         satellite='multi',group_max_timedelta='day',
-                        skip_started=True,catch_errors=False,
-                        multi_focus='NICER',nfakes=1000):
+                        skip_started=True,catch_errors=True,
+                        multi_focus='NICER',nfakes=1000,
+                        spread_comput=1,
+                        indiv_instances=True):
 
     '''
     Inserts a parfile for a linedet computation
@@ -450,9 +468,12 @@ def make_linedet_parfile(parallel,outdir,cont_model,autofit_model='lines_narrow'
                 'skip_started':skip_started,
                 'catch_errors':catch_errors,
                 'multi_focus':multi_focus,
-                'nfakes':nfakes}
+                'nfakes':nfakes,
+                'spread_comput':spread_comput,
+                'indiv_instances':indiv_instances}
 
-    parfile_name='./parfile'+'_outdir_'+outdir+'_satellite_'+satellite+'_cont_model_'+cont_model+'.par'
+    parfile_name='./parfile'+'_outdir_'+outdir+'_satellite_'+satellite+'_cont_model_'+cont_model+'_parallel_'\
+                 +str(parallel)+'.par'
     #writing in the file
     with open(parfile_name,'w+')\
             as file:
@@ -467,6 +488,8 @@ def make_linedet_script(startdir,cores,parfile_path,cpus=2,nodes=1,
 
     '''
     Create standard oar script for ipag-calc computation
+
+    NOTE: CURRENTLY THE NUMBER OF CORES AND THE WALLTIME MUST BE SPECIFIED MANUALLY (OAR DOESNT TAKE THESE INPUTS)
 
     core value should be set to the same value than the "parallel" number in make_linedet_parfile
 

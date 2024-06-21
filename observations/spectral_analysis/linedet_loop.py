@@ -182,14 +182,16 @@ def linedet_loop(epoch_list,arg_dict,arg_dict_path=None,parallel=1,heasoft_init_
 
             instance_run_code=bashproc.expect(['linedet_runner complete','(Pdb)','Aborted (core dumped)'],timeout=None)
 
-            #switching to breakpoint but only in non-parallel mode to avoid breaking everything
-            if instance_run_code ==1 and parallel==1:
-                breakpoint()
+            #avoid for now to avoid issues
+            # #switching to breakpoint but only in non-parallel mode to avoid breaking everything
+            # #note that parallel may be a string if taken from a parfile
+            # if instance_run_code==1 and parallel==1:
+            #     breakpoint()
 
             if indiv_instances:
                 subprocess.call(['singularity', 'instance', 'stop', instance_name_indiv])
 
-            if instance_run_code ==1:
+            if instance_run_code==1:
                 raise ValueError('Breakpoint hit while running singularity instance')
 
             elif instance_run_code>1:
@@ -446,7 +448,7 @@ def linedet_loop_single(epoch_id,arg_dict):
             summary_lines=line_detect(epoch_id,arg_dict)
 
 
-def make_linedet_parfile(parallel,outdir,cont_model,autofit_model='lines_narrow',
+def make_linedet_parfile(parallel,outdir,cont_model='thcont_NICER',autofit_model='lines_narrow',
                         container='default',
                         satellite='multi',group_max_timedelta='day',
                         skip_started=True,catch_errors=True,
@@ -520,5 +522,5 @@ def make_linedet_script(startdir,cores,parfile_path,cpus=2,nodes=1,
     "\ncd "+startdir+"\n"+\
     "\npython $linedet_script -parfile '"+parfile_path+"'"
 
-    with open('./oar_script.sh','w+') as oar_file:
+    with open('./oar_script_'+parfile_path.split('/')[-1][:parfile_path.split('/')[-1].rfind('.')]+'.sh','w+') as oar_file:
         oar_file.write(script_str)

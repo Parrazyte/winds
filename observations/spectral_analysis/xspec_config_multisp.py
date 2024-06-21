@@ -4529,7 +4529,7 @@ class fitmod:
 
                     #unfreezing the parameter
                     try:
-                        AllModels(par_peg_ids[i_par_peg][0])(pegged_par_index).frozen=False
+                        AllModels(par_peg_ids[i_par_peg][0])(pegged_par_index%AllModels(1).nParameters).frozen=False
                     except:
                         breakpoint()
 

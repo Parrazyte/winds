@@ -690,7 +690,10 @@ def pdf_summary(epoch_files,arg_dict,fit_ok=False,summary_epoch=None,e_sat_low_l
                 try:
                     pdf.image(elem_obsid +'-global_flares_night.png',x=20,y=30,w=250)
                 except:
-                    pass
+                    try:
+                        pdf.image(elem_obsid + '-global_flares.png', x=20, y=30, w=250)
+                    except:
+                        pass
 
             #and adding the individual GTI's flare and lightcurves
             pdf.add_page()
@@ -717,11 +720,21 @@ def pdf_summary(epoch_files,arg_dict,fit_ok=False,summary_epoch=None,e_sat_low_l
 
             try:
                 pdf.image(elem_epoch + '_lc_3-10_bin_' + NICER_lc_binning + '.png', x=150, y=30, w=70)
+            except:
+                pass
+            try:
                 pdf.image(elem_epoch + '_hr_6-10_3-6_bin_' + NICER_lc_binning + '.png', x=220, y=30, w=70)
-
+            except:
+                try:
+                    pdf.image(elem_epoch + '_hr_3-10_bin_' + NICER_lc_binning + '.png', x=220, y=30, w=70)
+                except:
+                    pass
+            try:
                 pdf.image(elem_epoch + '_lc_3-6_bin_' + NICER_lc_binning + '.png', x=150, y=120, w=70)
+            except:
+                pass
+            try:
                 pdf.image(elem_epoch + '_lc_6-10_bin_' + NICER_lc_binning + '.png', x=220, y=120, w=70)
-
             except:
                 pass
 

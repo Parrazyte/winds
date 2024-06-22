@@ -86,6 +86,9 @@ def linedet_loop(epoch_list,arg_dict,arg_dict_path=None,parallel=1,heasoft_init_
     write_aborted_pdf=arg_dict['write_aborted_pdf']
     sat_glob=arg_dict['sat_glob']
     spread_str=arg_dict['spread_str']
+    catch_errors=arg_dict['catch_errors']
+    megumi_files=arg_dict['megumi_files']
+    summary_header = arg_dict['summary_header']
 
     if job_id=='default':
         job_id_use='_'.join(os.getcwd().split('/')[-4:]+[outdir,sat_glob,spread_str.replace('_over_','-')])
@@ -102,6 +105,8 @@ def linedet_loop(epoch_list,arg_dict,arg_dict_path=None,parallel=1,heasoft_init_
 
         print('Starting line detection for epoch\n')
         print(epoch_list[epoch_id])
+
+        epoch_files=epoch_list[epoch_id]
 
         io_log = open(outdir + '/'+epoch_list[epoch_id][0][:epoch_list[epoch_id][0].rfind('.')]+'_log_spawn.log', 'w+')
 
@@ -191,11 +196,42 @@ def linedet_loop(epoch_list,arg_dict,arg_dict_path=None,parallel=1,heasoft_init_
             if indiv_instances:
                 subprocess.call(['singularity', 'instance', 'stop', instance_name_indiv])
 
+            diag_message=''
+
             if instance_run_code==1:
-                raise ValueError('Breakpoint hit while running singularity instance')
+                if catch_errors:
+                    diag_message = 'Breakpoint hit while running singularity instance'
+                else:
+                    raise ValueError('Breakpoint hit while running singularity instance')
 
             elif instance_run_code>1:
-                raise ValueError('Error while running singularity instance')
+                if catch_errors:
+                    diag_message = 'Error while running singularity instance'
+                else:
+                    raise ValueError('Error while running singularity instance')
+
+
+            #if the console itself crashes, we have to log the bug for the epoch as for the normal linedet
+            if diag_message!='':
+                if sat_glob=='Suzaku' and megumi_files:
+                    epoch_files_suffix=np.unique([elem.split('_spec')[-1].split('_pin')[-1] for elem in epoch_files])
+                    epoch_files_suffix=epoch_files_suffix[::-1].tolist()
+                else:
+                    epoch_files_suffix=np.unique([elem.split('_sp')[-1]for elem in epoch_files]).tolist()
+
+                epoch_files_str=epoch_files_suffix
+
+                if sat_glob == 'Suzaku' and megumi_files:
+                    file_ids = [elem.split('_spec')[0].split('_src')[0] for elem in epoch_files]
+                else:
+                    file_ids = [elem.split('_sp')[0] for elem in epoch_files]
+
+                summary_content=str(shorten_epoch(file_ids))+'\t'+str(epoch_files_suffix)+'\t'+str(diag_message)
+
+                #adding it to the summary file
+                file_edit(outdir+'/'+'summary_line_det.log',
+                          str(shorten_epoch(file_ids))+'\t'+str(epoch_files_suffix),summary_content+'\n',summary_header)
+
 
     #### line detections for exposure with a spectrum
     if parallel==1:

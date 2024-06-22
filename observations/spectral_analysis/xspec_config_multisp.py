@@ -4531,6 +4531,18 @@ class fitmod:
                     try:
                         AllModels(par_peg_ids[i_par_peg][0])(pegged_par_index%AllModels(1).nParameters).frozen=False
                     except:
+                        print('THIS SHOULDNT HAPPEN')
+                        Xset.chatter=10
+                        AllModels.show()
+                        Xset.save('test_bp.xcm')
+
+                        save={"par_peg_ids":par_peg_ids,
+                              "i_par_peg":i_par_peg,
+                              "pegged_par_index":pegged_par_index,
+                              "mod1_npars":AllModels(1).nParameters}
+                        with open('bp_dump.dill','wb') as f:
+                            dill.dump(save,f)
+
                         breakpoint()
 
                     # #computing the parameter position in all groups values

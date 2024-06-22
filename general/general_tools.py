@@ -52,10 +52,14 @@ def shorten_epoch(file_ids_init):
     # obsids_list = [elem.split('-')[0] for elem in file_ids]
 
     #we split some weirder names, like bat files, to avoid splitting them incorrectly
-    obsids = np.unique([elem.split('-')[0] for elem in file_ids if 'survey_point' not in elem])
-    bat_survey_files=[elem for elem in file_ids if 'survey_point' in elem]
 
-    if len(bat_survey_files)==0:
+    bat_survey_files=[elem for elem in file_ids if 'survey_point' in elem or \
+                      (elem.startswith('BAT_') and elem.endswith('_mosaic.pha'))]
+
+    obsids = np.unique([elem.split('-')[0] for elem in file_ids if elem not in bat_survey_files])
+
+
+    if len(obsids)==0:
         # returning the obsids directly if there's no gtis in the obsids
         obsids_ravel = ''.join(file_ids)
         if '-' not in obsids_ravel:
@@ -68,6 +72,7 @@ def shorten_epoch(file_ids_init):
     epoch_str_list = []
     for elem_obsid in obsids:
 
+        #for bat individual survey points
         if 'survey_point' in elem_obsid:
 
             #computing how much of the pointings can be compacted
@@ -84,6 +89,11 @@ def shorten_epoch(file_ids_init):
 
                 #recognizing BAT_analysis point, and adding them accordingly
                 epoch_str_list+=[str_obsid]
+            continue
+
+        #for bat mosaics
+        elif elem_obsid.startswith('BAT_') and elem_obsid.endswith('_mosaic.pha'):
+            epoch_str_list += [elem_obsid.replace('.pha','').replace('_mosaic','')]
             continue
 
         str_gti_add = ''

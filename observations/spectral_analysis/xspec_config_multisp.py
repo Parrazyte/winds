@@ -4529,7 +4529,8 @@ class fitmod:
 
                     #unfreezing the parameter
                     try:
-                        AllModels(par_peg_ids[i_par_peg][0])(pegged_par_index%AllModels(1).nParameters).frozen=False
+                        AllModels(par_peg_ids[i_par_peg][0])\
+                            (max(pegged_par_index%AllModels(1).nParameters,1)).frozen=False
                     except:
                         print('THIS SHOULDNT HAPPEN')
                         Xset.chatter=10

@@ -4535,13 +4535,14 @@ class fitmod:
                         print('THIS SHOULDNT HAPPEN')
                         Xset.chatter=10
                         AllModels.show()
-                        Xset.save('test_bp.xcm')
+                        print('Saving to test_bp_'+str(time.time())+'.xcm')
+                        Xset.save('test_bp_'+str(time.time())+'.xcm')
 
                         save={"par_peg_ids":par_peg_ids,
                               "i_par_peg":i_par_peg,
                               "pegged_par_index":pegged_par_index,
                               "mod1_npars":AllModels(1).nParameters}
-                        with open('bp_dump.dill','wb') as f:
+                        with open('bp_dump_'+str(time.time())+'.dill','wb') as f:
                             dill.dump(save,f)
 
                         breakpoint()

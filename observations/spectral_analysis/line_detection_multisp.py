@@ -153,7 +153,7 @@ ap.add_argument('-container',help='path of the container to use',default='defaul
 
 ap.add_argument('-indiv_instances',help='make individual instances for each computation run',default=True,type=bool)
 #useful for debugging
-ap.add_argument('-force_instance',help='force instantiation even if parallel is set to 1',default=False,type=bool)
+ap.add_argument('-force_instance',help='force instantiation even if parallel is set to 1',default=True,type=bool)
 
 
 #parfile mode (empty string means not using this mode)
@@ -188,7 +188,7 @@ ap.add_argument("-prefix",nargs=1,help='restrict analysis to a specific prefix',
 
 ####output directory
 ap.add_argument("-outdir",nargs=1,help="name of output directory for line plots",
-                default="lineplots_opt_update",type=str)
+                default="lineplots_opt_cont",type=str)
 
 #overwrite
 #global overwrite based on recap PDF
@@ -744,6 +744,7 @@ if parfile!='':
     nfakes=int(param_arr[10][1])
     spread_comput=int(param_arr[11][1])
     indiv_instances=bool(param_arr[12][1])
+    skip_started_spread=bool(param_arr[13][1])
 
 '''utility functions'''
 

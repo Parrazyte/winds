@@ -490,7 +490,8 @@ def make_linedet_parfile(parallel,outdir,cont_model='thcont_NICER',autofit_model
                         skip_started=True,catch_errors=True,
                         multi_focus='NICER',nfakes=1000,
                         spread_comput=1,
-                        indiv_instances=True):
+                        indiv_instances=True,
+                        skip_started_spread=False):
 
     '''
     Inserts a parfile for a linedet computation
@@ -508,7 +509,8 @@ def make_linedet_parfile(parallel,outdir,cont_model='thcont_NICER',autofit_model
                 'multi_focus':multi_focus,
                 'nfakes':nfakes,
                 'spread_comput':spread_comput,
-                'indiv_instances':indiv_instances}
+                'indiv_instances':indiv_instances,
+                'skip_started_spread':skip_started_spread}
 
     parfile_name='./parfile'+'_outdir_'+outdir+'_satellite_'+satellite+'_cont_model_'+cont_model+'_parallel_'\
                  +str(parallel)+'.par'

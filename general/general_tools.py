@@ -56,7 +56,7 @@ def shorten_epoch(file_ids_init):
     bat_survey_files=[elem for elem in file_ids if 'survey_point' in elem or \
                       (elem.startswith('BAT_') and elem.endswith('_mosaic.pha'))]
 
-    obsids = np.unique([elem.split('-')[0] for elem in file_ids if elem not in bat_survey_files])
+    obsids = np.unique([(elem if 'heg_' in elem else elem.split('-')[0]) for elem in file_ids if elem not in bat_survey_files])
 
 
     if len(obsids)==0:
@@ -101,9 +101,12 @@ def shorten_epoch(file_ids_init):
         str_obsid = elem_obsid
 
         if '-' in ''.join([elem for elem in file_ids if elem.startswith(elem_obsid)]):
-            str_gti_add = '-' + '-'.join([elem.split('-')[1] for elem in file_ids if \
+            try:
+                str_gti_add = '-' + '-'.join([elem.split('-')[1] for elem in file_ids if \
                                           elem.startswith(elem_obsid)])
-
+            except:
+                breakpoint()
+                pass
         epoch_str_list += [str_obsid + str_gti_add]
 
     return epoch_str_list

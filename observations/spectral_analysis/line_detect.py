@@ -57,7 +57,8 @@ from linedet_utils import plot_line_comps,plot_line_search,plot_std_ener,coltour
                             plot_line_ratio
 
 #custom script with a some lines and fit utilities and variables
-from fitting_tools import c_light,lines_std_names,lines_e_dict,n_absline,range_absline,model_list
+from fitting_tools import c_light,lines_std_names,lines_e_dict,n_absline,range_absline,\
+                          model_list,line_e_ranges_fullarg,file_to_obs
 
 from general_tools import file_edit,ravel_ragged,shorten_epoch,expand_epoch,get_overlap,interval_extract
 
@@ -236,111 +237,15 @@ def line_detect(epoch_id,arg_dict):
     suzaku_pin_range=arg_dict['suzaku_pin_range']
     line_cont_ig_arg=arg_dict['line_cont_ig_arg']
 
-    def line_e_ranges(sat, det=None):
-        '''
-        Determines the energy range allowed, as well as the ignore energies for a given satellite
+    e_min_NuSTAR=arg_dict['e_min_NuSTAR']
+    e_max_XRT=arg_dict['e_max_XRT']
 
-        DO NOT USE INTS else it will be taken as channels instead of energies
-        ignore_bands are bands that will be ignored on top of the rest, in ALL bands
-        '''
-        ignore_bands = None
-
-        if sat == 'NuSTAR':
-            e_sat_low = 8. if (sat_glob == 'multi' and diff_bands_NuSTAR_NICER) else 4.
-            e_sat_high = 79.
-
-        if sat.upper()=='SWIFT':
-            if det is not None and det.upper()=='BAT':
-                e_sat_low=14.
-                e_sat_high=195.
-            else:
-                e_sat_low=0.3
-                e_sat_high=10.
-
-        if sat.upper() in ['XMM', 'NICER']:
-
-            if sat == 'NICER':
-                e_sat_low = 0.3 if (sat_glob == 'multi' and diff_bands_NuSTAR_NICER) else low_E_NICER
-            else:
-                e_sat_low = 0.3
-
-            if sat.upper() in ['XMM']:
-                if sat == 'XMM':
-                    e_sat_low = 2.
-
-                e_sat_high = 10.
-            else:
-                if sat == 'NICER':
-                    e_sat_high = 10.
-                else:
-                    e_sat_high = 10.
-
-        elif sat == 'Suzaku':
-
-            if det == None:
-                e_sat_low = 1.9
-                e_sat_high = 40.
-
-                ignore_bands = suzaku_xis_ignore
-            else:
-
-                assert det in ['PIN', 'XIS'], 'Detector argument necessary to choose energy ranges for Suzaku'
-
-                e_sat_low = suzaku_xis_range[0] if det == 'XIS' else suzaku_pin_range[0]
-                e_sat_high = suzaku_xis_range[1] if det == 'XIS' else suzaku_pin_range[1]
-
-                # note: we don't care about ignoring these with pin since pin doesn't go that low
-                ignore_bands = suzaku_xis_ignore
-
-        elif sat == 'Chandra':
-            e_sat_low = 1.5
-            e_sat_high = 10.
-
-        '''
-        computing the line ignore values, which we cap from the lower and upper bound of the global energy ranges to avoid issues 
-        we also avoid getting upper bounds lower than the lower bounds because xspec reads it in reverse and still ignores the band you want to keep
-        ####should eventually be expanded to include the energies of each band as for the lower bound they are higher and we could have the opposite issue with re-noticing low energies
-        '''
-
-        line_cont_ig = ''
-
-        if line_cont_ig_arg == 'iron':
-
-            if sat in ['XMM', 'Chandra', 'NICER', 'Swift', 'SWIFT', 'Suzaku', 'NuSTAR']:
-
-
-                if e_sat_low > 6:
-                    # not ignoring this band for high-E only e.g. high-E only NuSTAR, BAT, INTEGRAL spectra
-                    pass
-                else:
-                    if e_sat_high > 6.5:
-
-                        line_cont_ig += '6.5-' + str(min(7.1, e_sat_high))
-
-                        if e_sat_high > 7.7:
-                            line_cont_ig += ',7.7-' + str(min(8.3, e_sat_high))
-                    else:
-                        # failsafe in case the e_sat_high is too low, we ignore the very first channel of the spectrum
-                        # which will be ignored anyway
-                        line_cont_ig = str(1)
-
-            else:
-                line_cont_ig = '6.-8.'
-
-        return e_sat_low, e_sat_high, ignore_bands, line_cont_ig
-
-
-    def file_to_obs(file, sat):
-        if sat == 'Suzaku':
-            if megumi_files:
-                return file.split('_src')[0].split('_gti')[0]
-        elif sat in ['XMM', 'NuSTAR']:
-            return file.split('_sp')[0]
-        elif sat in ['Chandra', 'Swift', 'SWIFT']:
-            return file.split('_grp_opt')[0]
-        elif sat in ['NICER']:
-            return file.split('_sp_grp_opt')[0]
-
+    def line_e_ranges(sat,det=None):
+        return line_e_ranges_fullarg(sat,sat_glob,
+                                     diff_bands_NuSTAR_NICER,low_E_NICER,line_cont_ig_arg,
+                                    suzaku_xis_ignore,suzaku_pin_range,suzaku_xis_range,
+                                     e_min_NuSTAR=e_min_NuSTAR,e_max_XRT=e_max_XRT,
+                                    det=det)
     def html_table_maker():
 
         def strmaker(value_arr, is_overlap=False):
@@ -503,6 +408,10 @@ def line_detect(epoch_id,arg_dict):
     # defining the standard number of fit iterations
     Fit.nIterations = 100
 
+    #for testing
+    # time.sleep(30)
+    # raise ValueError
+
     Fit.query = xspec_query
 
     # deprecated
@@ -515,7 +424,7 @@ def line_detect(epoch_id,arg_dict):
     epoch_dets = []
 
     # skipping observation if asked
-    if sat_glob == 'Chandra' and skip_nongrating and not obs_grating:
+    if sat_glob.upper() == 'CHANDRA' and skip_nongrating and not obs_grating:
         return None
 
     # useful for later
@@ -529,7 +438,8 @@ def line_detect(epoch_id,arg_dict):
             # note that we replace the megumi xis0_xis3 files by the xis1 because the merged xis0_xis3 have no header
             # we also replace SUZAKU in caps by Suzaku to have a better time matching strings
             sat_indiv_init[id_epoch] = fits.open(elem_file.replace('xis0_xis3', 'xis1'))[1].header['TELESCOP'] \
-                .replace('SUZAKU', 'Suzaku')
+            .replace('SUZAKU', 'Suzaku')
+
     else:
         sat_indiv_init = np.repeat([sat_glob], len(epoch_files))
 
@@ -595,10 +505,10 @@ def line_detect(epoch_id,arg_dict):
             line_cont_ig_indiv_init[id_epoch] = line_e_ranges(sat_indiv_init[id_epoch], epoch_dets[id_epoch])
 
     if sat_glob == 'multi':
-        epoch_observ = [file_to_obs(elem_file, elem_telescope) for elem_file, elem_telescope in \
+        epoch_observ = [file_to_obs(elem_file, elem_telescope,megumi_files) for elem_file, elem_telescope in \
                         zip(epoch_files, sat_indiv_init)]
     else:
-        epoch_observ = [file_to_obs(elem_file, sat_glob) for elem_file in epoch_files]
+        epoch_observ = [file_to_obs(elem_file, sat_glob,megumi_files) for elem_file in epoch_files]
 
     Xset.logChatter = 10
 
@@ -682,6 +592,10 @@ def line_detect(epoch_id,arg_dict):
                 continue
             else:
                 Plot_screen("ldata", outdir + '/' + epoch_observ[i_sp] + "_screen_xspec_spectrum")
+
+                if os.path.isfile(outdir + '/' + epoch_observ[0] + "_screen_xspec_spectrum_loader.xcm"):
+                    os.remove(outdir + '/' + epoch_observ[0] + "_screen_xspec_spectrum_loader.xcm")
+                Xset.save(outdir + '/' + epoch_observ[0] + "_screen_xspec_spectrum_loader.xcm")
             AllData.notice('all')
 
             '''Various Checks'''
@@ -780,9 +694,6 @@ def line_detect(epoch_id,arg_dict):
             line_cont_ig_indiv += [line_cont_ig_indiv_init[i_sp]]
             epoch_dets_good += [epoch_dets[i_sp]]
 
-        # testing if all spectra have been taken off
-        if len(epoch_files_good) == 0:
-            return epoch_result
 
     epoch_files_good = np.array(epoch_files_good)
     sat_indiv_good = np.array(sat_indiv_good)
@@ -792,6 +703,12 @@ def line_detect(epoch_id,arg_dict):
     line_cont_ig_indiv = np.array(line_cont_ig_indiv)
     epoch_dets_good = np.array(epoch_dets_good)
 
+    if len(epoch_files_good)==0:
+        print_xlog('\nNo spectra remaining after pile-up tests.')
+        return epoch_result
+    elif min(e_sat_low_indiv)>line_cont_range[1]:
+        print_xlog('\nNo soft spectra remaining after pile-up tests.')
+        return epoch_result
     '''
     Data load
     '''
@@ -806,7 +723,7 @@ def line_detect(epoch_id,arg_dict):
 
         if elem_sat == 'XMM':
             data_load_str += ' ' + elem_sp.replace('.ds', '_bgtested.ds') + ' '
-        if elem_sat == 'Chandra':
+        if elem_sat.upper() == 'CHANDRA':
             if 'heg_1' in elem_sp and restrict_order:
                 data_load_str = data_load_str[:-len(index_str)]
                 continue
@@ -818,9 +735,10 @@ def line_detect(epoch_id,arg_dict):
 
     # updating individual spectra bg, rmf arf if needed
     scorpeon_list_indiv = np.repeat(None, len(epoch_files_good))
+
     for i_sp, (elem_sp, elem_sat,elem_det) in enumerate(zip(epoch_files_good, sat_indiv_good,epoch_dets_good)):
 
-        if elem_sat == 'Chandra':
+        if elem_sat.upper() == 'CHANDRA':
             if 'heg_1' in elem_sp and restrict_order:
                 continue
             AllData(i_sp + 1).response.arf = elem_sp.replace('_grp_opt.pha', '.arf')
@@ -831,15 +749,18 @@ def line_detect(epoch_id,arg_dict):
                 # note that here we assume that all files have a valid scorpeon background
                 scorpeon_list_indiv[i_sp] = elem_sp.replace('_sp_grp_opt.pha', '_bg.py')
         if elem_sat in ['Swift', 'SWIFT'] and elem_det!='BAT':
-            AllData(i_sp + 1).response.arf = epoch_observ[0].replace('source', '') + '.arf'
-            AllData(i_sp + 1).background = epoch_observ[0].replace('source', '') + ('back.pi')
+            AllData(i_sp + 1).response.arf = elem_sp.split('source')[0] + '.arf'
+            AllData(i_sp + 1).background = elem_sp.split('source')[0] + 'back.pi'
 
     if 'NICER' in sat_indiv_good:
         xscorpeon.load(scorpeon_list_indiv, frozen=True)
 
     '''resetting the energy bands if needed'''
     if not force_ener_bounds:
-        hid_cont_range[1] = max(e_sat_high_indiv)
+        try:
+            hid_cont_range[1] = max(e_sat_high_indiv)
+        except:
+            breakpoint()
 
         # here we just test for the snr and create the line searc hspace, this will re-adjusted esat_high later
         line_cont_range[1] = min(np.array(line_cont_range_arg.split(' ')).astype(float)[1], max(e_sat_high_indiv))
@@ -875,6 +796,9 @@ def line_detect(epoch_id,arg_dict):
     ignore_data_indiv(e_sat_low_indiv, e_sat_high_indiv)
 
     Plot_screen("ldata", outdir + '/' + epoch_observ[0] + "_screen_xspec_spectrum")
+    if os.path.isfile(outdir + '/' + epoch_observ[0] + "_screen_xspec_spectrum_loader.xcm"):
+        os.remove(outdir + '/' + epoch_observ[0] + "_screen_xspec_spectrum_loader.xcm")
+    Xset.save(outdir + '/' + epoch_observ[0] + "_screen_xspec_spectrum_loader.xcm")
 
     '''
     Testing the amount of raw source counts in the line detection range for all datagroups combined
@@ -2183,7 +2107,7 @@ def line_detect(epoch_id,arg_dict):
             Plot_screen("ldata,ratio,delchi", outdir + '/' + epoch_observ[0] + "_screen_xspec_autofit",
                         includedlist=fitlines.includedlist)
 
-            if 'Chandra' in sat_indiv_good:
+            if 'CHANDRA' in [elem.upper() for elem in sat_indiv_good]:
                 # plotting a zoomed version for HETG spectra
                 AllData.ignore('**-6.5 ' + str(float(min(9, max(e_sat_high_indiv)))) + '-**')
 

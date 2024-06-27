@@ -1042,7 +1042,7 @@ def line_detect(epoch_id,arg_dict):
         return fill_result('Line detection complete.')
 
     # creating the continuum model list
-    comp_cont = model_list(cont_model)
+    comp_cont = model_list(cont_model,sat_list=sat_indiv_good)
 
     # taking off the constant factor if there's only one data group
     if AllData.nGroups == 1:

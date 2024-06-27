@@ -435,6 +435,7 @@ def linedet_loop_single(epoch_id,arg_dict):
                 log_text=open(outdir+'/'+epoch_files[0].split('_sp')[0]+'_terminal_log.log')
 
             if catch_errors:
+                print("catching errors")
                 try:
                     #main function
                     summary_lines=line_detect(epoch_id,arg_dict)

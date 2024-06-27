@@ -158,7 +158,7 @@ ap.add_argument('-force_instance',help='force instantiation even if parallel is 
 
 #parfile mode (empty string means not using this mode)
 ap.add_argument('-parfile',nargs=1,help="parfile to use instead of standard sets of arguments",
-                default='',
+                default='parfile_calc_2.par',
                 type=str)
 
 '''GENERAL OPTIONS'''
@@ -759,13 +759,13 @@ if parfile!='':
     container=param_arr[4][1]
     satellite=param_arr[5][1]
     groum_max_timedelta=param_arr[6][1]
-    skip_started=bool(param_arr[7][1])
-    catch_errors=bool(param_arr[8][1])
+    skip_started=literal_eval(param_arr[7][1])
+    catch_errors=literal_eval(param_arr[8][1])
     multi_focus=param_arr[9][1]
     nfakes=int(param_arr[10][1])
     spread_comput=int(param_arr[11][1])
-    indiv_instances=bool(param_arr[12][1])
-    skip_started_spread=bool(param_arr[13][1])
+    indiv_instances=literal_eval(param_arr[12][1])
+    skip_started_spread=literal_eval(param_arr[13][1])
     multi_restrict_combi=param_arr[14][1]
     multi_forbid_combi=param_arr[15][1]
     force_instance=param_arr[16][1]

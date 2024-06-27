@@ -47,7 +47,7 @@ import dill
 
 from matplotlib.gridspec import GridSpec
 
-if 'xspec_models_dirs' in os.environ:
+if 'xspec_models_dir' in os.environ:
     #example '/home/parrama/Soft/Xspec/Models'
     model_dir=os.environ['xspec_models_dir']
 else:
@@ -2249,9 +2249,14 @@ def addcomp(compname,position='last',endmult=None,return_pos=False,modclass=AllM
                     #testing if the spectrum has an extraction region part in its fits
                     if len(hdul)>=4 and 'REG' in hdul[3].name:
 
+                        print('region info detected in '+group_sp[i_grp-1])
+
                         #if yes, we fix the extraction radius to the one in the file using the infos stored
                         first_reg_lastrad=hdul[3].data.R[0][-1]
                         pix_to_arcsec=abs(hdul[3].columns['X'].coord_inc*3600)
+
+                        print('freezing Rext of group '+str(i_grp)+' at')
+                        print(str(round(first_reg_lastrad*pix_to_arcsec)))
                         AllModels(i_grp)(gap_end-1).values=round(first_reg_lastrad*pix_to_arcsec)
 
             #fixing the position if an object is specified

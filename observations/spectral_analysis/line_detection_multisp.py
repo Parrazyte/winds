@@ -158,7 +158,7 @@ ap.add_argument('-force_instance',help='force instantiation even if parallel is 
 
 #parfile mode (empty string means not using this mode)
 ap.add_argument('-parfile',nargs=1,help="parfile to use instead of standard sets of arguments",
-                default='parfile_calc_2.par',
+                default='',
                 type=str)
 
 '''GENERAL OPTIONS'''
@@ -188,7 +188,7 @@ ap.add_argument("-prefix",nargs=1,help='restrict analysis to a specific prefix',
 
 ####output directory
 ap.add_argument("-outdir",nargs=1,help="name of output directory for line plots",
-                default="lineplots_opt_update",type=str)
+                default="lineplots_opt_tests",type=str)
 
 #overwrite
 #global overwrite based on recap PDF
@@ -295,12 +295,12 @@ ap.add_argument('-force_epochs',nargs=1,help='force epochs to given set of spect
 
 force_epochs_str=\
 '''
-['5665010401-002M003_sp_grp_opt.pha'];
+['409007010_xis1_gti_event_spec_src_grp_opt.pha', '409007010_xis0_xis3_gti_event_spec_src_grp_opt.pha', 'nu90002004002A01_sp_src_grp_opt.pha', 'nu90002004002B01_sp_src_grp_opt.pha', 'BAT_2015-02-20_mosaic.pha'];
 '''
 force_epochs_str_list=[literal_eval(elem.replace('\n','')) for elem in force_epochs_str.split(';')[:-1]]
 
 #should be a path with syntax similar to epoch_list.txt, or an empty string to not be activated
-ap.add_argument('-force_epochs_file',nargs=1,help="force epochs from file",default='epoch_pdf.txt',type=str)
+ap.add_argument('-force_epochs_file',nargs=1,help="force epochs from file",default='',type=str)
 
 ap.add_argument('-force_epochs_list',nargs=1,help='force epochs list',default=force_epochs_str_list)
 
@@ -445,7 +445,7 @@ ap.add_argument('-plot_epoch_overlap',nargs=1,help='plot overlap between differe
 #useful to center epoch matching on a specific instrument
 #off value is 'False'
 ap.add_argument('-multi_focus',nargs=1,help='restricts epoch matching to having a specific telescope',
-                default='False',type=str)
+                default='Suzaku',type=str)
 
 #off value is 'False'. ex: "NICER+NuSTAR"
 ap.add_argument('-multi_restrict_combi',nargs=1,help='restrict multi epochs to a specific satellite combination',
@@ -477,7 +477,7 @@ ap.add_argument('-single_obsid_NuSTAR',nargs=1,
 ap.add_argument('-diff_bands_NuSTAR_NICER',nargs=1,help='different energy bounds for multi NuSTAR/NICER combinations',
                 default=True,type=bool)
 
-ap.add_argument('-e_min_NuSTAR',nargs=1,help='minimum energy for NuSTAR in multi mode only',default=4.,type=float)
+ap.add_argument('-e_min_NuSTAR',nargs=1,help='minimum energy for NuSTAR in multi mode only',default=8.,type=float)
 ap.add_argument('-e_max_XRT',nargs=1,help='maximum energy for Swift-XRT in multi mode only',default=4.,type=float)
 
 ap.add_argument('-force_nosplit_fit_multi',nargs=1,help='force no split fit for multi satellites',default=False)
@@ -974,7 +974,7 @@ for i_file,elem_file in enumerate(spfile_list):
 
     #for Suzaku this won't work for meugmi's xis0_xis3 files bc their header has been replaced
     # so we replace them by the xis1 to be able to load the exposure
-    elem_file_load=elem_file.replace('xis0_xis3','xis1')
+    elem_file_load=elem_file.replace('xis0_xis3','xis1').replace('xis0_xis2_xis3','xis1')
 
     try:
         fits.open(elem_file_load)
@@ -1142,6 +1142,10 @@ with tqdm(total=len(tstart_list)) as pbar:
 
 epoch_list=[spfile_list[elem] for elem in epoch_id_list]
 
+#reordering to have the xis1 (back illuminated CCD) first and xis0_xis2_xis3 (front illuminated CCDs) second
+epoch_list=[[subelem for subelem in elem if 'xis1_' in subelem]+\
+            [subelem for subelem in elem if 'xis0_' in subelem]+\
+            [subelem for subelem in elem if 'xis0_' not in subelem and 'xis1_' not in subelem] for elem in epoch_list]
 #reordering the satellites to have BAT last
 epoch_list=[[subelem for subelem in elem if 'BAT_' not in subelem]+\
             [subelem for subelem in elem if 'BAT_' in subelem] for elem in epoch_list]

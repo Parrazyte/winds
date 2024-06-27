@@ -1782,9 +1782,10 @@ def line_detect(epoch_id,arg_dict):
         data_broad_deload = deepcopy(data_broad)
         data_broad_deload.default = data_broad_deload.default[mask_nodeload]
 
-        #note always defined at least as a list of nones even if no scorpeon model exists, so can be masked
-        data_broad_deload.scorpeon.nxb_save_list = np.array(data_broad_deload.scorpeon.nxb_save_list)[mask_nodeload]
-        data_broad_deload.scorpeon.sky_save_list = np.array(data_broad_deload.scorpeon.sky_save_list)[mask_nodeload]
+        if data_broad_deload.scorpeon is not None:
+            #note always defined at least as a list of nones even if no scorpeon model exists, so can be masked
+            data_broad_deload.scorpeon.nxb_save_list = np.array(data_broad_deload.scorpeon.nxb_save_list)[mask_nodeload]
+            data_broad_deload.scorpeon.sky_save_list = np.array(data_broad_deload.scorpeon.sky_save_list)[mask_nodeload]
 
         scorpeon_deload=data_broad_deload.scorpeon
 
@@ -2078,8 +2079,10 @@ def line_detect(epoch_id,arg_dict):
                 # restoring the rest of the datagroups because reloading a different number of datagroup
                 # resets the links of all but the first DGs
                 mod_pre_autofit.default = mod_pre_autofit.default[mask_nodeload]
-                mod_pre_autofit.scorpeon.nxb_save_list=np.array(mod_pre_autofit.scorpeon.nxb_save_list)[mask_nodeload]
-                mod_pre_autofit.scorpeon.sky_save_list=np.array(mod_pre_autofit.scorpeon.sky_save_list)[mask_nodeload]
+
+                if mod_pre_autofit.scorpeon is not None:
+                    mod_pre_autofit.scorpeon.nxb_save_list=np.array(mod_pre_autofit.scorpeon.nxb_save_list)[mask_nodeload]
+                    mod_pre_autofit.scorpeon.sky_save_list=np.array(mod_pre_autofit.scorpeon.sky_save_list)[mask_nodeload]
 
                 # note that more things would need to be done for NICER/Suzaku and
                 # some things might not work with NuSTAR edge's links but let's see

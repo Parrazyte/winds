@@ -2136,7 +2136,7 @@ def addcomp(compname,position='last',endmult=None,return_pos=False,modclass=AllM
 
                 AllModels(i_grp)(gap_start+1).link=''
                 AllModels(i_grp)(gap_start+1).frozen=False
-                AllModels(i_grp)(gap_start + 1).values = [1] + [0.01, 0.85,0.85,1.15,1.15]
+                AllModels(i_grp)(gap_start + 1).values = [1] + [0.01, 0.7,0.7,1.3,1.3]
             if i_grp!=AllData.nGroups:
                 return_pars+=[gap_start+AllModels(1).nParameters*i_grp,gap_start+1+AllModels(gap_start).nParameters*i_grp]
 

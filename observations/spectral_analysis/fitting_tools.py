@@ -168,7 +168,7 @@ def ang2kev(x):
 
     return 12.398/x
 
-def model_list(model_id='lines',give_groups=False,sat_list=None):
+def model_list(model_id='lines',give_groups=False,sat_list=[]):
     
     '''
     wrapper for the fitmod class with a bunch of models

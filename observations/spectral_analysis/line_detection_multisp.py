@@ -158,7 +158,7 @@ ap.add_argument('-force_instance',help='force instantiation even if parallel is 
 
 #parfile mode (empty string means not using this mode)
 ap.add_argument('-parfile',nargs=1,help="parfile to use instead of standard sets of arguments",
-                default='parfile_calc_2.par',
+                default='',
                 type=str)
 
 '''GENERAL OPTIONS'''
@@ -768,6 +768,7 @@ if parfile!='':
     skip_started_spread=bool(param_arr[13][1])
     multi_restrict_combi=param_arr[14][1]
     multi_forbid_combi=param_arr[15][1]
+    force_instance=param_arr[16][1]
 
 '''utility functions'''
 

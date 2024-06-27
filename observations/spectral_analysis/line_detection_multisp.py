@@ -158,7 +158,7 @@ ap.add_argument('-force_instance',help='force instantiation even if parallel is 
 
 #parfile mode (empty string means not using this mode)
 ap.add_argument('-parfile',nargs=1,help="parfile to use instead of standard sets of arguments",
-                default='',
+                default='parfile_calc_2.par',
                 type=str)
 
 '''GENERAL OPTIONS'''
@@ -443,9 +443,9 @@ ap.add_argument('-plot_epoch_overlap',nargs=1,help='plot overlap between differe
 
 #in this case other epochs from other instruments are matched against the obs of this one
 #useful to center epoch matching on a specific instrument
-#off value is False
+#off value is 'False'
 ap.add_argument('-multi_focus',nargs=1,help='restricts epoch matching to having a specific telescope',
-                default=False,type=str)
+                default='False',type=str)
 
 #off value is 'False'. ex: "NICER+NuSTAR"
 ap.add_argument('-multi_restrict_combi',nargs=1,help='restrict multi epochs to a specific satellite combination',
@@ -1041,7 +1041,7 @@ tstop_list = tstop_list[file_ok_ids]
 det_list = det_list[file_ok_ids]
 
 if sat_glob=='multi':
-    if multi_focus!=False:
+    if multi_focus!='False':
         #restricting the match epochs to a specific satellite
         mask_multi_focus=[elem==multi_focus for elem in det_list[file_ok_ids]]
     else:

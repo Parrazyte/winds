@@ -497,7 +497,8 @@ def make_linedet_parfile(parallel,outdir,cont_model='thcont_var',autofit_model='
                         skip_started_spread=False,
                         multi_restrict_combi=False,
                         multi_forbid_combi='SWIFT',
-                        force_instance=True):
+                        force_instance=True,
+                         e_min_NuSTAR=8.):
 
     '''
     Inserts a parfile for a linedet computation
@@ -519,7 +520,8 @@ def make_linedet_parfile(parallel,outdir,cont_model='thcont_var',autofit_model='
                 'skip_started_spread':skip_started_spread,
                 'multi_restrict_combi':multi_restrict_combi,
                 'multi_forbid_combi':multi_forbid_combi,
-                'force_instance':force_instance}
+                'force_instance':force_instance,
+                'e_min_NuSTAR':e_min_NuSTAR}
 
     parfile_name='./parfile'+'_outdir_'+outdir+'_satellite_'+satellite+'_cont_model_'+cont_model+'_parallel_'\
                  +str(parallel)+'.par'

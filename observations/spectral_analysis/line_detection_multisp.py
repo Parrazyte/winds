@@ -769,6 +769,7 @@ if parfile!='':
     multi_restrict_combi=param_arr[14][1]
     multi_forbid_combi=param_arr[15][1]
     force_instance=param_arr[16][1]
+    e_min_NuSTAR=float(param_arr[17][1])
 
 '''utility functions'''
 

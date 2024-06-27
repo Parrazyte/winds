@@ -73,7 +73,8 @@ def pdf_summary(epoch_files,arg_dict,fit_ok=False,summary_epoch=None,e_sat_low_l
             # fetching the instrument of the individual element
             # note that we replace the megumi xis0_xis3 files by the xis1 because the merged xis0_xis3 have no header
             #we also replace SUZAKU in caps by Suzaku to have a better time matching strings
-            sat_indiv[id_epoch] = fits.open(elem_file.replace('xis0_xis3','xis1'))[1].header['TELESCOP']\
+            sat_indiv[id_epoch] = fits.open(elem_file.replace('xis0_xis3', 'xis1').\
+                                                 replace('xis0_xis2_xis3','xis1'))[1].header['TELESCOP']\
                 .replace('SUZAKU','Suzaku')
             e_sat_low_indiv[id_epoch], e_sat_high_indiv[id_epoch], temp,line_cont_ig_indiv[id_epoch], = \
                 line_e_ranges(sat_indiv[id_epoch])

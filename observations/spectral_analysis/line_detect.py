@@ -437,7 +437,8 @@ def line_detect(epoch_id,arg_dict):
             # fetching the instrument of the individual element
             # note that we replace the megumi xis0_xis3 files by the xis1 because the merged xis0_xis3 have no header
             # we also replace SUZAKU in caps by Suzaku to have a better time matching strings
-            sat_indiv_init[id_epoch] = fits.open(elem_file.replace('xis0_xis3', 'xis1'))[1].header['TELESCOP'] \
+            sat_indiv_init[id_epoch] = fits.open(elem_file.replace('xis0_xis3', 'xis1').\
+                                                 replace('xis0_xis2_xis3','xis1'))[1].header['TELESCOP'] \
             .replace('SUZAKU', 'Suzaku')
 
     else:

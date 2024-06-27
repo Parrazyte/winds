@@ -307,6 +307,7 @@ def linedet_loop(epoch_list,arg_dict,arg_dict_path=None,parallel=1,heasoft_init_
     elif sat_glob=='multi':
         aborted_files=[]
         aborted_epochs=[]
+        print('Finished')
         breakpoint()
 
     arg_dict['glob_summary_linedet']=glob_summary_linedet
@@ -484,14 +485,16 @@ def linedet_loop_single(epoch_id,arg_dict):
             summary_lines=line_detect(epoch_id,arg_dict)
 
 
-def make_linedet_parfile(parallel,outdir,cont_model='thcont_NICER',autofit_model='lines_narrow',
+def make_linedet_parfile(parallel,outdir,cont_model='thcont_var',autofit_model='lines_narrow',
                         container='default',
                         satellite='multi',group_max_timedelta='day',
                         skip_started=True,catch_errors=True,
                         multi_focus='NICER',nfakes=1000,
                         spread_comput=1,
                         indiv_instances=True,
-                        skip_started_spread=False):
+                        skip_started_spread=False,
+                        multi_restrict_combi=False,
+                        multi_forbid_combi='SWIFT'):
 
     '''
     Inserts a parfile for a linedet computation
@@ -510,7 +513,9 @@ def make_linedet_parfile(parallel,outdir,cont_model='thcont_NICER',autofit_model
                 'nfakes':nfakes,
                 'spread_comput':spread_comput,
                 'indiv_instances':indiv_instances,
-                'skip_started_spread':skip_started_spread}
+                'skip_started_spread':skip_started_spread,
+                'multi_restrict_combi':multi_restrict_combi,
+                'multi_forbid_combi':multi_forbid_combi}
 
     parfile_name='./parfile'+'_outdir_'+outdir+'_satellite_'+satellite+'_cont_model_'+cont_model+'_parallel_'\
                  +str(parallel)+'.par'

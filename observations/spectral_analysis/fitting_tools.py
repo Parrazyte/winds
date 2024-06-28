@@ -440,6 +440,8 @@ def line_e_ranges_fullarg(sat,sat_glob,diff_bands_NuSTAR_NICER,low_E_NICER,line_
 
     DO NOT USE INTS else it will be taken as channels instead of energies
     ignore_bands are bands that will be ignored on top of the rest, in ALL bands
+
+
     '''
     ignore_bands = None
 
@@ -507,7 +509,7 @@ def line_e_ranges_fullarg(sat,sat_glob,diff_bands_NuSTAR_NICER,low_E_NICER,line_
 
     if line_cont_ig_arg == 'iron':
 
-        if sat.upper() in ['XMM', 'CHANDRA', 'NICER', 'SWIFT', 'SUZAKU', 'NUSTAR']:
+        if sat.upper() in ['XMM', 'CHANDRA', 'NICER', 'SWIFT', 'SUZAKU', 'NUSTAR','INTEGRAL']:
 
 
             if e_sat_low > 6:
@@ -521,9 +523,8 @@ def line_e_ranges_fullarg(sat,sat_glob,diff_bands_NuSTAR_NICER,low_E_NICER,line_
                     if e_sat_high > 7.7:
                         line_cont_ig += ',7.7-' + str(min(8.3, e_sat_high))
                 else:
-                    # failsafe in case the e_sat_high is too low, we ignore the very first channel of the spectrum
-                    # which will be ignored anyway
-                    line_cont_ig = str(1)
+                    #an empty string will work with xspec but cause issues so better put a None (which will crash)
+                    line_cont_ig = None
 
         else:
             line_cont_ig = '6.-8.'

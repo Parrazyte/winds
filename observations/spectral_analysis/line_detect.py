@@ -51,7 +51,8 @@ from xspec import AllChains
 #custom script with a few shorter xspec commands
 from xspec_config_multisp import allmodel_data,model_load,addcomp,Pset,Pnull,rescale,reset,Plot_screen,store_plot,freeze,allfreeze,unfreeze,\
                          calc_error,delcomp,fitmod,calc_fit,xcolors_grp,xPlot,xscorpeon,catch_model_str,\
-                         load_fitmod, ignore_data_indiv,par_degroup,xspec_globcomps,store_fit
+                         load_fitmod, ignore_data_indiv,par_degroup,xspec_globcomps,store_fit,\
+                         ignore_indiv_ig,notice_indiv_ig
 
 from linedet_utils import plot_line_comps,plot_line_search,plot_std_ener,coltour_chi2map,narrow_line_search,\
                             plot_line_ratio
@@ -1219,13 +1220,8 @@ def line_detect(epoch_id,arg_dict):
 
         spflux_single = np.array(spflux_single).T
 
-        for i_sp in range(len(epoch_files_good)):
-            if line_cont_ig_indiv[i_sp] != '':
-                try:
-                    AllData(i_sp + 1).notice(line_cont_ig_indiv[i_sp])
-                except:
-                    breakpoint()
-                    pass
+        #indiv ignoring with check for empty ignores
+        ignore_indiv_ig(line_cont_ig_indiv)
 
         curr_store_fit(mode='broadhid' + add_str, fitmod=fitmodel)
 
@@ -1480,9 +1476,11 @@ def line_detect(epoch_id,arg_dict):
 
             # if the stat is low we don't do the autofit anyway so we'd rather get the best fit possible
             if not flag_lowSNR_line:
-                for i_grp in range(len(epoch_files_good[mask_nodeload])):
-                    # ignoring the line_cont_ig energy range for the fit to avoid contamination by lines
-                    AllData(i_grp + 1).ignore(line_cont_ig_indiv[i_grp])
+
+                # indiv ignoring with check for empty ignores
+                # ignoring the line_cont_ig energy range for the fit to avoid contamination by lines
+                ignore_indiv_ig(line_cont_ig_indiv[mask_nodeload])
+
 
             # comparing different continuum possibilities with a broken powerlaw or a combination of diskbb and powerlaw
 
@@ -1557,9 +1555,8 @@ def line_detect(epoch_id,arg_dict):
             # note: for now this is fine but might need to be udpated later with telescopes with global ignore bands
             # matching part of this
 
-            for i_sp in range(len(epoch_files_good[mask_nodeload])):
-                if line_cont_ig_indiv[i_sp] != '':
-                    AllData(i_sp + 1).notice(line_cont_ig_indiv[i_sp])
+            # indiv noticing with check for empty ignores
+            notice_indiv_ig(line_cont_ig_indiv[mask_nodeload])
 
             # saving the model data to reload it after the broad band fit if needed
             mod_high_dat = allmodel_data()
@@ -1597,9 +1594,9 @@ def line_detect(epoch_id,arg_dict):
 
             # if the stat is low we don't do the autofit anyway so we'd rather get the best fit possible
             if not flag_lowSNR_line:
-                for i_sp in range(len(epoch_files_good)):
-                    if line_cont_ig_indiv[i_sp] != '':
-                        AllData(i_sp + 1).ignore(line_cont_ig_indiv[i_sp])
+                # indiv ignoring with check for empty ignores
+                # ignoring the line_cont_ig energy range for the fit to avoid contamination by lines
+                ignore_indiv_ig(line_cont_ig_indiv)
 
             # forcing an absorption value if asked to
             if sat_glob == 'NuSTAR' and freeze_nH:
@@ -1675,9 +1672,8 @@ def line_detect(epoch_id,arg_dict):
                 broad_absval = 0
                 broad_abscomp = ''
 
-            for i_sp in range(len(epoch_files_good)):
-                if line_cont_ig_indiv[i_sp] != '':
-                    AllData(i_sp + 1).notice(line_cont_ig_indiv[i_sp])
+            # indiv notice with check for empty ignores
+            notice_indiv_ig(line_cont_ig_indiv)
 
             curr_store_fit(mode='broadband', fitmod=fitcont_broad)
 
@@ -1688,9 +1684,8 @@ def line_detect(epoch_id,arg_dict):
             data_broad = allmodel_data()
             print_xlog('\nComputing HID broad fit...')
 
-            for i_sp in range(len(epoch_files_good)):
-                if line_cont_ig_indiv[i_sp] != '':
-                    AllData(i_sp + 1).ignore(line_cont_ig_indiv[i_sp])
+            # indiv ignoring with check for empty ignores
+            ignore_indiv_ig(line_cont_ig_indiv)
 
             if broad_HID_mode:
                 fitcont_hid = fitcont_broad
@@ -1707,9 +1702,8 @@ def line_detect(epoch_id,arg_dict):
 
                 # if the stat is low we don't do the autofit anyway so we'd rather get the best fit possible
                 if not flag_lowSNR_line:
-                    for i_sp in range(len(epoch_files_good)):
-                        if line_cont_ig_indiv[i_sp] != '':
-                            AllData(i_sp + 1).ignore(line_cont_ig_indiv[i_sp])
+                    # indiv ignoring with check for empty ignores
+                    ignore_indiv_ig(line_cont_ig_indiv)
 
                 # creating the automatic fit class for the standard continuum
                 # (without absorption if it didn't get included)

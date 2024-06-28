@@ -165,6 +165,27 @@ def ignore_data_indiv(e_low_groups,e_high_groups,reset=False,sat_low_groups=None
     else:
         Plot.xLog=False
 
+def ignore_indiv_ig(line_cont_ig_indiv):
+    '''
+    Wrapper around a list of line_cont_ig to avoid future mistakes forgetting to not ignore empty ignores
+    '''
+
+
+    for i_sp in range(AllData.nGroups):
+        if line_cont_ig_indiv[i_sp] != None:
+            AllData(i_sp + 1).ignore(line_cont_ig_indiv[i_sp])
+
+def notice_indiv_ig(line_cont_ig_indiv):
+    '''
+    Wrapper around a list of line_cont_ig to avoid future mistakes forgetting to not ignore empty ignores
+    '''
+
+
+    for i_sp in range(AllData.nGroups):
+        if line_cont_ig_indiv[i_sp] != None:
+            AllData(i_sp + 1).notice(line_cont_ig_indiv[i_sp])
+
+
 #not used anymore now that we take the info directly from the log file
 
 def screen_term(screenfile,wind_type='Spyder',kill=False):

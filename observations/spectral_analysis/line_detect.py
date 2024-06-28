@@ -1435,7 +1435,7 @@ def line_detect(epoch_id,arg_dict):
             dill.dump(chi_dict_init, file)
 
         # re-ignoring high-E only spectra for the autofit band
-        mask_nodeload = e_sat_low_indiv<10
+        mask_nodeload = (e_sat_low_indiv<line_cont_range[1]) & (e_sat_high_indiv>line_cont_range[0])
 
         # reloading the continuum models to get the saves back and compute the continuum infos
         Xset.restore(outdir + '/' + epoch_observ[0] + '_mod_autofit.xcm')
@@ -1774,7 +1774,7 @@ def line_detect(epoch_id,arg_dict):
         '''
         automatic detector exclusions base on their energy range to avoid crashes later
         '''
-        mask_nodeload = e_sat_low_indiv<10
+        mask_nodeload = (e_sat_low_indiv<line_cont_range[1]) & (e_sat_high_indiv>line_cont_range[0])
         reload_sp(baseload_path, newbl_keyword='autofit',method='new',mask=mask_nodeload)
         data_broad_deload=deepcopy(data_broad)
         scorpeon_deload=data_broad_deload.scorpeon

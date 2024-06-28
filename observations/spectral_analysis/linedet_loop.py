@@ -186,7 +186,7 @@ def linedet_loop(epoch_list,arg_dict,arg_dict_path=None,parallel=1,heasoft_init_
                               ' -arg_dict_path '+str(arg_dict_path))
 
             instance_run_code=bashproc.expect(['linedet_runner complete','(Pdb)','Aborted (core dumped)',
-                                               "Traceback (most recent call last): "],timeout=None)
+                                               "Traceback (most recent call last): ","Segmentation fault"],timeout=None)
 
             #avoid for now to avoid issues
             # #switching to breakpoint but only in non-parallel mode to avoid breaking everything

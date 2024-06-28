@@ -72,7 +72,7 @@ if not streamlit_mode and model_dir!=None:
     # 5: NuSTAR / FPMA
     # 6: NuSTAR / FPMB
 
-    AllModels.mdefine('crabcorr (1./E^dGamma)crabcorrNorm : mul')
+AllModels.mdefine('crabcorr (1./E^dGamma)crabcorrNorm : mul')
 
 #example of model loading
 # AllModels.initpackage('tbnew_mod',"lmodel_tbnew.dat",dirPath=model_dir+'/tbnew')

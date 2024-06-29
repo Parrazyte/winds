@@ -102,7 +102,7 @@ ap.add_argument("-dir", "--startdir", nargs='?', help="starting directory. Curre
 ap.add_argument("-l","--local",nargs=1,help='Launch actions directly in the current directory instead',
                 default=False,type=bool)
 ap.add_argument('-catch','--catch_errors',help='Catch errors while running the data reduction and continue',
-                default=False,type=bool)
+                default=True,type=bool)
 
 #1 for no parallelization
 ap.add_argument('-parallel',help='number of processors for parallel directories',
@@ -1927,15 +1927,19 @@ def extract_lc(directory,binning_list=[1],bands='3-12',HR='6-10/3-6',overwrite=T
                                   ((" clfile='$CLDIR/ni$OBSID_0mpu7_cl_day.evt'  suffix=" + extract_suffix)
                                    if extract_mode == 'day' else ''))
 
-                process_state=bashproc.expect(['DONE','ERROR: could not recompute normalized RATE/ERROR','Task aborting due','Task nicerl3-lc'],timeout=None)
+                process_state=bashproc.expect(['DONE','ERROR: could not recompute normalized RATE/ERROR','Task aborting due','Task nicerl3-lc','Killed'],timeout=None)
 
                 #raising an error to stop the process if the command has crashed for some reason
                 if process_state>1:
+                    if process_state==4:
+                        return 'RAM Overload'
+
                     with open(directory+'/extract_lc.log') as file:
                         lines=file.readlines()
 
                     return lines[-1].replace('\n','')
 
+                #this one is for empty lc, which is normal for day gtis of night orbits and vice-versa
                 if process_state==1:
 
                     #emptying the buffer
@@ -2323,7 +2327,7 @@ def regroup_spectral(directory,group='opt',thread=None,parallel=False):
                       directory+'/'+directory+gti_suffix+'_sp_grp_'+group+'.pha'))
                 time.sleep(5)
                 spawn.sendline('echo done')
-                process_state = spawn.expect(['done', 'terminating with status -1'], timeout=30)
+                process_state = spawn.expect(['done', 'terminating with status -1'], timeout=60)
 
                 assert process_state==0, 'Issue when regrouping'
                 return ''

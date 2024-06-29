@@ -110,7 +110,7 @@ ap.add_argument('-parallel',help='number of processors for parallel directories'
 
 #global choices
 ap.add_argument("-a","--action",nargs='?',help='Give which action(s) to proceed,separated by comas.',
-                default='fc,1,gti,fs,l,g,m,ml,c',type=str)
+                default='g,m,ml,c',type=str)
 #default: fc,1,gti,fs,l,g,m,ml,c
 
 #note: should be kept to true for most complicated tasks
@@ -2330,10 +2330,9 @@ def regroup_spectral(directory,group='opt',thread=None,parallel=False):
                 process_state = spawn.expect(['done', 'terminating with status -1'], timeout=60)
 
                 assert process_state==0, 'Issue when regrouping'
-                return ''
-
-            spawn.sendline('echo done')
-            spawn.expect('done')
+            else:
+                spawn.sendline('echo done')
+                spawn.expect('done')
 
             time.sleep(1)
 

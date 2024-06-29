@@ -47,7 +47,7 @@ import dill
 
 from matplotlib.gridspec import GridSpec
 
-if 'xspec_models_dirs' in os.environ:
+if 'xspec_models_dir' in os.environ:
     #example '/home/parrama/Soft/Xspec/Models'
     model_dir=os.environ['xspec_models_dir']
 else:
@@ -72,7 +72,7 @@ if not streamlit_mode and model_dir!=None:
     # 5: NuSTAR / FPMA
     # 6: NuSTAR / FPMB
 
-    AllModels.mdefine('crabcorr (1./E^dGamma)crabcorrNorm : mul')
+AllModels.mdefine('crabcorr (1./E^dGamma)crabcorrNorm : mul')
 
 #example of model loading
 # AllModels.initpackage('tbnew_mod',"lmodel_tbnew.dat",dirPath=model_dir+'/tbnew')
@@ -164,6 +164,27 @@ def ignore_data_indiv(e_low_groups,e_high_groups,reset=False,sat_low_groups=None
         Plot.xLog=True
     else:
         Plot.xLog=False
+
+def ignore_indiv_ig(line_cont_ig_indiv):
+    '''
+    Wrapper around a list of line_cont_ig to avoid future mistakes forgetting to not ignore empty ignores
+    '''
+
+
+    for i_sp in range(AllData.nGroups):
+        if line_cont_ig_indiv[i_sp] != None:
+            AllData(i_sp + 1).ignore(line_cont_ig_indiv[i_sp])
+
+def notice_indiv_ig(line_cont_ig_indiv):
+    '''
+    Wrapper around a list of line_cont_ig to avoid future mistakes forgetting to not ignore empty ignores
+    '''
+
+
+    for i_sp in range(AllData.nGroups):
+        if line_cont_ig_indiv[i_sp] != None:
+            AllData(i_sp + 1).notice(line_cont_ig_indiv[i_sp])
+
 
 #not used anymore now that we take the info directly from the log file
 
@@ -2136,7 +2157,7 @@ def addcomp(compname,position='last',endmult=None,return_pos=False,modclass=AllM
 
                 AllModels(i_grp)(gap_start+1).link=''
                 AllModels(i_grp)(gap_start+1).frozen=False
-                AllModels(i_grp)(gap_start + 1).values = [1] + [0.01, 0.85,0.85,1.15,1.15]
+                AllModels(i_grp)(gap_start + 1).values = [1] + [0.01, 0.7,0.7,1.3,1.3]
             if i_grp!=AllData.nGroups:
                 return_pars+=[gap_start+AllModels(1).nParameters*i_grp,gap_start+1+AllModels(gap_start).nParameters*i_grp]
 
@@ -2249,9 +2270,14 @@ def addcomp(compname,position='last',endmult=None,return_pos=False,modclass=AllM
                     #testing if the spectrum has an extraction region part in its fits
                     if len(hdul)>=4 and 'REG' in hdul[3].name:
 
+                        print('region info detected in '+group_sp[i_grp-1])
+
                         #if yes, we fix the extraction radius to the one in the file using the infos stored
                         first_reg_lastrad=hdul[3].data.R[0][-1]
                         pix_to_arcsec=abs(hdul[3].columns['X'].coord_inc*3600)
+
+                        print('freezing Rext of group '+str(i_grp)+' at')
+                        print(str(round(first_reg_lastrad*pix_to_arcsec)))
                         AllModels(i_grp)(gap_end-1).values=round(first_reg_lastrad*pix_to_arcsec)
 
             #fixing the position if an object is specified
@@ -4529,8 +4555,22 @@ class fitmod:
 
                     #unfreezing the parameter
                     try:
-                        AllModels(par_peg_ids[i_par_peg][0])(pegged_par_index).frozen=False
+                        AllModels(par_peg_ids[i_par_peg][0])\
+                            (max(pegged_par_index%AllModels(1).nParameters,1)).frozen=False
                     except:
+                        print('THIS SHOULDNT HAPPEN')
+                        Xset.chatter=10
+                        AllModels.show()
+                        print('Saving to test_bp_'+str(time.time())+'.xcm')
+                        Xset.save('test_bp_'+str(time.time())+'.xcm')
+
+                        save={"par_peg_ids":par_peg_ids,
+                              "i_par_peg":i_par_peg,
+                              "pegged_par_index":pegged_par_index,
+                              "mod1_npars":AllModels(1).nParameters}
+                        with open('bp_dump_'+str(time.time())+'.dill','wb') as f:
+                            dill.dump(save,f)
+
                         breakpoint()
 
                     # #computing the parameter position in all groups values

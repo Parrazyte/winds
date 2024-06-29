@@ -113,7 +113,7 @@ def merge_swift_spectra():
     
 def regroup_swift_spectra(extension='source.pi',group='opt',skip_started=True):
     
-    '''To be launched above all spectra to regroup'''
+    '''To be launched above all spectra to regroup IN BIGBATCH DIRECTORY'''
     
     #spawning heasoft terminal for Kastra grouping
     heas_proc=pexpect.spawn('/bin/bash',encoding='utf-8')
@@ -306,6 +306,12 @@ def DR_BAT(obsids='auto',noise_map_dir='environ',nprocs=1,clean_SNR=6,
         from heasoftpy.swift import batsurvey
         input_dict['chatter']=5
         result=batsurvey(**input_dict)
+
+    before the
+            try:
+            return hsp.batsurvey(**input_dict)²
+
+    WARNING: one of the main isseus are too long directory names. Be careful about that
     '''
 
     if reset_datadir:
@@ -673,6 +679,9 @@ def full_cycle_BAT(object_name,increment_start,increment_stop,minexposure,noise_
     same for summary file
 
     launched_intervals is to test whether to skip if return_intervals is set to False
+
+    WARNING: one of the main issues are too long directory names. Be careful about that
+
     '''
 
     if launched_intervals is not None and header_name in launched_intervals:
@@ -692,7 +701,9 @@ def full_cycle_BAT(object_name,increment_start,increment_stop,minexposure,noise_
         file_edit(summary_file, header_name, header_name + '\t' + interval_state + '\n',
                   summary_intervals_header)
 
-def loop_cycle_BAT(object_name,input_days_file=None,interval_start=None,interval_stop=None,interval_delta='1',interval_delta_unit='jd',minexposure=1000,noise_map_dir='environ',ul_pl_index=2.5,recalc=False,merge=True,clean_events=True,
+def loop_cycle_BAT(object_name,input_days_file=None,interval_start=None,interval_stop=None,interval_delta='1',
+                   interval_delta_unit='jd',minexposure=1000,noise_map_dir='environ',ul_pl_index=2.5,recalc=False,
+                   merge=True,clean_events=True,
                    rerun_started=False,rerun_completed=False,use_custom_cat=True,parallel=1,nprocs=1,uksdc=False):
     '''
     Bigger wrapper around integ_cycle_BAT
@@ -721,6 +732,9 @@ def loop_cycle_BAT(object_name,input_days_file=None,interval_start=None,interval
         parallelization inside the integ_cycle_BAT function
 
     uksdc: force uk download to avoid issues with older obs
+
+    WARNING: one of the main issues are too long directory names. Be careful about that
+
     '''
 
 

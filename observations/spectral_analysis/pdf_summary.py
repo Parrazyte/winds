@@ -21,6 +21,8 @@ from astropy.time import Time
 
 from general_tools import ravel_ragged,shorten_epoch
 
+from fitting_tools import line_e_ranges_fullarg,file_to_obs
+
 def pdf_summary(epoch_files,arg_dict,fit_ok=False,summary_epoch=None,e_sat_low_list=None,e_sat_high_list=None):
 
     sat_glob=arg_dict['sat_glob']
@@ -46,113 +48,19 @@ def pdf_summary(epoch_files,arg_dict,fit_ok=False,summary_epoch=None,e_sat_low_l
     suzaku_pin_range=arg_dict['suzaku_pin_range']
     line_cont_ig_arg=arg_dict['line_cont_ig_arg']
 
-    def line_e_ranges(sat, det=None):
-        '''
-        Determines the energy range allowed, as well as the ignore energies for a given satellite
+    e_min_NuSTAR=arg_dict['e_min_NuSTAR']
+    e_max_XRT=arg_dict['e_max_XRT']
 
-        DO NOT USE INTS else it will be taken as channels instead of energies
-        ignore_bands are bands that will be ignored on top of the rest, in ALL bands
-        '''
-        ignore_bands = None
-
-        if sat == 'NuSTAR':
-            e_sat_low = 8. if (sat_glob == 'multi' and diff_bands_NuSTAR_NICER) else 4.
-            e_sat_high = 79.
-
-        if sat.upper()=='SWIFT':
-            if det is not None and det.upper()=='BAT':
-                e_sat_low=14.
-                e_sat_high=195.
-            else:
-                e_sat_low=0.3
-                e_sat_high=10.
-
-        if sat.upper() in ['XMM', 'NICER']:
-
-            if sat == 'NICER':
-                e_sat_low = 0.3 if (sat_glob == 'multi' and diff_bands_NuSTAR_NICER) else low_E_NICER
-            else:
-                e_sat_low = 0.3
-
-            if sat.upper() in ['XMM']:
-                if sat == 'XMM':
-                    e_sat_low = 2.
-
-                e_sat_high = 10.
-            else:
-                if sat == 'NICER':
-                    e_sat_high = 10.
-                else:
-                    e_sat_high = 10.
-
-        elif sat == 'Suzaku':
-
-            if det == None:
-                e_sat_low = 1.9
-                e_sat_high = 40.
-
-                ignore_bands = suzaku_xis_ignore
-            else:
-
-                assert det in ['PIN', 'XIS'], 'Detector argument necessary to choose energy ranges for Suzaku'
-
-                e_sat_low = suzaku_xis_range[0] if det == 'XIS' else suzaku_pin_range[0]
-                e_sat_high = suzaku_xis_range[1] if det == 'XIS' else suzaku_pin_range[1]
-
-                # note: we don't care about ignoring these with pin since pin doesn't go that low
-                ignore_bands = suzaku_xis_ignore
-
-        elif sat == 'Chandra':
-            e_sat_low = 1.5
-            e_sat_high = 10.
-
-        '''
-        computing the line ignore values, which we cap from the lower and upper bound of the global energy ranges to avoid issues 
-        we also avoid getting upper bounds lower than the lower bounds because xspec reads it in reverse and still ignores the band you want to keep
-        ####should eventually be expanded to include the energies of each band as for the lower bound they are higher and we could have the opposite issue with re-noticing low energies
-        '''
-
-        line_cont_ig = ''
-
-        if line_cont_ig_arg == 'iron':
-
-            if sat in ['XMM', 'Chandra', 'NICER', 'Swift', 'SWIFT', 'Suzaku', 'NuSTAR']:
-
-
-                if e_sat_low > 6:
-                    # not ignoring this band for high-E only e.g. high-E only NuSTAR, BAT, INTEGRAL spectra
-                    pass
-                else:
-                    if e_sat_high > 6.5:
-
-                        line_cont_ig += '6.5-' + str(min(7.1, e_sat_high))
-
-                        if e_sat_high > 7.7:
-                            line_cont_ig += ',7.7-' + str(min(8.3, e_sat_high))
-                    else:
-                        # failsafe in case the e_sat_high is too low, we ignore the very first channel of the spectrum
-                        # which will be ignored anyway
-                        line_cont_ig = str(1)
-
-            else:
-                line_cont_ig = '6.-8.'
-
-        return e_sat_low, e_sat_high, ignore_bands, line_cont_ig
+    def line_e_ranges(sat,det=None):
+        return line_e_ranges_fullarg(sat,sat_glob,
+                                     diff_bands_NuSTAR_NICER,low_E_NICER,line_cont_ig_arg,
+                                    suzaku_xis_ignore,suzaku_pin_range,suzaku_xis_range,
+                                     e_min_NuSTAR=e_min_NuSTAR,e_max_XRT=e_max_XRT,
+                                    det=det)
 
 
     if summary_epoch is None:
         glob_summary_linedet=arg_dict['glob_summary_linedet']
-        
-    def file_to_obs(file, sat):
-        if sat == 'Suzaku':
-            if megumi_files:
-                return file.split('_src')[0].split('_gti')[0]
-        elif sat in ['XMM', 'NuSTAR']:
-            return file.split('_sp')[0]
-        elif sat in ['Chandra', 'Swift', 'SWIFT']:
-            return file.split('_grp_opt')[0]
-        elif sat in ['NICER']:
-            return file.split('_sp_grp_opt')[0]
 
     #used to have specific energy limits for different instruments. can be modified later
 
@@ -165,7 +73,8 @@ def pdf_summary(epoch_files,arg_dict,fit_ok=False,summary_epoch=None,e_sat_low_l
             # fetching the instrument of the individual element
             # note that we replace the megumi xis0_xis3 files by the xis1 because the merged xis0_xis3 have no header
             #we also replace SUZAKU in caps by Suzaku to have a better time matching strings
-            sat_indiv[id_epoch] = fits.open(elem_file.replace('xis0_xis3','xis1'))[1].header['TELESCOP']\
+            sat_indiv[id_epoch] = fits.open(elem_file.replace('xis0_xis3', 'xis1').\
+                                                 replace('xis0_xis2_xis3','xis1'))[1].header['TELESCOP']\
                 .replace('SUZAKU','Suzaku')
             e_sat_low_indiv[id_epoch], e_sat_high_indiv[id_epoch], temp,line_cont_ig_indiv[id_epoch], = \
                 line_e_ranges(sat_indiv[id_epoch])
@@ -182,10 +91,10 @@ def pdf_summary(epoch_files,arg_dict,fit_ok=False,summary_epoch=None,e_sat_low_l
         e_sat_high_indiv=e_sat_high_list
 
     if sat_glob == 'multi':
-        epoch_observ = [file_to_obs(elem_file, elem_telescope) for elem_file, elem_telescope in \
+        epoch_observ = [file_to_obs(elem_file, elem_telescope,megumi_files) for elem_file, elem_telescope in \
                         zip(epoch_files, sat_indiv)]
     else:
-        epoch_observ = [file_to_obs(elem_file, sat_glob) for elem_file in epoch_files]
+        epoch_observ = [file_to_obs(elem_file, sat_glob,megumi_files) for elem_file in epoch_files]
 
     '''PDF creation'''
 
@@ -690,7 +599,10 @@ def pdf_summary(epoch_files,arg_dict,fit_ok=False,summary_epoch=None,e_sat_low_l
                 try:
                     pdf.image(elem_obsid +'-global_flares_night.png',x=20,y=30,w=250)
                 except:
-                    pass
+                    try:
+                        pdf.image(elem_obsid + '-global_flares.png', x=20, y=30, w=250)
+                    except:
+                        pass
 
             #and adding the individual GTI's flare and lightcurves
             pdf.add_page()
@@ -717,11 +629,21 @@ def pdf_summary(epoch_files,arg_dict,fit_ok=False,summary_epoch=None,e_sat_low_l
 
             try:
                 pdf.image(elem_epoch + '_lc_3-10_bin_' + NICER_lc_binning + '.png', x=150, y=30, w=70)
+            except:
+                pass
+            try:
                 pdf.image(elem_epoch + '_hr_6-10_3-6_bin_' + NICER_lc_binning + '.png', x=220, y=30, w=70)
-
+            except:
+                try:
+                    pdf.image(elem_epoch + '_hr_3-10_bin_' + NICER_lc_binning + '.png', x=220, y=30, w=70)
+                except:
+                    pass
+            try:
                 pdf.image(elem_epoch + '_lc_3-6_bin_' + NICER_lc_binning + '.png', x=150, y=120, w=70)
+            except:
+                pass
+            try:
                 pdf.image(elem_epoch + '_lc_6-10_bin_' + NICER_lc_binning + '.png', x=220, y=120, w=70)
-
             except:
                 pass
 

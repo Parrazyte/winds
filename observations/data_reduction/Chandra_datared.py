@@ -17,7 +17,8 @@ import pexpect
 import sys
 
 #pdf table reader
-import tabula
+# import tabula
+
 import time
 
 def arrange_Chandra_arborescence():
@@ -52,7 +53,8 @@ def merge_chandra_spectra(startdir='./',mode='add_obsid'):
     '''
     
     Creates arborescence for Chandra files from a tgcat unzipped arborescence
-    
+
+    Note: need to remove the tgid before runnning this from individual obs directory names now
     '''
     
     if not os.path.isdir(startdir):
@@ -88,7 +90,7 @@ def merge_chandra_spectra(startdir='./',mode='add_obsid'):
         
     if mode=='add_obsid':
         for elem in allfiles:
-            
+
             #fetching positions of grouped files
             if elem.endswith('/pha2.gz'):
                 
@@ -99,9 +101,15 @@ def merge_chandra_spectra(startdir='./',mode='add_obsid'):
                     dirpath='./'
                     
                 lastdir=dirpath.split('/')[-1]
-                    
+
+                #doing this to comply with both the old and new namings of the obsid files
+                if '_' in lastdir:
+                    dir_obsid=lastdir.split('_')[1]
+                else:
+                    dir_obsid=lastdir
+
                 #now we check if those files have an obsid shape (10 numbers)
-                if len(lastdir)<=6 and lastdir.isdigit():
+                if len(dir_obsid)<=6 and dir_obsid.isdigit():
                     print('\nFound one pha file in obsid directory: '+elem)
                     
                     #going in the directory
@@ -187,18 +195,19 @@ def regroup_grating_spectra(extension='pha2.pha',group='opt', skip_started=True)
         ciao_proc.sendline('cd '+pha2_dirs[ind])
         
         #ungrouping the gratings
-        ciao_proc.sendline('dmtype2split "'+specfile+'[#row=3]" "'+specfile.split('_')[0]+'_heg_-1.pha[SPECTRUM]" clobber=yes verbose=2')
+        ciao_proc.sendline('dmtype2split "'+specfile+'[#row=3]" "'+specfile.replace('obs_','hetg').split('_')[0]+'_heg_-1.pha[SPECTRUM]" clobber=yes verbose=2')
         ciao_proc.expect('Total number of columns=')
         
-        time.sleep(10)
+        time.sleep(5)
         
-        ciao_proc.sendline('dmtype2split "'+specfile+'[#row=4]" "'+specfile.split('_')[0]+'_heg_1.pha[SPECTRUM]" clobber=yes verbose=2')
+        ciao_proc.sendline('dmtype2split "'+specfile+'[#row=4]" "'+specfile.replace('obs_','hetg').split('_')[0]+'_heg_1.pha[SPECTRUM]" clobber=yes verbose=2')
         ciao_proc.expect('Total number of columns=')
-        
+
+
         file_m1=specfile.split('_')[0]+'_heg_-1.pha'
         file_p1=specfile.split('_')[0]+'_heg_1.pha'
-        
-        time.sleep(10)
+        time.sleep(5)
+
         #stat grouping
         
         heas_proc.sendline('cd '+pha2_dirs[ind])

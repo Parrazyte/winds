@@ -168,11 +168,14 @@ def ang2kev(x):
 
     return 12.398/x
 
-def model_list(model_id='lines',give_groups=False):
+def model_list(model_id='lines',give_groups=False,sat_list=[]):
     
     '''
     wrapper for the fitmod class with a bunch of models
-        
+
+    if sat_list is a list and a _var model is selected,
+     will be used to add calibration components depending on the instruments in the list
+
     Model types:
         -lines : add high energy lines to a continuum.
                 Available components (to be updated):
@@ -237,7 +240,35 @@ def model_list(model_id='lines',give_groups=False):
         avail_comps=['FeKa0em_bgaussian','FeKa0em_gaussian','FeKb0em_gaussian','FeKa25em_gaussian','FeKa26em_gaussian',
                      'FeKa25abs_nagaussian','FeKa26abs_nagaussian','NiKa27abs_nagaussian',
                                    'FeKb25abs_nagaussian','FeKb26abs_nagaussian','FeKg26abs_nagaussian']
-        
+
+
+    if model_id=='thcont_var':
+        avail_comps = ['cont_diskbb', 'disk_thcomp', 'glob_TBabs']
+
+        if "Suzaku" in sat_list:
+            #note: this one still needs to be tested with multi sats
+            avail_comps+=['Suzaku_crabcorr']
+        else:
+            avail_comps+=['glob_constant']
+
+        if 'NICER' in sat_list:
+            avail_comps+=['calNICERSiem_gaussian','calNICER_edge']
+
+        if 'NuSTAR' in sat_list:
+            avail_comps+=['calNuSTAR_edge']
+
+        interact_groups=None
+
+    if model_id == 'thcont_NICER':
+        '''
+        subset of continuum with thcomp for better broad band work + NICER calibration components
+        '''
+
+        avail_comps = ['cont_diskbb', 'disk_thcomp', 'glob_TBabs', 'glob_constant',
+                       'calNICERSiem_gaussian','calNICER_edge']
+
+        interact_groups = None
+
     if model_id=='cont_laor':
 
         '''
@@ -324,16 +355,6 @@ def model_list(model_id='lines',give_groups=False):
 
         interact_groups = None
 
-    if model_id == 'thcont_NICER':
-        '''
-        subset of continuum with thcomp for better broad band work + NICER calibration components
-        '''
-
-        avail_comps = ['cont_diskbb', 'disk_thcomp', 'glob_TBabs', 'glob_constant',
-                       'calNICERSiem_gaussian','calNICER_edge']
-
-        interact_groups = None
-
     if model_id=='nthcont_detailed':
 
         '''
@@ -409,3 +430,114 @@ def model_list(model_id='lines',give_groups=False):
         return avail_comps,interact_groups
     else:
         return avail_comps
+
+
+def line_e_ranges_fullarg(sat,sat_glob,diff_bands_NuSTAR_NICER,low_E_NICER,line_cont_ig_arg,
+                  suzaku_xis_ignore,suzaku_pin_range,suzaku_xis_range,e_min_NuSTAR,e_max_XRT,
+                  det=None):
+    '''
+    Determines the energy range allowed, as well as the ignore energies for a given satellite
+
+    DO NOT USE INTS else it will be taken as channels instead of energies
+    ignore_bands are bands that will be ignored on top of the rest, in ALL bands
+
+
+    '''
+    ignore_bands = None
+
+    if sat == 'NuSTAR':
+        e_sat_low = e_min_NuSTAR if (sat_glob == 'multi' and diff_bands_NuSTAR_NICER) else 4.
+        e_sat_high = 79.
+
+    if sat.upper()=='SWIFT':
+        if det is not None and det.upper()=='BAT':
+            e_sat_low=14.
+            e_sat_high=195.
+        else:
+            e_sat_low=0.3
+            if sat_glob=='multi':
+                e_sat_high=e_max_XRT
+            else:
+                e_sat_high=10.
+
+    if sat.upper() in ['XMM', 'NICER']:
+
+        if sat == 'NICER':
+            e_sat_low = 0.3 if (sat_glob == 'multi' and diff_bands_NuSTAR_NICER) else low_E_NICER
+        else:
+            e_sat_low = 0.3
+
+        if sat.upper() in ['XMM']:
+            if sat == 'XMM':
+                e_sat_low = 2.
+
+            e_sat_high = 10.
+        else:
+            if sat == 'NICER':
+                e_sat_high = 10.
+            else:
+                e_sat_high = 10.
+
+    elif sat == 'Suzaku':
+
+        if det == None:
+            e_sat_low = 1.9
+            e_sat_high = 40.
+
+            ignore_bands = suzaku_xis_ignore
+        else:
+
+            assert det in ['PIN', 'XIS'], 'Detector argument necessary to choose energy ranges for Suzaku'
+
+            e_sat_low = suzaku_xis_range[0] if det == 'XIS' else suzaku_pin_range[0]
+            e_sat_high = suzaku_xis_range[1] if det == 'XIS' else suzaku_pin_range[1]
+
+            # note: we don't care about ignoring these with pin since pin doesn't go that low
+            ignore_bands = suzaku_xis_ignore
+
+    elif sat.upper() == 'CHANDRA':
+        e_sat_low = 1.5
+        e_sat_high = 10.
+
+    '''
+    computing the line ignore values, which we cap from the lower and upper bound of the global energy ranges to avoid issues 
+    we also avoid getting upper bounds lower than the lower bounds because xspec reads it in reverse and still ignores the band you want to keep
+    ####should eventually be expanded to include the energies of each band as for the lower bound they are higher and we could have the opposite issue with re-noticing low energies
+    '''
+
+    line_cont_ig = ''
+
+    if line_cont_ig_arg == 'iron':
+
+        if sat.upper() in ['XMM', 'CHANDRA', 'NICER', 'SWIFT', 'SUZAKU', 'NUSTAR','INTEGRAL']:
+
+
+            if e_sat_low > 6:
+                # not ignoring this band for high-E only e.g. high-E only NuSTAR, BAT, INTEGRAL spectra
+                pass
+            else:
+                if e_sat_high > 6.5:
+
+                    line_cont_ig += '6.5-' + str(min(7.1, e_sat_high))
+
+                    if e_sat_high > 7.7:
+                        line_cont_ig += ',7.7-' + str(min(8.3, e_sat_high))
+                else:
+                    #an empty string will work with xspec but cause issues so better put a None (which will crash)
+                    line_cont_ig = None
+
+        else:
+            line_cont_ig = '6.-8.'
+
+    return e_sat_low, e_sat_high, ignore_bands, line_cont_ig
+
+def file_to_obs(file, sat,megumi_files):
+    if sat == 'Suzaku':
+        if megumi_files:
+            return file.split('_src')[0].split('_gti')[0]
+    elif sat in ['XMM', 'NuSTAR']:
+        return file.split('_sp')[0]
+    elif sat.upper() in ['CHANDRA', 'SWIFT']:
+        return file.split('_grp_opt')[0]
+    elif sat in ['NICER']:
+        return file.split('_sp_grp_opt')[0]

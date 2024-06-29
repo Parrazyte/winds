@@ -16,7 +16,7 @@ import pexpect
 import time
 def linedet_loop(epoch_list,arg_dict,arg_dict_path=None,parallel=1,heasoft_init_alias='heainit',
                  container_mode='python',container='default',job_id='default',
-                 force_instance=False):
+                 force_instance=False,indiv_instances=False):
     '''
 
     epoch_list:
@@ -74,6 +74,9 @@ def linedet_loop(epoch_list,arg_dict,arg_dict_path=None,parallel=1,heasoft_init_
             uses the 4 last directory elements + the outdir + the sat_glob
         -string:
         uses that strings
+
+    indiv_instances: bool
+                    If set to True, creates individual singularity instances for each epoch
     '''
 
 
@@ -82,9 +85,13 @@ def linedet_loop(epoch_list,arg_dict,arg_dict_path=None,parallel=1,heasoft_init_
     outdir=arg_dict['outdir']
     write_aborted_pdf=arg_dict['write_aborted_pdf']
     sat_glob=arg_dict['sat_glob']
+    spread_str=arg_dict['spread_str']
+    catch_errors=arg_dict['catch_errors']
+    megumi_files=arg_dict['megumi_files']
+    summary_header = arg_dict['summary_header']
 
     if job_id=='default':
-        job_id_use='_'.join(os.getcwd().split('/')[-4:]+[outdir,sat_glob])
+        job_id_use='_'.join(os.getcwd().split('/')[-4:]+[outdir,sat_glob,spread_str.replace('_over_','-')])
     else:
         job_id_use=job_id
 
@@ -98,6 +105,8 @@ def linedet_loop(epoch_list,arg_dict,arg_dict_path=None,parallel=1,heasoft_init_
 
         print('Starting line detection for epoch\n')
         print(epoch_list[epoch_id])
+
+        epoch_files=epoch_list[epoch_id]
 
         io_log = open(outdir + '/'+epoch_list[epoch_id][0][:epoch_list[epoch_id][0].rfind('.')]+'_log_spawn.log', 'w+')
 
@@ -139,10 +148,15 @@ def linedet_loop(epoch_list,arg_dict,arg_dict_path=None,parallel=1,heasoft_init_
             else:
                 container_use = container
 
+            if indiv_instances:
+                instance_name_indiv=singularity_instance_name+'_epoch_'+str(epoch_id+1)+'-'+str(len(epoch_list))
+            else:
+                instance_name_indiv =singularity_instance_name
+
             # testing the whether already exists
             singul_list = str(subprocess.check_output("singularity instance list", shell=True)).split('\\n')
 
-            singul_list_mask = [elem.startswith(singularity_instance_name) for elem in singul_list]
+            singul_list_mask = [elem.startswith(instance_name_indiv) for elem in singul_list]
 
             if sum(singul_list_mask) == 0:
                 # calling the docker with no mounts
@@ -150,7 +164,7 @@ def linedet_loop(epoch_list,arg_dict,arg_dict_path=None,parallel=1,heasoft_init_
 
                 #note: doing it via the spawn because it doesn't work with subprocess for some reason
                 instance_create_line=' '.join(['singularity', 'instance', 'start', '--bind', os.getcwd() + ':/mnt',
-                                                   container_use,singularity_instance_name])
+                                                   container_use,instance_name_indiv])
 
                 bashproc.sendline(instance_create_line)
 
@@ -161,7 +175,7 @@ def linedet_loop(epoch_list,arg_dict,arg_dict_path=None,parallel=1,heasoft_init_
 
 
             #starting a shell inside the instance
-            bashproc.sendline('singularity shell instance://'+singularity_instance_name)
+            bashproc.sendline('singularity shell instance://'+instance_name_indiv)
 
             #moving inside the right directory
             bashproc.sendline('cd /mnt')
@@ -171,13 +185,54 @@ def linedet_loop(epoch_list,arg_dict,arg_dict_path=None,parallel=1,heasoft_init_
                               ' -epoch_id '+str(epoch_id)+
                               ' -arg_dict_path '+str(arg_dict_path))
 
-            instance_run_code=bashproc.expect(['linedet_runner complete','(Pdb)','Aborted (core dumped)'],timeout=None)
+            instance_run_code=bashproc.expect(['linedet_runner complete','(Pdb)','Aborted (core dumped)',
+                                               "Traceback (most recent call last): ","Segmentation fault"],timeout=None)
 
-            if instance_run_code ==1:
-                breakpoint()
+            #avoid for now to avoid issues
+            # #switching to breakpoint but only in non-parallel mode to avoid breaking everything
+            # #note that parallel may be a string if taken from a parfile
+            # if instance_run_code==1 and parallel==1:
+            #     breakpoint()
 
-            if instance_run_code > 1:
-                raise ValueError('Error while running singularity instance')
+            if indiv_instances:
+                subprocess.call(['singularity', 'instance', 'stop', instance_name_indiv])
+
+            diag_message=''
+
+            if instance_run_code==1:
+                if catch_errors:
+                    diag_message = 'Breakpoint hit while running singularity instance'
+                else:
+                    raise ValueError('Breakpoint hit while running singularity instance')
+
+            elif instance_run_code>1:
+                if catch_errors:
+                    diag_message = 'Error while running singularity instance'
+                else:
+                    raise ValueError('Error while running singularity instance')
+
+
+            #if the console itself crashes, we have to log the bug for the epoch as for the normal linedet
+            if diag_message!='':
+                if sat_glob=='Suzaku' and megumi_files:
+                    epoch_files_suffix=np.unique([elem.split('_spec')[-1].split('_pin')[-1] for elem in epoch_files])
+                    epoch_files_suffix=epoch_files_suffix[::-1].tolist()
+                else:
+                    epoch_files_suffix=np.unique([elem.split('_sp')[-1]for elem in epoch_files]).tolist()
+
+                epoch_files_str=epoch_files_suffix
+
+                if sat_glob == 'Suzaku' and megumi_files:
+                    file_ids = [elem.split('_spec')[0].split('_src')[0] for elem in epoch_files]
+                else:
+                    file_ids = [elem.split('_sp')[0] for elem in epoch_files]
+
+                summary_content=str(shorten_epoch(file_ids))+'\t'+str(epoch_files_suffix)+'\t'+str(diag_message)
+
+                #adding it to the summary file
+                file_edit(outdir+'/'+'summary_line_det.log',
+                          str(shorten_epoch(file_ids))+'\t'+str(epoch_files_suffix),summary_content+'\n',summary_header)
+
 
     #### line detections for exposure with a spectrum
     if parallel==1:
@@ -196,7 +251,7 @@ def linedet_loop(epoch_list,arg_dict,arg_dict_path=None,parallel=1,heasoft_init_
             for epoch_id in range(len(epoch_list)))
 
     #if necessary, killing the singularity instance now thart the process is finished
-    if container_mode=='singularity' and parallel!=1 or force_instance:
+    if container_mode=='singularity' and (parallel!=1 or force_instance) and not indiv_instances:
         # stopping the instance at the end
         subprocess.call(['singularity', 'instance', 'stop', singularity_instance_name])
 
@@ -253,6 +308,7 @@ def linedet_loop(epoch_list,arg_dict,arg_dict_path=None,parallel=1,heasoft_init_
     elif sat_glob=='multi':
         aborted_files=[]
         aborted_epochs=[]
+        print('Finished')
         breakpoint()
 
     arg_dict['glob_summary_linedet']=glob_summary_linedet
@@ -380,6 +436,7 @@ def linedet_loop_single(epoch_id,arg_dict):
                 log_text=open(outdir+'/'+epoch_files[0].split('_sp')[0]+'_terminal_log.log')
 
             if catch_errors:
+                print("catching errors")
                 try:
                     #main function
                     summary_lines=line_detect(epoch_id,arg_dict)
@@ -430,11 +487,18 @@ def linedet_loop_single(epoch_id,arg_dict):
             summary_lines=line_detect(epoch_id,arg_dict)
 
 
-def make_linedet_parfile(parallel,outdir,cont_model,autofit_model='lines_narrow',
+def make_linedet_parfile(parallel,outdir,cont_model='thcont_var',autofit_model='lines_narrow',
                         container='default',
                         satellite='multi',group_max_timedelta='day',
-                        skip_started=True,catch_errors=False,
-                        multi_focus='NICER',nfakes=1000):
+                        skip_started=True,catch_errors=True,
+                        multi_focus='NICER',nfakes=1000,
+                        spread_comput=1,
+                        indiv_instances=True,
+                        skip_started_spread=False,
+                        multi_restrict_combi=False,
+                        multi_forbid_combi='SWIFT',
+                        force_instance=True,
+                         e_min_NuSTAR=8.):
 
     '''
     Inserts a parfile for a linedet computation
@@ -450,9 +514,17 @@ def make_linedet_parfile(parallel,outdir,cont_model,autofit_model='lines_narrow'
                 'skip_started':skip_started,
                 'catch_errors':catch_errors,
                 'multi_focus':multi_focus,
-                'nfakes':nfakes}
+                'nfakes':nfakes,
+                'spread_comput':spread_comput,
+                'indiv_instances':indiv_instances,
+                'skip_started_spread':skip_started_spread,
+                'multi_restrict_combi':multi_restrict_combi,
+                'multi_forbid_combi':multi_forbid_combi,
+                'force_instance':force_instance,
+                'e_min_NuSTAR':e_min_NuSTAR}
 
-    parfile_name='./parfile'+'_outdir_'+outdir+'_satellite_'+satellite+'_cont_model_'+cont_model+'.par'
+    parfile_name='./parfile'+'_outdir_'+outdir+'_satellite_'+satellite+'_cont_model_'+cont_model+'_parallel_'\
+                 +str(parallel)+'.par'
     #writing in the file
     with open(parfile_name,'w+')\
             as file:
@@ -467,6 +539,8 @@ def make_linedet_script(startdir,cores,parfile_path,cpus=2,nodes=1,
 
     '''
     Create standard oar script for ipag-calc computation
+
+    NOTE: CURRENTLY THE NUMBER OF CORES AND THE WALLTIME MUST BE SPECIFIED MANUALLY (OAR DOESNT TAKE THESE INPUTS)
 
     core value should be set to the same value than the "parallel" number in make_linedet_parfile
 
@@ -497,5 +571,5 @@ def make_linedet_script(startdir,cores,parfile_path,cpus=2,nodes=1,
     "\ncd "+startdir+"\n"+\
     "\npython $linedet_script -parfile '"+parfile_path+"'"
 
-    with open('./oar_script.sh','w+') as oar_file:
+    with open('./oar_script_'+parfile_path.split('/')[-1][:parfile_path.split('/')[-1].rfind('.')]+'.sh','w+') as oar_file:
         oar_file.write(script_str)

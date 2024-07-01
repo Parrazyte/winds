@@ -914,7 +914,7 @@ def comb_chi2map(fig_comb, chi_dict, title='', comb_label=''):
 
     for i_grp in range(AllData.nGroups):
         ax_comb[0].errorbar(plot_ratio_values[i_grp][0][0], plot_ratio_values[i_grp][1][0],
-                            xerr=plot_ratio_values[i_grp][0][1], yerr=plot_ratio_values[i_grp][1][1],
+                            xerr=plot_ratio_values[i_grp][0][1].clip(0), yerr=plot_ratio_values[i_grp][1][1].clip(0),
                             color=xcolors_grp[i_grp], ecolor=xcolors_grp[i_grp], linestyle='None',
                             label=comb_label[i_grp])
 

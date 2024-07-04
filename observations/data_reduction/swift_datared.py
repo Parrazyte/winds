@@ -94,6 +94,22 @@ def source_catal(dirpath):
     print('\nValid source(s) detected. Object name assumed to be ' + obj_catal['MAIN_ID'])
 
     return obj_catal
+
+def untar_spectra():
+    '''
+    untars every file in the arborescence
+    '''
+
+    tarfiles=glob.glob('**/**.tar.gz',recursive=True)+glob.glob('**.tar.gz',recursive=True)
+    currdir=os.getcwd()
+
+    for elem_tar in tarfiles:
+        print('untaring '+elem_tar)
+        os.chdir(elem_tar[:elem_tar.rfind('/')+1])
+        os.system('tar -zxvf '+elem_tar[elem_tar.rfind('/')+1:]+' --one-top-level')
+        time.sleep(0.1)
+        os.chdir(currdir)
+
 def merge_swift_spectra():
 
     '''
@@ -108,19 +124,17 @@ def merge_swift_spectra():
     currdir=os.getcwd()
     
     for elemfile in specfiles:
-        shutil.copy(elemfile,os.path.join(currdir,'bigbatch','sw'+elemfile.split('/')[-1].replace('Obs_','')))
+        shutil.copy(elemfile,os.path.join(currdir,'bigbatch','xrt'+elemfile.split('/')[-1].replace('Obs_','')))
         
     
 def regroup_swift_spectra(extension='source.pi',group='opt',skip_started=True):
     
-    '''To be launched above all spectra to regroup IN BIGBATCH DIRECTORY'''
-    
-    #spawning heasoft terminal for Kastra grouping
-    heas_proc=pexpect.spawn('/bin/bash',encoding='utf-8')
-    heas_proc.logfile=sys.stdout
-    heas_proc.sendline('\nheainit')
-    
-    def ft_group(file,grptype):
+    '''
+    To be launched above all spectra to regroup IN BIGBATCH DIRECTORY
+    Note: for now, needs to be launched a bunch of times because things dont work every time for some reason
+    '''
+
+    def ft_group(file,grptype,heas_proc):
         
         '''wrapper for the command'''
         
@@ -137,8 +151,7 @@ def regroup_swift_spectra(extension='source.pi',group='opt',skip_started=True):
     
     speclist.sort()
     
-    heas_proc.sendline('cd '+os.path.join(currdir,'bigbatch'))
-    
+
     # if skip_started:
     #     pha2_spectra=[elem for elem in pha2_spectra if\
     #                 '/'.join(elem.split('/')[:-1])+('' if len(elem.split('/'))==1 else '/')+elem.split('/')[-1].split('_')[0]+'_heg_-1_grp_'+group+'.pha' not in allfiles or\
@@ -149,7 +162,14 @@ def regroup_swift_spectra(extension='source.pi',group='opt',skip_started=True):
         if skip_started and os.path.isfile(specpath.replace('.','_grp_'+group+'.')):
             print('\nSpectrum '+specpath+' already grouped')            
             continue
-        
+
+        # spawning heasoft terminal for Kastra grouping
+        heas_proc = pexpect.spawn('/bin/bash', encoding='utf-8')
+        heas_proc.logfile = sys.stdout
+        heas_proc.sendline('\nheainit')
+
+        heas_proc.sendline('cd ' + os.path.join(currdir, 'bigbatch'))
+
         specfile=specpath.split('/')[-1]
 
         #stat grouping
@@ -157,10 +177,10 @@ def regroup_swift_spectra(extension='source.pi',group='opt',skip_started=True):
             
             if group=='opt':
 
-                ft_group(specfile,grptype='opt')
+                ft_group(specfile,grptype='opt',heas_proc=heas_proc)
                 time.sleep(5)
         
-    heas_proc.sendline('exit')
+        heas_proc.sendline('exit')
 
 def convert_BAT_flux_spectra(observ_high_table_path,err_percent=90,e_low=15., e_high=50.):
     '''

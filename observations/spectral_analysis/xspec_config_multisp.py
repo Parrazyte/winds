@@ -701,9 +701,11 @@ class scorpeon_manager:
             if type(bgload_paths)==str and bgload_paths=='auto':
                 bgloads_auto=np.array([None]*AllData.nGroups)
                 for id_grp in range(AllData.nGroups):
-                    if AllData(id_grp+1).fileinfo('TELESCOP')=='NICER':
-                        bgloads_auto[id_grp]=AllData(id_grp+1).fileName.replace('_sp_grp_opt.pha','_bg.py')\
-                                                              .replace('_sr.pha','_bg.py')
+                    #note that we don't use fileinfo anywhere because it crashes with i.e. integral spectra
+                    with fits.open(AllData(id_grp+1).fileName) as hdul:
+                        if 'TELESCOP' in hdul[1].header and hdul[1].header['TELESCOP']=='NICER':
+                            bgloads_auto[id_grp]=AllData(id_grp+1).fileName.replace('_sp_grp_opt.pha','_bg.py')\
+                                                                  .replace('_sr.pha','_bg.py')
                 self.bgload_paths=bgloads_auto
 
             # converting the input into an array like for easier manipulation
@@ -5630,7 +5632,7 @@ class fitcomp_line(fitcomp):
         self.logfile.readlines()
 
         #computing the width with the current fit at 3 sigmas (third index of the sign_sigmas_delchi_1dof arr)
-        Fit.error('stop ,,0.1 max 100 '+sign_sigmas_delchi_1dof[2]+' '+str(self.parlist[-2]))
+        Fit.error('stop ,,0.1 max 100 '+str(sign_sigmas_delchi_1dof[2])+' '+str(self.parlist[-2]))
 
         #storing the error lines
         log_lines=self.logfile.readlines()
@@ -6196,13 +6198,17 @@ def xPlot(types,axes_input=None,plot_saves_input=None,plot_arg=None,includedlist
                                 grp_instru=hdul[1].header['INSTRUME']
                             except:
                                 grp_instru=''
-                            try:
-                                grp_obsid=hdul[1].header['OBS_ID']
-                            except:
+
+                            if grp_tel=='INTEGRAL':
+                                grp_obsid=AllData(id_grp+1).fileName.split('_sum_pha')[0].split('_')[-1]
+                            else:
                                 try:
-                                    grp_obsid=hdul[1].header['OGID']
+                                    grp_obsid=hdul[1].header['OBS_ID']
                                 except:
-                                    grp_obsid=''
+                                    try:
+                                        grp_obsid=hdul[1].header['OGID']
+                                    except:
+                                        grp_obsid=''
                     except:
                         grp_tel=''
                         grp_instru=''
@@ -6301,12 +6307,12 @@ def xPlot(types,axes_input=None,plot_saves_input=None,plot_arg=None,includedlist
         #plotting the legend in horizontal and below the main result if necessary
         if AllData.nGroups>=5 and no_name_data=='auto':
             if i_ax==0:
-                curr_ax.legend(loc=legend_position,ncols=3+np.ceil(AllData.nGroups/10))
+                curr_ax.legend(loc=legend_position,ncols=3+np.ceil(AllData.nGroups/15))
 
             if i_ax==len(types_split)-1:
                 bbox_yval=max(-0.3-0.2*np.ceil(AllData.nGroups/2),-0.5)
                 curr_ax.legend(loc='lower center',
-                               bbox_to_anchor=(0.5,bbox_yval),ncols=3+np.ceil(AllData.nGroups/10))
+                               bbox_to_anchor=(0.5,bbox_yval),ncols=3+np.ceil(AllData.nGroups/15))
 
         else:
             curr_ax.legend(loc=legend_position)

@@ -482,7 +482,7 @@ def line_detect(epoch_id,arg_dict):
                             hdul[1].header['RESPFILE'] = elem_sp.replace('src_grp_opt.pha', 'rsp.rmf')
                             hdul[1].header['BACKFILE'] = elem_sp.replace('src_grp_opt', 'bgd')
 
-                elif elem_sat== 'SWIFT':
+                elif elem_sat in ['SWIFT','INTEGRAL']:
                     epoch_dets[-1]=hdul[1].header['INSTRUME']
 
 
@@ -730,7 +730,7 @@ def line_detect(epoch_id,arg_dict):
                 data_load_str = data_load_str[:-len(index_str)]
                 continue
             data_load_str += ' ' + elem_sp + ' '
-        if elem_sat in ['NICER', 'Suzaku', 'Swift', 'SWIFT', 'NuSTAR']:
+        if elem_sat in ['NICER', 'Suzaku', 'Swift', 'SWIFT', 'NuSTAR','INTEGRAL']:
             data_load_str += ' ' + elem_sp + ' '
 
     AllData(data_load_str)

@@ -47,7 +47,7 @@ def pdf_summary(epoch_files,arg_dict,fit_ok=False,summary_epoch=None,e_sat_low_l
     suzaku_xis_range=arg_dict['suzaku_xis_range']
     suzaku_pin_range=arg_dict['suzaku_pin_range']
     line_cont_ig_arg=arg_dict['line_cont_ig_arg']
-
+    megumi_files=arg_dict['megumi_files']
     e_min_NuSTAR=arg_dict['e_min_NuSTAR']
     e_max_XRT=arg_dict['e_max_XRT']
 
@@ -69,6 +69,8 @@ def pdf_summary(epoch_files,arg_dict,fit_ok=False,summary_epoch=None,e_sat_low_l
         e_sat_high_indiv = np.repeat([None], len(epoch_files))
         line_cont_ig_indiv = np.repeat([None], len(epoch_files))
         sat_indiv = np.repeat([None], len(epoch_files))
+        det_indiv = np.repeat([None], len(epoch_files))
+
         for id_epoch, elem_file in enumerate(epoch_files):
             # fetching the instrument of the individual element
             # note that we replace the megumi xis0_xis3 files by the xis1 because the merged xis0_xis3 have no header
@@ -76,8 +78,27 @@ def pdf_summary(epoch_files,arg_dict,fit_ok=False,summary_epoch=None,e_sat_low_l
             sat_indiv[id_epoch] = fits.open(elem_file.replace('xis0_xis3', 'xis1').\
                                                  replace('xis0_xis2_xis3','xis1'))[1].header['TELESCOP']\
                 .replace('SUZAKU','Suzaku')
+
+            with fits.open(elem_file) as hdul:
+                if sat_indiv[id_epoch].upper() in ['SWIFT','INTEGRAL']:
+                    det_indiv[id_epoch] = hdul[1].header['INSTRUME']
+
+                elif sat_indiv[id_epoch].upper()=='SUZAKU':
+
+                        if megumi_files:
+                            # update for pin files
+                            if 'PIN' in hdul[1].header['DETNAM']:
+                                det_indiv[id_epoch] = 'PIN'
+                                # for megumi files we always update the header
+
+
+                            elif 'XIS' in hdul[1].header['INSTRUME'] or '_xis' in elem_file:
+                                det_indiv[id_epoch] ='XIS'
+
+
+
             e_sat_low_indiv[id_epoch], e_sat_high_indiv[id_epoch], temp,line_cont_ig_indiv[id_epoch], = \
-                line_e_ranges(sat_indiv[id_epoch])
+                line_e_ranges(sat_indiv[id_epoch],det=det_indiv[id_epoch])
     else:
         e_sat_low_val, e_sat_high_val, temp,line_cont_ig_val = line_e_ranges(sat_glob)
         e_sat_low_indiv = np.repeat(e_sat_low_val, len(epoch_files))

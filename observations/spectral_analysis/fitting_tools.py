@@ -459,6 +459,15 @@ def line_e_ranges_fullarg(sat,sat_glob,diff_bands_NuSTAR_NICER,low_E_NICER,line_
                 e_sat_high=e_max_XRT
             else:
                 e_sat_high=10.
+    if sat.upper()=='INTEGRAL':
+        if det=='IBIS':
+            e_sat_low=30
+            #no high ignore
+            e_sat_high=1000
+        if det=='JMX1':
+            #no low ignore
+            e_sat_low=0.1
+            e_sat_high=20
 
     if sat.upper() in ['XMM', 'NICER']:
 
@@ -511,7 +520,6 @@ def line_e_ranges_fullarg(sat,sat_glob,diff_bands_NuSTAR_NICER,low_E_NICER,line_
 
         if sat.upper() in ['XMM', 'CHANDRA', 'NICER', 'SWIFT', 'SUZAKU', 'NUSTAR','INTEGRAL']:
 
-
             if e_sat_low > 6:
                 # not ignoring this band for high-E only e.g. high-E only NuSTAR, BAT, INTEGRAL spectra
                 pass
@@ -541,3 +549,5 @@ def file_to_obs(file, sat,megumi_files):
         return file.split('_grp_opt')[0]
     elif sat in ['NICER']:
         return file.split('_sp_grp_opt')[0]
+    elif sat.upper()=='INTEGRAL':
+        return file.split('_sum')[0]

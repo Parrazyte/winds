@@ -95,6 +95,15 @@ telescope_colors={'Chandra':colors_func_instru.to_rgba(0),
                    'XMM':colors_func_instru.to_rgba(4**(norm_pow)),
                   'SWIFT':colors_func_instru.to_rgba(5**(norm_pow))}
 
+mpl_base_colors=mpl.colors.TABLEAU_COLORS
+mpl_base_colors_list=list(mpl_base_colors.keys())
+telescope_colors_inter={'Chandra':mpl_base_colors[mpl_base_colors_list[0]],
+                  'NICER':mpl_base_colors[mpl_base_colors_list[1]],
+                  'NuSTAR':mpl_base_colors[mpl_base_colors_list[2]],
+                  'Suzaku':mpl_base_colors[mpl_base_colors_list[3]],
+                   'XMM':mpl_base_colors[mpl_base_colors_list[4]],
+                  'SWIFT':mpl_base_colors[mpl_base_colors_list[5]],
+                  'INTEGRAL':mpl_base_colors[mpl_base_colors_list[6]]}
 
 #previous non colorblind-friendly mode
 # telescope_colors={'XMM':'red',

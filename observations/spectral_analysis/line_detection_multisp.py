@@ -443,24 +443,28 @@ ap.add_argument('-plot_epoch_overlap',nargs=1,help='plot overlap between differe
 
 #in this case other epochs from other instruments are matched against the obs of this one
 #useful to center epoch matching on a specific instrument
-#off value is 'False'
+#off value is 'False' (easier for parfiles
 ap.add_argument('-multi_focus',nargs=1,help='restricts epoch matching to having a specific telescope',
-                default='Suzaku',type=str)
+                default='False',type=str)
 
 #off value is 'False'. ex: "NICER+NuSTAR"
 ap.add_argument('-multi_restrict_combi',nargs=1,help='restrict multi epochs to a specific satellite combination',
                 default='False')
 
 #different instruments should be joined by '+'
+#different combinations should be joined by ','
 #off value is 'False'
 ap.add_argument('-multi_forbid_combi',nargs=1,help='prevents epochs with a given combination of telescopes',
-                default='SWIFT',type=str)
+                default='SWIFT,INTEGRAL,SWIFT+INTEGRAL,NICER,NICER+NuSTAR',type=str)
 
 
 ap.add_argument('-add_mosaic_BAT',nargs=1,help='add mosaiced Swift-BAT survey spectra to the epoch creation',
                 default=True,type=str)
 
 ap.add_argument('-add_ungrouped_BAT',nargs=1,help='add ungrouped Swift-BAT spectra to the epoch creation',
+                default=True,type=str)
+
+ap.add_argument('-add_ungrouped_IBIS',nargs=1,help='add ungrouped INTEGRAL-IBIS spectra to the epoch creation',
                 default=True,type=str)
 
 ap.add_argument('-skip_single_instru',nargs=1,help='skip epochs with a single instrument',
@@ -666,6 +670,7 @@ fix_compt_gamma=args.fix_compt_gamma
 mandatory_abs=args.mandatory_abs
 
 add_ungrouped_BAT=args.add_ungrouped_BAT
+add_ungrouped_IBIS=args.add_ungrouped_IBIS
 add_mosaic_BAT=args.add_mosaic_BAT
 
 cont_fit_method=args.cont_fit_method
@@ -899,10 +904,11 @@ if multi_obj==False:
                     glob.glob('*_'+prefix+'_sp_src_grp_'+grouping+'.*') if 'bgtested' not in elem]
 
         if add_mosaic_BAT:
-            spfile_list += [elem for elem in glob.glob('BAT_*_mosaic.pha')]
+            spfile_list += glob.glob('BAT_*_mosaic.pha')
         if add_ungrouped_BAT:
-            spfile_list+=[elem for elem in  glob.glob('*_survey_point_*.pha')]
-
+            spfile_list+=glob.glob('*_survey_point_*.pha')
+        if add_ungrouped_IBIS:
+            spfile_list+=glob.glob('*_ibis*_pha*')
     #creating the output directory
     os.system('mkdir -p '+outdir)
 
@@ -995,6 +1001,14 @@ for i_file,elem_file in enumerate(spfile_list):
         if det_list[i_file]=='XMM':
             tstart_list[i_file]=Time(hdul[0].header["EXPSTART"]).mjd
             tstop_list[i_file]=Time(hdul[0].header["EXPSTOP"]).mjd
+            file_ok_ids += [i_file]
+            continue
+
+        if det_list[i_file]=='INTEGRAL':
+
+            MJDREF=hdul[1].header['MJDREF']
+            tstart_list[i_file]=Time(MJDREF+hdul[1].header['TFIRST'],format='mjd').mjd
+            tstop_list[i_file]=Time(MJDREF+hdul[1].header['TLAST'],format='mjd').mjd
             file_ok_ids += [i_file]
             continue
 
@@ -1158,9 +1172,17 @@ if sat_glob=='multi' and multi_restrict_combi!='False':
                 (np.unique(det_list[epoch_id_list[id_epoch]])==np.unique(multi_restrict_combi.split('+'))).all()]
 
 if sat_glob=='multi' and multi_forbid_combi!='False':
+
+    id_epochs_clean_list=[]
+    for id_epoch in range(len(epoch_list)):
+        forbid_arr=np.array(['_'.join((np.unique(det_list[epoch_id_list[id_epoch]])))\
+                              =='_'.join(np.unique(elem_combi if '+' not in elem_combi else elem_combi.split('+')))\
+        for elem_combi in multi_forbid_combi.split(',')])
+        if not forbid_arr.any():
+            id_epochs_clean_list+=[id_epoch]
+
     #note that np.unique is also used for sorting to ensure we can compare the arrays directly
-    epoch_list = [epoch_list[id_epoch] for id_epoch in range(len(epoch_list)) if not
-                  (np.unique(det_list[epoch_id_list[id_epoch]]) == np.unique(multi_forbid_combi.split('+'))).all()]
+    epoch_list = np.array(epoch_list,dtype=object)[id_epochs_clean_list]
 
 epoch_list=np.array(epoch_list,dtype=object)
 
@@ -1206,7 +1228,7 @@ if plot_epoch_overlap:
     then the final epochs as they end up, cycling through colors for each epoch
     '''
 
-    from visual_line_tools import telescope_colors
+    from visual_line_tools import telescope_colors_inter
     import matplotlib.dates as mdates
 
     print('Plotting multi epoch overlaps...')
@@ -1221,7 +1243,7 @@ if plot_epoch_overlap:
         epoch_mask=np.array([np.argwhere(spfile_list==elem)[0][0] for elem in elem_epoch])
 
 
-        tel_col_list = list(telescope_colors.keys())
+        tel_col_list = list(telescope_colors_inter.keys())
         mask_tel = np.array([np.array(det_list[epoch_mask]) == elem for elem in tel_col_list])
 
         num_dates_start_epoch = mdates.date2num(Time(tstart_list.astype(float)[epoch_mask], format='mjd').datetime)
@@ -1279,7 +1301,7 @@ if plot_epoch_overlap:
 
                 ax_exp.axvspan(xmin=num_dates_start_all[mask_tel[i_det]][i_exp],
                                xmax=num_dates_stop_all[mask_tel[i_det]][i_exp],
-                               ymin=0, ymax=0.5, color=telescope_colors[tel_col_list[i_det]],
+                               ymin=0, ymax=0.5, color=telescope_colors_inter[tel_col_list[i_det]],
                                label=tel_col_list[i_det] if (bar_in_plot and tel_col_list[i_det] not in tel_col_shown) else '', alpha=0.4)
 
                 if bar_in_plot:

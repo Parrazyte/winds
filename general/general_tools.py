@@ -56,7 +56,7 @@ def shorten_epoch(file_ids_init):
     bat_survey_files=[elem for elem in file_ids if 'survey_point' in elem or \
                       (elem.startswith('BAT_') and elem.endswith('_mosaic.pha'))]
 
-    obsids = np.unique([(elem if 'heg_' in elem else elem.split('-')[0]) for elem in file_ids if elem not in bat_survey_files])
+    obsids = np.unique([(elem.split('_heg'[0]) if 'heg_' in elem else elem.split('-')[0]) for elem in file_ids if elem not in bat_survey_files])
 
 
     if len(obsids)==0:

@@ -226,7 +226,7 @@ def linedet_loop(epoch_list,arg_dict,arg_dict_path=None,parallel=1,heasoft_init_
                 if sat_glob == 'Suzaku' and megumi_files:
                     file_ids = [elem.split('_spec')[0].split('_src')[0] for elem in epoch_files]
                 else:
-                    file_ids = [elem.split('_sp')[0] for elem in epoch_files]
+                    file_ids = [elem.split('_sp')[0].split('_grp_opt')[0] for elem in epoch_files]
 
                 summary_content=str(shorten_epoch(file_ids))+'\t'+str(epoch_files_suffix)+'\t'+str(diag_message)
 

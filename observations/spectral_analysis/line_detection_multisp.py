@@ -1356,7 +1356,7 @@ if spread_comput!=1:
         if not os.path.isfile(file_spread):
 
             if not spread_overwrite:
-                split_epoch=[epoch for epoch in spread_epochs[i_spread] if shorten_epoch([elem.split('_sp')[0]\
+                split_epoch=[epoch for epoch in spread_epochs[i_spread] if shorten_epoch([elem.split('_sp')[0].split('_grp_opt')[0]\
                                                                               for elem in epoch]) not in started_expos]
             else:
                 split_epoch=spread_epochs[i_spread]

@@ -1531,6 +1531,28 @@ def addcomp(compname,position='last',endmult=None,return_pos=False,modclass=AllM
 
         -disk_thcomp: thcomp multiplicating the disk, with frozen cutoff at 100 keV
 
+
+
+        For the following (physical) models:
+            The search for physical values is performed by parsing if
+             objname is in the inclination, mass or distance tables
+
+        -objname_kerrbb:
+            kerrbb with i, M, D fixed at physical values if they exist.
+
+            Also for anything with a prefix including kerrbb,
+            -the spectral hardening factor is left free between 1.4 and 1.9
+            -normalization: frozen to 1 if all three physical parameters are fixed
+
+        -objname_relxillCp
+            relxill model with i, M, D fixed at physical values if they exist.
+
+            Also for anything with a prefix including relxillCp
+            -the normalization fraction refl_frac is set to -1 to only include the reflected spectrum
+            -Rbr is fixed at 18 Rg
+            -Index 1 and Index 2 are left free
+            -Rin is set at -1 (R_ISCO) and Rout is set at 1000 Rg
+
     Dust scattering
         -globOBJNAME_xscat: scattering component linked with existing absorption if any
                             regions extraction sizes extracted automatically
@@ -2263,7 +2285,7 @@ def addcomp(compname,position='last',endmult=None,return_pos=False,modclass=AllM
                 AllModels(1)(gap_end-3).link=str(abs_comp_firstpar.index)
 
         # only doing presets if added with a prefix
-        if comp_custom != '':
+        if comp_custom is not None:
             for i_grp in range(1, AllData.nGroups + 1):
                 with fits.open(group_sp[i_grp-1]) as hdul:
                     if 'TELESCOP' in hdul[1].header and hdul[1].header['TELESCOP'] == 'NICER':
@@ -2286,6 +2308,79 @@ def addcomp(compname,position='last',endmult=None,return_pos=False,modclass=AllM
             if comp_custom.replace('glob','') in list(xscat_pos_dict.keys()):
                 AllModels(1)(gap_end-2).values=xscat_pos_dict[comp_custom.replace('glob','')]
                 AllModels(1)(gap_end-2).frozen=True
+
+    '''Physical model specifics'''
+
+    if comp_split== 'relxillCp':
+        if comp_custom  is not None:
+
+            from visual_line_tools import incl_dyn_dict, incl_jet_dict, incl_misc_dict
+
+            #fixing the inclination, preferentially to dynamical values, else to jet, else to misc
+            if comp_custom in list(incl_dyn_dict.keys()):
+                AllModels(1)(gap_end-14).values=incl_dyn_dict[comp_custom][0]
+                AllModels(1)(gap_end-14).frozen = True
+
+            elif comp_custom in list(incl_jet_dict.keys()):
+                AllModels(1)(gap_end-14).values = incl_jet_dict[comp_custom][0]
+                AllModels(1)(gap_end-14).frozen = True
+
+            elif comp_custom in list(incl_misc_dict.keys()):
+                AllModels(1)(gap_end-14).values = incl_misc_dict[comp_custom][0]
+                AllModels(1)(gap_end-14).frozen = True
+
+            #freezing the reflection fraction to -1 to only get the reflection component
+            AllModels(1)(gap_end-1).values=-1
+            AllModels(1)(gap_end - 1).frozen=True
+
+            #free indexes but with restrained values
+            AllModels(1)(gap_end-8).values=[3.,0.1,1.,1.,5.,5.]
+            AllModels(1)(gap_end-9).values=[3.,0.1,1.,1.,5.,5.]
+
+
+            #fixing Rin=R_ISCO, Rout=1000, Rbr=18Rg
+            AllModels(1)(gap_end-10).values=18
+            AllModels(1)(gap_end-11).values=1e3
+            AllModels(1)(gap_end-12).values=-1
+
+    if comp_split == 'kerrbb':
+        if comp_custom is not None:
+
+            # allowing some wiggle room for the spectral hardening
+            AllModels(1)(gap_end - 3).values = [1.7, 0.1, 1.4, 1.4, 1.9, 1.9]
+
+            #fixing the max spin to 0.998 on both sides to avoid issues when linking with relxill
+            AllModels(1)(gap_end-8).values=[0.0, 0.01, -0.998, -0.998, 0.998, 0.998]
+
+            from visual_line_tools import incl_dyn_dict, incl_jet_dict, incl_misc_dict, dist_dict, mass_dict
+
+            #fixing the inclination, preferentially to dynamical values, else to jet, else to misc
+            if comp_custom in list(incl_dyn_dict.keys()):
+                AllModels(1)(gap_end-7).values=incl_dyn_dict[comp_custom][0]
+                AllModels(1)(gap_end - 7).frozen = True
+
+            elif comp_custom in list(incl_jet_dict.keys()):
+                AllModels(1)(gap_end - 7).values = incl_jet_dict[comp_custom][0]
+                AllModels(1)(gap_end - 7).frozen = True
+
+            elif comp_custom in list(incl_misc_dict.keys()):
+                AllModels(1)(gap_end - 7).values = incl_misc_dict[comp_custom][0]
+                AllModels(1)(gap_end - 7).frozen = True
+
+            #mass
+            if comp_custom in list(mass_dict.keys()):
+                AllModels(1)(gap_end - 6).values = mass_dict[comp_custom][0]
+                AllModels(1)(gap_end - 6).frozen = True
+
+
+            #distance
+            if comp_custom in list(dist_dict.keys()):
+                AllModels(1)(gap_end - 4).values = dist_dict[comp_custom][0]
+                AllModels(1)(gap_end - 4).frozen = True
+
+            #freezing the norm if all 3 physical parameters are frozen
+            if AllModels(1)(gap_end-7).frozen and AllModels(1)(gap_end-6).frozen and AllModels(1)(gap_end-4).frozen:
+                AllModels(1)(gap_end).frozen=True
 
     AllModels.show()
 

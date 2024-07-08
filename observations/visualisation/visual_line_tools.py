@@ -1833,8 +1833,16 @@ def obj_values(file_paths,E_factors,dict_linevis):
                     curr_instru_list[i_obs]='multi'
                     #loading the first obs to get some data
                     # note: the first item of the literal_eval list here is the suffix of the first file
-                    filepath='/'.join(lineval_path.split('/')[:-2])+'/'+obs+('_gti_event_spec' if 'xis' in obs else '_sp')+ \
-                             literal_eval(summary_obs_line[0].split('\t')[1])[0]
+                    obs_suffix_list=[elem for elem in literal_eval(summary_obs_line[0].split('\t')[1]) if elem.startswith('_')]
+
+                    if len(obs_suffix_list)==0:
+                        #this can happen for multi epchs with only full file name in the file identifiers
+                        obs_file=literal_eval(summary_obs_line[0].split('\t')[1])[0]
+                    else:
+                        obs_file=obs+('_gti_event_spec' if 'xis' in obs else '_sp')+obs_suffix_list[0]
+
+                    filepath=os.path.join('/'.join(lineval_path.split('/')[:-2]),obs_file)
+
 
                     #ensuring no issue with suzaku files without a header
                     filepath=filepath.replace('xis0_xis2_xis3','xis1').replace('xis0_xis3','xis1')

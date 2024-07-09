@@ -77,7 +77,7 @@ lines_e_dict={
                    'FeKb0em':[7.06,-10000,10000],
                    'calNICERSiem':[1.74],
                   #energy from http://www.atomdb.org/Webguide/transition_information.php?lower=1s&upper=2p&z0=14&z1=13
-                  'SiKa14abs':[2.0043928,-3000,3000]}
+                  'SiKa14abs':[2.005494,-3000,3000]}
 
 #note: if find a line at 2.47 keV, careful about confusion with an interstellar gas S2 3p line at 2.47 keV
 #for galactic sources

@@ -1220,8 +1220,9 @@ def line_detect(epoch_id,arg_dict):
 
         spflux_single = np.array(spflux_single).T
 
-        #indiv ignoring with check for empty ignores
-        ignore_indiv_ig(line_cont_ig_indiv)
+        if not post_autofit:
+            #indiv ignoring with check for empty ignores
+            ignore_indiv_ig(line_cont_ig_indiv)
 
         curr_store_fit(mode='broadhid' + add_str, fitmod=fitmodel)
 

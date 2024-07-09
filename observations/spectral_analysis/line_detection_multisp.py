@@ -188,7 +188,12 @@ ap.add_argument("-prefix",nargs=1,help='restrict analysis to a specific prefix',
 
 ####output directory
 ap.add_argument("-outdir",nargs=1,help="name of output directory for line plots",
-                default="lineplots_opt_tests",type=str)
+                default="lineplots_opt_parallel",type=str)
+
+#give object name directly, otherwise it will be taken from the second last directory (above the bigbatch)
+#as usual, "False" to remove this
+ap.add_argument('-object_name',nargs=1,help='Name of observed object',
+                default='4U1630-47',type=str)
 
 #overwrite
 #global overwrite based on recap PDF
@@ -362,7 +367,7 @@ ap.add_argument('-compute_highflux_only',help='Reloads the autofit computation a
                 default=False,type=bool)
 
 ap.add_argument('-hid_only',nargs=1,help='skip the line detection and directly plot the hid',
-                default=False,type=bool)
+                default=True,type=bool)
 
 #date or HR
 ap.add_argument('-hid_sort_method',nargs=1,help='HID summary observation sorting',default='date',type=str)
@@ -445,7 +450,7 @@ ap.add_argument('-plot_epoch_overlap',nargs=1,help='plot overlap between differe
 #useful to center epoch matching on a specific instrument
 #off value is 'False' (easier for parfiles
 ap.add_argument('-multi_focus',nargs=1,help='restricts epoch matching to having a specific telescope',
-                default='False',type=str)
+                default='NICER',type=str)
 
 #off value is 'False'. ex: "NICER+NuSTAR"
 ap.add_argument('-multi_restrict_combi',nargs=1,help='restrict multi epochs to a specific satellite combination',
@@ -455,7 +460,7 @@ ap.add_argument('-multi_restrict_combi',nargs=1,help='restrict multi epochs to a
 #different combinations should be joined by ','
 #off value is 'False'
 ap.add_argument('-multi_forbid_combi',nargs=1,help='prevents epochs with a given combination of telescopes',
-                default='SWIFT,INTEGRAL,SWIFT+INTEGRAL,NICER,NICER+NuSTAR',type=str)
+                default='SWIFT,INTEGRAL,SWIFT+INTEGRAL,NICER+NuSTAR',type=str)
 
 
 ap.add_argument('-add_mosaic_BAT',nargs=1,help='add mosaiced Swift-BAT survey spectra to the epoch creation',
@@ -608,6 +613,8 @@ container=args.container
 force_instance=args.force_instance
 parfile=args.parfile
 indiv_instances=args.indiv_instances
+
+object_name_arg=args.object_name
 
 sat_glob=args.satellite
 cameras=args.cameras
@@ -875,7 +882,10 @@ glob_summary_sp=[]
 if multi_obj==False:
 
     #assuming the last top directory is the object name
-    obj_name=os.getcwd().split('/')[-2]
+    if object_name_arg!='False':
+        obj_name=object_name_arg
+    else:
+        obj_name=os.getcwd().split('/')[-2]
 
     #path to the line results file
     line_store_path=os.path.join(os.getcwd(),outdir,'line_values_'+args.line_search_e.replace(' ','_')+'_'+
@@ -1059,7 +1069,7 @@ det_list = det_list[file_ok_ids]
 if sat_glob=='multi':
     if multi_focus!='False':
         #restricting the match epochs to a specific satellite
-        mask_multi_focus=[elem==multi_focus for elem in det_list[file_ok_ids]]
+        mask_multi_focus=[elem.upper()==multi_focus.upper() for elem in det_list[file_ok_ids]]
     else:
         mask_multi_focus=np.repeat(True,len(det_list[file_ok_ids]))
 
@@ -1546,7 +1556,8 @@ dict_linevis={
     'args_cam':args.cameras,
     'args_line_search_e':args.line_search_e,
     'args_line_search_norm':args.line_search_norm,
-    'visual_line':False
+    'visual_line':False,
+    'incl_dict_use':{},
     }
 
 #getting the single parameters
@@ -1560,7 +1571,7 @@ Edd_factor=dist_factor/(1.26e38*mass_obj_list)
 
 #Reading the results files
 observ_list,lineval_list,lum_list,date_list,instru_list,exptime_list,fitmod_broadband_list,epoch_obs_list,\
-    flux_high_list=obj_values(lineval_files,Edd_factor,dict_linevis)
+    flux_high_list=obj_values(lineval_files,Edd_factor,dict_linevis,local_paths=True)
 
 dict_linevis['lum_list']=lum_list
 dict_linevis['exptime_list']=exptime_list
@@ -1860,6 +1871,7 @@ dict_linevis['flag_single_obj']=True
 dict_linevis['display_minorticks']=False
 dict_linevis['hatch_unstable']=False
 dict_linevis['change_legend_position']=False
+dict_linevis['observ_list']=None
 
 #individual plotting options for the graph that will create the PDF
 display_single=not multi_obj
@@ -2031,7 +2043,7 @@ def save_pdf(fig):
             try:
                 point_recapfile=[elem for elem in save_dir_list if point_observ+'_recap.pdf' in elem][0]
             except:
-                avail_recapfile=glob.glob(os.path.join(save_dir, point_observ + '**_recap.pdf'))
+                avail_recapfile=glob.glob(os.path.join(save_dir, '**'+point_observ + '**_recap.pdf'))
 
                 if len(avail_recapfile)!=1:
                     breakpoint()

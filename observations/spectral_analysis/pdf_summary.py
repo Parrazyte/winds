@@ -179,7 +179,7 @@ def pdf_summary(epoch_files,arg_dict,fit_ok=False,summary_epoch=None,e_sat_low_l
             else:
                 is_sp+=[False]
                 is_cleanevt+=[False]
-        elif elem_sat in ['Chandra','NICER','Swift','SWIFT','NuSTAR']:
+        elif elem_sat.upper() in ['CHANDRA','NICER','Swift','SWIFT','NuSTAR']:
             is_sp+=[True]
             is_cleanevt+=[False]
 
@@ -801,4 +801,3 @@ def pdf_summary(epoch_files,arg_dict,fit_ok=False,summary_epoch=None,e_sat_low_l
         pdf.output(outdir + '/' + ('_'.join(shorten_epoch(epoch_observ))) + '_aborted_recap.pdf')
     else:
         pdf.output(outdir+'/'+('_'.join(shorten_epoch(epoch_observ)))+'_recap.pdf')
-

@@ -716,8 +716,10 @@ class scorpeon_manager:
 
         if self.bgload_paths is not None:
             #making sure the file actually exists
-            assert np.array([elem is None or os.path.isfile(str(elem)) for elem in self.bgload_paths]).all(),\
-                'One or more scorpeon load file path does not exist'
+            if not np.array([elem is None or os.path.isfile(str(elem)) for elem in self.bgload_paths]).all():
+                print('One or more scorpeon load file path does not exist')
+                raise ValueError
+
 
             #loading all of the models
             for i_bg,bg_path in enumerate(self.bgload_paths):

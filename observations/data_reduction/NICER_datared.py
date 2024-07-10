@@ -2473,6 +2473,27 @@ def clean_products(directory,clean_wait_value=2,thread=None):
     if thread is not None:
         thread.set()
 
+def update_bg():
+    '''
+    Function to clean bg issues in a previous version of the code
+    '''
+
+    bg_files=glob.glob('**_bg.py')
+    for elem in bg_files:
+        print('updating file '+elem)
+        with open(elem) as f:
+            f_lines=f.readlines()
+        with open(elem,'w+') as f:
+            for i_line,line in enumerate(f_lines):
+                if line.startswith('nicer_srcrmf') and f_lines[i_line-1].startswith('nicer_srcrmf'):
+                    continue
+                if line.startswith('nicer_skyarf') and f_lines[i_line-1].startswith('nicer_skyarf'):
+                    continue
+                if line.startswith('nicer_diagrmf') and f_lines[i_line-1].startswith('nicer_diagrmf'):
+                    continue
+                f.write(line)
+
+
 def clean_all(directory,clean_wait_value=2,thread=None):
 
     '''

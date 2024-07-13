@@ -817,6 +817,7 @@ def loop_cycle_BAT(object_name,input_days_file=None,interval_start=None,interval
 
     header_name_list=['_'.join([elem_start,elem_stop]) for elem_start,elem_stop in \
                       zip(increment_start_list,increment_stop_list)]
+
     if parallel==1:
 
         for i_increment in range(len(increment_start_list)):
@@ -849,6 +850,11 @@ def loop_cycle_BAT(object_name,input_days_file=None,interval_start=None,interval
                       summary_intervals_header)
 
     else:
+
+        mask_use=[(elem not in launched_intervals if not rerun_started else 1) and \
+                  (elem not in completed_intervals if not rerun_completed else 1)
+                  for elem in header_name_list]
+
         res = Parallel(n_jobs=parallel)(
             delayed(full_cycle_BAT)(
                 object_name=object_name,
@@ -866,4 +872,5 @@ def loop_cycle_BAT(object_name,input_days_file=None,interval_start=None,interval
                 launched_intervals=launched_intervals if not rerun_started  else None,
                 nprocs=1)
             for elem_start,elem_stop,elem_inter_dir,elem_header_name \
-                    in zip(increment_start_list,increment_stop_list,inter_dir_list,header_name_list))
+                    in zip(np.array(increment_start_list)[mask_use],np.array(increment_stop_list)[mask_use],
+                           np.array(inter_dir_list)[mask_use],np.array(header_name_list)[mask_use]))

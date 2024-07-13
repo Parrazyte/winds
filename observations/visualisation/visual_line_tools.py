@@ -236,7 +236,7 @@ incl_refl_dict={
         'XTEJ1752-223':[35,4,4,1],
         'XTEJ1859+226':[71,1,1,1],
         'XTEJ1908+094':[28,11,11,1],
-        'XTEJ2012+381':[68,11,6,1]
+        'XTEJ2012+381':[58,15,16,1]
          }
 
 Porb_dict={'1E1740.7-2942':[303,2,1,1],
@@ -1562,7 +1562,7 @@ def dist_mass(dict_linevis,use_unsure_mass_dist=True):
     return d_obj,m_obj
 
 #@st.cache_data
-def obj_values(file_paths,E_factors,dict_linevis):
+def obj_values(file_paths,E_factors,dict_linevis,local_paths=False):
     
     '''
     Extracts the stored data from each value line_values file. 
@@ -1575,8 +1575,7 @@ def obj_values(file_paths,E_factors,dict_linevis):
     cameras=dict_linevis['args_cam']
     expmodes=dict_linevis['expmodes']
     multi_obj=dict_linevis['multi_obj']
-    visual_line=True
-    
+
     obs_list=np.array([None]*len(obj_list))
     lval_list=np.array([None]*len(obj_list))
     l_list=np.array([None]*len(obj_list))
@@ -1592,10 +1591,10 @@ def obj_values(file_paths,E_factors,dict_linevis):
     for i in range(len(obj_list)):
         
         #matching the line paths corresponding to each object
-        if visual_line:    
-            curr_obj_paths=[elem for elem in file_paths if '/'+obj_list[i]+'/' in elem]
+        if local_paths:
+            curr_obj_paths = file_paths
         else:
-            curr_obj_paths=file_paths
+            curr_obj_paths=[elem for elem in file_paths if '/'+obj_list[i]+'/' in elem]
             
         curr_E_factor=E_factors[i]
         
@@ -1671,283 +1670,281 @@ def obj_values(file_paths,E_factors,dict_linevis):
         curr_flux_high_list=np.array([None]*len(obs_list[i]))
         #fetching spectrum informations
 
-        if visual_line:
+        '''
+        importing xspec while online can be very complicated, so we only import it here to make the dumps
+        The dumps will never be made online so that there shouldn't be a problem
+        
+        
+        Note that xspec still needs to be imported to load the pickles, but we give the results in arrays
+        so that the visual_line dumps don't need it afterwards
+        '''
+        from xspec_config_multisp import load_fitmod,parse_xlog
+
+        for i_obs,obs in enumerate(obs_list[i]):
+
+            lineval_path=lineval_paths_arr[i_obs]
+
+            '''Storing the list of exposures'''
+
+            # fetching the full list of epoch obs to get the exposure later
+            with open('/'.join(lineval_path.split('/')[:-1]) + '/summary_line_det.log') as summary:
+                summary_lines = summary.readlines()[1:]
+
+            if 'XMM/' in lineval_path or 'Chandra/' in lineval_path:
+                #safeguard for the previous way the summaries were handled
+                #kept separate from the rest so this is done consciously
+                summary_obs_line = [elem for elem in summary_lines if obs in ('_').join(elem.split('\t'))]
+            else:
+                summary_obs_line = [elem for elem in summary_lines if obs in elem]
+
+            assert len(summary_obs_line) == 1, 'Error in observation summary matching'
+
+            epoch_tab = summary_obs_line[0].split('\t')[0]
+            # note: this is for backward compatiblity with old NICER reduction without gti-level split
+
+            if '[' not in epoch_tab:
+                elem_epoch_obs_list = [epoch_tab]
+                multi_sat=False
+            else:
+                elem_epoch_obs_list = expand_epoch(literal_eval(summary_obs_line[0].split('\t')[0]))
+
+                #the multi sat flag is here to avoid fetching informations which assume that a single suffix
+                #works for all the spectra
+
+                #note: this method is more complicated and won't need to be used as long as we don't only
+                #allow for multi instrument spectral analysis in multi folders
+                #failsafe against summaries (such a for nicer) without extension information
+                # if summary_obs_line[0].count('\t')<2 or 'Suzaku/' in lineval_path:
+                #     multi_sat=False
+                # else:
+                #     multi_sat=len(literal_eval(summary_obs_line[0].split('\t')[1]))>1
+
+                multi_sat='/multi/' in lineval_path
+
+
+            curr_epoch_obs_list[i_obs] = elem_epoch_obs_list
+
+            # the path+ obs prefix for all the stored files in the lineplots_X folders
+            obs_path_prefix = lineval_path[:lineval_path.rfind('/') + 1] + obs
+
+            #storing the high flux array if it exists
+            if os.path.isfile(obs_path_prefix+'_main_spflux_high.txt'):
+                curr_flux_high_list[i_obs]=np.loadtxt(obs_path_prefix+'_main_spflux_high.txt')
+
+            '''Storing the fitmod'''
 
             '''
-            importing xspec while online can be very complicated, so we only import it here to make the dumps
-            The dumps will never be made online so that there shouldn't be a problem
+            Here, we need both the txt for the main values and the fitmod for the errors stored in the
+            .errors method
             
+            Extremely inneficient but this should work for everything
             
-            Note that xspec still needs to be imported to load the pickles, but we give the results in arrays
-            so that the visual_line dumps don't need it afterwards
+            Note that since we take the values and the errors from the broadband fits, the errors are not
+            from a chain
             '''
-            from xspec_config_multisp import load_fitmod,parse_xlog
 
-            for i_obs,obs in enumerate(obs_list[i]):
+            txtmod_path=obs_path_prefix+'_mod_broadband_post_auto.txt'
 
-                lineval_path=lineval_paths_arr[i_obs]
+            #safeguard for the few nustar runs where I deleted the products by mistake
+            if os.path.isfile(txtmod_path):
 
-                '''Storing the list of exposures'''
+                with open(txtmod_path) as txt_file:
+                    txt_lines=txt_file.readlines()
 
-                # fetching the full list of epoch obs to get the exposure later
-                with open('/'.join(lineval_path.split('/')[:-1]) + '/summary_line_det.log') as summary:
-                    summary_lines = summary.readlines()[1:]
+                #fetching the main values of the parameters
+                mainmod_mainpars=parse_xlog(txt_lines,return_pars=True)[0]
 
-                if 'XMM/' in lineval_path or 'Chandra/' in lineval_path:
-                    #safeguard for the previous way the summaries were handled
-                    #kept separate from the rest so this is done consciously
-                    summary_obs_line = [elem for elem in summary_lines if obs in ('_').join(elem.split('\t'))]
-                else:
-                    summary_obs_line = [elem for elem in summary_lines if obs in elem]
+                fitmod_path=obs_path_prefix+'_fitmod_broadband_post_auto.pkl'
 
-                assert len(summary_obs_line) == 1, 'Error in observation summary matching'
+                assert os.path.isfile(fitmod_path),'broadband_post_auto fitmod missing'
 
-                epoch_tab = summary_obs_line[0].split('\t')[0]
-                # note: this is for backward compatiblity with old NICER reduction without gti-level split
-
-                if '[' not in epoch_tab:
-                    elem_epoch_obs_list = [epoch_tab]
-                    multi_sat=False
-                else:
-                    elem_epoch_obs_list = expand_epoch(literal_eval(summary_obs_line[0].split('\t')[0]))
-
-                    #the multi sat flag is here to avoid fetching informations which assume that a single suffix
-                    #works for all the spectra
-
-                    #note: this method is more complicated and won't need to be used as long as we don't only
-                    #allow for multi instrument spectral analysis in multi folders
-                    #failsafe against summaries (such a for nicer) without extension information
-                    # if summary_obs_line[0].count('\t')<2 or 'Suzaku/' in lineval_path:
-                    #     multi_sat=False
-                    # else:
-                    #     multi_sat=len(literal_eval(summary_obs_line[0].split('\t')[1]))>1
-
-                    multi_sat='/multi/' in lineval_path
-
-
-                curr_epoch_obs_list[i_obs] = elem_epoch_obs_list
-
-                # the path+ obs prefix for all the stored files in the lineplots_X folders
-                obs_path_prefix = lineval_path[:lineval_path.rfind('/') + 1] + obs
-
-                #storing the high flux array if it exists
-                if os.path.isfile(obs_path_prefix+'_main_spflux_high.txt'):
-                    curr_flux_high_list[i_obs]=np.loadtxt(obs_path_prefix+'_main_spflux_high.txt')
-
-                '''Storing the fitmod'''
-
-                '''
-                Here, we need both the txt for the main values and the fitmod for the errors stored in the
-                .errors method
-                
-                Extremely inneficient but this should work for everything
-                
-                Note that since we take the values and the errors from the broadband fits, the errors are not
-                from a chain
-                '''
-
-                txtmod_path=obs_path_prefix+'_mod_broadband_post_auto.txt'
-
-                #safeguard for the few nustar runs where I deleted the products by mistake
-                if os.path.isfile(txtmod_path):
-
-                    with open(txtmod_path) as txt_file:
-                        txt_lines=txt_file.readlines()
-
-                    #fetching the main values of the parameters
-                    mainmod_mainpars=parse_xlog(txt_lines,return_pars=True)[0]
-
-                    fitmod_path=obs_path_prefix+'_fitmod_broadband_post_auto.pkl'
-
-                    assert os.path.isfile(fitmod_path),'broadband_post_auto fitmod missing'
-
-                    #storing the post_hid fitmod to have access to the full model
-                    #note that the last directory has to be unchanged since the save otherwise there's a
-                    #logfile trace somewhere who's crashing
-
-                    try:
-                        elem_fitmod=load_fitmod(fitmod_path)
-                    except:
-
-                        print('logfile bug in '+fitmod_path)
-                        print('fixing...')
-                        #Annoying bug when at some point the continuum fitmod was saved in the autofit with the
-                        # io of the first xspec log still on it. This needs to be cleaned otherwise they can only load
-                        # in the directory where they were created and if this file exists
-
-                        currdir=os.getcwd()
-
-                        os.chdir('/'.join(fitmod_path.split('/')[:-2]))
-
-                        try:
-                            elem_fitmod=load_fitmod('/'.join(fitmod_path.split('/')[-2:]))
-                        except:
-                            breakpoint()
-                            print("if the pyxspec path is loaded that shouldn't happen, need to investigate")
-
-                        from xspec import Xset
-                        #we also need to restore the data to resave the fitmod afterwards
-
-                        Xset.restore('/'.join(fitmod_path.split('/')[-2:]).replace('fitmod','mod').replace('.pkl','.xcm'))
-
-                        #updating the component fitmod
-                        for elem_comp in elem_fitmod.complist:
-                            elem_comp.fitmod=elem_fitmod
-
-                        #and resaving
-                        elem_fitmod.dump('/'.join(fitmod_path.split('/')[-2:]))
-
-                        #returning to the current directory
-                        os.chdir(currdir)
-
-                        #and reloading the fitmod
-                        elem_fitmod=load_fitmod(fitmod_path)
-
-                    #errors ravelled on the datagroup dimension to make things easier
-                    elem_fitmod_errors=[subelem.tolist() for elem in elem_fitmod.errors for subelem in elem]
-
-                    '''
-                    There's two "wrong" xspec errors to readjust:
-                    The upper error can appear as a negative value (the main val) it's pegged
-                    The lower error can be equal the main value  when it' pegged at 1 
-                    We need to correct for both so we edit the array directly
-                    '''
-
-                    tot_error_arr=np.array([[mainmod_mainpars[i_par]]+elem_fitmod_errors[i_par]\
-                                           for i_par in range(len(mainmod_mainpars))]).T
-
-                    tot_error_arr[1]=np.where(tot_error_arr[0]==tot_error_arr[1],0,tot_error_arr[1])
-                    tot_error_arr[2]=tot_error_arr[2].clip(0)
-
-                    tot_error_arr=tot_error_arr.T
-
-                    #creating a dictionnary of all component names and asociated parameter values
-                    #note that we offset the parlist per 1 to get back to parameters ids
-                    comp_par_fitmod_broadband_dict={comp.compname:tot_error_arr[np.array(comp.parlist)-1] for comp in\
-                                              [elem for elem in elem_fitmod.includedlist if elem is not None]}
-
-                    curr_fitmod_broadband_list[i_obs]=comp_par_fitmod_broadband_dict
-
-                if multi_sat:
-                    #skipping the computations below because we don't care for now
-                    curr_instru_list[i_obs]='multi'
-                    #loading the first obs to get some data
-                    # note: the first item of the literal_eval list here is the suffix of the first file
-                    obs_suffix_list=[elem for elem in literal_eval(summary_obs_line[0].split('\t')[1]) if elem.startswith('_')]
-
-                    if len(obs_suffix_list)==0:
-                        #this can happen for multi epchs with only full file name in the file identifiers
-                        obs_file=literal_eval(summary_obs_line[0].split('\t')[1])[0]
-                    else:
-                        obs_file=obs+('_gti_event_spec' if 'xis' in obs else '_sp')+obs_suffix_list[0]
-
-                    filepath=os.path.join('/'.join(lineval_path.split('/')[:-2]),obs_file)
-
-
-                    #ensuring no issue with suzaku files without a header
-                    filepath=filepath.replace('xis0_xis2_xis3','xis1').replace('xis0_xis3','xis1')
-
-
-                else:
-
-                    if len(obs.split('_'))<=1:
-
-                        if 'source' in obs.split('_')[0]:
-                            #this means a Swift observation
-                            filepath='/'.join(lineval_path.split('/')[:-2])+'/'+obs+'_grp_opt.pi'
-                            curr_instru_list[i_obs]='Swift'
-
-                        elif obs.startswith('nu'):
-                            #this means a NuSTAR observation
-                            #we take the directory structure from the according file in curr_obj_paths
-                            filepath='/'.join(lineval_path.split('/')[:-2])+'/'+obs+'_sp_src_grp_opt.pha'
-                            curr_instru_list[i_obs]='NuSTAR'
-                        else:
-                            #this means a NICER observation
-                            #we take the directory structure from the according file in curr_obj_paths
-                            filepath='/'.join(lineval_path.split('/')[:-2])+'/'+obs+'_sp_grp_opt.pha'
-                            curr_instru_list[i_obs]='NICER'
-
-                            epoch_sp_list=[elem+'_sp_grp_opt.pha' for elem in elem_epoch_obs_list]
-
-
-                    else:
-
-                        if obs.split('_')[1] in ['pn','mos1','mos2']:
-
-                            #we take the directory structure from the according file in curr_obj_paths
-                            filepath='/'.join(lineval_path.split('/')[:-2])+'/'+obs+'_sp_src_grp_20.ds'
-                            curr_instru_list[i_obs]='XMM'
-
-                        elif obs.split('_')[1]=='heg':
-
-                            #we take the directory structure from the according file in curr_obj_paths
-                            filepath='/'.join(lineval_path.split('/')[:-2])+'/'+obs+'_grp_opt.pha'
-                            curr_instru_list[i_obs]='Chandra'
-
-                        elif 'xis' in obs:
-                            #we take the directory structure from the according file in curr_obj_paths
-                            filepath='/'.join(lineval_path.split('/')[:-2])+'/'+obs+'_gti_event_spec_src_grp_opt.pha'
-
-                            #getting non stacked files for megumi files to be able to read the header
-                            filepath=filepath.replace('xis0_xis2_xis3','xis_1').replace('xis0_xis3','xis_1')
-
-                            curr_instru_list[i_obs]='Suzaku'
-
-                        elif obs.split('_')[1] in ['0','1']:
-                            #note that this only works for xis1 files as xis0_xis2 are merged and the header had been removed
-                            #we take the directory structure from the according file in curr_obj_paths
-                            filepath='/'.join(lineval_path.split('/')[:-2])+'/'+obs+'_sp_grp_opt.pha'
-                            curr_instru_list[i_obs]='Suzaku'
-
-                        #failsafe if the file is an XMM spectrum a _full folder instead
-                        if not os.path.isfile(filepath):
-
-                            filepath='/'.join(lineval_path.split('/')[:-3])+'_full/'+lineval_path.split('/')[-3]+'/'+obs+'_sp_src_grp_20.ds'
-
-                            if not os.path.isfile(filepath):
-                                #should not happen
-                                breakpoint()
-                                print('issue with identifying obs sp path')
-
-                #summing the exposures for NICER
-                if curr_instru_list[i_obs]=='NICER':
-
-                    curr_exptime_list[i_obs] = 0
-
-                    for elem_file in epoch_sp_list:
-                        with fits.open('/'.join(lineval_path.split('/')[:-2]) + '/' + elem_file) as hdul:
-                            curr_exptime_list[i_obs] += hdul[1].header['EXPOSURE']
+                #storing the post_hid fitmod to have access to the full model
+                #note that the last directory has to be unchanged since the save otherwise there's a
+                #logfile trace somewhere who's crashing
 
                 try:
-                    with fits.open(filepath) as hdul:
-
-                        if curr_instru_list[i_obs]!='NICER':
-
-                            curr_exptime_list[i_obs]=hdul[1].header['EXPOSURE']
-
-                        if curr_instru_list[i_obs] in ['NICER','NuSTAR']:
-
-                            start_obs_s = hdul[1].header['TSTART'] +\
-                                          (hdul[1].header['TIMEZERO'] if curr_instru_list[i_obs]=='NICER' else 0)
-                            # saving for titles later
-                            mjd_ref = Time(hdul[1].header['MJDREFI'] + hdul[1].header['MJDREFF'], format='mjd')
-
-                            obs_start = mjd_ref + TimeDelta(start_obs_s, format='sec')
-
-                            curr_date_list[i_obs] = str(obs_start.isot)
-
-                        else:
-                            try:
-                                curr_date_list[i_obs]=hdul[0].header['DATE-OBS']
-                            except:
-                                try:
-                                    curr_date_list[i_obs]=hdul[1].header['DATE-OBS']
-                                except:
-                                    curr_date_list[i_obs]=Time(hdul[1].header['MJDSTART'],format='mjd').isot
+                    elem_fitmod=load_fitmod(fitmod_path)
                 except:
-                    breakpoint()
-                    print('issue with obs fits handling')
+
+                    print('logfile bug in '+fitmod_path)
+                    print('fixing...')
+                    #Annoying bug when at some point the continuum fitmod was saved in the autofit with the
+                    # io of the first xspec log still on it. This needs to be cleaned otherwise they can only load
+                    # in the directory where they were created and if this file exists
+
+                    currdir=os.getcwd()
+
+                    os.chdir('/'.join(fitmod_path.split('/')[:-2]))
+
+                    try:
+                        elem_fitmod=load_fitmod('/'.join(fitmod_path.split('/')[-2:]))
+                    except:
+                        breakpoint()
+                        print("if the pyxspec path is loaded that shouldn't happen, need to investigate")
+
+                    from xspec import Xset
+                    #we also need to restore the data to resave the fitmod afterwards
+
+                    Xset.restore('/'.join(fitmod_path.split('/')[-2:]).replace('fitmod','mod').replace('.pkl','.xcm'))
+
+                    #updating the component fitmod
+                    for elem_comp in elem_fitmod.complist:
+                        elem_comp.fitmod=elem_fitmod
+
+                    #and resaving
+                    elem_fitmod.dump('/'.join(fitmod_path.split('/')[-2:]))
+
+                    #returning to the current directory
+                    os.chdir(currdir)
+
+                    #and reloading the fitmod
+                    elem_fitmod=load_fitmod(fitmod_path)
+
+                #errors ravelled on the datagroup dimension to make things easier
+                elem_fitmod_errors=[subelem.tolist() for elem in elem_fitmod.errors for subelem in elem]
+
+                '''
+                There's two "wrong" xspec errors to readjust:
+                The upper error can appear as a negative value (the main val) it's pegged
+                The lower error can be equal the main value  when it' pegged at 1 
+                We need to correct for both so we edit the array directly
+                '''
+
+                tot_error_arr=np.array([[mainmod_mainpars[i_par]]+elem_fitmod_errors[i_par]\
+                                       for i_par in range(len(mainmod_mainpars))]).T
+
+                tot_error_arr[1]=np.where(tot_error_arr[0]==tot_error_arr[1],0,tot_error_arr[1])
+                tot_error_arr[2]=tot_error_arr[2].clip(0)
+
+                tot_error_arr=tot_error_arr.T
+
+                #creating a dictionnary of all component names and asociated parameter values
+                #note that we offset the parlist per 1 to get back to parameters ids
+                comp_par_fitmod_broadband_dict={comp.compname:tot_error_arr[np.array(comp.parlist)-1] for comp in\
+                                          [elem for elem in elem_fitmod.includedlist if elem is not None]}
+
+                curr_fitmod_broadband_list[i_obs]=comp_par_fitmod_broadband_dict
+
+            if multi_sat:
+                #skipping the computations below because we don't care for now
+                curr_instru_list[i_obs]='multi'
+                #loading the first obs to get some data
+                # note: the first item of the literal_eval list here is the suffix of the first file
+                obs_suffix_list=[elem for elem in literal_eval(summary_obs_line[0].split('\t')[1]) if elem.startswith('_')]
+
+                if len(obs_suffix_list)==0:
+                    #this can happen for multi epchs with only full file name in the file identifiers
+                    obs_file=literal_eval(summary_obs_line[0].split('\t')[1])[0]
+                else:
+                    obs_file=obs+('_gti_event_spec' if 'xis' in obs else '_sp')+obs_suffix_list[0]
+
+                filepath=os.path.join('/'.join(lineval_path.split('/')[:-2]),obs_file)
+
+
+                #ensuring no issue with suzaku files without a header
+                filepath=filepath.replace('xis0_xis2_xis3','xis1').replace('xis0_xis3','xis1')
+
+
+            else:
+
+                if len(obs.split('_'))<=1:
+
+                    if 'source' in obs.split('_')[0]:
+                        #this means a Swift observation
+                        filepath='/'.join(lineval_path.split('/')[:-2])+'/'+obs+'_grp_opt.pi'
+                        curr_instru_list[i_obs]='Swift'
+
+                    elif obs.startswith('nu'):
+                        #this means a NuSTAR observation
+                        #we take the directory structure from the according file in curr_obj_paths
+                        filepath='/'.join(lineval_path.split('/')[:-2])+'/'+obs+'_sp_src_grp_opt.pha'
+                        curr_instru_list[i_obs]='NuSTAR'
+                    else:
+                        #this means a NICER observation
+                        #we take the directory structure from the according file in curr_obj_paths
+                        filepath='/'.join(lineval_path.split('/')[:-2])+'/'+obs+'_sp_grp_opt.pha'
+                        curr_instru_list[i_obs]='NICER'
+
+                        epoch_sp_list=[elem+'_sp_grp_opt.pha' for elem in elem_epoch_obs_list]
+
+
+                else:
+
+                    if obs.split('_')[1] in ['pn','mos1','mos2']:
+
+                        #we take the directory structure from the according file in curr_obj_paths
+                        filepath='/'.join(lineval_path.split('/')[:-2])+'/'+obs+'_sp_src_grp_20.ds'
+                        curr_instru_list[i_obs]='XMM'
+
+                    elif obs.split('_')[1]=='heg':
+
+                        #we take the directory structure from the according file in curr_obj_paths
+                        filepath='/'.join(lineval_path.split('/')[:-2])+'/'+obs+'_grp_opt.pha'
+                        curr_instru_list[i_obs]='Chandra'
+
+                    elif 'xis' in obs:
+                        #we take the directory structure from the according file in curr_obj_paths
+                        filepath='/'.join(lineval_path.split('/')[:-2])+'/'+obs+'_gti_event_spec_src_grp_opt.pha'
+
+                        #getting non stacked files for megumi files to be able to read the header
+                        filepath=filepath.replace('xis0_xis2_xis3','xis_1').replace('xis0_xis3','xis_1')
+
+                        curr_instru_list[i_obs]='Suzaku'
+
+                    elif obs.split('_')[1] in ['0','1']:
+                        #note that this only works for xis1 files as xis0_xis2 are merged and the header had been removed
+                        #we take the directory structure from the according file in curr_obj_paths
+                        filepath='/'.join(lineval_path.split('/')[:-2])+'/'+obs+'_sp_grp_opt.pha'
+                        curr_instru_list[i_obs]='Suzaku'
+
+                    #failsafe if the file is an XMM spectrum a _full folder instead
+                    if not os.path.isfile(filepath):
+
+                        filepath='/'.join(lineval_path.split('/')[:-3])+'_full/'+lineval_path.split('/')[-3]+'/'+obs+'_sp_src_grp_20.ds'
+
+                        if not os.path.isfile(filepath):
+                            #should not happen
+                            breakpoint()
+                            print('issue with identifying obs sp path')
+
+            #summing the exposures for NICER
+            if curr_instru_list[i_obs]=='NICER':
+
+                curr_exptime_list[i_obs] = 0
+
+                for elem_file in epoch_sp_list:
+                    with fits.open('/'.join(lineval_path.split('/')[:-2]) + '/' + elem_file) as hdul:
+                        curr_exptime_list[i_obs] += hdul[1].header['EXPOSURE']
+
+            try:
+                with fits.open(filepath) as hdul:
+
+                    if curr_instru_list[i_obs]!='NICER':
+
+                        curr_exptime_list[i_obs]=hdul[1].header['EXPOSURE']
+
+                    if curr_instru_list[i_obs] in ['NICER','NuSTAR']:
+
+                        start_obs_s = hdul[1].header['TSTART'] +\
+                                      (hdul[1].header['TIMEZERO'] if curr_instru_list[i_obs]=='NICER' else 0)
+                        # saving for titles later
+                        mjd_ref = Time(hdul[1].header['MJDREFI'] + hdul[1].header['MJDREFF'], format='mjd')
+
+                        obs_start = mjd_ref + TimeDelta(start_obs_s, format='sec')
+
+                        curr_date_list[i_obs] = str(obs_start.isot)
+
+                    else:
+                        try:
+                            curr_date_list[i_obs]=hdul[0].header['DATE-OBS']
+                        except:
+                            try:
+                                curr_date_list[i_obs]=hdul[1].header['DATE-OBS']
+                            except:
+                                curr_date_list[i_obs]=Time(hdul[1].header['MJDSTART'],format='mjd').isot
+            except:
+                breakpoint()
+                print('issue with obs fits handling')
 
         date_list[i]=curr_date_list
         instru_list[i]=curr_instru_list

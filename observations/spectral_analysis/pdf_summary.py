@@ -632,7 +632,7 @@ def pdf_summary(epoch_files,arg_dict,fit_ok=False,summary_epoch=None,e_sat_low_l
             pdf.ln(10)
 
             #recognizing time-resolved spectra
-            elem_orbit=elem_epoch.split('S')[0].split('M')[0].split('F')[0].split('I')[0].split('N')[0]
+            elem_orbit=elem_epoch.split('S')[0].split('M')[0].split('F')[0].split('I')[0].split('N')[0].split('D')[0]
 
             if 'N' in elem_epoch.split('-')[-1]:
                 orbit_night=True
@@ -646,6 +646,7 @@ def pdf_summary(epoch_files,arg_dict,fit_ok=False,summary_epoch=None,e_sat_low_l
             try:
                 pdf.image(elem_orbit+day_add+'_flares.png',x=2,y=70,w=140)
             except:
+                breakpoint()
                 pass
 
             try:

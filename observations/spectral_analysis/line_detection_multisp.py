@@ -171,6 +171,14 @@ ap.add_argument('-satellite',nargs=1,help='telescope to fetch spectra from',defa
 ap.add_argument('-group_max_timedelta',nargs=1,
                 help='maximum time delta for epoch/gti grouping in dd_hh_mm_ss_ms',default='day',type=str)
 
+#note: for NICER only for now, considers the number of detectors used
+ap.add_argument('-group_max_ratevar',nargs=1,help='maximum variation between different orbits',default=1.2,type=float)
+
+ap.add_argument('-group_max_HRvar',nargs=1,help='maximum HR variation between different orbits',default=1.2,type=float)
+
+#note: the lower and upper bounds are taken as the limit in which count_var is measured
+ap.add_argument('-group_HR_bands',nargs=1,help='HR bands to test the group HR',default='3.-5._5.-8.',type=str)
+
 #00_00_00_10 for NICER TR
 #00_00_15_00 for NuSTAR individual orbits
 #01_00_00_00 for dailies
@@ -188,7 +196,7 @@ ap.add_argument("-prefix",nargs=1,help='restrict analysis to a specific prefix',
 
 ####output directory
 ap.add_argument("-outdir",nargs=1,help="name of output directory for line plots",
-                default="lineplots_opt_parallel",type=str)
+                default="lineplots_opt_newsplit",type=str)
 
 #give object name directly, otherwise it will be taken from the second last directory (above the bigbatch)
 #as usual, "False" to remove this
@@ -203,7 +211,7 @@ ap.add_argument('-overwrite',nargs=1,
 
 #note : will skip exposures for which the exposure didn't compute or with logged errors
 ap.add_argument('-skip_started',nargs=1,help='skip all exposures listed in the local summary_line_det file',
-                default=True,type=bool)
+                default=False,type=bool)
 
 ap.add_argument('-skip_complete',nargs=1,help='skip completed exposures listed in the local summary_line_det file',
                 default=False,type=bool)
@@ -296,19 +304,23 @@ NICER no abslines: 4130010128-001_4130010129-001
 
 '''
 ap.add_argument('-force_epochs',nargs=1,help='force epochs to given set of spectra instead of auto matching',
-                default=False,type=bool)
+                default=True,type=bool)
 
 force_epochs_str=\
 '''
-['409007010_xis1_gti_event_spec_src_grp_opt.pha', '409007010_xis0_xis3_gti_event_spec_src_grp_opt.pha', 'nu90002004002A01_sp_src_grp_opt.pha', 'nu90002004002B01_sp_src_grp_opt.pha', 'BAT_2015-02-20_mosaic.pha'];
+['1130010133-001N_sp_grp_opt.pha', '1130010133-002N_sp_grp_opt.pha', '1130010133-003N_sp_grp_opt.pha', '1130010133-004N_sp_grp_opt.pha', '1130010133-005N_sp_grp_opt.pha', '1130010133-006N_sp_grp_opt.pha', '1130010133-007N_sp_grp_opt.pha', 'BAT_2018-08-09_mosaic.pha'];
 '''
 force_epochs_str_list=[literal_eval(elem.replace('\n','')) for elem in force_epochs_str.split(';')[:-1]]
 
 #should be a path with syntax similar to epoch_list.txt, or an empty string to not be activated
-ap.add_argument('-force_epochs_file',nargs=1,help="force epochs from file",default='',type=str)
+ap.add_argument('-force_epochs_file',nargs=1,help="force epochs from file",default='epoch_list_bg_crash.txt',type=str)
 
 ap.add_argument('-force_epochs_list',nargs=1,help='force epochs list',default=force_epochs_str_list)
 
+ap.add_argument('-min_expos',nargs=1,help='minimum exposure time per observation (not epochs)',default=60,type=float)
+
+ap.add_argument('-min_expos_tel_apply',nargs=1,help='instruments for which to apply the min_expos criteria',
+                default='NICER',type=str)
 
 ap.add_argument('-SNR_min',nargs=1,help='minimum source Signal to Noise Ratio',default=30,type=float)
 #shouldn't be needed now that we have a counts min limit + sometimes false especially in timing when the bg is the source
@@ -338,7 +350,7 @@ ap.add_argument('-write_aborted_pdf',nargs=1,help='create aborted pdfs at the en
 
 '''MODES'''
 
-ap.add_argument('-load_epochs',nargs=1,help='prepare epochs then exit',default=False)
+ap.add_argument('-load_epochs',nargs=1,help='prepare epochs then exit',default=True)
 
 #options: "opt" (tests the significance of each components and add them accordingly)
 # and "force_all" to force all components
@@ -355,7 +367,7 @@ ap.add_argument('-reload_fakes',nargs=1,
 
 ap.add_argument('-pdf_only',nargs=1,
                 help='Updates the pdf with already existing elements but skips the line detection entirely',
-                default=False,type=bool)
+                default=True,type=bool)
 
 #note: used mainly to recompute obs with bugged UL computations. Needs FINISHED computations firsthand, else
 #use reload_autofit and reload_fakes
@@ -367,7 +379,7 @@ ap.add_argument('-compute_highflux_only',help='Reloads the autofit computation a
                 default=False,type=bool)
 
 ap.add_argument('-hid_only',nargs=1,help='skip the line detection and directly plot the hid',
-                default=True,type=bool)
+                default=False,type=bool)
 
 #date or HR
 ap.add_argument('-hid_sort_method',nargs=1,help='HID summary observation sorting',default='date',type=str)
@@ -753,6 +765,15 @@ log_console=args.log_console
 fitstat=args.fitstat
 cont_model=args.cont_model
 
+min_expos=args.min_expos
+min_expos_tel_apply=args.min_expos_tel_apply
+
+
+group_max_ratevar=args.group_max_ratevar
+group_max_HRvar=args.group_max_HRvar
+group_HR_bands=args.group_HR_bands
+
+
 force_nosplit_fit_multi=args.force_nosplit_fit_multi
 split_fit=args.split_fit and not (sat_glob=='multi' and force_nosplit_fit_multi)
 
@@ -985,79 +1006,126 @@ if skip_flares:
 tstart_list=np.array([None]*len(spfile_list))
 det_list=np.array([None]*len(spfile_list))
 tstop_list=np.array([None]*len(spfile_list))
+rate_weighted_list=np.repeat(np.nan,len(spfile_list))
+HR_count_list=np.repeat(np.nan,len(spfile_list))
+rate_raw_list=np.repeat(np.nan,len(spfile_list))
+FPM_sel_list=np.repeat([None],len(spfile_list))
 
 file_ok_ids=[]
-for i_file,elem_file in enumerate(spfile_list):
 
-    #for Suzaku this won't work for meugmi's xis0_xis3 files bc their header has been replaced
-    # so we replace them by the xis1 to be able to load the exposure
-    elem_file_load=elem_file.replace('xis0_xis3','xis1').replace('xis0_xis2_xis3','xis1')
+print('Loading spectal file infos...')
+with tqdm(total=len(spfile_list)) as pbar:
 
-    try:
-        fits.open(elem_file_load)
-    except:
-        print('Issue with fits opening for file:'+elem_file)
-        continue
+    for i_file,elem_file in enumerate(spfile_list):
 
-    with fits.open(elem_file_load) as hdul:
-        if 'TELESCOP' in hdul[1].header:
-            det_list[i_file]=hdul[1].header['TELESCOP'].replace('SUZAKU','Suzaku')
-        else:
-            #the only files without TELESCOP in the header should be the fused megumi_files suzaku sp
-            assert megumi_files, 'Issue with detector handling'
+        #for Suzaku this won't work for meugmi's xis0_xis3 files bc their header has been replaced
+        # so we replace them by the xis1 to be able to load the exposure
+        elem_file_load=elem_file.replace('xis0_xis3','xis1').replace('xis0_xis2_xis3','xis1')
 
-            det_list[i_file]='Suzaku'
+        try:
+            fits.open(elem_file_load)
+        except:
+            print('Issue with fits opening for file:'+elem_file)
+            pbar.update()
 
-        if det_list[i_file]=='XMM':
-            tstart_list[i_file]=Time(hdul[0].header["EXPSTART"]).mjd
-            tstop_list[i_file]=Time(hdul[0].header["EXPSTOP"]).mjd
-            file_ok_ids += [i_file]
             continue
 
-        if det_list[i_file]=='INTEGRAL':
+        with fits.open(elem_file_load) as hdul:
+            if 'TELESCOP' in hdul[1].header:
+                det_list[i_file]=hdul[1].header['TELESCOP'].replace('SUZAKU','Suzaku')
 
-            MJDREF=hdul[1].header['MJDREF']
-            tstart_list[i_file]=Time(MJDREF+hdul[1].header['TFIRST'],format='mjd').mjd
-            tstop_list[i_file]=Time(MJDREF+hdul[1].header['TLAST'],format='mjd').mjd
-            file_ok_ids += [i_file]
-            continue
-
-        if 'TIMEZERO' in hdul[1].header:
-            start_obs_s = hdul[1].header['TSTART'] + hdul[1].header['TIMEZERO']
-            stop_obs_s= hdul[1].header['TSTOP'] + hdul[1].header['TIMEZERO']
-        else:
-            try:
-                start_obs_s=hdul[1].header['TSTART']
-                stop_obs_s=hdul[1].header['TSTOP']
-            except:
-                breakpoint()
-
-
-        # saving for later
-        if 'MJDREFI' not in hdul[1].header:
-            if det_list[i_file]=='CHANDRA':
-                MJDREFI = hdul[1].header['MJDREF']
-                MJDREFF = 0
-            elif det_list[i_file]=='SWIFT' and hdul[1].header['INSTRUME']=='BAT':
-                MJDREFI = 51910
-                MJDREFF = 7.4287037E-4
             else:
-                print('Error: Cannot file MJDREF information in spectrum header')
-                breakpoint()
-        else:
-            MJDREFI=hdul[1].header['MJDREFI']
-            MJDREFF=hdul[1].header['MJDREFF']
+                #the only files without TELESCOP in the header should be the fused megumi_files suzaku sp
+                assert megumi_files, 'Issue with detector handling'
 
-        mjd_ref = Time(MJDREFI+MJDREFF, format='mjd')
+                det_list[i_file]='Suzaku'
 
-        obs_start = mjd_ref + TimeDelta(start_obs_s, format='sec')
-        obs_stop=mjd_ref+TimeDelta(stop_obs_s,format='sec')
+            if det_list[i_file]=='XMM':
+                tstart_list[i_file]=Time(hdul[0].header["EXPSTART"]).mjd
+                tstop_list[i_file]=Time(hdul[0].header["EXPSTOP"]).mjd
+                file_ok_ids += [i_file]
+                pbar.update()
+                continue
 
-    #note: don't convert to jd, jd have 0 at 12:00 instead of 00:00
-    tstart_list[i_file]=obs_start.mjd
-    tstop_list[i_file]=obs_stop.mjd
+            if det_list[i_file]=='INTEGRAL':
 
-    file_ok_ids += [i_file]
+                MJDREF=hdul[1].header['MJDREF']
+                tstart_list[i_file]=Time(MJDREF+hdul[1].header['TFIRST'],format='mjd').mjd
+                tstop_list[i_file]=Time(MJDREF+hdul[1].header['TLAST'],format='mjd').mjd
+                file_ok_ids += [i_file]
+                pbar.update()
+                continue
+
+            if 'TIMEZERO' in hdul[1].header:
+                start_obs_s = hdul[1].header['TSTART'] + hdul[1].header['TIMEZERO']
+                stop_obs_s= hdul[1].header['TSTOP'] + hdul[1].header['TIMEZERO']
+            else:
+                try:
+                    start_obs_s=hdul[1].header['TSTART']
+                    stop_obs_s=hdul[1].header['TSTOP']
+                except:
+                    breakpoint()
+
+
+            # saving for later
+            if 'MJDREFI' not in hdul[1].header:
+                if det_list[i_file]=='CHANDRA':
+                    MJDREFI = hdul[1].header['MJDREF']
+                    MJDREFF = 0
+                elif det_list[i_file]=='SWIFT' and hdul[1].header['INSTRUME']=='BAT':
+                    MJDREFI = 51910
+                    MJDREFF = 7.4287037E-4
+                else:
+                    print('Error: Cannot file MJDREF information in spectrum header')
+                    breakpoint()
+            else:
+                MJDREFI=hdul[1].header['MJDREFI']
+                MJDREFF=hdul[1].header['MJDREFF']
+
+            mjd_ref = Time(MJDREFI+MJDREFF, format='mjd')
+
+            obs_start = mjd_ref + TimeDelta(start_obs_s, format='sec')
+            obs_stop=mjd_ref+TimeDelta(stop_obs_s,format='sec')
+
+        #note: don't convert to jd, jd have 0 at 12:00 instead of 00:00
+        tstart_list[i_file]=obs_start.mjd
+        tstop_list[i_file]=obs_stop.mjd
+
+        #removing individual obs below the minimum exposure time
+        if (tstop_list[i_file]-tstart_list[i_file])*86400<min_expos and det_list[i_file] in min_expos_tel_apply:
+            pbar.update()
+            continue
+
+        if det_list[i_file]=='NICER':
+
+            #doing it like this to avoid having to load xspec
+            counts_low_e_channel=int(100*float(group_HR_bands.split('_')[0].split('-')[0]))
+            counts_high_e_channel=int(100*float(group_HR_bands.split('_')[1].split('-')[1]))
+            HR_low_high_channel=int(100*float(group_HR_bands.split('_')[0].split('-')[1]))
+            HR_high_low_channel=int(100*float(group_HR_bands.split('_')[1].split('-')[0]))
+
+            with fits.open(spfile_list[i_file]) as hdul:
+                rate_raw_list[i_file]=sum(hdul[1].data['COUNTS'][counts_low_e_channel:counts_high_e_channel])\
+                                      /hdul[1].header['EXPOSURE']
+                HR_raw=sum(hdul[1].data['COUNTS'][HR_high_low_channel:counts_high_e_channel])/\
+                       sum(hdul[1].data['COUNTS'][counts_low_e_channel:HR_low_high_channel])
+
+            #note: to get a rescaling factor we sum the wheighting factors of all of the detectors as
+            #saved in the rmf file's HISTORY header
+            #see https://heasarc.gsfc.nasa.gov/docs/nicer/analysis_threads/arf-rmf/ for weighing factor explanation
+            #weighting factors for each NICER detector, based on which detectors are on or off, as well as on-axis or off-axis)
+            with fits.open(spfile_list[i_file].replace('_sp_grp_opt.pha','.rmf')) as hdul:
+                FPM_sel_list[i_file]=np.array([elem.split(' ')[-1] for elem in str(hdul[2].header['HISTORY']).split('\n') if
+                          elem.startswith('F') and 'File' not in elem], dtype=float)
+
+                rescale_factor =FPM_sel_list[i_file].sum()
+
+            rate_weighted_list[i_file]=rate_raw_list[i_file]/rescale_factor
+            HR_count_list[i_file]=HR_raw
+
+        file_ok_ids += [i_file]
+
+        pbar.update()
 
 epoch_id_list_ravel=[]
 epoch_id_list=[]
@@ -1065,13 +1133,16 @@ epoch_id_list=[]
 tstart_list=tstart_list[file_ok_ids]
 tstop_list = tstop_list[file_ok_ids]
 det_list = det_list[file_ok_ids]
+spfile_list=spfile_list[file_ok_ids]
+rate_weighted_list=rate_weighted_list[file_ok_ids]
+HR_count_list=HR_count_list[file_ok_ids]
 
 if sat_glob=='multi':
     if multi_focus!='False':
         #restricting the match epochs to a specific satellite
-        mask_multi_focus=[elem.upper()==multi_focus.upper() for elem in det_list[file_ok_ids]]
+        mask_multi_focus=[elem.upper()==multi_focus.upper() for elem in det_list]
     else:
-        mask_multi_focus=np.repeat(True,len(det_list[file_ok_ids]))
+        mask_multi_focus=np.repeat(True,len(det_list))
 
     tstart_list_base=tstart_list[mask_multi_focus]
     tstop_list_base=tstop_list[mask_multi_focus]
@@ -1083,11 +1154,13 @@ else:
     det_list_base=det_list
     id_base=np.arange(len(spfile_list))
 
+print('Creating epochs...')
 with tqdm(total=len(tstart_list)) as pbar:
     for id_elem,(elem_tstart,elem_tstop,elem_det) in enumerate(zip(tstart_list_base,tstop_list_base,det_list_base)):
 
         #skipping computation for already grouped elements
         if id_base[id_elem] in epoch_id_list_ravel:
+            pbar.update()
             continue
 
         # max delta between gti starts in sec
@@ -1151,12 +1224,27 @@ with tqdm(total=len(tstart_list)) as pbar:
                 elem_epoch_id=np.array([elem_epoch_id])[[mask_obsid_restrict]].tolist()
 
             if skip_single_instru and len(np.unique(det_list[elem_epoch_id]))==1:
+                pbar.update()
                 continue
 
         else:
             #restricting to the obs of that telescope
             epoch_det_mask=[elem.lower() == sat_glob.lower() for elem in det_list[elem_epoch_id]]
             elem_epoch_id = elem_epoch_id[epoch_det_mask].tolist()
+
+        #applying the counts and HR cuts
+        if not np.isnan(rate_weighted_list[id_elem]):
+            #note: made like this so that the np.nan are considered as valid
+            novar_counts_mask=~(rate_weighted_list[elem_epoch_id]/rate_weighted_list[id_elem]<(1/group_max_ratevar)) &\
+                              ~(rate_weighted_list[elem_epoch_id]/rate_weighted_list[id_elem]>group_max_ratevar)
+
+            novar_HR_mask=~(HR_count_list[elem_epoch_id]/HR_count_list[id_elem]<(1/group_max_HRvar)) &\
+                              ~(HR_count_list[elem_epoch_id]/HR_count_list[id_elem]>group_max_HRvar)
+
+            # if sum(novar_counts_mask)!=len(novar_counts_mask) or sum(novar_HR_mask)!=len( novar_HR_mask):
+            #     breakpoint()
+
+            elem_epoch_id=np.array(elem_epoch_id)[novar_counts_mask & novar_HR_mask].tolist()
 
         epoch_id_list_ravel+=elem_epoch_id
 
@@ -1196,12 +1284,13 @@ if sat_glob=='multi' and multi_forbid_combi!='False':
 
 epoch_list=np.array(epoch_list,dtype=object)
 
+
 #saving a txt file the tstart and tstop of each epoch
-epoch_tstart_arr=np.array([np.array([tstart_list[np.argwhere(spfile_list[file_ok_ids]==elem)[0][0]] for elem in epoch])\
+epoch_tstart_arr=np.array([np.array([tstart_list[np.argwhere(spfile_list==elem)[0][0]] for elem in epoch])\
                        for epoch in epoch_list],
              dtype=object)
 
-epoch_tstop_arr=np.array([np.array([tstop_list[np.argwhere(spfile_list[file_ok_ids]==elem)[0][0]] for elem in epoch])\
+epoch_tstop_arr=np.array([np.array([tstop_list[np.argwhere(spfile_list==elem)[0][0]] for elem in epoch])\
                        for epoch in epoch_list],
              dtype=object)
 

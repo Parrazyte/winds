@@ -110,7 +110,7 @@ ap.add_argument('-parallel',help='number of processors for parallel directories'
 
 #global choices
 ap.add_argument("-a","--action",nargs='?',help='Give which action(s) to proceed,separated by comas.',
-                default='g,m,ml,c',type=str)
+                default='gti',type=str)
 #default: fc,1,gti,fs,l,g,m,ml,c
 
 #note: should be kept to true for most complicated tasks
@@ -119,8 +119,8 @@ ap.add_argument("-over",nargs=1,help='overwrite computed tasks (i.e. with produc
 
 #directory level overwrite (not active in local)
 ap.add_argument('-folder_over',nargs=1,help='relaunch action through folders with completed analysis',
-                default=False,type=bool)
-ap.add_argument('-folder_cont',nargs=1,help='skip all but the last 2 directories in the summary folder file',
+                default=True,type=bool)
+ap.add_argument('-folder_cont',nargs=1,help='skips all but the last 2 directories in the summary folder file',
                 default=False,type=bool)
 #note : we keep the previous 2 directories because bug or breaks can start actions on a directory following the initially stopped one
 
@@ -153,12 +153,13 @@ ap.add_argument('-br_earth_min',nargs=1,help='bright earth minimum angle',type=s
 
 ap.add_argument('-min_gti',nargs=1,help='minimum gti size',type=float,default=1.0)
 
+#this one is for the standard nimaketime
 ap.add_argument('-erodedilate',nargs=1,help='Erodes increasingly more gtis around the excluded intervals',
                 type=float,default=1.0)
 
 '''gti creation'''
 #keyword for split: split_timeinsec
-ap.add_argument('-gti_split',nargs=1,help='GTI split method',default='orbit+flare+overdyn',type=str)
+ap.add_argument('-gti_split',nargs=1,help='GTI split method',default='orbit+flare+overdyn+underdyn',type=str)
 ap.add_argument('-flare_method',nargs=1,help='Flare extraction method(s)',default='clip+peak',type=str)
 
 #previous version was with a SAS, tool, which required installing SAS. Now the default is NICER directly
@@ -166,19 +167,42 @@ ap.add_argument('-gti_tool',nargs=1,help='GTI tool used to make the gti file its
 
 
 '''Flare methods '''
-#for clip
+#for "normal" flare clip
 ap.add_argument('-clip_sigma',nargs=1,help='clipping minimum variance treshold in sigmas',default=3.,type=float)
 
 ap.add_argument('-flare_factor',nargs=1,help='minimum flare multiplication factor for flare clipping',
                 default=2.,type=float)
 
-#for peak
+#for peak. 10 for bright sources, 2 for small sources
 ap.add_argument('-peak_score_thresh',nargs=1,help='topological peak score treshold for peak exclusion',
-                default=10.,type=float)
+                default=3.,type=float)
 
 #for overdyn, in s since based on the mkf
 ap.add_argument('-erodedilate_overdyn',nargs=1,help='Erodes increasingly more gtis around the overshoot excluded intervals',
                 type=int,default=5)
+
+ap.add_argument('-hard_flare_segments',nargs=1,
+                help='Number of segments to split the hard flare lightcurve to determine the sigma clipping',
+                type=int,default=5)
+
+ap.add_argument('-hard_flare_sigma',nargs=1,help='Number of sigmas of the sigma hard_flare sigma clipping',
+                type=int,default=5)
+
+ap.add_argument('-hard_flare_min_duration',nargs=1,help='minimum duration of a single hard flare period',type=int,
+                default=30)
+
+ap.add_argument('-erodedilate_hard_flare',nargs=1,
+                help='Erodes increasingly more gtis around the overshoot excluded intervals',
+                type=int,default=5)
+
+#also used for the leeway between both jumps
+ap.add_argument('-underdyn_jump_width',nargs=1,
+                help='Maximum duration and leeway of an undershoot+main counts jump',type=int,
+                default=10)
+
+ap.add_argument('-underdyn_jump_factor',nargs=1,
+                help='Minimum changing factor of an undershoot+main counts jump',type=int,
+                default=5)
 
 #note: not used currently
 ap.add_argument('-gti_lc_band',nargs=1,help='Band for the lightcurve used for GTI splitting',
@@ -299,6 +323,14 @@ hr_bands_str=args.hr_bands_str
 sp_systematics=args.sp_systematics
 
 erodedilate_overdyn=args.erodedilate_overdyn
+
+hard_flare_segments=args.hard_flare_segments
+hard_flare_sigma=args.hard_flare_sigma
+hard_flare_min_duration=args.hard_flare_min_duration
+erodedilate_hard_flare=args.erodedilate_hard_flare
+
+underdyn_jump_width=args.underdyn_jump_width
+underdyn_jump_factor=args.underdyn_jump_factor
 
 grouptype=args.grouptype
 bad_detectors=args.bad_detectors
@@ -494,7 +526,9 @@ def plot_event_diag(mode,obs_start_str,time_obs,id_gti_orbit,
                     counts_035_8,counts_8_12,counts_overshoot,counts_undershoot,cutoff_rigidity,
                     counts_035_8_glob=None,
                     save_path=None,
-                    id_gti=None,id_flares=None,id_over=None,
+                    id_gti=None,id_flares=None,id_overcut=None,
+                    id_undercut=None,
+                    id_hard_flares=None,
                     gti_nimkt_arr=None,split_arg=None,split_gti_arr=None,
                     orbit_cut_times=None):
     
@@ -579,10 +613,24 @@ def plot_event_diag(mode,obs_start_str,time_obs,id_gti_orbit,
     for id_inter, list_inter in enumerate(list(interval_extract(id_flares))):
         ax_rigidity.axvspan(time_obs[min(list_inter)]-1/2, time_obs[max(list_inter)]+1/2, color='blue', alpha=0.2,
                             label='flare gtis' if id_inter == 0 else '')
-    if id_over is not None:
-        for id_inter, list_inter in enumerate(list(interval_extract(id_over))):
+
+    if id_overcut is not None:
+        for id_inter, list_inter in enumerate(list(interval_extract(id_overcut))):
             ax_rigidity.axvspan(time_obs[min(list_inter)]-1/2, time_obs[max(list_inter)]+1/2, color='orange', alpha=0.2,
                                 label='overshoot filtered gtis' if id_inter == 0 else '')
+
+    if id_undercut is not None:
+        for id_inter, list_inter in enumerate(list(interval_extract(id_undercut))):
+            ax_rigidity.axvspan(time_obs[min(list_inter)]-1/2, time_obs[max(list_inter)]+1/2, color='saddlebrown',
+                                alpha=0.3,
+                                label='undershoot filtered gtis' if id_inter == 0 else '')
+
+    if id_hard_flares is not None:
+
+        for id_inter, list_inter in enumerate(list(interval_extract(id_hard_flares))):
+            ax_rigidity.axvspan(time_obs[min(list_inter)] - 1 / 2, time_obs[max(list_inter)] + 1 / 2, color='cyan',
+                                alpha=0.2,
+                                label='hard flare gtis' if id_inter == 0 else '')
 
     # computing the non-gti intervals from nimaketime
     id_nongti_nimkt = []
@@ -675,10 +723,14 @@ def plot_event_diag(mode,obs_start_str,time_obs,id_gti_orbit,
 
         plt.close()
     
-def create_gtis(directory,split_arg='orbit+flare',band='3-15',flare_method='clip+peak',clip_method='median',
+def create_gtis(directory,split_arg='orbit+flare+overdyn+underdyn',band='3-15',flare_method='clip+peak',clip_method='median',
                 clip_sigma=2.,clip_band='8-12',peak_score_thresh=2.,
                 int_split_band='0.3-10.',int_split_bin=0.1,clip_int_delta=True,
-                flare_factor=2,gti_tool='NICERDAS',erodedilate_overdyn=1,day_mode='both',thread=None,parallel=False):
+                flare_factor=2,gti_tool='NICERDAS',erodedilate_overdyn=5,
+                hard_flare_segments=5,hard_flare_sigma=4,erodedilate_hard_flare=5,
+                hard_flare_min_duration=30,
+                underdyn_jump_width=10,underdyn_jump_factor=5,
+                day_mode='both',thread=None,parallel=False):
     '''
     wrapper for a function to split nicer obsids into indivudal portions with different methods
     the default binning is 1s because the NICER mkf file time resolution is 1s
@@ -695,12 +747,35 @@ def create_gtis(directory,split_arg='orbit+flare',band='3-15',flare_method='clip
         -flare: isolates background flare periods in each observation from the main data
                 GTI naming: obsid-XXXFYYY
 
+
         -overdyn: dynamically filters high overshoot regions by comparing the 0.35-8keV count rate and the overhsoot rate
 
                   When the 0.35-8 count rate is <1 cts/s, filters when the overshoot rate is >2* the count rate
                   When the 0.35-8 count rate is >1 ct/s, filters when the overshoot rate is >5* the count rate
 
                  dilates the resulting exclusion using the erodedilate_overdyn parameter (in s)
+
+
+        -underdyn: dynamically filters high undershoot regions by searching for jumps in both the 0.35-8. lightcurve
+                    and the undershoot lightcurve within a short period
+                    underdyn_jump_width defines the maximum width for a jump to take place
+                    underdyn_jump_factor defines the multiplicative height of a jump
+                    A jump is considered valid if an undershoot jump happens\
+                     within unerdyn_jump_width of a main counts jump
+                    For now, Removes the entirety of the following orbit
+
+        -hard_flare:
+                isolate hard-only background flare periods in each observation from the non-nimkt excluded data
+                Uses sigma clipping from the lowest of n segments of the remaining gti at this step
+                GTI naming: obsid-XXXHFYYY
+                Note that the goal here is to keep the data, so hard_flare is done AFTER overdyn
+
+                we limit to periods bigger than hard_flare_min_duration to avoid removing simple random noise
+
+                dilates the resulting exclusion using the erodedilate_hard_flare parameter (in s)
+
+                Note that this is not needed if the nxbprel_norm parameter of the nxb background can't get the job done
+
 
         -split_X: on top of cutting splits and flares, splits each orbit in individual periods of X seconds for
                   time-resolved spectroscopy
@@ -1122,12 +1197,19 @@ def create_gtis(directory,split_arg='orbit+flare',band='3-15',flare_method='clip
 
             if clip_band=='8-12':
                 flare_lc=counts_8_12
-            elif clip_band=='overshoot':
-                flare_lc=counts_overshoot
+            else:
+                breakpoint()
+                #to be implemented
 
             clip_lc=np.where(np.isnan(flare_lc),0,flare_lc)
 
             if 'flare' in split_arg:
+
+                '''
+                Note: this one is mainly for short, bright flare which completely distort the spectrum and
+                need to be removed
+                '''
+
                 id_gti=[]
                 id_flares=[]
                 id_dips=[]
@@ -1136,7 +1218,25 @@ def create_gtis(directory,split_arg='orbit+flare',band='3-15',flare_method='clip
 
                     elem_id_flares=[]
 
+
+                    # # computing the non-gti intervals from nimaketime
+                    # id_nongti_nimkt = []
+                    #
+                    # for elem_gti in elem_gti_orbit:
+                    #     # testing if the gti is in one of the gtis of the nimaketime
+                    #     if not ((time_obs[elem_gti] >= gti_nimkt_arr.T[0]) & (
+                    #             time_obs[elem_gti] <= gti_nimkt_arr.T[1])).any():
+                    #         # and storing if that's not the case
+                    #         id_nongti_nimkt += [elem_gti]
+                    #
+                    # elem_gti_orbit_oknimkt=[elem for elem in elem_gti_orbit if elem not in id_nongti_nimkt]
+                    # if len(elem_gti_orbit_oknimkt)==0:
+                    #     continue
+
                     if 'clip' in flare_method:
+
+                        # note:this one should be improved to something closer to hard_flare
+
                         #should clip anything weird in the data unless the flare is huge
                         clip_data = sigma_clip(clip_lc[elem_gti_orbit], sigma=2)
 
@@ -1250,7 +1350,21 @@ def create_gtis(directory,split_arg='orbit+flare',band='3-15',flare_method='clip
                         #cleaning potential repeats
                         peak_region_multi=np.unique(peak_region_multi).tolist()
 
-                        elem_id_flares+=peak_region_multi
+                        #adding anerodedilate factor of 30s for safety around big peaks
+
+                        peak_region_eroded=[]
+                        if len(peak_region_multi)>0:
+                            for i_region,peak_interval in enumerate(interval_extract(peak_region_multi)):
+                                if peak_interval[1]-peak_interval[0]>60:
+                                    peak_region_eroded+=np.arange(max(peak_interval[0]-30,elem_gti_orbit[0]),
+                                                                  peak_interval[0]).tolist()+\
+                                                        np.arange(peak_interval[0],peak_interval[1]+1).tolist()+ \
+                                                       np.arange(peak_interval[1]+1,
+                                                        min(peak_interval[1]+31,elem_gti_orbit[-1]+1)).tolist()
+                                else:
+                                    peak_region_eroded+=np.arange(peak_interval[0],peak_interval[1]+1).tolist()
+
+                            elem_id_flares+=peak_region_eroded
 
                     #ensuring no repeats
                     elem_id_flares=np.unique(elem_id_flares).tolist()
@@ -1271,42 +1385,205 @@ def create_gtis(directory,split_arg='orbit+flare',band='3-15',flare_method='clip
                 id_flares=[]
                 id_dips=[]
 
-            id_over=np.array([None]*n_orbit)
+            id_overcut = np.array([None] * n_orbit)
 
             if 'overdyn' in split_arg:
-                for i_orbit,elem_gti_orbit in enumerate(id_gti):
+                for i_orbit, elem_gti_orbit in enumerate(id_gti):
 
-                    #note that here we're only filtering what's not in the flares
+                    # note that here we're only filtering what's not in the flares
 
-                    #we cut with different criteria for high and low bg rates to have better filtering
-                    mask_over=((counts_035_8[elem_gti_orbit]<=1) & \
-                             (counts_overshoot[elem_gti_orbit]>2*counts_035_8[elem_gti_orbit])) | \
-                                 ((counts_035_8[elem_gti_orbit]>1) & \
-                                  (counts_overshoot[elem_gti_orbit] > 5 * counts_035_8[elem_gti_orbit]))
+                    # computing the non-gti intervals from nimaketime
+                    id_nongti_nimkt = []
 
-                    id_over_orbit=np.array(elem_gti_orbit)[mask_over].tolist()
+                    for elem_gti in elem_gti_orbit:
+                        # testing if the gti is in one of the gtis of the nimaketime
+                        if not ((time_obs[elem_gti] >= gti_nimkt_arr.T[0]) & (
+                                time_obs[elem_gti] <= gti_nimkt_arr.T[1])).any():
+                            # and storing if that's not the case
+                            id_nongti_nimkt += [elem_gti]
 
-                    if erodedilate_overdyn>0:
-                        id_over_orbit_eroded=np.unique(ravel_ragged([\
-                                             np.arange(elem-erodedilate_overdyn,elem+erodedilate_overdyn+1)\
-                                                                    for elem in id_over_orbit]))
+                    # we cut with different criteria for high and low bg rates to have better filtering
+                    mask_over = ((counts_035_8[elem_gti_orbit] <= 1) & \
+                                 (counts_overshoot[elem_gti_orbit] > 2 * counts_035_8[elem_gti_orbit])) | \
+                                ((counts_035_8[elem_gti_orbit] > 1) & \
+                                 (counts_overshoot[elem_gti_orbit] > 5 * counts_035_8[elem_gti_orbit]))
 
-                        #limiting to the initial range of gtis to avoid eroded beyond the bounds
-                        id_over_orbit_eroded=[elem for elem in elem_gti_orbit if elem in id_over_orbit_eroded]
+                    id_over_orbit = np.array(elem_gti_orbit)[mask_over].tolist()
+
+                    if erodedilate_overdyn > 0:
+
+                        assert type(erodedilate_overdyn) == int, 'Error: erodedilate_overdyn should be an integer'
+
+                        id_over_orbit_eroded = np.unique(ravel_ragged([ \
+                            np.arange(elem - erodedilate_overdyn, elem + erodedilate_overdyn + 1) \
+                            for elem in id_over_orbit]))
+
+                        # limiting to the initial range of gtis to avoid eroded beyond the bounds
+                        id_over_orbit_eroded = [elem for elem in elem_gti_orbit if elem in id_over_orbit_eroded]
                     else:
-                        id_over_orbit_eroded=id_over_orbit
+                        id_over_orbit_eroded = id_over_orbit
 
-                    id_over[i_orbit]=id_over_orbit_eroded
+                    # removing nimaketime exclusions
+                    id_over_orbit_eroded = [elem for elem in id_over_orbit_eroded if elem not in id_nongti_nimkt]
 
-                    #redefining the gtis after the flares have been defined
+                    id_overcut[i_orbit] = id_over_orbit_eroded
+
+                    # redefining the gtis after the flares have been defined
                     id_gti[i_orbit] = [elem for elem in elem_gti_orbit if elem not in id_over_orbit_eroded]
 
-
-                    #this one for is for the automatic split
+                    # this one for is for the automatic split
                     if 'split' in split_arg:
                         for i_split in range(len(split_gti_arr[i_orbit])):
-                            split_gti_arr[i_orbit][i_split]=[elem for elem in split_gti_arr[i_orbit][i_split]\
-                                                         if elem not in id_over_orbit_eroded]
+                            split_gti_arr[i_orbit][i_split] = [elem for elem in split_gti_arr[i_orbit][i_split] \
+                                                               if elem not in id_over_orbit_eroded]
+
+            id_undercut = np.array([None] * n_orbit)
+
+            if 'underdyn' in split_arg:
+                for i_orbit, elem_gti_orbit in enumerate(id_gti):
+
+                    # note that here we're only filtering what's not in the flares
+
+                    '''
+                    Here we're looking for a gradien in undershoots that would be linked to a gradient in main count rate
+                    and not be diagnosed
+                    The jumps are usually very short
+                    '''
+
+                    assert type(underdyn_jump_width)==int,'Error: underdyn_jump_width must be an integer'
+
+                    jump_undershoot_id =[]
+                    jump_main_counts_id=[]
+
+                    for elem_gti in elem_gti_orbit[:-1]:
+                        #identifying the jumps that are INSIDE the gtis and not in the nongtis
+                        mask_jump_main_counts=(counts_035_8[elem_gti:min(elem_gti+underdyn_jump_width,elem_gti_orbit[-1])]>\
+                                               underdyn_jump_factor*counts_035_8[elem_gti])
+                        mask_okgti_main_counts=np.array([elem in elem_gti_orbit and elem not in id_nongti_nimkt for elem in \
+                                                np.arange(elem_gti,min(elem_gti+underdyn_jump_width,elem_gti_orbit[-1]))])
+
+                        if np.any((mask_jump_main_counts) & (mask_okgti_main_counts)):
+                            jump_main_counts_id+=[elem_gti]
+
+                        #identifying the jumps that are INSIDE the gtis and not in the nongtis
+                        mask_jump_underdyn=(counts_undershoot[elem_gti:min(elem_gti+underdyn_jump_width,elem_gti_orbit[-1])]>\
+                                            underdyn_jump_factor*counts_undershoot[elem_gti])
+                        mask_okgti_underdyn=np.array([elem in elem_gti_orbit and elem not in id_nongti_nimkt for elem in \
+                                                np.arange(elem_gti,min(elem_gti+underdyn_jump_width,elem_gti_orbit[-1]))])
+
+                        if np.any((mask_jump_underdyn) & (mask_okgti_underdyn)):
+                            jump_undershoot_id+=[elem_gti]
+
+                    jump_undershoot_id=np.array(jump_undershoot_id)
+                    jump_main_counts_id=np.array(jump_main_counts_id)
+
+                    #finding the ids where there is less than a 10 second gap between the jumps
+
+                    if len(jump_undershoot_id)>0 and len(jump_main_counts_id)>0:
+                        id_jump_both=[elem_jump_main for elem_jump_main in jump_main_counts_id\
+                                        if np.any(abs(jump_undershoot_id-elem_jump_main)<underdyn_jump_width)]
+                    else:
+                        id_jump_both=[]
+                    #stopping the gti at the first id
+                    if len(id_jump_both)>0:
+                        elem_id_undercut = np.array(elem_gti_orbit)[elem_gti_orbit>id_jump_both[0]]
+
+                        # defining the gtis after the flares have been defined
+                        elem_id_gti = [elem for elem in elem_gti_orbit if elem not in elem_id_undercut]
+
+                        id_gti[i_orbit] = elem_id_gti
+                        id_undercut [i_orbit]= elem_id_undercut
+
+
+            id_hard_flares=np.array([None] * n_orbit)
+
+
+            if 'hard_flare' in split_arg:
+
+                '''
+                There are also a second type of less bright flares that mainly affect the sp above 8 keV.
+                These ones do not correlate as much to the overshoot lightcurve, and often don't with
+                the mainlightcurve
+                
+                The hard flares are thus defined from sigma clipping using the lowest region of the high energy
+                FPM lightcurve
+                '''
+
+
+                for i_orbit, elem_gti_orbit in enumerate(id_gti_orbit):
+
+
+                    '''
+                    To avoid potential issues with too much source variability, we split the remaining data into
+                    5 segments, and will compute the sigma clipping threshold from the faintest of the 4
+                    
+                    We restrict the segment cut to the non-nimkt excluded portion
+                    '''
+                    elem_id_hard_flares = []
+
+                    # computing the non-gti intervals from nimaketime
+                    id_nongti_nimkt = []
+
+                    for elem_gti in elem_gti_orbit:
+                        # testing if the gti is in one of the gtis of the nimaketime
+                        if not ((time_obs[elem_gti] >= gti_nimkt_arr.T[0]) & (
+                                time_obs[elem_gti] <= gti_nimkt_arr.T[1])).any():
+                            # and storing if that's not the case
+                            id_nongti_nimkt += [elem_gti]
+
+                    #restricting the elem_gti_orbit to the non excluded periods
+                    elem_gti_orbit_oknimkt=[elem for elem in elem_gti_orbit if elem not in id_nongti_nimkt]
+
+                    if len(elem_gti_orbit_oknimkt)==0:
+                        continue
+
+                    #cutting the high E lightcurve
+                    flare_lc_hardcut=flare_lc[elem_gti_orbit_oknimkt]
+
+                    #computing median and stds for each split
+                    median_sampled = [np.nanmedian(flare_lc_hardcut[int(i * len(flare_lc_hardcut) / hard_flare_segments)\
+                                                              :int((i + 1) * len(flare_lc_hardcut) / hard_flare_segments)])
+                                     for i in range(5)]
+                    std_sampled = [np.nanstd(flare_lc_hardcut[int(i * len(flare_lc_hardcut) / hard_flare_segments)\
+                                                              :int((i + 1) * len(flare_lc_hardcut) / hard_flare_segments)])
+                                     for i in range(5)]
+
+                    #4 sigma clipping for now. Should not consider the full nan periods if there are some
+                    hard_flare_clip_threshold=min(median_sampled)+hard_flare_sigma*std_sampled[np.argmin(median_sampled)]
+
+                    elem_id_hard_flares += [elem for elem in elem_gti_orbit_oknimkt\
+                                            if flare_lc[elem]>hard_flare_clip_threshold]
+
+                    if erodedilate_hard_flare>0:
+                        assert type(erodedilate_hard_flare)==int,'Error: erodedilate_hard_flare should be an integer'
+
+                        elem_id_hard_flares_eroded=np.unique(ravel_ragged([\
+                                             np.arange(elem-erodedilate_hard_flare,elem+erodedilate_hard_flare+1)\
+                                                                    for elem in elem_id_hard_flares]))
+
+                        #limiting to the initial range of gtis to avoid eroding beyond the bounds
+                        elem_id_hard_flares_eroded=[elem for elem in elem_gti_orbit_oknimkt if elem in elem_id_hard_flares_eroded]
+                    else:
+                        elem_id_hard_flares_eroded=elem_id_hard_flares
+
+                    elem_id_hard_flares=elem_id_hard_flares_eroded
+
+                    hard_flare_intervals = list(interval_extract(elem_id_hard_flares))
+                    hard_flare_intervals_clean=[elem for elem in hard_flare_intervals if elem[1]-elem[0]>hard_flare_min_duration]
+
+                    elem_id_hard_flares=ravel_ragged([np.arange(elem[0],elem[1]+1).tolist() for elem in hard_flare_intervals_clean])
+
+                    # defining the gtis after the flares have been defined
+                    elem_id_gti = [elem for elem in elem_gti_orbit if elem not in elem_id_hard_flares]
+
+                    id_gti [i_orbit]=elem_id_gti
+                    id_hard_flares += [elem_id_hard_flares]
+
+                    if 'split' in split_arg:
+                        for i_split in range(len(split_gti_arr[i_orbit])):
+                            split_gti_arr[i_orbit][i_split] = [elem for elem in split_gti_arr[i_orbit][i_split] \
+                                                               if elem not in elem_id_hard_flares]
+
 
             if 'manual' in split_arg:
 
@@ -1326,7 +1603,9 @@ def create_gtis(directory,split_arg='orbit+flare',band='3-15',flare_method='clip
                                     counts_undershoot=counts_undershoot[id_gti_orbit[i_orbit]],
                                     cutoff_rigidity=cutoff_rigidity[id_gti_orbit[i_orbit]],
                                     save_path='',
-                                    id_gti=id_gti[i_orbit], id_flares=id_flares[i_orbit],id_over=id_over[i_orbit],
+                                    id_gti=id_gti[i_orbit], id_flares=id_flares[i_orbit],
+                                    id_overcut=id_overcut[i_orbit],id_undercut=id_undercut[i_orbit],
+                                    id_hard_flares=id_hard_flares[i_orbit],
                                     gti_nimkt_arr=gti_nimkt_arr, split_arg=split_arg,
                                     split_gti_arr=split_gti_arr[i_orbit],orbit_cut_times=orbit_cut_times)]
 
@@ -1350,7 +1629,19 @@ def create_gtis(directory,split_arg='orbit+flare',band='3-15',flare_method='clip
                     if 'overdyn' in split_arg:
                         for i_split in range(len(split_gti_arr[i_orbit])):
                             split_gti_arr[i_orbit][i_split] = np.array([elem for elem in split_gti_arr[i_orbit][i_split] \
-                                                               if elem not in id_over[i_orbit]])
+                                                               if elem not in id_overcut[i_orbit]])
+
+                    #removing overdyn if necesary
+                    if 'underdyn' in split_arg:
+                        for i_split in range(len(split_gti_arr[i_orbit])):
+                            split_gti_arr[i_orbit][i_split] = np.array([elem for elem in split_gti_arr[i_orbit][i_split] \
+                                                               if elem not in id_undercut[i_orbit]])
+
+                    #removing hard flares if necesary
+                    if 'underdyn' in split_arg:
+                        for i_split in range(len(split_gti_arr[i_orbit])):
+                            split_gti_arr[i_orbit][i_split] = np.array([elem for elem in split_gti_arr[i_orbit][i_split] \
+                                                               if elem not in id_hard_flares[i_orbit]])
 
             #creating individual orbit figures
             for i_orbit in range(n_orbit):
@@ -1365,7 +1656,9 @@ def create_gtis(directory,split_arg='orbit+flare',band='3-15',flare_method='clip
                                 counts_undershoot=counts_undershoot[id_gti_orbit[i_orbit]],
                                 cutoff_rigidity=cutoff_rigidity[id_gti_orbit[i_orbit]],
                                 save_path=save_path_str,
-                                id_gti=id_gti[i_orbit],id_flares=id_flares[i_orbit],id_over=id_over[i_orbit],
+                                id_gti=id_gti[i_orbit],id_flares=id_flares[i_orbit],
+                                id_overcut=id_overcut[i_orbit],id_undercut=id_undercut[i_orbit],
+                                id_hard_flares=id_hard_flares[i_orbit],
                                 gti_nimkt_arr=gti_nimkt_arr,split_arg=split_arg,
                                 split_gti_arr=split_gti_arr[i_orbit])
 
@@ -1406,7 +1699,10 @@ def create_gtis(directory,split_arg='orbit+flare',band='3-15',flare_method='clip
                 if len(id_flares[i_orbit])>0:
                     create_gti_files(id_flares[i_orbit],flare_lc,str_orbit(i_orbit),suffix=split_keyword+'F',
                                      file_base=file_mkf,time_gtis=time_obs,gti_tool=gti_tool)
-
+                if 'hard_flare' in split_arg:
+                    if len(id_hard_flares[i_orbit])>0:
+                        create_gti_files(id_hard_flares[i_orbit], flare_lc, str_orbit(i_orbit), suffix=split_keyword + 'HF',
+                                         file_base=file_mkf, time_gtis=time_obs, gti_tool=gti_tool)
 
             if 'intensity' in split_arg:
 
@@ -1502,7 +1798,10 @@ def create_gtis(directory,split_arg='orbit+flare',band='3-15',flare_method='clip
                                     counts_035_8_glob=counts_035_8,
                                     save_path=save_path_str,
                                     id_gti=id_gti[i_orbit], id_flares=id_flares[i_orbit],
-                                    gti_nimkt_arr=gti_nimkt_arr, split_arg=split_arg,id_over=id_over[i_orbit],
+                                    id_hard_flares=id_hard_flares[i_orbit],
+                                    gti_nimkt_arr=gti_nimkt_arr, split_arg=split_arg,
+                                    id_overcut=id_overcut[i_orbit],
+                                    id_undercut=id_undercut[i_orbit],
                                     split_gti_arr=None)
 
                     split_keyword+='I'
@@ -2678,6 +2977,10 @@ def run_actions(obs_dir,action_list,parallel=False):
                                          clip_sigma=clip_sigma,
                                          peak_score_thresh=peak_score_thresh,
                                          gti_tool=gti_tool, erodedilate_overdyn=erodedilate_overdyn,
+                                         underdyn_jump_width=underdyn_jump_width,underdyn_jump_factor=underdyn_jump_factor,
+                                         hard_flare_segments=hard_flare_segments,hard_flare_sigma=hard_flare_sigma,
+                                         erodedilate_hard_flare=erodedilate_hard_flare,
+                                         hard_flare_min_duration=hard_flare_min_duration,
                                          day_mode=day_mode, thread=create_gtis_thread,parallel=parallel)
                 if type(output_err[0]) == str:
                     if catch_errors:

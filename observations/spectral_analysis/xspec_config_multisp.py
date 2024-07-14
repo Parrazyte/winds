@@ -767,7 +767,7 @@ class scorpeon_manager:
                     mod_nxb(nxb_par_saa_id).values = mod_nxb(7).values[:4] + [6000, 6000]
 
                 if fit_SAA_norm:
-                    mod_nxb(nxb_par_prel_id).frozen = False
+                    mod_nxb(nxb_par_saa_id).frozen = False
 
                 if fit_prel_norm:
                     mod_nxb(nxb_par_prel_id).frozen = False
@@ -5397,7 +5397,11 @@ class fitcomp:
 
             #defining the list of parameter numbers associated to this/these component(s) and its/their component number(s)
             #additive calibration components are added with lastin to not consider all the multiplicative calibration components
-            self.parlist,self.compnumbers=addcomp(self.compname,position='lastin' if self.calibration else 'lastinall',
+
+
+            self.parlist,self.compnumbers=addcomp(self.compname,
+                                    position=('last' if AllModels(1).componentNames[0] not in xspec_globcomps else\
+                                              'lastin') if self.calibration else 'lastinall',
                                                   included_list=incl_list,return_pos=True)
 
             #fixing parameters if values are provided

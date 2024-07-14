@@ -1941,6 +1941,9 @@ def line_detect(epoch_id,arg_dict):
                                       fitlines.includedlist_main]:
                     fitlines.disk_nthcomp.xcomps[0].Gamma.frozen = False
 
+                    # also unfreezing the norm in case it was frozen during the autofit
+                    fitlines.disk_nthcomp.xcomps[0].norm.frozen = False
+
                     fitlines.update_fitcomps()
                     fitlines.disk_nthcomp.n_unlocked_pars_base = len(fitlines.disk_nthcomp.unlocked_pars)
 
@@ -1949,6 +1952,9 @@ def line_detect(epoch_id,arg_dict):
                                        fitlines.includedlist_main] and not fitlines.thcomp_frac_frozen:
 
                     fitlines.disk_thcomp.xcomps[0].Gamma_tau.frozen = False
+
+                    #also unfreezing the covering fraction in case it was frozen during the autofit
+                    fitlines.disk_thcomp.xcomps[0].cov_frac.frozen = False
 
                     fitlines.update_fitcomps()
                     fitlines.disk_thcomp.n_unlocked_pars_base = len(fitlines.disk_thcomp.unlocked_pars)

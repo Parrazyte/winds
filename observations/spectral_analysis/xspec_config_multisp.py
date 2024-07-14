@@ -676,7 +676,7 @@ class scorpeon_manager:
         self.bgload_paths=None
 
     def load(self,bgload_paths=None,scorpeon_save=None,load_save_freeze=True,frozen=False,extend_SAA_norm=True,
-             fit_SAA_norm=False):
+             fit_SAA_norm=False,fit_prel_norm=True):
 
         '''
         reloads the nicer bg model(s) from the stored path(s), and scorpeon save(s) if any
@@ -693,6 +693,9 @@ class scorpeon_manager:
         fit_SAA_norm:
             -unfreezes this parameter which is usually frozen to allow to fit it
 
+        fit_prel_norm:
+            -unfreezes this parameter which is usually frozen to allow to fit it
+            Don't know why it's currently frozen by default when the spectrum is created.
         '''
 
         #updating the bgload paths if an argument if prodivded
@@ -746,18 +749,28 @@ class scorpeon_manager:
                 # with really high overshoots, but then careful about the spectrum...)
 
                 #identifying the nxb saa norm parameter
-                nxb_par_id_list=[i_par for i_par in range(1,mod_nxb.nParameters+1) if 'saa_norm' in mod_nxb(i_par).name]
-                assert len(nxb_par_id_list)==1,'Issue in saa_norm parameter identification'
-                nxb_par_id=nxb_par_id_list[0]
+                nxb_par_saa_list=[i_par for i_par in range(1,mod_nxb.nParameters+1) if 'saa_norm' in mod_nxb(i_par).name]
+                assert len(nxb_par_saa_list)==1,'Issue in saa_norm parameter identification'
+                nxb_par_saa_id=nxb_par_saa_list[0]
+
+                #identifying the nxb prel_norm parameter
+                nxb_par_prel_list=[i_par for i_par in range(1,mod_nxb.nParameters+1) if 'prel_norm' in mod_nxb(i_par).name]
+                assert len(nxb_par_prel_list)==1,'Issue in saa_norm parameter identification'
+                nxb_par_prel_id=nxb_par_prel_list[0]
 
                 #here there's several parameters with the "nom" parameter name so we need to use the component
                 comp_nxb_noise=getattr(mod_nxb,[elem for elem in mod_nxb.componentNames if '_noise' in elem][0])
                 noisenorm_par_id=comp_nxb_noise.norm.index
 
+                #note: should be useless now
                 if extend_SAA_norm:
-                    mod_nxb(nxb_par_id).values = mod_nxb(7).values[:4] + [6000, 6000]
+                    mod_nxb(nxb_par_saa_id).values = mod_nxb(7).values[:4] + [6000, 6000]
+
                 if fit_SAA_norm:
-                    mod_nxb(nxb_par_id).frozen = False
+                    mod_nxb(nxb_par_prel_id).frozen = False
+
+                if fit_prel_norm:
+                    mod_nxb(nxb_par_prel_id).frozen = False
 
                 if curr_grp_sp.energies[0][0]>0.5:
 

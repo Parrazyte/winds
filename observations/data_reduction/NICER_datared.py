@@ -102,7 +102,7 @@ ap.add_argument("-dir", "--startdir", nargs='?', help="starting directory. Curre
 ap.add_argument("-l","--local",nargs=1,help='Launch actions directly in the current directory instead',
                 default=False,type=bool)
 ap.add_argument('-catch','--catch_errors',help='Catch errors while running the data reduction and continue',
-                default=True,type=bool)
+                default=False,type=bool)
 
 #1 for no parallelization
 ap.add_argument('-parallel',help='number of processors for parallel directories',
@@ -110,7 +110,7 @@ ap.add_argument('-parallel',help='number of processors for parallel directories'
 
 #global choices
 ap.add_argument("-a","--action",nargs='?',help='Give which action(s) to proceed,separated by comas.',
-                default='gti',type=str)
+                default='fc,1,gti,fs,l,g,m,ml,c',type=str)
 #default: fc,1,gti,fs,l,g,m,ml,c
 
 #note: should be kept to true for most complicated tasks
@@ -175,7 +175,7 @@ ap.add_argument('-flare_factor',nargs=1,help='minimum flare multiplication facto
 
 #for peak. 10 for bright sources, 2 for small sources
 ap.add_argument('-peak_score_thresh',nargs=1,help='topological peak score treshold for peak exclusion',
-                default=3.,type=float)
+                default=2.,type=float)
 
 #for overdyn, in s since based on the mkf
 ap.add_argument('-erodedilate_overdyn',nargs=1,help='Erodes increasingly more gtis around the overshoot excluded intervals',
@@ -220,7 +220,7 @@ ap.add_argument('-int_split_bin',nargs=1,help='binning of the light curve used f
 
 ap.add_argument('-lc_bin_list',nargs=1,
                 help='A list of binnings with which to generate all lightcurces/HR evolutions (in s)',
-                default=[1.,0.1],type=list)
+                default=[1.],type=list)
 #note: also defines the binning used for the gti definition
 
 # lc_bands_list_det=['1-2','2-3','3-4','4-5','5-6','6-7','7-8','8-9','9-10']
@@ -1132,23 +1132,30 @@ def create_gtis(directory,split_arg='orbit+flare+overdyn+underdyn',band='3-15',f
 
             split_gti_arr=np.array([None]*n_orbit)
 
+            # computing the non-gti intervals from nimaketime
+            id_nongti_nimkt = []
+
+            for elem_gti_orbit in id_gti_orbit:
+
+                id_nongti_nimkt_orbit = []
+
+                for elem_gti in elem_gti_orbit:
+                    # testing if the gti is in one of the gtis of the nimaketime
+                    if not ((time_obs[elem_gti] >= gti_nimkt_arr.T[0]) & (
+                            time_obs[elem_gti] <= gti_nimkt_arr.T[1])).any():
+                        # and storing if that's not the case
+                        id_nongti_nimkt_orbit += [elem_gti]
+
+                id_nongti_nimkt+=[id_nongti_nimkt_orbit]
+
             if 'split' in split_arg:
 
                 split_sampling=float([elem for elem in split_arg.split('+') if 'split' in elem][0].split('_')[1])
 
-                for i_orbit in range(n_orbit):
-
-                    # computing the non-gti intervals from nimaketime to begin with a non-broken interval
-                    id_nongti_nimkt = []
-
-                    for elem_gti in id_gti_orbit[i_orbit]:
-                        # testing if the gti is in one of the gtis of the nimaketime
-                        if not ((time_obs[elem_gti] >= gti_nimkt_arr.T[0]) & (time_obs[elem_gti] <= gti_nimkt_arr.T[1])).any():
-                            # and storing if that's not the case
-                            id_nongti_nimkt += [elem_gti]
+                for i_orbit, id_nongti_nimkt_orbit in enumerate(id_nongti_nimkt):
 
                     #computing the starting id, a bit convoluted but not to depend on the binning
-                    start_id=np.argwhere([elem not in id_nongti_nimkt for elem in id_gti_orbit[i_orbit]])\
+                    start_id=np.argwhere([elem not in id_nongti_nimkt_orbit for elem in id_gti_orbit[i_orbit]])\
                         [0][0]
 
                     split_gti_orbit=[]
@@ -1201,6 +1208,7 @@ def create_gtis(directory,split_arg='orbit+flare+overdyn+underdyn',band='3-15',f
                 breakpoint()
                 #to be implemented
 
+
             clip_lc=np.where(np.isnan(flare_lc),0,flare_lc)
 
             if 'flare' in split_arg:
@@ -1218,20 +1226,6 @@ def create_gtis(directory,split_arg='orbit+flare+overdyn+underdyn',band='3-15',f
 
                     elem_id_flares=[]
 
-
-                    # # computing the non-gti intervals from nimaketime
-                    # id_nongti_nimkt = []
-                    #
-                    # for elem_gti in elem_gti_orbit:
-                    #     # testing if the gti is in one of the gtis of the nimaketime
-                    #     if not ((time_obs[elem_gti] >= gti_nimkt_arr.T[0]) & (
-                    #             time_obs[elem_gti] <= gti_nimkt_arr.T[1])).any():
-                    #         # and storing if that's not the case
-                    #         id_nongti_nimkt += [elem_gti]
-                    #
-                    # elem_gti_orbit_oknimkt=[elem for elem in elem_gti_orbit if elem not in id_nongti_nimkt]
-                    # if len(elem_gti_orbit_oknimkt)==0:
-                    #     continue
 
                     if 'clip' in flare_method:
 
@@ -1388,19 +1382,9 @@ def create_gtis(directory,split_arg='orbit+flare+overdyn+underdyn',band='3-15',f
             id_overcut = np.array([None] * n_orbit)
 
             if 'overdyn' in split_arg:
-                for i_orbit, elem_gti_orbit in enumerate(id_gti):
+                for i_orbit, (elem_gti_orbit,id_nongti_nimkt_orbit) in enumerate(zip(id_gti,id_nongti_nimkt)):
 
                     # note that here we're only filtering what's not in the flares
-
-                    # computing the non-gti intervals from nimaketime
-                    id_nongti_nimkt = []
-
-                    for elem_gti in elem_gti_orbit:
-                        # testing if the gti is in one of the gtis of the nimaketime
-                        if not ((time_obs[elem_gti] >= gti_nimkt_arr.T[0]) & (
-                                time_obs[elem_gti] <= gti_nimkt_arr.T[1])).any():
-                            # and storing if that's not the case
-                            id_nongti_nimkt += [elem_gti]
 
                     # we cut with different criteria for high and low bg rates to have better filtering
                     mask_over = ((counts_035_8[elem_gti_orbit] <= 1) & \
@@ -1424,7 +1408,7 @@ def create_gtis(directory,split_arg='orbit+flare+overdyn+underdyn',band='3-15',f
                         id_over_orbit_eroded = id_over_orbit
 
                     # removing nimaketime exclusions
-                    id_over_orbit_eroded = [elem for elem in id_over_orbit_eroded if elem not in id_nongti_nimkt]
+                    id_over_orbit_eroded = [elem for elem in id_over_orbit_eroded if elem not in id_nongti_nimkt_orbit]
 
                     id_overcut[i_orbit] = id_over_orbit_eroded
 
@@ -1440,7 +1424,7 @@ def create_gtis(directory,split_arg='orbit+flare+overdyn+underdyn',band='3-15',f
             id_undercut = np.array([None] * n_orbit)
 
             if 'underdyn' in split_arg:
-                for i_orbit, elem_gti_orbit in enumerate(id_gti):
+                for i_orbit, (elem_gti_orbit,id_nongti_nimkt_orbit) in enumerate(zip(id_gti,id_nongti_nimkt)):
 
                     # note that here we're only filtering what's not in the flares
 
@@ -1455,20 +1439,23 @@ def create_gtis(directory,split_arg='orbit+flare+overdyn+underdyn',band='3-15',f
                     jump_undershoot_id =[]
                     jump_main_counts_id=[]
 
-                    for elem_gti in elem_gti_orbit[:-1]:
-                        #identifying the jumps that are INSIDE the gtis and not in the nongtis
+                    #note: here to avoid issues we only compute these starting from positions outside of nimkt,
+                    # to avoid issues with starting jumps
+                    for elem_gti in [gti for gti in elem_gti_orbit[:-1] if gti not in id_nongti_nimkt_orbit]:
+
+                        #identifying the neighboring jumps that are also INSIDE the gtis and not in the nimkt excluded
                         mask_jump_main_counts=(counts_035_8[elem_gti:min(elem_gti+underdyn_jump_width,elem_gti_orbit[-1])]>\
                                                underdyn_jump_factor*counts_035_8[elem_gti])
-                        mask_okgti_main_counts=np.array([elem in elem_gti_orbit and elem not in id_nongti_nimkt for elem in \
+                        mask_okgti_main_counts=np.array([elem in elem_gti_orbit and elem not in id_nongti_nimkt_orbit for elem in \
                                                 np.arange(elem_gti,min(elem_gti+underdyn_jump_width,elem_gti_orbit[-1]))])
 
                         if np.any((mask_jump_main_counts) & (mask_okgti_main_counts)):
                             jump_main_counts_id+=[elem_gti]
 
-                        #identifying the jumps that are INSIDE the gtis and not in the nongtis
+                        #same for undershoot jumps
                         mask_jump_underdyn=(counts_undershoot[elem_gti:min(elem_gti+underdyn_jump_width,elem_gti_orbit[-1])]>\
                                             underdyn_jump_factor*counts_undershoot[elem_gti])
-                        mask_okgti_underdyn=np.array([elem in elem_gti_orbit and elem not in id_nongti_nimkt for elem in \
+                        mask_okgti_underdyn=np.array([elem in elem_gti_orbit and elem not in id_nongti_nimkt_orbit for elem in \
                                                 np.arange(elem_gti,min(elem_gti+underdyn_jump_width,elem_gti_orbit[-1]))])
 
                         if np.any((mask_jump_underdyn) & (mask_okgti_underdyn)):
@@ -1484,6 +1471,7 @@ def create_gtis(directory,split_arg='orbit+flare+overdyn+underdyn',band='3-15',f
                                         if np.any(abs(jump_undershoot_id-elem_jump_main)<underdyn_jump_width)]
                     else:
                         id_jump_both=[]
+
                     #stopping the gti at the first id
                     if len(id_jump_both)>0:
                         elem_id_undercut = np.array(elem_gti_orbit)[elem_gti_orbit>id_jump_both[0]]
@@ -1510,7 +1498,7 @@ def create_gtis(directory,split_arg='orbit+flare+overdyn+underdyn',band='3-15',f
                 '''
 
 
-                for i_orbit, elem_gti_orbit in enumerate(id_gti_orbit):
+                for i_orbit, (elem_gti_orbit,id_nongti_nimkt_orbit) in enumerate(zip(id_gti,id_nongti_nimkt)):
 
 
                     '''
@@ -1521,18 +1509,9 @@ def create_gtis(directory,split_arg='orbit+flare+overdyn+underdyn',band='3-15',f
                     '''
                     elem_id_hard_flares = []
 
-                    # computing the non-gti intervals from nimaketime
-                    id_nongti_nimkt = []
-
-                    for elem_gti in elem_gti_orbit:
-                        # testing if the gti is in one of the gtis of the nimaketime
-                        if not ((time_obs[elem_gti] >= gti_nimkt_arr.T[0]) & (
-                                time_obs[elem_gti] <= gti_nimkt_arr.T[1])).any():
-                            # and storing if that's not the case
-                            id_nongti_nimkt += [elem_gti]
 
                     #restricting the elem_gti_orbit to the non excluded periods
-                    elem_gti_orbit_oknimkt=[elem for elem in elem_gti_orbit if elem not in id_nongti_nimkt]
+                    elem_gti_orbit_oknimkt=[elem for elem in elem_gti_orbit if elem not in id_nongti_nimkt_orbit]
 
                     if len(elem_gti_orbit_oknimkt)==0:
                         continue
@@ -2756,7 +2735,8 @@ def clean_products(directory,clean_wait_value=2,thread=None):
     '''
 
     product_files=[elem for elem in glob.glob(os.path.join(directory,'xti/event_cl/**'),recursive=True)\
-                   if not elem.endswith('/') and not elem.endswith('nimaketime.gti') and not elem.endswith('mpu7_cl.evt')]
+                   if not elem.endswith('/') and not elem.endswith('nimaketime.gti') and not elem.endswith('mpu7_cl.evt')\
+                   and not elem.endswith('mpu7_cl_day.evt')]
 
     print('Cleaning '+str(len(product_files))+' elements in directory '+os.path.join(directory,'xti/event_cl/'))
 

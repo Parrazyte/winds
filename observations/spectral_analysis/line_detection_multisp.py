@@ -196,7 +196,7 @@ ap.add_argument("-prefix",nargs=1,help='restrict analysis to a specific prefix',
 
 ####output directory
 ap.add_argument("-outdir",nargs=1,help="name of output directory for line plots",
-                default="lineplots_opt_newsplit",type=str)
+                default="lineplots_opt_parallel",type=str)
 
 #give object name directly, otherwise it will be taken from the second last directory (above the bigbatch)
 #as usual, "False" to remove this
@@ -304,16 +304,32 @@ NICER no abslines: 4130010128-001_4130010129-001
 
 '''
 ap.add_argument('-force_epochs',nargs=1,help='force epochs to given set of spectra instead of auto matching',
-                default=True,type=bool)
+                default=False,type=bool)
 
 force_epochs_str=\
 '''
-['1130010133-001N_sp_grp_opt.pha', '1130010133-002N_sp_grp_opt.pha', '1130010133-003N_sp_grp_opt.pha', '1130010133-004N_sp_grp_opt.pha', '1130010133-005N_sp_grp_opt.pha', '1130010133-006N_sp_grp_opt.pha', '1130010133-007N_sp_grp_opt.pha', 'BAT_2018-08-09_mosaic.pha'];
+['3130010122-001N_sp_grp_opt.pha', '3130010122-002N_sp_grp_opt.pha', 'BAT_2020-04-20_mosaic.pha'];
 '''
+#for hard flare bg test
+
+#for thcomp norm test
+'''
+['1130010147-001N_sp_grp_opt.pha', '1130010147-002N_sp_grp_opt.pha', 'BAT_2018-10-04_mosaic.pha'];
+'''
+
+#for bp test
+# '''
+# ['3130010115-001N_sp_grp_opt.pha', 'BAT_2020-04-12_mosaic.pha'];
+# '''
+
+#for single DG test
+# '''
+# ['5130010124-001N_sp_grp_opt.pha'];
+# '''
 force_epochs_str_list=[literal_eval(elem.replace('\n','')) for elem in force_epochs_str.split(';')[:-1]]
 
 #should be a path with syntax similar to epoch_list.txt, or an empty string to not be activated
-ap.add_argument('-force_epochs_file',nargs=1,help="force epochs from file",default='epoch_list_bg_crash.txt',type=str)
+ap.add_argument('-force_epochs_file',nargs=1,help="force epochs from file",default='',type=str)
 
 ap.add_argument('-force_epochs_list',nargs=1,help='force epochs list',default=force_epochs_str_list)
 
@@ -350,7 +366,7 @@ ap.add_argument('-write_aborted_pdf',nargs=1,help='create aborted pdfs at the en
 
 '''MODES'''
 
-ap.add_argument('-load_epochs',nargs=1,help='prepare epochs then exit',default=True)
+ap.add_argument('-load_epochs',nargs=1,help='prepare epochs then exit',default=False)
 
 #options: "opt" (tests the significance of each components and add them accordingly)
 # and "force_all" to force all components
@@ -367,7 +383,7 @@ ap.add_argument('-reload_fakes',nargs=1,
 
 ap.add_argument('-pdf_only',nargs=1,
                 help='Updates the pdf with already existing elements but skips the line detection entirely',
-                default=True,type=bool)
+                default=False,type=bool)
 
 #note: used mainly to recompute obs with bugged UL computations. Needs FINISHED computations firsthand, else
 #use reload_autofit and reload_fakes

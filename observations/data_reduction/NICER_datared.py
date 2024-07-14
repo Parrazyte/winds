@@ -1452,13 +1452,12 @@ def create_gtis(directory,split_arg='orbit+flare+overdyn+underdyn',band='3-15',f
                         if np.any((mask_jump_main_counts) & (mask_okgti_main_counts)):
                             jump_main_counts_id+=[elem_gti]
 
-                        #same for undershoot jumps
+                        #same for undershoot jumps but we don't restrict them to the current gtis
+
                         mask_jump_underdyn=(counts_undershoot[elem_gti:min(elem_gti+underdyn_jump_width,elem_gti_orbit[-1])]>\
                                             underdyn_jump_factor*counts_undershoot[elem_gti])
-                        mask_okgti_underdyn=np.array([elem in elem_gti_orbit and elem not in id_nongti_nimkt_orbit for elem in \
-                                                np.arange(elem_gti,min(elem_gti+underdyn_jump_width,elem_gti_orbit[-1]))])
 
-                        if np.any((mask_jump_underdyn) & (mask_okgti_underdyn)):
+                        if np.any(mask_jump_underdyn):
                             jump_undershoot_id+=[elem_gti]
 
                     jump_undershoot_id=np.array(jump_undershoot_id)
@@ -1466,9 +1465,12 @@ def create_gtis(directory,split_arg='orbit+flare+overdyn+underdyn',band='3-15',f
 
                     #finding the ids where there is less than a 10 second gap between the jumps
 
+                    #note: there are some jumps with more than 10s at the end of orbits so using a higher value than
+                    #underdyn_jump_wdith can help
+
                     if len(jump_undershoot_id)>0 and len(jump_main_counts_id)>0:
                         id_jump_both=[elem_jump_main for elem_jump_main in jump_main_counts_id\
-                                        if np.any(abs(jump_undershoot_id-elem_jump_main)<underdyn_jump_width)]
+                                        if np.any(abs(jump_undershoot_id-elem_jump_main)<3*underdyn_jump_width)]
                     else:
                         id_jump_both=[]
 

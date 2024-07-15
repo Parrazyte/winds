@@ -140,7 +140,7 @@ ap = argparse.ArgumentParser(description='Script to perform line detection in X-
 
 #1 for no parallelization and using the current python interpreter
 ap.add_argument('-parallel',help='number of processors for parallel directories',
-                default=1,type=int)
+                default=4,type=int)
 
 '''THE FOLLOWING ARGUMENTS ARE ONLY USED IF PARALLEL>1'''
 #singularity or python (which will the run a specific python environment).
@@ -164,7 +164,7 @@ ap.add_argument('-parfile',nargs=1,help="parfile to use instead of standard sets
 '''GENERAL OPTIONS'''
 
 
-ap.add_argument('-satellite',nargs=1,help='telescope to fetch spectra from',default='multi',type=str)
+ap.add_argument('-satellite',nargs=1,help='telescope to fetch spectra from',default='NICER',type=str)
 
 #used for NICER, NuSTAR and multi for now
 #can also be set for "day" to finish the current day
@@ -1046,7 +1046,14 @@ with tqdm(total=len(spfile_list)) as pbar:
 
             continue
 
+        indiv_expos=None
+
         with fits.open(elem_file_load) as hdul:
+
+            #adding it like this since tstart and tstop don't consider gti cuts
+            if 'EXPOSURE' in hdul[1].header:
+                indiv_expos=hdul[1].header['EXPOSURE']
+
             if 'TELESCOP' in hdul[1].header:
                 det_list[i_file]=hdul[1].header['TELESCOP'].replace('SUZAKU','Suzaku')
 
@@ -1107,8 +1114,13 @@ with tqdm(total=len(spfile_list)) as pbar:
         tstart_list[i_file]=obs_start.mjd
         tstop_list[i_file]=obs_stop.mjd
 
+        if indiv_expos is not None:
+            obs_expos=indiv_expos
+        else:
+            obs_expos=(tstop_list[i_file]-tstart_list[i_file])*86400
+
         #removing individual obs below the minimum exposure time
-        if (tstop_list[i_file]-tstart_list[i_file])*86400<min_expos and det_list[i_file] in min_expos_tel_apply:
+        if obs_expos<min_expos and det_list[i_file] in min_expos_tel_apply:
             pbar.update()
             continue
 
@@ -1123,6 +1135,7 @@ with tqdm(total=len(spfile_list)) as pbar:
             with fits.open(spfile_list[i_file]) as hdul:
                 rate_raw_list[i_file]=sum(hdul[1].data['COUNTS'][counts_low_e_channel:counts_high_e_channel])\
                                       /hdul[1].header['EXPOSURE']
+
                 HR_raw=sum(hdul[1].data['COUNTS'][HR_high_low_channel:counts_high_e_channel])/\
                        sum(hdul[1].data['COUNTS'][counts_low_e_channel:HR_low_high_channel])
 
@@ -1137,6 +1150,7 @@ with tqdm(total=len(spfile_list)) as pbar:
                 rescale_factor =FPM_sel_list[i_file].sum()
 
             rate_weighted_list[i_file]=rate_raw_list[i_file]/rescale_factor
+
             HR_count_list[i_file]=HR_raw
 
         file_ok_ids += [i_file]
@@ -1251,14 +1265,12 @@ with tqdm(total=len(tstart_list)) as pbar:
         #applying the counts and HR cuts
         if not np.isnan(rate_weighted_list[id_elem]):
             #note: made like this so that the np.nan are considered as valid
+
             novar_counts_mask=~(rate_weighted_list[elem_epoch_id]/rate_weighted_list[id_elem]<(1/group_max_ratevar)) &\
                               ~(rate_weighted_list[elem_epoch_id]/rate_weighted_list[id_elem]>group_max_ratevar)
 
             novar_HR_mask=~(HR_count_list[elem_epoch_id]/HR_count_list[id_elem]<(1/group_max_HRvar)) &\
                               ~(HR_count_list[elem_epoch_id]/HR_count_list[id_elem]>group_max_HRvar)
-
-            # if sum(novar_counts_mask)!=len(novar_counts_mask) or sum(novar_HR_mask)!=len( novar_HR_mask):
-            #     breakpoint()
 
             elem_epoch_id=np.array(elem_epoch_id)[novar_counts_mask & novar_HR_mask].tolist()
 

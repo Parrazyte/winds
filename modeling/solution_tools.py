@@ -184,8 +184,9 @@ def func_vel_sol(coordinate,r_sph,z_over_r,vel_r,vel_phi,vel_z,m_BH):
         # pov of the gas so the gas speed is inverted, very important for the aberration
         # (which has coords (1,z_over_r,0) when putting r at 1
         scal_gas_los=-u_r_nr*u_nonrelat/u_relat*1/cyl_cst-u_z_nr*u_nonrelat/u_relat*z_over_r/cyl_cst
-
+        # scal_gas_los=-u_r_nr*u_relat/u_nonrelat*1/cyl_cst-u_z_nr*u_relat/u_nonrelat*z_over_r/cyl_cst
         cos_angle=scal_gas_los/u_relat
+        ####TODO: is any of thisis correct ? this needs to be fixed
 
         # relativistic aberration on the angle
 
@@ -198,7 +199,9 @@ def func_vel_sol(coordinate,r_sph,z_over_r,vel_r,vel_phi,vel_z,m_BH):
         # print(cos_angle_relat)
         # print('angle')
         # print(np.arccos(cos_angle_relat)*180/np.pi)
-
+        val=np.arccos(cos_angle_relat)*180/np.pi
+        if np.isnan(val).all():
+            pass
         return np.arccos(cos_angle_relat)*180/np.pi
 
 
@@ -218,6 +221,8 @@ def func_E_deboost_sol(r_sph,z_over_r,vel_r,vel_phi,vel_z,m_BH):
     beta_gas=v_gas/c_cgs
 
     psi=1/(gamma_gas*(1-beta_gas*np.cos(angle_gas_los*np.pi/180)))
+    if np.isnan(psi).all():
+        pass
 
     return psi
 
@@ -262,7 +267,7 @@ def func_r_boost_sol(r_sph,z_over_r,vel_r,vel_phi,vel_z,m_BH):
     return 1+(1- gamma_gas)*np.cos(angle_gas_los*np.pi/180)
     
 # in this one, the distance appears directly so it should be the spherical one
-def func_logxi_sol(r_sph,z_over_r,L_xi_Source,rho_mhd,p_mhd,mdot_mhd,vel_r,vel_phi,vel_z,m_BH,):
+def func_logxi_sol(r_sph,z_over_r,L_xi_Source,rho_mhd,p_mhd,mdot_mhd,vel_r,vel_phi,vel_z,m_BH,trig=False):
 
     '''
 
@@ -280,7 +285,11 @@ def func_logxi_sol(r_sph,z_over_r,L_xi_Source,rho_mhd,p_mhd,mdot_mhd,vel_r,vel_p
     # !* Gravitational radius
     Rg_SI = 0.5 * Rs_SI
     Rg_cgs = Rg_SI * m2cm
-
+    plop=L_xi_Source*func_lum_deboost_sol(r_sph,z_over_r,vel_r,vel_phi,vel_z,m_BH)\
+                    / (func_density_relat_sol(r_sph,z_over_r,rho_mhd,p_mhd,mdot_mhd,vel_r,vel_phi,vel_z,m_BH) *\
+                       (r_sph * Rg_cgs * func_r_boost_sol(r_sph,z_over_r,vel_r,vel_phi,vel_z,m_BH)) ** 2)
+    if trig:
+        breakpoint()
     return np.log10(L_xi_Source*func_lum_deboost_sol(r_sph,z_over_r,vel_r,vel_phi,vel_z,m_BH)\
                     / (func_density_relat_sol(r_sph,z_over_r,rho_mhd,p_mhd,mdot_mhd,vel_r,vel_phi,vel_z,m_BH) *\
                        (r_sph * Rg_cgs * func_r_boost_sol(r_sph,z_over_r,vel_r,vel_phi,vel_z,m_BH)) ** 2))
@@ -438,9 +447,9 @@ def sample_angle(solutions_path, angle_values, mdot_obs, m_BH, r_j=6., eta_mhd=1
     Rg_cgs = Rg_SI * m2cm
 
     if mdot_obs=='auto':
-        mdot_mhd=xlum/(1.26*m_BH)/eta_mhd
+        mdot_mhd=xlum/(1.26*m_BH)*2/eta_mhd
     else:
-        mdot_mhd = mdot_obs/eta_mhd
+        mdot_mhd = mdot_obs*2/eta_mhd
 
 
     solutions_sample = []

@@ -4,6 +4,14 @@ import matplotlib as mpl
 import numpy as np
 import glob
 
+def xi_i(log_xi_div_T,log_T):
+
+    '''
+    Function for the pcolormesh
+    '''
+
+    return log_xi_div_T+log_T
+
 def plot_scurve(x,y,ax=None,ion_range=None,ion_range_stable=True,color=None,
                  color_ion_range=None,return_plot=False,label_ion='',label_main='',ls_main='-',lw_main=None):
     '''
@@ -279,6 +287,15 @@ def plot_4U_state_curves(save_path_curves=None,save_path_SEDs=None,label=False,c
     ax_use.set_xlim(-4.5,-2)
     ax_use.set_ylim(4.1,8.)
 
+    mesh = [xi_i(np.linspace(-4.5, -2., 50), elem) for elem in np.linspace(4.1, 8., 60)]
+
+    contours_nolabel= ax_use.contour(np.linspace(-4.5, -2., 50), np.linspace(4.1, 8., 60), mesh,
+                               levels=[0., 5.], colors='grey', linewidths=1.)
+
+
+    contours= ax_use.contour(np.linspace(-4.5, -2., 50), np.linspace(4.1, 8., 60), mesh,
+                               levels=[1., 2., 3, 4., ], colors='grey', linewidths=1.)
+
     plot_scurves=[]
     for i in range(len(s_curves)):
 
@@ -309,6 +326,18 @@ def plot_4U_state_curves(save_path_curves=None,save_path_SEDs=None,label=False,c
         ax_use.indicate_inset_zoom(axins, edgecolor="black")
 
     plt.tight_layout()
+
+    fmt_clabels = {}
+    label_names = [ r'log($\xi$)=1',
+                   r'log($\xi$)=2',r'log($\xi$)=3',
+                   r'log($\xi$)=4',]
+    for i,(l, s) in enumerate(zip(contours.levels, label_names)):
+
+        fmt_clabels[l] = s
+
+    manual_locs=[(-4.15,5.15),(-2.8,4.8),(-4.,7.),(-2.45,6.45)]
+
+    contour_labels=ax_use.clabel(contours, inline=True, fontsize=10,fmt=fmt_clabels,manual=manual_locs)
 
     if save_path_curves is not None:
         plt.savefig(save_path_curves)
@@ -347,3 +376,5 @@ def plot_4U_state_curves(save_path_curves=None,save_path_SEDs=None,label=False,c
 
     if save_path_SEDs is not None:
         plt.savefig(save_path_SEDs)
+
+    return fig_use,fig_sed

@@ -46,7 +46,7 @@ with st.sidebar:
         dv_v=val_resol*1e-3/ang2kev(val_ener)
     
     else:
-        de=st.number_input(r'microcalorimeter resolution $\delta E$ (eV)',value=6,format='%.3e')
+        de=st.number_input(r'microcalorimeter resolution $\delta E$ (eV)',value=5,format='%.3e')
         
         dv_v=de*1e-3/val_ener
     
@@ -85,13 +85,23 @@ with st.sidebar:
         
         
     xlum=st.number_input(r'Luminosity (1e38erg/s)',value=3,format='%.3e')
-    
-    mdot_obs=st.number_input(r'Observed $\dot m$',value=0.111,min_value=1e-10,format='%.3e')
-    
     m_BH=st.number_input(r'Black Hole Mass ($M_\odot$)',value=8.,min_value=1e-10,format='%.3e')
 
-    
-mdot_mhd=mdot_obs*12
+    auto_mdot=st.toggle(r'Derive $\dot m$ automatically from the luminosity',value=True)
+
+    if auto_mdot:
+        mdot_obs=xlum/(1.26*m_BH)
+    else:
+        mdot_obs=st.number_input(r'Observed $\dot m$',value=0.111,min_value=1e-10,format='%.3e')
+
+
+
+
+mdot_mhd=mdot_obs*2*12
+
+#high-inclined test with low accretion efficiency
+# mdot_mhd=mdot_obs*2*25
+
     
 #! light speed in Km/s unit
 c_Km = 2.99792458e5 
@@ -354,7 +364,7 @@ with tab_sampling:
     with col_2:
         fig_rdr,ax_rdr=plt.subplots(1)
         
-        plt.suptitle('Evolution of the box radial resolution')
+        plt.suptitle('Evolution of the radial resolution')
         
         plt.xlabel('R (Rg)')
         plt.ylabel(r'$\Delta r/r$')
@@ -400,7 +410,7 @@ with tab_sampling:
                     
         fig_dens_thresh,ax_dens_thresh=plt.subplots(1)
 
-        plt.suptitle('Evolution of the column density of the boxes')
+        plt.suptitle('Evolution of the column density of the radial steps')
         
         plt.xlabel(r'$n_{box}$')
         plt.ylabel(r'$nh_{box}$ (cgs)')
@@ -432,7 +442,7 @@ with tab_sampling:
         
         fig_density,ax_density=plt.subplots(1)
         
-        plt.suptitle('Evolution of the density of the boxes')
+        plt.suptitle('Evolution of the density of the radial steps')
         
         plt.xlabel(r'$n_{box}$')
         plt.ylabel(r'$\rho_{cgs}$')
@@ -463,7 +473,7 @@ with tab_sampling:
         
         fig_logxi,ax_logxi=plt.subplots(1)
         
-        plt.suptitle(r'Evolution of the $\log(\xi)$ of the boxes')
+        plt.suptitle(r'Evolution of the $\log(\xi)$ of the radial steps')
         
         plt.xlabel(r'$n_{box}$')
         plt.ylabel(r'$\log(\xi)$')
@@ -495,7 +505,7 @@ with tab_sampling:
         
         fig_vturb,ax_vturb=plt.subplots(1)
         
-        plt.suptitle(r'Evolution of $\Delta v_{bulk}$ of the boxes')
+        plt.suptitle(r'Evolution of the turbulent velocity of the radial steps')
         
         plt.xlabel(r'$n_{box}$')
         plt.ylabel(r'$v_{turb}$ (km/s)')

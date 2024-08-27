@@ -1623,7 +1623,7 @@ def line_detect(epoch_id,arg_dict):
             # checking whether the comptonisation component is useless
             if 'disk_thcomp' in [elem.compname for elem in fitcont_broad.includedlist_main]:
 
-                # checking if the component was pegged during the fit
+                # checking if the photon index was pegged during the fit
                 thcomp_frac_frozen = AllModels(1).thcomp.Gamma_tau.frozen
                 if thcomp_frac_frozen:
                     # forcing the component to 0 values and freezing it

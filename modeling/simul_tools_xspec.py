@@ -140,7 +140,9 @@ def model_to_nuLnu(path):
 def gridmodel(gridpath, interp='log'):
     '''
     Fetches all final spectra in the gridpath arborescence,
-    and creates an xspec model using the
+    and creates an xspec model .
+
+    Note: need non physical parameter sampling due to uneven solution parameter space.
     '''
 
 

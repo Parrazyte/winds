@@ -274,7 +274,7 @@ radio_epoch_split=st.sidebar.radio('Observation type',('averaged ObsID','individ
 use_obsids=radio_epoch_split=='averaged ObsID'
 use_orbit_obs=radio_epoch_split=='individual orbits'
 use_time_resolved=radio_epoch_split=='Time Resolved'
-time_resolved_split_avail = ['100', '30']
+time_resolved_split_avail = ['100', '30','var']
 
 if use_time_resolved:
     time_resolved_split=st.sidebar.radio('Temporal Resolution (s)',time_resolved_split_avail)
@@ -704,8 +704,10 @@ if multi_obj:
         obj_included_obs_restrict = np.unique([elem.split('_')[0] for elem in choice_obs_restrict])
         mask_obj_select_obs_restrict=np.array([elem in obj_included_obs_restrict for elem in obj_list])
 
-        mask_obj_select=mask_obj_select & mask_obj_select_obs_restrict
-
+        try:
+            mask_obj_select=mask_obj_select & mask_obj_select_obs_restrict
+        except:
+            breakpoint()
 
         restrict_match_INT=st.toggle('Restrict to Observations with INTEGRAL coverage',value=False)
 
@@ -878,12 +880,12 @@ else:
 HID_options_str=np.array(['Source','Inclination','Instrument','Time',
                           r'line $V_{shift}$',r'line $\Delta$C',r'line $EW$ ratio',
                           r'$nH$',r'$T_{in}$'] \
-                          + (['Custom: Line substructures', 'Custom: accretion states'] if \
+                          + (['Custom: Line substructures', 'Custom: accretion states','Custom: ionization'] if \
                                  display_single and obj_list[mask_obj_select][0] == '4U1630-47' else []) \
                           + (['Custom: Outbursts'] if display_single else []))
 
 radio_info_cmap_options=['Source','Inclination','Instrument','Time','Velocity shift','Del-C','EW ratio','nH','kT'] \
-                        + (['custom_line_struct', 'custom_acc_states'] if \
+                        + (['custom_line_struct', 'custom_acc_states','custom_ionization'] if \
                                display_single and obj_list[mask_obj_select][0] == '4U1630-47' else []) \
                         + (['custom_outburst'] if display_single else [])
 
@@ -1332,7 +1334,7 @@ else:
 
 #adding the significant BAT extrapolated fluxes to the lum_high_list array if asked to (for the scatter plots)
 #the sum mask_obj condition skips issues when no observation is kept
-if add_BAT_flux_corr and display_single and choice_source[0]=='4U1630-47' and sum(mask_obj)>0:
+if add_BAT_flux_corr and display_single and choice_source[0]=='4U1630-47' and sum(mask_obj)>0 and use_obsids:
 
     bat_lc_df_scat = fetch_bat_lightcurve(catal_bat_df, catal_bat_simbad, choice_source, binning=BAT_binning_scat)
 
@@ -1675,6 +1677,46 @@ if display_single and choice_source[0]=='4U1630-47' and sum(ravel_ragged(mask_in
                     custom_states_color[i_obj][i_obs] = 'purple'
 
 dict_linevis['custom_states_color']=custom_states_color
+
+custom_ionization_color = deepcopy(hid_plot[1][0])
+if display_single and choice_source[0] == '4U1630-47' and sum(ravel_ragged(mask_intime_plot)) > 0:
+    for i_obj in range(len(custom_states_color)):
+        if obj_list[i_obj] == '4U1630-47':
+            for i_obs in range(len(custom_ionization_color[i_obj])):
+
+
+                # no specific state
+                custom_ionization_color[i_obj][i_obs] = 'grey'
+
+                if observ_list[i_obj][i_obs]=='400010010_xis1':
+                    #outlier_diagonal_middle
+                    custom_ionization_color[i_obj][i_obs] = 'red'
+
+                if observ_list[i_obj][i_obs]=='400010060_xis1':
+                    #outlier_diagonal_lower_floor
+                    custom_ionization_color[i_obj][i_obs] = 'rosybrown'
+
+                if observ_list[i_obj][i_obs]=='906008010_xis1':
+                    #diagonal_lower_low_highE_flux
+                    custom_ionization_color[i_obj][i_obs] = 'orange'
+
+                if observ_list[i_obj][i_obs]=='5501010104-001':
+                    #diagonal_upper_low_highE_flux
+                    custom_ionization_color[i_obj][i_obs] = 'powderblue'
+
+                if observ_list[i_obj][i_obs]=='nu40014009001A01':
+                    #diagonal_upper_mid_highE_flux
+                    custom_ionization_color[i_obj][i_obs] = 'turquoise'
+
+                if observ_list[i_obj][i_obs]=='409007010_xis1':
+                    #diagonal_upper_high_highE_flux
+                    custom_ionization_color[i_obj][i_obs] = 'pink'
+
+                if observ_list[i_obj][i_obs]=='nu80902312002A01':
+                    #SPL_whereline
+                    custom_ionization_color[i_obj][i_obs] = 'forestgreen'
+
+dict_linevis['custom_ionization_color'] = custom_ionization_color
 
 #outburst coloring
 color_cmap_outburst = mpl.cm.tab10
@@ -3053,12 +3095,12 @@ with st.sidebar.expander('Parameter analysis'):
     st.header('Visualisation')
     radio_color_scatter_options=np.array(['None','Source','Instrument','Time',
                                           r'line $FWHM$',r'$nH$',r'$HR_{soft}$',r'$L_{3-10}$']\
-                                         + (['Custom: Line substructures','Custom: accretion states'] if \
+                                         + (['Custom: Line substructures','Custom: accretion states','Custom: ionization'] if \
                                          display_single and obj_list[mask_obj_select][0]=='4U1630-47' else [])\
                                          + (['Custom: Outbursts'] if display_single else []))
 
     color_scatter_options=['None','Source','Instrument','Time','width','nH','HR','L_3-10']\
-                        + (['custom_line_struct','custom_acc_states'] if\
+                        + (['custom_line_struct','custom_acc_states','custom_ionization'] if\
                             display_single and obj_list[mask_obj_select][0]=='4U1630-47' else [])\
                         + (['custom_outburst'] if display_single else [])
 
@@ -3074,6 +3116,7 @@ with st.sidebar.expander('Parameter analysis'):
                                    value=False)
     common_observ_bounds_lines=st.toggle('Use common observation parameter bounds for all lines',value=True)
     display_pearson = st.toggle('Display Pearson rank', value=False)
+    display_legend_correl=st.toggle('Display legend',value=True)
 
     st.header('Upper limits')
     show_scatter_ul=st.toggle('Display upper limits in EW plots',value=False)
@@ -3153,6 +3196,7 @@ dict_linevis['display_th_width_ew']=display_th_width_ew
 dict_linevis['common_observ_bounds_lines']=common_observ_bounds_lines
 dict_linevis['common_observ_bounds_dates']=common_observ_bounds_dates
 dict_linevis['use_alpha_ul']=use_alpha_ul
+dict_linevis['display_legend_correl']=display_legend_correl
 
 dict_linevis['split_dist_method']=split_dist_method
 
@@ -3699,10 +3743,11 @@ if display_single and choice_source[0]=='4U1630-47' and plot_gamma_correl:
     #integral gamma-flux figure
     fig_gamma_flux_int,ax_gamma_flux_int=plt.subplots(figsize=(6,6))
     ax_gamma_flux_int.set_xlim(1.5, 3.5)
-    ax_gamma_flux_int.set_ylim(3e-11, 5e-9)
+    # ax_gamma_flux_int.set_ylim(3e-11, 5e-9)
     ax_gamma_flux_int.set_yscale('log')
     ax_gamma_flux_int.set_xlabel(r'powerlaw $\Gamma$')
-    plt.ylabel('30-50 keV flux (erg/s/cm²)')
+    # plt.ylabel('30-50 keV flux (erg/s/cm²)')
+    plt.ylabel('30-50 keV luminosity ($L/L_{Edd}$)')
 
     #setting up alpha for the colors
     int_fit_flux_alpha=abs(int_fit_flux/int_fit_flux_err)
@@ -3710,11 +3755,31 @@ if display_single and choice_source[0]=='4U1630-47' and plot_gamma_correl:
     int_fit_flux_alpha = int_fit_flux_alpha / max(int_fit_flux_alpha)
     i_max_alpha_flux=np.argmax(int_fit_flux_alpha)
 
+    #note: Flux translated to Eddington ratios using the Edd factor of the source
     for i_revol in range(len(int_fit_flux)):
-        ax_gamma_flux_int.errorbar(int_fit_gamma[i_revol],int_fit_flux[i_revol],
+        ax_gamma_flux_int.errorbar(int_fit_gamma[i_revol],int_fit_flux[i_revol]*Edd_factor[mask_obj][0],
                 xerr=np.array([[int_fit_gamma_err.T[i_revol].T[0]],[int_fit_gamma_err.T[i_revol].T[1]]]),
-                yerr=int_fit_flux_err[i_revol],color='black',alpha=int_fit_flux_alpha[i_revol],
+                yerr=int_fit_flux_err[i_revol]*Edd_factor[mask_obj][0],color='black',alpha=int_fit_flux_alpha[i_revol],
                 label='INTEGRAL' if i_revol==i_max_alpha_flux else '',ls='')
+
+    #adding the february/march 2024 points, handmade from Tristan's data
+    #feb
+    # ax_gamma_flux_int.errorbar(1.93173,0.00025141484646483593,
+    #                            xerr=[[0.00926375],[0.00978644]],yerr=[[1.2151665648938697e-06],[1.1216922137481912e-06]],
+    #                            color='black',marker='d')
+    # #march
+    # ax_gamma_flux_int.errorbar(2.07,0.0004436682181837173,
+    #                            xerr=[[0.00736723],[0.00743803]],yerr=[[1.6903278498844185e-06],[1.5812744402144266e-06]],
+    #                            color='black',marker='d')
+
+    #note: using systematic uncertainties instead bc the fits give suspicious low errors
+    ax_gamma_flux_int.errorbar(1.93173,0.00025141484646483593,
+                               xerr=0.1,yerr=0.00025/10,
+                               color='black',marker='d')
+    #march
+    ax_gamma_flux_int.errorbar(2.07,0.0004436682181837173,
+                               xerr=0.1,yerr=0.00044/10,
+                               color='black',marker='d')
 
     r_spearman_gamma_flux_int= np.array(pymccorrelation(int_fit_gamma, int_fit_flux,
                                           dx_init=int_fit_gamma_err.T,
@@ -3917,7 +3982,7 @@ if display_single and choice_source[0]=='4U1630-47' and plot_gamma_correl:
                  lum_high_list_single_withBAT[0],
                  xerr=lum_BAT_single[1][flux_high_list_single_mask & mask_match_BAT_main],
                  yerr=lum_high_list_single_withBAT[1:],
-                 ls='',color='blue',label='main telescopes (nthcomp)')
+                 ls='',color='blue',label='NuSTAR/Suzaku-PIN (nthcom)')
 
     #computing the linear regression
 
@@ -3961,11 +4026,11 @@ if display_single and choice_source[0]=='4U1630-47' and plot_gamma_correl:
     ax_native_flux_gamma.set_ylim(1e-4, 1e-1)
     ax_native_flux_gamma.set_yscale('log')
     ax_native_flux_gamma.set_xlabel(r'nthcomp $\Gamma$')
-    ax_native_flux_gamma.set_ylabel('15-50 keV measured flux ($L/L_{Edd}$)')
+    ax_native_flux_gamma.set_ylabel('15-50 keV luminosity ($L/L_{Edd}$)')
     
     plt.errorbar(gamma_nthcomp_single[flux_high_list_single_mask].T[0],lum_high_list_single[0],
                  xerr=gamma_nthcomp_single[flux_high_list_single_mask].T[1:],yerr=lum_high_list_single[1:],ls='',
-                 color='blue',label='main telescopes (nthcomp)',marker='d')
+                 color='blue',label='NuSTAR/Suzaku-PIN',marker='d')
 
     # fig_native_flux_gamma.suptitle(r'Observed nthcomp $\Gamma$ vs high energy luminosity')
     plt.legend(fontsize=10,)

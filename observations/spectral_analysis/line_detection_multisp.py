@@ -1980,6 +1980,7 @@ dict_linevis['diago_color']=None
 dict_linevis['custom_states_color']=None
 dict_linevis['custom_outburst_color']=None
 dict_linevis['custom_outburst_number']=None
+dict_linevis['custom_ionization_color']=None
 dict_linevis['hr_high_plot_restrict']=None
 dict_linevis['lum_high_1sig_plot_restrict']=None
 dict_linevis['lum_high_sign_plot_restrict']=None

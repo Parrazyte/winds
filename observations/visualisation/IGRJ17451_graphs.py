@@ -73,26 +73,26 @@ plt.title("Evolution of IGRJ17451's luminosity for the XMM exposure")
 
 #%% lightcurves
 
-from stingray import Lightcurve
-
-lc_xi0=Lightcurve.read('lc_0.lc','ogip')
-lc_xi1=Lightcurve.read('lc.evt','ogip')
-lc_xi0bg=Lightcurve.read('lc_0bg.lc','ogip')
-lc_xi1bg=Lightcurve.read('lc_bg.lc','ogip')
-
-
-
-lc_net_xi0=lc_xi0-lc_xi0bg
-lc_net_xi1=lc_xi1-lc_xi1bg
-
-fig_lc=plt.figure()
-
-plt.xlabel('time (s)')
-plt.ylabel('counts')
-
-plt.title('IGRJ 17451-3022 Suzaku net lightcurves')
-
-plt.plot(lc_net_xi0.time-lc_net_xi0.time[0],lc_net_xi0.counts,label='xi0')
-plt.plot(lc_net_xi1.time-lc_net_xi0.time[0],lc_net_xi1.counts,label='xi1')
-
-plt.legend()
+# from stingray import Lightcurve
+#
+# lc_xi0=Lightcurve.read('lc_0.lc','ogip')
+# lc_xi1=Lightcurve.read('lc.evt','ogip')
+# lc_xi0bg=Lightcurve.read('lc_0bg.lc','ogip')
+# lc_xi1bg=Lightcurve.read('lc_bg.lc','ogip')
+#
+#
+#
+# lc_net_xi0=lc_xi0-lc_xi0bg
+# lc_net_xi1=lc_xi1-lc_xi1bg
+#
+# fig_lc=plt.figure()
+#
+# plt.xlabel('time (s)')
+# plt.ylabel('counts')
+#
+# plt.title('IGRJ 17451-3022 Suzaku net lightcurves')
+#
+# plt.plot(lc_net_xi0.time-lc_net_xi0.time[0],lc_net_xi0.counts,label='xi0')
+# plt.plot(lc_net_xi1.time-lc_net_xi0.time[0],lc_net_xi1.counts,label='xi1')
+#
+# plt.legend()

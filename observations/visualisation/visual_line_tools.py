@@ -516,6 +516,26 @@ wind_det_sources=list(wind_det_dict.keys())
 #     'XTEJ1701-462':[1.4,0,0]
 #     }
 
+#--------------------
+#from Tristan
+kev_to_erg = 1.60218e-9 # convertion factor from keV to erg
+
+def flux_erg_pow(g,K,e1,e2):
+    '''integrated flux between e1 and e2 from photon index (g) and norm (K) (with F = K*E**(-g)), in erg/s/cm2'''
+    return (K/(2-g))*(e2**(2-g) - e1**(2-g))*kev_to_erg
+
+def err_flux_erg_pow(g, K, dg, dK, e1,e2):
+    '''finds the error on flux from photon index (g, dg) and norm (K,dK) in erg/s/cm2'''
+    F12 = (K/(2-g))*(e2**(2-g) - e1**(2-g))
+    if K==0. : return 0
+    else : return F12 * np.sqrt( (dK/K)**2 + ((K/(F12*(2-g)))* (np.log(e2)*e2**(2-g)-np.log(e1)*e1**(2-g)) - 1/(2-g))**2 * (dg)**2 ) * kev_to_erg
+
+# example with Crab nebula:
+flux_erg_pow(2.09,9.9 ,30,50), err_flux_erg_pow(2.09,9.9,0.01,0.4 ,30,50)
+
+#--------------------
+
+
 #BAT conversion factors for 1 cts/s in 15-50 keV counts to 15-50keV flux
 convert_BAT_count_flux={
                         #this one assumes 11e22nH (but that doesn't change anything) and 2.5 gamma powerlaw
@@ -980,19 +1000,21 @@ def plot_lightcurve(dict_linevis,ctl_maxi_df,ctl_maxi_simbad,name,ctl_bat_df,ctl
         # ax_lc.set_title(name[0]+str_binning_monit+' broad band monitoring')
 
         # full name is maxi_lc_df.columns[1]
-        maxi_y_str='MAXI 2-20 keV rate' if maxi_lc_df is not None else ''
+        maxi_y_str='MAXI 2-20 keV rate' if maxi_lc_df is not None and slider_date[1].year >= 2009 else ''
         #full name is rxte_lc_df.columns[1]
-        rxte_y_str='RXTE 1.5-12 keV rate/'+str(20 if name[0]=='4U1630-47' else 25) if rxte_lc_df is not None else ''
-        ax_lc.set_ylabel(maxi_y_str+(' | ' if maxi_lc_df is not None and rxte_lc_df is not None else '')+rxte_y_str)
+        rxte_y_str='RXTE 1.5-12 keV rate/'+str(20 if name[0]=='4U1630-47' else 25) if rxte_lc_df is not None \
+                    and slider_date[0].year <= 2012 else ''
+        label_both = maxi_y_str!='' and rxte_y_str!=''
+        ax_lc.set_ylabel(maxi_y_str+(' | ' if label_both else '')+rxte_y_str)
 
     elif mode=='HR_soft':
         ax_lc.set_title(name[0]+str_binning_monit+' Soft Hardness Ratio monitoring')
 
-        maxi_y_str='MAXI counts HR in [4-10]/[2-4] keV' if maxi_lc_df is not None else ''
-        rxte_y_str='RXTE band C/(B+A) [5-12]/[1.5-5] keV' if rxte_lc_df is not None else ''
-        ax_lc.set_ylabel(maxi_y_str+\
-                         ("/" if maxi_lc_df is not None and rxte_lc_df is not None else '')+\
-                         rxte_y_str,fontsize=8 if maxi_lc_df is not None and rxte_lc_df is not None else None)
+        maxi_y_str='MAXI counts HR in [4-10]/[2-4] keV' if maxi_lc_df is not None and slider_date[1].year >= 2009 else ''
+        rxte_y_str='RXTE band C/(B+A) [5-12]/[1.5-5] keV' if rxte_lc_df is not None and slider_date[0].year <= 2012 else ''
+        label_both=maxi_y_str!='' and rxte_y_str!=''
+        ax_lc.set_ylabel(maxi_y_str + (" | " if label_both else '')+rxte_y_str,fontsize=6 if label_both else None)
+
     elif mode=='HR_hard':
         ax_lc.set_title(name[0]+str_binning_monit+' Hard Hardness Ratio monitoring')
 
@@ -1306,7 +1328,8 @@ def plot_lightcurve(dict_linevis,ctl_maxi_df,ctl_maxi_simbad,name,ctl_bat_df,ctl
         
         color_ul=[telescope_colors[elem] for elem in ravel_ragged(instru_list_repeat)[bool_nondetsign]]
 
-        ax_lc_ew.set_ylim(min(4,min(ravel_ragged(abslines_plot_restrict[0][0])[bool_detsign])),
+        ax_lc_ew.set_ylim(min(4,min(min(ravel_ragged(abslines_plot_restrict[0][0])[bool_detsign]),
+                                    min(ravel_ragged(abslines_plot_restrict[5][0])[bool_nondetsign]))),
                           max(100,max(ravel_ragged(abslines_plot_restrict[0][0])[bool_detsign])))
 
         markers_legend_done_list=[]
@@ -1335,7 +1358,7 @@ def plot_lightcurve(dict_linevis,ctl_maxi_df,ctl_maxi_simbad,name,ctl_bat_df,ctl
         #we add a condition for the label to only plot each instrument once
         ax_lc.axvline(x=num_date_obs,ymin=0,ymax=1,color=telescope_colors[instru_list[i_obs]],
                         label=instru_list[i_obs]+' exposure' if instru_list[i_obs] not in label_tel_list else '',
-                      ls=':',lw=2.)
+                      ls=':',lw=1.)
 
         if instru_list[i_obs] not in label_tel_list:
             label_tel_list+=[instru_list[i_obs]]
@@ -1452,11 +1475,17 @@ def plot_lightcurve(dict_linevis,ctl_maxi_df,ctl_maxi_simbad,name,ctl_bat_df,ctl
         plt.axvspan(xmin=hypersoft_start,xmax=hypersoft_end,color='green',zorder=1000,alpha=0.3,
                     label='hypersoft state')
 
-    #hypersoft state for GROJ1655-40
+    # #hypersoft state for GROJ1655-40
     ax_lc.legend(loc='upper right' if name[0]=="GROJ1655-40" else 'upper left',ncols=2)
 
+    # #shifted position if need be
+    # ax_lc.legend(loc='upper right' if name[0]=="GROJ1655-40" else 'center right',ncols=2,
+    #              bbox_to_anchor=(0.5, 0.53, 0.5, 0.5))
+
     if superpose_ew:
+        # ax_lc_ew.legend(loc='upper center')
         ax_lc_ew.legend(loc='upper right')
+
     
     return fig_lc
 
@@ -2478,6 +2507,7 @@ def hid_graph(ax_hid,dict_linevis,
     custom_states_color=dict_linevis['custom_states_color']
     custom_outburst_color=dict_linevis['custom_outburst_color']
     custom_outburst_number=dict_linevis['custom_outburst_number']
+    custom_ionization_color=dict_linevis['custom_ionization_color']
 
     hatch_unstable=dict_linevis['hatch_unstable']
     change_legend_position=dict_linevis['change_legend_position']
@@ -2519,7 +2549,7 @@ def hid_graph(ax_hid,dict_linevis,
     type_1_cm = ['Inclination', 'Time', 'nH', 'kT']
 
     # parameters without actual colorbars
-    type_1_colorcode = ['Source', 'Instrument','custom_line_struct','custom_acc_states','custom_outburst']
+    type_1_colorcode = ['Source', 'Instrument','custom_line_struct','custom_acc_states','custom_outburst','custom_ionization']
 
     fig_hid=ax_hid.get_figure()
 
@@ -2973,6 +3003,19 @@ def hid_graph(ax_hid,dict_linevis,
                                                      [obj_order_sign_states[i_state]]\
                                                  for i_state in range(len(states_zorder))])
 
+            elif radio_info_cmap=='custom_ionization':
+                # reordering to have the substructures above the rest
+                colors_data_restrict = custom_ionization_color[mask_obj][i_obj][obj_val_mask_sign]
+
+                states_zorder=['grey','red','rosybrown','orange','turquoise','pink','powderblue','forestgreen']
+                obj_order_sign_states=[obj_size_sign[obj_val_mask_sign][colors_data_restrict == elem_state_zorder]\
+                                              .argsort()[::-1] for elem_state_zorder in states_zorder]
+
+                len_arr = np.arange(len(obj_order_sign))
+                obj_order_sign = np.concatenate([len_arr[colors_data_restrict == states_zorder[i_state]]\
+                                                     [obj_order_sign_states[i_state]]\
+                                                 for i_state in range(len(states_zorder))])
+
         # same thing for all detections
         obj_val_cmap = np.array(
             [np.nan if len(abslines_obj[0][radio_cmap_i][mask_lines].T[i_obs][mask_det.T[i_obs]]) == 0 else \
@@ -3052,6 +3095,8 @@ def hid_graph(ax_hid,dict_linevis,
                                     if radio_info_cmap=='custom_line_struct' else \
                                 custom_states_color[mask_obj][i_obj][obj_val_mask_sign][obj_order_sign] \
                                         if radio_info_cmap == 'custom_acc_states' else \
+                                custom_ionization_color[mask_obj][i_obj][obj_val_mask_sign][obj_order_sign] \
+                                        if radio_info_cmap == 'custom_ionization' else \
                                 custom_outburst_color[mask_obj][i_obj][obj_val_mask_sign][obj_order_sign] \
                                         if radio_info_cmap=='custom_outburst' else\
                                 obj_val_cmap_sign[obj_val_mask_sign][obj_order_sign]
@@ -3139,7 +3184,9 @@ def hid_graph(ax_hid,dict_linevis,
                                     if radio_info_cmap == 'custom_line_struct' else \
                                     custom_states_color[mask_obj][i_obj][obj_val_mask_nonsign] \
                                         if radio_info_cmap == 'custom_acc_states' else \
-                                        custom_outburst_color[mask_obj][i_obj][obj_val_mask_nonsign] \
+                                    custom_ionization_color[mask_obj][i_obj][obj_val_mask_nonsign] \
+                                        if radio_info_cmap == 'custom_ionization' else \
+                                            custom_outburst_color[mask_obj][i_obj][obj_val_mask_nonsign] \
                                         if radio_info_cmap=='custom_outburst' else \
                     obj_val_cmap[obj_val_mask_nonsign]
 
@@ -3299,7 +3346,11 @@ def hid_graph(ax_hid,dict_linevis,
                     # manually readjusting for small durations because the AutoDateLocator doesn't work well
                     time_range = high_bound_date - low_bound_date
 
-                    if time_range < 150:
+                    if time_range <1:
+                        date_format = mdates.DateFormatter('%Y-%m-%d %H:%M')
+                    elif time_range < 5:
+                        date_format = mdates.DateFormatter('%Y-%m-%d %Hh')
+                    elif time_range < 150:
                         date_format = mdates.DateFormatter('%Y-%m-%d')
                     elif time_range < 1825:
                         date_format = mdates.DateFormatter('%Y-%m')
@@ -3501,7 +3552,9 @@ def hid_graph(ax_hid,dict_linevis,
                                             if radio_info_cmap == 'custom_line_struct' else \
                                             custom_states_color[mask_obj][i_obj_base][mask_nondet_ul] \
                                                 if radio_info_cmap == 'custom_acc_states' else \
-                                            custom_outburst_color[mask_obj][i_obj_base][mask_nondet_ul] \
+                                            custom_ionization_color[mask_obj][i_obj_base][mask_nondet_ul] \
+                                                if radio_info_cmap == 'custom_ionization' else \
+                                                    custom_outburst_color[mask_obj][i_obj_base][mask_nondet_ul] \
                                                 if radio_info_cmap=='custom_outburst' else \
                                             'grey'
 
@@ -3599,7 +3652,9 @@ def hid_graph(ax_hid,dict_linevis,
                                         if radio_info_cmap == 'custom_line_struct' else \
                                     custom_states_color[mask_obj][i_obj_base][mask_nondet] \
                                         if radio_info_cmap == 'custom_acc_states' else \
-                                    custom_outburst_color[mask_obj][i_obj_base][mask_nondet] \
+                                        custom_ionization_color[mask_obj][i_obj_base][mask_nondet] \
+                                            if radio_info_cmap == 'custom_ionization' else \
+                                            custom_outburst_color[mask_obj][i_obj_base][mask_nondet] \
                                         if radio_info_cmap == 'custom_outburst' else \
                                         'grey'
 
@@ -3796,8 +3851,8 @@ def hid_graph(ax_hid,dict_linevis,
         # computing the position of the arrows to superpose to the lines
         xarr_start = x_hid_base[mask_intime[0]][date_order][range(len(x_hid_base[mask_intime[0]][date_order]) - 1)].astype(float)
         xarr_end = x_hid_base[mask_intime[0]][date_order][range(1, len(x_hid_base[mask_intime[0]][date_order]))].astype(float)
-        yarr_start = y_hid_base[mask_intime[0]][date_order][range(len(y_hid_base[mask_intime[0]][date_order]) - 1)]
-        yarr_end = y_hid_base[mask_intime[0]][date_order][range(1, len(y_hid_base[mask_intime[0]][date_order]))]
+        yarr_start = y_hid_base[mask_intime[0]][date_order][range(len(y_hid_base[mask_intime[0]][date_order]) - 1)].astype(float)
+        yarr_end = y_hid_base[mask_intime[0]][date_order][range(1, len(y_hid_base[mask_intime[0]][date_order]))].astype(float)
 
         #mask to know if we can do a log computation of the arrow positions or not (aka not broad mode or
         #x positions above the lintresh threshold
@@ -3816,8 +3871,11 @@ def hid_graph(ax_hid,dict_linevis,
             ydir = yarr_end - yarr_start
 
             #log version in the mask
-            xpos[x_arr_log_ok] = 10**((np.log10(xarr_start[x_arr_log_ok]) + np.log10(xarr_end[x_arr_log_ok])) / 2)
-            ypos[x_arr_log_ok] = 10**((np.log10(yarr_start[x_arr_log_ok]) + np.log10(yarr_end[x_arr_log_ok])) / 2)
+            try:
+                xpos[x_arr_log_ok] = 10**((np.log10(xarr_start[x_arr_log_ok]) + np.log10(xarr_end[x_arr_log_ok])) / 2)
+                ypos[x_arr_log_ok] = 10**((np.log10(yarr_start[x_arr_log_ok]) + np.log10(yarr_end[x_arr_log_ok])) / 2)
+            except:
+                breakpoint()
 
             xdir[x_arr_log_ok] = 10**(np.log10(xarr_end[x_arr_log_ok]) - np.log10(xarr_start[x_arr_log_ok]))
             ydir[x_arr_log_ok] = 10**(np.log10(yarr_end[x_arr_log_ok]) - np.log10(yarr_start[x_arr_log_ok]))
@@ -4116,7 +4174,8 @@ def hid_graph(ax_hid,dict_linevis,
         instru_legend = fig_hid.legend(handles=instru_examples[instru_ind].tolist(), loc='upper right',
                                        labels=telescope_choice_sort.tolist(),
                                        title=radio_info_cmap,
-                                       bbox_to_anchor=(0.900, 0.88) if bigger_text and square_mode else (0.825, 0.918),
+                                       bbox_to_anchor=(0.900, 0.21),
+                                       # bbox_to_anchor=(0.900, 0.88) if bigger_text and square_mode else (0.825, 0.918),
                                        handleheight=1, handlelength=4, facecolor='None')
 
     # manual custom subplot adjust to get the same scale for the 3 visible sources plot and for the zoomed 5 sources with detection
@@ -4688,8 +4747,10 @@ def correl_graph(data_perinfo,infos,data_ener,dict_linevis,mode='intrinsic',mode
         custom_outburst_color=dict_linevis['custom_outburst_color'][mask_obj]
         custom_outburst_number=dict_linevis['custom_outburst_number'][mask_obj]
         custom_outburst_dict=dict_linevis['custom_outburst_dict'][mask_obj]
+        custom_ionization_color = dict_linevis['custom_ionization_color'][mask_obj]
+        display_legend_correl=dict_linevis['display_legend_correl']
 
-    if 'color_scatter' in dict_linevis:    
+    if 'color_scatter' in dict_linevis:
         color_scatter=dict_linevis['color_scatter']
         obj_disp_list=dict_linevis['obj_list'][mask_obj]
         date_list=dict_linevis['date_list'][mask_obj]
@@ -5654,8 +5715,9 @@ def correl_graph(data_perinfo,infos,data_ener,dict_linevis,mode='intrinsic',mode
         elif 'custom' in color_scatter:
 
             custom_color=diago_color if color_scatter=='custom_line_struct' else\
-                         custom_states_color if color_scatter=='custom_acc_states' else\
-                         custom_outburst_color if color_scatter=='custom_outburst' else 'grey'
+                         custom_states_color if color_scatter=='custom_acc_states' else \
+                             custom_ionization_color if color_scatter == 'custom_ionization' else \
+                                 custom_outburst_color if color_scatter=='custom_outburst' else 'grey'
 
             # there's no need to repeat in ewratio since the masks are computed for a single line
             if line_comp_mode or ratio_mode:
@@ -5706,6 +5768,15 @@ def correl_graph(data_perinfo,infos,data_ener,dict_linevis,mode='intrinsic',mode
                               'SPL': 'red',
                               'canonical hard':'blue',
                               'QRM':'violet'}
+            elif color_scatter=='custom_ionization':
+                label_dict = {'std':'grey',
+                              'outlier_diagonal_middle': 'red',
+                              'outlier_diagonal_lower_floor': 'rosybrown',
+                              'diagonal_lower_low_highE_flux': 'orange',
+                              'diagonal_upper_mid_highE_flux': 'turquoise',
+                              'diagonal_upper_high_highE_flux': 'pink',
+                              'diagonal_upper_low_highE_flux': 'powderblue',
+                              'SPL_whereline': 'forestgreen'}
             elif color_scatter=='custom_outburst':
                 # note: 0 here because this is only used in display_single mode
                 label_dict=custom_outburst_dict[0]
@@ -6547,7 +6618,8 @@ def correl_graph(data_perinfo,infos,data_ener,dict_linevis,mode='intrinsic',mode
 
 
         #### legend display
-        if show_linked or (compute_correl and mode!='source' and len(x_data[0])>1 and not time_mode) or color_scatter not in ['Time','HR','width','nH','L_3-10',None]:
+        if show_linked or (compute_correl and mode!='source' and len(x_data[0])>1 and not time_mode) or color_scatter not in ['Time','HR','width','nH','L_3-10',None]\
+                and display_legend_correl:
             
             scat_legend=ax_scat.legend(fontsize=9 if infos=='ew_width' and display_th_width_ew else 10,title=legend_title,
                                    ncol=2 if display_th_width_ew and infos=='ew_width' else 1,loc='upper right' if not ratio_mode else 'upper right')

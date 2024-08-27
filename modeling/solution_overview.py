@@ -5,8 +5,10 @@ import plotly.graph_objects as go
 from streamlit_plotly_events import plotly_events
 from plotly.express.colors import sample_colorscale
 from plotly.subplots import make_subplots
-
+from streamlit_theme import st_theme
 import scipy
+import io
+import zipfile
 
 from scipy.interpolate import interp1d
 from scipy.ndimage import map_coordinates
@@ -38,6 +40,16 @@ try:
     st.set_page_config(page_icon=":magnet:",layout='wide')
 except:
     pass
+
+def make_zip(filebites_arr,filename_arr):
+    zip_buffer = io.BytesIO()
+
+    with zipfile.ZipFile(zip_buffer, "a",
+                         zipfile.ZIP_DEFLATED, False) as zip_file:
+        for file_name, data in zip(filename_arr,filebites_arr):
+            zip_file.writestr(file_name, data.getvalue())
+
+    return zip_buffer
 
 def check_password():
     """Returns `True` if the user had the correct password."""
@@ -73,9 +85,9 @@ online='parrama' not in os.getcwd()
 if not online:
     update_online = st.sidebar.button('Update online version')
 
-    solutions_path='/media/parrama/SSD/Simu/MHD/solutions/nathan_init/nathan_init.txt'
+    solutions_path='/media/parrama/crucial_SSD/Simu/MHD/solutions/nathan_init/nathan_init.txt'
 
-    possible_sol_path='/media/parrama/SSD/Simu/MHD/solutions/nathan_init/super_a_0.0.dat'
+    possible_sol_path='/media/parrama/crucial_SSD/Simu/MHD/solutions/nathan_init/super_a_0.0.dat'
 
     #solutions_path='/media/parrama/SSD/Simu/MHD/solutions/nathan_init/nathan_init.txt'
     #refaire un merge des trois epsilon
@@ -147,6 +159,10 @@ with st.sidebar:
 
     mdot_obs=st.number_input(r'Observed $\dot m$',value=0.111,min_value=1e-10,format='%.3e')
     m_BH=st.number_input(r'Black Hole Mass ($M_\odot$)',value=8.,min_value=1e-10,format='%.3e')
+
+    #note that this was 1/12 in the PhD plots
+    eta_mhd=st.number_input(r'$\eta_{mhd}$',value=0.057,min_value=1e-10,max_value=1.,format='%.3e')
+
     rj=st.number_input(r'internal WED radius ',value=6,format='%.2e')
 
     val_angle_low=st.number_input(r'angle interval lower limit',value=30.,format='%.2f')
@@ -154,12 +170,24 @@ with st.sidebar:
     val_angle_step=st.number_input(r'angle step',value=4.,format='%.2f')
 
     st.header('SED')
-    val_L_source=st.number_input(r'Source bolometric luminosity ($10^{38} erg/s/cm^2$)',value=1e0,
+    source_lum_auto=st.toggle(r'Automatic derivation of the source luminosity',value=True)
+    if source_lum_auto:
+        val_L_source=mdot_obs*1.26*m_BH*1e38
+    else:
+        val_L_source=st.number_input(r'Source bolometric luminosity ($10^{38} erg/s/cm^2$)',value=1e0,
                                  format='%.3e')*1e38
 
     with st.expander('visualisation'):
         latex_title=st.checkbox('Force latex whenever possible(unstable)')
         visu_2D=st.checkbox('Plot 2D solution visualization (in progress)')
+        double_cols=st.checkbox('restrict plots ')
+
+#adapting light or dark themes
+theme = st_theme()
+try:
+    light_mode=theme['base']=='light'
+except:
+    light_mode=False
 
 #fetching the p/mu space of existing solutions
 p_mu_space=[]
@@ -185,8 +213,8 @@ fig_scatter=go.Figure()
 fig_scatter.update_layout(width=1500,height=750)
 fig_scatter.update_xaxes(type="log")
 fig_scatter.update_yaxes(type="log")
-fig_scatter.layout.yaxis.color = 'white'
-fig_scatter.layout.xaxis.color = 'white'
+fig_scatter.layout.yaxis.color = 'black' if light_mode else 'white'
+fig_scatter.layout.xaxis.color = 'black' if light_mode else 'white'
 fig_scatter.layout.yaxis.gridcolor='rgba(0.5,0.5,.5,0.2)'
 fig_scatter.layout.xaxis.gridcolor='rgba(0.5,0.5,.5,0.2)'
 
@@ -205,7 +233,7 @@ scat_possible=go.Scatter(x=non_computed_p_mu[1],y=non_computed_p_mu[0],mode='mar
 
 #and the one of the ones for which we have the MHD solution
 scat_mhd=go.Scatter(x=p_mu_space[1],y=p_mu_space[0],mode='markers',
-                            marker=dict(size=12,color='grey',line=dict(width=2,color='white')),
+                            marker=dict(size=12,color='grey',line=dict(width=2,color='black' if light_mode else 'white')),
                     name='computed MHD solutions')
 
 fig_scatter.add_trace(scat_possible)
@@ -216,11 +244,11 @@ fig_scatter.update_layout(legend=dict(
     yanchor="top",
     y=0.99,
     xanchor="right",
-    x=0.99,font=dict(color='white')),hovermode='closest',    hoverlabel=dict(
+    x=0.99,font=dict(color='black' if light_mode else 'white')),hovermode='closest',    hoverlabel=dict(
         bgcolor='rgba(0.,0.,0.,0.)',font=dict(color="white")),margin=dict(t=20))
 
-# fig_scatter.update_xaxes(tickfont=dict(color='white'),title_font_color="white")
-# fig_scatter.update_yaxes(tickfont=dict(color='white'),title_font_color="white")
+# fig_scatter.update_xaxes(tickfont=dict(color='black' if light_mode else 'white'),title_font_color="white")
+# fig_scatter.update_yaxes(tickfont=dict(color='black' if light_mode else 'white'),title_font_color="white")
 
 tab_p_mu, tab_sol, tab_sol_radial,tab_explo,tab_2D,tab_tstruct= st.tabs(["Solution selection", "Angular distributions", "radial distribution","parameter exploration","full solution vizualisation","thermal structure"])
 
@@ -406,11 +434,11 @@ def plotly_line_wrapper(x,y,log_x=False,log_y='auto',xaxis_title='',yaxis_title=
                                 paper_bgcolor='rgba(0.,0.,0.,0.)', plot_bgcolor='rgba(0.,0.,0.,0.)',
                        margin=dict(l=100, r=20, t=0, b=100))
 
-    fig_line.layout.xaxis.color = 'white'
+    fig_line.layout.xaxis.color = 'black' if light_mode else 'white'
     # line.layout.xaxis.zerolinecolor = 'rgba(0.5,0.5,.5,0.3)'
     fig_line.layout.xaxis.gridcolor = 'rgba(0.5,0.5,.5,0.3)'
 
-    fig_line.layout.yaxis.color = 'white'
+    fig_line.layout.yaxis.color = 'black' if light_mode else 'white'
     # line.layout.yaxis.zerolinecolor = 'rgba(0.5,0.5,.5,0.3)'
     fig_line.layout.yaxis.gridcolor = 'rgba(0.5,0.5,.5,0.3)'
 
@@ -422,14 +450,14 @@ def plotly_line_wrapper(x,y,log_x=False,log_y='auto',xaxis_title='',yaxis_title=
                 yanchor="top",
                 y=0.99,
                 xanchor="right",
-                x=0.99, font=dict(color='white')), hovermode='closest', hoverlabel=dict(
+                x=0.95, font=dict(color='black' if light_mode else 'white')), hovermode='closest', hoverlabel=dict(
                 bgcolor='rgba(0.,0.,0.,0.)', font=dict(color="white")))
         elif legend == 'bot_left':
             fig_line.update_layout(legend=dict(
                 yanchor="bottom",
                 y=0.01,
                 xanchor="left",
-                x=0.01, font=dict(color='white')), hovermode='closest', hoverlabel=dict(
+                x=0.01, font=dict(color='black' if light_mode else 'white')), hovermode='closest', hoverlabel=dict(
                 bgcolor='rgba(0.,0.,0.,0.)', font=dict(color="white")))
 
         elif legend =='top_left':
@@ -437,13 +465,13 @@ def plotly_line_wrapper(x,y,log_x=False,log_y='auto',xaxis_title='',yaxis_title=
                 yanchor="top",
                 y=0.99,
                 xanchor="left",
-                x=0.01, font=dict(color='white')), hovermode='closest', hoverlabel=dict(
+                x=0.01, font=dict(color='black' if light_mode else 'white')), hovermode='closest', hoverlabel=dict(
                 bgcolor='rgba(0.,0.,0.,0.)', font=dict(color="white")))
 
     return fig_line
 
 def angle_plot(x_arr,y_arr,log_x=False,log_y='auto',xaxis_title='',yaxis_title='',legend=False,sampl_angles_arr=None,
-               compt_angles_arr=None,cmap='cividis',legend_lines=True,legend_points=True):
+               compt_angles_arr=None,cmap='cividis',legend_lines=True,legend_points=True,return_fig=False):
 
     fig_line=go.Figure()
 
@@ -510,7 +538,7 @@ def angle_plot(x_arr,y_arr,log_x=False,log_y='auto',xaxis_title='',yaxis_title='
             y_title_str = y_title
 
         id_mhd_point=go.Scatter(x=[sol_angle_id],y=[(-1 if neg_log else 1)*\
-                                interp_yaxis(sol_angle_id,x,y,log_y=setup_log_y,log_x=log_x)],mode='markers',name='id mhd point',marker=dict(size=13,symbol='star-triangle-up-dot',color='black',line=dict(color='violet',width=2)),showlegend=id==n_sel-1 and legend_points,
+                                interp_yaxis(sol_angle_id,x,y,log_y=setup_log_y,log_x=log_x)],mode='markers',name='id mhd point',marker=dict(size=13,symbol='star-triangle-up-dot',color='white' if light_mode else 'black',line=dict(color='violet',width=2)),showlegend=id==n_sel-1 and legend_points,
                                 hovertemplate="<b>" + 'id mhd point' + "</b><br>" +
                                               "<b>" + line_name + "</b><br>"+
                                               x_title_str + ": %{x}<br>" +
@@ -518,7 +546,7 @@ def angle_plot(x_arr,y_arr,log_x=False,log_y='auto',xaxis_title='',yaxis_title='
                                               "<extra></extra>")
 
         sm_point = go.Scatter(x=[sol_angle_sm], y=[(-1 if neg_log else 1)*\
-                                interp_yaxis(sol_angle_sm, x,y,log_y=setup_log_y,log_x=log_x)], mode='markers', name='sm point',marker=dict(size=13,symbol='star-triangle-down-dot',color='black',line=dict(color='green',width=2)),showlegend=id==n_sel-1 and legend_points,
+                                interp_yaxis(sol_angle_sm, x,y,log_y=setup_log_y,log_x=log_x)], mode='markers', name='sm point',marker=dict(size=13,symbol='star-triangle-down-dot',color='white' if light_mode else 'black',line=dict(color='green',width=2)),showlegend=id==n_sel-1 and legend_points,
                               hovertemplate="<b>" + 'sm point' + "</b><br>" +
                                             "<b>" + line_name + "</b><br>"+
                                             x_title_str + ": %{x}<br>" +
@@ -526,7 +554,7 @@ def angle_plot(x_arr,y_arr,log_x=False,log_y='auto',xaxis_title='',yaxis_title='
                                             "<extra></extra>")
 
         Alfven_point = go.Scatter(x=[sol_angle_A],y=[(-1 if neg_log else 1)*\
-                                interp_yaxis(sol_angle_A,x,y,log_y=setup_log_y,log_x=log_x)], mode='markers', name='Alfven point',marker=dict(size=13,symbol='circle-x',color='black',line=dict(color='red',width=2)),showlegend=id==n_sel-1 and legend_points,
+                                interp_yaxis(sol_angle_A,x,y,log_y=setup_log_y,log_x=log_x)], mode='markers', name='Alfven point',marker=dict(size=13,symbol='circle-x',color='white' if light_mode else 'black',line=dict(color='red',width=2)),showlegend=id==n_sel-1 and legend_points,
                                   hovertemplate="<b>" + 'Alfven point' + "</b><br>" +
                                                 "<b>" + line_name + "</b><br>"+
                                                 x_title_str + ": %{x}<br>" +
@@ -543,7 +571,7 @@ def angle_plot(x_arr,y_arr,log_x=False,log_y='auto',xaxis_title='',yaxis_title='
 
             mask_sampl_angles=np.array([elem_sol_angle==elem for elem in sampl_angles]).any(0)
 
-            sampl_points=go.Scatter(x=x[mask_sampl_angles],y=(-1 if neg_log else 1)*y[mask_sampl_angles], mode='markers', name='angle sampling',marker=dict(size=10,symbol='line-ns',color='black',line=dict(color='orange',width=2)),showlegend=id==n_sel-1 and legend_points,
+            sampl_points=go.Scatter(x=x[mask_sampl_angles],y=(-1 if neg_log else 1)*y[mask_sampl_angles], mode='markers', name='angle sampling',marker=dict(size=10,symbol='line-ns',color='white' if light_mode else 'black',line=dict(color='orange',width=2)),showlegend=id==n_sel-1 and legend_points,
                                     hovertemplate="<b>" + 'angle sampling' + "</b><br>" +
                                                   "<b>" + line_name + "</b><br>" +
                                                   x_title_str + ": %{x}<br>" +
@@ -556,7 +584,7 @@ def angle_plot(x_arr,y_arr,log_x=False,log_y='auto',xaxis_title='',yaxis_title='
             if  n_sel==1:
                 fig_line.add_vrect(x0=compt_angle, x1=90, line_width=0, fillcolor="grey", opacity=0.2,
                                    annotation_text="compton-thick", annotation_position="bottom",
-                                   annotation=dict(font=dict(color='white')))
+                                   annotation=dict(font=dict(color='black' if light_mode else 'white')))
             else:
                 #remaking this because we need it
                 if log_y == 'auto':
@@ -571,7 +599,7 @@ def angle_plot(x_arr,y_arr,log_x=False,log_y='auto',xaxis_title='',yaxis_title='
 
                 #marking the beginning of the compton thick region with a marker
 
-                compt_thick_point= go.Scatter(x=[compt_angle], y=[compt_angle_y], mode='markers', name='compton thick thresh',marker=dict(size=13,symbol='triangle-right',color='black',line=dict(color='white',width=2)),showlegend=id==n_sel-1 and legend_points,
+                compt_thick_point= go.Scatter(x=[compt_angle], y=[compt_angle_y], mode='markers', name='compton thick thresh',marker=dict(size=13,symbol='triangle-right',color='white' if light_mode else 'black',line=dict(color='black' if light_mode else 'white',width=2)),showlegend=id==n_sel-1 and legend_points,
                                       hovertemplate="<b>" + 'compton thick thresh' + "</b><br>" +
                                                     "<b>" + line_name + "</b><br>"+
                                                     x_title_str + ": %{x}<br>" +
@@ -585,13 +613,15 @@ def angle_plot(x_arr,y_arr,log_x=False,log_y='auto',xaxis_title='',yaxis_title='
     else:
         st.plotly_chart(fig_line,use_container_width=False,theme=None)
 
-
+    if return_fig:
+        return fig_line
 
 if split_angle and n_sel>0:
 
     array_sampl_angle,compton_angles_arr=sample_angle(solutions_path,
                                           angle_values=np.arange(val_angle_low,val_angle_high+0.00001,val_angle_step),
-                                          mdot_obs=mdot_obs,m_BH=m_BH,r_j=rj,mode='array',return_compton_angle=True)
+                                          mdot_obs=mdot_obs,m_BH=m_BH,r_j=rj,eta_mhd=eta_mhd,
+                                                      mode='array',return_compton_angle=True)
 
     sol_split_angle=load_solutions(array_sampl_angle,mode='array',split_sol=True,split_par=False)
 
@@ -623,50 +653,76 @@ with tab_sol:
     if n_sel>0:
         with col_1:
 
-            angle_plot(sol_angle,sol_r_cyl_r0,log_x=False,log_y=True,legend_points=n_sel==1,
-                                xaxis_title=r'$\theta \; (°)$',yaxis_title=r'$r_{cyl}/r_0$',legend=True,
-                                sampl_angles_arr=selected_angles,compt_angles_arr=compton_angles)
+            fig_angle_r_cyl=angle_plot(sol_angle,sol_r_cyl_r0,log_x=False,log_y=True,legend_points=n_sel==1,
+                                xaxis_title=r'$\theta \; (°)$',yaxis_title=r'$r_{cyl}/r_0$',legend='top_left',
+                                sampl_angles_arr=selected_angles,compt_angles_arr=compton_angles,return_fig=True)
 
-            angle_plot(sol_angle,sol_ur,log_x=False,legend_points=n_sel==1,
-                                xaxis_title=r'$\theta \; (°)$', yaxis_title=r'$u_{r}$',legend=True,
-                                sampl_angles_arr=selected_angles,compt_angles_arr=compton_angles)
+            fig_angle_ur=angle_plot(sol_angle,sol_ur,log_x=False,legend_points=n_sel==1,
+                                xaxis_title=r'$\theta \; (°)$', yaxis_title=r'$u_{r}$',legend=False,
+                                sampl_angles_arr=selected_angles,compt_angles_arr=compton_angles,return_fig=True)
 
-            angle_plot(sol_angle,sol_br,log_x=False,legend_points=n_sel==1,
+            fig_angle_br=angle_plot(sol_angle,sol_br,log_x=False,legend_points=n_sel==1,
                                 xaxis_title=r'$\theta \; (°)$', yaxis_title=r'$B_r$',legend='top_left',
-                                sampl_angles_arr=selected_angles,compt_angles_arr=compton_angles)
+                                sampl_angles_arr=selected_angles,compt_angles_arr=compton_angles,return_fig=True)
 
         with col_2:
 
             #when several solutions are selected we plot the legend for the points here to avoid cluttering the first
             #plots
-            angle_plot(sol_angle,sol_rho_mhd,log_x=False,log_y=True,
+            fig_angle_rho=angle_plot(sol_angle,sol_rho_mhd,log_x=False,log_y=True,
                        legend='top_left' if n_sel>1 else False,legend_lines=False,
                                 xaxis_title =r'$\theta \; (°)$', yaxis_title = r'$\ρ_{mhd}$',
-                                sampl_angles_arr=selected_angles,compt_angles_arr=compton_angles)
+                                sampl_angles_arr=selected_angles,compt_angles_arr=compton_angles,return_fig=True)
 
-            angle_plot(sol_angle, sol_uphi,log_x=False,log_y=True,
+            fig_angle_uphi=angle_plot(sol_angle, sol_uphi,log_x=False,log_y=True,
                        legend='top_left' if n_sel>1 else False,legend_lines=False,
                                 xaxis_title=r'$\theta \; (°)$', yaxis_title=r'$u_{\phi}$',
-                                sampl_angles_arr=selected_angles,compt_angles_arr=compton_angles)
+                                sampl_angles_arr=selected_angles,compt_angles_arr=compton_angles,return_fig=True)
 
-            angle_plot(sol_angle, sol_bphi,log_x=False,legend='bot_left' if n_sel>1 else False,legend_lines=False,
+            fig_angle_bphi=angle_plot(sol_angle, sol_bphi,log_x=False,legend='bot_left' if n_sel>1 else False,legend_lines=False,
                                 xaxis_title=r'$\theta \; (°)$', yaxis_title=r'$B_{\phi}$',
-                                sampl_angles_arr=selected_angles,compt_angles_arr=compton_angles)
+                                sampl_angles_arr=selected_angles,compt_angles_arr=compton_angles,return_fig=True)
 
 
         with col_3:
 
-            angle_plot(sol_angle,sol_t_mhd,log_x=False,log_y=True,
+            fig_angle_t=angle_plot(sol_angle,sol_t_mhd,log_x=False,log_y=True,
                                 xaxis_title=r'$\theta \; (°)$', yaxis_title=r'$T_{mhd}$',
-                                sampl_angles_arr=selected_angles,compt_angles_arr=compton_angles)
+                                sampl_angles_arr=selected_angles,compt_angles_arr=compton_angles,return_fig=True)
 
-            angle_plot(sol_angle, sol_uz,log_x=False,
+            fig_angle_uz=angle_plot(sol_angle, sol_uz,log_x=False,
                                 xaxis_title=r'$\theta \; (°)$', yaxis_title=r'$u_{z}$',
-                                sampl_angles_arr=selected_angles,compt_angles_arr=compton_angles)
+                                sampl_angles_arr=selected_angles,compt_angles_arr=compton_angles,return_fig=True)
 
-            angle_plot(sol_angle, sol_bz,log_x=False,
+            fig_angle_bz=angle_plot(sol_angle, sol_bz,log_x=False,legend='top_left',legend_points=n_sel==1,
                                 xaxis_title=r'$\theta \; (°)$', yaxis_title=r'$B_z$',
-                                sampl_angles_arr=selected_angles,compt_angles_arr=compton_angles)
+                                sampl_angles_arr=selected_angles,compt_angles_arr=compton_angles,return_fig=True)
+
+        #creating a list of the lc plots objects
+        angl_plot_list=[fig_angle_r_cyl,fig_angle_ur,fig_angle_br,fig_angle_rho,fig_angle_uphi,fig_angle_bphi,
+                        fig_angle_t,fig_angle_uz,fig_angle_bz]
+        angl_plot_name_list=['fig_angle_r_cyl.pdf',
+                             'fig_angle_ur.pdf',
+                             'fig_angle_br.pdf',
+                             'fig_angle_rho.pdf',
+                             'fig_angle_uphi.pdf',
+                             'fig_angle_bphi.pdf',
+                             'fig_angle_t.pdf',
+                             'fig_angle_uz.pdf',
+                             'fig_angle_bz.pdf']
+
+        #saving them into a list of byte objects
+        fig_io_list=[io.BytesIO() for i in range(len(angl_plot_list))]
+        for elem_fig,elem_io in zip(angl_plot_list,fig_io_list):
+            elem_fig.write_image(elem_io,format='pdf')
+            #converting into a zip
+            zip_io=make_zip(fig_io_list,angl_plot_name_list)
+
+        st.download_button(
+            label="Download ZIP of angular figures",
+            data=zip_io,
+            file_name='angle_plots.zip',
+            mime='text/csv',key='plip')
 
 if n_sel>1:
     with tab_sol_radial:
@@ -680,15 +736,20 @@ if n_sel==1 and not split_angle:
     with tab_explo:
         st.info('Activate angle sampling in the sidebar to see parameter exploration.')
 
-def radial_plot(rad,sol_sampl,angl_sampl,log_x=False,log_y=False,xaxis_title='',yaxis_title='',legend=False,
-                cmap='plasma_r',logxi_ids=None,yrange=None):
+def radial_plot(rad,sol_sampl,c_val_sampl,log_x=False,log_y=False,xaxis_title='',yaxis_title='',legend=False,
+                cmap='plasma_r',logxi_ids=None,yrange=None,plot_logxi_peg=True,return_fig=False,color_type='angle',
+                color_label='θ'):
 
-    norm_angl= (angl_sampl-val_angle_low)/(val_angle_high-val_angle_low)
+    if color_type=='angle':
+        norm_angl= (c_val_sampl-val_angle_low)/(val_angle_high-val_angle_low)
+    else:
+        norm_angl=(c_val_sampl-c_val_sampl[0])/(c_val_sampl[-1]-c_val_sampl[0])
 
     ang_colors = sample_colorscale(cmap,norm_angl)
 
     #creating the theme with the first line
-    fig_rad=plotly_line_wrapper(rad[0],sol_sampl[0],log_x=log_x,log_y='auto',xaxis_title=xaxis_title,yaxis_title=yaxis_title,line_color=ang_colors[0],legend=True,name='θ='+str(angl_sampl[0]))
+    fig_rad=plotly_line_wrapper(rad[0],sol_sampl[0],log_x=log_x,log_y='auto',xaxis_title=xaxis_title,yaxis_title=yaxis_title,
+                                line_color=ang_colors[0],legend=True,name=color_label+'='+str(c_val_sampl[0]))
 
     fig_rad.update_layout(width=515)
 
@@ -711,32 +772,41 @@ def radial_plot(rad,sol_sampl,angl_sampl,log_x=False,log_y=False,xaxis_title='',
         y_title_str = y_title
 
     #and adding the rest of the lines
-    for id_sol,(elem_rad,elem_sampl,elem_angl,elem_color) in enumerate(zip(rad[1:],sol_sampl[1:],angl_sampl[1:],ang_colors[1:])):
+    for id_sol,(elem_rad,elem_sampl,elem_angl,elem_color) in enumerate(zip(rad[1:],sol_sampl[1:],c_val_sampl[1:],ang_colors[1:])):
         fig_rad.add_trace(
         go.Scatter(x=elem_rad,y=elem_sampl,line=dict(color=elem_color),name='',showlegend=False,
-            hovertemplate="<b>" + 'θ='+str(elem_angl) + "</b><br>" +
+            hovertemplate="<b>" + color_label+'='+str(elem_angl) + "</b><br>" +
                           x_title_str + ": %{x}<br>" +
                           y_title_str + ": %{y}<br>" +
                           "<extra></extra>"))
 
     #adding the trace of the logxi=6 surface
     if logxi_ids is not None:
-        fig_rad.add_trace(go.Scatter(x=[rad[i][logxi_ids[i]] for i in range(len(sol_sampl))],
-                                     y=[sol_sampl[i][logxi_ids[i]] for i in range(len(sol_sampl))],
-                                     name='logxi=6',mode='lines',line=dict(color='white')))
+        fig_rad.add_trace(go.Scatter(x=[rad[i][logxi_ids[i]] for i in np.arange(len(sol_sampl))\
+                                       [np.repeat(True,len(sol_sampl)) if plot_logxi_peg else logxi_ids!=0.]],
+                                     y=[sol_sampl[i][logxi_ids[i]] for i in np.arange(len(sol_sampl))\
+                                        [np.repeat(True,len(sol_sampl)) if plot_logxi_peg else logxi_ids!=0.]],
+                                     name='logξ=6',mode='lines',line=dict(color='black' if light_mode else 'white')))
 
     #tickvals for the cmap with some rounding
-    tickvals_cm=np.array([round(elem,1) for elem in angl_sampl.tolist()+[val_angle_low,val_angle_high]])
+    tickvals_cm=np.array([round(elem,1) for elem in c_val_sampl.tolist()+
+                          ([val_angle_low,val_angle_high] if color_type=='angle' else [])])
+
+    # if color_type!='angle':
+    #     breakpoint()
 
     colorbar_trace = go.Scatter(x=[None],y=[None],mode='markers',showlegend=False,
                                 marker=dict(colorscale=cmap,showscale=True,
-                                            cmin=val_angle_low,cmax=val_angle_high,
-                                    colorbar=dict(thickness=10, tickvals=tickvals_cm,tickfont=dict(color='white'),
-                                                  ticks='outside',ticklen=3,tickcolor='white',
-                                                  title=dict(text='θ' if not latex_title else r"theta", side="top"),titlefont=dict(color='white'))),hoverinfo='none')
+                                            cmin=val_angle_low if color_type=='angle' else min(c_val_sampl),
+                                            cmax=val_angle_high if color_type=='angle' else max(c_val_sampl),
+                                    colorbar=dict(thickness=10, tickvals=tickvals_cm,
+                                                  tickfont=dict(color='black' if light_mode else 'white'),
+                                                  ticks='outside',ticklen=3,tickcolor='black' if light_mode else 'white',
+                                                  title=dict(text=color_label if not latex_title else r"theta", side="top"),titlefont=dict(color='black' if light_mode else 'white'))),hoverinfo='none')
     fig_rad.add_trace(colorbar_trace)
 
-    fig_rad.update_layout(xaxis=dict(range=[np.log10(rj),6]))
+    if color_type=='angle':
+        fig_rad.update_layout(xaxis=dict(range=[np.log10(rj),6]))
 
     if yrange is not None:
         fig_rad.update_layout(yaxis=dict(range=yrange))
@@ -745,9 +815,13 @@ def radial_plot(rad,sol_sampl,angl_sampl,log_x=False,log_y=False,xaxis_title='',
         st.components.v1.html(fig_rad.to_html(include_mathjax='cdn'), width=500, height=450)
     else:
         st.plotly_chart(fig_rad, use_container_width=False, theme=None)
+    
+    if return_fig:
+        return fig_rad
 
 
-mdot_mhd=mdot_obs*12
+
+mdot_mhd=mdot_obs*2/eta_mhd
 
 if split_angle and n_sel==1:
     n_sol=len(selected_sol_split_angle[0])
@@ -774,7 +848,7 @@ if split_angle and n_sel==1:
 
         logxi_sampl=np.array([func_logxi_sol(r_sph_sampl[i],sol_sampl_z_over_r[i],val_L_source,sol_sampl_rho_mhd[i],
                                              sol_p_mhd,mdot_mhd,sol_sampl_ur[i], sol_sampl_uphi[i],
-                                             sol_sampl_uz[i],m_BH)\
+                                             sol_sampl_uz[i],m_BH,trig=False)\
                               for i in range(n_sol)])
 
         nh_sampl=np.array([func_nh_sol(r_sph_sampl[i],rj*cyl_cst_sampl[i],sol_sampl_z_over_r[i],
@@ -794,11 +868,11 @@ if split_angle and n_sel==1:
                                           sol_sampl_uphi[i],sol_sampl_uz[i],m_BH) for i in range(n_sol)])/1e5
 
         #fetching the positions at which logxi=6 for each angle
-        logxi_6_ids=np.array([np.argmin(abs(elem-6)) for elem in logxi_sampl])
+        logxi_6_ids=np.array([0 if np.all(elem-6<0) else np.nanargmin(abs(elem-6)) for elem in logxi_sampl])
 
         r_sph_nonthick_sampl=np.array([r_sph_sampl[i][logxi_6_ids[i]:] for i in range(n_sol)],dtype=object)
 
-        nh_nonthick_sampl=np.array([func_nh_sol(r_sph_sampl[i][logxi_6_ids[i]:],r_sph_sampl[i][logxi_6_ids[i]],
+        nh_goodxi_sampl=np.array([func_nh_sol(r_sph_sampl[i][logxi_6_ids[i]:],r_sph_sampl[i][logxi_6_ids[i]],
                             sol_sampl_z_over_r[i],sol_sampl_rho_mhd[i],sol_p_mhd,mdot_mhd,m_BH) for i in range(n_sol)],
                                    dtype=object)
 
@@ -806,43 +880,71 @@ if split_angle and n_sel==1:
 
         yrange_speed=[np.log10(1),np.log10(299792.458)]
 
+        #to avoid issue with column density plot
+        logxi_6_ids_nan0=np.copy(logxi_6_ids)
         with col_a:
-            radial_plot(r_sph_sampl,n_sampl,sol_sampl_angle,log_x=True,
+            fig_rad_n=radial_plot(r_sph_sampl,n_sampl,sol_sampl_angle,log_x=True,
                                         log_y=True,xaxis_title=r'$R_{sph}\;$ (Rg)',yaxis_title=r'$n\textrm{ (cgs)}$',
-                        logxi_ids=logxi_6_ids)
+                        logxi_ids=logxi_6_ids,return_fig=True)
 
-            radial_plot(r_sph_sampl,ur_sampl,sol_sampl_angle,log_x=True,
+            fig_rad_ur=radial_plot(r_sph_sampl,ur_sampl,sol_sampl_angle,log_x=True,
                                         log_y=True,xaxis_title=r'$R_{sph}\;$ (Rg)',yaxis_title=r'$v_{r}\textrm{ (km/s)}$',
-                        logxi_ids=logxi_6_ids,yrange=yrange_speed)
+                        logxi_ids=logxi_6_ids,yrange=yrange_speed,return_fig=True)
 
-            radial_plot(r_sph_sampl,nh_sampl,sol_sampl_angle,log_x=True,log_y=True,
+            fig_rad_nh=radial_plot(r_sph_sampl,nh_sampl,sol_sampl_angle,log_x=True,log_y=True,
                         xaxis_title=r'$R_{sph}\;$ (Rg)',yaxis_title=r'$n_{h}\textrm{ (cm}^{-2}\textrm{)}$',
-                        logxi_ids=logxi_6_ids,
-                        yrange=[np.log10(1e20),np.log10(max(ravel_ragged(nh_sampl)))])
+                        logxi_ids=logxi_6_ids,plot_logxi_peg=False,
+                        yrange=[np.log10(1e20),np.log10(max(ravel_ragged(nh_sampl)))],return_fig=True)
 
         with col_b:
-            radial_plot(r_sph_sampl,logxi_sampl, sol_sampl_angle, log_x=True,
+            fig_rad_logxi=radial_plot(r_sph_sampl,logxi_sampl, sol_sampl_angle, log_x=True,
                         log_y=False, xaxis_title=r'$R_{sph}\;$ (Rg)', yaxis_title=r'$log\xi$',
-                        logxi_ids=logxi_6_ids)
+                        logxi_ids=logxi_6_ids,return_fig=True)
 
-            radial_plot(r_sph_sampl, uphi_sampl, sol_sampl_angle, log_x=True,
+            fig_rad_uphi=radial_plot(r_sph_sampl, uphi_sampl, sol_sampl_angle, log_x=True,
                         log_y=True, xaxis_title=r'$R_{sph}\;$ (Rg)', yaxis_title=r'$v_{\phi}\textrm{ (km/s)}$',
-                        logxi_ids=logxi_6_ids,yrange=yrange_speed)
+                        logxi_ids=logxi_6_ids,yrange=yrange_speed,return_fig=True)
 
-            radial_plot(r_sph_nonthick_sampl,nh_nonthick_sampl,sol_sampl_angle,log_x=True,log_y=True,
+            fig_rad_nh_goodxi=radial_plot(r_sph_nonthick_sampl,nh_goodxi_sampl,sol_sampl_angle,log_x=True,log_y=True,
                         xaxis_title=r'$R_{sph}\;$ (Rg)',yaxis_title=r'$n_{h}^{\textrm{log}\xi\leq6}\textrm{(cm}^{-2}\textrm{)}$',
-                        yrange=[np.log10(1e20),np.log10(max(ravel_ragged(nh_nonthick_sampl)))])
+                        yrange=[np.log10(1e20),np.log10(max(ravel_ragged(nh_goodxi_sampl)))],return_fig=True)
 
         with col_c:
 
-            radial_plot(r_sph_sampl, uobs_sampl, sol_sampl_angle, log_x=True,
+            fig_rad_uobs=radial_plot(r_sph_sampl, uobs_sampl, sol_sampl_angle, log_x=True,
                         log_y=True, xaxis_title=r'$R_{sph}\;$ (Rg)', yaxis_title=r'$v_{obs}\textrm{ (km/s)}$',
-                        logxi_ids=logxi_6_ids,yrange=yrange_speed)
+                        logxi_ids=logxi_6_ids,yrange=yrange_speed,return_fig=True)
 
-            radial_plot(r_sph_sampl, uz_sampl, sol_sampl_angle, log_x=True,
+            fig_rad_uz=radial_plot(r_sph_sampl, uz_sampl, sol_sampl_angle, log_x=True,
                         log_y=True, xaxis_title=r'$R_{sph}\;$ (Rg)', yaxis_title=r'$v_{z}\textrm{ (km/s)}$',
-                        logxi_ids=logxi_6_ids,yrange=yrange_speed)
+                        logxi_ids=logxi_6_ids,yrange=yrange_speed,return_fig=True)
 
+
+        #creating a list of the lc plots objects
+        rad_plot_list=[fig_rad_n,fig_rad_ur,fig_rad_nh,fig_rad_logxi,fig_rad_uphi,fig_rad_nh_goodxi,fig_rad_uobs,
+                       fig_rad_uz]
+        rad_plot_name_list=['fig_rad_n.pdf',
+                            'fig_rad_ur.pdf',
+                            'fig_rad_nh.pdf',
+                            'fig_rad_logxi.pdf',
+                            'fig_rad_uphi.pdf',
+                            'fig_rad_nh_goodxi.pdf',
+                            'fig_rad_uobs.pdf',
+                            'fig_rad_uz.pdf']
+
+        #saving them into a list of byte objects
+        fig_io_list=[io.BytesIO() for i in range(len(rad_plot_list))]
+        for elem_fig,elem_io in zip(rad_plot_list,fig_io_list):
+            elem_fig.write_image(elem_io,format='pdf')
+            #converting into a zip
+            zip_io=make_zip(fig_io_list,rad_plot_name_list)
+
+        st.download_button(
+            label="Download ZIP of radial figures",
+            data=zip_io,
+            file_name='rad_plots.zip',
+            mime='text/csv',key='ploup')
+        
     #luminosity at which logxi is 6
 
     m_BH_SI = m_BH * Msol_SI
@@ -859,10 +961,11 @@ if split_angle and n_sel==1:
     with tab_explo:
 
         col_explo_a,col_explo_b,col_explo_c=st.columns(3)
-
-        with col_explo_a:
-            radial_plot(r_sph_sampl,L_xi_6, sol_sampl_angle, log_x=True,
-                        log_y=True, xaxis_title=r'$R_{sph}\;$ (Rg)', yaxis_title=r'L (cgs)$')
+            
+        #note: this plot is probably useless since it doesnt consider the influence of L on mdot
+        # with col_explo_a:
+        #     radial_plot(r_sph_sampl,L_xi_6, sol_sampl_angle, log_x=True,
+        #                 log_y=True, xaxis_title=r'$R_{sph}\;$ (Rg)', yaxis_title=r'L (cgs)$')
 
 
 # def polar2cartesian(rad_range, theta_range, grid, x, y, order=3):
@@ -989,7 +1092,7 @@ with tab_2D:
         #
         # r_sph_nonthick_sol_indiv = np.array([r_sph_sol_indiv[i][logxi_6_ids[i]:] for i in range(n_angles_sol_indiv)], dtype=object)
         #
-        # nh_nonthick_sol_indiv = np.array([func_nh_sol(r_sph_sol_indiv[i][logxi_6_ids[i]:], r_sph_sol_indiv[i][logxi_6_ids[i]],
+        # nh_goodxi_sol_indiv = np.array([func_nh_sol(r_sph_sol_indiv[i][logxi_6_ids[i]:], r_sph_sol_indiv[i][logxi_6_ids[i]],
         #                                           sol_z_over_r[0][i], sol_rho_mhd[0][i], sol_p_mhd, mdot_mhd, m_BH)
         #                               for i in range(n_angles_sol_indiv)],
         #                              dtype=object)
@@ -1460,7 +1563,7 @@ with st.sidebar.expander('Thermal structure computation'):
 
     struct_input_mdot = st.number_input(r'mdot_in',value=1e0,format='%.3e')
 
-    struct_input_eta = st.number_input(r'$\eta$ (radiative efficiency)', value=1e-1, format='%.3e')
+    struct_input_eta = st.number_input(r'$\eta$ (radiative efficiency)', value=0.057, format='%.3e')
 
     struct_input_mu = st.number_input(r'$\mu$ (magnetization)', value=1e-3, format='%.3e')
 
@@ -1468,7 +1571,7 @@ with st.sidebar.expander('Thermal structure computation'):
 
     struct_input_p = st.number_input(r'$p$ (ejection index)', value=0.1, format='%.3e')
 
-    struct_input_alpha_0 = st.number_input(r'$\alpha_0$ (viscosity)', value=7, format='%.3e')
+    struct_input_alpha_0 = st.number_input(r'$\alpha_0$ (viscosity)', value=8, format='%.3e')
     #see salvesen16 or Jacquemin19
 
     struct_input_m_BH = st.number_input(r'$M_{BH}$ in $M_\odot$', value=8, format='%.3e')
@@ -1484,17 +1587,19 @@ if struct_sol_mode=='Manual parameter input':
     struct_alpha_0 = struct_input_alpha_0
     struct_m_BH = struct_input_m_BH
 
-# elif struct_sol_mode is 'Selected solution':
-#
-#     #will need to be changed
-#     struct_rj = struct_input_rj
-#     struct_mdot = struct_input_mdot
-#     struct_eta = struct_input_eta
-#     struct_mu = struct_input_mu
-#     struct_b = struct_input_b
-#     struct_p = struct_input_p
-#     struct_alpha_0 = struct_input_alpha_0
-#     struct_m_BH = struct_input_m_BH
+elif struct_sol_mode is 'Selected solution':
+
+    #will need to be changed
+    struct_rj = rj
+    struct_mdot = mdot_obs
+
+    #fiducial NT value
+    struct_eta = eta_mhd
+    struct_mu = selected_sol_p_mu[0][1]
+    struct_b = struct_input_b
+    struct_p = selected_sol_p_mu[0][0]
+    struct_alpha_0 = struct_input_alpha_0
+    struct_m_BH = struct_input_m_BH
 
 if compute_tstruct:
 
@@ -1537,8 +1642,9 @@ if compute_tstruct:
                             struct_eta, struct_mu, struct_b, struct_p, struct_alpha_0, struct_m_BH,struct_rj,mode=P_dom_regime)
 
     #figures
-    fig_HR=plotly_line_wrapper(struct_rsph,struct_HR,log_x=True,log_y=True,xaxis_title='radius (Rg)', yaxis_title=r'H/R', legend='HR',
-                                       name='H/R',showlegend=True,figwidth=515)
+    fig_HR=plotly_line_wrapper(struct_rsph,struct_HR,log_x=True,log_y=True,
+                               xaxis_title='radius (Rg)', yaxis_title=r'ε', legend='HR',
+                                       name='ε',showlegend=True,figwidth=515)
 
     fig_rho_0 = make_subplots(specs=[[{"secondary_y": True}]])
     fig_rho_0.update_layout(width=515)
@@ -1576,6 +1682,8 @@ if compute_tstruct:
                                        xaxis_title='radius (Rg)', yaxis_title=r'opacity ($cm^2/g$)', legend=name_regimes[i],
                                        name=name_regimes[i],showlegend=True,figwidth=515)
 
+    fig_opacity.update_layout(yaxis=dict(range=[-8,5]))
+
     #computing the intervals where each non-validity condition applies
     rads_rad_dom=np.argwhere(struct_P_rad>struct_P_gaz).T[0]
     rads_non_thick=np.argwhere(struct_Tau<100).T[0]
@@ -1593,26 +1701,192 @@ if compute_tstruct:
                                     textposition="top center",
                                     font=dict(size=20, family="Times New Roman")))
 
+        #note: not writing the pressure dominated regions for now
         for i_reg, reg in enumerate(rad_dom_regs):
             fig.add_vrect(x0=struct_rsph[reg[0]], x1=struct_rsph[reg[1]], line_width=0, fillcolor="purple", opacity=0.2,
                            name='P_rad dominated region',
-                          label=dict(text='P_rad dominated region' if i_reg==0 else '',
+                          label=dict(text='P_rad dominated region' if i_reg==1000 else '',
                                     textposition="top center",
                                     font=dict(size=20, family="Times New Roman")))
 
 
+    #sample plots
+    n_sampl_therm=10
+    
+    ###############################
+    #LEDD SAMPLING
+    ###############################
+
+    sampl_L_Edd_thermal=np.logspace(-2,0,n_sampl_therm)
+
+    sampl_mdot_in_thermal=sampl_L_Edd_thermal*2/struct_eta
+
+    K_r_arr_sampl_LEdd=np.zeros((n_sampl_therm,n_regimes,len(struct_rsph)))
+
+    struct_HR_sampl_LEdd=np.array([None]*n_sampl_therm)
+
+    #computing each individual opacity regime within this radius sample
+    # for mode in 'gaz','rad'
+    for id_sampl_therm in range(n_sampl_therm):
+        for id_K_r in range(n_regimes):
+            K_r_arr_sampl_LEdd[id_sampl_therm][id_K_r]=func_K_r(struct_rsph,sampl_mdot_in_thermal[id_sampl_therm],
+                                     kappa_0_arr[id_K_r],alpha_tau_arr[id_K_r],beta_tau_arr[id_K_r],
+                                     struct_eta,struct_mu,struct_b,struct_p,struct_alpha_0,struct_m_BH,struct_rj,mode=P_dom_regime)
+    
+        max_opacity_mask_sampl_therm=np.argmax(K_r_arr_sampl_LEdd[id_sampl_therm],0)
+
+        #creating an array with the values of the dominant opacity regime at each radius
+        kappa_0_dom_arr_sampl_therm=np.array([kappa_0_arr[max_opacity_mask_sampl_therm[i]] for i in range(len(struct_rsph))])
+        alpha_tau_dom_arr_sampl_therm = np.array([alpha_tau_arr[max_opacity_mask_sampl_therm[i]] for i in range(len(struct_rsph))])
+        beta_tau_dom_arr_sampl_therm = np.array([beta_tau_arr[max_opacity_mask_sampl_therm[i]] for i in range(len(struct_rsph))])
+    
+        struct_HR_sampl_LEdd[id_sampl_therm]=func_H_R(struct_rsph,sampl_mdot_in_thermal[id_sampl_therm],
+                                                      kappa_0_dom_arr_sampl_therm,
+                                                      alpha_tau_dom_arr_sampl_therm,
+                                                      beta_tau_dom_arr_sampl_therm,
+                            struct_eta,struct_mu,struct_b,struct_p,struct_alpha_0,struct_m_BH,struct_rj,mode=P_dom_regime)
+                                       
+
+    ###############################
+    #P SAMPLING
+    ###############################
+
+    sampl_p_thermal=np.logspace(np.log10(5e-3),np.log10(0.5),n_sampl_therm)
+
+    K_r_arr_sampl_p = np.zeros((n_sampl_therm, n_regimes, len(struct_rsph)))
+
+    struct_HR_sampl_p = np.array([None] * n_sampl_therm)
+
+    # computing each individual opacity regime within this radius sample
+    # for mode in 'gaz','rad'
+    for id_sampl_therm in range(n_sampl_therm):
+        for id_K_r in range(n_regimes):
+            K_r_arr_sampl_p[id_sampl_therm][id_K_r] = func_K_r(struct_rsph, struct_mdot,
+                                                                  kappa_0_arr[id_K_r], alpha_tau_arr[id_K_r],
+                                                                  beta_tau_arr[id_K_r],
+                                                                  struct_eta, struct_mu, struct_b, 
+                                                                  sampl_p_thermal[id_sampl_therm],
+                                                                  struct_alpha_0, struct_m_BH, struct_rj,
+                                                                  mode=P_dom_regime)
+
+        max_opacity_mask_sampl_therm = np.argmax(K_r_arr_sampl_p[id_sampl_therm], 0)
+
+        # creating an array with the values of the dominant opacity regime at each radius
+        kappa_0_dom_arr_sampl_therm = np.array(
+            [kappa_0_arr[max_opacity_mask_sampl_therm[i]] for i in range(len(struct_rsph))])
+        alpha_tau_dom_arr_sampl_therm = np.array(
+            [alpha_tau_arr[max_opacity_mask_sampl_therm[i]] for i in range(len(struct_rsph))])
+        beta_tau_dom_arr_sampl_therm = np.array(
+            [beta_tau_arr[max_opacity_mask_sampl_therm[i]] for i in range(len(struct_rsph))])
+
+        struct_HR_sampl_p[id_sampl_therm] = func_H_R(struct_rsph, struct_mdot,
+                                                        kappa_0_dom_arr_sampl_therm,
+                                                        alpha_tau_dom_arr_sampl_therm,
+                                                        beta_tau_dom_arr_sampl_therm,
+                                                        struct_eta, struct_mu, struct_b,
+                                                        sampl_p_thermal[id_sampl_therm],
+                                                        struct_alpha_0,
+                                                        struct_m_BH, struct_rj, mode=P_dom_regime)
+
+    ###############################
+    #MU SAMPLING
+    ###############################
+
+    sampl_mu_thermal = np.logspace(np.log10(5e-4), np.log10(1), n_sampl_therm)
+
+    K_r_arr_sampl_mu = np.zeros((n_sampl_therm, n_regimes, len(struct_rsph)))
+
+    struct_HR_sampl_mu = np.array([None] * n_sampl_therm)
+
+    # computing each individual opacity regime within this radius sample
+    # for mode in 'gaz','rad'
+    for id_sampl_therm in range(n_sampl_therm):
+        for id_K_r in range(n_regimes):
+            K_r_arr_sampl_mu[id_sampl_therm][id_K_r] = func_K_r(struct_rsph, struct_mdot,
+                                                                  kappa_0_arr[id_K_r], alpha_tau_arr[id_K_r],
+                                                                  beta_tau_arr[id_K_r],
+                                                                  struct_eta,
+                                                                  sampl_mu_thermal[id_sampl_therm],
+                                                                  struct_b,
+                                                                  struct_p,
+                                                                  struct_alpha_0, struct_m_BH, struct_rj,
+                                                                  mode=P_dom_regime)
+
+        max_opacity_mask_sampl_therm = np.argmax(K_r_arr_sampl_mu[id_sampl_therm], 0)
+
+        # creating an array with the values of the dominant opacity regime at each radius
+        kappa_0_dom_arr_sampl_therm = np.array(
+            [kappa_0_arr[max_opacity_mask_sampl_therm[i]] for i in range(len(struct_rsph))])
+        alpha_tau_dom_arr_sampl_therm = np.array(
+            [alpha_tau_arr[max_opacity_mask_sampl_therm[i]] for i in range(len(struct_rsph))])
+        beta_tau_dom_arr_sampl_therm = np.array(
+            [beta_tau_arr[max_opacity_mask_sampl_therm[i]] for i in range(len(struct_rsph))])
+
+        struct_HR_sampl_mu[id_sampl_therm] = func_H_R(struct_rsph, struct_mdot,
+                                                        kappa_0_dom_arr_sampl_therm,
+                                                        alpha_tau_dom_arr_sampl_therm,
+                                                        beta_tau_dom_arr_sampl_therm,
+                                                        struct_eta,
+                                                        sampl_mu_thermal[id_sampl_therm],
+                                                        struct_b,
+                                                        struct_p,
+                                                        struct_alpha_0,
+                                                        struct_m_BH, struct_rj, mode=P_dom_regime)
+
+    struct_rsph_repeat=np.array([struct_rsph for i in range(n_sampl_therm)])
 
     with tab_tstruct:
         #placing them accordingly
         col_1,col_2,col_3=st.columns(3)
+
         with col_1:
             st.plotly_chart(fig_HR,use_container_width=False,theme=None)
             st.plotly_chart(fig_P, use_container_width=False, theme=None)
+
+            fig_HR_sampl_LEdd = radial_plot(struct_rsph_repeat, struct_HR_sampl_LEdd, np.log10(sampl_L_Edd_thermal),
+                                            log_x=True,
+                                            log_y=True, xaxis_title='radius (Rg)', yaxis_title=r'ε',
+                                            logxi_ids=None, return_fig=True, color_type='var', color_label='log(L/LEdd)')
 
         with col_2:
             st.plotly_chart(fig_rho_0,use_container_width=False,theme=None)
             st.plotly_chart(fig_opacity, use_container_width=False, theme=None)
 
+            fig_HR_sampl_p = radial_plot(struct_rsph_repeat, struct_HR_sampl_p, np.log10(sampl_p_thermal),
+                                         log_x=True,log_y=True, xaxis_title='radius (Rg)', yaxis_title=r'ε',
+                                         logxi_ids=None, return_fig=True, color_type='var', color_label='log(p)')
+
         with col_3:
             st.plotly_chart(fig_T_0,use_container_width=False,theme=None)
             st.plotly_chart(fig_Tau, use_container_width=False, theme=None)
+
+            fig_HR_sampl_mu = radial_plot(struct_rsph_repeat, struct_HR_sampl_mu, np.log10(sampl_mu_thermal),
+                                          log_x=True,
+                                          log_y=True, xaxis_title='radius (Rg)', yaxis_title=r'ε',
+                                          logxi_ids=None, return_fig=True, color_type='var', color_label='log(μ)')
+
+        #creating a list of the lc plots objects
+        thermal_plot_list=[fig_HR,fig_P,fig_rho_0,fig_opacity,fig_T_0,fig_Tau,
+                           fig_HR_sampl_LEdd,fig_HR_sampl_mu,fig_HR_sampl_p]
+        thermal_plot_name_list=['fig_HR.pdf',
+                            'fig_P.pdf',
+                            'fig_rho_0.pdf',
+                            'fig_opacity.pdf',
+                            'fig_T_0.pdf',
+                            'fig_Tau.pdf',
+                            'fig_HR_sampl_LEdd.pdf',
+                            'fig_HR_sampl_mu.pdf',
+                            'fig_HR_sampl_p.pdf']
+
+        #saving them into a list of byte objects
+        fig_io_list=[io.BytesIO() for i in range(len(thermal_plot_list))]
+        for elem_fig,elem_io in zip(thermal_plot_list,fig_io_list):
+            elem_fig.write_image(elem_io,format='pdf')
+            #converting into a zip
+            zip_io=make_zip(fig_io_list,thermal_plot_name_list)
+
+        st.download_button(
+            label="Download ZIP of thermal figures",
+            data=zip_io,
+            file_name='thermal_plots.zip',
+            mime='text/csv',key='plup')

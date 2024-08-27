@@ -356,6 +356,9 @@ def xstar_func(spectrum_file,lum,t_guess,n,nh,xi,vturb_x,nbins,nsteps=1,niter=10
     '''
     wrapper around the xstar function itself with explicit calls to the parameters routinely being changed in the computation
 
+    Initially adapted from Sudeb and Susmita's fortran subroutine script, hence the weird callbacks to highlight similar
+    parts of the code.
+
     non-direct arguments:
         dict-box: information for the box number
         comput_mode/xstar_mode/xstar_loc: identical to the comput modes of the other functions
@@ -531,7 +534,7 @@ def xstar_func(spectrum_file,lum,t_guess,n,nh,xi,vturb_x,nbins,nsteps=1,niter=10
 
 def xstar_wind(solution,SED_path,xlum,outdir,
                mdot_obs='auto',p_mhd_input=None,m_BH=8,
-               ro_init=6.,dr_r=0.05,stop_d_input=1e6,v_resol=85.7,
+               ro_init=6.,dr_r=0.05,stop_d_input=1e6,v_resol=71.4,
                chatter=0,reload=True,
                eta='jed-sad',
                comput_mode='local',xstar_mode='standalone',xstar_loc='default',
@@ -975,16 +978,16 @@ def xstar_wind(solution,SED_path,xlum,outdir,
         lpri=0
     
     '''
-    computing the number of bins to be used from the desired radial resolution
+    computing the number of bins to be used from the desired velocity resolution
     see xstar manual p.34 for the main formula 
     (here we use log version instead of a very small power to avoid losing precision with numerical computations)
     delta_E/E is delta_V/c
     
     (note: several mistakes in the formula so we adapt)
     
-    IMPORTANT: the formula is not entirely correct, the standard ener has a double log grid, 
-    with a main grid up to 500keV and another one with 50 times less bins up to 1 MeV
-    this needs to be accounted for in the computation
+    IMPORTANT: the xstar manual formula is not entirely correct, the standard ener has a double log grid, 
+    with a main grid up to 400keV and another one with 50 times less bins up to 1 MeV
+    this needs to be accounted for in the computation, hence why the log factor is 4e6 (400keV/0.1keV)
     
     in custom grid mode, we use a different grid formation with a coarse grid (50 times less bins) 
     in 0.1eV-0.1keV and 10keV-1Mev, and the main grid for 0.1keV-10keV
@@ -1011,20 +1014,20 @@ def xstar_wind(solution,SED_path,xlum,outdir,
     '''
 
     # ! From formula (rg/2.0*r_in), Equation (12) of Chakravorty et al. 2016. Here r_in is 6.0*r_g. eta_rad is assumed to be 1.0.
-
+    #Factor 2 coming from the fact that the BH radiates on both sides but we only see one.
     if eta=='jed_sad':
-        eta_spec = (1.0/12.0)
+        eta_acc = (1.0/12.0)
     elif eta=='diskbb':
 
         #from Sudeb23 paper who cites bhat2020, but probably shouldn't be applied here because
         #it makes the rest inconsistent
-        eta_spec=1/4
+        eta_acc=1/4
 
     if mdot_obs=='auto':
         #notes: Lum_Edd = 1.26e38 for a BH of 1 solar Mass)
-        mdot_mhd=xlum/(1.26*m_BH)/eta_spec
+        mdot_mhd=xlum/(1.26*m_BH)*2/eta_acc
     else:
-        mdot_mhd = mdot_obs/eta_spec
+        mdot_mhd = mdot_obs*2/eta_acc
 
     m_BH_SI = m_BH*Msol_SI
     Rs_SI = 2.0*G_SI*m_BH_SI/(c_SI*c_SI)
@@ -1371,7 +1374,7 @@ def xstar_wind(solution,SED_path,xlum,outdir,
         Rsph_cgs_start[i_box]= Rsph_cgs_end
 
         '''
-        All densities aer computed with relativistic corrections because they need to be correct to match
+        All densities are computed with relativistic corrections because they need to be correct to match
         the logxi, which needs to be relativistically corrected 
         
         The nH value on the other hand, is in the rest frame, because instead of relativistically correcting it

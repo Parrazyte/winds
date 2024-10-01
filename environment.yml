@@ -14,5 +14,6 @@ dependencies:
     - seaborn==0.12.2
     - tqdm==4.66.1
     - pandas==2.1.0
+    - lxml==4.9.3
     
 prefix: /home/parrama/Soft/Anaconda/anaconda3

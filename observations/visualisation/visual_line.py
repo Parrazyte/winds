@@ -268,6 +268,8 @@ if not online:
 #wrapped in a function to be cachable in streamlit
 if not online:
     catal_blackcat,catal_watchdog,catal_blackcat_obj,catal_watchdog_obj,catal_maxi_df,catal_maxi_simbad,catal_bat_df,catal_bat_simbad=load_catalogs()
+else:
+    catal_blackcat,catal_watchdog,catal_blackcat_obj,catal_watchdog_obj,catal_maxi_df,catal_maxi_simbad,catal_bat_df,catal_bat_simbad=load_catalogs()
 
 st.sidebar.header('Sample selection')
 
@@ -300,7 +302,7 @@ if online:
     include_untested= False
 
     st.info('''
-    The current version is experimental as I'm currently implementing many new fonctionalities, for a new study on 4U1630-47.
+    The current version is experimental as I'm currently implementing many new fonctionalities, for a new study on 4U 1630-47.
     
     See https://theses.fr/s296242 (manuscript soon up).
     

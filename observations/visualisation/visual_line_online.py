@@ -294,7 +294,7 @@ use_orbit_obs_str_path=use_orbit_obs_str+'/'
 
 #We put the telescope option before anything else to filter which file will be used
 choice_telescope=st.sidebar.multiselect('Telescopes', ['NICER','NuSTAR'] if use_orbit_obs or use_time_resolved else\
-                 (['XMM','Chandra']+([] if online else ['NICER','NuSTAR','Suzaku','Swift'])),
+                 (['XMM','Chandra']+(['NICER','NuSTAR','Suzaku','Swift'] if online else ['NICER','NuSTAR','Suzaku','Swift'])),
                                         default=['NICER','NuSTAR'] if use_orbit_obs or use_time_resolved else ('XMM','Chandra'))
 
 if online:

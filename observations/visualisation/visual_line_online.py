@@ -300,7 +300,7 @@ if online:
     include_untested= False
 
     st.info('''
-    The current version includes many new fonctionalities  and includes a new study on 4U1630-47.
+    The current version is experimental as I'm currently implementing many new fonctionalities, for a new study on 4U1630-47.
     
     See https://theses.fr/s296242 (manuscript soon up).
     

@@ -321,8 +321,9 @@ if online:
               ('_with_md_unsure' if use_unsure_mass_dist else '')+\
               '.pkl'
 
-    
-    update_dump=False
+    if not os.path.isfile(dump_path):
+        print(dump_path)
+        st.error('Dump file not found for this configuration')
 else:
     dump_path='./glob_batch/visual_line_dumps/dump_'+join_telescope_str+\
               use_orbit_obs_str+time_resolved_dump_str+\

@@ -321,6 +321,11 @@ if online:
               ('_with_md_unsure' if use_unsure_mass_dist else '')+\
               '.pkl'
 
+    if not os.path.isfile(dump_path):
+        print(dump_path)
+        st.error('Dump file not found for this configuration')
+
+
     
     update_dump=False
 else:

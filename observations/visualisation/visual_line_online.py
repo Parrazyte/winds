@@ -301,7 +301,9 @@ if online:
 
     st.info('''
     The current version includes many new fonctionalities  and includes a new study on 4U1630-47.
-    See https://theses.fr/s296242 (manuscript soon up)
+    
+    See https://theses.fr/s296242 (manuscript soon up).
+    
     The "about" part will be updated once the first paper on 4U 1630-47 will be accepted.
     ''', icon="ℹ️")
 

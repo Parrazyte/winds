@@ -296,7 +296,7 @@ choice_telescope=st.sidebar.multiselect('Telescopes', ['NICER','NuSTAR'] if use_
                                         default=['NICER','NuSTAR'] if use_orbit_obs or use_time_resolved else ('XMM','Chandra'))
 
 if online:
-    include_full=True
+    include_full=False
     
     include_untested= False
 else:

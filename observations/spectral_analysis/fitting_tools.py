@@ -45,7 +45,28 @@ lines_std={         #don't change the first 8, there are explicit calls in the c
                   'FeKa0em':r'Fe K$\alpha$',
                   'FeKb0em':r'Fe K$\beta$',
                   'calNICERSiem':r'Nicer Cal',
-                  'SiKa14abs': r'SiXIV K$\alpha$'}
+                  'SiKa14abs': r'SiXIV K$\alpha$',
+                  'SKa16abs':r'SXVI K$\alpha$',
+                  'CaKa20abs':r'CaXX K$\alpha$',
+                  'CrKa23abs':r'CrXXIII K$\alpha$',
+                  #resolved lines
+                'FeKa25Zabs':r'FeXXV K$\alpha$ (z)',
+                'FeKa25Yabs': r'FeXXV K$\alpha$ (y)',
+                'FeKa25Xabs': r'FeXXV K$\alpha$ (x)',
+                'FeKa25Wabs': r'FeXXV K$\alpha$ (w)',
+
+                'FeKb25p1abs': r'FeXXV K$\beta$ (P^{1/2})',
+                'FeKb25p3abs': r'FeXXV K$\beta$ (P^{3/2})',
+
+                'FeKa26p1abs': r'FeXXVI K$\alpha$ (P^{1/2})',
+                'FeKa26p3abs': r'FeXXVI K$\alpha$ (P^{3/2})',
+
+                'FeKb26p1abs': r'FeXXVI K$\beta$ (P^{1/2})',
+                'FeKb26p3abs': r'FeXXVI K$\beta$ (P^{3/2})',
+
+                'FeKg26p1abs': r'FeXXVI K$\gamma$ (P^{1/2})',
+                'FeKg26p3abs': r'FeXXVI K$\gamma$ (P^{3/2})',
+}
 
 lines_std_names=list(lines_std.keys())
 
@@ -58,12 +79,13 @@ n_absline=len([elem for elem in lines_std_names if 'abs' in elem and 'Si' not in
 range_absline=range(n_absline)
 
 lines_e_dict={
-                    'FeKaem':[6.4],
+                    'FeKaem':[6.404],
                     'FeKbem':[7.06],
                     'FeDiazem':[7.0],
                   'FeKa25abs':[6.7,-5000,10000],
                   'FeKa26abs':[6.97,-5000,10000],
-                  'NiKa27abs':[7.8,-5000,3000],
+                  #uncertainty of 5eV
+                  'NiKa27abs':[7.793,-5000,3000],
                   'FeKb25abs':[7.88,-5000,10000],
                   'FeKb26abs':[8.25,-5000,10000],
                   'FeKg26abs':[8.7,-5000,10000],
@@ -73,11 +95,39 @@ lines_e_dict={
                   'FeKa26em':[6.97,-5000,10000],
                   #this are the narrow equivalent to FeKa and FeKb, but they are used as much more "physical" lines and as such 
                   #have restrained energy ranges compared to their broad counterparts
-                   'FeKa0em':[6.4,-10000,10000],
+
+                    #this one is the average of the 6.391 (1/3) and 6.404 (2/3)
+                   'FeKa0em':[6.400,-10000,10000],
                    'FeKb0em':[7.06,-10000,10000],
                    'calNICERSiem':[1.74],
                   #energy from http://www.atomdb.org/Webguide/transition_information.php?lower=1s&upper=2p&z0=14&z1=13
-                  'SiKa14abs':[2.005494,-3000,3000]}
+                  'SiKa14abs':[2.005494,-3000,3000],
+                  'SKa16abs':[2.6215,-3000,3000],
+                  'CaKa20abs':[4.10505,-3000,3000],
+
+                  #main transition here, precision 3eV
+                  'CrKa23abs': [5.682, -3000, 3000],
+
+    # resolved lines (from NIST 2023)
+                #these have uncertainties of 4eV
+                'FeKa25Zabs': [6.637,-3000,3000],
+                'FeKa25Yabs':  [6.668,-3000,3000],
+                'FeKa25Xabs':  [6.682,-3000,3000],
+                'FeKa25Wabs':  [6.700,-3000,3000],
+
+                #these have uncertainties of 5eV
+                'FeKb25p1abs':  [7.872,-3000,3000],
+                'FeKb25p3abs':  [7.881,-3000,3000],
+
+                'FeKa26p1abs':  [6.9520,-3000,3000],
+                'FeKa26p3abs':  [6.9732,-3000,3000],
+
+                'FeKb26p1abs':  [8.2464,-3000,3000],
+                'FeKb26p3abs':  [8.2527,-3000,3000],
+
+                'FeKg26p1abs':  [8.6986,-3000,3000],
+                'FeKg26p3abs':  [8.7012,-3000,3000],}
+
 
 #note: if find a line at 2.47 keV, careful about confusion with an interstellar gas S2 3p line at 2.47 keV
 #for galactic sources
@@ -87,7 +137,7 @@ lines_e_dict={
 
 # higher bshift range for IGRJ17091-3624
 # lines_e_dict={
-#                     'FeKaem':[6.4],
+#                     'FeKaem':[6.404],
 #                     'FeKbem':[7.06],
 #                     'FeDiazem':[7.0],
 #                   'FeKa25abs':[6.7,-5000,15000],
@@ -99,7 +149,7 @@ lines_e_dict={
 
 #restrict to Miller 2006 values for H1743-322 11048
 # lines_e_dict={
-#                     'FeKaem':[6.4],
+#                     'FeKaem':[6.404],
 #                     'FeKbem':[7.06],
 #                     'FeDiazem':[7.0],
 #                   'FeKa25abs':[6.7,-480,480],
@@ -132,7 +182,29 @@ lines_w_dict={
                   'FeKa25em':[1e-2,0.,0.05],
                   'FeKa26em':[1e-2,0.,0.05],
                   'calNICERSiem':[0.1,0.05,0.2],
-                  'SiKa14abs': [1e-2,0.,0.05]}
+                  'SiKa14abs': [1e-2,0.,0.05],
+                'SKa16abs': [1e-2,0.,0.05],
+                'CaKa20abs': [1e-2,0.,0.05],
+                'CrKa23abs': [1e-2, 0., 0.05],
+
+    # resolved lines
+
+            'FeKa25Zabs': [1e-2,0.,0.05],
+            'FeKa25Yabs': [1e-2,0.,0.05],
+            'FeKa25Xabs': [1e-2,0.,0.05],
+            'FeKa25Wabs': [1e-2,0.,0.05],
+
+            'FeKb25p1abs': [1e-2,0.,0.05],
+            'FeKb25p3abs': [1e-2,0.,0.05],
+
+            'FeKa26p1abs': [1e-2,0.,0.05],
+            'FeKa26p3abs': [1e-2,0.,0.05],
+
+            'FeKb26p1abs': [1e-2,0.,0.05],
+            'FeKb26p3abs': [1e-2,0.,0.05],
+
+            'FeKg26p1abs': [1e-2,0.,0.05],
+            'FeKg26p3abs': [1e-2,0.,0.05], }
 
 
 lines_broad_w_dict={
@@ -179,7 +251,7 @@ def model_list(model_id='lines',give_groups=False,sat_list=[]):
     Model types:
         -lines : add high energy lines to a continuum.
                 Available components (to be updated):
-                    -2 gaussian emission lines at roughly >6.4/7.06 keV (narrow or not)
+                    -2 gaussian emission lines at roughly >6.404/7.06 keV (narrow or not)
                     -6 narrow absorption lines (see addcomp)
                     -the diskbb and powerlaw to try to add them if they're needed
                     
@@ -199,7 +271,11 @@ def model_list(model_id='lines',give_groups=False,sat_list=[]):
                     -powerlaw
                     -diskbb
     '''
-    
+
+    if model_id=='lines_XRISM_V4641_2024':
+        avail_comps=['FeKa25Yabs_gaussian','FeKa25Wabs_gaussian',
+                     'FeKa26p1abs_gaussian','FeKa26p3abs_gaussian',
+                     'SKa16abs_gaussian','CaKa20abs_gaussian']
     if model_id=='lines_resolved':
         avail_comps=['FeKa0em_bgaussian','FeKb0em_bgaussian','FeKa25em_gaussian','FeKa26em_gaussian',
                       'FeKa25abs_agaussian','FeKa26abs_agaussian','NiKa27abs_agaussian',

@@ -176,7 +176,6 @@ m2cm = 100.0
 #     #sol_lines=np.array(len(sol_files))
 
 
-
 def oar_wrapper(solution_rel_dir,save_grid_dir,sim_grid_dir,
                   mdot_obs,xlum,m_BH,
                   ro_init, dr_r,stop_d_input,v_resol,
@@ -350,8 +349,8 @@ def oar_wrapper(solution_rel_dir,save_grid_dir,sim_grid_dir,
 
 def xstar_func(spectrum_file,lum,t_guess,n,nh,xi,vturb_x,nbins,nsteps=1,niter=100,lcpres=0,
                path_logpars=None,
-               comput_mode='local',xstar_mode='standalone',xstar_loc='default',
-               dict_box=None,save_folder='',no_write=False,extract_transmitted=False):
+               comput_mode='local',xstar_mode='standalone',xstar_loc='default',instance_identifier='grid',
+               kill_container=False,dict_box=None,save_folder='',no_write=False,extract_transmitted=False):
     
     '''
     wrapper around the xstar function itself with explicit calls to the parameters routinely being changed in the computation
@@ -362,7 +361,12 @@ def xstar_func(spectrum_file,lum,t_guess,n,nh,xi,vturb_x,nbins,nsteps=1,niter=10
     non-direct arguments:
         dict-box: information for the box number
         comput_mode/xstar_mode/xstar_loc: identical to the comput modes of the other functions
-    
+        instance_identifier: if set to grid, simplifies the instance identifier to the pwd after "grid"
+                             if set to auto, uses the full pwd
+                             if set to anything else, uses that string
+
+        kill_container: if set to True, immediately kills the container once the xstar computation is finished
+
     if path_logpars is not None, saves the list of modifiable parameters into a file
     
     lum -> rlrad38
@@ -389,8 +393,8 @@ def xstar_func(spectrum_file,lum,t_guess,n,nh,xi,vturb_x,nbins,nsteps=1,niter=10
     -niter: determines the number of iterations to find the thermal equilibrium.
             Needs to be changed because the default PyXstar value is 0 (no equilibrium iteration found)
             Default value at 100 (max value) to get the most attemps at finding the equilibrium
-    
-    
+
+
     npass=number of computations (going outwards then inwards) to converge
     should always stay odd if increased to remain the one taken outwards
     
@@ -411,7 +415,7 @@ def xstar_func(spectrum_file,lum,t_guess,n,nh,xi,vturb_x,nbins,nsteps=1,niter=10
         nbox=''
         i_box_final=''
         xlum=0
-
+        v_resol = 0
 
     #copying the parameter dictionnaries to avoid issues if overwriting the defaults
     xpar=px.par.copy()
@@ -483,15 +487,28 @@ def xstar_func(spectrum_file,lum,t_guess,n,nh,xi,vturb_x,nbins,nsteps=1,niter=10
 
         #in order to ensure we're not gonna mix the xstar runs, we make a global identifier with the name
         #of the grid and the solution
-        identifier_str=os.getcwd()[os.getcwd().find('grid'):]
-        identifier_str=identifier_str.replace('/','_')
+        if instance_identifier in ['auto','grid']:
+            if instance_identifier=='grid':
+                identifier_str=os.getcwd()[os.getcwd().find('grid'):]
+            else:
+                identifier_str=os.getcwd()
+
+            identifier_str=identifier_str.replace('/','_')
+            if identifier_str.startswith('_'):
+                identifier_str=identifier_str[1:]
+        else:
+            identifier_str=instance_identifier
 
         #using xstar_loc for the name of the xstar container to create an image of
 
         if xstar_mode=='docker' and xstar_loc=='default':
-            px.container_run_xstar(xpar, xhpar,mode=xstar_mode,dentifier=identifier_str)
+            px.container_run_xstar(xpar, xhpar,mode=xstar_mode,identifier=identifier_str)
         else:
             px.container_run_xstar(xpar, xhpar, mode=xstar_mode, container=xstar_loc,identifier=identifier_str)
+
+        if kill_container:
+            if xstar_mode=='singularity' and xstar_loc=='default':
+                os.system('singularity instance stop '+identifier_str)
 
     #storing the lines of the xstar log file
     with open('xout_step.log') as xlog:
@@ -505,19 +522,24 @@ def xstar_func(spectrum_file,lum,t_guess,n,nh,xi,vturb_x,nbins,nsteps=1,niter=10
         
         file_edit(path_logpars,'\t'.join([str(nbox),str(i_box_final),spectrum_file]),parlog_str,parlog_header)
 
-    #compacting the current xstar log file to a global log file
-    with open('./xout_log_global.log',mode='a') as xlog_global:
-        xlog_global.write('\n\n************************\n BOX:'+str(nbox)+'   FINAL_BOX:'+str(i_box_final)+'\n\n')
-        xlog_global.writelines(xlog_lines)
+    if dict_box is not None:
+        #compacting the current xstar log file to a global log file
+        with open('./xout_log_global.log',mode='a') as xlog_global:
+            xlog_global.write('\n\n************************\n BOX:'+str(nbox)+'   FINAL_BOX:'+str(i_box_final)+'\n\n')
+            xlog_global.writelines(xlog_lines)
 
-    #deleting the current log file
-    os.remove('xout_step.log')
+        #deleting the current log file
+        os.remove('xout_step.log')
 
     #extracting the output spectrum if asked to
     if extract_transmitted:
         px.LoadFiles()
         out_sp=px.ContSpectra()
         out_arr= np.array([out_sp.energy,out_sp.transmitted]).T
+
+        #if need be, emission lines only (without the continuum)
+        #out_arr_em = np.array([out_sp.energy, out_sp.emit_outward]).T
+
 
         # !**Writing the shifted spectra in a file as it is input for next box
         np.savetxt('./xout_transmitted_'+str(nbox)+'_'+str(i_box_final)+'.txt', out_arr,
@@ -997,6 +1019,8 @@ def xstar_wind(solution,SED_path,xlum,outdir,
     if grid_type=="standard":
         #note: the 1/0.98 factor here is here to reflect the addition of a 1/50 nbins grid for the higher interval
         #which needs to be accounted for
+
+        #ex for vresol=71.4 (deltaE of 5eV) : 65139
         nbins=max(999,int(np.ceil(np.log(4*10**6)/np.log(1+v_resol/299792.458))/0.98))
 
     elif grid_type=="custom":

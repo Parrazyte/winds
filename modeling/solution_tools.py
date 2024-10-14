@@ -204,6 +204,26 @@ def func_vel_sol(coordinate,r_sph,z_over_r,vel_r,vel_phi,vel_z,m_BH):
             pass
         return np.arccos(cos_angle_relat)*180/np.pi
 
+def E_deboost_arg(v_gas,angle=180):
+
+    '''
+    Formula from the Luminari20 for the change in Energies in a more general case
+    v_gas in cgs
+
+    angle_gas_los is from the pov of the gas, so 180° is outwards motion (default)
+
+    the angle computation considers the relatvistic aberration
+    '''
+
+
+    gamma_gas=1/np.sqrt(1-(v_gas/c_cgs)**2)
+    beta_gas=v_gas/c_cgs
+
+    psi=1/(gamma_gas*(1-beta_gas*np.cos(angle*np.pi/180)))
+    if np.isnan(psi).all():
+        pass
+
+    return psi
 
 def func_E_deboost_sol(r_sph,z_over_r,vel_r,vel_phi,vel_z,m_BH):
 

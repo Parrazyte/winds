@@ -1192,9 +1192,11 @@ delta_1h=TimeDelta(3600,format='sec')
 delta_1s=TimeDelta(1,format='sec')
 if restrict_time:
 
-    slider_date_coarse=st.slider('Dates restriction',min_value=(Time(min(ravel_ragged(date_list[mask_obj_base])))-\
+
+    slider_date_coarse=st.slider('Dates restriction',
+                                 min_value=(Time(min(ravel_ragged(date_list[mask_obj_base])))-\
                                                          (delta_1y if use_obsids else delta_1m)).datetime,
-                          max_value=max((Time(max(ravel_ragged(date_list[mask_obj_base])))+\
+                                 max_value=max((Time(max(ravel_ragged(date_list[mask_obj_base])))+\
                                          (delta_1y if use_obsids else delta_1m)),
                                         (Time(str(date.today())) if use_obsids else \
                                         Time(max(ravel_ragged(date_list[mask_obj_base]))) + delta_1m)).datetime,
@@ -1205,7 +1207,19 @@ if restrict_time:
                           step=delta_1h.datetime,
                           format='YYYY-MM-DD HH:MM:ss')
 
+    manual_date_vals=st.toggle('Manual Date bounds')
+
+    if manual_date_vals:
+
+        man_min_date_val = st.date_input('Minimum date', value=None)
+        time_min_date_val=slider_date_coarse[0] if man_min_date_val is None else Time(man_min_date_val.isoformat()).datetime
+        man_max_date_val = st.date_input('Maximum date', value=None)
+        time_max_date_val=slider_date_coarse[1] if man_max_date_val is None else Time(man_max_date_val.isoformat()).datetime
+
+        slider_date_coarse=np.array([time_min_date_val,time_max_date_val])
+
     fine_restrict_dates=st.toggle('Fine Dates restriction')
+
 
     if fine_restrict_dates:
         fine_range=slider_date_coarse[1]-slider_date_coarse[0]
@@ -3818,7 +3832,7 @@ if display_single and choice_source[0]=='4U1630-47' and plot_gamma_correl:
     # ax_gamma_rate_int.set_ylim(3e-11, 5e-9)
     ax_gamma_rate_int.set_yscale('log')
     ax_gamma_rate_int.set_xlabel(r'powerlaw $\Gamma$')
-    plt.ylabel('30-50 keV rate (cts/s)')
+    plt.ylabel('INTEGRAL rate in [30-50] keV (cts/s)')
 
     #setting up alpha for the colors
     int_fit_rate_30_50_alpha=abs(int_fit_rate_30_50/int_fit_rate_30_50_err)
@@ -3857,7 +3871,7 @@ if display_single and choice_source[0]=='4U1630-47' and plot_gamma_correl:
     # ax_rate_flux_int.set_ylim(3e-11, 5e-9)
     ax_rate_flux_int.set_yscale('log')
     ax_rate_flux_int.set_xscale('log')
-    ax_rate_flux_int.set_xlabel(r'30-50 keV rate (cts/s)')
+    ax_rate_flux_int.set_xlabel(r'INTEGRAL rate in [30-50] keV (cts/s)')
     ax_rate_flux_int.set_ylabel(r'30-50 keV flux (erg/s/cm²)')
 
     #setting up alpha for the colors
@@ -3897,7 +3911,7 @@ if display_single and choice_source[0]=='4U1630-47' and plot_gamma_correl:
     # ax_rate_flux_15_50_int.set_ylim(3e-11, 5e-9)
     ax_rate_flux_15_50_int.set_yscale('log')
     ax_rate_flux_15_50_int.set_xscale('log')
-    ax_rate_flux_15_50_int.set_xlabel(r'30-50 keV rate (cts/s)')
+    ax_rate_flux_15_50_int.set_xlabel(r'INTEGRAL rate in [30-50] keV (cts/s)')
     ax_rate_flux_15_50_int.set_ylabel(r'15-50 keV extrapolated flux  (erg/s/cm²)')
 
     #setting up alpha for the colors

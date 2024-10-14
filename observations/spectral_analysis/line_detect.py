@@ -52,7 +52,7 @@ from xspec import AllChains
 from xspec_config_multisp import allmodel_data,model_load,addcomp,Pset,Pnull,rescale,reset,Plot_screen,store_plot,freeze,allfreeze,unfreeze,\
                          calc_error,delcomp,fitmod,calc_fit,xcolors_grp,xPlot,xscorpeon,catch_model_str,\
                          load_fitmod, ignore_data_indiv,par_degroup,xspec_globcomps,store_fit,\
-                         ignore_indiv_ig,notice_indiv_ig
+                         ignore_indiv_ig,notice_indiv_ig,xLog_rw
 
 from linedet_utils import plot_line_comps,plot_line_search,plot_std_ener,coltour_chi2map,narrow_line_search,\
                             plot_line_ratio
@@ -522,17 +522,11 @@ def line_detect(epoch_id,arg_dict):
 
     '''Setting up a log file and testing the properties of each spectra'''
 
-    curr_logfile_write = Xset.openLog(outdir + '/' + epoch_observ[0] + '_xspec_log' +
+    curr_logfile_write,curr_logfile=xLog_rw(outdir + '/' + epoch_observ[0] + '_xspec_log' +
                                       ('_pdf' if pdf_only else '_ul' if line_ul_only \
                                           else '_reload' if reload_autofit and os.path.isfile(
                                           outdir + '/' + epoch_observ[0] + '_fitmod_autofit.pkl') \
                                           else '') + '.log')
-    # ensuring the log information gets in the correct place in the log file by forcing line to line buffering
-    curr_logfile_write.reconfigure(line_buffering=True)
-
-    curr_logfile = open(curr_logfile_write.name, 'r')
-
-    # curr_logfile_linedet=open(outdir+'/'+epoch_observ[0]+'_linedet_log.log','w+')
 
     def print_xlog(string, logfile_write=curr_logfile_write):
 
@@ -999,8 +993,8 @@ def line_detect(epoch_id,arg_dict):
         mask_abslines_sign = abslines_sign >= sign_threshold
 
         # computing the upper limits for the non significant lines
-        abslines_eqw_upper = fitlines.get_eqwidth_uls(mask_abslines_sign, abslines_bshift, sign_widths_arr,
-                                                      pre_delete=True)
+        abslines_eqw_upper = fitlines.get_ew_uls(mask_abslines_sign, abslines_bshift, sign_widths_arr,
+                                                 pre_delete=True)
 
         # here will need to reload an accurate model before updating the fitcomps
         '''HTML TABLE FOR the pdf summary'''
@@ -1400,9 +1394,7 @@ def line_detect(epoch_id,arg_dict):
         AllChains.clear()
 
         # updating the logfile for the next type of computations
-        curr_logfile_write = Xset.openLog(outdir + '/' + epoch_observ[0] + '_xspec_log_autofit_comput.log')
-        curr_logfile_write.reconfigure(line_buffering=True)
-        curr_logfile = open(curr_logfile_write.name, 'r')
+        curr_logfile_write,curr_logfile=xLog_rw(outdir + '/' + epoch_observ[0] + '_xspec_log_autofit_comput.log')
 
         # updating it in the fitmod
         fitlines_hid.logfile = curr_logfile
@@ -1481,23 +1473,6 @@ def line_detect(epoch_id,arg_dict):
                 # indiv ignoring with check for empty ignores
                 # ignoring the line_cont_ig energy range for the fit to avoid contamination by lines
                 ignore_indiv_ig(line_cont_ig_indiv[mask_nodeload])
-
-
-            # comparing different continuum possibilities with a broken powerlaw or a combination of diskbb and powerlaw
-
-            # creating the automatic fit class for the standard continuum
-
-            # Xset.closeLog()
-
-            # Xset.openLog('lineplots_opt_nth/test.log')
-            # curr_logfile = Xset.log
-            # curr_logfile_write = Xset.log
-            # curr_logfile_write.reconfigure(line_buffering=True)
-            # curr_logfile = open(curr_logfile_write.name, 'r')
-
-            # initial informations:
-            # gamma to freeze the nthcomp to avoid nonsenses
-            # and giving the info on whether the thcomp should be nullified if there is one
 
             if broad_absval != 0:
                 fitcont_high = fitmod(comp_cont,
@@ -1838,9 +1813,7 @@ def line_detect(epoch_id,arg_dict):
             comp_lines = model_list(autofit_model)
 
             # creating a new logfile for the autofit
-            curr_logfile_write = Xset.openLog(outdir + '/' + epoch_observ[0] + '_xspec_log_autofit.log')
-            curr_logfile_write.reconfigure(line_buffering=True)
-            curr_logfile = open(curr_logfile_write.name, 'r')
+            curr_logfile_write, curr_logfile=xLog_rw(outdir + '/' + epoch_observ[0] + '_xspec_log_autofit.log')
 
             # creating the fitmod object with the desired components (we currently do not use comp groups)
             fitlines = fitmod(comp_lines, curr_logfile, curr_logfile_write, prev_fitmod=fitmod_cont,
@@ -1878,9 +1851,7 @@ def line_detect(epoch_id,arg_dict):
                 fitlines.dump(outdir + '/' + epoch_observ[0] + '_fitmod_autofit_init.pkl')
 
                 # updating the logfile for the second round of fitting
-                curr_logfile_write = Xset.openLog(outdir + '/' + epoch_observ[0] + '_xspec_log_autofit_recont.log')
-                curr_logfile_write.reconfigure(line_buffering=True)
-                curr_logfile = open(curr_logfile_write.name, 'r')
+                curr_logfile_write, curr_logfile = xLog_rw(outdir + '/' + epoch_observ[0] + '_xspec_log_autofit_recont.log')
 
                 # updating it in the fitmod
                 fitlines.logfile = curr_logfile
@@ -2137,9 +2108,7 @@ def line_detect(epoch_id,arg_dict):
     if autofit and (cont_abspeak or force_autofit) and not flag_lowSNR_line:
 
         # updating the logfile for the next type of computations
-        curr_logfile_write = Xset.openLog(outdir + '/' + epoch_observ[0] + '_xspec_log_autofit_comput.log')
-        curr_logfile_write.reconfigure(line_buffering=True)
-        curr_logfile = open(curr_logfile_write.name, 'r')
+        curr_logfile_write,curr_logfile=xLog_rw(outdir + '/' + epoch_observ[0] + '_xspec_log_autofit_comput.log')
 
         # updating it in the fitmod
         fitlines.logfile = curr_logfile
@@ -2519,9 +2488,7 @@ def line_detect(epoch_id,arg_dict):
                                [comp for comp in fitlines.includedlist if comp is not None]]).any()
 
         # updating the logfile for the second round of fitting
-        curr_logfile_write = Xset.openLog(outdir + '/' + epoch_observ[0] + '_xspec_log_fakeits.log')
-        curr_logfile_write.reconfigure(line_buffering=True)
-        curr_logfile = open(curr_logfile_write.name, 'r')
+        curr_logfile_write,curr_logfile=xLog_rw(outdir + '/' + epoch_observ[0] + '_xspec_log_fakeits.log')
 
         # updating it in the fitmod
         fitlines.logfile = curr_logfile
@@ -2794,8 +2761,8 @@ def line_detect(epoch_id,arg_dict):
 
         if assess_line_upper:
             # computing the upper limits for the non significant lines
-            abslines_eqw_upper = fitlines.get_eqwidth_uls(mask_abslines_sign, abslines_bshift, sign_widths_arr,
-                                                          pre_delete=True)
+            abslines_eqw_upper = fitlines.get_ew_uls(mask_abslines_sign, abslines_bshift, sign_widths_arr,
+                                                     pre_delete=True)
 
         # here will need to reload an accurate model before updating the fitcomps
         '''HTML TABLE FOR the pdf summary'''

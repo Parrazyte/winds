@@ -388,12 +388,7 @@ def fit_broader(epoch_id,add_gaussem=True,bat_interp_dir='/home/parrama/Document
 
     os.system('mkdir -p '+outdir)
 
-    curr_logfile_write = Xset.openLog(os.path.join(outdir, epoch_id + '_broader.log'))
-
-    # ensuring the log information gets in the correct place in the log file by forcing line to line buffering
-    curr_logfile_write.reconfigure(line_buffering=True)
-
-    curr_logfile = open(curr_logfile_write.name, 'r')
+    curr_logfile_write,curr_logfile=xLog_rw(os.path.join(outdir, epoch_id + '_broader.log'))
 
     AllModels.clear()
     AllModels.setEnergies('0.01 1000. 10000 log')
@@ -517,12 +512,7 @@ def fit_broader_BAT(epoch_list,
 
     os.system('mkdir -p '+outdir)
 
-    curr_logfile_write = Xset.openLog(os.path.join(outdir, epoch_id + '_broader.log'))
-
-    # ensuring the log information gets in the correct place in the log file by forcing line to line buffering
-    curr_logfile_write.reconfigure(line_buffering=True)
-
-    curr_logfile = open(curr_logfile_write.name, 'r')
+    curr_logfile_write,curr_logfile=xLog_rw(os.path.join(outdir, epoch_id + '_broader.log'))
 
     AllModels.clear()
 
@@ -598,6 +588,25 @@ def fit_broader_BAT(epoch_list,
                    remove_scorpeon=True)
 
     plt.ion()
+
+def make_ls(low_e,high_e):
+    Xset.restore('xrism_save_stronglines.xcm')
+    Plot.setRebin(2,5000,1)
+    freeze()
+    mod_cont=allmodel_data()
+
+    from linedet_utils import narrow_line_search,plot_line_search
+
+    Xset.chatter=1
+    narrow_out_val=narrow_line_search(mod_cont,'mod_cont',[1.5,1.5],
+                                      [low_e,high_e,5e-3],line_cont_range=[low_e,high_e])
+    with open('narrow_out_'+str(low_e)+'_'+str(high_e)+'.dill','wb+') as f:
+        dill.dump(narrow_out_val,f)
+
+    plot_line_search(narrow_out_val, './', 'XRISM', suffix=str(low_e)+'_'+str(high_e),
+                     save=True, epoch_observ=['first_fit'], format='pdf')
+
+    return narrow_out_val
 
 class model_data:
 
@@ -1071,6 +1080,23 @@ def reset():
     Plot.add=True
     Fit.statMethod='cstat'
     Fit.query='no'
+
+def xLog_rw(path):
+
+    '''
+    opeans path as a new Xset Log file, reconfigures for line buffering to avoid delays when printing there
+    and opens it independantly for reading
+    returns both the w+ and the r io objects
+    '''
+
+    logfile_write = Xset.openLog(path)
+
+    # ensuring the log information gets in the correct place in the log file by forcing line to line buffering
+    logfile_write.reconfigure(line_buffering=True)
+
+    logfile_read=open(logfile_write.name, 'r')
+
+    return logfile_write,logfile_read
 
 def model_load(model_saves,mod_name='',mod_number=1,gap_par=None,in_add=False,table_dict=None,modclass=AllModels,
                verbose=False):
@@ -3568,7 +3594,7 @@ class fitmod:
         return comps_errlocked
 
     def add_allcomps(self, chain=False, lock_lines=False, no_abslines=False, nomixline=True, split_fit=True,
-                     fit_scorpeon=False,fit_SAA_norm=False):
+                     fit_scorpeon=False,fit_SAA_norm=False,no_fit=False):
 
         '''
         Adds all components from the excl_list in the order of the list
@@ -3775,6 +3801,10 @@ class fitmod:
             component.fitted_mod = allmodel_data()
 
         self.update_fitcomps()
+
+        if no_fit:
+            return
+
 
         calc_fit()
 
@@ -4810,7 +4840,7 @@ class fitmod:
         return par_errors,par_names
 
 
-    def get_absline_width(self):
+    def get_absline_width(self,err_sigma=3):
 
         abs_lines=[elem for elem in self.name_complist if 'agaussian' in elem]
 
@@ -4833,7 +4863,7 @@ class fitmod:
             print('Computing width of component '+fitcomp_line.compname)
 
             #computing the line width at 3 sigma
-            abslines_width[i_line]=fitcomp_line.get_width()
+            abslines_width[i_line]=fitcomp_line.get_width(err_sigma=err_sigma)
 
         return abslines_width
 
@@ -4858,13 +4888,13 @@ class fitmod:
             n_abslines=len(abs_lines)
 
         abslines_flux=np.zeros((n_abslines,3))
-        abslines_eqw=np.zeros((n_abslines,3))
+        abslines_ew=np.zeros((n_abslines,3))
         abslines_bshift=np.array([[None]*3]*n_abslines)
         abslines_bshift_distinct=np.array([None]*n_abslines)
         abslines_delchi=np.zeros(n_abslines)
 
         if len(abs_lines)==0:
-            return abslines_flux,abslines_eqw,abslines_bshift,abslines_delchi,abslines_bshift_distinct
+            return abslines_flux,abslines_ew,abslines_bshift,abslines_delchi,abslines_bshift_distinct
 
         base_chi=Fit.statistic
 
@@ -4915,10 +4945,10 @@ class fitmod:
 
             fitcomp_line=getattr(self,line)
 
-            #storing the eqw (or the upper limit if there is no line)
-            abslines_eqw[i_line]=fitcomp_line.get_eqwidth()
+            #storing the ew (or the upper limit if there is no line)
+            abslines_ew[i_line]=fitcomp_line.get_ewidth()
 
-        #second loop since we modify the fit here and that affects the eqw computation
+        #second loop since we modify the fit here and that affects the ew computation
         for i_line,line in enumerate(abs_lines):
 
             fitcomp_line=getattr(self,line)
@@ -5034,18 +5064,175 @@ class fitmod:
         #recreating a valid fit for the error computation
         calc_fit()
 
-        return abslines_flux,abslines_eqw,abslines_bshift,abslines_delchi,abslines_bshift_distinct
+        return abslines_flux,abslines_ew,abslines_bshift,abslines_delchi,abslines_bshift_distinct
 
-
-    def get_eqwidth_uls(self,bool_sign,lines_bshift,sign_widths,pre_delete=False):
+    def get_emline_info(self, par_draw, percentile=90):
 
         '''
-        Computes the eqwdith upper limit of each non significant line, with other parameters free except the other absorption lines
+
+        TO BE TESTED
+        Computes and returns various informations on the absorption lines:
+            -line flux,
+            -equivalent width with errors, computed from the chain if a chain is loaded
+            -blueshift with errors from the currently stored self.errors (i.e. from a chain if a chain was used to compute them)
+            -energies and associated errors from the blueshift values
+        '''
+
+        mod_data_init = allmodel_data()
+
+        em_lines = [elem for elem in self.name_complist if '_gaussian' in elem]
+
+        # using 6 emlines as default when there are no emlines used to go faster
+        if len(em_lines) == 0:
+            n_emlines = 6
+        else:
+            n_emlines = len(em_lines)
+
+        emlines_flux = np.zeros((n_emlines, 3))
+        emlines_ew = np.zeros((n_emlines, 3))
+        emlines_bshift = np.array([[None] * 3] * n_emlines)
+        emlines_delchi = np.zeros(n_emlines)
+
+        if len(em_lines) == 0:
+            return emlines_flux, emlines_ew, emlines_bshift, emlines_delchi
+
+        base_chi = Fit.statistic
+
+        Fit.perform()
+
+
+        for i_line, line in enumerate(em_lines):
+            fitcomp_line = getattr(self, line)
+
+            # storing the ew (or the upper limit if there is no line)
+            emlines_ew[i_line] = fitcomp_line.get_ewidth()
+
+        # second loop since we modify the fit here and that affects the ew computation
+        for i_line, line in enumerate(em_lines):
+
+            fitcomp_line = getattr(self, line)
+
+            # skipping if the line is not in the final model
+            if not fitcomp_line.included:
+                continue
+
+            # fetching the xspec vashift parameter number of this line
+            vashift_parid = fitcomp_line.parlist[0]
+
+            # if the parameter is linked to something we note it instead of fetching the uncertainty:
+            if AllModels(1)(vashift_parid).link != '':
+                # identifying the parameter it is linked to
+                vashift_parlink = int(AllModels(1)(vashift_parid).link.replace('=', ''))
+                # fetching the name of the component associated to this parameter
+                for comp in [elem for elem in self.includedlist if elem is not None]:
+                    if vashift_parlink in comp.parlist:
+                        linked_compname = comp.compname.split('_')[0]
+                        break
+                emlines_bshift[i_line] = [-AllModels(1)(vashift_parid).values[0], linked_compname, linked_compname]
+            else:
+                # creating a proper array with the blueshift of the line and its uncertainties
+                # note: since we want the blueshift we need to swap the value of the vashift AND swap the + error with the - error
+                emlines_bshift[i_line] = \
+                    [-AllModels(1)(vashift_parid).values[0],
+                     self.errors[0][vashift_parid - 1][1],
+                     self.errors[0][vashift_parid - 1][0]]
+
+            # getting the delchi of the line (we assume that the normalisation is the last parameter of the line component)
+
+            # deleting the component
+            delcomp(fitcomp_line.xcompnames[-1])
+
+            # fitting and computing errors
+            # note: might need to be re-adjusted back to with a logfile if the fit gets stuck here
+            calc_fit()
+
+            # calc_fit(logfile=self.logfile)
+
+            calc_error(self.logfile, param='1-' + str(AllModels(1).nParameters * AllData.nGroups), indiv=True)
+
+            # storing the delta chi
+            emlines_delchi[i_line] = Fit.statistic - base_chi
+
+            # reloading the model
+            mod_data_init.load()
+
+            '''
+            Computing the individual flux of each emline
+
+            For this, we delete every other component in the model then vary each parameter of the line for 1000 iterations
+            from the MC computation, and draw the 90% flux interval from that
+            '''
+
+            # loop on all the components to delete them, in reverse order to avoid having to update them
+            for comp in self.includedlist_main[::-1]:
+
+                # skipping the current component, already removed emorptions
+                if comp is fitcomp_line or (comp.emorption and comp.xcompnames[0] not in AllModels(1).componentNames):
+                    continue
+
+                # skipping multiplicative non-calibration components, which will be deleted anyway with the additive ones
+                if not comp.calibration and comp.multipl and not comp.emorption \
+                        and not comp.xcompnames[0] in xspec_globcomps:
+                    continue
+
+                print(comp.compname)
+
+                comp.delfrommod(rollback=False)
+                # fix this
+
+            # loop on the parameters
+            flux_line_dist = np.zeros(len(par_draw))
+            for i_sim in range(len(par_draw)):
+                # setting the parameters of the line according to the drawpar
+                for id_parcomp, parcomp in enumerate(fitcomp_line.parlist):
+                    # we only draw from the first data group BECAUSE WE TAKE THE FLUX FOR THE FIRST DG,
+                    # hence the [0] index in par_draw
+                    AllModels(1)(id_parcomp + 1).values = [par_draw[i_sim][0][parcomp - 1]] + AllModels(1)(
+                        id_parcomp + 1).values[1:]
+
+                # computing the flux of the line
+                # (should be negligbly affected by the energy limits of instruments since we don't have lines close to these anyway)
+                '''
+                note that this could be an issue for lower energy lines if a high-energy telescope is loaded first
+                there could be a need to extend its rmf
+                '''
+                AllModels.calcFlux('0.3 10')
+
+                # and storing it in the distribution
+                # note: won't work with several datagroups
+                flux_line_dist[i_sim] = AllData(1).flux[0]
+
+            flux_line_dist = abs(flux_line_dist)
+            flux_line_dist.sort()
+
+            # we don't do that anymore to avoid main values outside of MC simulations in extreme cases
+            # #storing the main value
+            # emlines_flux[i_line][0]=AllModels.calcFlux('0.3 10')
+
+            # drawing the quantile values from the distribution (instead of the main value) to get the errors
+            emlines_flux[i_line][0] = flux_line_dist[int(len(par_draw) / 2)]
+            emlines_flux[i_line][1] = emlines_flux[i_line][0] - flux_line_dist[
+                int((1 - percentile / 100) / 2 * len(par_draw))]
+            emlines_flux[i_line][2] = flux_line_dist[int((1 - (1 - percentile / 100) / 2) * len(par_draw))] - \
+                                       emlines_flux[i_line][0]
+
+            # reloading the model
+            mod_data_init.load()
+            self.update_fitcomps()
+        # recreating a valid fit for the error computation
+        calc_fit()
+
+        return emlines_flux, emlines_ew, emlines_bshift, emlines_delchi
+
+    def get_ew_uls(self, bool_sign, lines_bshift, sign_widths, pre_delete=False):
+
+        '''
+        Computes the ewdith upper limit of each non significant line, with other parameters free except the other absorption lines
         '''
 
         abslines=[comp.compname for comp in [elem for elem in self.complist if elem is not None] if 'agaussian' in comp.compname]
 
-        abslines_eqw_ul=np.zeros(len(abslines))
+        abslines_ew_ul=np.zeros(len(abslines))
 
         for i_line,line in enumerate(abslines):
 
@@ -5102,9 +5289,9 @@ class fitmod:
                 width_val=0
 
             #computing the upper limit with the given bshift range
-            abslines_eqw_ul[i_line]=fitcomp_line.get_eqwidth_ul(bshift_range,width_val,pre_delete=pre_delete)
+            abslines_ew_ul[i_line]=fitcomp_line.get_ew_ul(bshift_range,width_val,pre_delete=pre_delete)
 
-        return abslines_eqw_ul
+        return abslines_ew_ul
 
     def save_mod(self):
 
@@ -5725,7 +5912,7 @@ class fitcomp_line(fitcomp):
                  continuum=False,fitcomp_names=None, fitmod=None):
         super().__init__(compname,logfile=logfile,logfile_write=logfile_write,identifier=identifier,
                        continuum=continuum,fitcomp_names=fitcomp_names,fitmod=fitmod)
-    def get_width(self):
+    def get_width(self,err_sigma=3):
 
         '''
         computes errors to see if the width of the current component (assumed to be gaussian)
@@ -5745,8 +5932,9 @@ class fitcomp_line(fitcomp):
 
         self.logfile.readlines()
 
-        #computing the width with the current fit at 3 sigmas (third index of the sign_sigmas_delchi_1dof arr)
-        Fit.error('stop ,,0.1 max 100 '+str(sign_sigmas_delchi_1dof[2])+' '+str(self.parlist[-2]))
+        #computing the width with the current fit at n sigmas (aka a delchi of the square of that for 1 dof, see
+        # the sign_sigmas_delchi_1dof arr)
+        Fit.error('stop ,,0.1 max 100 '+str(err_sigma**2)+' '+str(self.parlist[-2]))
 
         #storing the error lines
         log_lines=self.logfile.readlines()
@@ -5757,10 +5945,10 @@ class fitcomp_line(fitcomp):
 
         return np.array([width_par.values[0],width_par.values[0]-width_par.error[0],width_par.error[1]-width_par.values[0]])
 
-    def get_eqwidth(self):
+    def get_ew(self, err_percent=90):
 
         '''
-        Note : we currently only compute the eqwidth of the first data group
+        Note : we currently only compute the ewidth of the first data group
         '''
 
         if not self.included:
@@ -5770,32 +5958,32 @@ class fitcomp_line(fitcomp):
         #computing the eqwidth without errors first
         AllModels.eqwidth(self.compnumbers[-1])
 
-        eqwidth_noerr=np.array(AllData(1).eqwidth)*1e3
+        ew_noerr=np.array(AllData(1).eqwidth)*1e3
 
         try:
-            #eqwidth at 90%
-            AllModels.eqwidth(self.compnumbers[-1],err=True,number=1000,level=90)
+            #ew at 90%
+            AllModels.eqwidth(self.compnumbers[-1],err=True,number=1000,level=err_percent)
 
             #conversion in eV from keV (same e)
-            eqwidth=np.array(AllData(1).eqwidth)*1e3
+            ew=np.array(AllData(1).eqwidth)*1e3
 
             #testing if the MC computation led to bounds out of the initial value :
-            if eqwidth[1]<=eqwidth[0]<=eqwidth[2]:
+            if ew[1]<=ew[0]<=ew[2]:
                 #getting the actual uncertainties and not the quantile values
-                eqwidth_arr=np.array([abs(eqwidth[0]),eqwidth[0]-eqwidth[1],eqwidth[2]-eqwidth[0]])
+                ew_arr=np.array([abs(ew[0]),ew[0]-ew[1],ew[2]-ew[0]])
             else:
                 #if the bounds are outside we take the median of the bounds as the main value instead
-                eqwidth_arr=\
-                    np.array([abs(eqwidth[1]+eqwidth[2])/2,abs(eqwidth[2]-eqwidth[1])/2,abs(eqwidth[2]-eqwidth[1])/2])
+                ew_arr=\
+                    np.array([abs(ew[1]+ew[2])/2,abs(ew[2]-ew[1])/2,abs(ew[2]-ew[1])/2])
         except:
-            eqwidth_arr=eqwidth_noerr
+            ew_arr=ew_noerr
 
-        return eqwidth_arr
+        return ew_arr
 
-    def get_eqwidth_ul(self,bshift_range,line_width=0,pre_delete=False):
+    def get_ew_ul(self,bshift_range,line_width=0,pre_delete=False,ul_level=99.7):
 
         '''
-        Note : we compute the eqw ul from the first data group
+        Note : we compute the ew ul from the first data group
         Also tests the upper limit for included components by removing them first
         '''
 
@@ -5804,7 +5992,7 @@ class fitcomp_line(fitcomp):
 
         curr_model=allmodel_data()
 
-        distrib_eqw=[]
+        distrib_ew=[]
 
         prev_chatter=Xset.chatter
         prev_logChatter=Xset.logChatter
@@ -5846,7 +6034,7 @@ class fitcomp_line(fitcomp):
                 #skipping the computation if the line is above the maximum energy
                 if AllModels(1)(npars-2).values[0]>AllData(1).energies[-1][1]:
                     self.print_xlog('Line above maximum energy range. Skipping computation...')
-                    distrib_eqw+=[0]
+                    distrib_ew+=[0]
                     break
 
                 #freezing the width value
@@ -5880,12 +6068,12 @@ class fitcomp_line(fitcomp):
 
                 try:
                     #computing the EQW with errors
-                    AllModels.eqwidth(len(AllModels(1).componentNames),err=True,number=1000,level=99.7)
-                    #adding the eqw value to the distribution
-                    distrib_eqw+=[abs(AllData(1).eqwidth[1])]
+                    AllModels.eqwidth(len(AllModels(1).componentNames),err=True,number=1000,level=ul_level)
+                    #adding the ew value to the distribution
+                    distrib_ew+=[abs(AllData(1).eqwidth[1])]
                 except:
                     self.print_xlog('Issue during EW computation')
-                    distrib_eqw+=[0]
+                    distrib_ew+=[0]
 
                 Xset.logChatter=5
 
@@ -5897,7 +6085,7 @@ class fitcomp_line(fitcomp):
         #reloading the previous model iteration
         curr_model.load()
 
-        return max(distrib_eqw)*1e3
+        return max(distrib_ew)*1e3
 
 
 ####Plot commands
@@ -6180,7 +6368,8 @@ def EW_ang2keV(x,e_line):
 
 def xPlot(types,axes_input=None,plot_saves_input=None,plot_arg=None,includedlist=None,group_names='auto',hide_ticks=True,
           secondary_x=True,legend_position=None,xlims=None,ylims=None,label_bg=False,
-          no_name_data='auto',force_ylog_ratio=False):
+          no_name_data='auto',force_ylog_ratio=False,legend_ncols=None,
+          data_colors=None,model_colors=None,addcomp_colors=None,data_alpha=1):
 
     '''
     Replot xspec plots using matplotib. Accepts custom types:
@@ -6193,6 +6382,8 @@ def xPlot(types,axes_input=None,plot_saves_input=None,plot_arg=None,includedlist
     plot_arg is an array argument with the values necessary for custom plots. each element should be None if the associated plot doesn't need plot arguments
 
     xlims and ylims should be tuples of values
+        can be made for individual subplots plot types independantly if set to 2-dimensionnal tuples
+        in this case the null value is [None,None]
 
     If plot_saves is not None, uses its array elements as inputs to create the plots.
     Else, creates a range of plot_saves using plot_saver from the asked set of plot types
@@ -6214,6 +6405,19 @@ def xPlot(types,axes_input=None,plot_saves_input=None,plot_arg=None,includedlist
     no_name_data: -if set to auto, removes the data label for plots with more than 1 panel
                     and rearranges the position when there are many datagroups
 
+    legend_ncols: overwrite the automatic number of legend columns
+
+    data_colors: if not None 'data', should be an AllData.nGroups size iterable.
+                 overwrite the default xspec colors for the data
+    model_colors: if not None or 'data', should be an AllData.nGroups size iterable.
+                 overwrite the default xspec colors for the models
+                if set to 'data', copies the data_colors
+
+    addcomp_colors: if not None or 'data', should be an AllData.nGroups size iterable.
+                    overwrite the default xspec colors for the models.
+                    if set to 'data', copies the data_colors
+
+    data_alpha: alpha value for the ratio/delchi plot errorbars
     '''
 
     if axes_input is None:
@@ -6247,6 +6451,22 @@ def xPlot(types,axes_input=None,plot_saves_input=None,plot_arg=None,includedlist
 
     types_split=types.split(',')
 
+    if xlims is not None:
+        if np.ndim(xlims)==1:
+            xlims_use=np.array([xlims for i in range(len(types_split))])
+        else:
+            xlims_use=xlims
+    else:
+        xlims_use=None
+        
+    if ylims is not None:
+        if np.ndim(ylims)==1:
+            ylims_use=np.array([ylims for i in range(len(types_split))])
+        else:
+            ylims_use=ylims
+    else:
+        ylims_use=None
+        
     for i_ax,plot_type in enumerate(types_split):
 
         curr_ax=axes[i_ax]
@@ -6287,10 +6507,10 @@ def xPlot(types,axes_input=None,plot_saves_input=None,plot_arg=None,includedlist
             curr_ax.set_yscale('log')
 
         #this needs to be performed independantly of how many groups there are
-        if xlims is not None:
-            curr_ax.set_xlim(xlims[0],xlims[1])
-        if ylims is not None:
-            curr_ax.set_ylim(ylims[0],ylims[1])
+        if xlims_use is not None and xlims_use[i_ax][0] is not None:
+            curr_ax.set_xlim(xlims_use[i_ax][0],xlims_use[i_ax][1])
+        if ylims_use is not None and ylims_use[i_ax][0] is not None:
+            curr_ax.set_ylim(ylims_use[i_ax][0],ylims_use[i_ax][1])
 
         for id_grp in range(max(1,curr_save.nGroups)):
 
@@ -6330,6 +6550,7 @@ def xPlot(types,axes_input=None,plot_saves_input=None,plot_arg=None,includedlist
 
                     grp_name=' '.join([elem for elem in [grp_tel,grp_obsid,grp_instru] if len(elem)>0])
             else:
+                Plot.setGroup('2')
                 #needs to be implemented
                 breakpoint()
                 grp_name='' if group_names=='nolabel' else\
@@ -6339,12 +6560,23 @@ def xPlot(types,axes_input=None,plot_saves_input=None,plot_arg=None,includedlist
                 #plotting each data group
 
                 curr_ax.errorbar(curr_save.x[id_grp],curr_save.y[id_grp],xerr=curr_save.xErr[id_grp],yerr=curr_save.yErr[id_grp].clip(0),
-                                 color=xcolors_grp[id_grp],linestyle='None',elinewidth=0.75,
+                                 color=xcolors_grp[id_grp] if data_colors is None else data_colors[id_grp],linestyle='None',
+                                 elinewidth=0.75,alpha=data_alpha,
                                  label='' if group_names=='nolabel' or (no_name_data=='auto' and i_ax!=len(types_split)-1) else grp_name)
 
             #plotting models
             if 'ratio' not in plot_type and curr_save.model[id_grp] is not None:
-                curr_ax.plot(curr_save.x[id_grp],curr_save.model[id_grp],color=xcolors_grp[id_grp],alpha=0.5,
+
+                if model_colors is not None:
+                    if model_colors == 'data':
+                        model_color_grp=data_colors[id_grp]
+                    else:
+                        model_color_grp=model_colors[id_grp]
+                else:
+                    model_color_grp=None
+                    
+                curr_ax.plot(curr_save.x[id_grp],curr_save.model[id_grp],
+                             color=xcolors_grp[id_grp] if model_color_grp is None else model_color_grp,alpha=0.5,
                              label='' if group_names=='nolabel' else '')
 
 
@@ -6354,7 +6586,9 @@ def xPlot(types,axes_input=None,plot_saves_input=None,plot_arg=None,includedlist
                 #empty backgrounds are stored as 0 values everywhere so we test for that to avoid plotting them for nothing
                 if curr_save.addbg and curr_save.background_y[id_grp] is not None:
                     curr_ax.errorbar(curr_save.background_x[id_grp],curr_save.background_y[id_grp],xerr=curr_save.background_xErr[id_grp],
-                                     yerr=curr_save.background_yErr[id_grp],color=xcolors_grp[id_grp],linestyle='None',elinewidth=0.5,
+                                     yerr=curr_save.background_yErr[id_grp],
+                                     color=xcolors_grp[id_grp] if data_colors is None else data_colors[id_grp],
+                                     linestyle='None',elinewidth=0.5,alpha=data_alpha,
                                      marker='x',mew=0.5,label='' if not label_bg or group_names=='nolabel' else grp_name+' background')
 
         #### locking the axe limits
@@ -6364,10 +6598,10 @@ def xPlot(types,axes_input=None,plot_saves_input=None,plot_arg=None,includedlist
         we don't bother doing that for the background
         '''
 
-        if xlims is None:
+        if xlims_use is None or xlims_use[i_ax][0] is None:
             curr_ax.set_xlim(round(min(ravel_ragged(curr_save.x-curr_save.xErr)),2),round(max(ravel_ragged(curr_save.x+curr_save.xErr)),2))
 
-        if ylims is None:
+        if ylims_use is None or ylims_use[i_ax][0] is None:
             curr_ax.set_ylim(min(curr_ax.get_ylim()[0],round(min(ravel_ragged(curr_save.y-curr_save.yErr)),4)),
                           max(curr_ax.get_ylim()[1],round(max(ravel_ragged(curr_save.y+curr_save.yErr)),4)))
 
@@ -6380,7 +6614,27 @@ def xPlot(types,axes_input=None,plot_saves_input=None,plot_arg=None,includedlist
 
             colors_addcomp=mpl.cm.ScalarMappable(norm=norm_colors_addcomp,cmap=mpl.cm.plasma)
 
-            ls_types=['dotted','dashed','dashdot']
+            # ls_types=['dotted','dashed','dashdot']
+
+            # linestyle_tuple = [
+            #     ('loosely dotted', (0, (1, 10))),
+            #     ('dotted', (0, (1, 1))),
+            #     ('densely dotted', (0, (1, 1))),
+            #     ('long dash with offset', (5, (10, 3))),
+            #     ('loosely dashed', (0, (5, 10))),
+            #     ('dashed', (0, (5, 5))),
+            #     ('densely dashed', (0, (5, 1))),
+            #
+            #     ('loosely dashdotted', (0, (3, 10, 1, 10))),
+            #     ('dashdotted', (0, (3, 5, 1, 5))),
+            #     ('densely dashdotted', (0, (3, 1, 1, 1))),
+            #
+            #     ('dashdotdotted', (0, (3, 5, 1, 5, 1, 5))),
+            #     ('loosely dashdotdotted', (0, (3, 10, 1, 10, 1, 10))),
+            #     ('densely dashdotdotted', (0, (3, 1, 1, 1, 1, 1)))]
+
+            ls_types =[(0, (3, 1, 1, 1)),(0, (5, 1)),(5, (10, 3)),(0, (1, 1)),\
+                       (0, (3, 10, 1, 10)),(0, (5, 10)),(0, (1, 10))]
 
             list_models=list(AllModels.sources.values())
 
@@ -6399,15 +6653,27 @@ def xPlot(types,axes_input=None,plot_saves_input=None,plot_arg=None,includedlist
                 label_comps=curr_save.addcompnames
 
             for id_grp in range(curr_save.nGroups):
+
+                if addcomp_colors is not None:
+                    if addcomp_colors == 'data':
+                        addcomp_color_grp=data_colors[id_grp]
+                    else:
+                        addcomp_color_grp=addcomp_colors[id_grp]
+                else:
+                    addcomp_color_grp=None
+
+                # breakpoint()
                 for i_comp in range(len(curr_save.addcomps[id_grp])):
 
                     try:
-                        curr_ax.plot(curr_save.x[id_grp],curr_save.addcomps[id_grp][i_comp],color=colors_addcomp.to_rgba(i_comp),
-                                 label=label_comps[i_comp] if id_grp==0 else '',linestyle=ls_types[i_comp%3],linewidth=1)
+                        curr_ax.plot(curr_save.x[id_grp],curr_save.addcomps[id_grp][i_comp],
+                                     color=colors_addcomp.to_rgba(i_comp) if  addcomp_colors not in [None,'data'] else  addcomp_color_grp,
+                                 label=label_comps[i_comp] if id_grp==0 else '',linestyle=ls_types[i_comp%len(ls_types)],linewidth=1)
                     except:
                         try:
-                            curr_ax.plot(curr_save.x[0],curr_save.addcomps[id_grp][i_comp],color=colors_addcomp.to_rgba(i_comp),
-                                     label=label_comps[i_comp] if id_grp==0 else '',linestyle=ls_types[i_comp%3],linewidth=1)
+                            curr_ax.plot(curr_save.x[0],curr_save.addcomps[id_grp][i_comp],
+                                         color=colors_addcomp.to_rgba(i_comp)  if  addcomp_colors not in [None,'data']  else  addcomp_color_grp,
+                                     label=label_comps[i_comp] if id_grp==0 else '',linestyle=ls_types[i_comp%len(ls_types)],linewidth=1)
                         except:
                             breakpoint()
                             print("check if other x work")
@@ -6421,12 +6687,14 @@ def xPlot(types,axes_input=None,plot_saves_input=None,plot_arg=None,includedlist
         #plotting the legend in horizontal and below the main result if necessary
         if AllData.nGroups>=5 and no_name_data=='auto':
             if i_ax==0:
-                curr_ax.legend(loc=legend_position,ncols=3+np.ceil(AllData.nGroups/15))
+                curr_ax.legend(loc=legend_position,
+                               ncols=3+np.ceil(AllData.nGroups/15) if legend_ncols==None else legend_ncols)
 
             if i_ax==len(types_split)-1:
                 bbox_yval=max(-0.3-0.2*np.ceil(AllData.nGroups/2),-0.5)
                 curr_ax.legend(loc='lower center',
-                               bbox_to_anchor=(0.5,bbox_yval),ncols=3+np.ceil(AllData.nGroups/15))
+                               bbox_to_anchor=(0.5,bbox_yval),
+                               ncols=3+np.ceil(AllData.nGroups/15) if legend_ncols==None else legend_ncols)
 
         else:
             curr_ax.legend(loc=legend_position)

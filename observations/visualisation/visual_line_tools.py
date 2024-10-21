@@ -1476,7 +1476,11 @@ def plot_lightcurve(dict_linevis,ctl_maxi_df,ctl_maxi_simbad,name,ctl_bat_df,ctl
                     label='hypersoft state')
 
     # #hypersoft state for GROJ1655-40
-    ax_lc.legend(loc='upper right' if name[0]=="GROJ1655-40" else 'upper left',ncols=2)
+    try:
+        ax_lc.legend(loc='upper right' if name[0]=="GROJ1655-40" else 'upper left',ncols=2)
+    except:
+        #to avoid an issue with a different python version online
+        ax_lc.legend(loc='upper right' if name[0]=="GROJ1655-40" else 'upper left')
 
     # #shifted position if need be
     # ax_lc.legend(loc='upper right' if name[0]=="GROJ1655-40" else 'center right',ncols=2,

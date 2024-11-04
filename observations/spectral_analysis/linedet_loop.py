@@ -91,7 +91,7 @@ def linedet_loop(epoch_list,arg_dict,arg_dict_path=None,parallel=1,heasoft_init_
     summary_header = arg_dict['summary_header']
 
     if job_id=='default':
-        job_id_use='_'.join(os.getcwd().split('/')[-4:]+[outdir,sat_glob,spread_str.replace('_over_','-')])
+        job_id_use='_'.join(os.getcwd().split('/')[-4:]+[outdir,sat_glob,spread_str.replace('_over_','-')]).replace('__','_')
     else:
         job_id_use=job_id
 

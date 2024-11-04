@@ -280,7 +280,11 @@ def model_list(model_id='lines',give_groups=False,sat_list=[]):
         avail_comps=['FeKa0em_bgaussian','FeKb0em_bgaussian','FeKa25em_gaussian','FeKa26em_gaussian',
                       'FeKa25abs_agaussian','FeKa26abs_agaussian','NiKa27abs_agaussian',
                       'FeKb25abs_agaussian','FeKb26abs_agaussian','FeKg26abs_agaussian']
-        
+
+    if model_id=='lines_em':
+        avail_comps=['FeKa0em_bgaussian','FeKb0em_bgaussian','FeKa25em_gaussian','FeKa26em_gaussian']
+
+
     if model_id=='lines_narrow':
         avail_comps=['FeKa0em_bgaussian','FeKb0em_bgaussian','FeKa25em_gaussian','FeKa26em_gaussian',
                       'FeKa25abs_nagaussian','FeKa26abs_nagaussian','NiKa27abs_nagaussian',
@@ -310,7 +314,7 @@ def model_list(model_id='lines',give_groups=False,sat_list=[]):
         Contains :
             -1 broad neutral emission component
             -4 "narrow-ish" emission line components
-            -6 "narrow-ish" absorption line components (can be disabled with no_abslines in the main script
+            -6 "narrow-ish" absorption line components (can be disabled with no_abslines in the main script)
         '''
 
         avail_comps=['FeKa0em_bgaussian','FeKa0em_gaussian','FeKb0em_gaussian','FeKa25em_gaussian','FeKa26em_gaussian',
@@ -457,7 +461,7 @@ def model_list(model_id='lines',give_groups=False,sat_list=[]):
     if model_id=='lines':
         
         '''
-        Notes : no need to include continuum componennts here anymore since we now use the continuum fitmod as argument in the lines fitmod
+        Notes : no need to include continuum components here anymore since we now use the continuum fitmod as argument in the lines fitmod
         '''
         
         # avail_comps=['FeKaem_gaussian','FeKa26abs_nagaussian']

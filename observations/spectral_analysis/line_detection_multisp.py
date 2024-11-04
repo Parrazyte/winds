@@ -140,7 +140,7 @@ ap = argparse.ArgumentParser(description='Script to perform line detection in X-
 
 #1 for no parallelization and using the current python interpreter
 ap.add_argument('-parallel',help='number of processors for parallel directories',
-                default=4,type=int)
+                default=1,type=int)
 
 '''THE FOLLOWING ARGUMENTS ARE ONLY USED IF PARALLEL>1'''
 #singularity or python (which will the run a specific python environment).
@@ -201,7 +201,7 @@ ap.add_argument("-outdir",nargs=1,help="name of output directory for line plots"
 #give object name directly, otherwise it will be taken from the second last directory (above the bigbatch)
 #as usual, "False" to remove this
 ap.add_argument('-object_name',nargs=1,help='Name of observed object',
-                default='4U1630-47',type=str)
+                default='False',type=str)
 
 #overwrite
 #global overwrite based on recap PDF
@@ -250,7 +250,7 @@ ap.add_argument('-mandatory_abs',nargs=1,help='Consider absorption component as 
                 default=True,type=bool)
 
 ap.add_argument('-autofit_model',nargs=1,help='model list to use for the autofit computation',
-                default='lines_narrow',type=str)
+                default='lines_em',type=str)
 #narrow or resolved mainly
 
 ap.add_argument('-no_abslines',nargs=1,
@@ -297,7 +297,7 @@ ap.add_argument('-restrict',nargs=1,
                 help='restrict the computation to a number of predefined exposures',
                 default=False,type=bool)
 
-epoch_restrict=['1130010141-001-002-003-004-005-006-007']
+epoch_restrict=['1133010115-001N-003N']
 
 '''
 NICER no abslines: 4130010128-001_4130010129-001
@@ -342,7 +342,7 @@ ap.add_argument('-SNR_min',nargs=1,help='minimum source Signal to Noise Ratio',d
 #shouldn't be needed now that we have a counts min limit + sometimes false especially in timing when the bg is the source
 
 ap.add_argument('-counts_min',nargs=1,
-                help='minimum source counts in the source region in the line continuum range',default=5000,type=float)
+                help='minimum source counts in the source region in the line continuum range',default=500,type=float)
 
 ap.add_argument('-fit_lowSNR',nargs=1,
                 help='fit the continuum of low quality data to get the HID values',default=False,type=str)
@@ -422,12 +422,16 @@ ap.add_argument('-split_fit',nargs=1,
                 default=True)
 
 #line significance assessment parameter
+
+ap.add_argument('-skip_absline_comput',nargs=1,
+                help="skip all absorption line computations after the autofit",default=True,type=bool)
+
 ap.add_argument('-assess_line',nargs=1,
                 help='use fakeit simulations to estimate the significance of each absorption line',
-                default=True,type=bool)
+                default=False,type=bool)
 
 ap.add_argument('-assess_line_upper',nargs=1,help='compute upper limits of each absorption line',
-                default=True,type=bool)
+                default=False,type=bool)
 
 
 '''SPECTRUM PARAMETERS'''
@@ -537,7 +541,7 @@ ap.add_argument('-NICER_bkg',nargs=1,help='NICER background type',default='scorp
 ap.add_argument('-pre_reduced_NICER',nargs=1,
                 help='change NICER data format to pre-reduced obsids',default=False,type=bool)
 
-ap.add_argument('-NICER_lc_binning',nargs=1,help='NICER LC binning',default='1',type=str)
+ap.add_argument('-NICER_lc_binning',nargs=1,help='NICER LC binning',default='1.0',type=str)
 
 #in this case the continuum components require the NICER calibration components to get a decent fit
 ap.add_argument('-low_E_NICER',nargs=1,help='NICER lower energy threshold for broadband fits',default=0.3,type=str)
@@ -657,6 +661,7 @@ line_search_e=np.array(args.line_search_e.split(' ')).astype(float)
 line_search_norm=np.array(args.line_search_norm.split(' ')).astype(float)
 assess_line=args.assess_line
 assess_line_upper=args.assess_line_upper
+skip_absline_comput=args.skip_absline_comput
 
 nfakes=args.nfakes
 autofit=args.autofit
@@ -1528,6 +1533,7 @@ arg_dict['NICER_lc_binning']=NICER_lc_binning
 arg_dict['SNR_min']=SNR_min
 arg_dict['assess_line']=assess_line
 arg_dict['assess_line_upper']=assess_line_upper
+arg_dict['skip_absline_comput']=skip_absline_comput
 arg_dict['autofit']=autofit
 arg_dict['autofit_model']=autofit_model
 arg_dict['autofit_store_path']=autofit_store_path

@@ -4072,6 +4072,17 @@ if display_single and choice_source[0]=='4U1630-47' and plot_gamma_correl:
     plt.xscale('log')
     plt.yscale('log')
 
+    fig_kt_lum, ax_kt_lum = plt.subplots()
+
+    plt.errorbar(kt_plot_restrict[0][0], lum_plot_restrict[4][0][0],
+                 xerr=np.array([elem for elem in kt_plot_restrict.T[0][1:]]).clip(0),
+                 yerr=np.array([elem for elem in lum_plot_restrict[4].T[0][1:]]), ls='')
+    plt.xlabel('kT')
+    plt.ylabel('[3-10] keV lum')
+    plt.suptitle('kt - Luminosity ')
+    plt.xscale('linear')
+    plt.yscale('log')
+
 
     fig_high_softhard, ax_high_softhard = plt.subplots()
 
@@ -4114,6 +4125,7 @@ if display_single and choice_source[0]=='4U1630-47' and plot_gamma_correl:
             colordiag_cols=st.columns(3)
             with colordiag_cols[0]:
                 st.pyplot(fig_high_soft)
+                st.pyplot(fig_kt_lum)
             with colordiag_cols[1]:
                 st.pyplot(fig_high_softhard)
             with colordiag_cols[2]:

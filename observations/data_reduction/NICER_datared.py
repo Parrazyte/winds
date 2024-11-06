@@ -372,7 +372,7 @@ def _remove_control_chars(message):
 
 def process_obsdir(directory,overwrite=True,keep_SAA=False,overshoot_limit=30.,undershoot_limit=500.,
                                             min_gti=5.0,erodedilate=5.0,keep_lowmem=False,
-                                            day_mode='both',thread=None,parallel=False):
+                                            br_earth_min='default',day_mode='both',thread=None,parallel=False):
     
     '''
     Processes a directory using the nicerl2 script

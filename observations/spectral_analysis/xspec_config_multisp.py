@@ -621,7 +621,7 @@ class model_data:
         self.npars=xspec_model.nParameters
         self.comps=xspec_model.componentNames
 
-        #note: we do this because some models have length 1 values for choices (ex: dscat grain type)
+        #note: we do this because some models have length 1 values for choices (ex: xscat grain type)
         #in which case we can't use a regular npars*6 type array
         values=np.array([None]*self.npars)
 
@@ -5788,7 +5788,7 @@ class fitcomp:
         no direct parameter attribution to avoid issues when reload
         '''
 
-        # note: we do this because some models have length 1 values for choices (ex: dscat grain type)
+        # note: we do this because some models have length 1 values for choices (ex: xscat grain type)
         # in which case we can't use a regular npars*6 type array
 
         #note: this number is the number of non-standard parameters in the comp

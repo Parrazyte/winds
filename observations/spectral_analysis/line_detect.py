@@ -1136,7 +1136,7 @@ def line_detect(epoch_id,arg_dict):
 
         # computing and storing the flux in several bands
         spflux_single = [None] * 5
-        spflux_high = None
+        spflux_high = np.repeat([np.nan],3)
 
         # adding a cflux component after all calibration and absorption components
         # we need to parse the components in the model to know where to place it
@@ -1231,7 +1231,7 @@ def line_detect(epoch_id,arg_dict):
                 if max(e_sat_high_indiv)>20:
                     spflux_high = np.array(err_vals_decimal)
                 else:
-                    spflux_high=np.repeat([None],3)
+                    spflux_high=np.repeat([np.nan],3)
             else:
                 spflux_single[i_band] = [err_vals_decimal[0], err_vals_decimal[0] - err_vals_decimal[1],
                                          err_vals_decimal[2] - err_vals_decimal[1]]
@@ -2152,8 +2152,8 @@ def line_detect(epoch_id,arg_dict):
             # storing the class
             fitlines.dump(outdir + '/' + epoch_observ[0] + '_fitmod_autofit.pkl')
 
-            #just there to simulate a stop after the autofit computation
-            #
+            # just there to simulate a stop after the autofit computation
+
             # breakpoint()
             # pass
 
@@ -2304,6 +2304,9 @@ def line_detect(epoch_id,arg_dict):
             # fetching informations about the absorption lines
             abslines_flux, abslines_eqw, abslines_bshift, abslines_delchi, abslines_bshift_distinct = fitlines.get_absline_info(
                 autofit_drawpars)
+        else:
+            abslines_delchi, abslines_bshift_distinct=np.repeat(0,12).reshape((2,6))
+            abslines_flux, abslines_eqw, abslines_bshift=np.repeat(0,54).reshape((3,6,3))
 
         from xspec import AllChains
 
@@ -2315,7 +2318,8 @@ def line_detect(epoch_id,arg_dict):
         if not skip_absline_comput:
             # computing the 3-sigma width without the MC to avoid issues with values being too different from 0
             abslines_width = fitlines.get_absline_width()
-
+        else:
+            abslines_width=np.repeat(np.nan,18).reshape((6,3))
         '''
         Saving a "continuum" version of the model without absorption
         '''

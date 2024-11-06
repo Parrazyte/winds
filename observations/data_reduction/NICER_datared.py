@@ -110,7 +110,7 @@ ap.add_argument('-parallel',help='number of processors for parallel directories'
 
 #global choices
 ap.add_argument("-a","--action",nargs='?',help='Give which action(s) to proceed,separated by comas.',
-                default='fc,1,gti,fs,l,g,m,ml,c',type=str)
+                default = 'fc,1,gti,fs,l,g,m,ml', type = str)
 #default: fc,1,gti,fs,l,g,m,ml,c
 
 #note: should be kept to true for most complicated tasks
@@ -119,7 +119,7 @@ ap.add_argument("-over",nargs=1,help='overwrite computed tasks (i.e. with produc
 
 #directory level overwrite (not active in local)
 ap.add_argument('-folder_over',nargs=1,help='relaunch action through folders with completed analysis',
-                default=True,type=bool)
+                default=True, type=bool)
 ap.add_argument('-folder_cont',nargs=1,help='skips all but the last 2 directories in the summary folder file',
                 default=False,type=bool)
 #note : we keep the previous 2 directories because bug or breaks can start actions on a directory following the initially stopped one
@@ -165,6 +165,8 @@ ap.add_argument('-flare_method',nargs=1,help='Flare extraction method(s)',defaul
 #previous version was with a SAS, tool, which required installing SAS. Now the default is NICER directly
 ap.add_argument('-gti_tool',nargs=1,help='GTI tool used to make the gti file itself',default='NICERDAS',type=str)
 
+ap.add_argument('-add_merge_gti',nargs=1,help='Add an daily integrated DAY/NIGHT GTI for less datagroups',default=True,
+                type=bool)
 
 '''Flare methods '''
 #for "normal" flare clip
@@ -305,6 +307,7 @@ br_earth_min=args.br_earth_min
 gti_split=args.gti_split
 gti_lc_band=args.gti_lc_band
 flare_method=args.flare_method
+add_merge_gti=args.add_merge_gti
 
 gti_tool=args.gti_tool
 
@@ -369,7 +372,7 @@ def _remove_control_chars(message):
 
 def process_obsdir(directory,overwrite=True,keep_SAA=False,overshoot_limit=30.,undershoot_limit=500.,
                                             min_gti=5.0,erodedilate=5.0,keep_lowmem=False,
-                                            br_earth_min='default',day_mode='both',thread=None,parallel=False):
+                                            day_mode='both',thread=None,parallel=False):
     
     '''
     Processes a directory using the nicerl2 script
@@ -730,7 +733,7 @@ def create_gtis(directory,split_arg='orbit+flare+overdyn+underdyn',band='3-15',f
                 hard_flare_segments=5,hard_flare_sigma=4,erodedilate_hard_flare=5,
                 hard_flare_min_duration=30,
                 underdyn_jump_width=10,underdyn_jump_factor=5,
-                day_mode='both',thread=None,parallel=False):
+                day_mode='both',thread=None,add_merge_gti=True,parallel=False):
     '''
     wrapper for a function to split nicer obsids into indivudal portions with different methods
     the default binning is 1s because the NICER mkf file time resolution is 1s
@@ -835,6 +838,9 @@ def create_gtis(directory,split_arg='orbit+flare+overdyn+underdyn',band='3-15',f
                 peak_score_thresh:
                     peak score threshold to exlcude peaks as flares in the data
 
+    -add_merge_gti:
+    Merges every single GTI at the end of the filtering process and creates a single integrated obsid-level gti
+    Only applied if not in split mode or manual mode
 
     gti_tool:
         software used for gti creation. Can be "SAS" (first version from before nigti existed)\
@@ -846,7 +852,8 @@ def create_gtis(directory,split_arg='orbit+flare+overdyn+underdyn',band='3-15',f
 
     '''
 
-    def create_gti_files(id_gti, data_lc, orbit_prefix, suffix, file_base,time_gtis,gti_tool='NICERDAS'):
+    def create_gti_files(id_gti, data_lc, orbit_prefix, suffix, file_base, time_gtis, gti_tool='NICERDAS',
+                         id_gti_multi=None):
 
         '''
         creates a gti file from a list of indexes of times which will be picked in data_lc
@@ -860,6 +867,9 @@ def create_gtis(directory,split_arg='orbit+flare+overdyn+underdyn',band='3-15',f
         gti_tool:
             -SAS         uses sas's tabgtigen
             -NICERDAS    uses nicerdas nigti tool
+
+        if id_gti_multi is provided, id_gti is assumed to be the raveled array and id_gti_multi an array with
+        an additional dimension with each required gti split (typically by orbit).
         '''
 
         if len(id_gti) == 0:
@@ -871,8 +881,20 @@ def create_gtis(directory,split_arg='orbit+flare+overdyn+underdyn',band='3-15',f
         # creating the orbit gti expression
         gti_path = os.path.join(directory, 'xti', obsid + '_gti_' + orbit_prefix + suffix) + '.gti'
 
-        # preparing the list of gtis to replace manually
-        gti_intervals = np.array(list(interval_extract(id_gti))).T
+        if id_gti_multi is None:
+            # preparing the list of gtis to replace manually
+            gti_intervals = np.array(list(interval_extract(id_gti))).T
+        else:
+            # doing the interval extract within eahc subarray to automatically get the splits
+            gti_intervals_full = [list(interval_extract(id_gti_multi[i_orbit])) for i_orbit in
+            range(len(id_gti_multi))]
+            gti_intervals = [[], []]
+
+            for i_orbit in range(len(id_gti_split)):
+                gti_intervals[0] += np.array(gti_intervals_full[i_orbit]).T[0].tolist()
+                gti_intervals[1] += np.array(gti_intervals_full[i_orbit]).T[1].tolist()
+
+            gti_intervals = np.array(gti_intervals)
 
         delta_time_gtis = (time_gtis[1] - time_gtis[0]) / 2
 
@@ -901,6 +923,10 @@ def create_gtis(directory,split_arg='orbit+flare+overdyn+underdyn',band='3-15',f
             bashproc.expect('ngti=')
 
         if gti_tool=='SAS':
+
+            '''
+            NOTE: NOT SURE THE INTEGRATED GTIs WOULD WORK WITH SAS
+            '''
 
             # creating a custom gti 'mask' file
             gti_column = fits.ColDefs([fits.Column(name='IS_GTI', format='I',
@@ -1667,7 +1693,7 @@ def create_gtis(directory,split_arg='orbit+flare+overdyn+underdyn',band='3-15',f
 
                 if 'split' in split_arg or 'manual' in split_arg:
 
-                    split_keyword+=('S' if 'split' in split_arg else 'M' if 'manual' in split_arg else '')
+                    split_keyword += ('S' if 'split' in split_arg else 'MAN' if 'manual' in split_arg else '')
                     #create the gti files with a "S" keyword and keeping the orbit information in the name
                     for i_split,split_gtis in enumerate(split_gti_arr[i_orbit]):
                         if len(split_gtis)>0:
@@ -1684,6 +1710,15 @@ def create_gtis(directory,split_arg='orbit+flare+overdyn+underdyn',band='3-15',f
                     if len(id_hard_flares[i_orbit])>0:
                         create_gti_files(id_hard_flares[i_orbit], flare_lc, str_orbit(i_orbit), suffix=split_keyword + 'HF',
                                          file_base=file_mkf, time_gtis=time_obs, gti_tool=gti_tool)
+
+
+                if add_merge_gti:
+
+                    # giving both the full id_gti and the one with the orbit splits (which will be used to ensure)
+                    # the gti intervals won't be overextended between each orbit
+                    create_gti_files(ravel_ragged(id_gti), flare_lc, '', suffix=split_keyword + 'MRG',
+                                    file_base = file_mkf, time_gtis = time_obs, gti_tool = gti_tool,
+                                    id_gti_multi = id_gti)
 
             if 'intensity' in split_arg:
 
@@ -2963,7 +2998,8 @@ def run_actions(obs_dir,action_list,parallel=False):
                                          hard_flare_segments=hard_flare_segments,hard_flare_sigma=hard_flare_sigma,
                                          erodedilate_hard_flare=erodedilate_hard_flare,
                                          hard_flare_min_duration=hard_flare_min_duration,
-                                         day_mode=day_mode, thread=create_gtis_thread,parallel=parallel)
+                                         day_mode=day_mode, thread=create_gtis_thread,
+                                         add_merge_gti=add_merge_gti,parallel=parallel)
                 if type(output_err[0]) == str:
                     if catch_errors:
                         raise ValueError

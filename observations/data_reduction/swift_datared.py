@@ -487,7 +487,7 @@ def inter_to_dir(date_start,date_stop):
 
     return cycle_dir
 
-def integ_cycle_BAT(object_name,date_start,date_stop,minexposure=1000,noise_map_dir='environ',ul_pl_index=2.5,recalc=False,merge=True,custom_cat_coords=None,nprocs=1,uksdc=False):
+def integ_cycle_BAT(object_name,date_start,date_stop,minexposure=1000,noise_map_dir='environ',ul_pl_index=2.5,recalc=False,merge=True,custom_cat_coords=None,nprocs=1,uksdc=False,preclean_dir=False,):
 
     '''
     Performs a full data reduction download and cycle for a given object between date_start and date_stop
@@ -512,6 +512,8 @@ def integ_cycle_BAT(object_name,date_start,date_stop,minexposure=1000,noise_map_
 
     cycle_dir=inter_to_dir(date_start,date_stop)
 
+    if preclean_dir:
+        os.system('rm -rf '+cycle_dir)
     os.system('mkdir -p '+cycle_dir)
 
     os.chdir(cycle_dir)
@@ -689,8 +691,9 @@ def summary_state(summary_file):
     return launched_intervals,completed_intervals
 
 def full_cycle_BAT(object_name,increment_start,increment_stop,minexposure,noise_map_dir,ul_pl_index,recalc,
-                   merge,custom_cat_coords,clean_events_dir=None,
-                   summary_file=None,header_name=None,summary_intervals_header=None,launched_intervals=None,nprocs=1):
+                   merge,custom_cat_coords,clean_events_dir=None,preclean_dir=False,
+                   summary_file=None,header_name=None,summary_intervals_header=None,launched_intervals=None,nprocs=1,
+                   uksdc=False):
 
     '''
     this function is mostly here to be parallelized
@@ -710,7 +713,8 @@ def full_cycle_BAT(object_name,increment_start,increment_stop,minexposure,noise_
 
     interval_state = integ_cycle_BAT(object_name, increment_start, increment_stop, minexposure=minexposure,
                                      noise_map_dir=noise_map_dir, ul_pl_index=ul_pl_index, recalc=recalc, merge=merge,
-                                     custom_cat_coords=custom_cat_coords,nprocs=nprocs)
+                                     custom_cat_coords=custom_cat_coords,nprocs=nprocs,preclean_dir=preclean_dir,
+                                     uksdc=uksdc)
 
     # cleaning the events if required
     if clean_events_dir is not None:
@@ -723,8 +727,8 @@ def full_cycle_BAT(object_name,increment_start,increment_stop,minexposure,noise_
 
 def loop_cycle_BAT(object_name,input_days_file=None,interval_start=None,interval_stop=None,interval_delta='1',
                    interval_delta_unit='jd',minexposure=1000,noise_map_dir='environ',ul_pl_index=2.5,recalc=False,
-                   merge=True,clean_events=True,
-                   rerun_started=False,rerun_completed=False,use_custom_cat=True,parallel=1,nprocs=1,uksdc=False):
+                   merge=True,clean_events=True,preclean_dir=False,
+                   rerun_started=True,rerun_completed=False,use_custom_cat=True,parallel=1,nprocs=1,uksdc=False):
     '''
     Bigger wrapper around integ_cycle_BAT
 
@@ -838,7 +842,8 @@ def loop_cycle_BAT(object_name,input_days_file=None,interval_start=None,interval
                 continue
 
             interval_state=integ_cycle_BAT(object_name,increment_start,increment_stop,minexposure=minexposure,noise_map_dir=noise_map_dir,ul_pl_index=ul_pl_index,recalc=recalc,merge=merge,
-              custom_cat_coords=object_coords if use_custom_cat else None,nprocs=nprocs,uksdc=uksdc)
+              custom_cat_coords=object_coords if use_custom_cat else None,nprocs=nprocs,uksdc=uksdc,
+                                           preclean_dir=preclean_dir)
 
 
             #cleaning the events if required
@@ -870,7 +875,9 @@ def loop_cycle_BAT(object_name,input_days_file=None,interval_start=None,interval
                 summary_file=summary_file, header_name=elem_header_name,
                 summary_intervals_header=summary_intervals_header,
                 launched_intervals=launched_intervals if not rerun_started  else None,
-                nprocs=1)
+                preclean_dir=preclean_dir,
+                nprocs=1,
+                uksdc=uksdc)
             for elem_start,elem_stop,elem_inter_dir,elem_header_name \
                     in zip(np.array(increment_start_list)[mask_use],np.array(increment_stop_list)[mask_use],
                            np.array(inter_dir_list)[mask_use],np.array(header_name_list)[mask_use]))

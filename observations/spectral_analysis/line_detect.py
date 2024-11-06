@@ -230,6 +230,9 @@ def line_detect(epoch_id,arg_dict):
     xspec_query=arg_dict['xspec_query']
     line_store_path=arg_dict['line_store_path']
     assess_line_upper=arg_dict['assess_line_upper']
+
+    skip_absline_comput=arg_dict['skip_absline_comput']
+
     fix_compt_gamma=arg_dict['fix_compt_gamma']
     diff_bands_NuSTAR_NICER=arg_dict['diff_bands_NuSTAR_NICER']
     low_E_NICER=arg_dict['low_E_NICER']
@@ -1072,10 +1075,18 @@ def line_detect(epoch_id,arg_dict):
     def curr_store_fit(mode='broadband', fitmod=None):
         store_fit(mode=mode, epoch_id=epoch_observ[0], outdir=outdir, logfile=curr_logfile, fitmod=fitmod)
 
-    def hid_fit_infos(fitmodel, broad_absval, post_autofit=False):
+    def hid_fit_infos(fitmodel, broad_absval, sat_indiv,post_autofit=False):
 
         '''
         computes various informations about the fit
+
+        sat_indiv: list of satellites for each datagroup.
+        Used to know how to compute the average of the datagroups for the flux
+        The flux is multiplied by a weighted average (modulo the exposure) of the constant factor of all datagroups
+        with the instrument as the FIRST datagroups
+
+        This assumes that the first telescope is assumed to be the "best" in terms of flux calibration,
+         and that others could be erroneous.
         '''
 
         if post_autofit:
@@ -1145,6 +1156,15 @@ def line_detect(epoch_id,arg_dict):
         if max(e_sat_high_indiv) >= 20:
             flux_bands += [[15, 50]]
 
+        #well-calibrated datagroups
+        dg_for_flux_average=np.argwhere(sat_indiv==sat_indiv[0]).T[0]
+
+        #weighted average of the constant factors considering the exposures,
+        constant_factor_average=\
+        sum([AllData(1 + int(i)).exposure * AllModels(1 + int(i))(1).values[0]
+          for i in np.arange(AllData.nGroups)[dg_for_flux_average]]) /\
+        sum([AllData(1 + int(i)).exposure for i in np.arange(AllData.nGroups)[dg_for_flux_average]])
+
         # loop in each band:
         for i_band, elem_band in enumerate(flux_bands):
 
@@ -1204,8 +1224,14 @@ def line_detect(epoch_id,arg_dict):
                                                 cflux_comp.lg10Flux.values[0] - err_vals[0][par_index - 1][0],
                                                 cflux_comp.lg10Flux.values[0] + err_vals[0][par_index - 1][1]]))
 
+            #multiplicating par the constant factor average
+            err_vals_decimal=constant_factor_average*err_vals_decimal
+
             if i_band > 4:
-                spflux_high = np.array(err_vals_decimal)
+                if max(e_sat_high_indiv)>20:
+                    spflux_high = np.array(err_vals_decimal)
+                else:
+                    spflux_high=np.repeat([None],3)
             else:
                 spflux_single[i_band] = [err_vals_decimal[0], err_vals_decimal[0] - err_vals_decimal[1],
                                          err_vals_decimal[2] - err_vals_decimal[1]]
@@ -1401,9 +1427,16 @@ def line_detect(epoch_id,arg_dict):
         fitlines_hid.logfile_write = curr_logfile_write
         fitlines_hid.update_fitcomps()
 
-        main_spflux, main_spflux_high = hid_fit_infos(fitlines_hid, broad_absval, post_autofit=True)
+        if os.path.isfile(outdir + '/' + epoch_observ[0] + '_main_spflux.txt'):
+            #note that now these should only be there but this allows to bridge with previous computations
+            #where these values were not saved
+            main_spflux=np.loadtxt(outdir + '/' + epoch_observ[0] + '_main_spflux.txt')
+            main_spflux_high=np.loadtxt(outdir + '/' + epoch_observ[0] + '_main_spflux_high.txt')
+        else:
 
-        if max(e_sat_high_indiv) >= 20:
+            main_spflux, main_spflux_high = hid_fit_infos(fitlines_hid, broad_absval, sat_indiv=sat_indiv_good, post_autofit=True)
+
+            np.savetxt(outdir + '/' + epoch_observ[0] + '_main_spflux.txt', main_spflux)
             np.savetxt(outdir + '/' + epoch_observ[0] + '_main_spflux_high.txt', main_spflux_high)
 
         if compute_highflux_only:
@@ -1429,8 +1462,6 @@ def line_detect(epoch_id,arg_dict):
         # reloading the continuum models to get the saves back and compute the continuum infos
         Xset.restore(outdir + '/' + epoch_observ[0] + '_mod_autofit.xcm')
 
-        # loading the autofit model
-        Xset.restore(outdir + '/' + epoch_observ[0] + '_mod_autofit.xcm')
 
         # reloading the fitlines class
         fitlines = load_fitmod(outdir + '/' + epoch_observ[0] + '_fitmod_autofit.pkl')
@@ -1559,9 +1590,14 @@ def line_detect(epoch_id,arg_dict):
 
             return [mod_high_dat, fitcont_high]
 
-        def broad_fit():
+        def broad_fit(flag_skip_flux_comput=False):
 
-            '''Broad band fit to get the HR ratio and Luminosity'''
+            '''
+
+            Broad band fit to get the HR ratio and Luminosity
+
+            flag_skip_flux_comput: if set to True, doesn't compute hid_fit_infos at the end
+            '''
 
             # first broad band fit in e_sat_low-10 to see the spectral shape
             print_xlog('\nComputing broad band fit for visualisation purposes...')
@@ -1708,7 +1744,15 @@ def line_detect(epoch_id,arg_dict):
                 print_xlog('\nProblem during hid band fit. Skipping line detection for this exposure...')
                 return ['\nProblem during hid band fit. Skipping line detection for this exposure...']
 
-            spflux_single, spflux_high = hid_fit_infos(fitcont_hid, broad_absval)
+            if flag_skip_flux_comput:
+                spflux_single=None
+                spflux_high=None
+            else:
+                spflux_single, spflux_high = hid_fit_infos(fitcont_hid, broad_absval,sat_indiv=sat_indiv_good)
+
+                np.savetxt(outdir + '/' + epoch_observ[0] + '_main_spflux.txt', spflux_single)
+
+                np.savetxt(outdir + '/' + epoch_observ[0] + '_main_spflux_high.txt', spflux_high)
 
             return spflux_single, broad_absval, broad_abscomp, data_broad, fitcont_broad, broad_gamma_compt, spflux_high, \
                 thcomp_frac_frozen
@@ -1726,7 +1770,11 @@ def line_detect(epoch_id,arg_dict):
 
         Xset.save(outdir + '/' + epoch_observ[0] + '_baseload.xcm', info='a')
 
-        result_broad_fit = broad_fit()
+        # flag to skip the hid flux computation when it will be for sure done another time after
+        # saving time for the majority of the cases where the autofit is forced
+        flag_skip_flux_comput=force_autofit and not flag_lowSNR_line and refit_cont
+
+        result_broad_fit = broad_fit(flag_skip_flux_comput)
 
         if len(result_broad_fit) == 1:
             return fill_result(result_broad_fit)
@@ -1734,8 +1782,6 @@ def line_detect(epoch_id,arg_dict):
             main_spflux, broad_absval, broad_abscomp, data_broad, fitcont_broad, broad_gamma_compt, main_spflux_high, \
                 thcomp_frac_frozen = result_broad_fit
 
-        if max(e_sat_high_indiv) >= 20:
-            np.savetxt(outdir + '/' + epoch_observ[0] + '_main_spflux_high.txt', main_spflux_high)
 
         # reloading the frozen scorpeon data\
         # (which won't change anything if it hasn't been fitted but will help otherwise)
@@ -1982,10 +2028,11 @@ def line_detect(epoch_id,arg_dict):
 
                 AllChains.clear()
 
-                main_spflux, main_spflux_high = hid_fit_infos(fitlines, broad_absval, post_autofit=True)
 
-                if max(e_sat_high_indiv) >= 20:
-                    np.savetxt(outdir + '/' + epoch_observ[0] + '_main_spflux_high.txt', main_spflux_high)
+                main_spflux, main_spflux_high = hid_fit_infos(fitlines, broad_absval, sat_indiv=sat_indiv_good,post_autofit=True)
+
+                np.savetxt(outdir + '/' + epoch_observ[0] + '_main_spflux.txt', main_spflux)
+                np.savetxt(outdir + '/' + epoch_observ[0] + '_main_spflux_high.txt', main_spflux_high)
 
                 '''
                 Refitting in the autofit range to get the newer version of the autofit and continuum
@@ -2104,6 +2151,12 @@ def line_detect(epoch_id,arg_dict):
 
             # storing the class
             fitlines.dump(outdir + '/' + epoch_observ[0] + '_fitmod_autofit.pkl')
+
+            #just there to simulate a stop after the autofit computation
+            #
+            # breakpoint()
+            # pass
+
 
     if autofit and (cont_abspeak or force_autofit) and not flag_lowSNR_line:
 
@@ -2227,17 +2280,18 @@ def line_detect(epoch_id,arg_dict):
         # drawing parameters for the MC significance test later
         autofit_drawpars = np.array([None] * nfakes)
 
-        print_xlog('\nDrawing parameters from the Chain...')
-        for i_draw in range(nfakes):
-            curr_simpar = AllModels.simpars()
+        if not skip_absline_comput:
+            print_xlog('\nDrawing parameters from the Chain...')
+            for i_draw in range(nfakes):
+                curr_simpar = AllModels.simpars()
 
-            # we restrict the simpar to the initial model because we don't really care about simulating the variations
-            # of the bg since it's currently frozen
-            autofit_drawpars[i_draw] = np.array(curr_simpar)[:AllData.nGroups * AllModels(1).nParameters] \
-                .reshape(AllData.nGroups, AllModels(1).nParameters)
+                # we restrict the simpar to the initial model because we don't really care about simulating the variations
+                # of the bg since it's currently frozen
+                autofit_drawpars[i_draw] = np.array(curr_simpar)[:AllData.nGroups * AllModels(1).nParameters] \
+                    .reshape(AllData.nGroups, AllModels(1).nParameters)
 
-        # turning it back into a regular array
-        autofit_drawpars = np.array([elem for elem in autofit_drawpars])
+            # turning it back into a regular array
+            autofit_drawpars = np.array([elem for elem in autofit_drawpars])
 
         # storing the parameter and errors of all the components, as well as their corresponding name
         autofit_parerrors, autofit_parnames = fitlines.get_usedpars_vals()
@@ -2246,9 +2300,10 @@ def line_detect(epoch_id,arg_dict):
 
         #### Computing line parameters
 
-        # fetching informations about the absorption lines
-        abslines_flux, abslines_eqw, abslines_bshift, abslines_delchi, abslines_bshift_distinct = fitlines.get_absline_info(
-            autofit_drawpars)
+        if not skip_absline_comput:
+            # fetching informations about the absorption lines
+            abslines_flux, abslines_eqw, abslines_bshift, abslines_delchi, abslines_bshift_distinct = fitlines.get_absline_info(
+                autofit_drawpars)
 
         from xspec import AllChains
 
@@ -2257,8 +2312,9 @@ def line_detect(epoch_id,arg_dict):
 
         Fit.perform()
 
-        # computing the 3-sigma width without the MC to avoid issues with values being too different from 0
-        abslines_width = fitlines.get_absline_width()
+        if not skip_absline_comput:
+            # computing the 3-sigma width without the MC to avoid issues with values being too different from 0
+            abslines_width = fitlines.get_absline_width()
 
         '''
         Saving a "continuum" version of the model without absorption
@@ -2358,9 +2414,9 @@ def line_detect(epoch_id,arg_dict):
         autofit_plot(data=data_autofit, data_noabs=data_autofit_noabs, addcomps_cont=addcomps_cont,
                      comp_pos=comp_absline_position)
 
-        plt.savefig(outdir + '/' + epoch_observ[0] + '_autofit_components_plot_' + line_search_e_arg.replace(' ',
-                                                                                                              '_') + '_' + line_search_norm_arg.replace(
-            ' ', '_') + '.png')
+        plt.savefig(outdir + '/' + epoch_observ[0] + '_autofit_components_plot_' +
+                    line_search_e_arg.replace(' ','_') + '_' +
+                    line_search_norm_arg.replace(' ', '_') + '.png')
         plt.close(fig_autofit)
 
         '''

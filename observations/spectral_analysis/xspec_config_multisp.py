@@ -2600,9 +2600,8 @@ def delcomp(compname,modclass=AllModels,give_ndel=False):
 
             '''
             deleting all links that points to deleted parameters
-            the ecludian division allows the test to work for the deleted parameters of all data groups
-            the goal of the concatenate here is to add the zero to consider when the link points to the last parameter of the group if this 
-            parameter is among the deleted one
+            the euclidian division allows the test to work for the deleted parameters of all data groups
+            the goal of the concatenate here is to add the zero to consider when the link points to the last parameter of the group if this parameter is among the deleted ones
             '''
 
             # fetching the link parameter inside the link expression
@@ -3320,8 +3319,8 @@ def calc_error(logfile,maxredchi=1e6,param='all',delchi_err='',timeout=60,delchi
                 #in indiv mode we only update the value of the parameter for which the error was just computed
                 if indiv:
 
-                    error_pars[(int(error_str)-1)//AllModels(1).nParameters][(int(error_str)-1)%AllModels(1).nParameters]=\
-                        new_errors[(int(error_str)-1)//AllModels(1).nParameters][(int(error_str)-1)%AllModels(1).nParameters]
+                    par_group,par_number=par_degroup(int(error_str))
+                    error_pars[par_group-1][par_number-1]=new_errors[par_group-1][par_number-1]
                 else:
                     error_pars=new_errors
 
@@ -4695,10 +4694,16 @@ class fitmod:
                     #defining the current pegged_par total index with the new configuration
                     pegged_par_index=par_peg_comps[i_par_peg][0].parlist[par_peg_comps[i_par_peg][1]]
 
+                    #note that here we are not directly re-using the par_peg_id values because the position
+                    #of the parameters could have been modified since with the new round of deletion
+                    pegged_par_group,pegged_par_number=par_degroup(pegged_par_index)
+
                     #unfreezing the parameter
                     try:
-                        AllModels(par_peg_ids[i_par_peg][0])\
-                            (max(pegged_par_index%AllModels(1).nParameters,1)).frozen=False
+
+                        AllModels(pegged_par_group)\
+                            (pegged_par_number).frozen=False
+
                     except:
                         print('THIS SHOULDNT HAPPEN')
                         Xset.chatter=10

@@ -781,9 +781,11 @@ def coltour_chi2map(fig, axe, chi_dict, title='', combined=False, ax_bar=None, n
     cm_bipolar = hotcold(neutral=1)
 
     # and the non symetric normalisation
-    cm_norm = colors.TwoSlopeNorm(vcenter=0, vmin=chi_arr_plot.min() if norm is None else -norm_col[0],
+    try:
+        cm_norm = colors.TwoSlopeNorm(vcenter=0, vmin=chi_arr_plot.min() if norm is None else -norm_col[0],
                               vmax=chi_arr_plot.max() if norm is None else norm_col[1])
-
+    except:
+        breakpoint()
     #should be tested if necessary
     #cm_norm = colors.TwoSlopeNorm(vcenter=0, vmin=min(-1,chi_arr_plot.min() if norm is None else -norm_col[0]),
     #                         vmax=max(1,chi_arr_plot.max() if norm is None else norm_col[1]))

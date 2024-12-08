@@ -1049,9 +1049,9 @@ def xstar_wind(solution,SED_path,xlum,outdir,
 
     if mdot_obs=='auto':
         #notes: Lum_Edd = 1.26e38 for a BH of 1 solar Mass)
-        mdot_mhd=xlum/(1.26*m_BH)*2/eta_acc
+        mdot_mhd=xlum/(1.26*m_BH)*1/eta_acc
     else:
-        mdot_mhd = mdot_obs*2/eta_acc
+        mdot_mhd = mdot_obs*1/eta_acc
 
     m_BH_SI = m_BH*Msol_SI
     Rs_SI = 2.0*G_SI*m_BH_SI/(c_SI*c_SI)

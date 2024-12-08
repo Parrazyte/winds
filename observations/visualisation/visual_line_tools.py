@@ -2084,10 +2084,17 @@ def abslines_values(file_paths,dict_linevis,only_abs=False,obsid=None):
             
             for  m in range(len(curr_line[1:-2])):
 
+                try:
+                    elem_array=np.array(literal_eval(curr_line[m+1].replace(',','').replace(' ',',')\
+                                                     .replace('nan','315151582340293')))\
+                        if curr_line[m+1]!='' else None
 
-                elem_array=np.array(literal_eval(curr_line[m+1].replace(',','').replace(' ',',')))\
-                    if curr_line[m+1]!='' else None
-                
+                    #this weird line is here to not keep the nans since they cannot be directly understood
+                    #with literal_eval
+                    elem_array=np.where(elem_array==315151582340293,np.nan,elem_array)
+
+                except:
+                    breakpoint()
                 #inverting the sign of the blueshift values                    
                 if m==1:
 
@@ -2165,9 +2172,12 @@ def values_manip(abslines_infos,dict_linevis,autofit_infos,lum_list_infos,mask_i
                         
                         #here to have an easier time using the data, we add nan uncertainties to the significance in order to keep 
                         #regular shaped arrays that we can tranpose at will
-                        array_obs=np.array([elem if len(np.shape(elem))==2\
+                        try:
+                            array_obs=np.array([elem if len(np.shape(elem))==2\
                                             else np.array([[elem[i],None,None] for i in range(len(elem))]).astype(float)\
                                                 for elem in abslines_inf[i_obj][i_obs]])
+                        except:
+                            breakpoint()
 
                         arr_part_obs[i_obs]=np.transpose(array_obs,axes=[1,0,2])[i_line]
 

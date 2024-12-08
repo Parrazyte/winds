@@ -66,7 +66,7 @@ from lmplot_uncert import lmplot_uncert_a
 # import streamlit.components.v1 as components
 
 
-ap = argparse.ArgumentParser(description='Script to display lines in XMM Spectra.\n)')
+ap = argparse.ArgumentParser(description='')
 
 ###
 #GENERAL OPTIONS
@@ -99,7 +99,6 @@ ap.add_argument('-multi_obj',nargs=1,help='compute the hid for multiple obj dire
 ap.add_argument("-line_cont_range",nargs=1,help='min and max energies of the line continuum broand band fit',default='4 10',type=str)
 ap.add_argument("-line_cont_ig",nargs=1,help='min and max energies of the ignore zone in the line continuum broand band fit',
                 default='6.-8.',type=str)
-ap.add_argument("-line_search_e",nargs=1,help='min, max and step of the line energy search',default='4 10 0.05',type=str)
 
 ap.add_argument("-line_search_norm",nargs=1,help='min, max and nsteps (for one sign)  of the line norm search (which operates in log scale)',
                 default='0.01 10 500',type=str)
@@ -150,7 +149,6 @@ else:
 
 line_cont_range=np.array(args.line_cont_range.split(' ')).astype(float)
 line_cont_ig=args.line_cont_ig
-line_search_e=np.array(args.line_search_e.split(' ')).astype(float)
 line_search_norm=np.array(args.line_search_norm.split(' ')).astype(float)
 
 multi_obj=args.multi_obj
@@ -222,13 +220,6 @@ def convert_df(df):
 # #bad spectra manually taken off
 bad_flags=[]
 
-
-#we create these variables in any case because the multi_obj plots require them
-line_search_e_space=np.arange(line_search_e[0],line_search_e[1]+line_search_e[2],line_search_e[2])
-#this one is here to avoid adding one point if incorrect roundings create problem
-line_search_e_space=line_search_e_space[line_search_e_space<=line_search_e[1]]
-
-
 norm_par_space=np.concatenate((-np.logspace(np.log10(line_search_norm[1]),np.log10(line_search_norm[0]),int(line_search_norm[2]/2)),np.array([0]),
                                 np.logspace(np.log10(line_search_norm[0]),np.log10(line_search_norm[1]),int(line_search_norm[2]/2))))
 norm_nsteps=len(norm_par_space)
@@ -265,13 +256,15 @@ if not online:
 
 #Distance and Mass determination
 
-#wrapped in a function to be cachable in streamlit
-if not online:
-    catal_blackcat,catal_watchdog,catal_blackcat_obj,catal_watchdog_obj,catal_maxi_df,catal_maxi_simbad,catal_bat_df,catal_bat_simbad=load_catalogs()
-else:
-    catal_blackcat,catal_watchdog,catal_blackcat_obj,catal_watchdog_obj,catal_maxi_df,catal_maxi_simbad,catal_bat_df,catal_bat_simbad=load_catalogs()
-
 st.sidebar.header('Sample selection')
+
+line_search_e_str= st.sidebar.radio('line search parameters',('4 10 0.05','4 10 0.02'))
+
+line_search_e=np.array(line_search_e_str.split(' ')).astype(float)
+#we create these variables in any case because the multi_obj plots require them
+line_search_e_space=np.arange(line_search_e[0],line_search_e[1]+line_search_e[2],line_search_e[2])
+#this one is here to avoid adding one point if incorrect roundings create problem
+line_search_e_space=line_search_e_space[line_search_e_space<=line_search_e[1]]
 
 radio_epoch_split=st.sidebar.radio('Observation type',('averaged ObsID','individual orbits','Time Resolved'))
 use_obsids=radio_epoch_split=='averaged ObsID'
@@ -295,11 +288,12 @@ use_orbit_obs_str_path=use_orbit_obs_str+'/'
 #We put the telescope option before anything else to filter which file will be used
 choice_telescope=st.sidebar.multiselect('Telescopes', ['NICER','NuSTAR'] if use_orbit_obs or use_time_resolved else\
                  (['XMM','Chandra']+(['NICER','NuSTAR','Suzaku','Swift'] if online else ['NICER','NuSTAR','Suzaku','Swift'])),
-                                        default=['NICER','NuSTAR'] if use_orbit_obs or use_time_resolved else ('XMM','Chandra'))
+                                        default=['NICER','NuSTAR'] if use_orbit_obs or use_time_resolved else \
+                                            ['XMM','Chandra']+(['NICER'] if line_search_e_str!='4 10 0.05' else []))
 
 if online:
     include_full=False
-    include_untested= False
+    include_untested= st.toggle('Include untested and preliminary NICER sources',value=False if line_search_e_str=='4 10 0.05' else True)
 
     st.info('''
     The current version is experimental as I'm currently implementing many new fonctionalities, for a new study on 4U 1630-47.
@@ -312,7 +306,7 @@ if online:
 else:
     with st.sidebar:
         include_full=st.toggle('Include problematic data (_full) folders')
-        include_untested= st.toggle('Include untested and preliminary NICER sources')
+        include_untested= st.toggle('Include untested and preliminary NICER sources',value=False if line_search_e_str=='4 10 0.05' else True)
 
 use_unsure_mass_dist=st.sidebar.toggle('Use tentative mass and distance measurements',value=True)
 
@@ -328,25 +322,27 @@ if online:
               use_orbit_obs_str+time_resolved_dump_str+\
               ('_full' if include_full else '')+\
               ('_untested' if include_untested else '')+ \
-              ('_with_md_unsure' if use_unsure_mass_dist else '')+\
+              ('_with_md_unsure' if use_unsure_mass_dist else '')+ \
+              ('_line_search_'+line_search_e_str.replace(' ','_') if line_search_e_str!='4 10 0.05' else '')+ \
               '.pkl'
 
     if not os.path.isfile(dump_path):
         print(dump_path)
         st.error('Dump file not found for this configuration')
-
-
-    
-    update_dump=False
 else:
     dump_path='./glob_batch/visual_line_dumps/dump_'+join_telescope_str+\
               use_orbit_obs_str+time_resolved_dump_str+\
               ('_full' if include_full else '')+\
               ('_untested' if include_untested else '')+ \
-              ('_with_md_unsure' if use_unsure_mass_dist else '')+\
+              ('_with_md_unsure' if use_unsure_mass_dist else '')+ \
+              ('_line_search_' + line_search_e_str.replace(' ', '_') if line_search_e_str != '4 10 0.05' else '') + \
               '.pkl'
 
-    update_dump=st.sidebar.button('Update dump')
+    update_dump=st.sidebar.button('Update dumps')
+
+#wrapped in a function to be cachable in streamlit
+
+dump_path_catal=project_dir+'/observations/visualisation/visual_line_dumps/dump_catalogs.pkl'
 
 if not online:
     update_online=st.sidebar.button('Update online version')
@@ -370,7 +366,7 @@ if update_online:
         #the last replace is to override this specific line (the following one) which gets fucked by the rest,
         # the pass allows a line to remain in the if
         #here this line will be commented so that's why we keep it as a single line
-        #=#.replace(".markdown('''",'.markdown('''').replace("'''",''''').replace("'''","'''").replace("r'''",'r'''').replace("###",'###').replace("'''","###").replace('#','#')
+        #=#.replace(".markdown('''",'.markdown('''').replace(".info('''",'.info('''').replace(".header('''",'.header('''').replace("'''",''''').replace("'''","'''").replace("r'''",'r'''').replace("###",'###').replace("'''","###").replace('#','#')
         
         pass
             
@@ -388,7 +384,7 @@ if update_dump or not os.path.isfile(dump_path):
         #### file search
         
         all_files=glob.glob('**',recursive=True)
-        lineval_id='line_values_'+args.line_search_e.replace(' ','_')+'_'+args.line_search_norm.replace(' ','_')+'.txt'
+        lineval_id='line_values_'+line_search_e_str.replace(' ','_')+'_'+args.line_search_norm.replace(' ','_')+'.txt'
         lineval_files=[elem for elem in all_files if \
                        (outdir+use_orbit_obs_str_path in elem\
                        or outdir+'_nth'+use_orbit_obs_str_path in elem and 'Suzaku' not in elem)\
@@ -397,7 +393,7 @@ if update_dump or not os.path.isfile(dump_path):
                        and ('/'+time_resolved_split+'s/' in elem if use_time_resolved else\
                             np.all(['/'+elem_split+'s/' not in elem for elem_split in time_resolved_split_avail]))]
 
-        abslines_id='autofit_values_'+args.line_search_e.replace(' ','_')+'_'+args.line_search_norm.replace(' ','_')+'.txt'
+        abslines_id='autofit_values_'+line_search_e_str.replace(' ','_')+'_'+args.line_search_norm.replace(' ','_')+'.txt'
         abslines_files=[elem for elem in all_files if \
                         (outdir+use_orbit_obs_str_path in elem\
                        or outdir+'_nth'+use_orbit_obs_str_path in elem and 'Suzaku' not in elem)\
@@ -453,14 +449,24 @@ if update_dump or not os.path.isfile(dump_path):
         lc_int_sw_dict,fit_int_revol_dict=load_integral()
             
         #note: there's no need to order anymore since the file values are attributed for each object of object list in the visual_line functions
-        
+
+        catal_blackcat, catal_watchdog, \
+            catal_blackcat_obj, catal_watchdog_obj, \
+            catal_maxi_df, catal_maxi_simbad, \
+            catal_bat_df, catal_bat_simbad = load_catalogs()
+
+        catal_arr=np.array([catal_blackcat,catal_watchdog,catal_blackcat_obj,catal_watchdog_obj,
+                            catal_maxi_df,catal_maxi_simbad,catal_bat_df,catal_bat_simbad],dtype=object)
+
+        with open(dump_path_catal,'wb+') as file:
+            dill.dump(catal_arr,file=file)
+
         #creating the dictionnary for all of the arguments to pass to the visualisation functions
         dict_linevis={
             'ctl_blackcat':catal_blackcat,
             'ctl_blackcat_obj':catal_blackcat_obj,
             'ctl_watchdog':catal_watchdog,
             'ctl_watchdog_obj':catal_watchdog_obj,
-
             #note that this one is not used in the first array functions so it doesn't matter for lineval_files_multi
             'lineval_files':lineval_files,
             'obj_list':obj_list,
@@ -470,7 +476,7 @@ if update_dump or not os.path.isfile(dump_path):
             'range_absline':range_absline,
             'n_infos':n_infos,
             'args_cam':args.cameras,
-            'args_line_search_e':args.line_search_e,
+            'line_search_e_str':line_search_e_str,
             'args_line_search_norm':args.line_search_norm,
             'visual_line':True,
             }
@@ -559,8 +565,6 @@ if update_dump or not os.path.isfile(dump_path):
         dump_dict['lum_list']=lum_list
         dump_dict['dict_linevis']=dict_linevis
 
-        dump_dict['catal_maxi_df']=catal_maxi_df
-        dump_dict['catal_maxi_simbad']=catal_maxi_simbad
         dump_dict['dict_lc_rxte']=dict_lc_rxte
         dump_dict['lc_int_sw_dict']=lc_int_sw_dict
         dump_dict['fit_int_revol_dict']=fit_int_revol_dict
@@ -598,8 +602,20 @@ lum_list=dump_dict['lum_list']
 dict_linevis=dump_dict['dict_linevis']
 exptime_list=dump_dict['exptime_list']
 
-catal_maxi_df=dump_dict['catal_maxi_df']
-catal_maxi_simbad=dump_dict['catal_maxi_simbad']
+try:
+    catal_blackcat, catal_watchdog, \
+        catal_blackcat_obj, catal_watchdog_obj, \
+        catal_maxi_df, catal_maxi_simbad, \
+        catal_bat_df, catal_bat_simbad = load_catalogs()
+except:
+    st.warning('Catalog Loading failed. Loading from dump...')
+
+    with open(dump_path_catal, 'rb') as file:
+        catal_blackcat, catal_watchdog, \
+            catal_blackcat_obj, catal_watchdog_obj, \
+            catal_maxi_df, catal_maxi_simbad, \
+            catal_bat_df, catal_bat_simbad = dill.load(file)
+
 dict_lc_rxte=dump_dict['dict_lc_rxte']
 
 lc_int_sw_dict=dump_dict['lc_int_sw_dict']
@@ -710,8 +726,34 @@ if multi_obj:
         sorted_choice_obs=ravel_ragged(obs_list_str)
         sorted_choice_obs.sort()
 
-        choice_obs_restrict = st.multiselect('Restrict to a given number of obsrvations:', sorted_choice_obs,
+        choice_obs_restrict = st.multiselect('Restrict to a given number of observations:', sorted_choice_obs,
                                              default=None)
+
+        restrict_Ledd=st.toggle(r'Restrict [3-10] keV $L_{Edd}$ fraction',value=False)
+
+        if restrict_Ledd:
+            restrict_Ledd_low=st.number_input('minimum allowed Eddington fraction',value=0.,format='%.3e')
+            restrict_Ledd_high=st.number_input('maximum allowed Eddington fraction',value=0.,format='%.3e')
+        else:
+            restrict_Ledd_low=0.
+            restrict_Ledd_high=0.
+
+        restrict_HR=st.toggle(r'Restrict Hardnes Ratio',value=False)
+
+        dict_linevis['restrict_Ledd_low']=restrict_Ledd_low
+        dict_linevis['restrict_Ledd_high']=restrict_Ledd_high
+
+        if restrict_HR:
+            restrict_HR_band=st.radio('Hardness Ratio bands',('[6-10]/[3-10]','[15-50]/[3-6]'))
+            restrict_HR_low=st.number_input('minimum allowed HR',value=0.,format='%.3e')
+            restrict_HR_high=st.number_input('maximum allowed HR',value=0.,format='%.3e')
+        else:
+            restrict_HR_band='[6-10]/[3-10]'
+            restrict_HR_low=0.
+            restrict_HR_high=0.
+
+        dict_linevis['restrict_HR_low']=restrict_HR_low
+        dict_linevis['restrict_HR_high']=restrict_HR_high
 
         # directly removing all other objects is complicated for the array transpotions, so instead we
         # simply mask all objects except for the ones in which the obs_restrict are selected, and then
@@ -730,16 +772,6 @@ if multi_obj:
         choice_obs=st.multiselect('Exclude individual observations:',sorted_choice_obs,
                                   default=None if '4U1630-47_405051010_xis1' not in sorted_choice_obs else ['4U1630-47_405051010_xis1'])
 
-        mask_included_selection=np.array([np.array([obj_list[i]+'_'+observ_list[i][j].replace('_-1','').replace('_auto','')\
-                                        not in choice_obs and (True if len(choice_obs_restrict)==0 or\
-                                                                       obj_list[i] not in obj_included_obs_restrict else\
-                                          obj_list[i]+'_'+observ_list[i][j].replace('_-1','').replace('_auto','')\
-                                        in choice_obs_restrict)\
-                                        for j in range(len(observ_list[i]))]) for i in range(len(obj_list))],dtype=object)
-
-        if len(mask_included_selection)==1:
-            #this is necessary to avoid issues when choosing a single telescope with a single object
-            mask_included_selection=mask_included_selection.astype(bool)
 
 #masking for restriction to single objects
 if display_single or display_multi:
@@ -836,6 +868,45 @@ if replace_high_e_multi:
             Tin_diskbb_list[i_obj][i_epoch]=Tin_diskbb_list_multi[i_obj][id_match_multi[0]]
 
 
+#creating the mask for the observation restriction (needs ot be done after editing flux_high_list for the HR cut
+mask_included_selection = np.array([np.array([ \
+\
+    # obs to remove
+    obj_list[i] + '_' + observ_list[i][j].replace('_-1', '').replace('_auto', '') \
+    not in choice_obs and \
+\
+    # obs to restrict
+    (True if len(choice_obs_restrict) == 0 or \
+             obj_list[i] not in obj_included_obs_restrict else \
+         obj_list[i] + '_' + observ_list[i][j].replace('_-1', '').replace('_auto', '') \
+         in choice_obs_restrict) and \
+\
+        # luminosity bounds
+    (True if restrict_Ledd_low == 0. else lum_list[i][j][0][4] >= restrict_Ledd_low) and \
+    (True if restrict_Ledd_high == 0. else lum_list[i][j][0][4] <= restrict_Ledd_high) and \
+\
+    # HR bounds
+    (True if restrict_HR_low == 0. else \
+         (lum_list[i][j][0][2]/lum_list[i][j][0][1] >=restrict_HR_low) if restrict_HR_band=='[6-10]/[3-10]' else
+         (flux_high_list[i][j][0]/lum_list[i][j][0][1] >=restrict_HR_low) if restrict_HR_band=='[15-50]/[3-10]' else True) and \
+ \
+    (True if restrict_HR_high == 0. else \
+         (lum_list[i][j][0][2] / lum_list[i][j][0][1] <=restrict_HR_high) if restrict_HR_band == '[6-10]/[3-10]' else
+          (flux_high_list[i][j][0] / lum_list[i][j][0][1] <=restrict_HR_high) if restrict_HR_band == '[15-50]/[3-10]' else True) \
+ \
+    for j in range(len(observ_list[i]))]) for i in range(len(obj_list))], dtype=object)
+
+mask_obj_select_observ=np.array([elem.any() for elem in mask_included_selection])
+mask_obj_select=(mask_obj_select) & (mask_obj_select_observ)
+
+#reselecting the elements inside if we mask the entire object anyway, to avoid the array transposition going to shit
+for i_obj,elem in enumerate(mask_obj_select_observ):
+    if not elem:
+        mask_included_selection[i_obj]=np.repeat(True,len(mask_included_selection[i_obj]))
+
+if len(mask_included_selection) == 1:
+    # this is necessary to avoid issues when choosing a single telescope with a single object
+    mask_included_selection = mask_included_selection.astype(bool)
 
 # creating the global inclination dictionnary depending on what options have been selected
 
@@ -954,7 +1025,7 @@ display_nondet=st.sidebar.toggle('Display exposures with no detection',value=Tru
 
 if display_nondet:
     with st.sidebar.expander('Upper limits'):
-        display_upper=st.toggle('Display upper limits',value=True)
+        display_upper=st.toggle('Display upper limits',value=True if line_search_e_str=='4 10 0.05' else False)
         if display_upper:
                 selectbox_upperlines=st.multiselect('Lines selection for upper limit display:',
                                                             options=line_display_str[mask_lines],default=line_display_str[mask_lines][:2])
@@ -979,7 +1050,7 @@ if not online:
         ###
     
         fig_hid.savefig(save_dir+'/'+save_str_prefix+'HID_cam_'+args.cameras+'_'+\
-                    args.line_search_e.replace(' ','_')+'_'+args.line_search_norm.replace(' ','_')+'curr_'+str(round(time.time()))+'.'+save_format,bbox_inches='tight')
+                    line_search_e_str.replace(' ','_')+'_'+args.line_search_norm.replace(' ','_')+'curr_'+str(round(time.time()))+'.'+save_format,bbox_inches='tight')
             
     st.sidebar.button('Save current HID view',on_click=save_HID)
 
@@ -1196,9 +1267,11 @@ delta_1h=TimeDelta(3600,format='sec')
 delta_1s=TimeDelta(1,format='sec')
 if restrict_time:
 
-    slider_date_coarse=st.slider('Dates restriction',min_value=(Time(min(ravel_ragged(date_list[mask_obj_base])))-\
+
+    slider_date_coarse=st.slider('Dates restriction',
+                                 min_value=(Time(min(ravel_ragged(date_list[mask_obj_base])))-\
                                                          (delta_1y if use_obsids else delta_1m)).datetime,
-                          max_value=max((Time(max(ravel_ragged(date_list[mask_obj_base])))+\
+                                 max_value=max((Time(max(ravel_ragged(date_list[mask_obj_base])))+\
                                          (delta_1y if use_obsids else delta_1m)),
                                         (Time(str(date.today())) if use_obsids else \
                                         Time(max(ravel_ragged(date_list[mask_obj_base]))) + delta_1m)).datetime,
@@ -1209,7 +1282,19 @@ if restrict_time:
                           step=delta_1h.datetime,
                           format='YYYY-MM-DD HH:MM:ss')
 
+    manual_date_vals=st.toggle('Manual Date bounds')
+
+    if manual_date_vals:
+
+        man_min_date_val = st.date_input('Minimum date', value=None)
+        time_min_date_val=slider_date_coarse[0] if man_min_date_val is None else Time(man_min_date_val.isoformat()).datetime
+        man_max_date_val = st.date_input('Maximum date', value=None)
+        time_max_date_val=slider_date_coarse[1] if man_max_date_val is None else Time(man_max_date_val.isoformat()).datetime
+
+        slider_date_coarse=np.array([time_min_date_val,time_max_date_val])
+
     fine_restrict_dates=st.toggle('Fine Dates restriction')
+
 
     if fine_restrict_dates:
         fine_range=slider_date_coarse[1]-slider_date_coarse[0]
@@ -2077,7 +2162,7 @@ with tab_hid:
 with tab_about:
     st.markdown('**visual_line** is a visualisation and download tool for iron-band X-ray absorption lines signatures in Black Hole Low-Mass X-ray Binaries (BHLMXBs).')
     st.markdown('It is made to complement and give access to the results of my observational papers, and more generally, to give an overview of the sampling and X-ray evolution of the outbursts of this category of sources.')
-    st.markdown('Please contact me at [maxime.parra@univ-grenoble-alpes.fr](mailto:maxime.parra@univ-grenoble-alpes.fr) for questions, to report bugs or request features.')
+    st.markdown('Please contact me at [maxime.parrastro@gmail.com](mailto:maxime.parrastro@gmail.com) for questions, to report bugs or request features.')
     
     with st.expander('I want an overview of the science behind this'):
         st.header('Outbursts')
@@ -2099,11 +2184,14 @@ with tab_about:
         ''')
         
         col_fig1, col_fig2= st.columns(2)
-        with col_fig1:
-            st.image(dump_path[:dump_path.rfind('/')]+'/outburst.png',caption='Example of the evolution of GX 339-4 in a Hardness/Luminosity Diagram during its 2019 outburst. the MJD dates of each observation highlight the direction of the evolution, and colors different spectral states (independant from the right picture). From Petrucci et al. 21')
-        with col_fig2:
-            st.image(dump_path[:dump_path.rfind('/')]+'/xray_states.png',caption="Example of the differences between spectral shapes for the soft (red) and hard (blue) state of Cygnus X-1. From Done et al. 2007")
-            
+        try:
+            with col_fig1:
+                st.image(dump_path[:dump_path.rfind('/')]+'/outburst.png',caption='Example of the evolution of GX 339-4 in a Hardness/Luminosity Diagram during its 2019 outburst. the MJD dates of each observation highlight the direction of the evolution, and colors different spectral states (independant from the right picture). From Petrucci et al. 21')
+            with col_fig2:
+                st.image(dump_path[:dump_path.rfind('/')]+'/xray_states.png',caption="Example of the differences between spectral shapes for the soft (red) and hard (blue) state of Cygnus X-1. From Done et al. 2007")
+        except:
+            pass
+
         st.markdown('''
         Beyond this direct spectral dichotomy, a wealth of other features have been linked to the outburst evolution:  
             -a radio component associated to **jets** is only detected during the hard state  
@@ -2123,7 +2211,7 @@ with tab_about:
             st.header('Winds')
             
             st.markdown('''
-            Another features seen in outbursts is the appearance of **narrow, blueshifted absorption lines** in X-ray spectra, primarily from the very strong Ka and Kb lines of FeXXV and FeXXVI at 7-8keV.
+            Another feature seen in outbursts is the appearance of **narrow, blueshifted absorption lines** in X-ray spectra, primarily from the very strong Ka and Kb lines of FeXXV and FeXXVI at 7-8keV.
             They are interpreted as the signature of dense material outflowing from the accretion disk of the Black Hole, and are expected to expell amounts of matter comparable to the accretion rate.
             Since the first observations 25 ago, a wealth of absorption profiles have been observed in BHLMXBS.
             Wind signatures in **X-rays** have been traditionally found only in the soft states of high-inclined sources, but recent detections in hard states or for low-inclined sources challenge this assumption.
@@ -2135,7 +2223,9 @@ with tab_about:
             
             ''')
             
-            st.header('The global study ([Parra et al. 2024](https://doi.org/10.1051/0004-6361/202346920))')
+            st.header('''
+            The global study ([Parra et al. 2024](https://doi.org/10.1051/0004-6361/202346920))
+            ''')
             st.markdown('''
                         The science community and our own modeling efforts would benefit from a global and up-to-date view of the current wind signatures in BHLMXBs. However, while detailed works have been performed on the vast majority of individual detections, there are very few larger studies for several outbursts and sources. With the goal of providing a complete view of all currently known X-ray wind signatures, we first focus on the most historically studied and constraining observations, using the XMM-Newton and Chandra-HETG instruments.  
                         
@@ -2143,10 +2233,12 @@ with tab_about:
                         
                         Beyond interactive displays of our results through HID and scatter plots, we provide direct access to the results table, restricted according to user demands. We also provide a monitoring display tool, which combines RXTE and up-to-date MAXI lightcurves and HR ratio evolutions of all single sources in the sample.
                         ''')
-        
-        with col_figwinds:
-            st.image(dump_path[:dump_path.rfind('/')]+'/linedet_example.jpg',caption='Steps of the fitting procedure for a standard 4U130-47 Chandra spectra. First panel: 4-10 spectrum after the first continuum fit. Second panel: ∆C map of the line blind search, restricted to positive (i.e. improvements) regions. Standard confidence intervals are highlighted with different line styles, and the colormap with the ∆C improvements of emission and absorption lines. Third panel: Ratio plot of the best fit model once absorption lines are added. Fourth panel: Remaining residuals seen through a second blind search.#')
-            
+        try:
+            with col_figwinds:
+                st.image(dump_path[:dump_path.rfind('/')]+'/linedet_example.jpg',caption='Steps of the fitting procedure for a standard 4U130-47 Chandra spectra. First panel: 4-10 spectrum after the first continuum fit. Second panel: ∆C map of the line blind search, restricted to positive (i.e. improvements) regions. Standard confidence intervals are highlighted with different line styles, and the colormap with the ∆C improvements of emission and absorption lines. Third panel: Ratio plot of the best fit model once absorption lines are added. Fourth panel: Remaining residuals seen through a second blind search.#')
+        except:
+            pass
+
         st.markdown('''
                     See the paper for detailed references to the points discussed above, and [Diaz Trigo et al. 2016](https://doi.org/10.1002/asna.201612315) or [Ponti et al. 2016](https://doi.org/10.1002/asna.201612339) for reviews on winds.  
                     ''')
@@ -2823,6 +2915,7 @@ with tab_source_df:
                     file_name='observ_high_table.csv',
                     mime='text/csv',
                 )
+
 
     if display_single:
         with st.expander('Monitoring'):
@@ -3822,7 +3915,7 @@ if display_single and choice_source[0]=='4U1630-47' and plot_gamma_correl:
     # ax_gamma_rate_int.set_ylim(3e-11, 5e-9)
     ax_gamma_rate_int.set_yscale('log')
     ax_gamma_rate_int.set_xlabel(r'powerlaw $\Gamma$')
-    plt.ylabel('30-50 keV rate (cts/s)')
+    plt.ylabel('INTEGRAL rate in [30-50] keV (cts/s)')
 
     #setting up alpha for the colors
     int_fit_rate_30_50_alpha=abs(int_fit_rate_30_50/int_fit_rate_30_50_err)
@@ -3861,7 +3954,7 @@ if display_single and choice_source[0]=='4U1630-47' and plot_gamma_correl:
     # ax_rate_flux_int.set_ylim(3e-11, 5e-9)
     ax_rate_flux_int.set_yscale('log')
     ax_rate_flux_int.set_xscale('log')
-    ax_rate_flux_int.set_xlabel(r'30-50 keV rate (cts/s)')
+    ax_rate_flux_int.set_xlabel(r'INTEGRAL rate in [30-50] keV (cts/s)')
     ax_rate_flux_int.set_ylabel(r'30-50 keV flux (erg/s/cm²)')
 
     #setting up alpha for the colors
@@ -3901,7 +3994,7 @@ if display_single and choice_source[0]=='4U1630-47' and plot_gamma_correl:
     # ax_rate_flux_15_50_int.set_ylim(3e-11, 5e-9)
     ax_rate_flux_15_50_int.set_yscale('log')
     ax_rate_flux_15_50_int.set_xscale('log')
-    ax_rate_flux_15_50_int.set_xlabel(r'30-50 keV rate (cts/s)')
+    ax_rate_flux_15_50_int.set_xlabel(r'INTEGRAL rate in [30-50] keV (cts/s)')
     ax_rate_flux_15_50_int.set_ylabel(r'15-50 keV extrapolated flux  (erg/s/cm²)')
 
     #setting up alpha for the colors
@@ -4062,6 +4155,17 @@ if display_single and choice_source[0]=='4U1630-47' and plot_gamma_correl:
     plt.xscale('log')
     plt.yscale('log')
 
+    fig_kt_lum, ax_kt_lum = plt.subplots()
+
+    plt.errorbar(kt_plot_restrict[0][0], lum_plot_restrict[4][0][0],
+                 xerr=np.array([elem for elem in kt_plot_restrict.T[0][1:]]).clip(0),
+                 yerr=np.array([elem for elem in lum_plot_restrict[4].T[0][1:]]), ls='')
+    plt.xlabel('kT')
+    plt.ylabel('[3-10] keV lum')
+    plt.suptitle('kt - Luminosity ')
+    plt.xscale('linear')
+    plt.yscale('log')
+
 
     fig_high_softhard, ax_high_softhard = plt.subplots()
 
@@ -4104,6 +4208,7 @@ if display_single and choice_source[0]=='4U1630-47' and plot_gamma_correl:
             colordiag_cols=st.columns(3)
             with colordiag_cols[0]:
                 st.pyplot(fig_high_soft)
+                st.pyplot(fig_kt_lum)
             with colordiag_cols[1]:
                 st.pyplot(fig_high_softhard)
             with colordiag_cols[2]:

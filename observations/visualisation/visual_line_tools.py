@@ -276,7 +276,7 @@ Porb_dict={'1E1740.7-2942':[303,2,1,1],
 
 dist_dict={
     '4U1543-475':[7.5,0.5,0.5,1],
-    '4U1630-47':[8.1,3.4,3.4,1],
+    '4U1630-47':[11.5,3.4,3.4,1],
     '4U1755-388':[6.5,2.5,2.5,1],
     'A0620-00':[1.06,1,1,1],
     'A1524-61':[8,0.9,0.9,1],
@@ -2530,6 +2530,11 @@ def hid_graph(ax_hid,dict_linevis,
     hid_log_HR=dict_linevis['hid_log_HR']
     flag_single_obj=dict_linevis['flag_single_obj']
 
+    restrict_Ledd_low=dict_linevis['restrict_Ledd_low']
+    restrict_Ledd_high=dict_linevis['restrict_Ledd_high']
+    restrict_HR_low=dict_linevis['restrict_HR_low']
+    restrict_HR_high=dict_linevis['restrict_HR_high']
+
     if not broad_mode==False:
         HR_broad_bands=dict_linevis['HR_broad_bands']
         lum_broad_bands= dict_linevis['lum_broad_bands']
@@ -3941,6 +3946,28 @@ def hid_graph(ax_hid,dict_linevis,
         # ax_hid.set_xlim(ax_hid.get_xlim()[0],0.8)
         # ax_hid.set_ylim(1e-2,ax_hid.get_ylim()[1])
 
+    #Shading the Ledd and HR limits if there are some
+    if restrict_Ledd_low!=0:
+        ax_hid.fill_between(ax_hid.get_xlim(),[ax_hid.get_ylim()[0],ax_hid.get_ylim()[0]],
+                            [restrict_Ledd_low,restrict_Ledd_low],
+                            color='grey',alpha=0.2)
+        
+    if restrict_Ledd_high!=0:
+        ax_hid.fill_between(ax_hid.get_xlim(),[restrict_Ledd_high,restrict_Ledd_high],
+                            [ax_hid.get_ylim()[1], ax_hid.get_ylim()[1]],
+                            color='grey',alpha=0.2)
+
+    if restrict_HR_low != 0:
+        ax_hid.fill_between([ax_hid.get_xlim()[0],restrict_HR_low], [ax_hid.get_ylim()[0], ax_hid.get_ylim()[0]],
+                            [ax_hid.get_ylim()[1], ax_hid.get_ylim()[1]],
+                            color='grey', alpha=0.2)
+
+    if restrict_HR_high != 0:
+        ax_hid.fill_between([restrict_HR_high,ax_hid.get_xlim()[1]], [ax_hid.get_ylim()[0], ax_hid.get_ylim()[0]],
+                            [ax_hid.get_ylim()[1], ax_hid.get_ylim()[1]],
+                            color='grey', alpha=0.2)
+        
+
     ''''''''''''''''''
     #### legends
     ''''''''''''''''''
@@ -4200,6 +4227,7 @@ def hid_graph(ax_hid,dict_linevis,
     # manual custom subplot adjust to get the same scale for the 3 sources with ULs and for the zoomed 5 sources with detection
     #to be put in the 5 sources
 
+
     if custom:
         plt.subplots_adjust(top=0.863)
 
@@ -4254,7 +4282,7 @@ def distrib_graph(data_perinfo,info,dict_linevis,data_ener=None,conf_thresh=0.99
     save_dir=dict_linevis['save_dir']
     save_str_prefix=dict_linevis['save_str_prefix']
     args_cam=dict_linevis['args_cam']
-    args_line_search_e=dict_linevis['args_line_search_e']
+    line_search_e_str=dict_linevis['line_search_e_str']
     args_line_search_norm=dict_linevis['args_line_search_norm']
 
     #range of the existing lines for loops
@@ -4617,7 +4645,7 @@ def distrib_graph(data_perinfo,info,dict_linevis,data_ener=None,conf_thresh=0.99
                 suffix_str='_all'
                 
             plt.savefig(save_dir+'/graphs/distrib/'+save_str_prefix+'autofit_distrib_'+info+suffix_str+'_cam_'+args_cam+'_'+\
-                            args_line_search_e.replace(' ','_')+'_'+args_line_search_norm.replace(' ','_')+'.png')
+                            line_search_e_str.replace(' ','_')+'_'+args_line_search_norm.replace(' ','_')+'.png')
         if close:
             plt.close(fig_hist)
         
@@ -4750,7 +4778,7 @@ def correl_graph(data_perinfo,infos,data_ener,dict_linevis,mode='intrinsic',mode
     save_dir=dict_linevis['save_dir']
     save_str_prefix=dict_linevis['save_str_prefix']
     args_cam=dict_linevis['args_cam']
-    args_line_search_e=dict_linevis['args_line_search_e']
+    line_search_e_str=dict_linevis['line_search_e_str']
     args_line_search_norm=dict_linevis['args_line_search_norm']
     
     if streamlit:
@@ -6662,7 +6690,7 @@ def correl_graph(data_perinfo,infos,data_ener,dict_linevis,mode='intrinsic',mode
                 suffix_str='_all'
                 
             plt.savefig(save_dir+'/graphs/'+mode+'/'+save_str_prefix+'autofit_correl_'+infos+suffix_str+'_cam_'+args_cam+'_'+\
-                            args_line_search_e.replace(' ','_')+'_'+args_line_search_norm.replace(' ','_')+'.png')
+                            line_search_e_str.replace(' ','_')+'_'+args_line_search_norm.replace(' ','_')+'.png')
         if close:
             plt.close(fig_scat)
             

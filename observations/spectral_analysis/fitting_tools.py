@@ -74,7 +74,11 @@ lines_std_names=list(lines_std.keys())
 
 #number of absorption lines in the current model list
 #for now restricting to the iron lines to avoid issues when using visual_line
-n_absline=len([elem for elem in lines_std_names if 'abs' in elem and 'Si' not in elem])
+
+n_absline=6
+
+#too complicated nowadays
+# n_absline=len([elem for elem in lines_std_names if 'abs' in elem and 'Si' not in elem])
 
 range_absline=range(n_absline)
 
@@ -272,10 +276,13 @@ def model_list(model_id='lines',give_groups=False,sat_list=[]):
                     -diskbb
     '''
 
+    interact_groups=None
+
     if model_id=='lines_XRISM_V4641_2024':
         avail_comps=['FeKa25Yabs_gaussian','FeKa25Wabs_gaussian',
                      'FeKa26p1abs_gaussian','FeKa26p3abs_gaussian',
                      'SKa16abs_gaussian','CaKa20abs_gaussian']
+
     if model_id=='lines_resolved':
         avail_comps=['FeKa0em_bgaussian','FeKb0em_bgaussian','FeKa25em_gaussian','FeKa26em_gaussian',
                       'FeKa25abs_agaussian','FeKa26abs_agaussian','NiKa27abs_agaussian',
@@ -284,6 +291,8 @@ def model_list(model_id='lines',give_groups=False,sat_list=[]):
     if model_id=='lines_em':
         avail_comps=['FeKa0em_bgaussian','FeKb0em_bgaussian','FeKa25em_gaussian','FeKa26em_gaussian']
 
+    if model_id=='lines_em_V4641Sgr':
+        avail_comps=['FeKa0em_gaussian','FeKa25em_gaussian','FeKa26em_gaussian']
 
     if model_id=='lines_narrow':
         avail_comps=['FeKa0em_bgaussian','FeKb0em_bgaussian','FeKa25em_gaussian','FeKa26em_gaussian',

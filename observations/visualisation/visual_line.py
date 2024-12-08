@@ -329,6 +329,8 @@ if online:
     if not os.path.isfile(dump_path):
         print(dump_path)
         st.error('Dump file not found for this configuration')
+
+    update_dump=False
 else:
     dump_path='./glob_batch/visual_line_dumps/dump_'+join_telescope_str+\
               use_orbit_obs_str+time_resolved_dump_str+\

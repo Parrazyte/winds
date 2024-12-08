@@ -66,7 +66,7 @@ from lmplot_uncert import lmplot_uncert_a
 # import streamlit.components.v1 as components
 
 
-ap = argparse.ArgumentParser(description='Script to display lines in XMM Spectra.\n)')
+ap = argparse.ArgumentParser(description='')
 
 '''
 #GENERAL OPTIONS
@@ -99,7 +99,7 @@ ap.add_argument('-multi_obj',nargs=1,help='compute the hid for multiple obj dire
 ap.add_argument("-line_cont_range",nargs=1,help='min and max energies of the line continuum broand band fit',default='4 10',type=str)
 ap.add_argument("-line_cont_ig",nargs=1,help='min and max energies of the ignore zone in the line continuum broand band fit',
                 default='6.-8.',type=str)
-ap.add_argument("-line_search_e",nargs=1,help='min, max and step of the line energy search',default='4 10 0.05',type=str)
+ap.add_argument("-line_search_e",nargs=1,help='min, max and step of the line energy search',default='4 10 0.02',type=str)
 
 ap.add_argument("-line_search_norm",nargs=1,help='min, max and nsteps (for one sign)  of the line norm search (which operates in log scale)',
                 default='0.01 10 500',type=str)
@@ -2109,11 +2109,14 @@ with tab_about:
         #''')
         
         col_fig1, col_fig2= st.columns(2)
-        with col_fig1:
-            st.image(dump_path[:dump_path.rfind('/')]+'/outburst.png',caption='Example of the evolution of GX 339-4 in a Hardness/Luminosity Diagram during its 2019 outburst. the MJD dates of each observation highlight the direction of the evolution, and colors different spectral states (independant from the right picture). From Petrucci et al. 21')
-        with col_fig2:
-            st.image(dump_path[:dump_path.rfind('/')]+'/xray_states.png',caption="Example of the differences between spectral shapes for the soft (red) and hard (blue) state of Cygnus X-1. From Done et al. 2007")
-            
+        try:
+            with col_fig1:
+                st.image(dump_path[:dump_path.rfind('/')]+'/outburst.png',caption='Example of the evolution of GX 339-4 in a Hardness/Luminosity Diagram during its 2019 outburst. the MJD dates of each observation highlight the direction of the evolution, and colors different spectral states (independant from the right picture). From Petrucci et al. 21')
+            with col_fig2:
+                st.image(dump_path[:dump_path.rfind('/')]+'/xray_states.png',caption="Example of the differences between spectral shapes for the soft (red) and hard (blue) state of Cygnus X-1. From Done et al. 2007")
+        except:
+            pass
+
         st.markdown('''
         Beyond this direct spectral dichotomy, a wealth of other features have been linked to the outburst evolution:  
             -a radio component associated to **jets** is only detected during the hard state  
@@ -2153,10 +2156,12 @@ with tab_about:
                         
                         Beyond interactive displays of our results through HID and scatter plots, we provide direct access to the results table, restricted according to user demands. We also provide a monitoring display tool, which combines RXTE and up-to-date MAXI lightcurves and HR ratio evolutions of all single sources in the sample.
                         #''')
-        
-        with col_figwinds:
-            st.image(dump_path[:dump_path.rfind('/')]+'/linedet_example.jpg',caption='Steps of the fitting procedure for a standard 4U130-47 Chandra spectra. First panel: 4-10 spectrum after the first continuum fit. Second panel: ∆C map of the line blind search, restricted to positive (i.e. improvements) regions. Standard confidence intervals are highlighted with different line styles, and the colormap with the ∆C improvements of emission and absorption lines. Third panel: Ratio plot of the best fit model once absorption lines are added. Fourth panel: Remaining residuals seen through a second blind search.#')
-            
+        try:
+            with col_figwinds:
+                st.image(dump_path[:dump_path.rfind('/')]+'/linedet_example.jpg',caption='Steps of the fitting procedure for a standard 4U130-47 Chandra spectra. First panel: 4-10 spectrum after the first continuum fit. Second panel: ∆C map of the line blind search, restricted to positive (i.e. improvements) regions. Standard confidence intervals are highlighted with different line styles, and the colormap with the ∆C improvements of emission and absorption lines. Third panel: Ratio plot of the best fit model once absorption lines are added. Fourth panel: Remaining residuals seen through a second blind search.#')
+        except:
+            pass
+
         st.markdown('''
                     See the paper for detailed references to the points discussed above, and [Diaz Trigo et al. 2016](https://doi.org/10.1002/asna.201612315) or [Ponti et al. 2016](https://doi.org/10.1002/asna.201612339) for reviews on winds.  
                     #''')

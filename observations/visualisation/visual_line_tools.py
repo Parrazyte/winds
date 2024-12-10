@@ -2535,6 +2535,8 @@ def hid_graph(ax_hid,dict_linevis,
     restrict_HR_low=dict_linevis['restrict_HR_low']
     restrict_HR_high=dict_linevis['restrict_HR_high']
 
+    additional_HLD_points=dict_linevis['additional_HLD_points']
+
     if not broad_mode==False:
         HR_broad_bands=dict_linevis['HR_broad_bands']
         lum_broad_bands= dict_linevis['lum_broad_bands']
@@ -3853,25 +3855,60 @@ def hid_graph(ax_hid,dict_linevis,
                 id_obj_det += 1
 
     # taking off the axes in the colorbar axes if no colorbar was displayed
-
     if radio_info_cmap not in type_1_colorcode and cb is None:
         ax_cb.axis('off')
+
+
+    #making a copy array of the single object date to avoid issues when adding new things
+    # breakpoint()
+    datelist_time_evol=deepcopy(datelist_obj[0][mask_intime[0]])
+    x_hid_time_evol=deepcopy(x_hid_base[mask_intime[0]])
+    y_hid_time_evol=deepcopy(y_hid_base[mask_intime[0]])
+
+
+    #displaying the additional points if any
+    for i in range(len(additional_HLD_points)):
+        point_row=additional_HLD_points.iloc[i]
+        if point_row['L_3-10/L_Edd'] not in [0.,None]:
+
+            if point_row['HR_[6-10]/[3-6]'] not in [0.,None] and not broad_mode:
+                ax_hid.scatter(point_row['HR_[6-10]/[3-6]'],point_row['L_3-10/L_Edd'],
+                               color=point_row['color'] if point_row['color'] not in ['',None] else 'black',marker="X")
+
+                #adding to x_hid_base if there is a date
+                if point_row['Date (UTC)'] not in ['',None]:
+
+                    datelist_time_evol=datelist_time_evol.insert(0, Time(point_row['Date (UTC)']))
+                    x_hid_time_evol=np.concatenate([np.array([point_row['HR_[6-10]/[3-6]']]),x_hid_time_evol])
+                    y_hid_time_evol=np.concatenate([np.array([point_row['L_3-10/L_Edd']]),y_hid_time_evol])
+
+
+            if point_row['HR_[15-50]/[3-6]'] not in [0.,None] and broad_mode:
+                ax_hid.scatter(point_row['HR_[15-50]/[3-6]'],point_row['L_3-10/L_Edd'],
+                               color=point_row['color'] if point_row['color'] not in ['',None] else 'black',marker="X")
+
+                #adding to x_hid_base if there is a date
+                if point_row['Date (UTC)'] not in ['',None]:
+
+                    datelist_time_evol=datelist_time_evol.insert(0, Time(point_row['Date (UTC)']))
+                    x_hid_time_evol=np.concatenate([np.array([point_row['HR_[15-50]/[3-6]']]),x_hid_time_evol])
+                    y_hid_time_evol=np.concatenate([np.array([point_row['L_3-10/L_Edd']]),y_hid_time_evol])
 
     #### Displaying arrow evolution if needed and if there are points
     if display_single and display_evol_single and sum(global_mask_intime_norepeat) > 1 and display_nondet:
 
         # odering the points depending on the observation date
-        date_order = datelist_obj[0][mask_intime[0]].argsort()
+        date_order = datelist_time_evol.argsort()
 
         # plotting the main line between all points
-        ax_hid.plot(x_hid_base[mask_intime[0]][date_order], y_hid_base[mask_intime[0]][date_order], color='grey',
+        ax_hid.plot(x_hid_time_evol[date_order], y_hid_time_evol[date_order], color='grey',
                     linewidth=0.5,alpha=0.5)
 
         # computing the position of the arrows to superpose to the lines
-        xarr_start = x_hid_base[mask_intime[0]][date_order][range(len(x_hid_base[mask_intime[0]][date_order]) - 1)].astype(float)
-        xarr_end = x_hid_base[mask_intime[0]][date_order][range(1, len(x_hid_base[mask_intime[0]][date_order]))].astype(float)
-        yarr_start = y_hid_base[mask_intime[0]][date_order][range(len(y_hid_base[mask_intime[0]][date_order]) - 1)].astype(float)
-        yarr_end = y_hid_base[mask_intime[0]][date_order][range(1, len(y_hid_base[mask_intime[0]][date_order]))].astype(float)
+        xarr_start = x_hid_time_evol[date_order][range(len(x_hid_time_evol[date_order]) - 1)].astype(float)
+        xarr_end = x_hid_time_evol[date_order][range(1, len(x_hid_time_evol[date_order]))].astype(float)
+        yarr_start = y_hid_time_evol[date_order][range(len(y_hid_time_evol[date_order]) - 1)].astype(float)
+        yarr_end = y_hid_time_evol[date_order][range(1, len(y_hid_time_evol[date_order]))].astype(float)
 
         #mask to know if we can do a log computation of the arrow positions or not (aka not broad mode or
         #x positions above the lintresh threshold

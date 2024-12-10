@@ -2028,6 +2028,63 @@ else:
     #keeping a linear norm for the inclination
     cmap_norm_info=colors.Normalize()
 
+tab_hid, tab_monitoring, tab_param,tab_source_df,tab_about=\
+    st.tabs(["Hardness Luminosity Diagram","Monitoring", "Parameter analysis","Tables","About"])
+
+with tab_hid:
+
+    tab_soft_hid,tab_BAT_hid,tab_add_data=st.tabs(['Soft X HID','Broad HID','Add data'])
+
+
+'''
+#Manual additions
+'''
+
+with tab_add_data:
+
+    st.markdown('These data points will be added to the soft and/or broad HLDs.')
+    st.info('Remember to make your Eddington ratio compatible with this work by choosing the same D and M '
+              'than the ones I am using')
+    df = pd.DataFrame(
+        [
+            {"ObsID":'', "Date (UTC)":None,"Telescope": '', "L_3-10/L_Edd": 0.,"HR_[6-10]/[3-6]":0.,'HR_[15-50]/[3-6]':0.,
+             'color':''},
+        ]
+    )
+    additional_HLD_points = st.data_editor(
+        df,
+        column_config={
+            "ObsID": st.column_config.TextColumn(
+                "ObsID of the observation",
+                help="Mostly for avoiding confusion",),
+            "Date (UTC)": st.column_config.DatetimeColumn(
+                "Date of the observation in UTC format",
+                help="Mostly for avoiding confusion"),
+            "Telescope": st.column_config.TextColumn(
+                "Instrument taking the observation",
+                help="Mostly for avoiding confusion",),
+            "L_3-10/L_Edd": st.column_config.NumberColumn(
+                "3-10 keV Eddington ratio",
+                help="",
+                format="%.3e"),
+            "HR_[6-10]/[3-6]": st.column_config.NumberColumn(
+                "[6-10]/[3-6] keV HR",
+                help="",
+                format="%.3e",),
+            "HR_[15-50]/[3-6]": st.column_config.NumberColumn(
+                "[15-50]/[3-6] keV HR",
+                help="",
+                format="%.3e",),
+            "color": st.column_config.TextColumn(
+                "Color for the display",
+                help="Mostly for avoiding confusion", ),
+
+        },
+        hide_index=True,num_rows="dynamic")
+
+    # favorite_command = edited_df.loc[edited_df["rating"].idxmax()]["command"]
+    # st.markdown(f"Your favorite command is **{favorite_command}** 🎈")
+
 #necessary items for the hid graph run
 items_list=[
 abslines_infos_perobj,
@@ -2063,6 +2120,8 @@ dict_linevis['exptime_list'] = exptime_list
 dict_linevis['hid_log_HR'] = hid_log_HR
 dict_linevis['display_minorticks']=display_minorticks
 
+dict_linevis['additional_HLD_points']=additional_HLD_points
+
 if len(global_plotted_datetime)==0:
     st.warning('No points remaining with current sample/date selection')
 elif not skip_HID:
@@ -2086,12 +2145,7 @@ elif not skip_HID:
 # fig_hid_html = mpld3.fig_to_html(fig_hid)
 # components.html(fig_hid_html, height=1000)
 
-tab_hid, tab_monitoring, tab_param,tab_source_df,tab_about=\
-    st.tabs(["Hardness Luminosity Diagram","Monitoring", "Parameter analysis","Tables","About"])
-
 with tab_hid:
-
-    tab_soft_hid,tab_BAT_hid=st.tabs(['Soft X HID','Broad HID'])
 
     with tab_soft_hid:
 
@@ -2974,6 +3028,8 @@ with tab_source_df:
 
         st.markdown('References :')
         st.markdown(state_table_biblio_str)
+
+
 
 '''''''''''''''''''''
  ####Monitoring

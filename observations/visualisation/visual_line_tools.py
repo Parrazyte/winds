@@ -3868,7 +3868,8 @@ def hid_graph(ax_hid,dict_linevis,
 
             if point_row['HR_[6-10]/[3-6]'] not in [0.,None] and not broad_mode:
                 ax_hid.scatter(point_row['HR_[6-10]/[3-6]'],point_row['L_3-10/L_Edd'],
-                               color=point_row['color'] if point_row['color'] not in ['',None] else 'black',marker="X")
+                               color=point_row['color'] if point_row['color'] not in ['',None] else 'black',marker="X",
+                               edgecolor='black',zorder=1e6)
 
                 #adding to x_hid_base if there is a date
                 if point_row['Date (UTC)'] not in ['',None]:

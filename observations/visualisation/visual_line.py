@@ -300,7 +300,7 @@ choice_telescope=st.sidebar.multiselect('Telescopes',['NICER'] if BID_mode else 
 
 if online:
     include_full=False
-    include_untested= st.toggle('Include untested and preliminary NICER sources',value=False if line_search_e_str=='4 10 0.05' else True)
+    include_untested= st.sidebar.toggle('Include untested and preliminary NICER sources',value=False if line_search_e_str=='4 10 0.05' else True)
 
     st.info('''
     The current version is experimental as I'm currently implementing many new fonctionalities, for a new study on 4U 1630-47.
@@ -2012,6 +2012,8 @@ if display_single and choice_source[0]=='4U1630-47' and sum(ravel_ragged(mask_in
         if obj_list[i_obj]=='4U1630-47':
             for i_obs in range(len(diago_color[i_obj])):
 
+                edd_factor_8kpc=7598382.454
+                edd_factor_converter=1/edd_factor_8kpc*Edd_factor_restrict[0]
                 #first rule is for luminosity and HR + HR broad or det treshold to remove things
                 # that stay in intermediate states
                 # second rule is for a significant detection in suzeaku above 3.8 EWratio
@@ -2021,7 +2023,8 @@ if display_single and choice_source[0]=='4U1630-47' and sum(ravel_ragged(mask_in
 
                 is_below_broad=not np.isnan(hr_high_plot_restrict[0][0][i_obs]) and hr_high_plot_restrict[0][0][i_obs]<0.1
 
-                is_substructure=(hid_plot[1][0][i_obj][i_obs]<4.2e-2 and hid_plot[1][0][i_obj][i_obs]>2e-2 \
+                is_substructure=(hid_plot[1][0][i_obj][i_obs]<4.2e-2*edd_factor_converter and
+                                 hid_plot[1][0][i_obj][i_obs]>2e-2*edd_factor_converter \
                                  and hid_plot[0][0][i_obj][i_obs]<0.35 and (is_line or is_below_broad))
 
                 #suzaku start of the substructure
@@ -2031,11 +2034,12 @@ if display_single and choice_source[0]=='4U1630-47' and sum(ravel_ragged(mask_in
                                                 instru_list[i_obj][i_obs]=='Suzaku')
 
                 #spl outlier with Feka25 det
-                is_outlier_SPL=abslines_plot[4][0][0][i_obj][i_obs]>slider_sign and hid_plot[1][0][i_obj][i_obs]>1e-1
+                is_outlier_SPL=abslines_plot[4][0][0][i_obj][i_obs]>slider_sign and hid_plot[1][0][i_obj][i_obs]>1e-1*edd_factor_converter
 
                 #XMM transition
                 is_outlier_XMM=instru_list[i_obj][i_obs]=='XMM' and \
-                               hid_plot[1][0][i_obj][i_obs] < 0.09 and hid_plot[1][0][i_obj][i_obs] > 0.075
+                               hid_plot[1][0][i_obj][i_obs] < 0.09*edd_factor_converter\
+                               and hid_plot[1][0][i_obj][i_obs] > 0.075*edd_factor_converter
 
                 # hid_plot[0][0][i_obj][i_obs]>0.43 and  hid_plot[0][0][i_obj][i_obs]<0.45 and \
 

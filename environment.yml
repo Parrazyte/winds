@@ -7,7 +7,7 @@ dependencies:
     - astroquery==0.4.6
     - astropy==5.3.2
     - dill==0.3.7
-    - matplotlib==3.7.2
+    - matplotlib
     - scipy==1.11.2
     - plotly==5.22.0
     - streamlit-plotly-events==0.0.6

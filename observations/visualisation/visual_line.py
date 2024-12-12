@@ -5,6 +5,7 @@ Created on Sun Mar  6 00:11:45 2022
 
 @author: parrama
 """
+from __future__ import annotations
 
 #general imports
 import io as io
@@ -57,7 +58,7 @@ from astroquery.vizier import Vizier
 #visualisation functions
 from visual_line_tools import load_catalogs,dist_mass,obj_values,abslines_values,values_manip,distrib_graph,correl_graph,\
     n_infos, plot_lightcurve, hid_graph, sources_det_dic, dippers_list,telescope_list,load_integral,telescope_colors,\
-    convert_BAT_count_flux,flux_erg_pow,err_flux_erg_pow,values_manip_high_E,corr_factor_lbat,fetch_bat_lightcurve,\
+    convert_BAT_count_flux,flux_erg_pow,err_flux_erg_pow,values_manip_var,corr_factor_lbat,fetch_bat_lightcurve,\
     int_rate_to_flux,incl_dyn_dict,incl_jet_dict,incl_misc_dict,incl_refl_dict,Porb_dict,wind_det_dict,wind_det_sources
 
 from lmplot_uncert import lmplot_uncert_a
@@ -258,7 +259,9 @@ if not online:
 
 st.sidebar.header('Sample selection')
 
-line_search_e_str= st.sidebar.radio('line search parameters',('4 10 0.05','4 10 0.02'))
+line_search_e_str_arg= st.sidebar.radio('Mode',('visual_line','BID'))
+BID_mode=line_search_e_str_arg=='BID'
+line_search_e_str=line_search_e_str_arg.replace('visual_line','4 10 0.05').replace('BID','4 10 0.02')
 
 line_search_e=np.array(line_search_e_str.split(' ')).astype(float)
 #we create these variables in any case because the multi_obj plots require them
@@ -266,7 +269,8 @@ line_search_e_space=np.arange(line_search_e[0],line_search_e[1]+line_search_e[2]
 #this one is here to avoid adding one point if incorrect roundings create problem
 line_search_e_space=line_search_e_space[line_search_e_space<=line_search_e[1]]
 
-radio_epoch_split=st.sidebar.radio('Observation type',('averaged ObsID','individual orbits','Time Resolved'))
+
+radio_epoch_split=st.sidebar.radio('Observation type',['averaged ObsID'] if BID_mode else ('averaged ObsID','individual orbits','Time Resolved'))
 use_obsids=radio_epoch_split=='averaged ObsID'
 use_orbit_obs=radio_epoch_split=='individual orbits'
 use_time_resolved=radio_epoch_split=='Time Resolved'
@@ -277,6 +281,7 @@ if use_time_resolved:
     time_resolved_dump_str='_TR_'+time_resolved_split
 else:
     time_resolved_dump_str=''
+    time_resolved_split=''
 
 use_orbit_obs_str='_indiv' if use_orbit_obs else ''
 
@@ -286,10 +291,12 @@ use_orbit_obs_str_path=use_orbit_obs_str+'/'
 
 
 #We put the telescope option before anything else to filter which file will be used
-choice_telescope=st.sidebar.multiselect('Telescopes', ['NICER','NuSTAR'] if use_orbit_obs or use_time_resolved else\
+choice_telescope=st.sidebar.multiselect('Telescopes',['NICER'] if BID_mode else (['NICER','NuSTAR'] if use_orbit_obs or time_resolved_split=='100' else ['NICER'])\
+                                                        if use_orbit_obs or use_time_resolved else\
                  (['XMM','Chandra']+(['NICER','NuSTAR','Suzaku','Swift'] if online else ['NICER','NuSTAR','Suzaku','Swift'])),
-                                        default=['NICER','NuSTAR'] if use_orbit_obs or use_time_resolved else \
-                                            ['XMM','Chandra']+(['NICER'] if line_search_e_str!='4 10 0.05' else []))
+                                        default=['NICER'] if BID_mode else((['NICER','NuSTAR'] if use_orbit_obs or time_resolved_split=='100' else ['NICER'])\
+                                            if use_orbit_obs or use_time_resolved else \
+                                            ['XMM','Chandra']))
 
 if online:
     include_full=False
@@ -301,12 +308,20 @@ if online:
     See https://theses.fr/s296242 (manuscript soon up).
     
     The "about" part will be updated once the first paper on 4U 1630-47 will be accepted.
+    
+    Please send an email if you find bugs
     #''', icon="ℹ️")
 
 else:
     with st.sidebar:
-        include_full=st.toggle('Include problematic data (_full) folders')
-        include_untested= st.toggle('Include untested and preliminary NICER sources',value=False if line_search_e_str=='4 10 0.05' else True)
+        if not BID_mode:
+            include_full=st.toggle('Include problematic data (_full) folders')
+        else:
+            include_full=False
+        if not BID_mode:
+            include_untested= st.toggle('Include untested and preliminary NICER sources',value=False if line_search_e_str=='4 10 0.05' else True)
+        else:
+            include_untested=True
 
 use_unsure_mass_dist=st.sidebar.toggle('Use tentative mass and distance measurements',value=True)
 
@@ -487,63 +502,17 @@ if update_dump or not os.path.isfile(dump_path):
         
         #getting the single parameters
         dist_obj_list,mass_obj_list=dist_mass(dict_linevis,use_unsure_mass_dist=use_unsure_mass_dist)
-        
-        #distance factor for the flux conversion later on
-        dist_factor=4*np.pi*(dist_obj_list*1e3*3.086e18)**2
-        
-        #L_Edd unit factor
-        Edd_factor=dist_factor/(1.26e38*mass_obj_list)
-        
+
         #Reading the results files
         observ_list,lineval_list,lum_list,date_list,instru_list,exptime_list,\
-            fitmod_broadband_list,epoch_obs_list,flux_high_list=obj_values(lineval_files,Edd_factor,dict_linevis)
+            fitmod_broadband_list,epoch_obs_list,flux_high_list=obj_values(lineval_files,dict_linevis)
 
         #loading the interesting multi infos
         temp,temp,temp,date_list_multi,temp,temp,fitmod_broadband_list_multi,epoch_obs_list_multi,flux_high_list_multi=\
-            obj_values(lineval_files_multi,Edd_factor,dict_linevis)
+            obj_values(lineval_files_multi,dict_linevis)
 
         #the values here are for each observation
         abslines_infos,autofit_infos=abslines_values(abslines_files,dict_linevis)
-
-        # #getting all the variations we need
-        # abslines_infos_perline,abslines_infos_perobj,abslines_plot,abslines_ener,\
-        #     lum_plot,hid_plot,incl_plot,width_plot,nh_plot,kt_plot=values_manip(abslines_infos,dict_linevis,autofit_infos,
-        #                                                                          lum_list)
-
-        ####(deprecated) deleting bad flags        
-        # #taking of the bad files points from the HiD
-        # if multi_obj:
-            
-        #     #in multi object mode, we loop one more time for each object   
-        #     for i in range(len(observ_list)):     
-                
-        #         bad_index=[]
-        #         #check if the obsid identifiers of every index is in the bad flag list
-        #         for j in range(len(observ_list[i])):
-        #             if np.any(observ_list[i][j] in bad_flags):
-        #                 bad_index+=[j]
-                        
-        #         #and delete the resulting indexes from the arrays
-        #         observ_list[i]=np.delete(observ_list[i],bad_index)
-        #         lineval_list[i]=np.delete(lineval_list[i],bad_index,axis=0)
-        #         lum_list[i]=np.delete(lum_list[i],bad_index,axis=0)
-        #         # links_list[i]=np.delete(links_list[i],bad_index)
-        
-        # #same process for a single object
-        # else:
-        #     bad_index=[]
-        
-        #     #checking if the observ list isn't empty before trying to delete anything
-        #     if len(observ_list)!=0:
-        #         for j in range(len(observ_list[0])):
-        #             if np.any(observ_list[0][j] in bad_flags):
-        #                 bad_index+=[j]
-                        
-        #         #and delete the resulting indexes from the arrays
-        #         observ_list[0]=np.delete(observ_list[0],bad_index)
-        #         lineval_list[0]=np.delete(lineval_list[0],bad_index,axis=0)
-        #         lum_list[0]=np.delete(lum_list[0],bad_index,axis=0)
-        #         # links_list[0]=np.delete(links_list[0],bad_index)
         
         dump_dict={}
         
@@ -603,6 +572,12 @@ autofit_infos=dump_dict['autofit_infos']
 lum_list=dump_dict['lum_list']
 dict_linevis=dump_dict['dict_linevis']
 exptime_list=dump_dict['exptime_list']
+
+container_date_change=st.container(border=True)
+
+tab_hid, tab_monitoring, tab_param,tab_source_df,tab_about=\
+    st.tabs(["Hardness Luminosity Diagram","Monitoring", "Parameter analysis","Tables","About"])
+
 
 try:
     catal_blackcat, catal_watchdog, \
@@ -782,9 +757,12 @@ else:
     mask_obj_select=np.repeat(True,len(obj_list))
 
 ####Nickel display is turned off here
-with st.sidebar.expander('Absorption lines restriction'):
-    selectbox_abstype=st.multiselect('',
+if not BID_mode:
+    with st.sidebar.expander('Absorption lines restriction'):
+        selectbox_abstype=st.multiselect('',
                     options=line_display_str[:2].tolist()+line_display_str[3:].tolist(),default=line_display_str[:2])
+else:
+    selectbox_abstype=line_display_str[:2].tolist()+line_display_str[3:].tolist()
 
 #creating the line mask from that
 mask_lines=np.array([elem in selectbox_abstype for elem in line_display_str])
@@ -793,7 +771,7 @@ with st.sidebar.expander('Inclination'):
 
     #these two should match
     inclination_options = np.array(['dynamical', 'jet', 'misc', 'reflection'])
-    inclination_dict_lis = [incl_dyn_dict, incl_jet_dict, incl_misc_dict, incl_refl_dict]
+    inclination_dict_list = [incl_dyn_dict, incl_jet_dict, incl_misc_dict, incl_refl_dict]
 
     inclination_prio = np.array(st.multiselect('Inclination methods and priority', options=inclination_options,
                                       default=['dynamical', 'jet', 'misc', 'reflection']))
@@ -811,7 +789,355 @@ with st.sidebar.expander('Inclination'):
     
     radio_dipper=st.radio('Dipping sources restriction',('Off','Add dippers','Restrict to dippers','Restrict to non-dippers'))
     
-    
+# first a list of the dictionnaries selected, ordered according to the selection order
+inclination_dict_list_use = [inclination_dict_list[np.argwhere(inclination_options == elem)[0][0]] for elem in
+                             inclination_prio]
+
+# then creating a global dictionnary from this order:
+incl_dict_use = {}
+
+for elem_dict in inclination_dict_list_use:
+    for elem_source in list(elem_dict.keys()):
+        # adding the elements not already in the global dictionnary
+        # with an option according to the surety option selected
+        if elem_source not in list(incl_dict_use.keys()) and (elem_dict[elem_source][3] == 1 or use_inclination_unsure):
+            incl_dict_use[elem_source] = elem_dict[elem_source][:-1]
+
+dict_linevis['incl_dict_use'] = incl_dict_use
+
+'''
+#SOURCE TABLE
+'''
+
+#The Eddington factor is modifiable
+# distance factor for the flux conversion later on
+dist_factor = 4 * np.pi * (dist_obj_list * 1e3 * 3.086e18) ** 2
+
+# L_Edd unit factor
+Edd_factor = dist_factor / (1.26e38 * mass_obj_list)
+
+#creating a full, placeholder incl_to show in the graph
+# computing an array of the object inclinations
+incl_plot = np.array(
+    [[np.nan, np.nan, np.nan] if elem not in incl_dict_use else incl_dict_use[elem] for elem in obj_list])
+
+source_df_arr = np.array(
+    [obj_list, dist_obj_list, mass_obj_list, Edd_factor, incl_plot.T[0], incl_plot.T[1], incl_plot.T[2],
+     [sum(elem == 'XMM') for elem in instru_list], [sum(elem == 'Chandra') for elem in instru_list]]).astype(str).T
+
+source_df = pd.DataFrame(source_df_arr, columns=['source', 'distance (kpc)', 'mass (M_sun)', 'Eddington ratio factor',
+                                                 'inclination (°)', 'incl err -', 'incl err +',
+                                                 'XMM exposures', 'Chandra exposures'])
+
+source_df['Eddington ratio factor'] = source_df['Eddington ratio factor'].astype(float).round(3)
+
+#replacing the lines of the new source_df_arr (to keep modified parameters if any)
+# and then replacing it in the session_state
+
+if "source_df" in st.session_state:
+    for i_source,elem_source in enumerate(st.session_state['source_df']['source']):
+        if elem_source in obj_list:
+            i_new_table_source=np.argwhere(obj_list==elem_source)[0][0]
+            source_df.iloc[i_new_table_source]=st.session_state['source_df'].iloc[i_source]
+
+
+    st.session_state['source_df']=source_df
+
+#specific command from https://discuss.streamlit.io/t/experimental-data-editor-column-basic-calculation/39837/10
+#to dynamically recompute the Edd_factor column as a function of the distance and mass columns
+
+def add_c(new_df: pd.DataFrame | None = None):
+    # breakpoint()
+
+    if new_df is not None:
+        if new_df.equals(st.session_state["source_df"]):
+            return
+        st.session_state["source_df"] = new_df
+
+    df = st.session_state["source_df"]
+    Edd_ratio_factor = 4*np.pi*(df["distance (kpc)"].astype(float)*1e3 * 3.086e18)**2 / (1.26e38*df["mass (M_sun)"].astype(float))
+    #avoids rounding issues
+    Edd_ratio_factor=Edd_ratio_factor.round(3)
+    df['Eddington ratio factor']=Edd_ratio_factor
+    st.session_state["source_df"] = df
+
+    st.rerun()
+
+if "source_df" not in st.session_state:
+    st.session_state.source_df = source_df
+    add_c()
+
+with tab_source_df:
+    from streamlit_pdf_viewer import pdf_viewer
+
+
+    with st.expander('Source parameters'):
+
+
+        tab_pdf, tab_csv = st.tabs(["Full BH candidates table", "Current Sample editable array"])
+
+        with tab_pdf:
+            pdf_viewer(os.path.join(project_dir, 'observations/visualisation/visual_line_dumps/sources_tables.pdf'),
+                       pages_to_render=[1, 2, 3, 4, 7, 8], render_text=True)
+
+            # # st.notice('This table is similar to what was last published in ')
+            #
+            #
+            #
+            # ####PREPARING LATEX TABLES
+            # source_table_tex = os.path.join(project_dir, 'observations/visualisation/source_tables.tex')
+            #
+            # with open(source_table_tex) as tex_file:
+            #     tex_lines = tex_file.readlines()
+            #
+            # tex_str = ''.join(tex_lines)
+            #
+            # # first table
+            # source_table_str = tex_str[tex_str.find('label{table:sources}'):tex_str.find('\end{table*}')]
+            #
+            # # second table
+            # state_table_str = tex_str[tex_str.find('end{table*}') + 10:]
+            # state_table_str = state_table_str[
+            #                   state_table_str.find('label{table:sources_det_states}'):state_table_str.find(
+            #                       '\end{table*}')]
+            #
+            # # taking the main element of each table
+            # source_table_latex = source_table_str[
+            #                      source_table_str.find('1E 1740.7'):source_table_str.find('\end{tabular}')]
+            #
+            # state_table_latex = state_table_str[
+            #                     state_table_str.find('4U 1543-47}') - 10:state_table_str.find('\end{tabular}')]
+            #
+            # # replacing all of the commands that do not work, and removing math text because we're already in math mode
+            # source_table_latex = source_table_latex.replace('\T', '').replace('\B', '').replace('$', '').replace(
+            #     '\\textbf{dips}',
+            #     '\\bm{dips}')
+            #
+            # state_table_latex = state_table_latex.replace('\T', '').replace('\B', '').replace('$', '') \
+            #     .replace('\\textbf{', '\\bm{').replace('\\textit{', '\\mathit{').replace('*', '^*')
+            #
+            # # fetching the occurences of refences
+            # source_table_refs_str = np.unique(re.findall('labelcref{ref_source:.*?}', source_table_latex))
+            # state_table_refs_str = np.unique(re.findall('labelcref{ref_source_state:.*?}', state_table_latex))
+            #
+            # # and replacing with a fake reference in the latex text itself
+            # for i_ref, ref_str in enumerate(source_table_refs_str):
+            #     source_table_latex = source_table_latex.replace("\\" + ref_str, '\\textcolor{RoyalBlue}{\\bm{[' + str(
+            #         i_ref + 1) + ']}}')
+            #
+            # for i_ref, ref_str in enumerate(state_table_refs_str):
+            #     state_table_latex = state_table_latex.replace("\\" + ref_str, '\\textcolor{RoyalBlue}{\\bm{[' + str(
+            #         i_ref + 1) + ']}}')
+            #
+            # # needs to be done after to avoid issues with } moving away in the loop before
+            # state_table_latex = state_table_latex.replace('soft', '\\text{soft}').replace('hard', '\\text{hard}') \
+            #     .replace('obscured', '\\text{obscured}')
+            #
+            # # and after to reset to a good state to have the italics we want
+            # state_table_latex = state_table_latex.replace('\\mathit{\\text{soft}}', '\\textcolor{Goldenrod}{soft}') \
+            #     .replace('\\mathit{\\text{hard}}', '\\textcolor{Goldenrod}{hard}')
+            #
+            # # using the #''' to avoid issues when switching to online
+            # source_table_header = r'''
+            #         \def\arraystretch{2.5}
+            #         \begin{array}{c|c|c|c|c|ccc}
+            #         \hline
+            #         \hline
+            #                \textrm{Name}
+            #              & \textrm{mass} (M_\odot)
+            #              & \textrm{distance} (kpc)
+            #              & \textrm{inclination} (°)
+            #              & \textrm{absorption lines}
+            #              & \textrm{exposures in }
+            #              &\textrm{the sample}
+            #                 \\
+            #
+            #              &
+            #              &
+            #              &
+            #              & \textrm{reported in the iron band}
+            #              & \textrm{EPIC PN}
+            #              & \textrm{HETG}
+            #                 \\
+            #         \hline
+            #         \hline
+            #         '''  #
+            #
+            # state_table_header = r'''
+            #         \def\arraystretch{2.5}
+            #         \begin{array}{c || c || c | c }
+            #
+            #         \hline
+            #         \hline
+            #              \textrm{Source}
+            #              & \textrm{accretion states}
+            #              & \textrm{with absorption lines reported}
+            #              \\
+            #
+            #         \hline
+            #
+            #              & \textrm{this work}
+            #              & \textrm{other works}
+            #              & \textrm{other works}\\
+            #
+            #         \hline
+            #              & \textrm{iron band}
+            #              & \textrm{iron band}
+            #              & \textrm{other energies}
+            #              \\
+            #         \hline
+            #         \hline
+            #         '''  #
+            #
+            # table_footer = r'''\end{array}'''  #
+            #
+            # # this allows to replace single line jumps into double line jumps with a horizontal dotted line in between
+            # # for better visibility
+            # source_table_latex = source_table_latex.replace('\\\\', '\\\\\\hdashline')
+            # state_table_latex = state_table_latex.replace('\\\\', '\\\\\\hdashline')
+            #
+            # source_table_latex_disp = source_table_header + source_table_latex + table_footer
+            # state_table_latex_disp = state_table_header + state_table_latex + table_footer
+            #
+            # source_table_footnotes = source_table_str[
+            #                          source_table_str.find('Notes'):source_table_str.find('References') - 36]
+            #
+            # state_table_footnotes = state_table_str[
+            #                         state_table_str.find('Notes'):state_table_str.find('References')]
+            #
+            # source_table_footnotes += 'the second table below'
+            # source_table_footnotes = source_table_footnotes.replace('\citealt{Corral-Santana2016_blackcat}',
+            #                                                         '[Corral-Santana et al. 2016](https://doi.org/10.1051/0004-6361/201527130)') \
+            #     .replace('\\msun{}', '$M_{\odot}$')
+            #
+            # state_table_footnotes = state_table_footnotes.replace('italic', '\\textcolor{Goldenrod}{italic}')
+            #
+            # st.markdown(source_table_footnotes)
+            # st.latex(source_table_latex_disp)
+            #
+            # # the second one will be displayed later
+            #
+            # # REFERENCES
+            #
+            # # fetching the actual paper names in the bib files from the references part of the table
+            # source_table_references = source_table_str[source_table_str.find('References'):].split('citep[][]{')
+            # state_table_references = state_table_str[state_table_str.find('References'):].split('citep[][]{')
+            #
+            # # matching with the surnames of the table
+            # source_table_refs_bibid = [[elem.split('}')[0] for elem in source_table_references \
+            #                             if elem_source_ref.replace('labelcref', 'label') in elem] \
+            #                            for elem_source_ref in source_table_refs_str]
+            #
+            # state_table_refs_bibid = [[elem.split('}')[0] for elem in state_table_references \
+            #                            if elem_state_ref.replace('labelcref', 'label') in elem] \
+            #                           for elem_state_ref in state_table_refs_str]
+            #
+            # # checking there's no reference missing
+            # if not np.all([len(elem) == 1 for elem in source_table_refs_bibid + state_table_refs_bibid]):
+            #     st.error('Issue during bibliography reference matching')
+            #
+            # # just removing the useless dimension
+            # source_table_refs_bibid = ravel_ragged(source_table_refs_bibid)
+            # state_table_refs_bibid = ravel_ragged(state_table_refs_bibid)
+            #
+            # # loading the bib file
+            # bib_path = os.path.join(project_dir, 'observations/visualisation/bib_source_tables.bib')
+            #
+            # with open(bib_path) as bib_file:
+            #     bib_lines = bib_file.readlines()
+            #
+            # # and transforming it into something more useful
+            # bib_str = ''.join(bib_lines)
+            #
+            # bib_list = bib_str.split('@')[1:]
+            #
+            # # getting the list of lines of biblio of each matching item
+            # source_bib_list = [[elem.split('\n') for elem in bib_list if elem_bib_item + ',' in elem.split('\n')[0]] \
+            #                    for elem_bib_item in source_table_refs_bibid]
+            #
+            # state_bib_list = [[elem.split('\n') for elem in bib_list if elem_bib_item + ',' in elem.split('\n')[0]] \
+            #                   for elem_bib_item in state_table_refs_bibid]
+            #
+            # if not np.all([len(elem) == 1 for elem in source_bib_list + state_bib_list]):
+            #     st.error('Issue during bibliography reference matching')
+            #
+            # # removing the useless dimension
+            # source_bib_list = [elem[0] for elem in source_bib_list]
+            # state_bib_list = [elem[0] for elem in state_bib_list]
+            #
+            # # assigning a link line to each element (by preference a doi, else an url, else an arxiv id url
+            # # we also format the link line into an actual link for each link type
+            # source_bib_urls = [['https://doi.org/' + elem[elem.find('{') + 1:elem.find('}')] for elem in elem_bib if
+            #                     elem.startswith('doi =')] + \
+            #                    [elem[elem.find('{') + 1:elem.find('}')].split()[0] for elem in elem_bib if
+            #                     elem.startswith('url =')] + \
+            #                    ['https://arxiv.org/abs/' + elem[elem.find('{') + 1:elem.find('}')] \
+            #                     for elem in elem_bib if elem.startswith('arxivId =')] for elem_bib in source_bib_list]
+            #
+            # state_bib_urls = [['https://doi.org/' + elem[elem.find('{') + 1:elem.find('}')] for elem in elem_bib if
+            #                    elem.startswith('doi =')] + \
+            #                   [elem[elem.find('{') + 1:elem.find('}')].split()[0] for elem in elem_bib if
+            #                    elem.startswith('url =')] + \
+            #                   ['https://arxiv.org/abs/' + elem[elem.find('{') + 1:elem.find('}')] \
+            #                    for elem in elem_bib if elem.startswith('arxivId =')] for elem_bib in state_bib_list]
+            #
+            # if not np.all([len(elem) >= 1 for elem in source_bib_urls + state_bib_urls]):
+            #     st.error('At least one bibliography reference used in the tables has no URL')
+            #
+            # # selecting the "favorite" available url for each link
+            # source_bib_urls = [elem[0] for elem in source_bib_urls]
+            # state_bib_urls = [elem[0] for elem in state_bib_urls]
+            #
+            # # and finally displaying the biblio
+            # source_table_biblio_str = '\n'.join(
+            #     ['[[' + str(i_url + 1) + ']](' + source_bib_urls[i_url] + ')' for i_url in range(len(source_bib_urls))])
+            #
+            # state_table_biblio_str = '\n'.join(
+            #     ['[[' + str(i_url + 1) + ']](' + state_bib_urls[i_url] + ')' for i_url in range(len(state_bib_urls))])
+            #
+            # st.markdown('References:')
+            # st.markdown(source_table_biblio_str)
+
+        with tab_csv:
+            # st.dataframe(source_df,
+            #              column_config={"Eddington ratio Factor": st.column_config.NumberColumn(format='%.3e')})
+            #
+            # csv_source = convert_df(source_df)
+
+            st.info('Changing the Mass and Distance will affect the HLDs and other plots. The Eddington ratio factor is locked '
+                    'and computed automatically as a function of the mass and distance')
+            #the editable dataframe
+            source_df_updated = st.data_editor(
+                st.session_state["source_df"],
+                key="data",
+                column_config={"Eddington ratio factor": st.column_config.NumberColumn(format='%.3e', disabled=True)},
+                hide_index=True,use_container_width=True)
+
+            #avoids rounding issues
+            source_df_updated['Eddington ratio factor']=source_df_updated['Eddington ratio factor'].astype(float).round(3)
+
+            add_c(source_df_updated)
+
+        csv_source=convert_df(source_df_updated)
+        st.download_button(
+            label="Download current sample array as CSV",
+            data=csv_source,
+            file_name='source_table.csv',
+            mime='text/csv',
+        )
+
+#replacing the values in case this is important
+dist_obj_list, mass_obj_list, Edd_factor=\
+    source_df_updated[source_df_updated.keys()[[1,2,3]]].values.astype(float).T
+
+dist_factor = 4 * np.pi * (dist_obj_list * 1e3 * 3.086e18) ** 2
+
+
+#updating individually the luminosity components with the selected Eddington factor
+for i_obj in range(len(Edd_factor)):
+
+    lum_list[i_obj]*=Edd_factor[i_obj]
+
 #not used currently
 # radio_dispmode=st.sidebar.radio('HID display',('Autofit line detections','blind search peak detections'))
 # if radio_dispmode=='Autofit line detections':
@@ -912,21 +1238,6 @@ if len(mask_included_selection) == 1:
 
 # creating the global inclination dictionnary depending on what options have been selected
 
-# first a list of the dictionnaries selected, ordered according to the selection order
-inclination_dict_list_use = [inclination_dict_lis[np.argwhere(inclination_options == elem)[0][0]] for elem in
-                             inclination_prio]
-
-# then creating a global dictionnary from this order:
-incl_dict_use = {}
-
-for elem_dict in inclination_dict_list_use:
-    for elem_source in list(elem_dict.keys()):
-        # adding the elements not already in the global dictionnary
-        # with an option according to the surety option selected
-        if elem_source not in list(incl_dict_use.keys()) and (elem_dict[elem_source][3] == 1 or use_inclination_unsure):
-            incl_dict_use[elem_source] = elem_dict[elem_source][:-1]
-
-dict_linevis['incl_dict_use'] = incl_dict_use
 
 '''
 #RESTRICTION MASKING AND TRANSPOSING
@@ -936,7 +1247,7 @@ n_obj_init=len(obj_list)
 
 # getting all the variations we need
 abslines_infos_perline, abslines_infos_perobj, abslines_plot, abslines_ener, \
-    lum_plot, hid_plot, incl_plot, width_plot, nh_plot, kt_plot,lum_list = values_manip(abslines_infos, dict_linevis,
+    lum_plot, hid_plot, width_plot, nh_plot, kt_plot,lum_list = values_manip(abslines_infos, dict_linevis,
                                                                                 autofit_infos,
                                                                                 lum_list,
                                                                                 mask_include=mask_included_selection)
@@ -978,7 +1289,8 @@ radio_info_cmap_options=['Source','Inclination','Instrument','Time','Velocity sh
                                display_single and obj_list[mask_obj_select][0] == '4U1630-47' else []) \
                         + (['custom_outburst'] if display_single else [])
 
-radio_info_cmap_str=st.sidebar.radio('HID colormap',HID_options_str,index=0)
+radio_info_cmap_str=st.sidebar.radio('HLD colormap',(HID_options_str[:4].tolist()+HID_options_str[7:].tolist()) if BID_mode else HID_options_str ,
+                                     index=0)
 
 radio_info_index=np.argwhere(HID_options_str==radio_info_cmap_str)[0][0]
 
@@ -1023,9 +1335,12 @@ elif radio_zoom_hid=='manual bounds':
                                         value=[1e-5, 1.],format_func=format_slider)
     zoom_hid=[values_zoom_hr,values_zoom_lum]
 
-display_nondet=st.sidebar.toggle('Display exposures with no detection',value=True)
+if BID_mode:
+    display_nondet=True
+else:
+    display_nondet=st.sidebar.toggle('Display exposures with no detection',value=True)
 
-if display_nondet:
+if display_nondet and not BID_mode:
     with st.sidebar.expander('Upper limits'):
         display_upper=st.toggle('Display upper limits',value=True if line_search_e_str=='4 10 0.05' else False)
         if display_upper:
@@ -1060,19 +1375,27 @@ if not online:
 with st.sidebar.expander('Visualisation'):
 
     skip_HID=st.toggle('Skip HID computation',value=False)
-    
-    display_dicho=st.toggle('Display favourable zone',value=not display_single)
-    
-    color_nondet=st.toggle('Color non-detections',value=True)
-    
+
     display_hid_error=st.toggle('Display errorbar for HID position',value=False)
-    
-    display_central_abs=st.toggle('Display centers for absorption detections',value=False)
+
+    if BID_mode:
+        display_dicho=False
+        color_nondet=True
+        display_central_abs=False
+        split_cmap_source=False
+
+    else:
+
+        display_dicho=st.toggle('Display favourable zone',value=not display_single)
+
+        color_nondet=st.toggle('Color non-detections',value=True)
+
+        display_central_abs=st.toggle('Display centers for absorption detections',value=False)
+
+        split_cmap_source=st.toggle('Use different colormaps for detections and non-detections',value=True)
 
     alpha_abs=st.toggle('Plot with transparency',value=False)
-    
-    split_cmap_source=st.toggle('Use different colormaps for detections and non-detections',value=True)
-    
+
     global_colors=st.toggle('Normalize colors/colormaps over the entire sample',value=False)
         
     hid_log_HR=st.toggle('Use log scale for the Hardness Ratio',value=True)
@@ -1269,54 +1592,55 @@ delta_1h=TimeDelta(3600,format='sec')
 delta_1s=TimeDelta(1,format='sec')
 if restrict_time:
 
+    with container_date_change:
 
-    slider_date_coarse=st.slider('Dates restriction',
-                                 min_value=(Time(min(ravel_ragged(date_list[mask_obj_base])))-\
-                                                         (delta_1y if use_obsids else delta_1m)).datetime,
-                                 max_value=max((Time(max(ravel_ragged(date_list[mask_obj_base])))+\
-                                         (delta_1y if use_obsids else delta_1m)),
-                                        (Time(str(date.today())) if use_obsids else \
-                                        Time(max(ravel_ragged(date_list[mask_obj_base]))) + delta_1m)).datetime,
-                          value=[(Time(min(ravel_ragged(date_list[mask_obj_base])))-\
-                                  (delta_1m if use_obsids else delta_1w)).datetime,
-                                 (Time(max(ravel_ragged(date_list[mask_obj_base])))+ \
-                                  (delta_1m if use_obsids else delta_1w)).datetime],
-                          step=delta_1h.datetime,
-                          format='YYYY-MM-DD HH:MM:ss')
+        slider_date_coarse=st.slider('Dates restriction',
+                                     min_value=(Time(min(ravel_ragged(date_list[mask_obj_base])))-\
+                                                             (delta_1y if use_obsids else delta_1m)).datetime,
+                                     max_value=max((Time(max(ravel_ragged(date_list[mask_obj_base])))+\
+                                             (delta_1y if use_obsids else delta_1m)),
+                                            (Time(str(date.today())) if use_obsids else \
+                                            Time(max(ravel_ragged(date_list[mask_obj_base]))) + delta_1m)).datetime,
+                              value=[(Time(min(ravel_ragged(date_list[mask_obj_base])))-\
+                                      (delta_1m if use_obsids else delta_1w)).datetime,
+                                     (Time(max(ravel_ragged(date_list[mask_obj_base])))+ \
+                                      (delta_1m if use_obsids else delta_1w)).datetime],
+                              step=delta_1h.datetime,
+                              format='YYYY-MM-DD HH:MM:ss')
 
-    manual_date_vals=st.toggle('Manual Date bounds')
+        manual_date_vals=st.toggle('Manual Date bounds')
 
-    if manual_date_vals:
+        if manual_date_vals:
 
-        man_min_date_val = st.date_input('Minimum date', value=None)
-        time_min_date_val=slider_date_coarse[0] if man_min_date_val is None else Time(man_min_date_val.isoformat()).datetime
-        man_max_date_val = st.date_input('Maximum date', value=None)
-        time_max_date_val=slider_date_coarse[1] if man_max_date_val is None else Time(man_max_date_val.isoformat()).datetime
+            man_min_date_val = st.date_input('Minimum date', value=None)
+            time_min_date_val=slider_date_coarse[0] if man_min_date_val is None else Time(man_min_date_val.isoformat()).datetime
+            man_max_date_val = st.date_input('Maximum date', value=None)
+            time_max_date_val=slider_date_coarse[1] if man_max_date_val is None else Time(man_max_date_val.isoformat()).datetime
 
-        slider_date_coarse=np.array([time_min_date_val,time_max_date_val])
+            slider_date_coarse=np.array([time_min_date_val,time_max_date_val])
 
-    fine_restrict_dates=st.toggle('Fine Dates restriction')
+        fine_restrict_dates=st.toggle('Fine Dates restriction')
 
 
-    if fine_restrict_dates:
-        fine_range=slider_date_coarse[1]-slider_date_coarse[0]
-        fine_delta=delta_1s.datetime*60
-        fine_range_split=fine_range//fine_delta
-        slider_date_fine=st.select_slider('Fine Dates restriction',
-                                          options=[slider_date_coarse[0]+fine_delta*i for i in range(fine_range_split+1)],
-                                   # max_value=slider_date_coarse[1],
-                                   value=[slider_date_coarse[0],slider_date_coarse[1]],)
-                        # step=TimeDelta(60,format='sec').datetime,
-                        # format_func = 'YYYY-MM-DD HH:MM:ss')
-        slider_date=slider_date_fine
+        if fine_restrict_dates:
+            fine_range=slider_date_coarse[1]-slider_date_coarse[0]
+            fine_delta=delta_1s.datetime*60
+            fine_range_split=fine_range//fine_delta
+            slider_date_fine=st.select_slider('Fine Dates restriction',
+                                              options=[slider_date_coarse[0]+fine_delta*i for i in range(fine_range_split+1)],
+                                       # max_value=slider_date_coarse[1],
+                                       value=[slider_date_coarse[0],slider_date_coarse[1]],)
+                            # step=TimeDelta(60,format='sec').datetime,
+                            # format_func = 'YYYY-MM-DD HH:MM:ss')
+            slider_date=slider_date_fine
 
-    else:
-        slider_date=slider_date_coarse
-    # slider_date=st.slider('Dates restriction',min_value=(Time(min(ravel_ragged(date_list[mask_obj_base])))-delta_1y).datetime,
-    #                       max_value=max((Time(max(ravel_ragged(date_list[mask_obj_base])))+delta_1y),
-    #                                 Time(str(date.today()))).datetime,
-    #                       value=[(Time(min(ravel_ragged(date_list[mask_obj_base])))-delta_1m).datetime,
-    #                              (Time(max(ravel_ragged(date_list[mask_obj_base])))+delta_1m).datetime])
+        else:
+            slider_date=slider_date_coarse
+        # slider_date=st.slider('Dates restriction',min_value=(Time(min(ravel_ragged(date_list[mask_obj_base])))-delta_1y).datetime,
+        #                       max_value=max((Time(max(ravel_ragged(date_list[mask_obj_base])))+delta_1y),
+        #                                 Time(str(date.today()))).datetime,
+        #                       value=[(Time(min(ravel_ragged(date_list[mask_obj_base])))-delta_1m).datetime,
+        #                              (Time(max(ravel_ragged(date_list[mask_obj_base])))+delta_1m).datetime])
 else:
     slider_date=[Time(min(ravel_ragged(date_list[mask_obj_base]))).datetime,
                                  Time(max(ravel_ragged(date_list[mask_obj_base]))).datetime]
@@ -1356,12 +1680,6 @@ n_obj_withdet=sum(mask_obj_withdet & mask_obj_base)
 
 #we don't fuse with mask_obj_withdet anymore since the options to remove non-detections was removed
 mask_obj=mask_obj_base
-
-# distance factor for the flux conversion later on
-dist_factor = 4 * np.pi * (dist_obj_list * 1e3 * 3.086e18) ** 2
-
-# L_Edd unit factor
-Edd_factor = dist_factor / (1.26e38 * mass_obj_list)
 
 Edd_factor_restrict=Edd_factor[mask_obj].astype(float)
 dist_factor_restrict=dist_factor[mask_obj].astype(float)
@@ -1569,25 +1887,28 @@ if add_INT_flux_corr and display_single and choice_source[0]=='4U1630-47' and su
             mask_added_INT_sign[i_obs] = False
 
 #mask for dashing points in the correlations later
-mask_added_regr_sign=(mask_added_INT_sign) | (mask_added_BAT_sign)
+if display_single and choice_source[0]=='4U1630-47':
+    mask_added_regr_sign=(mask_added_INT_sign) | (mask_added_BAT_sign)
+else:
+    mask_added_regr_sign=None
 
 dict_linevis['mask_added_regr_sign']=mask_added_regr_sign
 
 
 #for the HID
-lum_high_1sig_plot=values_manip_high_E(lum_high_1sig_list)
-gamma_nthcomp_plot=values_manip_high_E(gamma_nthcomp_list)
+lum_high_1sig_plot=values_manip_var(lum_high_1sig_list)
+gamma_nthcomp_plot=values_manip_var(gamma_nthcomp_list)
 
 #for the tables
-lum_high_plot=values_manip_high_E(lum_high_list)
+lum_high_plot=values_manip_var(lum_high_list)
 
 #for the scatters
-lum_high_sign_plot=values_manip_high_E(lum_high_sign_list)
+lum_high_sign_plot=values_manip_var(lum_high_sign_list)
 
 #secondary parameters
-Tin_diskbb_plot=values_manip_high_E(Tin_diskbb_list)
+Tin_diskbb_plot=values_manip_var(Tin_diskbb_list)
 
-BAT_lc_plot=values_manip_high_E(BAT_rate_list)
+BAT_lc_plot=values_manip_var(BAT_rate_list)
 
 #no need to change this one since it only has 2D
 BAT_expos_plot=BAT_expos_list
@@ -2027,9 +2348,6 @@ elif radio_info_cmap not in ['Inclination','Time','kT']:
 else:
     #keeping a linear norm for the inclination
     cmap_norm_info=colors.Normalize()
-
-tab_hid, tab_monitoring, tab_param,tab_source_df,tab_about=\
-    st.tabs(["Hardness Luminosity Diagram","Monitoring", "Parameter analysis","Tables","About"])
 
 with tab_hid:
 
@@ -2497,247 +2815,6 @@ def produce_df(data,rows, columns, row_names=None, column_names=None,row_index=N
         
     return pd.DataFrame(data,index=row_index_build, columns=col_index_build)
 
-'''
-#SOURCE TABLE
-'''
-    
-source_df_arr=np.array([obj_list,dist_obj_list,mass_obj_list,incl_plot.T[0],incl_plot.T[1],incl_plot.T[2],
-                       [sum(elem=='XMM') for elem in instru_list],[sum(elem=='Chandra') for elem in instru_list]]).astype(str).T
-
-source_df=pd.DataFrame(source_df_arr,columns=['source','distance (kpc)','mass (M_sun)','inclination (°)','incl err -','incl err +',
-                                              'XMM exposures','Chandra exposures'])
-with tab_source_df:
-    
-    with st.expander('Source parameters'):
-
-        tab_latex,tab_csv=st.tabs(["Full Sample Latex table","Current Sample Array"])
-
-        with tab_latex:
-            ####PREPARING LATEX TABLES
-            source_table_tex = os.path.join(project_dir, 'observations/visualisation/source_tables.tex')
-
-            with open(source_table_tex) as tex_file:
-                tex_lines = tex_file.readlines()
-
-            tex_str = ''.join(tex_lines)
-
-            #first table
-            source_table_str = tex_str[tex_str.find('label{table:sources}'):tex_str.find('\end{table*}')]
-
-            #second table
-            state_table_str =  tex_str[tex_str.find('end{table*}')+10:]
-            state_table_str = state_table_str[state_table_str.find('label{table:sources_det_states}'):state_table_str.find('\end{table*}')]
-
-            # taking the main element of each table
-            source_table_latex = source_table_str[
-                                 source_table_str.find('1E 1740.7'):source_table_str.find('\end{tabular}')]
-
-            state_table_latex = state_table_str[state_table_str.find('4U 1543-47}')-10:state_table_str.find('\end{tabular}')]
-
-            # replacing all of the commands that do not work, and removing math text because we're already in math mode
-            source_table_latex = source_table_latex.replace('\T', '').replace('\B', '').replace('$', '').replace(
-                '\\textbf{dips}',
-                '\\bm{dips}')
-
-            state_table_latex=state_table_latex.replace('\T', '').replace('\B', '').replace('$', '')\
-                                               .replace('\\textbf{','\\bm{').replace('\\textit{','\\mathit{').replace('*','^*')
-
-
-            #fetching the occurences of refences
-            source_table_refs_str = np.unique(re.findall('labelcref{ref_source:.*?}', source_table_latex))
-            state_table_refs_str = np.unique(re.findall('labelcref{ref_source_state:.*?}', state_table_latex))
-
-            #and replacing with a fake reference in the latex text itself
-            for i_ref, ref_str in enumerate(source_table_refs_str):
-                source_table_latex = source_table_latex.replace("\\" + ref_str, '\\textcolor{RoyalBlue}{\\bm{[' + str(
-                    i_ref + 1) + ']}}')
-
-            for i_ref, ref_str in enumerate(state_table_refs_str):
-                state_table_latex = state_table_latex.replace("\\" + ref_str, '\\textcolor{RoyalBlue}{\\bm{[' + str(
-                    i_ref + 1) + ']}}')
-
-            #needs to be done after to avoid issues with } moving away in the loop before
-            state_table_latex=state_table_latex.replace('soft', '\\text{soft}').replace('hard', '\\text{hard}')\
-                                               .replace('obscured','\\text{obscured}')
-
-            #and after to reset to a good state to have the italics we want
-            state_table_latex = state_table_latex.replace('\\mathit{\\text{soft}}','\\textcolor{Goldenrod}{soft}')\
-                                                 .replace('\\mathit{\\text{hard}}','\\textcolor{Goldenrod}{hard}')
-
-            #using the #''' to avoid issues when switching to online
-            source_table_header = r'''
-                    \def\arraystretch{2.5}
-                    \begin{array}{c|c|c|c|c|ccc}
-                    \hline
-                    \hline
-                           \textrm{Name}
-                         & \textrm{mass} (M_\odot)
-                         & \textrm{distance} (kpc)
-                         & \textrm{inclination} (°)
-                         & \textrm{absorption lines}
-                         & \textrm{exposures in }
-                         &\textrm{the sample}
-                            \\
-
-                         &
-                         & 
-                         &
-                         & \textrm{reported in the iron band}
-                         & \textrm{EPIC PN}
-                         & \textrm{HETG}
-                            \\
-                    \hline
-                    \hline
-                    '''#
-
-            state_table_header = r'''
-                    \def\arraystretch{2.5}
-                    \begin{array}{c || c || c | c }
-                    
-                    \hline
-                    \hline
-                         \textrm{Source}
-                         & \textrm{accretion states}
-                         & \textrm{with absorption lines reported}
-                         \\
-                    
-                    \hline
-                    
-                         & \textrm{this work}
-                         & \textrm{other works}
-                         & \textrm{other works}\\
-                    
-                    \hline
-                         & \textrm{iron band}
-                         & \textrm{iron band}
-                         & \textrm{other energies}
-                         \\
-                    \hline
-                    \hline
-                    '''#
-
-            table_footer = r'''\end{array}'''#
-
-            # this allows to replace single line jumps into double line jumps with a horizontal dotted line in between
-            # for better visibility
-            source_table_latex = source_table_latex.replace('\\\\', '\\\\\\hdashline')
-            state_table_latex=state_table_latex.replace('\\\\', '\\\\\\hdashline')
-
-            source_table_latex_disp = source_table_header + source_table_latex + table_footer
-            state_table_latex_disp = state_table_header + state_table_latex + table_footer
-
-            source_table_footnotes = source_table_str[
-                                     source_table_str.find('Notes'):source_table_str.find('References') - 36]
-
-            state_table_footnotes = state_table_str[
-                                     state_table_str.find('Notes'):state_table_str.find('References')]
-
-            source_table_footnotes += 'the second table below'
-            source_table_footnotes = source_table_footnotes.replace('\citealt{Corral-Santana2016_blackcat}',
-                                                                    '[Corral-Santana et al. 2016](https://doi.org/10.1051/0004-6361/201527130)') \
-                .replace('\\msun{}', '$M_{\odot}$')
-
-            state_table_footnotes=state_table_footnotes.replace('italic','\\textcolor{Goldenrod}{italic}')
-
-            st.markdown(source_table_footnotes)
-            st.latex(source_table_latex_disp)
-
-            #the second one will be displayed later
-
-            # REFERENCES
-
-            # fetching the actual paper names in the bib files from the references part of the table
-            source_table_references = source_table_str[source_table_str.find('References'):].split('citep[][]{')
-            state_table_references = state_table_str[state_table_str.find('References'):].split('citep[][]{')
-
-            # matching with the surnames of the table
-            source_table_refs_bibid = [[elem.split('}')[0] for elem in source_table_references \
-                                        if elem_source_ref.replace('labelcref', 'label') in elem] \
-                                       for elem_source_ref in source_table_refs_str]
-
-            state_table_refs_bibid = [[elem.split('}')[0] for elem in state_table_references \
-                                        if elem_state_ref.replace('labelcref', 'label') in elem] \
-                                       for elem_state_ref in state_table_refs_str]
-
-            # checking there's no reference missing
-            if not np.all([len(elem) == 1 for elem in source_table_refs_bibid+state_table_refs_bibid]):
-                st.error('Issue during bibliography reference matching')
-
-            # just removing the useless dimension
-            source_table_refs_bibid = ravel_ragged(source_table_refs_bibid)
-            state_table_refs_bibid = ravel_ragged(state_table_refs_bibid)
-
-            # loading the bib file
-            bib_path = os.path.join(project_dir, 'observations/visualisation/bib_source_tables.bib')
-
-            with open(bib_path) as bib_file:
-                bib_lines = bib_file.readlines()
-
-            # and transforming it into something more useful
-            bib_str = ''.join(bib_lines)
-
-            bib_list = bib_str.split('@')[1:]
-
-            # getting the list of lines of biblio of each matching item
-            source_bib_list = [[elem.split('\n') for elem in bib_list if elem_bib_item + ',' in elem.split('\n')[0]] \
-                               for elem_bib_item in source_table_refs_bibid]
-
-            state_bib_list = [[elem.split('\n') for elem in bib_list if elem_bib_item + ',' in elem.split('\n')[0]] \
-                               for elem_bib_item in state_table_refs_bibid]
-
-            if not np.all([len(elem) == 1 for elem in source_bib_list+state_bib_list]):
-                st.error('Issue during bibliography reference matching')
-
-            # removing the useless dimension
-            source_bib_list = [elem[0] for elem in source_bib_list]
-            state_bib_list = [elem[0] for elem in state_bib_list]
-
-            # assigning a link line to each element (by preference a doi, else an url, else an arxiv id url
-            # we also format the link line into an actual link for each link type
-            source_bib_urls = [['https://doi.org/' + elem[elem.find('{') + 1:elem.find('}')] for elem in elem_bib if
-                                elem.startswith('doi =')] + \
-                               [elem[elem.find('{') + 1:elem.find('}')].split()[0] for elem in elem_bib if
-                                elem.startswith('url =')] + \
-                               ['https://arxiv.org/abs/' + elem[elem.find('{') + 1:elem.find('}')] \
-                                for elem in elem_bib if elem.startswith('arxivId =')] for elem_bib in source_bib_list]
-
-            state_bib_urls = [['https://doi.org/' + elem[elem.find('{') + 1:elem.find('}')] for elem in elem_bib if
-                                elem.startswith('doi =')] + \
-                               [elem[elem.find('{') + 1:elem.find('}')].split()[0] for elem in elem_bib if
-                                elem.startswith('url =')] + \
-                               ['https://arxiv.org/abs/' + elem[elem.find('{') + 1:elem.find('}')] \
-                                for elem in elem_bib if elem.startswith('arxivId =')] for elem_bib in state_bib_list]
-
-
-            if not np.all([len(elem) >= 1 for elem in source_bib_urls+state_bib_urls]):
-                st.error('At least one bibliography reference used in the tables has no URL')
-
-            # selecting the "favorite" available url for each link
-            source_bib_urls = [elem[0] for elem in source_bib_urls]
-            state_bib_urls = [elem[0] for elem in state_bib_urls]
-
-            # and finally displaying the biblio
-            source_table_biblio_str = '\n'.join(
-                ['[[' + str(i_url + 1) + ']](' + source_bib_urls[i_url] + ')' for i_url in range(len(source_bib_urls))])
-
-            state_table_biblio_str = '\n'.join(
-                ['[[' + str(i_url + 1) + ']](' + state_bib_urls[i_url] + ')' for i_url in range(len(state_bib_urls))])
-
-            st.markdown('References:')
-            st.markdown(source_table_biblio_str)
-
-        with tab_csv:
-            st.dataframe(source_df)
-
-            csv_source = convert_df(source_df)
-    
-        st.download_button(
-            label="Download current sample array as CSV",
-            data=csv_source,
-            file_name='source_table.csv',
-            mime='text/csv',
-        )
-        
         
 '''
 #OBS & LINE TABLES
@@ -3023,11 +3100,14 @@ with tab_source_df:
 
     with st.expander('Absorption lines in the literature'):
 
-        st.markdown(state_table_footnotes)
-        st.latex(state_table_latex_disp)
+        pdf_viewer(os.path.join(project_dir, 'observations/visualisation/visual_line_dumps/sources_tables.pdf'),
+                   pages_to_render=[5,6, 7, 8], render_text=True)
 
-        st.markdown('References :')
-        st.markdown(state_table_biblio_str)
+        # st.markdown(state_table_footnotes)
+        # st.latex(state_table_latex_disp)
+        #
+        # st.markdown('References :')
+        # st.markdown(state_table_biblio_str)
 
 
 

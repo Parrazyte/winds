@@ -1,0 +1,12 @@
+matplotlib
+astroquery
+astropy
+dill
+scipy
+plotly
+streamlit-plotly-events
+seaborn
+tqdm
+pandas
+lxml
+sreamlit_pdf_viewer

@@ -2,7 +2,7 @@ name: base
 channels:
   - defaults
 dependencies:
-  - pip=23.1.2=py39h06a4308_0
+  - pip=23.1.2
   - pip:
     - astroquery==0.4.6
     - astropy==5.2.2

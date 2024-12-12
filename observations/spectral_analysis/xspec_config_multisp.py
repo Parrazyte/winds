@@ -6521,8 +6521,12 @@ def xPlot(types,axes_input=None,plot_saves_input=None,plot_arg=None,includedlist
 
             if group_names=='auto':
                 #auto naming the group from header infos
+                try:
+                    AllData(1)
+                except:
+                    no_sp=True
 
-                if 'sp' in AllData(id_grp+1).fileName:
+                if not no_sp and 'sp' in AllData(id_grp+1).fileName:
                     grp_name=AllData(id_grp+1).fileName.split('_sp')[0]
                 else:
                     try:

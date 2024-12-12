@@ -1595,7 +1595,7 @@ def dist_mass(dict_linevis,use_unsure_mass_dist=True):
     return d_obj,m_obj
 
 #@st.cache_data
-def obj_values(file_paths,E_factors,dict_linevis,local_paths=False):
+def obj_values(file_paths,dict_linevis,local_paths=False):
     
     '''
     Extracts the stored data from each value line_values file. 
@@ -1628,9 +1628,7 @@ def obj_values(file_paths,E_factors,dict_linevis,local_paths=False):
             curr_obj_paths = file_paths
         else:
             curr_obj_paths=[elem for elem in file_paths if '/'+obj_list[i]+'/' in elem]
-            
-        curr_E_factor=E_factors[i]
-        
+
         store_lines=[]
 
         lineval_paths_arr=[]
@@ -1684,8 +1682,8 @@ def obj_values(file_paths,E_factors,dict_linevis,local_paths=False):
             #converting the lines into something usable
             curr_lval_list[l]=[literal_eval(elem.replace(',','').replace(' ',',')) if elem!='' else [] for elem in curr_line[1:]]
                 
-            #separing the flux values for easier plotting
-            curr_l_list[l]=np.array(curr_lval_list[l][-1])*curr_E_factor
+            #splitting the flux values for easier plotting
+            curr_l_list[l]=np.array(curr_lval_list[l][-1])
             
             #taking them off from the values lists
             curr_lval_list[l]=curr_lval_list[l][:-1]
@@ -2360,9 +2358,6 @@ def values_manip(abslines_infos,dict_linevis,autofit_infos,lum_list_infos,mask_i
 
     hid_plt=np.array([[hid_plt_vals,hid_errors[0],hid_errors[1]],[lum_plt[4][i] for i in range(3)]])
 
-    #computing an array of the object inclinations
-    incl_plt=np.array([[np.nan,np.nan,np.nan] if elem not in incl_dict_use else incl_dict_use[elem] for elem in obj_list])
-
     #computing an array of the line widths from the autofit computations
     
     #### fit parameters
@@ -2441,12 +2436,12 @@ def values_manip(abslines_infos,dict_linevis,autofit_infos,lum_list_infos,mask_i
     if mask_include is not None:
         #also returning the updated lum_list
         return abslines_inf_line,abslines_inf_obj,abslines_plt,abslines_e,\
-               lum_plt,hid_plt,incl_plt,width_plt,nh_plt,kt_plt,lum_list
+               lum_plt,hid_plt,width_plt,nh_plt,kt_plt,lum_list
     else:
         return abslines_inf_line, abslines_inf_obj, abslines_plt, abslines_e, \
-            lum_plt, hid_plt, incl_plt, width_plt, nh_plt, kt_plt
+            lum_plt, hid_plt, width_plt, nh_plt, kt_plt
 
-def values_manip_high_E(val_high_list):
+def values_manip_var(val_high_list):
 
     '''
     transposing list like structures into plot-like structures with the uncertainty as first dimension,

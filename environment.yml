@@ -15,5 +15,6 @@ dependencies:
     - tqdm==4.66.1
     - pandas==2.1.0
     - lxml==4.9.3
+    - sreamlit_pdf_viewer
     
 prefix: /home/parrama/Soft/Anaconda/anaconda3

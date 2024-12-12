@@ -2,19 +2,19 @@ name: base
 channels:
   - defaults
 dependencies:
-  - pip=23.1.2
+  - pip=24.3.1
   - pip:
     - astroquery==0.4.6
-    - astropy==5.2.2
-    - dill==0.3.6
-    - matplotlib==3.7.1
-    - scipy==1.10.1
-    - plotly==5.14.1
+    - astropy==5.3.2
+    - dill==0.3.7
+    - matplotlib==3.7.2
+    - scipy==1.11.2
+    - plotly==5.22.0
     - streamlit-plotly-events==0.0.6
     - seaborn==0.12.2
-    - tqdm==4.65.0
-    - pandas==2.0.1
-    - lxml==4.9.2
+    - tqdm==4.66.1
+    - pandas==2.1.0
+    - lxml==4.9.3
     - sreamlit_pdf_viewer==0.0.19
     
 prefix: /home/parrama/Soft/Anaconda/anaconda3

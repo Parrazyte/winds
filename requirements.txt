@@ -9,4 +9,4 @@ seaborn
 tqdm
 pandas
 lxml
-sreamlit_pdf_viewer
+sreamlit-pdf-viewer

@@ -877,8 +877,9 @@ with tab_source_df:
         tab_pdf, tab_csv = st.tabs(["Full BH candidates table", "Current Sample editable array"])
 
         with tab_pdf:
-            pdf_viewer(os.path.join(project_dir, 'observations/visualisation/visual_line_dumps/sources_tables.pdf'),
-                       pages_to_render=[1, 2, 3, 4, 7, 8], render_text=True)
+            with st.spinner('Loading PDF'):
+                pdf_viewer(os.path.join(project_dir, 'observations/visualisation/visual_line_dumps/sources_tables.pdf'),
+                       pages_to_render=[1, 2, 3, 4, 7, 8], width=1400,render_text=True)
 
             # # st.notice('This table is similar to what was last published in ')
             #
@@ -3099,9 +3100,9 @@ with tab_source_df:
             )
 
     with st.expander('Absorption lines in the literature'):
-
-        pdf_viewer(os.path.join(project_dir, 'observations/visualisation/visual_line_dumps/sources_tables.pdf'),
-                   pages_to_render=[5,6, 7, 8], render_text=True)
+        with st.spinner('Loading PDF'):
+            pdf_viewer(os.path.join(project_dir, 'observations/visualisation/visual_line_dumps/sources_tables.pdf'),
+                   pages_to_render=[5,6, 7, 8],width=1400,render_text=True)
 
         # st.markdown(state_table_footnotes)
         # st.latex(state_table_latex_disp)

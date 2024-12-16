@@ -6523,6 +6523,7 @@ def xPlot(types,axes_input=None,plot_saves_input=None,plot_arg=None,includedlist
                 #auto naming the group from header infos
                 try:
                     AllData(1)
+                    no_sp=False
                 except:
                     no_sp=True
 

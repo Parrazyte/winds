@@ -38,10 +38,10 @@ try:
 except:
     pass
 
-"""
-Important notes:
-for now we don't consider the luminosity uncertainty (assumed to be negligible against the one for the EW
-"""
+
+#Important notes:
+#for now we don't consider the luminosity uncertainty (assumed to be negligible against the one for the EW
+
 
 range_nH = np.arange(21, 25.01, 0.5)
 range_v_turb = np.array([0, 500, 1000, 2500, 5000])

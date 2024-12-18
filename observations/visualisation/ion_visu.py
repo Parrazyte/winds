@@ -22,6 +22,7 @@ from general_tools import interval_extract
 
 from scipy.interpolate import CubicSpline
 from scipy.ndimage import label, find_objects
+from scipy.spatial import Delaunay
 
 import dill
 
@@ -48,7 +49,7 @@ else:
 update_dump=False
 
 if online:
-    dump_path = '/mount/src/winds/observations/visualisation/ion_visu/dump_ions.pkl'
+    dump_path = project_dir+'observations/visualisation/ion_visu/dump_ions.pkl'
 
     if not os.path.isfile(dump_path):
         print(dump_path)
@@ -57,6 +58,20 @@ else:
     dump_path = '/home/parrama/Documents/Work/PhD/docs/Observations/4U/photo_Stefano/dump_ions.pkl'
 
     update_dump = st.sidebar.button('Update dump')
+
+if not online:
+    update_online = st.sidebar.button('Update online version')
+else:
+    update_online = False
+
+if update_online:
+
+    # updating script
+    path_online = __file__.replace('.py', '_online.py')
+    os.system('cp ' + __file__ + ' ' + path_online)
+
+    # updating dumps to one level above the script
+    os.system('cp '+dump_path+' '+ path_online[:path_online.rfind('/')] + '/ion_visu/')
 
 if update_dump or not os.path.isfile(dump_path):
 
@@ -145,8 +160,11 @@ SEDs=dump_arr[4]
 COG_base=dump_arr[5]
 COG_invert=dump_arr[6]
 
-slider_nH=st.select_slider('nH value',range_nH,value=23.0)
-slider_v_turb=st.select_slider(r'$v_{turb}$ value',range_v_turb,value=1000)
+tab_2D,tab_3D=st.tabs(['2D Curve of Growths','nR² evolution'])
+
+with tab_2D:
+    slider_nH=st.select_slider('nH value',range_nH,value=23.0)
+    slider_v_turb=st.select_slider(r'$v_{turb}$ value',range_v_turb,value=1000)
 
 fig_2D,ax_2D = plt.subplots(1,3, figsize=(10,8),sharey=True)
 fig_2D.subplots_adjust(wspace=0)
@@ -415,7 +433,6 @@ for i_SED,elem_SED in enumerate(list(SEDs.keys())):
 fig_2D.legend(ncol=3,bbox_to_anchor=(0.91, 1.))
 
 
-tab_2D,tab_3D=st.tabs(['2D Curve of Growths','nR² evolution'])
 
 with tab_2D:
 
@@ -425,152 +442,321 @@ with tab_2D:
 valid_par_range_dict={}
 valid_volumes_dict={}
 
-for elem_SED in list(SEDs.keys()):
+@st.cache_data
+def find_volumes():
 
-    valid_par_arr=np.repeat(-1.,2*len(range_nH)*len(range_v_turb)).reshape(2,len(range_nH),len(range_v_turb))
-    valid_par_arr_3D=np.repeat(None,2*len(range_nH)*len(range_v_turb)).reshape(2,len(range_nH),len(range_v_turb))
+    for elem_SED in list(SEDs.keys()):
 
-    for i_nh in range(len(range_nH)):
-        for i_v_turb in range(len(range_v_turb)):
+        valid_par_arr=np.repeat(-1.,2*len(range_nH)*len(range_v_turb)).reshape(2,len(range_nH),len(range_v_turb))
+        valid_par_arr_3D=np.repeat(None,2*len(range_nH)*len(range_v_turb)).reshape(2,len(range_nH),len(range_v_turb))
+
+        for i_nh in range(len(range_nH)):
+            for i_v_turb in range(len(range_v_turb)):
 
 
-            COG_invert_SED = COG_invert_use[elem_SED]
+                COG_invert_SED = COG_invert_use[elem_SED]
 
-            COG_invert_indiv = COG_invert_SED[i_nh][i_v_turb]
+                COG_invert_indiv = COG_invert_SED[i_nh][i_v_turb]
 
-            ew_25_vals = ew_25_csv[flux_3_10_csv['SED'] == elem_SED]
-            ew_25_vals_arr = np.array(ew_25_vals)[0][1:]
+                ew_25_vals = ew_25_csv[flux_3_10_csv['SED'] == elem_SED]
+                ew_25_vals_arr = np.array(ew_25_vals)[0][1:]
 
-            ew_26_vals = ew_26_csv[flux_3_10_csv['SED'] == elem_SED]
-            ew_26_vals_arr = np.array(ew_26_vals)[0][1:]
+                ew_26_vals = ew_26_csv[flux_3_10_csv['SED'] == elem_SED]
+                ew_26_vals_arr = np.array(ew_26_vals)[0][1:]
 
-            if ew_25_vals_arr[0] != 0:
-                ew_ratio_vals = np.array([ew_26_vals_arr[0] / ew_25_vals_arr[0],
-                                          ew_26_vals_arr[0] / ew_25_vals_arr[0] - (
-                                                      ew_26_vals_arr[0] - ew_26_vals_arr[1]) / (
-                                                      ew_25_vals_arr[0] + ew_25_vals_arr[1]),
-                                          (ew_26_vals_arr[0] + ew_26_vals_arr[1]) / (
-                                                      ew_25_vals_arr[0] - ew_25_vals_arr[1]) \
-                                          - ew_26_vals_arr[0] / ew_25_vals_arr[0]])
-            else:
-                ew_ratio_vals = np.repeat(0, 3)
-
-            ew_25_mask = np.argwhere((COG_invert_indiv[2] > ew_25_vals_arr[0] - ew_25_vals_arr[1]) &
-                                     (COG_invert_indiv[2] < ew_25_vals_arr[0] + ew_25_vals_arr[2])).T[0]
-
-            ew_26_mask = np.argwhere((COG_invert_indiv[1] > ew_26_vals_arr[0] - ew_26_vals_arr[1]) &
-                                     (COG_invert_indiv[1] < ew_26_vals_arr[0] + ew_26_vals_arr[2])).T[0]
-
-            if ew_25_vals_arr[-1] != 0.:
-                ew_25_mask_ul = np.argwhere(COG_invert_indiv[2] < ew_25_vals_arr[-1]).T[0]
-            else:
-                ew_25_mask_ul = []
-
-            if ew_26_vals_arr[-1] != 0.:
-                ew_26_mask_ul = np.argwhere(COG_invert_indiv[2] < ew_26_vals_arr[-1]).T[0]
-            else:
-                ew_26_mask_ul = []
-
-            if ew_25_vals_arr[-1] != 0 or ew_26_vals_arr[-1] != 0:
-                ew_ratio_mask = []
-            else:
-                ew_ratio_mask = np.argwhere((COG_invert_indiv[1] / COG_invert_indiv[2] > \
-                                             (ew_26_vals_arr[0] - ew_26_vals_arr[1]) / (
-                                                         ew_25_vals_arr[0] + ew_25_vals_arr[1])) &
-                                            (COG_invert_indiv[1] / COG_invert_indiv[2] < \
-                                             (ew_26_vals_arr[0] + ew_26_vals_arr[1]) / (
-                                                         ew_25_vals_arr[0] - ew_25_vals_arr[1]))).T[0]
-
-            if np.any(ew_25_mask_ul) or np.any(ew_26_mask_ul):
-
-                if np.any(ew_25_mask_ul) and np.any(ew_26_mask_ul):
-                    ew_ratio_mask_l = (ew_25_mask_ul) | (ew_26_mask_ul)
-                elif np.any(ew_25_mask_ul):
-                    ew_ratio_mask_l = ew_25_mask_ul
+                if ew_25_vals_arr[0] != 0:
+                    ew_ratio_vals = np.array([ew_26_vals_arr[0] / ew_25_vals_arr[0],
+                                              ew_26_vals_arr[0] / ew_25_vals_arr[0] - (
+                                                          ew_26_vals_arr[0] - ew_26_vals_arr[1]) / (
+                                                          ew_25_vals_arr[0] + ew_25_vals_arr[1]),
+                                              (ew_26_vals_arr[0] + ew_26_vals_arr[1]) / (
+                                                          ew_25_vals_arr[0] - ew_25_vals_arr[1]) \
+                                              - ew_26_vals_arr[0] / ew_25_vals_arr[0]])
                 else:
-                    ew_ratio_mask_l = ew_26_mask_ul
-            else:
-                ew_ratio_mask_l = []
+                    ew_ratio_vals = np.repeat(0, 3)
+
+                ew_25_mask = np.argwhere((COG_invert_indiv[2] > ew_25_vals_arr[0] - ew_25_vals_arr[1]) &
+                                         (COG_invert_indiv[2] < ew_25_vals_arr[0] + ew_25_vals_arr[2])).T[0]
+
+                ew_26_mask = np.argwhere((COG_invert_indiv[1] > ew_26_vals_arr[0] - ew_26_vals_arr[1]) &
+                                         (COG_invert_indiv[1] < ew_26_vals_arr[0] + ew_26_vals_arr[2])).T[0]
+
+                if ew_25_vals_arr[-1] != 0.:
+                    ew_25_mask_ul = np.argwhere(COG_invert_indiv[2] < ew_25_vals_arr[-1]).T[0]
+                else:
+                    ew_25_mask_ul = []
+
+                if ew_26_vals_arr[-1] != 0.:
+                    ew_26_mask_ul = np.argwhere(COG_invert_indiv[2] < ew_26_vals_arr[-1]).T[0]
+                else:
+                    ew_26_mask_ul = []
+
+                if ew_25_vals_arr[-1] != 0 or ew_26_vals_arr[-1] != 0:
+                    ew_ratio_mask = []
+                else:
+                    ew_ratio_mask = np.argwhere((COG_invert_indiv[1] / COG_invert_indiv[2] > \
+                                                 (ew_26_vals_arr[0] - ew_26_vals_arr[1]) / (
+                                                             ew_25_vals_arr[0] + ew_25_vals_arr[1])) &
+                                                (COG_invert_indiv[1] / COG_invert_indiv[2] < \
+                                                 (ew_26_vals_arr[0] + ew_26_vals_arr[1]) / (
+                                                             ew_25_vals_arr[0] - ew_25_vals_arr[1]))).T[0]
+
+                if np.any(ew_25_mask_ul) or np.any(ew_26_mask_ul):
+
+                    if np.any(ew_25_mask_ul) and np.any(ew_26_mask_ul):
+                        ew_ratio_mask_l = (ew_25_mask_ul) | (ew_26_mask_ul)
+                    elif np.any(ew_25_mask_ul):
+                        ew_ratio_mask_l = ew_25_mask_ul
+                    else:
+                        ew_ratio_mask_l = ew_26_mask_ul
+                else:
+                    ew_ratio_mask_l = []
 
 
-            valid_range_par = [elem for elem in np.arange(len(COG_invert_indiv[0])) if
-                               (elem in ew_25_mask or elem in ew_25_mask_ul) \
-                               and (elem in ew_26_mask or elem in ew_26_mask_ul)
-                               and (elem in ew_ratio_mask or elem in ew_ratio_mask_l)]
+                valid_range_par = [elem for elem in np.arange(len(COG_invert_indiv[0])) if
+                                   (elem in ew_25_mask or elem in ew_25_mask_ul) \
+                                   and (elem in ew_26_mask or elem in ew_26_mask_ul)
+                                   and (elem in ew_ratio_mask or elem in ew_ratio_mask_l)]
 
-            if len(valid_range_par)!=0:
-                valid_par_arr[0][i_nh][i_v_turb]=COG_invert_indiv[0][valid_range_par[0]]
-                valid_par_arr[1][i_nh][i_v_turb] = COG_invert_indiv[0][valid_range_par[-1]]
+                if len(valid_range_par)!=0:
+                    valid_par_arr[0][i_nh][i_v_turb]=COG_invert_indiv[0][valid_range_par[0]]
+                    valid_par_arr[1][i_nh][i_v_turb] = COG_invert_indiv[0][valid_range_par[-1]]
 
-                valid_par_arr_3D[0][i_nh][i_v_turb]=np.array([range_nH[i_nh],range_v_turb[i_v_turb],
-                                                              COG_invert_indiv[0][valid_range_par[0]]]).astype(object)
-                valid_par_arr_3D[1][i_nh][i_v_turb]=np.array([range_nH[i_nh],range_v_turb[i_v_turb],
-                                                              COG_invert_indiv[0][valid_range_par[-1]]]).astype(object)
-            else:
-                valid_par_arr_3D[0][i_nh][i_v_turb]=np.repeat(-1,3).astype(object)
-                valid_par_arr_3D[1][i_nh][i_v_turb]=np.repeat(-1,3).astype(object)
+                    valid_par_arr_3D[0][i_nh][i_v_turb]=np.array([range_nH[i_nh],range_v_turb[i_v_turb],
+                                                                  COG_invert_indiv[0][valid_range_par[0]]]).astype(object)
+                    valid_par_arr_3D[1][i_nh][i_v_turb]=np.array([range_nH[i_nh],range_v_turb[i_v_turb],
+                                                                  COG_invert_indiv[0][valid_range_par[-1]]]).astype(object)
+                else:
+                    valid_par_arr_3D[0][i_nh][i_v_turb]=np.repeat(-1,3).astype(object)
+                    valid_par_arr_3D[1][i_nh][i_v_turb]=np.repeat(-1,3).astype(object)
 
-                # breakpoint()
+                    # breakpoint()
 
-    valid_par_range_dict[elem_SED]=valid_par_arr
-    #identifying individual volumes in the final array (chatgpt made this)
+        valid_par_range_dict[elem_SED]=valid_par_arr
+        #identifying individual volumes in the final array (chatgpt made this)
 
-    # Label connected components
-    structure = np.ones((3, 3, 3))  # Define connectivity (26-connected here)
-    labeled_array, num_features = label(valid_par_arr > 0, structure=structure)
+        # Label connected components
+        structure = np.ones((3, 3, 3))  # Define connectivity (26-connected here)
+        labeled_array, num_features = label(valid_par_arr > 0, structure=structure)
 
-    # Find slices for each volume
-    slices = find_objects(labeled_array)
-    volume_list=[]
-    volume_3D_list=[]
-    for i, sl in enumerate(slices):
-        volume_list += [valid_par_arr[sl] * (labeled_array[sl] == (i + 1))]
+        # Find slices for each volume
+        slices = find_objects(labeled_array)
+        volume_list=[]
+        volume_3D_list=[]
+        for i, sl in enumerate(slices):
+            volume_list += [valid_par_arr[sl] * (labeled_array[sl] == (i + 1))]
 
+            try:
+                #protected by a fourth dimension that is kept as an object to avoid issues with the additional dimension
+                high_d_volume = valid_par_arr_3D[sl] * (labeled_array[sl] == (i + 1))
+            except:
+                breakpoint()
+
+
+            #once the array is created, we can put it back to floats to transpose it
+            for i in range(len(high_d_volume)):
+                for j in range(len(high_d_volume[i])):
+                    for k in range(len(high_d_volume[i][j])):
+                        high_d_volume[i][j][k]=high_d_volume[i][j][k].astype(float)
+
+            high_d_volume=np.array([[[subsubelem for subsubelem in subelem] for subelem in elem] for elem in high_d_volume])
+
+            # breakpoint()
+
+            # #flattening the array to get only one dimension
+            high_d_volume=np.array([elem.flatten().reshape(len(elem.flatten()) // 3, 3) for elem in high_d_volume])
+            #
+            # #removing the empty points
+            high_d_volume=np.array([[subelem for subelem in elem if not np.all(subelem==0.)] for elem in high_d_volume])
+
+            # # #and now we can set it up into a x y z array type
+            # high_d_volume_clean= np.array([elem.ravel() for elem in high_d_volume.transpose(3,0,1,2)])
+            #
+            # #removing the zeros that sometimes get there if the definition of the volume needs additional space
+            # #in the 3D range
+            # high_d_volume_clean=np.array([elem for elem in high_d_volume_clean.T if not np.all(elem==0.)]).T
+
+            volume_3D_list+=[high_d_volume]
+
+        valid_volumes_dict[elem_SED]=volume_3D_list
+
+    return valid_volumes_dict
+
+valid_volumes_dict=find_volumes()
+
+
+import numpy as np
+import plotly.graph_objects as go
+from scipy.spatial import ConvexHull
+import numpy as np
+import plotly.graph_objects as go
+from scipy.spatial import ConvexHull
+
+import numpy as np
+import plotly.graph_objects as go
+from scipy.spatial import ConvexHull
+
+
+def plot_3d_surface(planes, color='lightblue', volume_number=1, plot_points=True,
+                    legendgroup=''):
+    """
+    Plot a 3D structure, distinguishing between volumes, planes, and lines.
+
+    Args:
+        planes (numpy.ndarray): A 2D array of shape (n_planes, n_points, 3), where each plane is a set of 3D points.
+        color (str): The color to use for the surface or points (default is 'lightblue').
+        volume_number (int): The name of the volume to display on hover (default is 1').
+        show_volume_name (bool): Whether to display the `volume_name` on hover for each point (default is True).
+
+        plot_points (bool): whether to plots the points from which the volume/plane is made
+
+        legend_group: the SED name to only have one legend element per SED
+    Returns:
+        a list of  A Plotly graph objects with the appropriate 3D object type.
+    """
+
+    volume_str='volume ' + str(volume_number)
+
+    def make_shape_triangles(points, color='blue', volume_str='', legendgroup=''):
+        '''
+        This one was adapted from chatgpt but modified because must work specifically to not overplot too many triangles
+        Tailored for planes
+        '''
+        x = points[:, 0]  # x is always 23
+        y = points[:, 1]
+        z = points[:, 2]
+
+        if len(np.unique(x)) == 1:
+            points_2d = points[:, 1:3]
+        elif len(np.unique(y)) == 1:
+            points_2d = points[:, [0, 2]]
+        else:
+            points_2d = points[:, 0:2]
+
+        #
+        # # Prepare the points for Delaunay triangulation (only y and z are needed for 2D triangulation)
+        # points_2d = points[:, 1:3]
+
+        # breakpoint()
+
+        # Perform Delaunay triangulation
+        triangulation = Delaunay(points_2d)
+
+        # Add triangles to the plot
+        mesh_list = []
+        for simplex in triangulation.simplices:
+            x_tris = [x[simplex[0]], x[simplex[1]], x[simplex[2]]]
+            y_tris = [y[simplex[0]], y[simplex[1]], y[simplex[2]]]
+            z_tris = [z[simplex[0]], z[simplex[1]], z[simplex[2]]]
+
+            # skipping the triangles with 3 different x or y axis coordinates since these will go beyond the plane we want
+            # to draw
+            if len(np.unique(y_tris)) > 2 or len(np.unique(x_tris)) > 2:
+                continue
+
+            mesh_list += [
+                go.Mesh3d(x=x_tris, y=y_tris, z=z_tris, color=color, i=[0], j=[1], k=[2], opacity=0.5, showscale=False,
+                          name=volume_str, legendgroup=legendgroup, legendgrouptitle={'text': legendgroup},
+                          showlegend=False)]
+
+        return mesh_list
+
+
+    points = np.vstack(planes)
+    rank = np.linalg.matrix_rank(points[:, :3])  # Determine rank based on X, Y, Z coordinates
+
+    #adding a failsafe for the cases where this doesn't work
+    if rank==3:
+        rank=rank-sum([len(np.unique(elem))==1 for elem in points.T])
+
+    if rank==2:
+        rank=rank-max(sum([len(np.unique(elem))==1 for elem in points.T])-1,0)
+
+    shapes=[]
+    if rank == 3:
+        # 3D Volume
         try:
-            #protected by a fourth dimension that is kept as an object to avoid issues with the additional dimension
-            high_d_volume = valid_par_arr_3D[sl] * (labeled_array[sl] == (i + 1))
-        except:
-            breakpoint()
+            hull = ConvexHull(points)
+        except Exception as e:
+            raise ValueError(f"Error computing convex hull: {e}")
+        x, y, z = points[:, 0], points[:, 1], points[:, 2]
+        i, j, k = hull.simplices[:, 0], hull.simplices[:, 1], hull.simplices[:, 2]
+        # hover_text = [
+        #     f"{volume_name}<br>X: {xi:.2f}, Y: {yi:.2f}, Z: {zi:.2f}" for xi, yi, zi in zip(x, y, z)
+        # ] if show_volume_name else None
+        shapes+= [go.Mesh3d(
+            x=x, y=y, z=z, i=i, j=j, k=k,
+            color=color, opacity=0.5,name=volume_str, legendgroup=legendgroup, legendgrouptitle={'text': legendgroup},
+                                    showlegend=False)]
 
-        #once the array is created, we can put it back to floats to transpose it
-        for i in range(len(high_d_volume)):
-            for j in range(len(high_d_volume[i])):
-                for k in range(len(high_d_volume[i][j])):
-                    high_d_volume[i][j][k]=high_d_volume[i][j][k].astype(float)
-        high_d_volume=np.array([[[subsubelem for subsubelem in subelem] for subelem in elem] for elem in high_d_volume])
+        if plot_points:
+            shapes += [go.Scatter3d(x=points.T[0], y=points.T[1], z=points.T[2], mode='markers',
+                                       marker=dict(size=2, color=color),
+                                    name=volume_str, legendgroup=legendgroup, legendgrouptitle={'text': legendgroup},
+                                    showlegend=True)]
 
-        #and now we can set it up into a x y z array type
-        high_d_volume_clean= np.array([elem.ravel() for elem in high_d_volume.transpose(3,0,1,2)])
+    elif rank == 2:
 
-        #removing the zeros that sometimes get there if the definition of the volume needs additional space
-        #in the 3D range
-        high_d_volume_clean=np.array([elem for elem in high_d_volume_clean.T if not np.all(elem==0.)])
+        shapes+=make_shape_triangles(points,color=color,volume_str=volume_str,legendgroup=legendgroup)
 
-        volume_3D_list+=[high_d_volume_clean]
+        if plot_points:
+            shapes += [go.Scatter3d(x=points.T[0], y=points.T[1], z=points.T[2], mode='markers',
+                                       marker=dict(size=2, color=color),
+                                    name=volume_str,legendgroup=legendgroup,legendgrouptitle={'text': legendgroup},
+                                    showlegend=True)]
 
-    valid_volumes_dict[elem_SED]=volume_3D_list
 
-breakpoint()
-#now just gotta test how to plot the volumes
-# with tab_3D:
+    elif rank == 1:
+        # 1D Line
+        x, y, z = points[:, 0], points[:, 1], points[:, 2]
+
+        shapes += [go.Scatter3d(
+            x=x, y=y, z=z,
+            mode='lines+markers',
+            line=dict(color=color, width=5),
+            marker=dict(size=5, color=color, opacity=0.5),
+            name=volume_str,legendgroup=legendgroup,legendgrouptitle={'text': legendgroup})]
+    else:
+        # Degenerate case
+        x, y, z = points[:, 0], points[:, 1], points[:, 2]
+
+        shapes += [go.Scatter3d(
+            x=x, y=y, z=z,
+            mode='markers',
+            marker=dict(size=2, color=color, opacity=0.5),
+            name=volume_str,legendgroup=legendgroup,legendgrouptitle={'text': legendgroup})]
+
+    return shapes
+
+#getting all the surfaces into an array
+mult_d_surfaces=[]
+for i_SED,elem_SED in enumerate(list(SEDs.keys())):
+
+    if elem_SED not in list_SEDs_disp:
+        continue
+
+    valid_volumes=valid_volumes_dict[elem_SED]
+
+    for i_vol in range(len(valid_volumes)):
+        mult_d_surfaces+=plot_3d_surface(valid_volumes[i_vol],color=base_cmap[i_SED],volume_number=i_vol+1,
+                                         legendgroup=elem_SED)
+
+
+fig_3D=go.Figure(data=mult_d_surfaces)
+
+# Layout settings with custom axis names
+fig_3D.update_layout(
+    scene=dict(
+        xaxis_title='nH',  # Custom X-axis label
+        yaxis_title='v_turb',  # Custom Y-axis label
+        zaxis_title='log10(nR²)',  # Custom Z-axis label
+        aspectmode="cube",
+
+    ),
+    height=1000
+)
+
 #
-#
-#     elem_SED:go.volume()}
-#     fig = go.Figure(data=[
-#         go.Surface(z=z1),
-#         go.Surface(z=z2, showscale=False, opacity=0.9),
-#         go.Surface(z=z3, showscale=False, opacity=0.9)
-#
-#     ])
-#
-#     st.plotly_chart(fig)
+with tab_3D:
+    st.plotly_chart(fig_3D,use_container_width=True,theme=None)
 
-
-
-
-# breakpoint()
-
-#color the intervals of nR² where each obs may exist
-
-#make a 3D graph of the minimum/all nR² distance between observations?
-#ou alors 3D surface plot ?

@@ -176,21 +176,22 @@ base_cmap=plt.rcParams['axes.prop_cycle'].by_key()['color']
 
 ax_2D[0].set_ylim(33,38)
 
-radio_single = st.sidebar.radio('Display options:', ('Multiple Objects', 'Single Object'))
+radio_single = st.sidebar.radio('Display options:', ('Multiple Observations', 'Single Observation'))
 
-if radio_single == 'Single Object':
+if radio_single == 'Single Observation':
     list_SEDs_disp=[st.sidebar.selectbox('SED to display',options=list(SEDs.keys()))]
 
 
-if radio_single == 'Multiple Objects':
+if radio_single == 'Multiple Observations':
 
     list_SEDs_disp=st.sidebar.multiselect(label='SEDs to display',options=list(SEDs.keys()),default=list(SEDs.keys()))
 
 interpolate=st.sidebar.toggle(label='interpolate',value=True)
 
-highlight_EW_vert=st.sidebar.toggle('highlight EW range')
+with st.sidebar.expander('Curve of growth visualisation options:'):
+    highlight_EW_vert=st.toggle('highlight EW range')
 
-highlight_valid_range=st.sidebar.toggle('highlight valid nR² range',value=True)
+    highlight_valid_range=st.toggle('highlight valid nR² range',value=True)
 
 
 if interpolate:

@@ -38,10 +38,10 @@ try:
 except:
     pass
 
-'''
+"""
 Important notes:
 for now we don't consider the luminosity uncertainty (assumed to be negligible against the one for the EW
-'''
+"""
 
 range_nH = np.arange(21, 25.01, 0.5)
 range_v_turb = np.array([0, 500, 1000, 2500, 5000])
@@ -306,7 +306,7 @@ for i_SED,elem_SED in enumerate(list(SEDs.keys())):
         ew_25_intervals=list(interval_extract(ew_25_mask))
 
         #25 outline plot
-        [ax_2D[1].plot(COG_invert_indiv[2][ew_25_intervals[i_inter][0]:ew_25_intervals[i_inter][1]+1],
+        temp=[ax_2D[1].plot(COG_invert_indiv[2][ew_25_intervals[i_inter][0]:ew_25_intervals[i_inter][1]+1],
                   COG_invert_indiv[0][ew_25_intervals[i_inter][0]:ew_25_intervals[i_inter][1]+1],
                   color=base_cmap[i_SED],lw=5,alpha=0.7,zorder=100)\
          for i_inter in range(len(ew_25_intervals))]
@@ -316,7 +316,7 @@ for i_SED,elem_SED in enumerate(list(SEDs.keys())):
         ew_25_intervals_ul=list(interval_extract(ew_25_mask_ul))
 
         #25 outline plot
-        [ax_2D[1].plot(COG_invert_indiv[2][ew_25_intervals_ul[i_inter][0]:ew_25_intervals_ul[i_inter][1]+1],
+        temp=[ax_2D[1].plot(COG_invert_indiv[2][ew_25_intervals_ul[i_inter][0]:ew_25_intervals_ul[i_inter][1]+1],
                   COG_invert_indiv[0][ew_25_intervals_ul[i_inter][0]:ew_25_intervals_ul[i_inter][1]+1],
                   color=base_cmap[i_SED],lw=5,alpha=0.7,zorder=100,ls=':')\
          for i_inter in range(len(ew_25_intervals_ul))]
@@ -335,7 +335,7 @@ for i_SED,elem_SED in enumerate(list(SEDs.keys())):
             breakpoint()
 
         #26 outline plot
-        [ax_2D[2].plot(COG_invert_indiv[1][ew_26_intervals[i_inter][0]:ew_26_intervals[i_inter][1]+1],
+        temp=[ax_2D[2].plot(COG_invert_indiv[1][ew_26_intervals[i_inter][0]:ew_26_intervals[i_inter][1]+1],
                   COG_invert_indiv[0][ew_26_intervals[i_inter][0]:ew_26_intervals[i_inter][1]+1],
                   color=base_cmap[i_SED],lw=5,alpha=0.7,zorder=100)\
          for i_inter in range(len(ew_26_intervals))]
@@ -345,7 +345,7 @@ for i_SED,elem_SED in enumerate(list(SEDs.keys())):
         ew_26_intervals_ul=list(interval_extract(ew_26_mask_ul))
 
         #25 outline plot
-        [ax_2D[1].plot(COG_invert_indiv[1][ew_26_intervals_ul[i_inter][0]:ew_26_intervals_ul[i_inter][1]+1],
+        temp=[ax_2D[1].plot(COG_invert_indiv[1][ew_26_intervals_ul[i_inter][0]:ew_26_intervals_ul[i_inter][1]+1],
                   COG_invert_indiv[0][ew_26_intervals_ul[i_inter][0]:ew_26_intervals_ul[i_inter][1]+1],
                   color=base_cmap[i_SED],lw=5,alpha=0.7,zorder=100,ls=':')\
          for i_inter in range(len(ew_26_intervals_ul))]
@@ -618,10 +618,10 @@ def plot_3d_surface(planes, color='lightblue', volume_number=1, plot_points=True
     volume_str='volume ' + str(volume_number)
 
     def make_shape_triangles(points, color='blue', volume_str='', legendgroup=''):
-        '''
+        """
         This one was adapted from chatgpt but modified because must work specifically to not overplot too many triangles
         Tailored for planes
-        '''
+        """
         x = points[:, 0]  # x is always 23
         y = points[:, 1]
         z = points[:, 2]

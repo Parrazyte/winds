@@ -16,7 +16,13 @@ import matplotlib as mpl
 import matplotlib.pyplot as plt
 import plotly.graph_objects as go
 
-sys.path.append('/home/parrama/Documents/Work/PhD/Scripts/Python/general/')
+online='parrama' not in os.getcwd()
+if online:
+    project_dir='/mount/src/winds/'
+else:
+    project_dir='/home/parrama/Documents/Work/PhD/Scripts/Python/'
+
+sys.path.append(project_dir+'/general/')
 
 from general_tools import interval_extract
 
@@ -39,12 +45,6 @@ for now we don't consider the luminosity uncertainty (assumed to be negligible a
 
 range_nH = np.arange(21, 25.01, 0.5)
 range_v_turb = np.array([0, 500, 1000, 2500, 5000])
-
-online='parrama' not in os.getcwd()
-if online:
-    project_dir='/mount/src/winds/'
-else:
-    project_dir='/home/parrama/Documents/Work/PhD/Scripts/Python/'
 
 update_dump=False
 

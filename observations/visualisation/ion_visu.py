@@ -172,7 +172,21 @@ fig_2D.subplots_adjust(wspace=0)
 plt.suptitle(r'Curve of Growths for log(nH/cm²)='+str(slider_nH)+' and $v_{turb}$='+str(slider_v_turb)+' km/s',
              position=[0.5,0.05])
 
-base_cmap=plt.rcParams['axes.prop_cycle'].by_key()['color']
+cmap_choice=st.sidebar.radio('Color map choice',['Trying to match Stefano', 'matplotlib default'])
+
+init_cmap_vals={'outlier_diagonal_middle':'red',
+                'outlier_diagonal_lower_floor':'maroon',
+                'diagonal_lower_low_highE_flux':'orange',
+                'diagonal_upper_low_highE_flux':'powderblue',
+                'diagonal_upper_mid_highE_flux':'turquoise',
+                'diagonal_upper_high_highE_flux':'pink',
+                'SPL_whereline':'forestgreen'}
+
+if cmap_choice=="matplotlib default":
+    base_cmap=plt.rcParams['axes.prop_cycle'].by_key()['color']
+elif cmap_choice=='Trying to match Stefano':
+    base_cmap=[init_cmap_vals[elem_SED] for elem_SED in list(SEDs.keys())]
+
 
 ax_2D[0].set_ylim(33,38)
 

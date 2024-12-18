@@ -371,7 +371,7 @@ for i_SED,elem_SED in enumerate(list(SEDs.keys())):
                 continue
 
             #ratio outline plot
-            ax_2D[0].plot((COG_invert_indiv[1]/COG_invert_indiv[2])\
+            temp=ax_2D[0].plot((COG_invert_indiv[1]/COG_invert_indiv[2])\
                 [ew_ratio_intervals[i_inter][0]:ew_ratio_intervals[i_inter][1]+1],
                       COG_invert_indiv[0][ew_ratio_intervals[i_inter][0]:ew_ratio_intervals[i_inter][1]+1],
                       color=base_cmap[i_SED],lw=5,alpha=0.7,zorder=100)
@@ -395,7 +395,7 @@ for i_SED,elem_SED in enumerate(list(SEDs.keys())):
                      ew_ratio_intervals_l[i_inter][0]:ew_ratio_intervals_l[i_inter][1] + 1] >= 34.)
 
             # ratio outline plot
-            ax_2D[0].plot((COG_invert_indiv[1] / COG_invert_indiv[2]) \
+            temp=ax_2D[0].plot((COG_invert_indiv[1] / COG_invert_indiv[2]) \
                               [ew_ratio_intervals_l[i_inter][0]:ew_ratio_intervals_l[i_inter][1] + 1][mask_bounds],
                           COG_invert_indiv[0][ew_ratio_intervals_l[i_inter][0]:ew_ratio_intervals_l[i_inter][1] + 1][mask_bounds],
                           color=base_cmap[i_SED], lw=5, alpha=0.7, zorder=100,ls=':')
@@ -426,9 +426,9 @@ for i_SED,elem_SED in enumerate(list(SEDs.keys())):
 
 
 #plotting a horizontal background grid to help visualisation
-[ax_2D[0].plot([1e-2,1e2],[nr_val,nr_val],color='grey',lw=0.5,alpha=0.3) for nr_val in np.arange(33.1,38,0.1)]
-[ax_2D[1].plot([0,80],[nr_val,nr_val],color='grey',lw=0.5,alpha=0.3) for nr_val in np.arange(33.1,38,0.1)]
-[ax_2D[2].plot([0,80],[nr_val,nr_val],color='grey',lw=0.5,alpha=0.3) for nr_val in np.arange(33.1,38,0.1)]
+temp=[ax_2D[0].plot([1e-2,1e2],[nr_val,nr_val],color='grey',lw=0.5,alpha=0.3) for nr_val in np.arange(33.1,38,0.1)]
+temp=[ax_2D[1].plot([0,80],[nr_val,nr_val],color='grey',lw=0.5,alpha=0.3) for nr_val in np.arange(33.1,38,0.1)]
+temp=[ax_2D[2].plot([0,80],[nr_val,nr_val],color='grey',lw=0.5,alpha=0.3) for nr_val in np.arange(33.1,38,0.1)]
 
 fig_2D.legend(ncol=3,bbox_to_anchor=(0.91, 1.))
 

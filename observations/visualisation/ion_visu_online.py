@@ -425,7 +425,8 @@ list_SEDs_surface=st.sidebar.multiselect(label='SEDs to draw 3D surfaces for',
 
 with tab_3D:
     if len(list_SEDs_disp)>1:
-        st.info('Undersampling the volumes to limit lags. For the full volumes, select only one SED.')
+        st.info('The volumes are undersampled according to the number of observations drawn.'
+                'To see the full volumes, select only one SED.')
 
 plot_points=st.sidebar.toggle(label='overlay points',value=False)
 
@@ -982,7 +983,7 @@ def plot_3d_surface(planes, color='lightblue', volume_number=1, plot_points=Fals
                                     mode='markers',
                                        marker=dict(size=2, color=color,opacity=0.4 if single_mode else 1.),
                                     name=volume_str, legendgroup=legendgroup, legendgrouptitle={'text': legendgroup},
-                                    showlegend=False)]
+                                    showlegend=not draw_surface)]
 
     elif rank == 2:
 
@@ -1038,24 +1039,27 @@ def make_3D_figure(SEDs_disp,SEDs_surface,cmap,plot_points=False,under_sampling_
     # getting all the surfaces into an array
     mult_d_surfaces = []
 
-    single_mode=len(SEDs_disp)==1
+    single_mode=len(SEDs_surface)==1
 
     n_SEDs=len(SEDs_surface)
+
+    additional_sampling=0+(1 if 'diagonal_upper_mid_highE_flux' in SEDs_surface else 0)\
+                        +(1 if 'diagonal_upper_high_highE_flux' in SEDs_surface else 0)
 
     for i_SED,elem_SED in enumerate(list(SEDs.keys())):
 
         if under_sampling_v_turb == 'var':
 
             if i_SED in [2,4]:
-                under_sampling_v_turb=3 if single_mode else 5+n_SEDs//3
+                under_sampling_v_turb=3 if single_mode else 5+n_SEDs//2+2*additional_sampling
             else:
-                under_sampling_v_turb=1 if single_mode else 2+n_SEDs//2
+                under_sampling_v_turb=1 if single_mode else 2+n_SEDs//2+additional_sampling
 
         if under_sampling_nh == 'var':
             if i_SED in [2,4]:
-                under_sampling_nh=3 if single_mode else 5+n_SEDs//3
+                under_sampling_nh=3 if single_mode else 5+n_SEDs//2+2*additional_sampling
             else:
-                under_sampling_nh=1+n_SEDs//6
+                under_sampling_nh=1+n_SEDs//6+additional_sampling
 
         if elem_SED not in SEDs_disp:
             continue

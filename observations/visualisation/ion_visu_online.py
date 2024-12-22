@@ -1029,7 +1029,7 @@ def plot_3d_surface(planes, color='lightblue', volume_number=1, plot_points=Fals
 
 
 @st.cache_data
-def make_3D_figure(SEDs_disp,SEDs_surface,plot_points=False,under_sampling_v_turb='var',under_sampling_nh='var'):
+def make_3D_figure(SEDs_disp,SEDs_surface,cmap,plot_points=False,under_sampling_v_turb='var',under_sampling_nh='var'):
 
     '''
     Under sampling gives how much we divide in one axis to reduce the number of vertices
@@ -1095,7 +1095,7 @@ def make_3D_figure(SEDs_disp,SEDs_surface,plot_points=False,under_sampling_v_tur
             valid_volumes_under_sampled=[valid_volumes[i_vol][0][mask_under_sampling_lower],
                                          valid_volumes[i_vol][1][mask_under_sampling_higher]]
 
-            mult_d_surfaces+=plot_3d_surface(valid_volumes_under_sampled,color=base_cmap[i_SED],volume_number=i_vol+1,
+            mult_d_surfaces+=plot_3d_surface(valid_volumes_under_sampled,color=cmap[i_SED],volume_number=i_vol+1,
                                              legendgroup=elem_SED,i_SED=i_SED,draw_surface=elem_SED in SEDs_surface,
                                              full_planes=valid_volumes[i_vol],
                                              under_sampling_v_turb=under_sampling_v_turb,
@@ -1124,7 +1124,7 @@ def make_3D_figure(SEDs_disp,SEDs_surface,plot_points=False,under_sampling_v_tur
     with tab_3D:
         st.plotly_chart(fig,use_container_width=True,theme=None)
 
-make_3D_figure(list_SEDs_disp,list_SEDs_surface,plot_points=plot_points)
+make_3D_figure(list_SEDs_disp,list_SEDs_surface,cmap=base_cmap,plot_points=plot_points)
 
 
 

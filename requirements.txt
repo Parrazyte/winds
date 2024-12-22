@@ -10,3 +10,4 @@ tqdm
 pandas
 lxml
 streamlit-pdf-viewer
+webcolors

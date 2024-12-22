@@ -418,12 +418,12 @@ elif radio_single == 'Multiple Observations':
     list_SEDs_disp=st.sidebar.multiselect(label='SEDs to display',options=list(SEDs.keys()),default=list(SEDs.keys()))
 
 list_SEDs_surface=st.sidebar.multiselect(label='SEDs to draw 3D surfaces for',
-                                        options=list_SEDs_disp,default=list_SEDs_disp)
+                                        options=list_SEDs_disp,default=list_SEDs_disp[:min(3,len(list_SEDs_disp))])
 
 
 with tab_3D:
     if len(list_SEDs_disp)>1:
-        st.info('Undersampling the volumes to avoid lags. For the full volumes, select only one SED.')
+        st.info('Undersampling the volumes to limit lags. For the full volumes, select only one SED.')
 
 plot_points=st.sidebar.toggle(label='overlay points',value=False)
 
@@ -669,7 +669,7 @@ def plot_3d_surface(planes, color='lightblue', volume_number=1, plot_points=Fals
     volume_str='volume ' + str(volume_number)
 
     def make_shape_triangles_planes(points, color='blue', volume_str='', legendgroup='',check_overflow='base',
-                                    plane_type='delauney',line_mode=False):
+                                    plane_type='delauney',line_mode=False,show_legend=False):
         """
         This one was adapted must work specifically to not overplot too many triangles
         Tailored for planes
@@ -743,7 +743,7 @@ def plot_3d_surface(planes, color='lightblue', volume_number=1, plot_points=Fals
                         go.Mesh3d(x=tri_fill_lower.T[0], y=tri_fill_lower.T[1], z=tri_fill_lower.T[2],
                                   color=color, i=[0], j=[1], k=[2], opacity=0.5 if single_mode else 0.4, showscale=False,
                                   name=volume_str, legendgroup=legendgroup, legendgrouptitle={'text': legendgroup},
-                                  showlegend=False)]
+                                  showlegend=show_legend and i_v_turb==0)]
 
 
                     mesh_list += [
@@ -826,6 +826,7 @@ def plot_3d_surface(planes, color='lightblue', volume_number=1, plot_points=Fals
                     #              showlegend=False)]
 
                 else:
+
                     mesh_list += [
                         go.Mesh3d(x=x_tris, y=y_tris, z=z_tris, color=color, i=[0], j=[1], k=[2], opacity=0.5 if single_mode else 0.4,
                                   showscale=False,
@@ -970,7 +971,7 @@ def plot_3d_surface(planes, color='lightblue', volume_number=1, plot_points=Fals
         if draw_surface:
 
             shapes+=make_shape_triangles_planes(plane_highest,color=color,volume_str=volume_str,legendgroup=legendgroup,
-                                                plane_type='nearest')
+                                                plane_type='nearest',show_legend=True)
             shapes+=make_shape_triangles_planes(plane_lowest,color=color,volume_str=volume_str,legendgroup=legendgroup,
                                                 plane_type='nearest')
 
@@ -1044,13 +1045,13 @@ def make_3D_figure(SEDs_disp,SEDs_surface,plot_points=False,under_sampling_v_tur
         if under_sampling_v_turb == 'var':
 
             if i_SED in [2,4]:
-                under_sampling_v_turb=2 if single_mode else 5+n_SEDs//3
+                under_sampling_v_turb=3 if single_mode else 5+n_SEDs//3
             else:
                 under_sampling_v_turb=1 if single_mode else 4+n_SEDs//3
 
         if under_sampling_nh == 'var':
             if i_SED in [2,4]:
-                under_sampling_nh=2 if single_mode else 5+n_SEDs//3
+                under_sampling_nh=3 if single_mode else 5+n_SEDs//3
             else:
                 under_sampling_nh=1+n_SEDs//6
 

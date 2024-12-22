@@ -14,6 +14,7 @@ import streamlit as st
 
 import matplotlib as mpl
 import matplotlib.pyplot as plt
+import matplotlib.colors as colors
 import plotly.graph_objects as go
 
 online='parrama' not in os.getcwd()
@@ -24,7 +25,8 @@ else:
 
 sys.path.append(project_dir+'/general/')
 
-from general_tools import interval_extract
+from general_tools import interval_extract,get_overlap
+from bipolar import hotcold
 
 from scipy.interpolate import CubicSpline
 from scipy.ndimage import label, find_objects
@@ -47,11 +49,11 @@ except:
 #for now we don't consider the luminosity uncertainty (assumed to be negligible against the one for the EW
 
 #previous version
-# range_nH = np.arange(21, 25.01, 0.5)
+# range_nh = np.arange(21, 25.01, 0.5)
 # range_v_turb = np.array([0, 500, 1000, 2500, 5000])
 
 #better sampling (with rounding to avoid precision errors that will display in the values
-range_nH=np.arange(21.5,25.01,0.05).round(3)
+range_nh=np.arange(21.5,25.01,0.05).round(3)
 range_v_turb=np.arange(0.5,4.01,0.05).round(3)
 interp_x = np.arange(33, 38, 0.01)
 
@@ -134,9 +136,9 @@ if update_dump or not os.path.isfile(dump_path):
         lion[elem_SED] = float(l_ion_SED.iloc[0])
 
         # this one will also have the modified inverted y axis
-        COG_invert_indiv = np.array([[None] * len(range_v_turb)] * len(range_nH))
+        COG_invert_indiv = np.array([[None] * len(range_v_turb)] * len(range_nh))
 
-        for i_nh, nH in enumerate(range_nH):
+        for i_nh, nH in enumerate(range_nh):
             for i_v_turb, v_turb in enumerate(range_v_turb):
                 curr_COG = np.loadtxt(
                     os.path.join(explore_photo_dir, 'SED_' + elem_SED + '_ew_%.2f' % nH + '_%.2f'  % v_turb + '.dat'))
@@ -146,7 +148,7 @@ if update_dump or not os.path.isfile(dump_path):
                 # order is nr², 26, 25
                 COG_invert_indiv[i_nh][i_v_turb] = np.array([curr_nRtwo, curr_COG.T[1], curr_COG.T[2]])
 
-                loading_bar.progress(1 / (len(SEDs)*len(range_nH)*len(range_v_turb)))
+                loading_bar.progress(1 / (len(SEDs)*len(range_nh)*len(range_v_turb)))
 
 
         COG_invert[elem_SED] = COG_invert_indiv
@@ -191,14 +193,14 @@ if update_dump or not os.path.isfile(dump_path):
 
         for elem_SED in list(SEDs.keys()):
 
-            valid_par_arr = np.repeat(-1., 2 * len(range_nH) * len(range_v_turb)).reshape(2, len(range_nH),
+            valid_par_arr = np.repeat(-1., 2 * len(range_nh) * len(range_v_turb)).reshape(2, len(range_nh),
                                                                                           len(range_v_turb))
-            valid_par_arr_3D = np.repeat(None, 2 * len(range_nH) * len(range_v_turb)).reshape(2, len(range_nH),
+            valid_par_arr_3D = np.repeat(None, 2 * len(range_nh) * len(range_v_turb)).reshape(2, len(range_nh),
                                                                                               len(range_v_turb))
 
             param_space_bar = st.progress(0, text='Finding parameter space')
 
-            for i_nh in range(len(range_nH)):
+            for i_nh in range(len(range_nh)):
                 for i_v_turb in range(len(range_v_turb)):
 
                     COG_invert_SED = COG_invert_use[elem_SED]
@@ -268,17 +270,17 @@ if update_dump or not os.path.isfile(dump_path):
                         valid_par_arr[0][i_nh][i_v_turb] = interp_x[valid_range_par[0]]
                         valid_par_arr[1][i_nh][i_v_turb] = interp_x[valid_range_par[-1]]
 
-                        valid_par_arr_3D[0][i_nh][i_v_turb] = np.array([range_nH[i_nh], 10 ** (range_v_turb[i_v_turb]),
+                        valid_par_arr_3D[0][i_nh][i_v_turb] = np.array([range_nh[i_nh], 10 ** (range_v_turb[i_v_turb]),
                                                                         interp_x[
                                                                             valid_range_par[0]]]).astype(object)
-                        valid_par_arr_3D[1][i_nh][i_v_turb] = np.array([range_nH[i_nh], 10 ** (range_v_turb[i_v_turb]),
+                        valid_par_arr_3D[1][i_nh][i_v_turb] = np.array([range_nh[i_nh], 10 ** (range_v_turb[i_v_turb]),
                                                                         interp_x[
                                                                             valid_range_par[-1]]]).astype(object)
                     else:
                         valid_par_arr_3D[0][i_nh][i_v_turb] = np.repeat(-1, 3).astype(object)
                         valid_par_arr_3D[1][i_nh][i_v_turb] = np.repeat(-1, 3).astype(object)
 
-                    param_space_bar.progress(1 / (len(range_nH) * len(range_v_turb)))
+                    param_space_bar.progress(1 / (len(range_nh) * len(range_v_turb)))
                     print((i_nh, i_v_turb))
 
             valid_par_range_dict[elem_SED] = valid_par_arr
@@ -378,10 +380,10 @@ valid_volumes_dict=dump_arr[8]
 # test=valid_par_range_dict['outlier_diagonal_lower_floor']
 # breakpoint()
 
-tab_2D,tab_3D=st.tabs(['2D Curve of Growths','nR² evolution'])
+tab_2D,tab_3D,tab_delta=st.tabs(['2D Curve of Growths','3D nR² evolution','2D nR² distance between SEDs'])
 
 with tab_2D:
-    slider_nH=st.select_slider('nH value',range_nH,value=23.0)
+    slider_nH=st.select_slider('nH value',range_nh,value=23.0)
     slider_v_turb=st.select_slider(r'$v_{turb}$ value',range_v_turb,value=3.00)
 
 fig_2D,ax_2D = plt.subplots(1,3, figsize=(10,8),sharey=True)
@@ -419,6 +421,8 @@ elif radio_single == 'Multiple Observations':
 
 base_nolag=np.array(list(SEDs.keys()))[[0,1,3,5,6]]
 
+plot_3D=st.sidebar.toggle('Plot nR² evolution in 3D',value=False)
+
 list_SEDs_surface=st.sidebar.multiselect(label='SEDs to draw 3D surfaces for',
                                         options=list_SEDs_disp,default=[elem for elem in base_nolag if elem in list_SEDs_disp])
 
@@ -429,6 +433,9 @@ with tab_3D:
                 'To see the full volumes, select only one SED.')
 
 plot_points=st.sidebar.toggle(label='overlay points',value=False)
+
+plot_distance_SEDs=st.sidebar.toggle('Plot nR² distance between observations',value=False)
+
 
 
 with st.sidebar.expander('Curve of growth visualisation options:'):
@@ -443,7 +450,7 @@ for i_SED,elem_SED in enumerate(list(SEDs.keys())):
 
     COG_invert_SED=COG_invert_use[elem_SED]
 
-    COG_invert_indiv=COG_invert_SED[np.where(range_nH==slider_nH)[0][0]][np.where(slider_v_turb==range_v_turb)[0][0]]
+    COG_invert_indiv=COG_invert_SED[np.where(range_nh==slider_nH)[0][0]][np.where(slider_v_turb==range_v_turb)[0][0]]
 
     #plotting the COGs
 
@@ -638,6 +645,93 @@ with tab_2D:
 
     st.pyplot(fig_2D)
 
+#distance plots
+
+@st.cache_data
+def plot_distance(SED_1,SED_2):
+
+
+    assert len(valid_volumes_dict[SED_1])==1,'Error: only implemented for single volumes'
+    assert len(valid_volumes_dict[SED_2])==1,'Error: only implemented for single volumes'
+
+    plane_lower_SED_1,plane_higher_SED_1=valid_volumes_dict[SED_1][0]
+    plane_lower_SED_2,plane_higher_SED_2=valid_volumes_dict[SED_2][0]
+
+    distance_nr2=np.repeat(np.nan,len(range_v_turb)*len(range_nh)).reshape((len(range_v_turb),len(range_nh)))
+
+    #computing the distance array
+    for i_v_turb,elem_v_turb in enumerate(range_v_turb):
+        for i_nh,elem_nh in enumerate(range_nh):
+
+            mask_valid_SED_1=(plane_lower_SED_1.T[0]==elem_nh) & (np.log10(plane_lower_SED_1.T[1])==elem_v_turb)
+            mask_valid_SED_2=(plane_lower_SED_2.T[0]==elem_nh) & (np.log10(plane_lower_SED_2.T[1])==elem_v_turb)
+
+            if not (sum(mask_valid_SED_1)>0) & (sum(mask_valid_SED_2)>0):
+
+                continue
+            if sum(mask_valid_SED_1)>1 or sum(mask_valid_SED_2)>1:
+                print('This should not happen')
+                breakpoint()
+                
+            nr_range_SED_1=np.array([plane_lower_SED_1[mask_valid_SED_1][0][2],plane_higher_SED_1[mask_valid_SED_1][0][2]])
+            nr_range_SED_2=np.array([plane_lower_SED_2[mask_valid_SED_2][0][2],plane_higher_SED_2[mask_valid_SED_2][0][2]])
+
+            #note that this value is positive if the intervals are compatible and negative otherwise
+            distance_vals=get_overlap(nr_range_SED_1,nr_range_SED_2,distance=True)
+
+            if distance_vals>=0:
+                distance_nr2[i_v_turb][i_nh] = 0.
+            else:
+                distance_sign=(nr_range_SED_1[0]-nr_range_SED_2[0])/abs(nr_range_SED_1[0]-nr_range_SED_2[0])
+
+                distance_nr2[i_v_turb][i_nh] = distance_sign*abs(distance_vals)
+
+
+    #creating the plot
+    fig_dist,ax_dist= plt.subplots(1,1, figsize=(6,6),)
+    ax_dist.set_ylabel(r'log$_{10}$(nh)')
+    ax_dist.set_xlabel(r'log$_{10}$(v$_{turb}$)')
+    ax_dist.set_facecolor('grey')
+    cmap_bipolar=hotcold(neutral=1)
+
+
+    cm_ticks = (np.linspace(np.nanmin(distance_nr2), 0, 6, endpoint=True).tolist() if np.nanmin(distance_nr2)<=0 else [-0.0001])+ \
+               (np.linspace(0, np.nanmax(distance_nr2), 6, endpoint=True).tolist() if np.nanmin(distance_nr2) >= 0 else [0.0001])
+
+
+    cm_norm = colors.TwoSlopeNorm(vcenter=0,
+                                  vmin=np.nanmin(distance_nr2) if np.nanmin(distance_nr2)<0 else -0.0001,
+                                  vmax=np.nanmax(distance_nr2) if np.nanmax(distance_nr2)>0 else 0.0001)
+
+    img=ax_dist.pcolormesh(range_v_turb,range_nh,distance_nr2.T,cmap=cmap_bipolar,norm=cm_norm)
+
+    cb=fig_dist.colorbar(img,location='bottom', orientation='horizontal',spacing='proportional',
+                         ticks=cm_ticks)
+    #important to rescale the colorbar properly, otherwise both sides will always be 50/50
+    # ('proportional' in the cb settings isn't really working for twoslopenorm)
+    cb.ax.set_xscale('linear')
+
+    plt.suptitle(r'log$_{10}$nR²$_{' + SED_1.replace('_','\_') + '}$' + ' - log$_{10}$nR²$_{' + SED_2.replace('_','\_') + '}$')
+
+
+    return fig_dist
+
+
+#finding all list of SED pairs:
+SED_pairs = [(a, b) for idx, a in enumerate(list_SEDs_disp) for b in list_SEDs_disp[idx + 1:]]
+
+with tab_delta:
+    column_list=st.columns(len(list_SEDs_disp)-1)
+
+if plot_distance_SEDs:
+
+    for couple in SED_pairs:
+
+        plot_couple=plot_distance(couple[0],couple[1])
+
+        with column_list[np.argwhere(np.array(list_SEDs_disp)==couple[0])[0][0]]:
+            st.pyplot(plot_couple)
+
 def plot_3d_surface(planes, color='lightblue', volume_number=1, plot_points=False,
                     legendgroup='',i_SED=-1,draw_surface=True,full_planes=None,under_sampling_v_turb=1,under_sampling_nh=1,
                     single_mode=False):
@@ -781,7 +875,7 @@ def plot_3d_surface(planes, color='lightblue', volume_number=1, plot_points=Fals
 
                     args_y=np.array([np.argwhere(range_v_turb == np.log10(elem))[0][0] for elem in y_tris])
                     dist_x=abs(args_y.max()-args_y.min())
-                    args_x=np.array([np.argwhere(range_nH==elem)[0][0] for elem in x_tris])
+                    args_x=np.array([np.argwhere(range_nh==elem)[0][0] for elem in x_tris])
                     dist_y=abs(args_x.max()-args_x.min())
 
                     if np.sqrt(dist_y**2+dist_x**2)>int(check_overflow):
@@ -873,7 +967,7 @@ def plot_3d_surface(planes, color='lightblue', volume_number=1, plot_points=Fals
                 continue
 
             # skipping the triangles with non-adjacent points:
-            ids_x_grid=np.unique(np.array([np.argwhere(range_nH==elem)[0][0] for elem in x_tris]))
+            ids_x_grid=np.unique(np.array([np.argwhere(range_nh==elem)[0][0] for elem in x_tris]))
             if abs(ids_x_grid[1]-ids_x_grid[0])>1:
                 continue
 
@@ -882,7 +976,7 @@ def plot_3d_surface(planes, color='lightblue', volume_number=1, plot_points=Fals
             if abs(ids_y_grid[1]-ids_y_grid[0])>1:
                 continue
                 
-            # ids_z_grid=np.unique(np.array([np.argwhere(range_nH==elem)[0][0] for elem in x_tris]))
+            # ids_z_grid=np.unique(np.array([np.argwhere(range_nh==elem)[0][0] for elem in x_tris]))
             # if abs(ids_z_grid[1]-ids_z_grid[0])>0:
             #     continue
 
@@ -1080,9 +1174,9 @@ def make_3D_figure(SEDs_disp,SEDs_surface,cmap,plot_points=False,under_sampling_
             mask_under_sampling_v_turb_higher=(pos_v_turb_higher % under_sampling_v_turb == 0) | (pos_v_turb_higher==max(pos_v_turb_higher)) \
                                                                                 | (pos_v_turb_higher==min(pos_v_turb_higher))
 
-            pos_nh_lower=np.array([np.argwhere(elem == range_nH)[0][0]
+            pos_nh_lower=np.array([np.argwhere(elem == range_nh)[0][0]
                                                 for elem in valid_volumes[i_vol][0].T[0]])
-            pos_nh_higher=np.array([np.argwhere(elem == range_nH)[0][0]
+            pos_nh_higher=np.array([np.argwhere(elem == range_nh)[0][0]
                                                 for elem in valid_volumes[i_vol][1].T[0]])
 
             #combining undersampling and adding the first and last nhs in any case to avoid missing out the edes of the surface
@@ -1128,8 +1222,7 @@ def make_3D_figure(SEDs_disp,SEDs_surface,cmap,plot_points=False,under_sampling_
     with tab_3D:
         st.plotly_chart(fig,use_container_width=True,theme=None)
 
-make_3D_figure(list_SEDs_disp,list_SEDs_surface,cmap=base_cmap,plot_points=plot_points)
-
-
+if plot_3D:
+    make_3D_figure(list_SEDs_disp,list_SEDs_surface,cmap=base_cmap,plot_points=plot_points)
 
 

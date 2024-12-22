@@ -417,8 +417,10 @@ elif radio_single == 'Multiple Observations':
 
     list_SEDs_disp=st.sidebar.multiselect(label='SEDs to display',options=list(SEDs.keys()),default=list(SEDs.keys()))
 
+base_nolag=np.array(list(SEDs.keys()))[[0,1,3,5,6]]
+
 list_SEDs_surface=st.sidebar.multiselect(label='SEDs to draw 3D surfaces for',
-                                        options=list_SEDs_disp,default=list_SEDs_disp[:min(3,len(list_SEDs_disp))])
+                                        options=list_SEDs_disp,default=[elem for elem in base_nolag if elem in list_SEDs_disp])
 
 
 with tab_3D:
@@ -911,15 +913,15 @@ def plot_3d_surface(planes, color='lightblue', volume_number=1, plot_points=Fals
         lower_p=planes[0]
         higher_p=planes[1]
 
-        if i_SED in [0,1]:
-            alpha_higher=8
+        if i_SED in [0,1,3,6]:
+            alpha_higher=8+(2 if i_SED==3 else 0)
             alpha_lower=6
         else:
             alpha_higher=6
             alpha_lower=6
 
-        alpha_higher=str(alpha_higher+(0 if under_sampling_nh==1 and under_sampling_v_turb==1 else 3))
-        alpha_lower=str(alpha_lower+(0 if under_sampling_nh==1 and under_sampling_v_turb==1 else 3))
+        alpha_higher=str(alpha_higher+(0 if under_sampling_nh==1 and under_sampling_v_turb==1 else 3+under_sampling_v_turb+under_sampling_nh))
+        alpha_lower=str(alpha_lower+(0 if under_sampling_nh==1 and under_sampling_v_turb==1 else 3+under_sampling_v_turb+under_sampling_nh))
 
         if draw_surface:
             #making the base "horizontal" planes
@@ -980,7 +982,7 @@ def plot_3d_surface(planes, color='lightblue', volume_number=1, plot_points=Fals
                                     mode='markers',
                                        marker=dict(size=2, color=color,opacity=0.4 if single_mode else 1.),
                                     name=volume_str, legendgroup=legendgroup, legendgrouptitle={'text': legendgroup},
-                                    showlegend=True)]
+                                    showlegend=False)]
 
     elif rank == 2:
 
@@ -1038,7 +1040,7 @@ def make_3D_figure(SEDs_disp,SEDs_surface,plot_points=False,under_sampling_v_tur
 
     single_mode=len(SEDs_disp)==1
 
-    n_SEDs=len(SEDs_disp)
+    n_SEDs=len(SEDs_surface)
 
     for i_SED,elem_SED in enumerate(list(SEDs.keys())):
 
@@ -1047,7 +1049,7 @@ def make_3D_figure(SEDs_disp,SEDs_surface,plot_points=False,under_sampling_v_tur
             if i_SED in [2,4]:
                 under_sampling_v_turb=3 if single_mode else 5+n_SEDs//3
             else:
-                under_sampling_v_turb=1 if single_mode else 4+n_SEDs//3
+                under_sampling_v_turb=1 if single_mode else 2+n_SEDs//2
 
         if under_sampling_nh == 'var':
             if i_SED in [2,4]:

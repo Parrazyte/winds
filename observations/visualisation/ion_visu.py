@@ -423,18 +423,25 @@ base_nolag=np.array(list(SEDs.keys()))[[0,1,3,5,6]]
 
 plot_3D=st.sidebar.toggle('Plot nR² evolution in 3D',value=False)
 
+if not plot_3D:
+    with tab_3D:
+        st.info('To start plotting the 3D evolution, toggle the option in the sidebar.')
+
 list_SEDs_surface=st.sidebar.multiselect(label='SEDs to draw 3D surfaces for',
                                         options=list_SEDs_disp,default=[elem for elem in base_nolag if elem in list_SEDs_disp])
 
 
 with tab_3D:
-    if len(list_SEDs_disp)>1:
+    if plot_3D and len(list_SEDs_disp)>1:
         st.info('The volumes are undersampled according to the number of observations drawn.'
                 'To see the full volumes, select only one SED.')
 
 plot_points=st.sidebar.toggle(label='overlay points',value=False)
 
 plot_distance_SEDs=st.sidebar.toggle('Plot nR² distance between observations',value=False)
+if not plot_distance_SEDs:
+    with tab_delta:
+        st.info('To start plotting these elements, toggle the option in the sidebar.')
 
 
 

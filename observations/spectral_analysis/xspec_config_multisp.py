@@ -347,6 +347,11 @@ def load_mod(path,load_xspec=True):
 mod_sky=None
 mod_nxb=None
 
+def set_ener(mode='thcomp'):
+    if mode=='thcomp':
+        AllModels.setEnergies('0.01 1000. 10000 log')
+
+
 def fit_broader(epoch_id,add_gaussem=True,bat_interp_dir='/home/parrama/Documents/Observ/copy_SSD/Swift/BAT_interp',
                 n_add=1,outdir='fit_broader',bat_emin=15.,bat_emax=50.,avg_BAT_norm=True):
     '''
@@ -4951,7 +4956,7 @@ class fitmod:
             fitcomp_line=getattr(self,line)
 
             #storing the ew (or the upper limit if there is no line)
-            abslines_ew[i_line]=fitcomp_line.get_ewidth()
+            abslines_ew[i_line]=fitcomp_line.get_ew()
 
         #second loop since we modify the fit here and that affects the ew computation
         for i_line,line in enumerate(abs_lines):
@@ -5110,7 +5115,7 @@ class fitmod:
             fitcomp_line = getattr(self, line)
 
             # storing the ew (or the upper limit if there is no line)
-            emlines_ew[i_line] = fitcomp_line.get_ewidth()
+            emlines_ew[i_line] = fitcomp_line.get_ew()
 
         # second loop since we modify the fit here and that affects the ew computation
         for i_line, line in enumerate(em_lines):

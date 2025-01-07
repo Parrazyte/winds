@@ -196,12 +196,12 @@ ap.add_argument("-prefix",nargs=1,help='restrict analysis to a specific prefix',
 
 ####output directory
 ap.add_argument("-outdir",nargs=1,help="name of output directory for line plots",
-                default="lineplots_opt_em",type=str)
+                default="lineplots_opt_mrg",type=str)
 
 #give object name directly, otherwise it will be taken from the second last directory (above the bigbatch)
 #as usual, "False" to remove this
 ap.add_argument('-object_name',nargs=1,help='Name of observed object',
-                default='V4641Sgr',type=str)
+                default='MAXIJ1820+070',type=str)
 
 #overwrite
 #global overwrite based on recap PDF
@@ -250,7 +250,7 @@ ap.add_argument('-mandatory_abs',nargs=1,help='Consider absorption component as 
                 default=True,type=bool)
 
 ap.add_argument('-autofit_model',nargs=1,help='model list to use for the autofit computation',
-                default='lines_em_V4641Sgr',type=str)
+                default='lines_narrow',type=str)
 #narrow or resolved mainly
 
 ap.add_argument('-no_abslines',nargs=1,
@@ -338,11 +338,11 @@ ap.add_argument('-min_expos',nargs=1,help='minimum exposure time per observation
 ap.add_argument('-min_expos_tel_apply',nargs=1,help='instruments for which to apply the min_expos criteria',
                 default='NICER',type=str)
 
-ap.add_argument('-SNR_min',nargs=1,help='minimum source Signal to Noise Ratio',default=10,type=float)
+ap.add_argument('-SNR_min',nargs=1,help='minimum source Signal to Noise Ratio',default=30,type=float)
 #shouldn't be needed now that we have a counts min limit + sometimes false especially in timing when the bg is the source
 
 ap.add_argument('-counts_min',nargs=1,
-                help='minimum source counts in the source region in the line continuum range',default=100,type=float)
+                help='minimum source counts in the source region in the line continuum range',default=500,type=float)
 
 ap.add_argument('-fit_lowSNR',nargs=1,
                 help='fit the continuum of low quality data to get the HID values',default=False,type=str)
@@ -357,9 +357,9 @@ ap.add_argument('-skip_nongrating',nargs=1,
 
 ap.add_argument('-skip_flares',nargs=1,help='skip flare GTIs',default=True,type=bool)
 
-ap.add_argument('-skip_merges',nargs=1,help='skip NICER merge GTIs',default=True,type=bool)
+ap.add_argument('-skip_merges',nargs=1,help='skip NICER merge GTIs',default=False,type=bool)
 
-ap.add_argument('-focus_merges',nargs=1,help='only use NICER merge GTIs',default=False,type=bool)
+ap.add_argument('-focus_merges',nargs=1,help='only use NICER merge GTIs',default=True,type=bool)
 
 
 ap.add_argument('-write_pdf',nargs=1,help='overwrite finished pdf at the end of the line detection',
@@ -400,7 +400,7 @@ ap.add_argument('-compute_highflux_only',help='Reloads the autofit computation a
                 default=False,type=bool)
 
 ap.add_argument('-hid_only',nargs=1,help='skip the line detection and directly plot the hid',
-                default=True,type=bool)
+                default=False,type=bool)
 
 #date or HR
 ap.add_argument('-hid_sort_method',nargs=1,help='HID summary observation sorting',default='date',type=str)
@@ -429,14 +429,14 @@ ap.add_argument('-split_fit',nargs=1,
 #line significance assessment parameter
 
 ap.add_argument('-skip_absline_comput',nargs=1,
-                help="skip all absorption line computations after the autofit",default=True,type=bool)
+                help="skip all absorption line computations after the autofit",default=False,type=bool)
 
 ap.add_argument('-assess_line',nargs=1,
                 help='use fakeit simulations to estimate the significance of each absorption line',
-                default=False,type=bool)
+                default=True,type=bool)
 
 ap.add_argument('-assess_line_upper',nargs=1,help='compute upper limits of each absorption line',
-                default=False,type=bool)
+                default=True,type=bool)
 
 
 '''SPECTRUM PARAMETERS'''
@@ -1710,7 +1710,7 @@ Edd_factor=dist_factor/(1.26e38*mass_obj_list)
 
 #Reading the results files
 observ_list,lineval_list,lum_list,date_list,instru_list,exptime_list,fitmod_broadband_list,epoch_obs_list,\
-    flux_high_list=obj_values(lineval_files,Edd_factor,dict_linevis,local_paths=True)
+    flux_high_list=obj_values(lineval_files,dict_linevis,local_paths=True)
 
 dict_linevis['lum_list']=lum_list
 dict_linevis['exptime_list']=exptime_list

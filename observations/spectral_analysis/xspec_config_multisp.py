@@ -351,6 +351,9 @@ def set_ener(mode='thcomp'):
     if mode=='thcomp':
         AllModels.setEnergies('0.01 1000. 10000 log')
 
+def rebin_xrism(grp_number):
+    Plot.setRebin(2, 5000, grp_number)
+
 
 def fit_broader(epoch_id,add_gaussem=True,bat_interp_dir='/home/parrama/Documents/Observ/copy_SSD/Swift/BAT_interp',
                 n_add=1,outdir='fit_broader',bat_emin=15.,bat_emax=50.,avg_BAT_norm=True):

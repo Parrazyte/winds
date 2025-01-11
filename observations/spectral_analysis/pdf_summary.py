@@ -5,6 +5,7 @@ import os,sys
 import re as re
 import numpy as np
 
+import glob
 #pdf conversion with HTML parsin
 #install with fpdf2 NOT FPDF otherwise HTML won't work
 from fpdf import FPDF, HTMLMixin
@@ -625,49 +626,60 @@ def pdf_summary(epoch_files,arg_dict,fit_ok=False,summary_epoch=None,e_sat_low_l
                     except:
                         pass
 
-            #and adding the individual GTI's flare and lightcurves
-            pdf.add_page()
-            pdf.set_font('helvetica', 'B', 16)
-            pdf.cell(1,10,'GTIS and lightcurves for gti '+elem_epoch,align='C',center=True)
-            pdf.ln(10)
+            #looping through all individual orbits if in a merge epoch
+            if 'MRG' in elem_epoch:
+                day_add='_night' if 'NMRG' in elem_epoch else '_day' if '_DMRG' in elem_epoch else ''
 
-            #recognizing time-resolved spectra
-            elem_orbit=elem_epoch.split('S')[0].split('M')[0].split('F')[0].split('I')[0].split('N')[0].split('D')[0]
+                elem_orbit=elem_epoch.split('N')[0].split('D')[0]
 
-            if 'N' in elem_epoch.split('-')[-1]:
-                orbit_night=True
-                day_add='_night'
-            elif 'D' in elem_epoch.split('-')[-1]:
-                orbit_day=True
-                day_add='_day'
+                avg_orbits= np.sort([elem.split('_')[0] for elem in glob.glob(elem_orbit+'**'+day_add+'_flares.png')])
+
             else:
-                day_add=''
+                # also recognizes time-resolved spectra
+                avg_orbits=[elem_epoch.split('S')[0].split('M')[0].split('F')[0].split('I')[0].split('N')[0].split('D')[0]]
 
-            try:
-                pdf.image(elem_orbit+day_add+'_flares.png',x=2,y=70,w=140)
-            except:
-                breakpoint()
-                pass
+                if 'N' in elem_epoch.split('-')[-1]:
+                    orbit_night=True
+                    day_add='_night'
+                elif 'D' in elem_epoch.split('-')[-1]:
+                    orbit_day=True
+                    day_add='_day'
+                else:
+                    day_add=''
 
-            try:
-                pdf.image(elem_epoch + '_lc_3-10_bin_' + NICER_lc_binning + '.png', x=150, y=30, w=70)
-            except:
-                pass
-            try:
-                pdf.image(elem_epoch + '_hr_6-10_3-6_bin_' + NICER_lc_binning + '.png', x=220, y=30, w=70)
-            except:
+            for elem_orbit in avg_orbits:
+
+                #and adding the individual GTI's flare and lightcurves
+                pdf.add_page()
+                pdf.set_font('helvetica', 'B', 16)
+                pdf.cell(1,10,'GTIS and lightcurves for gti '+elem_epoch,align='C',center=True)
+                pdf.ln(10)
+
                 try:
-                    pdf.image(elem_epoch + '_hr_3-10_bin_' + NICER_lc_binning + '.png', x=220, y=30, w=70)
+                    pdf.image(elem_orbit+day_add+'_flares.png',x=2,y=70,w=140)
+                except:
+                    breakpoint()
+                    pass
+
+                try:
+                    pdf.image(elem_epoch + '_lc_3-10_bin_' + NICER_lc_binning + '.png', x=150, y=30, w=70)
                 except:
                     pass
-            try:
-                pdf.image(elem_epoch + '_lc_3-6_bin_' + NICER_lc_binning + '.png', x=150, y=120, w=70)
-            except:
-                pass
-            try:
-                pdf.image(elem_epoch + '_lc_6-10_bin_' + NICER_lc_binning + '.png', x=220, y=120, w=70)
-            except:
-                pass
+                try:
+                    pdf.image(elem_epoch + '_hr_6-10_3-6_bin_' + NICER_lc_binning + '.png', x=220, y=30, w=70)
+                except:
+                    try:
+                        pdf.image(elem_epoch + '_hr_3-10_bin_' + NICER_lc_binning + '.png', x=220, y=30, w=70)
+                    except:
+                        pass
+                try:
+                    pdf.image(elem_epoch + '_lc_3-6_bin_' + NICER_lc_binning + '.png', x=150, y=120, w=70)
+                except:
+                    pass
+                try:
+                    pdf.image(elem_epoch + '_lc_6-10_bin_' + NICER_lc_binning + '.png', x=220, y=120, w=70)
+                except:
+                    pass
 
         if elem_sat=='NuSTAR':
 

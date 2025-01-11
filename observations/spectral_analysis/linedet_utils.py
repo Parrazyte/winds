@@ -782,8 +782,8 @@ def coltour_chi2map(fig, axe, chi_dict, title='', combined=False, ax_bar=None, n
 
     # and the non symetric normalisation
     try:
-        cm_norm = colors.TwoSlopeNorm(vcenter=0, vmin=chi_arr_plot.min() if norm is None else -norm_col[0],
-                              vmax=chi_arr_plot.max() if norm is None else norm_col[1])
+        cm_norm = colors.TwoSlopeNorm(vcenter=0, vmin=min(-9.21,chi_arr_plot.min()) if norm is None else -norm_col[0],
+                              vmax=max(chi_arr_plot.max(),9.21) if norm is None else norm_col[1])
     except:
         breakpoint()
     #should be tested if necessary

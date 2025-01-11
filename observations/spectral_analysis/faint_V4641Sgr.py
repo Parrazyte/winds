@@ -7,6 +7,16 @@ os.chdir('/media/parrama/crucial_SSD/Observ/BHLMXB/XRISM/V4641Sgr/v4641sgr')
 
 logfile_write,logfile=xLog_rw('xrism_log2.log')
 
+#base load
+os.chdir('/media/parrama/crucial_SSD/Observ/BHLMXB/XRISM/V4641Sgr/v4641sgr')
+
+Xset.restore('fit.xcm')
+Fit.statMethod='cstat'
+AllData.ignore('**-1.5 10.-**')
+Plot.xLog=False
+Plot.setRebin(2,5000,1)
+xPlot('ldata,ratio,delchi')
+
 
 def print_xlog(string, logfile_write=logfile_write):
     '''

@@ -283,8 +283,8 @@ ap.add_argument('-reverse_epoch',nargs=1,help='reverse epoch list order',default
 
 #better when spread computations are not running
 ap.add_argument('-skip_started_spread',nargs=1,
-                help='skip already finished computations when splitting the exposures',
-                default=True,type=bool)
+                help='skip already started computations when splitting the exposures',
+                default=False,type=bool)
 
 #better when some spread computations are still running
 ap.add_argument('-spread_overwrite',nargs=1,
@@ -1505,12 +1505,13 @@ if spread_comput!=1:
 
             if not spread_overwrite:
                 split_epoch=[epoch for epoch in spread_epochs[i_spread] if shorten_epoch([elem.split('_sp')[0].split('_grp_opt')[0]\
-                                                                              for elem in epoch]) not in started_expos]
+                                                                              for elem in epoch]) not in done_expos]
             else:
                 split_epoch=spread_epochs[i_spread]
 
             with open(file_spread,'w+') as f:
                 f.writelines([str(elem)+'\n' for elem in split_epoch[::(-1 if reverse_spread else 1)]])
+
             epoch_list=split_epoch[::(-1 if reverse_spread else 1)]
 
             spread_str='spread_epoch_'+('rev_' if reverse_spread else '')+str(i_spread+1)+'_over_'+str(spread_comput)

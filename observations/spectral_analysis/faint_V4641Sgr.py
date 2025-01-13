@@ -73,22 +73,22 @@ fitlines_strong.add_allcomps(split_fit=False)
 breakpoint()
 
 
-#after the Chain is loaded
-nfakes=1000
-# drawing parameters for the MC significance test later
-autofit_drawpars = np.array([None] * nfakes)
-
-print_xlog('\nDrawing parameters from the Chain...')
-for i_draw in range(nfakes):
-    curr_simpar = AllModels.simpars()
-
-    # we restrict the simpar to the initial model because we don't really care about simulating the variations
-    # of the bg since it's currently frozen
-    autofit_drawpars[i_draw] = np.array(curr_simpar)[:AllData.nGroups * AllModels(1).nParameters] \
-        .reshape(AllData.nGroups, AllModels(1).nParameters)
-
-# turning it back into a regular array
-autofit_drawpars = np.array([elem for elem in autofit_drawpars])
+# #after the Chain is loaded
+# nfakes=1000
+# # drawing parameters for the MC significance test later
+# autofit_drawpars = np.array([None] * nfakes)
+#
+# print_xlog('\nDrawing parameters from the Chain...')
+# for i_draw in range(nfakes):
+#     curr_simpar = AllModels.simpars()
+#
+#     # we restrict the simpar to the initial model because we don't really care about simulating the variations
+#     # of the bg since it's currently frozen
+#     autofit_drawpars[i_draw] = np.array(curr_simpar)[:AllData.nGroups * AllModels(1).nParameters] \
+#         .reshape(AllData.nGroups, AllModels(1).nParameters)
+#
+# # turning it back into a regular array
+# autofit_drawpars = np.array([elem for elem in autofit_drawpars])
 
 
 

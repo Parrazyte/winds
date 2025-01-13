@@ -347,10 +347,11 @@ def oar_wrapper(solution_rel_dir,save_grid_dir,sim_grid_dir,
                save_inter_sp=save_inter_sp)
 
 
-def xstar_func(spectrum_file,lum,t_guess,n,nh,xi,vturb_x,nbins,nsteps=1,niter=100,lcpres=0,
+def xstar_func(spectrum_file, lum, t_guess, n, nh, logxi, vturb_x, nbins, nsteps=1, niter=100, lcpres=0,
                path_logpars=None,
-               comput_mode='local',xstar_mode='standalone',xstar_loc='default',instance_identifier='grid',
-               kill_container=False,dict_box=None,save_folder='',no_write=False,extract_transmitted=False):
+               comput_mode='local', xstar_mode='standalone', xstar_loc='default', instance_identifier='grid',
+               kill_container=False, dict_box=None, save_folder='', no_write=False, extract_transmitted=False,
+               id_comput='',return_temp=False):
     
     '''
     wrapper around the xstar function itself with explicit calls to the parameters routinely being changed in the computation
@@ -366,6 +367,13 @@ def xstar_func(spectrum_file,lum,t_guess,n,nh,xi,vturb_x,nbins,nsteps=1,niter=10
                              if set to anything else, uses that string
 
         kill_container: if set to True, immediately kills the container once the xstar computation is finished
+
+        extract_transmitted: Saves the transmitted spectrum in a separate file
+
+        id_comput: if using still in a loop but without a full box setup, used to identify the xstar instance for
+                    logging the output values in the log file
+
+        return_temp: directly returns the temperature (useful for stability curve loops)
 
     if path_logpars is not None, saves the list of modifiable parameters into a file
     
@@ -432,7 +440,7 @@ def xstar_func(spectrum_file,lum,t_guess,n,nh,xi,vturb_x,nbins,nsteps=1,niter=10
     xpar['temperature']=t_guess
     xpar['density']=n
     xpar['column']=nh
-    xpar['rlogxi']=xi
+    xpar['rlogxi']=logxi
     
     #making sure this remains at 0 if the default values get played with
     xpar['lcpres']=lcpres
@@ -456,12 +464,6 @@ def xstar_func(spectrum_file,lum,t_guess,n,nh,xi,vturb_x,nbins,nsteps=1,niter=10
         #default fits writing without too much details
         xhpar['lwrite']=0
 
-    parlog_header=['#xlum_init = %.3e'%(xlum)+' *1e38 erg/s | v_resol = '+str(v_resol)+' km/s | nbins = '+str(nbins)+'\n',
-                   '#nsteps = '+str(nsteps)+'\tniter = '+str(niter)+'\n',
-                   '#Remember logxi is shifted to give xstar the correct luminosity input and the density at the half-box radius\n',
-                   '############################################################################################################\n',
-                   '#nbox\tnbox_final\tspectrum\tlum\tlum_corr_factor\tt_guess\tn\tnh\tlogxi\tvturb_x\tdr_r\tt_run\n']
-
     # we don't save the gaz frame spectra to avoid storing too much data
     # first save before the xstar run
     if comput_mode in ['server', 'cigrid']:
@@ -471,11 +473,41 @@ def xstar_func(spectrum_file,lum,t_guess,n,nh,xi,vturb_x,nbins,nsteps=1,niter=10
             os.system('cp ' + spectrum_file + ' ' + save_folder)
 
     if path_logpars is not None:
-        parlog_str='\t'.join([str(nbox),str(i_box_final),spectrum_file,'%.6e'%lum,'%.6e'%lum_corr_factor,
-                              '%.6e'%t_guess,'%.6e'%n,'%.6e'%nh,'%.6e'%xi,'%.6e'%vturb_x,
-                              '%.6e'%dr_r_eff_list[nbox-1]])+'\n'
-        
-        file_edit(path_logpars,'\t'.join([str(nbox),str(i_box_final),spectrum_file]),parlog_str,parlog_header)
+
+        if dict_box is not None:
+
+            parlog_header = [
+                '#xlum_init = %.3e' % (xlum) + ' *1e38 erg/s | v_resol = ' + str(v_resol) + ' km/s | nbins = ' + str(
+                    nbins) + '\n',
+                '#nsteps = ' + str(nsteps) + '\tniter = ' + str(niter) + '\n',
+                '#Remember logxi is shifted to give xstar the correct luminosity input and the density at the half-box radius\n',
+                '############################################################################################################\n',
+                '#nbox\tnbox_final\tspectrum\tlum\tlum_corr_factor\tt_guess\tn\tnh\tlogxi\tvturb_x\tdr_r\tt_run\n']
+
+            parlog_str='\t'.join([str(nbox), str(i_box_final), spectrum_file,'%.6e' % lum,'%.6e' % lum_corr_factor,
+                              '%.6e' % t_guess,'%.6e' % n,'%.6e' % nh,'%.6e' % logxi, '%.6e' % vturb_x,
+                              '%.6e' % dr_r_eff_list[nbox-1]])+'\n'
+
+            file_edit(path_logpars,'\t'.join([str(nbox),str(i_box_final),spectrum_file]),parlog_str,parlog_header)
+
+        else:
+
+            parlog_header = [
+                '#xlum_init = %.3e' % (xlum) + ' *1e38 erg/s | v_resol = ' + str(v_resol) + ' km/s | nbins = ' + str(
+                    nbins) + '\n',
+                '#nsteps = ' + str(nsteps) + '\tniter = ' + str(niter) + '\n',
+                '############################################################################################################\n',
+                'spectrum\tid\tlum\tT_guess\tn\tnh\tlogxi\tvturb_x\ttime_run\tT_final\n']
+
+
+            parlog_str='\t'.join([spectrum_file,id_comput,'%.6e' % lum,
+                              '%.6e' % t_guess,
+                              '%.6e' % n,
+                              '%.6e' % nh,
+                              '%.6e' % logxi,
+                              '%.6e' % vturb_x])+'\n'
+
+            file_edit(path_logpars,'\t'.join([spectrum_file,id_comput]),parlog_str,parlog_header)
 
 
     if xstar_mode=='standalone':
@@ -514,13 +546,34 @@ def xstar_func(spectrum_file,lum,t_guess,n,nh,xi,vturb_x,nbins,nsteps=1,niter=10
     with open('xout_step.log') as xlog:
         xlog_lines = xlog.readlines()
 
-    #re-editing the file to add elapsed time
+    #re-editing the file to add elapsed time and other things
     if path_logpars is not None:
 
         xrun_time=str(round(float(xlog_lines[-1].split()[-1])))
         parlog_str=parlog_str.replace('\n','\t'+xrun_time+'\n')
-        
-        file_edit(path_logpars,'\t'.join([str(nbox),str(i_box_final),spectrum_file]),parlog_str,parlog_header)
+
+        if dict_box is not None:
+            file_edit(path_logpars,'\t'.join([str(nbox),str(i_box_final),spectrum_file]),parlog_str,parlog_header)
+        else:
+
+            if no_write:
+                # adding the temperature as an output by reading the logfile
+                #note: by doing this the precsion on t is only 1/10000 of its value
+                # due to the rounding in the display
+                with open('xout_step.log') as f:
+                    xlog_lines = f.readlines()[::-1]
+                for i_line, elem_line in enumerate(xlog_lines):
+                    if elem_line == ' print option:22\n':
+                        infos_out = xlog_lines[i_line - 1]
+                        temp_out = float(infos_out.split(' t=  ')[1].split(' ')[0])
+            else:
+                px.LoadFiles()
+                plasmapar=px.PlasmaParameters()
+                temp_out=plasmapar.temperature[0]
+
+            parlog_str=parlog_str.replace('\n','\t'+'%.6e' % temp_out+'\n')
+            file_edit(path_logpars,'\t'.join([spectrum_file,id_comput]),parlog_str,parlog_header)
+
 
     if dict_box is not None:
         #compacting the current xstar log file to a global log file
@@ -530,6 +583,7 @@ def xstar_func(spectrum_file,lum,t_guess,n,nh,xi,vturb_x,nbins,nsteps=1,niter=10
 
         #deleting the current log file
         os.remove('xout_step.log')
+
 
     #extracting the output spectrum if asked to
     if extract_transmitted:
@@ -553,6 +607,10 @@ def xstar_func(spectrum_file,lum,t_guess,n,nh,xi,vturb_x,nbins,nsteps=1,niter=10
             upload_mantis('./xout_log_global.log',save_folder)
         elif comput_mode=='server':
             os.system('cp '+path_logpars+' '+save_folder)
+
+    #for cases where we want the temperature
+    if dict_box is None and return_temp:
+        return temp_out
 
 def xstar_wind(solution,SED_path,xlum,outdir,
                mdot_obs='auto',p_mhd_input=None,m_BH=8,
@@ -1640,7 +1698,7 @@ def xstar_wind(solution,SED_path,xlum,outdir,
     #     fileobj_xstar_output.write('#starting_calculation_from_nbox='+str(nbox_restart)+'\n')
     
     '''
-    t is the temperature of the plasma. Starts at the default value of 400, but will be updated starting on the second box
+    t is the temperature of the plasma. Starts at the default value of 400x10^4K, but will be updated starting on the second box
     with the temperature of the previous box as a "guess"
     '''
 

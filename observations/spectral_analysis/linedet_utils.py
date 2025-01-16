@@ -353,11 +353,12 @@ def narrow_line_search(data_cont, suffix,e_sat_low_indiv,line_search_e=[4,10,0.0
     else:
         return chi_dict_plot
 
-def plot_line_search(chi_dict_plot,outdir,sat,save=True,suffix=None,epoch_observ=None,format='png'):
+def plot_line_search(chi_dict_plot,outdir,sat,save=True,suffix=None,epoch_observ=None,format='png',
+                     force_ylog_ratio=False,ratio_bounds=None,x_range=None):
 
     line_search_e=chi_dict_plot['line_search_e']
     line_search_norm=chi_dict_plot['line_search_norm']
-
+    n_groups=len(chi_dict_plot['plot_ratio_values'])
     #doing this to keep the same syntax as before on the file creation
     line_search_e_str='_'.join([str(int(elem) if int(elem)==elem else elem) for elem in line_search_e])
     line_search_norm_str='_'.join([str(int(elem) if int(elem)==elem else elem) for elem in line_search_norm])
@@ -373,7 +374,7 @@ def plot_line_search(chi_dict_plot,outdir,sat,save=True,suffix=None,epoch_observ
                  ' and norm par ' + line_search_norm_str + ' in continuum units'
 
     comb_label = []
-    for i_grp in range(AllData.nGroups):
+    for i_grp in range(n_groups):
         if sat == 'Chandra':
             label_grating = str(-1 + 2 * i_grp)
         else:
@@ -385,7 +386,8 @@ def plot_line_search(chi_dict_plot,outdir,sat,save=True,suffix=None,epoch_observ
     # creating the figure
     figure_comb = plt.figure(figsize=(15, 10))
 
-    comb_chi2map(figure_comb, chi_dict_plot, title=comb_title, comb_label=comb_label)
+    comb_chi2map(figure_comb, chi_dict_plot, title=comb_title, comb_label=comb_label,
+                 force_ylog_ratio=force_ylog_ratio,ratio_bounds=ratio_bounds,x_range=x_range)
 
     if save==True:
         # saving it and closing it
@@ -764,7 +766,9 @@ def coltour_chi2map(fig, axe, chi_dict, title='', combined=False, ax_bar=None, n
     # here we do some more modifications
     chi_arr_plot = chi_map
 
-    # swapping the sign of the delchis for the absorption and emission lines in order to display them with both parts of the cmap + using a square root norm for easier visualisation
+    # swapping the sign of the delchis for the absorption and emission lines in order to display them
+    # with both parts of the cmap + using a square root norm for easier visualisation
+
     for i in range(len(chi_arr_plot)):
         chi_arr_plot[i] = np.concatenate((-(chi_arr_plot[i][:int(len(chi_arr_plot[i]) / 2)]) ** (1 / 2),
                                           (chi_arr_plot[i][int(len(chi_arr_plot[i]) / 2):]) ** (1 / 2)))
@@ -781,11 +785,10 @@ def coltour_chi2map(fig, axe, chi_dict, title='', combined=False, ax_bar=None, n
     cm_bipolar = hotcold(neutral=1)
 
     # and the non symetric normalisation
-    try:
-        cm_norm = colors.TwoSlopeNorm(vcenter=0, vmin=min(-9.21,chi_arr_plot.min()) if norm is None else -norm_col[0],
-                              vmax=max(chi_arr_plot.max(),9.21) if norm is None else norm_col[1])
-    except:
-        breakpoint()
+    cm_norm = colors.TwoSlopeNorm(vcenter=0, vmin=min(-np.sqrt(9.21),chi_arr_plot.min()) if norm is None else -norm_col[0],
+                          vmax=max(chi_arr_plot.max(),np.sqrt(9.21)) if norm is None else norm_col[1])
+
+
     #should be tested if necessary
     #cm_norm = colors.TwoSlopeNorm(vcenter=0, vmin=min(-1,chi_arr_plot.min() if norm is None else -norm_col[0]),
     #                         vmax=max(1,chi_arr_plot.max() if norm is None else norm_col[1]))
@@ -892,10 +895,21 @@ def coltour_chi2map(fig, axe, chi_dict, title='', combined=False, ax_bar=None, n
             axe.legend(title='Bottom panel labels', loc='right', bbox_to_anchor=(1.25, 1.5))
 
 
-def comb_chi2map(fig_comb, chi_dict, title='', comb_label=''):
+def comb_chi2map(fig_comb, chi_dict, title='', comb_label='',
+                 force_ylog_ratio=False,ratio_bounds=None,x_range=None):
+
+    '''
+
+    force_ylog_ratio, ratio bounds: for visual changes on the y axis
+
+    x_range: force a specific range for the x axis (useful when taking bigger chi_dicts as input)
+    '''
+
     line_cont_range = chi_dict['line_cont_range']
     plot_ratio_values = chi_dict['plot_ratio_values']
     line_search_e_space = chi_dict['line_search_e_space']
+    n_groups=len(chi_dict['plot_ratio_values'])
+
     ax_comb = np.array([None] * 2)
     fig_comb.suptitle(title)
 
@@ -912,9 +926,14 @@ def comb_chi2map(fig_comb, chi_dict, title='', comb_label=''):
     ax_comb[0].xaxis.tick_top()
     ax_comb[0].xaxis.set_label_position('top')
 
+    if force_ylog_ratio:
+        ax_comb[0].set_yscale('log')
+
+
+
     # for now we only expect up to 3 data groups. The colors below are the standard xspec colors, for visual clarity with the xspec screen
 
-    for i_grp in range(AllData.nGroups):
+    for i_grp in range(n_groups):
         ax_comb[0].errorbar(plot_ratio_values[i_grp][0][0], plot_ratio_values[i_grp][1][0],
                             xerr=plot_ratio_values[i_grp][0][1].clip(0), yerr=plot_ratio_values[i_grp][1][1].clip(0),
                             color=xcolors_grp[i_grp], ecolor=xcolors_grp[i_grp], linestyle='None',
@@ -932,12 +951,16 @@ def comb_chi2map(fig_comb, chi_dict, title='', comb_label=''):
 
     # rescaling with errorbars (which are not taken into account by normal rescaling)
     plot_ratio_y_up = max(ravel_ragged(np.array([(plot_ratio_values[i_grp][1][0] + plot_ratio_values[i_grp][1][1])
-                                                 for i_grp in range(AllData.nGroups)], dtype=object), mode=object))
+                                                 for i_grp in range(n_groups)], dtype=object), mode=object))
 
     plot_ratio_y_dn = min(ravel_ragged(np.array([(plot_ratio_values[i_grp][1][0] - plot_ratio_values[i_grp][1][1])
-                                                 for i_grp in range(AllData.nGroups)], dtype=object), mode=object))
+                                                 for i_grp in range(n_groups)], dtype=object), mode=object))
 
-    ax_comb[0].set_ylim(0.95 * np.min(plot_ratio_y_dn), 1.05 * np.max(plot_ratio_y_up))
+    if ratio_bounds is not None:
+
+        ax_comb[0].set_ylim(0.95 * np.min(plot_ratio_y_dn), 1.05 * np.max(plot_ratio_y_up))
+    else:
+        ax_comb[0].set_ylim(ratio_bounds[0],ratio_bounds[1])
 
     '''second plot (contour)'''
 
@@ -967,6 +990,10 @@ def comb_chi2map(fig_comb, chi_dict, title='', comb_label=''):
     #                                 arrowprops=dict(arrowstyle='->',color='white'))
 
     '''Plotting the Standard Line energies'''
+
+    if x_range is not None:
+        ax_comb[0].set_xlim(x_range[0],x_range[1])
+        ax_comb[1].set_xlim(x_range[0],x_range[1])
 
     plot_std_ener(ax_comb[0], ax_comb[1], plot_em=True)
 

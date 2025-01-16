@@ -25,6 +25,7 @@ from matplotlib.ticker import Locator,MaxNLocator,AutoMinorLocator
 from scipy.stats import norm as scinorm
 
 import matplotlib.dates as mdates
+from matplotlib.ticker import MultipleLocator
 
 #pickle for the rxte lightcurve dictionnary
 import pickle
@@ -131,7 +132,105 @@ MAXI_psf_dates=mdates.date2num(MAXI_psf_mjd.datetime)
 ####PLOT
 date_format = mdates.DateFormatter('%Y-%m-%d')
 #     date_format=mdates.AutoDateFormatter(mdates.AutoDateLocator())
-fig_lc,ax_lc=plt.subplots(4,1,sharex=True,figsize=(10,6))
+#fig_lc,ax_lc=plt.subplots(4,1,sharex=True,figsize=(10,6))
+fig_lc,ax_lc=plt.subplots(4,1,sharex=True,figsize=(6,10))
+
+def numtomjd(x):
+    '''
+    the direct conversion doesn't seem to work so using  an hardwritten workaround
+    '''
+    return x+40587
+#    return  Time(mdates.num2date(x)).mjd
+
+
+def mjdtonum(x):
+    '''
+    the direct conversion doesn't seem to work so using  an hardwritten workaround
+    '''
+    return x-40587
+
+    #return mdates.date2num(Time(x,format='mjd').datetime)
+
+#more axis for better visualisation
+secax_0 = ax_lc[0].secondary_xaxis('top', functions=(numtomjd, mjdtonum))
+secax_1 = ax_lc[1].secondary_xaxis('top', functions=(numtomjd, mjdtonum))
+secax_2 = ax_lc[2].secondary_xaxis('top', functions=(numtomjd, mjdtonum))
+secax_3 = ax_lc[3].secondary_xaxis('top', functions=(numtomjd, mjdtonum))
+secax_4 = ax_lc[3].secondary_xaxis('bottom', functions=(numtomjd, mjdtonum))
+
+for ax in [secax_0,secax_1,secax_2,secax_3,secax_4]:
+    ax.yaxis.set_visible(False)
+
+secax_4.tick_params(
+    axis='x',          # changes apply to the x-axis
+    which='both',      # both major and minor ticks are affected
+    bottom=True,      # ticks along the bottom edge are off
+    top=False,         # ticks along the top edge are off
+    labelbottom=False,
+    labeltop=False,
+    direction='in')
+
+secax_0.xaxis.set_minor_locator(MultipleLocator(1))
+secax_1.xaxis.set_minor_locator(MultipleLocator(1))
+secax_2.xaxis.set_minor_locator(MultipleLocator(1))
+secax_3.xaxis.set_minor_locator(MultipleLocator(1))
+secax_4.xaxis.set_minor_locator(MultipleLocator(1))
+
+secax_1.xaxis.set_ticklabels('')
+secax_2.xaxis.set_ticklabels('')
+secax_3.xaxis.set_ticklabels('')
+secax_4.xaxis.set_ticklabels('')
+
+ax_lc_02 = ax_lc[0].twinx()
+ax_lc_12 = ax_lc[1].twinx()
+ax_lc_22 = ax_lc[2].twinx()
+ax_lc_32 = ax_lc[3].twinx()
+
+ax_lc_32.tick_params(
+    axis='x',          # changes apply to the x-axis
+    which='both',      # both major and minor ticks are affected
+    bottom=True,      # ticks along the bottom edge are off
+    top=False,         # ticks along the top edge are off
+    labelbottom=True,
+    labeltop=False,
+    direction='out')
+
+ax_lc[0].tick_params(
+    axis='x',          # changes apply to the x-axis
+    which='both',      # both major and minor ticks are affected
+    bottom=False,      # ticks along the bottom edge are off
+    top=True,         # ticks along the top edge are off
+    labelbottom=False,
+    labeltop=False,
+    direction='in')
+
+ax_lc[1].tick_params(
+    axis='x',          # changes apply to the x-axis
+    which='both',      # both major and minor ticks are affected
+    bottom=False,      # ticks along the bottom edge are off
+    top=True,         # ticks along the top edge are off
+    labelbottom=False,
+    labeltop=False,
+    direction='in')
+
+ax_lc[2].tick_params(
+    axis='x',          # changes apply to the x-axis
+    which='both',      # both major and minor ticks are affected
+    bottom=False,      # ticks along the bottom edge are off
+    top=True,         # ticks along the top edge are off
+    labelbottom=False,
+    labeltop=False,
+    direction='in')
+
+ax_lc[3].tick_params(
+    axis='x',          # changes apply to the x-axis
+    which='both',      # both major and minor ticks are affected
+    bottom=False,      # ticks along the bottom edge are off
+    top=True,         # ticks along the top edge are off
+    labelbottom=False,
+    labeltop=False,
+    direction='in')
+
 plt.subplots_adjust(hspace=0)
 
 ax_lc[0].xaxis.set_major_formatter(date_format)
@@ -139,20 +238,20 @@ ax_lc[0].xaxis.set_major_formatter(date_format)
 
 
 
-ax_lc[0].set_ylabel('MAXI\n[2-10]keV flux\n(ergs/s/cm²)')
-ax_lc[1].set_ylabel('NICER\n[3-10]keV flux\n(erg/s/cm²)')
+ax_lc[0].set_ylabel('MAXI [2-10]keV flux\n($10^{-9}$ ergs/s/cm²)')
+ax_lc[1].set_ylabel('NICER [3-10]keV flux\n($10^{-9}$ erg/s/cm²)')
 ax_lc[2].set_ylabel('NICER\n[6-10]/[3-10]keV\nHR')
 
 ax_lc[3].set_ylabel('Einstein Probe\n(tbd)')
 
-ax_lc[0].errorbar(x=MAXI_psf_dates,xerr=0.5,y=MAXI_psf_210_f,yerr=MAXI_psf_210_err,linewidth=0.5,
+ax_lc[0].errorbar(x=MAXI_psf_dates,xerr=0.5,y=MAXI_psf_210_f*1e9,yerr=MAXI_psf_210_err*1e9,linewidth=0.5,
                   elinewidth=1.,ls=':',
                   color='black',label='PSF fitting')
 
 min_vis_psf=MAXI_psf_dates[MAXI_psf_210_f.values>0.][0]
 max_vis_psf=MAXI_psf_dates[MAXI_psf_210_f.values>0.][-1]
 
-ax_lc[0].errorbar(x=MAXI_od_dates,xerr=MAXI_od_daterr,y=MAXI_od_210_f,yerr=MAXI_od_210_err,linewidth=0.5,
+ax_lc[0].errorbar(x=MAXI_od_dates,xerr=MAXI_od_daterr,y=MAXI_od_210_f*1e9,yerr=MAXI_od_210_err*1e9,linewidth=0.5,
                   elinewidth=1.,ls=':',
                   color='grey',alpha=0.3,label='On-demand tool')
 
@@ -162,8 +261,7 @@ max_vis_od=MAXI_od_dates[MAXI_od_210_f.values>0.][-1]
 ax_lc[0].set_xlim(min(min_vis_psf,min_vis_od)-1,max(max_vis_psf,max_vis_od)+1)
 
 # ax_lc[0].set_ylim(0,ax_lc[0].get_ylim()[1])
-ax_lc[0].set_ylim(0.,2e-9)
-
+ax_lc[0].set_ylim(0.,2e-9*1e9)
 
 #adding the XRISM obs
 xrism_interval=Time(['2024-09-30 09:42:04','2024-09-30 17:03:04'])
@@ -171,46 +269,55 @@ xrism_interval=Time(['2024-09-30 09:42:04','2024-09-30 17:03:04'])
 #adding the radio obs
 radio_obs_ul=Time('2024-09-29 12:57:36')
 radio_obs_jet=Time('2024-10-06 12:28:48')
+radio_obs_firstdet=Time('2024-09-16 15:05:00')
 
-ax_lc_02 = ax_lc[0].twinx()
-ax_lc_12 = ax_lc[1].twinx()
-ax_lc_22 = ax_lc[2].twinx()
-ax_lc_32 = ax_lc[3].twinx()
+
 
 for i_ax,ax in enumerate([ax_lc_02,ax_lc_12,ax_lc_22,ax_lc_32]):
     ax.axvspan(mdates.date2num(xrism_interval[0].datetime),mdates.date2num(xrism_interval[1].datetime),
                      color='green',alpha=0.5,label='XRISM observation')
 
+    ax.axvline(mdates.date2num(radio_obs_firstdet.datetime),color='red',ls='-',alpha=0.5,label='')
     ax.axvline(mdates.date2num(radio_obs_ul.datetime),color='blue',ls='-',alpha=0.5,label='Radio non-detection')
-    ax.axvline(mdates.date2num(radio_obs_jet.datetime),color='red',ls='-',alpha=0.5,label='Radio detection')
+    ax.axvline(mdates.date2num(radio_obs_jet.datetime),color='red',ls='-',alpha=0.5,label='Radio detections')
+
 
     ax.yaxis.set_visible(False)
     if i_ax==3:
         ax.legend(loc='upper left')
-
+        ax.xaxis.set_visible(True)
 ax_lc[0].legend(loc='upper right')
 
-ax_lc[1].errorbar(NICER_dates,xerr=NICER_dateserr,y=NICER_flux_arr.T[4][0],yerr=NICER_flux_arr.T[4][1:],
+ax_lc[1].errorbar(NICER_dates,xerr=NICER_dateserr,y=NICER_flux_arr.T[4][0]*1e9,yerr=NICER_flux_arr.T[4][1:]*1e9,
                   linewidth=0.5,
                   elinewidth=1., ls=':',color='black')
+
+
 
 NICER_HR=NICER_flux_arr.T[2][0]/NICER_flux_arr.T[1][0]
 
 NICER_HR_err = np.array([((NICER_flux_arr.T[2][i] / NICER_flux_arr.T[2][0]) ** 2 + \
                         (NICER_flux_arr.T[1][i] / NICER_flux_arr.T[1][0]) ** 2) ** (1 / 2) * NICER_HR for i in [1, 2]])
 
-ax_lc[1].errorbar(NICER_dates,xerr=NICER_dateserr,y=NICER_flux_arr.T[4][0],yerr=NICER_flux_arr.T[4][1:],
-                  linewidth=0.5,
-                  elinewidth=1., ls=':',color='black')
-
 ax_lc[2].errorbar(NICER_dates,xerr=NICER_dateserr,y=NICER_HR,yerr=NICER_HR_err,
                   linewidth=0.5,
                   elinewidth=1., ls=':',color='black')
 
-ax_lc[1].set_ylim(0,2e-9)
+ax_lc[1].set_ylim(0,2e-9*1e9)
 ax_lc[2].set_ylim(0.1,2)
 
-# ax_lc[0].set_xlim(NICER_dates[0]-0.5,NICER_dates[-1]+0.5)
 plt.show()
+
+
+
+ax_lc[0].set_xlim(NICER_dates[0]-7.5,NICER_dates[-1]+7.5)
+
+plt.subplots_adjust(left=0.16,right=0.96,top=0.97,bottom=0.03)
+
+plt.show()
+
+#needs to be done last
+plt.setp(ax_lc[1].get_yticklabels()[-1], visible=False)
+plt.setp(ax_lc[2].get_yticklabels()[-1], visible=False)
 
 

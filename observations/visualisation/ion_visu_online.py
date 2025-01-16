@@ -4,7 +4,7 @@ import glob
 import argparse
 import warnings
 
-
+import time
 import numpy as np
 import pandas as pd
 from decimal import Decimal
@@ -438,7 +438,60 @@ with tab_3D:
 
 plot_points=st.sidebar.toggle(label='overlay points',value=False)
 
+control_camera=st.sidebar.toggle(label='manual camera control',value=False)
+
+setup_camera=st.sidebar.toggle(label='setup camera',value=False)
+
+
+if setup_camera and not online:
+    val_up_x=st.sidebar.number_input('camera up x',format="%.3f")
+    val_up_y=st.sidebar.number_input('camera up y',format="%.3f")
+    val_up_z=st.sidebar.number_input('camera up z',format="%.3f")
+
+    val_center_x=st.sidebar.number_input('camera center x',format="%.3f")
+    val_center_y=st.sidebar.number_input('camera center y',format="%.3f")
+    val_center_z=st.sidebar.number_input('camera center z',format="%.3f")
+    
+    val_eye_x=st.sidebar.number_input('camera eye x',format="%.3f")
+    val_eye_y=st.sidebar.number_input('camera eye y',format="%.3f")
+    val_eye_z=st.sidebar.number_input('camera eye z',format="%.3f")
+
+    camera = dict(
+        up=dict(x=val_up_x,y=val_up_y,z=val_up_z),
+        center=dict(x=val_center_x,y=val_center_y,z=val_center_z),
+        eye=dict(x=val_eye_x,y=val_eye_y,z=val_eye_z)
+    )
+
+    #view 2:
+    # 0 0 1 0.07 -0.108 0.009 1.614 -0.005 -0.855
+
+    #view 3:
+    #0 0 1 0.013 0.057 -0.101 -0.303 1.303 1.132
+
+elif control_camera and not online:
+
+    slider_up_x = st.sidebar.slider(label='camera X angle vector',min_value=-1., max_value=1., step=0.01,value=0.)
+    slider_up_y = st.sidebar.slider(label='camera Y angle vector',min_value=-1., max_value=1., step=0.01,value=0.)
+    slider_up_z = st.sidebar.slider(label='camera Z angle vector',min_value=-1., max_value=1., step=0.01,value=1.)
+    
+    slider_eye_x = st.sidebar.slider(label='camera X pos',min_value=-3., max_value=3., step=0.1,value=1.)
+    slider_eye_y = st.sidebar.slider(label='camera Y pos',min_value=-3., max_value=3., step=0.1,value=1.)
+    slider_eye_z = st.sidebar.slider(label='camera Z pos',min_value=-3., max_value=3., step=0.1,value=1.)
+
+    #good views: 1.6 1.6 0.3 (facing the planes)
+
+    camera = dict(
+        up=dict(x=slider_up_x, y=slider_up_y, z=slider_up_z),
+        center=dict(x=0, y=0, z=0),
+        eye=dict(x=slider_eye_x, y=slider_eye_y, z=slider_eye_z)
+    )
+else:
+    camera=None
+
+
 plot_distance_SEDs=st.sidebar.toggle('Plot nR² distance between observations',value=False)
+
+plot_distance_names=st.sidebar.toggle('Write SED names in the distance plot titles',value=True)
 if not plot_distance_SEDs:
     with tab_delta:
         st.info('To start plotting these elements, toggle the option in the sidebar.')
@@ -655,7 +708,7 @@ with tab_2D:
 #distance plots
 
 @st.cache_data
-def plot_distance(SED_1,SED_2):
+def plot_distance(SED_1,SED_2,write_names=True):
 
 
     assert len(valid_volumes_dict[SED_1])==1,'Error: only implemented for single volumes'
@@ -666,12 +719,36 @@ def plot_distance(SED_1,SED_2):
 
     distance_nr2=np.repeat(np.nan,len(range_v_turb)*len(range_nh)).reshape((len(range_v_turb),len(range_nh)))
 
+    surface_SED_1=np.repeat(np.nan,len(range_v_turb)*len(range_nh)).reshape((len(range_v_turb),len(range_nh)))
+    surface_SED_2=np.repeat(np.nan,len(range_v_turb)*len(range_nh)).reshape((len(range_v_turb),len(range_nh)))
+
+    #creating the plot
+    fig_dist,ax_dist= plt.subplots(1,1, figsize=(6,6),)
+    ax_dist.set_ylabel(r'log$_{10}$(nh)')
+    ax_dist.set_xlabel(r'log$_{10}$(v$_{turb}$)')
+    ax_dist.set_facecolor('grey')
+    cmap_bipolar=hotcold(neutral=1)
+
+
     #computing the distance array
     for i_v_turb,elem_v_turb in enumerate(range_v_turb):
         for i_nh,elem_nh in enumerate(range_nh):
 
+
             mask_valid_SED_1=(plane_lower_SED_1.T[0]==elem_nh) & (np.log10(plane_lower_SED_1.T[1])==elem_v_turb)
             mask_valid_SED_2=(plane_lower_SED_2.T[0]==elem_nh) & (np.log10(plane_lower_SED_2.T[1])==elem_v_turb)
+
+            # x_square=[[range_v_turb[i_v_turb],range_v_turb[i_v_turb+1]],range_v_turb[i_v_turb],range_v_turb[i_v_turb+1]]
+            #
+            # y_square=[[range_nh[i_nh],range_nh[i_nh]],range_nh[i_nh+1],range_nh[i_nh+1]]
+
+            if mask_valid_SED_1.any():
+                surface_SED_1[i_v_turb][i_nh]=1
+                # ax_dist.pcolor(x_square,y_square,[[1]],cmap='viridis',alpha=1,hash='//',vmin=0,vmax=1)
+
+            if mask_valid_SED_2.any():
+                surface_SED_2[i_v_turb][i_nh]=1
+                # ax_dist.pcolor(x_square,y_square,1,[[1]],cmap='viridis',alpha=1,hash="\\",vmin=0,vmax=1)
 
             if not (sum(mask_valid_SED_1)>0) & (sum(mask_valid_SED_2)>0):
 
@@ -694,13 +771,24 @@ def plot_distance(SED_1,SED_2):
                 distance_nr2[i_v_turb][i_nh] = distance_sign*abs(distance_vals)
 
 
-    #creating the plot
-    fig_dist,ax_dist= plt.subplots(1,1, figsize=(6,6),)
-    ax_dist.set_ylabel(r'log$_{10}$(nh)')
-    ax_dist.set_xlabel(r'log$_{10}$(v$_{turb}$)')
-    ax_dist.set_facecolor('grey')
-    cmap_bipolar=hotcold(neutral=1)
+    #note: lw=0 is used to remove the borders. The weird implementation of the hatch coloring is necesarry
+    #because pcolor doesn't have enough arguments
+    hash_1=ax_dist.pcolor(np.repeat(range_v_turb-0.025,len(range_nh)).reshape(len(range_v_turb),len(range_nh)),
+                   np.repeat(range_nh-0.025,len(range_v_turb)).reshape(len(range_v_turb),len(range_nh)).T,
+                   surface_SED_1[:-1, :-1],
+                   cmap='viridis',alpha=1.,hatch='///',lw=0,vmin=0,vmax=1,zorder=10)
 
+    hash_1.set_facecolor('none')
+    hash_1.set_edgecolor('lightgrey')
+
+
+    hash_2=ax_dist.pcolor(np.repeat(range_v_turb-0.025,len(range_nh)).reshape(len(range_v_turb),len(range_nh)),
+                   np.repeat(range_nh-0.025,len(range_v_turb)).reshape(len(range_v_turb),len(range_nh)).T,
+                   surface_SED_2[:-1, :-1],
+                   cmap='viridis',alpha=1.,hatch='\\\\\\',lw=0,vmin=0,vmax=1,zorder=10)
+
+    hash_2.set_facecolor('none')
+    hash_2.set_edgecolor('lightgrey')
 
     cm_ticks = (np.linspace(np.nanmin(distance_nr2), 0, 6, endpoint=True).tolist() if np.nanmin(distance_nr2)<=0 else [-0.0001])+ \
                (np.linspace(0, np.nanmax(distance_nr2), 6, endpoint=True).tolist() if np.nanmin(distance_nr2) >= 0 else [0.0001])
@@ -710,16 +798,41 @@ def plot_distance(SED_1,SED_2):
                                   vmin=np.nanmin(distance_nr2) if np.nanmin(distance_nr2)<0 else -0.0001,
                                   vmax=np.nanmax(distance_nr2) if np.nanmax(distance_nr2)>0 else 0.0001)
 
-    img=ax_dist.pcolormesh(range_v_turb,range_nh,distance_nr2.T,cmap=cmap_bipolar,norm=cm_norm)
+    img=ax_dist.pcolormesh(range_v_turb,range_nh,distance_nr2.T,cmap=cmap_bipolar,norm=cm_norm,zorder=100)
 
     cb=fig_dist.colorbar(img,location='bottom', orientation='horizontal',spacing='proportional',
+                         pad=0.3 if write_names else 0.2,
                          ticks=cm_ticks)
     #important to rescale the colorbar properly, otherwise both sides will always be 50/50
     # ('proportional' in the cb settings isn't really working for twoslopenorm)
     cb.ax.set_xscale('linear')
 
-    plt.suptitle(r'log$_{10}$nR²$_{' + SED_1.replace('_','\_') + '}$' + ' - log$_{10}$nR²$_{' + SED_2.replace('_','\_') + '}$')
+    if write_names:
+        plt.suptitle(r'log$_{10}$nR²$_{' + SED_1.replace('_','\_') + '}$' + ' - log$_{10}$nR²$_{' + SED_2.replace('_','\_') + '}$')
+    else:
+        cb.ax.set_title(r'$\Delta$lognR$^{2}$')
 
+        SEDs_arr=np.array(list(SEDs.keys()))
+
+        color_SED_1=np.array(base_cmap)[np.argwhere(SEDs_arr==SED_1)[0]][0]
+        color_SED_2=np.array(base_cmap)[np.argwhere(SEDs_arr==SED_2)[0]][0]
+
+        #automatic text spacing
+        n_delta=(len(color_SED_1)+len(color_SED_2)+3)/100*1.2
+
+        plt.figtext(0.59, 0.24, '(', fontdict={'color':  'black','weight': 'normal','size': 10,})
+        plt.figtext(0.6+len(color_SED_1)*0.1/100, 0.24,
+                    color_SED_1.replace('powderblue','blue').replace('maroon','brown').replace('forestgreen','green'),
+                    fontdict={'color':  color_SED_1,'weight': 'normal','size': 10,})
+        plt.figtext(0.6+len(color_SED_1)*1.5/100, 0.24, '-', fontdict={'color':  'black','weight': 'normal','size': 10,})
+        plt.figtext(0.6++len(color_SED_2)*0.1/100+len(color_SED_1)*1.5/100+0.015, 0.24,
+                    color_SED_2.replace('powderblue','blue').replace('maroon','brown').replace('forestgreen','green'),
+                    fontdict={'color':  color_SED_2,'weight': 'normal','size': 10,})
+        plt.figtext(0.6+(len(color_SED_1)+len(color_SED_2))*1.5/100+0.02, 0.24, ')',
+                    fontdict={'color':  'black','weight': 'normal','size': 10,})
+
+    plt.xlim(range_v_turb[0],range_v_turb[-1])
+    plt.ylim(range_nh[0],range_nh[-1])
 
     return fig_dist
 
@@ -734,7 +847,7 @@ if plot_distance_SEDs:
 
     for couple in SED_pairs:
 
-        plot_couple=plot_distance(couple[0],couple[1])
+        plot_couple=plot_distance(couple[0],couple[1],write_names=plot_distance_names)
 
         with column_list[np.argwhere(np.array(list_SEDs_disp)==couple[0])[0][0]]:
             st.pyplot(plot_couple)
@@ -811,8 +924,6 @@ def plot_3d_surface(planes, color='lightblue', volume_number=1, plot_points=Fals
 
                 #making two triangles out of these
                 points_fill=np.array([points_curr_v_turb.tolist()+points_next_v_turb.tolist()])
-
-                # breakpoint()
 
                 #adding the lower and upper triangle
                 tri_fill_lower=np.array(points_curr_v_turb.tolist()+[points_next_v_turb[points_next_v_turb.T[2].argmin()].tolist()])
@@ -916,7 +1027,6 @@ def plot_3d_surface(planes, color='lightblue', volume_number=1, plot_points=Fals
                                          legendgrouptitle={'text': legendgroup},
                                          showlegend=False)]
 
-                        # breakpoint()
 
                         couple_list+=[simplex[couple]]
 
@@ -978,7 +1088,6 @@ def plot_3d_surface(planes, color='lightblue', volume_number=1, plot_points=Fals
             if abs(ids_x_grid[1]-ids_x_grid[0])>1:
                 continue
 
-            # breakpoint()
             ids_y_grid=np.unique(np.array([np.argwhere(range_v_turb==np.log10(elem))[0][0] for elem in y_tris]))
             if abs(ids_y_grid[1]-ids_y_grid[0])>1:
                 continue
@@ -1129,10 +1238,9 @@ def plot_3d_surface(planes, color='lightblue', volume_number=1, plot_points=Fals
     return shapes
 
 
-
 @st.cache_data
-def make_3D_figure(SEDs_disp,SEDs_surface,cmap,plot_points=False,under_sampling_v_turb='var',under_sampling_nh='var'):
-
+def make_3D_figure(SEDs_disp, SEDs_surface, cmap, plot_points=False, under_sampling_v_turb='var',
+                   under_sampling_nh='var', camera=None):
     '''
     Under sampling gives how much we divide in one axis to reduce the number of vertices
     '''
@@ -1140,75 +1248,75 @@ def make_3D_figure(SEDs_disp,SEDs_surface,cmap,plot_points=False,under_sampling_
     # getting all the surfaces into an array
     mult_d_surfaces = []
 
-    single_mode=len(SEDs_surface)==1
+    single_mode = len(SEDs_surface) == 1
 
-    n_SEDs=len(SEDs_surface)
+    n_SEDs = len(SEDs_surface)
 
-    additional_sampling=0+(1 if 'diagonal_upper_mid_highE_flux' in SEDs_surface else 0)\
-                        +(1 if 'diagonal_upper_high_highE_flux' in SEDs_surface else 0)
+    additional_sampling = 0 + (1 if 'diagonal_upper_mid_highE_flux' in SEDs_surface else 0) \
+                          + (1 if 'diagonal_upper_high_highE_flux' in SEDs_surface else 0)
 
-    for i_SED,elem_SED in enumerate(list(SEDs.keys())):
+    for i_SED, elem_SED in enumerate(list(SEDs.keys())):
 
         if under_sampling_v_turb == 'var':
 
-            if i_SED in [2,4]:
-                under_sampling_v_turb=3 if single_mode else 5+n_SEDs//2+2*additional_sampling
+            if i_SED in [2, 4]:
+                under_sampling_v_turb = 3 if single_mode else 5 + n_SEDs // 2 + 2 * additional_sampling
             else:
-                under_sampling_v_turb=1 if single_mode else 2+n_SEDs//2+additional_sampling
+                under_sampling_v_turb = 1 if single_mode else 2 + n_SEDs // 2 + additional_sampling
 
         if under_sampling_nh == 'var':
-            if i_SED in [2,4]:
-                under_sampling_nh=3 if single_mode else 5+n_SEDs//2+2*additional_sampling
+            if i_SED in [2, 4]:
+                under_sampling_nh = 3 if single_mode else 5 + n_SEDs // 2 + 2 * additional_sampling
             else:
-                under_sampling_nh=1+n_SEDs//6+additional_sampling
+                under_sampling_nh = 1 + n_SEDs // 6 + additional_sampling
 
         if elem_SED not in SEDs_disp:
             continue
 
-        valid_volumes=valid_volumes_dict[elem_SED]
+        valid_volumes = valid_volumes_dict[elem_SED]
 
         for i_vol in range(len(valid_volumes)):
+            pos_v_turb_lower = np.array([np.argwhere(np.log10(elem) == range_v_turb)[0][0]
+                                         for elem in valid_volumes[i_vol][0].T[1]])
+            pos_v_turb_higher = np.array([np.argwhere(np.log10(elem) == range_v_turb)[0][0]
+                                          for elem in valid_volumes[i_vol][1].T[1]])
 
-            pos_v_turb_lower=np.array([np.argwhere(np.log10(elem) == range_v_turb)[0][0]
-                                                for elem in valid_volumes[i_vol][0].T[1]])
-            pos_v_turb_higher=np.array([np.argwhere(np.log10(elem) == range_v_turb)[0][0]
-                                                for elem in valid_volumes[i_vol][1].T[1]])
+            # combining undersampling and adding the first and last v_turbs in any case to avoid missing out the edes of the surface
+            mask_under_sampling_v_turb_lower = (pos_v_turb_lower % under_sampling_v_turb == 0) | (
+                        pos_v_turb_lower == max(pos_v_turb_lower)) \
+                                               | (pos_v_turb_lower == min(pos_v_turb_lower))
 
-            #combining undersampling and adding the first and last v_turbs in any case to avoid missing out the edes of the surface
-            mask_under_sampling_v_turb_lower=(pos_v_turb_lower % under_sampling_v_turb == 0) | (pos_v_turb_lower==max(pos_v_turb_lower)) \
-                                                                                | (pos_v_turb_lower==min(pos_v_turb_lower))
+            mask_under_sampling_v_turb_higher = (pos_v_turb_higher % under_sampling_v_turb == 0) | (
+                        pos_v_turb_higher == max(pos_v_turb_higher)) \
+                                                | (pos_v_turb_higher == min(pos_v_turb_higher))
 
-            mask_under_sampling_v_turb_higher=(pos_v_turb_higher % under_sampling_v_turb == 0) | (pos_v_turb_higher==max(pos_v_turb_higher)) \
-                                                                                | (pos_v_turb_higher==min(pos_v_turb_higher))
+            pos_nh_lower = np.array([np.argwhere(elem == range_nh)[0][0]
+                                     for elem in valid_volumes[i_vol][0].T[0]])
+            pos_nh_higher = np.array([np.argwhere(elem == range_nh)[0][0]
+                                      for elem in valid_volumes[i_vol][1].T[0]])
 
-            pos_nh_lower=np.array([np.argwhere(elem == range_nh)[0][0]
-                                                for elem in valid_volumes[i_vol][0].T[0]])
-            pos_nh_higher=np.array([np.argwhere(elem == range_nh)[0][0]
-                                                for elem in valid_volumes[i_vol][1].T[0]])
+            # combining undersampling and adding the first and last nhs in any case to avoid missing out the edes of the surface
+            mask_under_sampling_nh_lower = (pos_nh_lower % under_sampling_nh == 0) | (pos_nh_lower == max(pos_nh_lower)) \
+                                           | (pos_nh_lower == min(pos_nh_lower))
 
-            #combining undersampling and adding the first and last nhs in any case to avoid missing out the edes of the surface
-            mask_under_sampling_nh_lower=(pos_nh_lower % under_sampling_nh == 0) | (pos_nh_lower==max(pos_nh_lower)) \
-                                                                                | (pos_nh_lower==min(pos_nh_lower))
+            mask_under_sampling_nh_higher = (pos_nh_higher % under_sampling_nh == 0) | (
+                        pos_nh_higher == max(pos_nh_higher)) \
+                                            | (pos_nh_higher == min(pos_nh_higher))
 
-            mask_under_sampling_nh_higher=(pos_nh_higher % under_sampling_nh == 0) | (pos_nh_higher==max(pos_nh_higher)) \
-                                                                                | (pos_nh_higher==min(pos_nh_higher))
-            
-            mask_under_sampling_lower=mask_under_sampling_v_turb_lower & mask_under_sampling_nh_lower
-            mask_under_sampling_higher=mask_under_sampling_v_turb_higher & mask_under_sampling_nh_higher
+            mask_under_sampling_lower = mask_under_sampling_v_turb_lower & mask_under_sampling_nh_lower
+            mask_under_sampling_higher = mask_under_sampling_v_turb_higher & mask_under_sampling_nh_higher
 
+            valid_volumes_under_sampled = [valid_volumes[i_vol][0][mask_under_sampling_lower],
+                                           valid_volumes[i_vol][1][mask_under_sampling_higher]]
 
-            valid_volumes_under_sampled=[valid_volumes[i_vol][0][mask_under_sampling_lower],
-                                         valid_volumes[i_vol][1][mask_under_sampling_higher]]
+            mult_d_surfaces += plot_3d_surface(valid_volumes_under_sampled, color=cmap[i_SED], volume_number=i_vol + 1,
+                                               legendgroup=elem_SED, i_SED=i_SED, draw_surface=elem_SED in SEDs_surface,
+                                               full_planes=valid_volumes[i_vol],
+                                               under_sampling_v_turb=under_sampling_v_turb,
+                                               under_sampling_nh=under_sampling_nh, plot_points=plot_points,
+                                               single_mode=single_mode)
 
-            mult_d_surfaces+=plot_3d_surface(valid_volumes_under_sampled,color=cmap[i_SED],volume_number=i_vol+1,
-                                             legendgroup=elem_SED,i_SED=i_SED,draw_surface=elem_SED in SEDs_surface,
-                                             full_planes=valid_volumes[i_vol],
-                                             under_sampling_v_turb=under_sampling_v_turb,
-                                             under_sampling_nh=under_sampling_nh,plot_points=plot_points,
-                                             single_mode=single_mode)
-
-    fig=go.Figure(data=mult_d_surfaces)
-
+    fig = go.Figure(data=mult_d_surfaces)
 
     # Layout settings with custom axis names
     fig.update_layout(
@@ -1217,19 +1325,70 @@ def make_3D_figure(SEDs_disp,SEDs_surface,cmap,plot_points=False,under_sampling_
             yaxis_title='v_turb',  # Custom Y-axis label
             zaxis_title='log10(nR²)',  # Custom Z-axis label
             aspectmode="cube",
-            yaxis=dict(type='log')
+            yaxis=dict(type='log'),
+            # camera=camera,
+
         ),
         height=1000
     )
 
+    fig.update_layout(scene_camera=camera,scene_dragmode='orbit')
     # fig_3D.show()
     # fig_3D.show()
 
     #
     with tab_3D:
-        st.plotly_chart(fig,use_container_width=True,theme=None)
+        st.plotly_chart(fig, use_container_width=True, theme=None)
+
+    return fig
 
 if plot_3D:
-    make_3D_figure(list_SEDs_disp,list_SEDs_surface,cmap=base_cmap,plot_points=plot_points)
+    fig_3D=make_3D_figure(list_SEDs_disp, list_SEDs_surface, cmap=base_cmap, plot_points=plot_points, camera=camera)
 
+    if not online:
+        with tab_3D:
+
+            savedir='/home/parrama/Documents/Work/PhD/docs/papers/wind_4U/global/ion_visu/save_figs'
+            def save_3dfig_local():
+
+                '''
+                # Saves the current maxi_graphs in a svg (i.e. with clickable points) format.
+                '''
+
+                if fig_3D is not None:
+                    fig_3D.write_image(savedir+'/'+'fig3D_'+str(round(time.time()))+'.pdf',engine="kaleido",
+                                       width=1000, height=1000)
+
+            st.button('Save current 3D figure',on_click=save_3dfig_local,key='save_3dfig_local')
+
+
+            with open(savedir+'/fig_3D.pkl', 'wb+') as f:
+                dill.dump(fig_3D,f)
+        #
+        # this doesn't work
+        # setup_default_3Dcam=st.toggle('Setup default camera position')
+
+        # @st.cache_data
+        # def setup_cam(setup):
+        #
+        # if setup_default_3Dcam:
+        #
+        # # if setup and 'fig_shown' not in st.session_state:
+        #
+        #     #requires ipywidgets installed
+        #     f = go.FigureWidget(fig_3D)
+        #
+        #     breakpoint()
+                # fig_3D.show()
+                # st.session_state['fig_shown']=True
+        #
+        #
+        # if setup_default_3Dcam:
+        #     setup_cam(setup_default_3Dcam)
+        #
+        # def show_cam_pos():
+        #     with tab_3D:
+        #         st.text(fig_3D.layout['scene']['camera'])
+        #
+        # save_default_3Dcam=st.button('show camera position',on_click=show_cam_pos,key='show_cam_pos')
 

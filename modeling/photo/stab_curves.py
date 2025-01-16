@@ -2,8 +2,9 @@
 import numpy as np
 from simul_tools import xstar_func
 
-def make_stab_curves(SED_path,xlum=1,n=1e12,v_turb=500,logNH=23.5, logxi_range=[0,6,0.01],
-                     abund='solar',suffix='',solver='xstar',solver_mode='singularity'):
+def make_stab_curves(SED_path,xlum=1,n=1e12,v_turb=500,logNH=23.5, logxi_range=[0,6,0.03],
+                     abund='solar',suffix='',solver='xstar',solver_mode='singularity',
+                     force_kill_instance=False):
 
     '''
 
@@ -28,6 +29,7 @@ def make_stab_curves(SED_path,xlum=1,n=1e12,v_turb=500,logNH=23.5, logxi_range=[
 
         solver: Radiative transfer code used to compute the stability curve
 
+        force_kill_instance: kills and recreates the xstar instance at each iteration
     '''
 
 
@@ -46,7 +48,7 @@ def make_stab_curves(SED_path,xlum=1,n=1e12,v_turb=500,logNH=23.5, logxi_range=[
             #to increase the speed of the computations
             t_guess=xstar_func(SED_path, xlum, t_guess=t_guess, n=n, nh=10**(logNH), logxi=elem_logxi,vturb_x=v_turb,nbins=1000,
                    xstar_mode=solver_mode,path_logpars=log_file,
-                       kill_container=i_logxi==len(logxi_range)-1,
+                       kill_container=i_logxi==len(logxi_range)-1 or force_kill_instance,
                        no_write=True,instance_identifier='auto',id_comput=str(i_logxi+1),return_temp=True)
 
 

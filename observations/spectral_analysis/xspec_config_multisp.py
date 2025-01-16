@@ -6392,11 +6392,17 @@ def xPlot(types,axes_input=None,plot_saves_input=None,plot_arg=None,includedlist
         -2Dchimap:          2d chi² color + contour map
         -absorb_ratio:      modified ratio plot with absorption lines in the ratio and higlighted + absorption line positions highlighted
 
+
     plot_arg is an array argument with the values necessary for custom plots. each element should be None if the associated plot doesn't need plot arguments
+
+    specifics for standard plots:
+        eemo: set to xLog=True and yLog=True
 
     xlims and ylims should be tuples of values
         can be made for individual subplots plot types independantly if set to 2-dimensionnal tuples
         in this case the null value is [None,None]
+
+
 
     If plot_saves is not None, uses its array elements as inputs to create the plots.
     Else, creates a range of plot_saves using plot_saver from the asked set of plot types
@@ -6514,9 +6520,9 @@ def xPlot(types,axes_input=None,plot_saves_input=None,plot_arg=None,includedlist
 
         curr_ax.set_xlabel(curr_save.labels[0])
         curr_ax.set_ylabel(curr_save.labels[1])
-        if curr_save.xLog:
+        if curr_save.xLog or plot_type.endswith('mo') :
             curr_ax.set_xscale('log')
-        if curr_save.yLog or (plot_type=='ratio' and force_ylog_ratio):
+        if curr_save.yLog or (plot_type=='ratio' and force_ylog_ratio) or plot_type.endswith('mo') :
             curr_ax.set_yscale('log')
 
         #this needs to be performed independantly of how many groups there are
@@ -6619,7 +6625,8 @@ def xPlot(types,axes_input=None,plot_saves_input=None,plot_arg=None,includedlist
         if xlims_use is None or xlims_use[i_ax][0] is None:
             curr_ax.set_xlim(round(min(ravel_ragged(curr_save.x-curr_save.xErr)),2),round(max(ravel_ragged(curr_save.x+curr_save.xErr)),2))
 
-        if ylims_use is None or ylims_use[i_ax][0] is None:
+        #with condition to avoid rescaling if there is no data (e.g. for eemo)
+        if (ylims_use is None or ylims_use[i_ax][0] is None) and len(np.argwhere(ravel_ragged(curr_save.y)!=None))!=0:
             curr_ax.set_ylim(min(curr_ax.get_ylim()[0],round(min(ravel_ragged(curr_save.y-curr_save.yErr)),4)),
                           max(curr_ax.get_ylim()[1],round(max(ravel_ragged(curr_save.y+curr_save.yErr)),4)))
 

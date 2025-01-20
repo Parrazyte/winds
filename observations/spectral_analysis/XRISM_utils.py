@@ -3,11 +3,12 @@ from xspec import Xset, Plot, Fit
 from xspec_config_multisp import freeze, allmodel_data
 from linedet_utils import narrow_line_search,plot_line_search
 import dill
+import numpy as np
 
 def rebinv_xrism(grp_number):
     Plot.setRebin(2, 5000, grp_number)
 def xrism_ls(baseload,low_e,high_e,plot_suffix,e_step=5e-3,e_sat_low_indiv=[1.5,1.5],resolve_dg=1,
-             force_ylog_ratio=True,ratio_bounds=[0.05,20]):
+             force_ylog_ratio=True,ratio_bounds=[0.05,20],title=True):
 
     '''
     Simple wrapper to compute a line search and make an associated plot with XRISM
@@ -29,7 +30,7 @@ def xrism_ls(baseload,low_e,high_e,plot_suffix,e_step=5e-3,e_sat_low_indiv=[1.5,
 
     mod_ls=allmodel_data()
     narrow_out_val=narrow_line_search(mod_ls,'mod_ls',e_sat_low_indiv,[low_e,high_e,e_step],
-                                      line_cont_range=[low_e,high_e])
+                                      line_cont_range=[low_e,high_e],scorpeon=False)
 
 
     with open(baseload[:baseload.rfind('.')]+'_narrow_out_'+str(low_e)+'_'+str(high_e)+'.dill','wb+') as f:
@@ -37,9 +38,31 @@ def xrism_ls(baseload,low_e,high_e,plot_suffix,e_step=5e-3,e_sat_low_indiv=[1.5,
 
     plot_line_search(narrow_out_val, './', 'XRISM', suffix='', save=True,
                      epoch_observ=[plot_suffix], format='pdf',
-                     force_ylog_ratio=force_ylog_ratio,ratio_bounds=ratio_bounds)
+                     force_ylog_ratio=force_ylog_ratio,ratio_bounds=ratio_bounds,title=title)
 
     Xset.chatter=prev_chatter
+
+def xrism_ls_loader(dump_path,ener_show_range,force_ylog_ratio=True,ratio_bounds=None,squished_mode=False,
+                    local_chi_bounds=True,force_side_lines='none',save=False,show_indiv_transi=True):
+    '''
+    More simple version to simply load the dump and make a figure out of it
+    '''
+
+    with open(dump_path,'rb') as f:
+        narrow_out_val=dill.load(f)
+
+    # breakpoint()
+    suffix_list=np.array(ratio_bounds).astype(str).tolist()
+    suffix='zoom_'+'_'.join(np.array(ener_show_range).round(2).astype(str).tolist())+'_'+\
+                  '_'.join(np.array(ratio_bounds).round(2).astype(str).tolist())+('_squished' if squished_mode else '')+\
+           '_'+dump_path[:dump_path.rfind('narrow')]
+
+    plot_line_search(narrow_out_val, './', 'XRISM', suffix='', save=save,
+                     epoch_observ=[suffix], format='png',
+                     force_ylog_ratio=force_ylog_ratio,ratio_bounds=ratio_bounds,ener_show_range=ener_show_range,
+                     show_indiv_transi=show_indiv_transi,title=False,squished_mode=squished_mode,
+                     local_chi_bounds=local_chi_bounds,
+                     force_side_lines=force_side_lines)
 
 
 #xrism_ls('pion_fit_paper.xcm',1.5,2.5,'pion_fit',)

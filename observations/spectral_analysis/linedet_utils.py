@@ -5,7 +5,7 @@ import matplotlib.pyplot as plt
 import matplotlib.colors as colors
 import sys
 from tqdm import tqdm
-
+from copy import deepcopy
 from matplotlib.gridspec import GridSpec
 
 from general_tools import ravel_ragged,MinorSymLogLocator
@@ -14,7 +14,7 @@ from general_tools import ravel_ragged,MinorSymLogLocator
 from xspec import AllData,Plot,AllModels,Fit,Xset
 
 from xspec_config_multisp import xcolors_grp,addcomp,store_plot,allfreeze,xscorpeon,\
-                                model_load
+                                model_load,xspec_globcomps
 from fitting_tools import lines_std,lines_e_dict, lines_std_names
 
 #bipolar colormap from a custom library (https://github.com/endolith/bipolar-colormap)
@@ -28,10 +28,11 @@ from imantics import Mask
 from shapely.geometry import Polygon,Point
 #mask propagation for the peak detection
 from scipy.ndimage import binary_dilation
+import dill
 
 def narrow_line_search(data_cont, suffix,e_sat_low_indiv,line_search_e=[4,10,0.05],line_search_norm=[0.01,10,500],
                        peak_thresh=9.21,peak_clean=False,line_cont_range=[4,10],trig_interval=[6.5,9.1],
-                       scorpeon_save=None,data_fluxcont=None):
+                       scorpeon_save=None,data_fluxcont=None,scorpeon=True):
 
     '''
     Wrapper for all the line search code and associated visualisation
@@ -42,6 +43,11 @@ def narrow_line_search(data_cont, suffix,e_sat_low_indiv,line_search_e=[4,10,0.0
     can use datafluxcont to compute the normalisation from the continuum of another spectrum
     useful when negative gaussians at 0 width that go below zero in flux (which you don't care about normally
     because it is diluted by the instrumental response, but it crashes the log flux)
+
+
+    arg:
+        -scorpeon. Tries to load the scorpeon background, checks all fits files and
+         will fail if there was a change in folder after loading. Setting it to False desactivates the load.
     '''
 
     line_search_e_space = np.arange(line_search_e[0], line_search_e[1] + line_search_e[2] / 2, line_search_e[2])
@@ -94,7 +100,8 @@ def narrow_line_search(data_cont, suffix,e_sat_low_indiv,line_search_e=[4,10,0.0
 
     # reseting the model
     AllModels.clear()
-    xscorpeon.load('auto',scorpeon_save=scorpeon_save, frozen=True)
+    if scorpeon:
+        xscorpeon.load('auto',scorpeon_save=scorpeon_save, frozen=True)
 
     # reloading the broad band model
     data_cont.load()
@@ -105,7 +112,8 @@ def narrow_line_search(data_cont, suffix,e_sat_low_indiv,line_search_e=[4,10,0.0
 
     # adding the gaussian with constant factors and cflux for variations
     # since we cannot use negative logspaces in steppar, we use one constant factor for the sign and a second for the value
-    addcomp('constant(constant(cflux(gauss)))')
+    addcomp('constant(constant(cflux(gauss)))',
+            position='lastin' if AllModels(1).componentNames[0] in xspec_globcomps else 'last')
 
     mod_gauss = AllModels(1)
 
@@ -354,7 +362,8 @@ def narrow_line_search(data_cont, suffix,e_sat_low_indiv,line_search_e=[4,10,0.0
         return chi_dict_plot
 
 def plot_line_search(chi_dict_plot,outdir,sat,save=True,suffix=None,epoch_observ=None,format='png',
-                     force_ylog_ratio=False,ratio_bounds=None,x_range=None):
+                     force_ylog_ratio=False,ratio_bounds=None,ener_show_range=None,show_indiv_transi=False,
+                     title=True,squished_mode=False,local_chi_bounds=False,force_side_lines='none'):
 
     line_search_e=chi_dict_plot['line_search_e']
     line_search_norm=chi_dict_plot['line_search_norm']
@@ -384,10 +393,12 @@ def plot_line_search(chi_dict_plot,outdir,sat,save=True,suffix=None,epoch_observ
                         else epoch_observ[0] + ' order ' + label_grating if sat == 'Chandra' else '']
 
     # creating the figure
-    figure_comb = plt.figure(figsize=(15, 10))
+    figure_comb = plt.figure(figsize=(15, 10*(0.5 if squished_mode else 1)))
 
-    comb_chi2map(figure_comb, chi_dict_plot, title=comb_title, comb_label=comb_label,
-                 force_ylog_ratio=force_ylog_ratio,ratio_bounds=ratio_bounds,x_range=x_range)
+    comb_chi2map(figure_comb, chi_dict_plot, title=comb_title if title else '', comb_label=comb_label,
+                 force_ylog_ratio=force_ylog_ratio,ratio_bounds=ratio_bounds,ener_show_range=ener_show_range,
+                 show_indiv_transi=show_indiv_transi,squished_mode=squished_mode,local_chi_bounds=local_chi_bounds,
+                 force_side_lines=force_side_lines)
 
     if save==True:
         # saving it and closing it
@@ -511,10 +522,16 @@ def plot_line_ratio(axe,data_autofit,data_autofit_noabs,n_addcomps_cont,mode=Non
         plot_std_ener(axe)
 
 
-def plot_std_ener(ax_ratio, ax_contour=None, plot_em=False, mode='ratio',exclude_last=False):
+def plot_std_ener(ax_ratio, ax_contour=None, plot_em=False, mode='ratio',exclude_last=False,plot_indiv_transi=False,
+                  squished_mode=False,force_side='none'):
     '''
     Plots the current absorption (and emission if asked) standard lines in the current axis
     also used in the autofit plots further down
+
+    -plot_indiv: if True, plots the individual transitions for absorption lines instead of the averaged energies
+    -squished mode: makes the absorption text slightly higher to avoid it going lower than the plot
+
+    -force_side: shows all lines either in emission if 'em' or in absorption if 'abs'
     '''
     # since for the first plot the 1. ratio is not necessarily centered, we need to fetch the absolute position of the y=1.0 line
     # in graph height fraction
@@ -525,45 +542,100 @@ def plot_std_ener(ax_ratio, ax_contour=None, plot_em=False, mode='ratio',exclude
     lines_abs_pos = ['abs' in elem for elem in lines_names]
     lines_em_pos = ['em' in elem for elem in lines_names]
 
+    #removing or restricting to resolved lines for the emission
+    lines_resolved_mask=['(' in lines_std[elem] and ')' in lines_std[elem] for elem in lines_names]
+    lines_resolved=lines_names[lines_resolved_mask]
+
     for i_line, line in enumerate(lines_names):
 
         if lines_e_dict[line][0] < ax_ratio.get_xlim()[0] or lines_e_dict[line][0] > ax_ratio.get_xlim()[1]:
             continue
 
-        # skipping some indexes for now
-        if line!= 'SiKa14abs' and (i_line == 2 or i_line > 8-(1 if exclude_last else 0)):
+        # skipping redundant indexes
+        if line in ['FeKa25em','FeKa26em','FeKa0em','FeKb0em','calNICERSiem','FeDiazem']:
             continue
 
-        # skipping Nika27:
-        if i_line == 5:
+        # skipping Nika27, FeKa25em, FeKa26em:
+        if i_line in [5,9,10]:
             continue
 
         # skipping display if emission lines are not asked
         if 'em' in line and not plot_em:
             continue
 
+        if not 'em' in line and (line not in lines_resolved and plot_indiv_transi\
+                                 or line in lines_resolved and not plot_indiv_transi):
+            continue
+
         # booleans for dichotomy in the plot arguments
-        abs_bool = 'abs' in line
-        em_bool = not abs_bool
+        abs_bool = 'abs' in line and 'abs' in force_side
+        em_bool = not abs_bool or 'em' in force_side
 
         # plotting the lines on the two parts of the graphs
         ax_ratio.axvline(x=lines_e_dict[line][0],
-                         ymin=0 if mode not in ['ratio','chimap'] else pos_ctr_ratio if em_bool else 0.,
-                         ymax=1 if mode not in ['ratio','chimap'] else 1 if em_bool else pos_ctr_ratio,
+                         ymin=0 if mode not in ['ratio','chimap'] else pos_ctr_ratio if not abs_bool else 0.,
+                         ymax=1 if mode not in ['ratio','chimap'] else pos_ctr_ratio if not em_bool else 1.,
                          color='blue' if em_bool else 'brown',
-                         linestyle='dashed', linewidth=1.5)
+                         linestyle='dashed', linewidth=1.5,zorder=-1)
         if ax_contour is not None:
             ax_contour.axvline(x=lines_e_dict[line][0], ymin=0.5 if em_bool else 0, ymax=1 if em_bool else 0.5,
                                color='blue' if em_bool else 'brown', linestyle='dashed', linewidth=0.5)
 
         # small left horizontal shift to help the Nika27 display
         txt_hshift = 0.1 if 'Ni' in line else 0.006 if 'Si' in line else 0
+        txt_line=lines_std[line]
 
+        line_x_text=lines_e_dict[line][0] - txt_hshift
         if mode != 'noname':
+
+            add_height_squished=0
+            if plot_indiv_transi:
+                line_full_name=lines_std[line]
+
+                #ensuring the line is an individual transition
+                if '(' in line_full_name and ')' in line_full_name:
+
+                    #additional tester to move line_x_tex if none of the conditions below are true
+                    bool_shift=True
+
+                    #shifting it to the left if is the first one of a complex
+                    if i_line<len(lines_names)-1 and lines_std[lines_names[i_line+1]].split('(')[0]\
+                                                   ==lines_std[lines_names[i_line]].split('(')[0]:
+                        line_x_text=lines_e_dict[line][0]-0.05-\
+                                    (0.01 if 'P' in lines_std[lines_names[i_line]].split('(')[1] else 0)
+
+                        #avoiding overlap with the NiKa27 complex display
+                        if line=='FeKb25p1abs':
+                            txt_line = '(' + lines_std[line].split('(')[1]
+                            line_x_text+=0.04
+                        bool_shift=False
+                    #removing everything except the complex name otherwise
+                    if i_line>0 and lines_std[lines_names[i_line]].split('(')[0]==\
+                                    lines_std[lines_names[i_line-1]].split('(')[0]:
+                        line_x_text=lines_e_dict[line][0]+0.01+\
+                        (0.01 if 'P' in lines_std[lines_names[i_line]].split('(')[1] else 0)
+
+                        if line!='FeKb25p3abs':
+                            txt_line = '(' + lines_std[line].split('(')[1]
+                        else:
+                            line_x_text+=0.03
+                        bool_shift=False
+                        add_height_squished=0.01 if  'P' in lines_std[lines_names[i_line]].split('(')[1] else 0
+
+                    if bool_shift:
+                        line_x_text+=0.04
+                else:
+                    line_x_text+=0.04
+            else:
+                line_x_text += 0.04
+
             # but the legend on the top part only
-            ax_ratio.text(x=lines_e_dict[line][0] - txt_hshift,
-                          y=0.96 if em_bool else (0.06 if i_line % 2 == 1 else 0.12), s=lines_std[line],
-                          color='blue' if em_bool else 'brown', transform=ax_ratio.get_xaxis_transform(), ha='center',
+            ax_ratio.text(x=line_x_text,
+                          y=0.96 if not abs_bool else (0.06+(0.02+add_height_squished if squished_mode else 0)
+                                                  if i_line % 2 == 1 else 0.12+(0.01 if squished_mode else 0)),
+                          s=txt_line,
+                          color='blue' if em_bool else 'brown',
+                          transform=ax_ratio.get_xaxis_transform(), ha='center',
                           va='top')
 
 
@@ -737,7 +809,12 @@ def contour_chi2map(fig, axe, chi_dict, title='', combined=False):
         axe.legend(loc='right', bbox_to_anchor=(1.25, 0.5))
 
 
-def coltour_chi2map(fig, axe, chi_dict, title='', combined=False, ax_bar=None, norm=None):
+def coltour_chi2map(fig, axe, chi_dict, title='', combined=False, ax_bar=None, norm=None,
+                    squished_mode=False,local_chi_bounds=False,ener_show_range=None):
+    '''
+        squished_mode: adds a bunch of line separators in th colormap label to avoid display issues
+
+    '''
     chi_arr = chi_dict['chi_arr']
     chi_base = chi_dict['chi_base']
     line_threshold = chi_dict['line_threshold']
@@ -745,10 +822,24 @@ def coltour_chi2map(fig, axe, chi_dict, title='', combined=False, ax_bar=None, n
     line_search_e_space = chi_dict['line_search_e_space']
     line_search_norm = chi_dict['line_search_norm']
     norm_par_space = chi_dict['norm_par_space']
-    peak_points = chi_dict['peak_points']
+    peak_points = deepcopy(chi_dict['peak_points'])
     peak_widths = chi_dict['peak_widths']
 
     chi_map = np.where(chi_arr >= chi_base, 0, chi_base - chi_arr)
+
+    if ener_show_range is not None:
+
+        #rounds to avoid issues with precision
+        ener_show_mask=(line_search_e_space.round(4)>=ener_show_range[0]) &\
+                       (line_search_e_space.round(4)<=ener_show_range[1])
+        chi_map=chi_map[ener_show_mask]
+        chi_arr=chi_arr[ener_show_mask]
+
+        line_search_e_space=line_search_e_space[ener_show_mask]
+
+        peak_points.T[0]-=np.argwhere(ener_show_mask).T[0][0]
+        peak_points=peak_points[(peak_points.T[0]>0) & (peak_points.T[0]<len(line_search_e_space))]
+
 
     axe.set_ylabel('Gaussian line normalisation\n in units of local continuum Flux')
     axe.set_yscale('symlog', linthresh=line_threshold, linscale=0.1)
@@ -798,6 +889,12 @@ def coltour_chi2map(fig, axe, chi_dict, title='', combined=False, ax_bar=None, n
     cm_ticks = np.concatenate((np.linspace(chi_arr_plot.min() if norm is None else -norm_col[0], 0, 6, endpoint=True),
                                np.linspace(0, chi_arr_plot.max() if norm is None else norm_col[1], 6, endpoint=True)))
 
+    if cm_ticks[0]>-np.sqrt(7):
+        cm_ticks=np.array([-np.sqrt(9.21)]+cm_ticks.tolist())
+
+    if cm_ticks[-1]<np.sqrt(7):
+        cm_ticks=np.array(cm_ticks.tolist()+[np.sqrt(9.21)])
+
     # renaming the ticks to positive values only since the negative side is only for the colormap + re-squaring to get the
     # right values
     cm_ticklabels = (cm_ticks ** 2).round(1).astype(str)
@@ -819,9 +916,11 @@ def coltour_chi2map(fig, axe, chi_dict, title='', combined=False, ax_bar=None, n
             colorbar.ax.set_yticklabels(cm_ticklabels)
 
         if bigline_flag == 1:
-            colorbar.set_label(r'$\sqrt{\Delta C}$ with separated scales\nfor absorption and emission')
+            colorbar.set_label(r'$\sqrt{\Delta C}$'+('\n' if squished_mode else ' ')
+                               +'with separated scales'+('\n' if squished_mode else ' ')+'for absorption and emission')
         else:
-            colorbar.set_label(r'$\Delta C$ with separated scales for absorption and emission')
+            colorbar.set_label(r'$\Delta C$'+('\n' if squished_mode else ' ')+
+                               'with separated scales'+('\n' if squished_mode else '')+'for absorption and emission')
 
     '''CONTOUR PLOT'''
 
@@ -831,12 +930,8 @@ def coltour_chi2map(fig, axe, chi_dict, title='', combined=False, ax_bar=None, n
                            r'68% conf. with 2 d.o.f.']
     contours_var_ls = ['solid', 'dashed', 'dotted']
 
-    try:
-        contours_var = axe.contour(line_search_e_space, norm_par_space, chi_arr.T, levels=chi_contours, colors='black',
-                                   linestyles=contours_var_ls, label=contours_var_labels)
-    except:
-        print("tchou")
-        raise ValueError
+    contours_var = axe.contour(line_search_e_space, norm_par_space, chi_arr.T, levels=chi_contours, colors='black',
+                               linestyles=contours_var_ls, label=contours_var_labels)
 
     # avoiding error if there are no contours to plot
     for l in range(len(contours_var.collections)):
@@ -860,21 +955,21 @@ def coltour_chi2map(fig, axe, chi_dict, title='', combined=False, ax_bar=None, n
         # contours_base.collections[l].set_label(contours_base_labels[l])
 
     # for each peak and width, the coordinates need to be translated in real energy and norm coordinates
-    try:
-        for elem_point in enumerate(peak_points):
-            point_coords = [line_search_e_space[elem_point[1][0]], norm_par_space[elem_point[1][1]]]
+    # try:
+    for elem_point in enumerate(peak_points):
+        point_coords = [line_search_e_space[elem_point[1][0]], norm_par_space[elem_point[1][1]]]
 
-            segment_coords = [point_coords[0] - line_search_e[2] * peak_widths[elem_point[0]] / 2,
-                              point_coords[0] + line_search_e[2] * peak_widths[elem_point[0]] / 2], [point_coords[1],
-                                                                                                     point_coords[1]]
+        segment_coords = [point_coords[0] - line_search_e[2] * peak_widths[elem_point[0]] / 2,
+                          point_coords[0] + line_search_e[2] * peak_widths[elem_point[0]] / 2], [point_coords[1],
+                                                                                                 point_coords[1]]
 
-            axe.scatter(point_coords[0], point_coords[1], marker='X', color='black',
-                        label='peak' if elem_point[0] == 0 else None)
+        axe.scatter(point_coords[0], point_coords[1], marker='X', color='black',
+                    label='peak' if elem_point[0] == 0 else None)
 
-            axe.plot(segment_coords[0], segment_coords[1], color='black',
-                     label='max peak structure width' if elem_point[0] == 0 else None)
-    except:
-        pass
+        axe.plot(segment_coords[0], segment_coords[1], color='black',
+                 label='max peak structure width' if elem_point[0] == 0 else None)
+    # except:
+    #     pass
 
     # using a weird class to get correct tickers on the axes since it doesn't work natively
     axe.yaxis.set_minor_locator(MinorSymLogLocator(line_search_norm[0]))
@@ -896,13 +991,16 @@ def coltour_chi2map(fig, axe, chi_dict, title='', combined=False, ax_bar=None, n
 
 
 def comb_chi2map(fig_comb, chi_dict, title='', comb_label='',
-                 force_ylog_ratio=False,ratio_bounds=None,x_range=None):
+                 force_ylog_ratio=False,ratio_bounds=None,ener_show_range=None,show_indiv_transi=False,
+                 squished_mode=False,local_chi_bounds=False,force_side_lines='none'):
 
     '''
 
     force_ylog_ratio, ratio bounds: for visual changes on the y axis
 
-    x_range: force a specific range for the x axis (useful when taking bigger chi_dicts as input)
+    ener_show_range: force a specific range for the x axis (useful when taking bigger chi_dicts as input)
+
+    squished_mode: adds a bunch of line separators in th colormap label to avoid display issues
     '''
 
     line_cont_range = chi_dict['line_cont_range']
@@ -956,7 +1054,7 @@ def comb_chi2map(fig_comb, chi_dict, title='', comb_label='',
     plot_ratio_y_dn = min(ravel_ragged(np.array([(plot_ratio_values[i_grp][1][0] - plot_ratio_values[i_grp][1][1])
                                                  for i_grp in range(n_groups)], dtype=object), mode=object))
 
-    if ratio_bounds is not None:
+    if ratio_bounds is None:
 
         ax_comb[0].set_ylim(0.95 * np.min(plot_ratio_y_dn), 1.05 * np.max(plot_ratio_y_up))
     else:
@@ -966,7 +1064,8 @@ def comb_chi2map(fig_comb, chi_dict, title='', comb_label='',
 
     ax_comb[1] = plt.subplot(gs_comb[1, 0], sharex=ax_comb[0])
     ax_colorbar = plt.subplot(gs_comb[1, 1])
-    coltour_chi2map(fig_comb, ax_comb[1], chi_dict, combined=True, ax_bar=ax_colorbar)
+    coltour_chi2map(fig_comb, ax_comb[1], chi_dict, combined=True, ax_bar=ax_colorbar,
+                    squished_mode=squished_mode,local_chi_bounds=local_chi_bounds,ener_show_range=ener_show_range)
 
     ax_comb[1].set_xlim(line_cont_range)
     # #third plot (color), with a separate colorbar plot on the second column of the gridspec
@@ -991,9 +1090,109 @@ def comb_chi2map(fig_comb, chi_dict, title='', comb_label='',
 
     '''Plotting the Standard Line energies'''
 
-    if x_range is not None:
-        ax_comb[0].set_xlim(x_range[0],x_range[1])
-        ax_comb[1].set_xlim(x_range[0],x_range[1])
+    if ener_show_range is not None:
+        ax_comb[0].set_xlim(ener_show_range[0],ener_show_range[1])
+        ax_comb[1].set_xlim(ener_show_range[0],ener_show_range[1])
 
-    plot_std_ener(ax_comb[0], ax_comb[1], plot_em=True)
+    plot_std_ener(ax_comb[0], ax_comb[1], plot_em=True,mode='chimap',plot_indiv_transi=show_indiv_transi,
+                  squished_mode=squished_mode,force_side=force_side_lines)
 
+
+def merge_chi_dict(chi_dict_files):
+
+    '''
+    attempts to merge a series of chi_dict binary files saved by dill
+
+    First checks if all the parameters that should be the same are the same, and if so, combines them into a new file
+    '''
+
+    chi_dict_arr=[]
+
+    for elem_file in chi_dict_files:
+        with open(elem_file,'rb') as f:
+            elem_chi_dict=dill.load(f)
+            chi_dict_arr+=[elem_chi_dict]
+
+    line_search_e_arr=np.array([elem['line_search_e'] for elem in chi_dict_arr])
+
+    #sorting the list to an increasing order of energy bands
+    chi_dict_arr=np.array(chi_dict_arr)[np.argsort(line_search_e_arr.T[0])]
+    chi_dict_files_sorted=np.array(chi_dict_files)[np.argsort(line_search_e_arr.T[0])]
+
+    #testing whether the files are compatible
+    chi_base_equal=len(np.unique([elem['chi_base'] for elem in chi_dict_arr]))==1
+    line_threshold_equal=len(np.unique([elem['line_threshold'] for elem in chi_dict_arr]))==1
+    line_search_norm_equal=len(np.unique([str(elem['line_search_norm']) for elem in chi_dict_arr]))==1
+
+    #recreating the array since the order has changed
+    line_search_e_arr=np.array([elem['line_search_e'] for elem in chi_dict_arr])
+
+    ##testing whether the energies are compatible
+    line_search_e_step_equal=len(np.unique(line_search_e_arr.T[-1]))==1
+    line_search_bounds_compat=str(line_search_e_arr.T[0][1:])==str(line_search_e_arr.T[1][:-1])
+
+    assert chi_base_equal and line_threshold_equal and line_search_norm_equal \
+           and line_search_e_step_equal and line_search_bounds_compat,'Error: line search saves not compatible'
+
+    chi_dict_merge={}
+    #directly giving it the elements that remain common
+    chi_dict_merge['chi_base']=chi_dict_arr[0]['chi_base']
+    chi_dict_merge['line_threshold']=chi_dict_arr[0]['line_threshold']
+    chi_dict_merge['line_search_norm']=chi_dict_arr[0]['line_search_norm']
+    chi_dict_merge['norm_par_space']=chi_dict_arr[0]['norm_par_space']
+    chi_dict_merge['plot_ratio_values']=chi_dict_arr[0]['plot_ratio_values']
+
+    #merging the energy bounds
+    chi_dict_merge['line_search_e']=np.array([line_search_e_arr[0][0],line_search_e_arr[-1][1],line_search_e_arr[0][-1]])
+    chi_dict_merge['line_search_e_space']=np.arange(chi_dict_merge['line_search_e'][0],
+                                        chi_dict_merge['line_search_e'][1]+chi_dict_merge['line_search_e'][2]/2,
+                                                    chi_dict_merge['line_search_e'][2])
+    chi_dict_merge['line_cont_range']=chi_dict_merge['line_search_e'][:2]
+
+    chi_arr_merge=[]
+    peak_points=[]
+    peak_widths=[]
+
+    #useful for moving the peak positions
+    n_ener_added=0
+
+    for i_elem,elem in enumerate(chi_dict_arr):
+
+
+        #-1 to avoid redundancy for the bridge energy value
+        chi_arr_merge+=elem['chi_arr'][:-1].tolist()
+
+        elem_peak_points=elem['peak_points']
+        if len(elem_peak_points)!=0:
+            elem_peak_points.T[0]+=n_ener_added
+
+        peak_points+=elem_peak_points.tolist()
+
+        if len(elem['peak_widths'])!=0:
+            peak_widths+=elem['peak_widths'].tolist()
+
+        n_ener_added=len(chi_arr_merge[:-1])
+
+    #adding the missing last element of the last band for the chi_arr
+    chi_arr_merge+=chi_dict_arr[-1]['chi_arr'][-1:].tolist()
+
+    if len(chi_arr_merge)!=len(chi_dict_merge['line_search_e_space']):
+        breakpoint()
+
+    #reconverting into arrays
+    chi_arr_merge=np.array(chi_arr_merge)
+    peak_points=np.array(peak_points)
+    peak_widths=np.array(peak_widths)
+
+    chi_dict_merge['chi_arr']=chi_arr_merge
+    chi_dict_merge['peak_points']=peak_points
+    chi_dict_merge['peak_widths']=peak_widths
+
+    #saving the array
+    low_e=chi_dict_merge['line_search_e'][0]
+    high_e=chi_dict_merge['line_search_e'][1]
+
+    merge_save_path=chi_dict_files_sorted[0][:chi_dict_files_sorted[0].rfind(str(low_e))]+str(low_e)+'_'+str(high_e)+'.dill'
+
+    with open(merge_save_path,'wb+') as f:
+        dill.dump(chi_dict_merge,f)

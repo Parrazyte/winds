@@ -48,24 +48,35 @@ lines_std={         #don't change the first 8, there are explicit calls in the c
                   'SiKa14abs': r'SiXIV K$\alpha$',
                   'SKa16abs':r'SXVI K$\alpha$',
                   'CaKa20abs':r'CaXX K$\alpha$',
-                  'CrKa23abs':r'CrXXIII K$\alpha$',
+                  # 'CrKa23abs':r'CrXXIII K$\alpha$',
                   #resolved lines
                 'FeKa25Zabs':r'FeXXV K$\alpha$ (z)',
                 'FeKa25Yabs': r'FeXXV K$\alpha$ (y)',
                 'FeKa25Xabs': r'FeXXV K$\alpha$ (x)',
                 'FeKa25Wabs': r'FeXXV K$\alpha$ (w)',
 
-                'FeKb25p1abs': r'FeXXV K$\beta$ (P^{1/2})',
-                'FeKb25p3abs': r'FeXXV K$\beta$ (P^{3/2})',
+                'FeKb25p1abs': r'FeXXV K$\beta$ (P$^{1/2}$)',
+                'FeKb25p3abs': r'FeXXV K$\beta$ (P$^{3/2}$)',
 
-                'FeKa26p1abs': r'FeXXVI K$\alpha$ (P^{1/2})',
-                'FeKa26p3abs': r'FeXXVI K$\alpha$ (P^{3/2})',
+                'FeKa26p1abs': r'FeXXVI K$\alpha$ (P$^{1/2}$)',
+                'FeKa26p3abs': r'FeXXVI K$\alpha$ (P$^{3/2}$)',
 
-                'FeKb26p1abs': r'FeXXVI K$\beta$ (P^{1/2})',
-                'FeKb26p3abs': r'FeXXVI K$\beta$ (P^{3/2})',
+                'FeKb26p1abs': r'FeXXVI K$\beta$ (P$^{1/2}$)',
+                'FeKb26p3abs': r'FeXXVI K$\beta$ (P$^{3/2}$)',
 
-                'FeKg26p1abs': r'FeXXVI K$\gamma$ (P^{1/2})',
-                'FeKg26p3abs': r'FeXXVI K$\gamma$ (P^{3/2})',
+                'FeKg26p1abs': r'FeXXVI K$\gamma$ (P$^{1/2}$)',
+                'FeKg26p3abs': r'FeXXVI K$\gamma$ (P$^{3/2}$)',
+
+                'NiKa27Zabs':r'NiXXVII K$\alpha$ (z)',
+                'NiKa27Yabs': r'NiXXVII K$\alpha$ (y)',
+                'NiKa27Xabs': r'NiXXVII K$\alpha$ (x)',
+                'NiKa27Wabs': r'NiXXVII K$\alpha$ (w)',
+
+                'CrKa23Zabs': r'CrXXIII K$\alpha$ (z)',
+                'CrKa23Yabs': r'CrXXIII K$\alpha$ (y)',
+                'CrKa23Xabs': r'CrXXIII K$\alpha$ (x)',
+                'CrKa23Wabs': r'CrXXIII K$\alpha$ (w)',
+
 }
 
 lines_std_names=list(lines_std.keys())
@@ -109,17 +120,17 @@ lines_e_dict={
                   'SKa16abs':[2.6215,-3000,3000],
                   'CaKa20abs':[4.10505,-3000,3000],
 
-                  #main transition here, precision 3eV
-                  'CrKa23abs': [5.682, -3000, 3000],
+                  #
+                  #'CaKb20abs': [around 4.85, -3000, 3000],
 
     # resolved lines (from NIST 2023)
-                #these have uncertainties of 4eV
-                'FeKa25Zabs': [6.637,-3000,3000],
-                'FeKa25Yabs':  [6.668,-3000,3000],
-                'FeKa25Xabs':  [6.682,-3000,3000],
-                'FeKa25Wabs':  [6.700,-3000,3000],
+                #these have uncertainties of 1.4 meV
+                'FeKa25Zabs': [6.6363,-3000,3000],
+                'FeKa25Yabs':  [6.6676,-3000,3000],
+                'FeKa25Xabs':  [6.6823,-3000,3000],
+                'FeKa25Wabs':  [6.7004,-3000,3000],
 
-                #these have uncertainties of 5eV
+                #these have uncertainties of 4-6 meV
                 'FeKb25p1abs':  [7.872,-3000,3000],
                 'FeKb25p3abs':  [7.881,-3000,3000],
 
@@ -130,7 +141,21 @@ lines_e_dict={
                 'FeKb26p3abs':  [8.2527,-3000,3000],
 
                 'FeKg26p1abs':  [8.6986,-3000,3000],
-                'FeKg26p3abs':  [8.7012,-3000,3000],}
+                'FeKg26p3abs':  [8.7012,-3000,3000],
+
+                #this one has uncertainty of 1.3 meV
+                'NiKa27Zabs': [7.7316, -3000, 3000],
+                'NiKa27Yabs': [7.7657, -3000, 3000],
+                'NiKa27Xabs': [7.7864, -3000, 3000],
+                'NiKa27Wabs': [7.8056, -3000, 3000],
+
+                # precision 1.2meV
+                'CrKa23Zabs': [5.6269, -3000, 3000],
+                'CrKa23Yabs': [5.6548, -3000, 3000],
+                'CrKa23Xabs': [5.6651, -3000, 3000],
+                'CrKa23Wabs': [5.6821, -3000, 3000],
+
+}
 
 
 #note: if find a line at 2.47 keV, careful about confusion with an interstellar gas S2 3p line at 2.47 keV
@@ -193,22 +218,34 @@ lines_w_dict={
 
     # resolved lines
 
-            'FeKa25Zabs': [1e-2,0.,0.05],
-            'FeKa25Yabs': [1e-2,0.,0.05],
-            'FeKa25Xabs': [1e-2,0.,0.05],
-            'FeKa25Wabs': [1e-2,0.,0.05],
+            'FeKa25Zabs': [1e-3,0.,0.05],
+            'FeKa25Yabs': [1e-3,0.,0.05],
+            'FeKa25Xabs': [1e-3,0.,0.05],
+            'FeKa25Wabs': [1e-3,0.,0.05],
 
-            'FeKb25p1abs': [1e-2,0.,0.05],
-            'FeKb25p3abs': [1e-2,0.,0.05],
+            'FeKb25p1abs': [1e-3,0.,0.05],
+            'FeKb25p3abs': [1e-3,0.,0.05],
 
-            'FeKa26p1abs': [1e-2,0.,0.05],
-            'FeKa26p3abs': [1e-2,0.,0.05],
+            'FeKa26p1abs': [1e-3,0.,0.05],
+            'FeKa26p3abs': [1e-3,0.,0.05],
 
-            'FeKb26p1abs': [1e-2,0.,0.05],
-            'FeKb26p3abs': [1e-2,0.,0.05],
+            'FeKb26p1abs': [1e-3,0.,0.05],
+            'FeKb26p3abs': [1e-3,0.,0.05],
 
-            'FeKg26p1abs': [1e-2,0.,0.05],
-            'FeKg26p3abs': [1e-2,0.,0.05], }
+            'FeKg26p1abs': [1e-3,0.,0.05],
+            'FeKg26p3abs': [1e-3,0.,0.05],
+
+            'NiKa27Zabs': [1e-3, 0., 0.05],
+            'NiKa27Yabs': [1e-3, 0., 0.05],
+            'NiKa27Xabs': [1e-3, 0., 0.05],
+            'NiKa27Wabs': [1e-3, 0., 0.05],
+
+            'CrKa23Zabs': [1e-3, 0., 0.05],
+            'CrKa23Yabs': [1e-3, 0., 0.05],
+            'CrKa23Xabs': [1e-3, 0., 0.05],
+            'CrKa23Wabs': [1e-3, 0., 0.05],
+
+}
 
 
 lines_broad_w_dict={

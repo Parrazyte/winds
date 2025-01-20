@@ -43,8 +43,9 @@ AllData.ignore('3.3-3.4')
 
 AllData.ignore('4.05-4.15')
 
-AllData.ignore('6.35-6.45')
+AllData.ignore('5.65-5.75')
 
+AllData.ignore('6.35-6.45')
 
 AllData.ignore('6.6-6.8')
 
@@ -107,3 +108,15 @@ breakpoint()
 # narrow_out_mid=narrow_line_search(mod_dat,'mod_dat',e_sat_low_indiv,[5.5,7.5,5e-3],line_cont_range=[5.5,7.5])
 #
 # narrow_out_high=narrow_line_search(mod_dat,'mod_dat',e_sat_low_indiv,[7.5,9.5,5e-3],line_cont_range=[7.5,9.5])
+
+
+'''
+ftgrouppha infile=xa901001010xtd_src_gti01.pi outfile=xa901001010xtd_src_gti01_grp_opt.pi respfile=xa901001010xtd_src_gti01.rmf grouptype=opt
+ftgrouppha infile=xa901001010xtd_src_gti02.pi outfile=xa901001010xtd_src_gti02_grp_opt.pi respfile=xa901001010xtd_src_gti02.rmf grouptype=opt
+ftgrouppha infile=xa901001010xtd_src_gti03.pi outfile=xa901001010xtd_src_gti03_grp_opt.pi respfile=xa901001010xtd_src_gti03.rmf grouptype=opt
+ftgrouppha infile=xa901001010xtd_src_gti04.pi outfile=xa901001010xtd_src_gti04_grp_opt.pi respfile=xa901001010xtd_src_gti04.rmf grouptype=opt
+ftgrouppha infile=xa901001010xtd_src_gti05.pi outfile=xa901001010xtd_src_gti05_grp_opt.pi respfile=xa901001010xtd_src_gti05.rmf grouptype=opt
+
+
+
+'''

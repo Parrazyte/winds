@@ -2781,6 +2781,23 @@ def unfreeze(model=None,modclass=AllModels,parlist=None):
 
     freeze(model=model,modclass=modclass,unfreeze=True,parlist=parlist)
 
+def unlink(parlist=None,model=None,modclass=AllModels):
+
+    if model is not None:
+        xspec_mod=model
+    else:
+        xspec_mod=modclass(1)
+
+    try:
+        iterator = iter(parlist)
+        parlist_use=parlist
+    except:
+        parlist_use=[parlist]
+
+    for elem_par in parlist_use:
+
+        xspec_mod(elem_par).link=''
+
 def parse_xlog(log_lines,goal='lastmodel',no_display=False,replace_frozen=False,
                freeze_pegged=False,return_pars=False):
 

@@ -1332,7 +1332,11 @@ def make_3D_figure(SEDs_disp, SEDs_surface, cmap, plot_points=False, under_sampl
         height=1000
     )
 
-    fig.update_layout(scene_camera=camera,scene_dragmode='orbit')
+    if setup_camera:
+        fig.update_layout(scene_camera=camera,scene_dragmode='orbit')
+    else:
+        fig.update_layout(scene_camera=camera)
+
     # fig_3D.show()
     # fig_3D.show()
 

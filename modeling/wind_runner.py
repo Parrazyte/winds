@@ -53,6 +53,12 @@ ap.add_argument("-stop_d_input",nargs=1,help="box parameter for xstar",type=floa
 
 ap.add_argument("-v_resol",nargs=1,help="box parameter for xstar",type=float,default=0)
 
+#see xstar_func in simul_tools for details about this
+ap.add_argument('-cfrac',nargs=1,help="covering fraction for xstar",type=float,default=1)
+
+#see xstar_func in simul_tools for details about this
+ap.add_argument('-npass',nargs=1,help="number of passes for xstar",type=int,default=1)
+
 ap.add_argument("-mode",nargs=1,help="computation mode for the save",type=str,default='')
 
 ap.add_argument("-progress_file",nargs=1,help='global progress file where to store the box evolution',type=str,default='')
@@ -77,6 +83,9 @@ stop_d_input=args.stop_d_input
 stop_d_input=args.stop_d_input
 v_resol=args.v_resol
 
+cfrac=args.cfrac
+npass=args.npass
+
 
 mode=args.mode
 progress_file=args.progress_file
@@ -88,15 +97,14 @@ if parfile_path!='':
 
     #converting in object to modify the types of the variables inside
     param_arr=param_arr.astype(object)
-    #note: ununsed as of now since pool.starmap directly takes an iterable
-    # #and decomposing the arguments (with some type conversions to get the floats whenever needed)
-    # solution_rel_dir_arr,save_grid_dir_arr,comput_grid_dir_arr=param_arr.T[:4]
-    # mdot_obs_arr,xlum_arr,m_BH_arr,ro_init_arr,dr_r_arr,stop_d_input_arr,v_resol_arr=param_arr.T[3:10].astype(float)
-    # mode_arr=param_arr.T[10]
 
     #converting some arguments in floats before retransposing back
-    for i_par in range(4,10):
+    for i_par in range(4,11):
         param_arr[i_par]=param_arr[i_par].astype(float)
+
+    #this is for npass, which should be an int
+    for i_par in range(11,12):
+        param_arr[i_par]=param_arr[i_par].astype(int)
 
     param_arr=param_arr.T
 
@@ -106,7 +114,7 @@ if parfile_path!='':
 
 else:
     oar_wrapper(solution_rel_dir=solution_rel_dir,save_grid_dir=save_grid_dir,comput_grid_dir=comput_grid_dir,
-            mdot_obs=mdot_obs,xlum=xlum,m_BH=m_BH,
+            mdot_obs=mdot_obs,xlum=xlum,m_BH=m_BH,cfrac=cfrac,npass=npass,
             ro_init=ro_init,dr_r=dr_r,stop_d_input=stop_d_input,v_resol=v_resol,
             mode=mode,progress_file=progress_file,save_inter_sp=save_inter_sp)
 

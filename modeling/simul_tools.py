@@ -179,6 +179,7 @@ m2cm = 100.0
 def oar_wrapper(solution_rel_dir,save_grid_dir,sim_grid_dir,
                   mdot_obs,xlum,m_BH,
                   ro_init, dr_r,stop_d_input,v_resol,
+                  c_frac, npass,
                   mode='server_standalone_default',
                   progress_file='',
                   save_inter_sp=True,
@@ -204,6 +205,8 @@ def oar_wrapper(solution_rel_dir,save_grid_dir,sim_grid_dir,
         mdot_obs,m_BH,xlum: SED parameters for xstar
         ro_init,dr_r,v_resol,stop_d_input: box parameters for xstar
 
+        cfrac,npass: covering fraction and number of passes for xstar.
+
         mode: changes the computation behavior: 'type_xstaruse_xstaruseid'
 
             type:
@@ -226,6 +229,7 @@ def oar_wrapper(solution_rel_dir,save_grid_dir,sim_grid_dir,
                  assumes the solution file name from the directory structure
         SED_file: naming of the SED file inside solution_rel_dir. If set to 'auto_fileextension',
                 assumes the SED file name from the directory structure, using the extension fileextension
+
     '''
 
     if sol_file=='auto':
@@ -341,13 +345,17 @@ def oar_wrapper(solution_rel_dir,save_grid_dir,sim_grid_dir,
                ro_init=ro_init,dr_r=dr_r,stop_d_input=stop_d_input,v_resol=v_resol,
                comput_mode=comput_mode,
                xstar_mode=xstar_mode,
-               save_folder=save_dir,
                xstar_loc=xstar_loc,
+               c_frac=c_frac,
+               npass=npass,
+               save_folder=save_dir,
                progress_file=progress_file_path,
                save_inter_sp=save_inter_sp)
 
 
-def xstar_func(spectrum_file, lum, t_guess, n, nh, logxi, vturb_x, nbins, nsteps=1, niter=100, lcpres=0,
+def xstar_func(spectrum_file, lum, t_guess, n, nh, logxi, vturb_x, nbins, nsteps=1, niter=100,
+               lcpres=0,
+               cfrac=1.,npass=1,
                path_logpars=None,
                comput_mode='local', xstar_mode='standalone', xstar_loc='default', instance_identifier='grid',
                kill_container=False, dict_box=None, save_folder='', no_write=False, extract_transmitted=False,
@@ -392,20 +400,27 @@ def xstar_func(spectrum_file, lum, t_guess, n, nh, logxi, vturb_x, nbins, nsteps
      vturb_x is vturb_i
     
     -niter>nlimd
-    
+
+    -cfrac: covering fraction, whch determines how much of the inward radiated component can escape.
+            See Xstar appendix for details, or Datta24 appendix C.5
+            cfrac=1 gives the smallest absorption lines, and cfrac=0 the highest.
+            If cfrac<1, should use npass>1 (but still odd) to correctly compute this effect.
+
     hpars
     
-    -nsteps: number of (radial?) decompositions of the box. Currently bugged in the standalone version so should be kept at 1 and only make the
-             number of boxes vary
+    -nsteps: number of (radial?) decompositions of the box.
+             As of the writing of this code, likely bugged in the standalone version
+             so should be kept at 1 and only make the number of boxes vary. Otherwise test it!
     
     -niter: determines the number of iterations to find the thermal equilibrium.
             Needs to be changed because the default PyXstar value is 0 (no equilibrium iteration found)
             Default value at 100 (max value) to get the most attemps at finding the equilibrium
 
+    -npass: number of computations (going outwards then inwards) to converge
+            should always stay odd if increased to remain the one taken outwards
 
-    npass=number of computations (going outwards then inwards) to converge
-    should always stay odd if increased to remain the one taken outwards
-    
+
+
     
     '''
     
@@ -442,7 +457,7 @@ def xstar_func(spectrum_file, lum, t_guess, n, nh, logxi, vturb_x, nbins, nsteps
     xpar['column']=nh
     xpar['rlogxi']=logxi
     
-    #making sure this remains at 0 if the default values get played with
+    #making sure this remains at 0 if the default values get played with. Should stay at 0 unless on purpose.
     xpar['lcpres']=lcpres
     
     #secondary parameters
@@ -453,6 +468,18 @@ def xstar_func(spectrum_file, lum, t_guess, n, nh, logxi, vturb_x, nbins, nsteps
 
     #turbulent speed
     xhpar['vturbi']=vturb_x
+
+    assert npass%2==1,'npass should always be odd so that the final round ends with an outwards computation'
+
+    if cfrac<1:
+        assert npass>1, 'If cfrac<1 then npass should be set to 3 at least to compute ' \
+                        'the inward component consistently. See Xstar manual.'
+
+    xhpar['npass']=npass
+
+    #cfrac is in the main parameters
+    xpar['cfrac']=cfrac
+
 
     xhpar['lprint']=0
 
@@ -479,7 +506,8 @@ def xstar_func(spectrum_file, lum, t_guess, n, nh, logxi, vturb_x, nbins, nsteps
             parlog_header = [
                 '#xlum_init = %.3e' % (xlum) + ' *1e38 erg/s | v_resol = ' + str(v_resol) + ' km/s | nbins = ' + str(
                     nbins) + '\n',
-                '#nsteps = ' + str(nsteps) + '\tniter = ' + str(niter) + '\n',
+                '#nsteps = ' + str(nsteps) + '\tniter = ' + str(niter) +
+                '\tnpass = ' + str(npass) + '\tcfrac = ' + str(cfrac) + '\n',
                 '#Remember logxi is shifted to give xstar the correct luminosity input and the density at the half-box radius\n',
                 '############################################################################################################\n',
                 '#nbox\tnbox_final\tspectrum\tlum\tlum_corr_factor\tt_guess\tn\tnh\tlogxi\tvturb_x\tdr_r\tt_run\n']
@@ -495,7 +523,8 @@ def xstar_func(spectrum_file, lum, t_guess, n, nh, logxi, vturb_x, nbins, nsteps
             parlog_header = [
                 '#xlum_init = %.3e' % (xlum) + ' *1e38 erg/s | v_resol = ' + str(v_resol) + ' km/s | nbins = ' + str(
                     nbins) + '\n',
-                '#nsteps = ' + str(nsteps) + '\tniter = ' + str(niter) + '\n',
+                '#nsteps = ' + str(nsteps) + '\tniter = ' + str(niter) +
+                '\tnpass = ' + str(npass) + '\tcfrac = ' + str(cfrac) + '\n',
                 '############################################################################################################\n',
                 'spectrum\tid\tlum\tT_guess\tn\tnh\tlogxi\tvturb_x\ttime_run\tT_final\n']
 
@@ -569,6 +598,12 @@ def xstar_func(spectrum_file, lum, t_guess, n, nh, logxi, vturb_x, nbins, nsteps
             else:
                 px.LoadFiles()
                 plasmapar=px.PlasmaParameters()
+
+                if len(plasmapar.temperature)>1:
+
+                    print('Warning: different temperatures detected')
+                    print(plasmapar.temperature)
+
                 temp_out=plasmapar.temperature[0]
 
             parlog_str=parlog_str.replace('\n','\t'+'%.6e' % temp_out+'\n')
@@ -618,6 +653,7 @@ def xstar_wind(solution,SED_path,xlum,outdir,
                chatter=0,reload=True,
                eta='jed-sad',
                comput_mode='local',xstar_mode='standalone',xstar_loc='default',
+               cfrac=1.0, npass=1,
                save_folder='',
                force_ro_init=False,no_turb=False,cap_dr_resol=True,no_write=False,
                grid_type="standard",custom_grid_headas=None,progress_file=None,
@@ -723,16 +759,21 @@ def xstar_wind(solution,SED_path,xlum,outdir,
 
 
     xstar_mode:
-    -standalone: uses an xstar version directly installed within an heasoft folder.
-    -docker: uses an xstar version installed in a docker. Uses smart copying to avoid necessiting permissions
-            (besides the one to run the docker)
-    -charliecloud: uses an xstar version installed in a charliecloud environment.
+        -standalone: uses an xstar version directly installed within an heasoft folder.
+        -docker: uses an xstar version installed in a docker. Uses smart copying to avoid necessiting permissions
+                (besides the one to run the docker)
+        -charliecloud: uses an xstar version installed in a charliecloud environment.
 
     xstar_loc:
-    in standalone: the path of the heasoft version to use. 'default' uses the standard version installed on the computer
+        in standalone: the path of the heasoft version to use. 'default' uses the standard version installed on the computer
 
-    in docker/charliecloud: the identifier of the container (not the image) to launch
-                            if default, merges the directory structure from the grid folder (which should start with grid)
+        in docker/charliecloud: the identifier of the container (not the image) to launch
+                                if default, merges the directory structure from the grid folder (which should start with grid)
+
+    cfrac:
+        -Covering fraction parameter in xstar. See xstar_func for details.
+    npass:
+        -number of passes parameter in xstar. See xstar_func for details.
 
     progress_file:
         -global log file for grid computation where the tqdm of all grid files are listed
@@ -744,7 +785,7 @@ def xstar_wind(solution,SED_path,xlum,outdir,
         but still print the correct box number (+1)
 
 
-    ####SHOULD BE UPDATED TO ADD THE JED SAD N(R) if necessary
+    ####Could be updated  to add the solution's N(R) in radexp if necessary
 
     '''
 
@@ -1939,7 +1980,9 @@ def xstar_wind(solution,SED_path,xlum,outdir,
                        save_folder=save_folder_use,
                        no_write=no_write,
                        xstar_mode=xstar_mode,
-                       xstar_loc=xstar_loc)
+                       xstar_loc=xstar_loc,
+                       cfrac=cfrac,
+                       npass=npass)
         else:
             xstar_func(xstar_input,xlum_corr,tp,xpx,xpxcol,zeta_corr,vturb_x,nbins=nbins,
                        path_logpars=path_log_xpars,dict_box=dict_box,
@@ -1947,7 +1990,9 @@ def xstar_wind(solution,SED_path,xlum,outdir,
                        save_folder=save_folder_use,
                        no_write=no_write,
                        xstar_mode=xstar_mode,
-                       xstar_loc=xstar_loc)
+                       xstar_loc=xstar_loc,
+                       cfrac=cfrac,
+                       npass=npass)
         
         os.chdir(currdir)
         
@@ -2046,7 +2091,9 @@ def xstar_wind(solution,SED_path,xlum,outdir,
                        save_folder=save_folder_use,
                        no_write=no_write,
                        xstar_mode=xstar_mode,
-                       xstar_loc=xstar_loc)
+                       xstar_loc=xstar_loc,
+                       cfrac=cfrac,
+                       npass=npass)
             
             os.chdir(currdir)
             

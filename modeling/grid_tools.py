@@ -329,7 +329,9 @@ def create_oar_script(grid_folder,parfile,cores,cpus=2,nodes=1,
 
 
 def create_grid_parfile(grid_folder,save_grid_dir,sim_grid_dir,xlum,dr_r,
-                        mode='server_standalone_default',v_resol=85.7,stop_d=1e6,progress_file='default',
+                        mode='server_standalone_default',v_resol=85.7,stop_d=1e6,
+                        cfrac=1,npass=1,
+                        progress_file='default',
                         save_inter_sp=True):
 
     '''
@@ -410,6 +412,10 @@ def create_grid_parfile(grid_folder,save_grid_dir,sim_grid_dir,xlum,dr_r,
                            'dr_r':str(dr_r),
                            'stop_d_input':str(stop_d),
                            'v_resol': str(v_resol),
+
+                           'cfrac':str(cfrac),
+                           'npass':str(npass),
+
                            'mode':mode,
                            'progress_file':progress_file,
                            'save_inter_sp':save_inter_sp,

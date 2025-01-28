@@ -3,6 +3,8 @@ import numpy as np
 import matplotlib as mpl
 import matplotlib.pyplot as plt
 import matplotlib.colors as colors
+from matplotlib.ticker import AutoMinorLocator
+
 import sys
 from tqdm import tqdm
 from copy import deepcopy
@@ -44,6 +46,7 @@ def narrow_line_search(data_cont, suffix,e_sat_low_indiv,line_search_e=[4,10,0.0
     useful when negative gaussians at 0 width that go below zero in flux (which you don't care about normally
     because it is diluted by the instrumental response, but it crashes the log flux)
 
+    Note: because of indexing the peak values are always shifted to 1 index lower (so 1 energy step lower)
 
     arg:
         -scorpeon. Tries to load the scorpeon background, checks all fits files and
@@ -363,7 +366,8 @@ def narrow_line_search(data_cont, suffix,e_sat_low_indiv,line_search_e=[4,10,0.0
 
 def plot_line_search(chi_dict_plot,outdir,sat,save=True,suffix=None,epoch_observ=None,format='png',
                      force_ylog_ratio=False,ratio_bounds=None,ener_show_range=None,show_indiv_transi=False,
-                     title=True,squished_mode=False,local_chi_bounds=False,force_side_lines='none'):
+                     title=True,squished_mode=False,local_chi_bounds=False,force_side_lines='none',
+                     minor_locator=False,show_peak_pos=True,show_peak_width=True):
 
     line_search_e=chi_dict_plot['line_search_e']
     line_search_norm=chi_dict_plot['line_search_norm']
@@ -398,7 +402,8 @@ def plot_line_search(chi_dict_plot,outdir,sat,save=True,suffix=None,epoch_observ
     comb_chi2map(figure_comb, chi_dict_plot, title=comb_title if title else '', comb_label=comb_label,
                  force_ylog_ratio=force_ylog_ratio,ratio_bounds=ratio_bounds,ener_show_range=ener_show_range,
                  show_indiv_transi=show_indiv_transi,squished_mode=squished_mode,local_chi_bounds=local_chi_bounds,
-                 force_side_lines=force_side_lines)
+                 force_side_lines=force_side_lines,minor_locator=minor_locator,
+                 show_peak_pos=show_peak_pos,show_peak_width=show_peak_width)
 
     if save==True:
         # saving it and closing it
@@ -528,7 +533,10 @@ def plot_std_ener(ax_ratio, ax_contour=None, plot_em=False, mode='ratio',exclude
     Plots the current absorption (and emission if asked) standard lines in the current axis
     also used in the autofit plots further down
 
-    -plot_indiv: if True, plots the individual transitions for absorption lines instead of the averaged energies
+    -plot_indiv_transi:
+            -True/False: plots only/none of the individual transitions for instead of the averaged energies
+            -prio_resolved: plots the resolved transitions when available, otherwise the non-resolved
+            -only[X+Y+...]: only plots the resolved lines for X, Y, ...
     -squished mode: makes the absorption text slightly higher to avoid it going lower than the plot
 
     -force_side: shows all lines either in emission if 'em' or in absorption if 'abs'
@@ -539,12 +547,28 @@ def plot_std_ener(ax_ratio, ax_contour=None, plot_em=False, mode='ratio',exclude
                     (1 - ax_ratio.get_ylim()[0]) / (ax_ratio.get_ylim()[1] - ax_ratio.get_ylim()[0])
 
     lines_names = np.array(lines_std_names)
+
+
     lines_abs_pos = ['abs' in elem for elem in lines_names]
     lines_em_pos = ['em' in elem for elem in lines_names]
+
+    indiv_lines_nonresolved_std=np.unique([' '.join(elem.split(' ')[:2]) if len(elem.split(' '))<=2
+                                    else '' for elem in lines_std.values()])
+    indiv_lines_resolved_std=np.unique([' '.join(elem.split(' ')[:2]) if len(elem.split(' '))>2
+                                    else '' for elem in lines_std.values()])
+
+    indiv_lines_both_std=[elem for elem in indiv_lines_resolved_std if elem in indiv_lines_nonresolved_std]
+
+    indiv_lines_both=[elem for elem in lines_names if lines_std[elem] in indiv_lines_both_std]
 
     #removing or restricting to resolved lines for the emission
     lines_resolved_mask=['(' in lines_std[elem] and ')' in lines_std[elem] for elem in lines_names]
     lines_resolved=lines_names[lines_resolved_mask]
+
+    if type(plot_indiv_transi)==str and 'only' in plot_indiv_transi:
+        plot_indiv_transi_lines=plot_indiv_transi.split('only')[1].split('+')
+        lines_resolved_restrict=[elem for elem in lines_resolved if
+                        sum([elem.startswith(subelem) for subelem in plot_indiv_transi_lines])>0]
 
     for i_line, line in enumerate(lines_names):
 
@@ -563,9 +587,18 @@ def plot_std_ener(ax_ratio, ax_contour=None, plot_em=False, mode='ratio',exclude
         if 'em' in line and not plot_em:
             continue
 
-        if not 'em' in line and (line not in lines_resolved and plot_indiv_transi\
-                                 or line in lines_resolved and not plot_indiv_transi):
-            continue
+        if plot_indiv_transi=='prio_resolved':
+            if  line in indiv_lines_both and not ('(' in lines_std[line] and ')' in lines_std[line]):
+                continue
+        elif type(plot_indiv_transi)==str and plot_indiv_transi.startswith('only'):
+            if line in lines_resolved and line not in lines_resolved_restrict:
+                continue
+        else:
+            if not 'em' in line and (line not in lines_resolved and plot_indiv_transi==True \
+                                 or line in lines_resolved and plot_indiv_transi==False):
+                continue
+
+
 
         # booleans for dichotomy in the plot arguments
         abs_bool = 'abs' in line and 'abs' in force_side
@@ -810,7 +843,8 @@ def contour_chi2map(fig, axe, chi_dict, title='', combined=False):
 
 
 def coltour_chi2map(fig, axe, chi_dict, title='', combined=False, ax_bar=None, norm=None,
-                    squished_mode=False,local_chi_bounds=False,ener_show_range=None):
+                    squished_mode=False,local_chi_bounds=False,ener_show_range=None,
+                    show_peak_pos=True,show_peak_width=True):
     '''
         squished_mode: adds a bunch of line separators in th colormap label to avoid display issues
 
@@ -826,7 +860,7 @@ def coltour_chi2map(fig, axe, chi_dict, title='', combined=False, ax_bar=None, n
     peak_widths = chi_dict['peak_widths']
 
     chi_map = np.where(chi_arr >= chi_base, 0, chi_base - chi_arr)
-
+    chi_map_full=chi_map
     if ener_show_range is not None:
 
         #rounds to avoid issues with precision
@@ -837,8 +871,9 @@ def coltour_chi2map(fig, axe, chi_dict, title='', combined=False, ax_bar=None, n
 
         line_search_e_space=line_search_e_space[ener_show_mask]
 
-        peak_points.T[0]-=np.argwhere(ener_show_mask).T[0][0]
-        peak_points=peak_points[(peak_points.T[0]>0) & (peak_points.T[0]<len(line_search_e_space))]
+        if len(peak_points)>0:
+            peak_points.T[0]-=np.argwhere(ener_show_mask).T[0][0]
+            peak_points=peak_points[(peak_points.T[0]>0) & (peak_points.T[0]<len(line_search_e_space))]
 
 
     axe.set_ylabel('Gaussian line normalisation\n in units of local continuum Flux')
@@ -857,6 +892,9 @@ def coltour_chi2map(fig, axe, chi_dict, title='', combined=False, ax_bar=None, n
     # here we do some more modifications
     chi_arr_plot = chi_map
 
+    #for the norm
+    chi_arr_plot_full=chi_map_full
+    
     # swapping the sign of the delchis for the absorption and emission lines in order to display them
     # with both parts of the cmap + using a square root norm for easier visualisation
 
@@ -864,8 +902,13 @@ def coltour_chi2map(fig, axe, chi_dict, title='', combined=False, ax_bar=None, n
         chi_arr_plot[i] = np.concatenate((-(chi_arr_plot[i][:int(len(chi_arr_plot[i]) / 2)]) ** (1 / 2),
                                           (chi_arr_plot[i][int(len(chi_arr_plot[i]) / 2):]) ** (1 / 2)))
 
-    if np.max(chi_arr_plot) >= 1e3:
+    for i in range(len(chi_arr_plot_full)):
+        chi_arr_plot_full[i] = np.concatenate((-(chi_arr_plot_full[i][:int(len(chi_arr_plot_full[i]) / 2)]) ** (1 / 2),
+                                          (chi_arr_plot_full[i][int(len(chi_arr_plot_full[i]) / 2):]) ** (1 / 2)))
+        
+    if np.max(chi_arr_plot) >= 1e3 or (np.max(chi_arr_plot_full) >= 1e3 and not local_chi_bounds):
         chi_arr_plot = chi_arr_plot ** (1 / 2)
+        chi_arr_plot_full=chi_arr_plot_full **(1/2)
         bigline_flag = 1
     else:
         bigline_flag = 0
@@ -876,8 +919,11 @@ def coltour_chi2map(fig, axe, chi_dict, title='', combined=False, ax_bar=None, n
     cm_bipolar = hotcold(neutral=1)
 
     # and the non symetric normalisation
-    cm_norm = colors.TwoSlopeNorm(vcenter=0, vmin=min(-np.sqrt(9.21),chi_arr_plot.min()) if norm is None else -norm_col[0],
-                          vmax=max(chi_arr_plot.max(),np.sqrt(9.21)) if norm is None else norm_col[1])
+    cm_norm = colors.TwoSlopeNorm(vcenter=0, 
+                                  vmin=min(-np.sqrt(9.21),chi_arr_plot.min() if local_chi_bounds
+                                          else chi_arr_plot_full.min()) if norm is None else -norm_col[0],
+                          vmax=max(chi_arr_plot.max() if local_chi_bounds else
+                                   chi_arr_plot_full.max(),np.sqrt(9.21)) if norm is None else norm_col[1])
 
 
     #should be tested if necessary
@@ -886,8 +932,10 @@ def coltour_chi2map(fig, axe, chi_dict, title='', combined=False, ax_bar=None, n
 
 
     # create evenly spaced ticks with different scales in top and bottom
-    cm_ticks = np.concatenate((np.linspace(chi_arr_plot.min() if norm is None else -norm_col[0], 0, 6, endpoint=True),
-                               np.linspace(0, chi_arr_plot.max() if norm is None else norm_col[1], 6, endpoint=True)))
+    cm_ticks = np.concatenate((np.linspace((chi_arr_plot.min() if local_chi_bounds else chi_arr_plot_full.min())
+                                           if norm is None else -norm_col[0], 0, 6, endpoint=True),
+                               np.linspace(0, (chi_arr_plot.max() if local_chi_bounds else chi_arr_plot_full.max())
+                                           if norm is None else norm_col[1], 6, endpoint=True)))
 
     if cm_ticks[0]>-np.sqrt(7):
         cm_ticks=np.array([-np.sqrt(9.21)]+cm_ticks.tolist())
@@ -963,10 +1011,14 @@ def coltour_chi2map(fig, axe, chi_dict, title='', combined=False, ax_bar=None, n
                           point_coords[0] + line_search_e[2] * peak_widths[elem_point[0]] / 2], [point_coords[1],
                                                                                                  point_coords[1]]
 
-        axe.scatter(point_coords[0], point_coords[1], marker='X', color='black',
+        if show_peak_pos:
+            #offset of one index (aka 1 line_search_e[2]) because of the internal offset in the values
+            axe.scatter(point_coords[0]+line_search_e[2], point_coords[1], marker='X', color='black',
                     label='peak' if elem_point[0] == 0 else None)
 
-        axe.plot(segment_coords[0], segment_coords[1], color='black',
+        if show_peak_width:
+            #offset of one index (aka 1 line_search_e[2]) because of the internal offset in the values
+            axe.plot(segment_coords[0]+line_search_e[2], segment_coords[1], color='black',
                  label='max peak structure width' if elem_point[0] == 0 else None)
     # except:
     #     pass
@@ -992,7 +1044,8 @@ def coltour_chi2map(fig, axe, chi_dict, title='', combined=False, ax_bar=None, n
 
 def comb_chi2map(fig_comb, chi_dict, title='', comb_label='',
                  force_ylog_ratio=False,ratio_bounds=None,ener_show_range=None,show_indiv_transi=False,
-                 squished_mode=False,local_chi_bounds=False,force_side_lines='none'):
+                 squished_mode=False,local_chi_bounds=False,force_side_lines='none',minor_locator=False,
+                 show_peak_pos=True,show_peak_width=True):
 
     '''
 
@@ -1065,7 +1118,8 @@ def comb_chi2map(fig_comb, chi_dict, title='', comb_label='',
     ax_comb[1] = plt.subplot(gs_comb[1, 0], sharex=ax_comb[0])
     ax_colorbar = plt.subplot(gs_comb[1, 1])
     coltour_chi2map(fig_comb, ax_comb[1], chi_dict, combined=True, ax_bar=ax_colorbar,
-                    squished_mode=squished_mode,local_chi_bounds=local_chi_bounds,ener_show_range=ener_show_range)
+                    squished_mode=squished_mode,local_chi_bounds=local_chi_bounds,ener_show_range=ener_show_range,
+                    show_peak_pos=show_peak_pos,show_peak_width=show_peak_width)
 
     ax_comb[1].set_xlim(line_cont_range)
     # #third plot (color), with a separate colorbar plot on the second column of the gridspec
@@ -1093,6 +1147,11 @@ def comb_chi2map(fig_comb, chi_dict, title='', comb_label='',
     if ener_show_range is not None:
         ax_comb[0].set_xlim(ener_show_range[0],ener_show_range[1])
         ax_comb[1].set_xlim(ener_show_range[0],ener_show_range[1])
+
+    if minor_locator is not False:
+        ax_comb[0].xaxis.set_minor_locator(AutoMinorLocator(minor_locator))
+        ax_comb[1].xaxis.set_minor_locator(AutoMinorLocator(minor_locator))
+
 
     plot_std_ener(ax_comb[0], ax_comb[1], plot_em=True,mode='chimap',plot_indiv_transi=show_indiv_transi,
                   squished_mode=squished_mode,force_side=force_side_lines)
@@ -1177,7 +1236,10 @@ def merge_chi_dict(chi_dict_files):
     chi_arr_merge+=chi_dict_arr[-1]['chi_arr'][-1:].tolist()
 
     if len(chi_arr_merge)!=len(chi_dict_merge['line_search_e_space']):
-        breakpoint()
+        if len(chi_arr_merge)==len(chi_dict_merge['line_search_e_space'])-1:
+            chi_arr_merge+=[chi_arr_merge[-1]]
+        else:
+            breakpoint()
 
     #reconverting into arrays
     chi_arr_merge=np.array(chi_arr_merge)

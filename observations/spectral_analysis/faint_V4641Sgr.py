@@ -120,3 +120,30 @@ ftgrouppha infile=xa901001010xtd_src_gti05.pi outfile=xa901001010xtd_src_gti05_g
 
 
 '''
+
+'''
+
+Xset.restore('baseload_all.xcm')
+
+rebinv_xrism(1)
+rebinv_xrism(3)
+rebinv_xrism(5)
+rebinv_xrism(7)
+rebinv_xrism(9)
+AllData.ignore('**-0.5 10.-**')
+Plot.xLog=False
+
+xPlot('ldata',
+data_colors=['black','black','red','red','limegreen','limegreen','blue','blue','cyan','cyan'],
+group_names=['orbit 1','','orbit 2','','orbit 3','','orbit 4','','orbit 5',''])
+
+leg=plt.gca().get_legend()
+leg.remove()
+plt.legend()
+plt.show()
+plt.subplots_adjust(bottom=0.07)
+fig=plt.gca().get_figure()
+fig.set_size_inches(10,5)
+plt.subplots_adjust(bottom=0.1)
+
+'''

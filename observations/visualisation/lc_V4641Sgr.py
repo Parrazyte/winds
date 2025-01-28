@@ -4,9 +4,9 @@ import glob
 
 import argparse
 import warnings
-
 import numpy as np
 import pandas as pd
+from mpdaf.obj import sexa2deg
 from decimal import Decimal
 
 import streamlit as st
@@ -33,6 +33,9 @@ from astropy.io import fits
 from astropy.time import Time, TimeDelta
 from astroquery.simbad import Simbad
 
+from general_tools import interval_extract
+
+
 from copy import deepcopy
 
 # needed to fetch the links to the lightcurves for MAXI data
@@ -48,21 +51,89 @@ from lmplot_uncert import lmplot_uncert_a
 
 from ast import literal_eval
 
+from astropy import units as u
+from astropy.time import Time
+from astropy.coordinates import SkyCoord, EarthLocation
 
 # import time
 
-def lc_internal():
+def lc_internal_1():
     fig, ax = plt.subplots(figsize=(10, 6))
     lc = fits.open('xa901001010xtd_0p5to10keV_b128_src_lc.fits')
     lc_bg = fits.open('xa901001010xtd_0p5to10keV_b128_bgd_lc.fits')
-    plt.errorbar(lc[1].data['TIME'], xerr=128,
+    plt.errorbar(lc[1].data['TIME']+64, xerr=128,
                  y=lc[1].data["RATE"] - lc_bg[1].data['RATE'],
                  yerr=lc[1].data['ERROR'], marker='s', ls=':')
 
     plt.ylabel('net [0.5-10] keV rate (counts/s')
     plt.xlabel('Time')
-    plt.suptitle('XRISM lightcurve of the source in bins of 128s')
+    plt.suptitle('Xtend lightcurve of the source in bins of 128s')
 
+def lc_internal_paper():
+
+    binning=128
+
+    figdir='/media/parrama/crucial_SSD/Observ/BHLMXB/XRISM/V4641Sgr/timeres/v4641dat/xtd/lc'
+    lc_03_4 = fits.open(figdir+'/xa901001010xtd_src_0p3to4p0_bin128s.lc')
+    lc_03_4_bg = fits.open(figdir+'/xa901001010xtd_bgd_0p3to4p0_bin128s.lc')
+
+    lc_4_10 = fits.open(figdir+'/xa901001010xtd_src_4p0to10p0_bin128s.lc')
+    lc_4_10_bg = fits.open(figdir+'/xa901001010xtd_bgd_4p0to10p0_bin128s.lc')
+
+    fig_lc_intra, ax_lc_intra = plt.subplots(3, 1, sharex=True, figsize=(6,10))
+    plt.subplots_adjust(hspace=0)
+
+    xcolors_grp = ['black', 'red', 'limegreen', 'blue', 'cyan']
+
+    inter_arr=np.array(list(interval_extract(lc_03_4[1].data['TIME']/128)))*128
+
+    ax_lc_intra[0].set_ylabel('net [0.5-4.0]\nkeV rate\n(counts/s')
+    ax_lc_intra[-1].set_xlabel('Time after the start of the observation (s)')
+    ax_lc_intra[0].set_xlim(lc_03_4[1].data['TIME'][0],lc_03_4[1].data['TIME'][-1]+binning)
+    ax_lc_intra[1].set_ylabel('net [4.0-10]\nkeV rate\n(counts/s)')
+
+    ax_lc_intra[2].set_ylabel('net\n[4.0-10]/[0.5-4.0] keV\nHardness Ratio')
+
+    for i_inter,elem_inter in enumerate(inter_arr):
+
+        inter_mask=(lc_03_4[1].data['TIME']>=elem_inter[0]) & (lc_03_4[1].data['TIME']<=elem_inter[1])
+
+        net_03_4=lc_03_4[1].data["RATE"][inter_mask] - lc_03_4_bg[1].data['RATE'][inter_mask]
+        err_03_4=lc_03_4[1].data['ERROR'][inter_mask]
+        net_4_10=lc_4_10[1].data["RATE"][inter_mask] - lc_4_10_bg[1].data['RATE'][inter_mask]
+        err_4_10=lc_4_10[1].data['ERROR'][inter_mask]
+
+        ax_lc_intra[0].errorbar(lc_03_4[1].data['TIME'][inter_mask]+binning/2, xerr=binning,
+                     y=net_03_4,
+                     yerr=err_03_4, marker='s',markersize=3, ls=':',color=xcolors_grp[i_inter])
+
+        ax_lc_intra[1].errorbar(lc_4_10[1].data['TIME'][inter_mask]+binning/2, xerr=binning,
+                     y=net_4_10,
+                     yerr=err_4_10, marker='s',markersize=3, ls=':',color=xcolors_grp[i_inter])
+
+        xtd_HR = net_4_10/net_03_4
+
+        xtd_HR_err = ((err_03_4/net_03_4) ** 2 + (err_4_10/net_4_10) ** 2) ** (1 / 2) * xtd_HR
+
+        ax_lc_intra[2].errorbar(lc_03_4[1].data['TIME'][inter_mask]+binning/2, xerr=128,
+                     y=xtd_HR,
+                     yerr=xtd_HR_err, marker='s',markersize=3, ls=':',color=xcolors_grp[i_inter])
+
+    ax_lc_intra[0].tick_params(
+        axis='x',  # changes apply to the x-axis
+        which='both',  # both major and minor ticks are affected
+        bottom=False,  # ticks along the bottom edge are off
+        top=True,  # ticks along the top edge are off
+        labelbottom=False,
+        labeltop=True,
+        direction='out')
+
+    plt.subplots_adjust(left=0.16, right=0.96, top=0.97, bottom=0.05)
+
+    #
+    # ax_lc_intra[0].xaxis.tick_top()
+    # ax_lc_intra[0].xaxis.set_ticklabels(ax_lc_intra[-1].xaxis.get_ticklabels())
+    # plt.suptitle('Xtend lightcurve of the source in bins of 128s')
 
 def lc_optical_monit():
 
@@ -81,6 +152,7 @@ def lc_optical_monit():
     #from the Goranskij
     to_jd_gor24=2459410.4080208335
     period_gor24=2.81727
+
     def phase_time(time,to,period):
         phased_time=(time-to)%period/period
 
@@ -88,9 +160,10 @@ def lc_optical_monit():
 
     time_mjd=Time(lc_V['MJD'],format='mjd')
     time_phased_mc=phase_time(time_mjd.jd,to_jd_mc14,period_mc14)
-
     time_phased_Gor=phase_time(time_mjd.jd,to_jd_gor24,period_gor24)
 
+    phase_obs_mc=phase_time(Time('2024-09-30').jd,to_jd_mc14,period_mc14)
+    phase_obs_Gor=phase_time(Time('2024-09-30').jd,to_jd_gor24,period_gor24)
 
     #note: the obs is on MJD 60583
     mask_around=(time_mjd.value>60560) & (time_mjd.value<60600)
@@ -110,6 +183,65 @@ def lc_optical_monit():
     plt.plot(time_phased_mc[mask_around]+1,lc_V.V[mask_around],ls='',marker='d',color='red')
 
     plt.gca().invert_yaxis()
+
+
+def vrad_V4641():
+
+    '''
+    Here the result is the radial velocity of the system, and thus should be substracted
+    from the observed velocity measurement
+
+    '''
+    #from vizier, slightly different than the ones of Gaia for some reason.
+    #in [l,b], l is longitude (in plane), b is latitude (vertical)
+    #reminder: https://en.wikipedia.org/wiki/Galactic_coordinate_system
+    galcoords=[006.7739158,-4.7888593]
+    l,d=galcoords
+    #deprojecting the distance to the galactic plane
+    #pm0.7
+    d_full=6.2
+    d_galplane=6.2*np.cos(-4.7888593*2*np.pi/360)
+
+    #assuming a galactic center distance of 8.5 kpc
+    d_galc=8.5
+
+    #distance from the galactic center to the source
+    #see https://www.omnicalculator.com/math/triangle-side
+    d_galc_s=(d_galc**2 + d_galplane**2 -2*d_galc*d_galplane*np.cos(6.7739158*2*np.pi/360))**(1/2)
+
+     #our angular velocity
+    w_0=240
+    #w velocity of the source from https://www.aanda.org/articles/aa/abs/2017/05/aa30540-17/aa30540-17.html
+    w_source=1.022*(d_galc_s/d_galc)**(0.0803)*w_0
+
+    #projection angle of the object compared to us is also beta (aka the angle between d_galc_s and d_galc)
+    beta=np.arcsin(d_galplane/(d_galc_s/np.sin(l*2*np.pi/360)))
+
+    #projected w
+    w_los=np.sin(beta)*w_source
+    #final value: 65.42 (coming away from us because the rotation curve of the galaxy is clockwise)
+
+
+
+def vrot_earth(source='V4641sgr',date='2024-09-30'):
+
+    '''
+    Gives the radial velocity offset due to earth's rotation around the sun for a given source
+    (by fetching Simbad for coordinates)
+    and a given time
+
+    result should be added to an observed velocity measurement
+    '''
+
+    north_p = EarthLocation.from_geodetic(lat=0*u.deg, lon=90*u.deg,height=0*u.m)
+
+    sc_source_vals=sexa2deg([Simbad.query_object(source)[0]['RA'],Simbad.query_object(source)[0]['DEC']][::-1])[::-1]
+
+    sc = SkyCoord(ra=sc_source_vals[0]*u.deg, dec=sc_source_vals[1]*u.deg)
+
+    heliocorr = sc.radial_velocity_correction('heliocentric',obstime=Time(date),location=north_p)
+    return heliocorr.to(u.km/u.s)
+
 
 def lc_paper_monit():
     lc_dir = '/home/parrama/Documents/Work/PhD/docs/Observations/V4641Sgr/'

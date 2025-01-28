@@ -2,9 +2,10 @@
 import numpy as np
 from simul_tools import xstar_func
 
-def make_stab_curves(SED_path,xlum=1,n=1e12,v_turb=500,logNH=23.5, logxi_range=[0,6,0.03],
-                     abund='solar',suffix='',solver='xstar',solver_mode='singularity',
-                     force_kill_instance=False):
+def make_stab_curves(SED_path,xlum=1,n=1e12,v_turb=500,logNH=23.5, logxi_range=[0.,6,0.03],
+                     abund='solar',suffix='',
+                     solver='xstar',solver_mode='singularity',xstar_loc='default',
+                     force_kill_instance=False,nowrite=False):
 
     '''
 
@@ -46,9 +47,11 @@ def make_stab_curves(SED_path,xlum=1,n=1e12,v_turb=500,logNH=23.5, logxi_range=[
 
             #note: here we overwrite the guess temperature with the output temperature of the previous iteration
             #to increase the speed of the computations
-            t_guess=xstar_func(SED_path, xlum, t_guess=t_guess, n=n, nh=10**(logNH), logxi=elem_logxi,vturb_x=v_turb,nbins=1000,
+            t_guess=xstar_func(SED_path, xlum, t_guess=t_guess, n=n, nh=10**(logNH), logxi=elem_logxi,vturb_x=v_turb,
+                               nbins=1000,
                    xstar_mode=solver_mode,path_logpars=log_file,
                        kill_container=i_logxi==len(logxi_range)-1 or force_kill_instance,
-                       no_write=True,instance_identifier='auto',id_comput=str(i_logxi+1),return_temp=True)
+                       no_write=nowrite,instance_identifier='auto',xstar_loc=xstar_loc,
+                               id_comput=str(i_logxi+1),return_temp=True)
 
 

@@ -125,9 +125,15 @@ lines_e_dict={
 
     # resolved lines (from NIST 2023)
                 #these have uncertainties of 1.4 meV
+
+                #Z is the forbidden line F
                 'FeKa25Zabs': [6.6363,-3000,3000],
+
+                #Y and X are the intercombination (I) lines. Summed for diagnostics
                 'FeKa25Yabs':  [6.6676,-3000,3000],
                 'FeKa25Xabs':  [6.6823,-3000,3000],
+
+                #W is the resonance line R
                 'FeKa25Wabs':  [6.7004,-3000,3000],
 
                 #these have uncertainties of 4-6 meV

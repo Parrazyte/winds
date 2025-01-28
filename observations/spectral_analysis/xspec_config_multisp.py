@@ -347,9 +347,13 @@ def load_mod(path,load_xspec=True):
 mod_sky=None
 mod_nxb=None
 
-def set_ener(mode='thcomp'):
+def set_ener(mode='thcomp',xrism=False):
     if mode=='thcomp':
-        AllModels.setEnergies('0.01 1000. 10000 log')
+
+        if xrism:
+            AllModels.setEnergies('0.01 0.1 1000 log, 10. 19801 lin, 1000. 1000 log')
+        else:
+            AllModels.setEnergies('0.01 1000. 10000 log')
 
 def fit_broader(epoch_id,add_gaussem=True,bat_interp_dir='/home/parrama/Documents/Observ/copy_SSD/Swift/BAT_interp',
                 n_add=1,outdir='fit_broader',bat_emin=15.,bat_emax=50.,avg_BAT_norm=True):
@@ -1008,7 +1012,8 @@ def save_broad_SED(path=None,e_low=0.1,e_high=100,nbins=1e3,retain_session=False
 
     cleaned_expression=AllModels(1).expression
 
-    AllModels.setEnergies(str(e_low)+' '+str(e_high)+' '+str(int(nbins))+" log")
+    if nbins is not None:
+        AllModels.setEnergies(str(e_low)+' '+str(e_high)+' '+str(int(nbins))+" log")
 
     #computing and storing the broadband flux
     AllModels.calcFlux(str(e_low)+' '+str(e_high))
@@ -6591,11 +6596,14 @@ def xPlot(types,axes_input=None,plot_saves_input=None,plot_arg=None,includedlist
 
                     grp_name=' '.join([elem for elem in [grp_tel,grp_obsid,grp_instru] if len(elem)>0])
             else:
-                Plot.setGroup('2')
+
+                grp_name=group_names[id_grp]
+
+                # Plot.setGroup('2')
                 #needs to be implemented
-                breakpoint()
-                grp_name='' if group_names=='nolabel' else\
-                    ('group '+str(id_grp+1) if curr_save.nGroups>1 else '') if group_names is None else group_names_list[id_grp]
+                # grp_name=
+                # grp_name='' if group_names=='nolabel' else\
+                #     ('group '+str(id_grp+1) if curr_save.nGroups>1 else '') if group_names is None else group_names_list[id_grp]
 
             if curr_save.y[id_grp] is not None:
                 #plotting each data group

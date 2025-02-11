@@ -53,8 +53,11 @@ except:
 # range_v_turb = np.array([0, 500, 1000, 2500, 5000])
 
 #better sampling (with rounding to avoid precision errors that will display in the values
-range_nh=np.arange(21.5,25.01,0.05).round(3)
-range_v_turb=np.arange(0.5,4.01,0.05).round(3)
+step_nh=0.05
+range_nh=np.arange(21.5,25.01,step_nh).round(3)
+
+step_v_turb=0.05
+range_v_turb=np.arange(0.5,4.01,step_v_turb).round(3)
 interp_x = np.arange(33, 38, 0.01)
 
 update_dump=False
@@ -380,7 +383,7 @@ valid_volumes_dict=dump_arr[8]
 # test=valid_par_range_dict['outlier_diagonal_lower_floor']
 # breakpoint()
 
-tab_2D,tab_3D,tab_delta=st.tabs(['2D Curve of Growths','3D nR² evolution','2D nR² distance between SEDs'])
+tab_2D,tab_3D,tab_delta=st.tabs(['2D Curve of Growths','3D nR² evolution','2D projections of distance between SEDs'])
 
 with tab_2D:
     slider_nH=st.select_slider('nH value',range_nh,value=23.0)
@@ -489,9 +492,20 @@ else:
     camera=None
 
 
-plot_distance_SEDs=st.sidebar.toggle('Plot nR² distance between observations',value=False)
+with st.sidebar.expander('2D projections'):
+    plot_distance_SEDs=st.toggle('Plot distance between observations',value=False)
 
-plot_distance_names=st.sidebar.toggle('Write SED names in the distance plot titles',value=True)
+    if plot_distance_SEDs:
+        plot_distance_dim=st.radio('projection',('nR²','v_turb','NH'),index=0)
+    else:
+        plot_distance_dim=''
+
+    combine_plot_distance=st.toggle('Combine distance plots',value=False)
+
+    plot_distance_names = st.toggle('Write SED names in the distance plot titles', value=False)
+
+    interpolate_nr2=st.toggle('Interpolate NR² values on a coarser grid when it is not the projected axe',value=True)
+
 if not plot_distance_SEDs:
     with tab_delta:
         st.info('To start plotting these elements, toggle the option in the sidebar.')
@@ -624,7 +638,7 @@ for i_SED,elem_SED in enumerate(list(SEDs.keys())):
                   interp_x[ew_26_intervals_ul[i_inter][0]:ew_26_intervals_ul[i_inter][1]+1],
                   color=base_cmap[i_SED],lw=5,alpha=0.7,zorder=100,ls=':')\
          for i_inter in range(len(ew_26_intervals_ul))]
-        
+
     ax_2D[2].set_xlim(0,70)
 
 
@@ -707,150 +721,554 @@ with tab_2D:
 
 #distance plots
 
-@st.cache_data
-def plot_distance(SED_1,SED_2,write_names=True):
 
+@st.cache_data
+def plot_distance(_ax,SED_1,SED_2,mode='nR²',write_names=True,interpolate_nr2=False):
+
+    '''
+    2D projections of the 3D graphs for couples of 2 SEDs.
+    Highlight the valid 2D parameter space of each individualSED in hashes,
+    when both spaces are compatible, highlights the distance in the projection dimension (mode) between the regions
+
+    interpolate_nr2:
+        if set to True, replaces the 0.01 grid with a 0.05
+
+    if ax is not None, builds the figure in the given ax, does not create a colorbar, and returns the
+    min and max value of the imshow and the imshow for climming
+    '''
 
     assert len(valid_volumes_dict[SED_1])==1,'Error: only implemented for single volumes'
     assert len(valid_volumes_dict[SED_2])==1,'Error: only implemented for single volumes'
 
-    plane_lower_SED_1,plane_higher_SED_1=valid_volumes_dict[SED_1][0]
-    plane_lower_SED_2,plane_higher_SED_2=valid_volumes_dict[SED_2][0]
+    # here we consider that the nr² values are sampled over a 0.01 grid between 33 and 36.5
+    # we add the rounding to avoid comparison issues
+    range_nr2 = np.arange(33, 36.51, 0.05 if interpolate_nr2 and mode!='nR²' else 0.01).round(3)
 
-    distance_nr2=np.repeat(np.nan,len(range_v_turb)*len(range_nh)).reshape((len(range_v_turb),len(range_nh)))
 
-    surface_SED_1=np.repeat(np.nan,len(range_v_turb)*len(range_nh)).reshape((len(range_v_turb),len(range_nh)))
-    surface_SED_2=np.repeat(np.nan,len(range_v_turb)*len(range_nh)).reshape((len(range_v_turb),len(range_nh)))
+    plane_lower_SED_1_init,plane_higher_SED_1_init=valid_volumes_dict[SED_1][0]
+    plane_lower_SED_2_init,plane_higher_SED_2_init=valid_volumes_dict[SED_2][0]
+
+    if interpolate_nr2 and mode !='nR²':
+        plane_lower_SED_1=plane_lower_SED_1_init.copy()
+        plane_lower_SED_1.T[2]=(plane_lower_SED_1.T[2]*20).round()/20
+
+        plane_higher_SED_1=plane_higher_SED_1_init.copy()
+        plane_higher_SED_1.T[2]=(plane_higher_SED_1.T[2]*20).round()/20
+        
+        plane_lower_SED_2=plane_lower_SED_2_init.copy()
+        plane_lower_SED_2.T[2]=(plane_lower_SED_2.T[2]*20).round()/20
+
+        plane_higher_SED_2=plane_higher_SED_2_init.copy()
+        plane_higher_SED_2.T[2]=(plane_higher_SED_2.T[2]*20).round()/20
+    else:
+        plane_lower_SED_1 = plane_lower_SED_1_init.copy()
+
+        plane_higher_SED_1 = plane_higher_SED_1_init.copy()
+
+        plane_lower_SED_2 = plane_lower_SED_2_init.copy()
+
+        plane_higher_SED_2 = plane_higher_SED_2_init.copy()
 
     #creating the plot
-    fig_dist,ax_dist= plt.subplots(1,1, figsize=(6,6),)
-    ax_dist.set_ylabel(r'log$_{10}$(nh)')
-    ax_dist.set_xlabel(r'log$_{10}$(v$_{turb}$)')
+    if _ax is None:
+        fig_dist,ax_dist= plt.subplots(1,1, figsize=(6,6),)
+    else:
+        ax_dist=_ax
+
     ax_dist.set_facecolor('grey')
     cmap_bipolar=hotcold(neutral=1)
 
+    if mode=='nR²':
+
+        range_x=range_v_turb
+        range_y=range_nh
+
+        #this index is for computing the values from the plane_lower/higher_SED arrays
+        index_x=1
+        index_y=0
+        index_z=2
+
+        if _ax is None:
+            ax_dist.set_xlabel(r'log$_{10}$(v$_{turb}$)')
+            ax_dist.set_ylabel(r'log$_{10}$(NH)')
+
+    if mode=='v_turb':
+
+        range_x=range_nr2
+        range_y=range_nh
+
+        #this index is for computing the values from the plane_lower/higher_SED arrays
+        index_x=2
+        index_y=0
+        index_z=1
+
+        if _ax is None:
+            ax_dist.set_xlabel(r'log$_{10}$(nR$^2$)')
+            ax_dist.set_ylabel(r'log$_{10}$(NH)')
+
+    if mode=='NH':
+
+        range_x=range_nr2
+        range_y=range_v_turb
+
+        #this index is for computing the values from the plane_lower/higher_SED arrays
+        index_x=2
+        index_y=1
+        index_z=0
+
+        if _ax is None:
+            ax_dist.set_xlabel(r'log$_{10}$(nR$^2$)')
+            ax_dist.set_ylabel(r'log$_{10}$(v_turb)')
+
+    distance_arr = np.repeat(np.nan, len(range_x) * len(range_y)).reshape((len(range_x), len(range_y)))
+
+    surface_SED_1 = np.repeat(np.nan, len(range_x) * len(range_y)).reshape((len(range_x), len(range_y)))
+
+    surface_SED_2 = np.repeat(np.nan, len(range_x) * len(range_y)).reshape((len(range_x), len(range_y)))
+
 
     #computing the distance array
-    for i_v_turb,elem_v_turb in enumerate(range_v_turb):
-        for i_nh,elem_nh in enumerate(range_nh):
+    for i_x,elem_x in enumerate(range_x):
+        for i_y,elem_y in enumerate(range_y):
+
+            #creating the x and y valid arrays separately for clarity
+            #we only apply the log10 for v_turb (index_x==1)
+            mask_x_valid_SED_1_lower=((np.log10(plane_lower_SED_1.T[index_x])==elem_x) if index_x==1 else \
+                              ((plane_lower_SED_1.T[index_x])==elem_x))
+
+            mask_y_valid_SED_1_lower=((np.log10(plane_lower_SED_1.T[index_y])==elem_y) if index_y==1 else \
+                              ((plane_lower_SED_1.T[index_y])==elem_y))
+
+            mask_x_valid_SED_2_lower = ((np.log10(plane_lower_SED_2.T[index_x]) == elem_x) if index_x == 1 else \
+                                      ((plane_lower_SED_2.T[index_x]) == elem_x))
+
+            mask_y_valid_SED_2_lower = ((np.log10(plane_lower_SED_2.T[index_y]) == elem_y) if index_y == 1 else \
+                                      ((plane_lower_SED_2.T[index_y]) == elem_y))
 
 
-            mask_valid_SED_1=(plane_lower_SED_1.T[0]==elem_nh) & (np.log10(plane_lower_SED_1.T[1])==elem_v_turb)
-            mask_valid_SED_2=(plane_lower_SED_2.T[0]==elem_nh) & (np.log10(plane_lower_SED_2.T[1])==elem_v_turb)
+            mask_valid_SED_1_lower=mask_x_valid_SED_1_lower & mask_y_valid_SED_1_lower
+            mask_valid_SED_2_lower=mask_x_valid_SED_2_lower & mask_y_valid_SED_2_lower
+            
+            mask_x_valid_SED_1_higher=((np.log10(plane_higher_SED_1.T[index_x])==elem_x) if index_x==1 else \
+                              ((plane_higher_SED_1.T[index_x])==elem_x))
+
+            mask_y_valid_SED_1_higher=((np.log10(plane_higher_SED_1.T[index_y])==elem_y) if index_y==1 else \
+                              ((plane_higher_SED_1.T[index_y])==elem_y))
+
+            mask_x_valid_SED_2_higher = ((np.log10(plane_higher_SED_2.T[index_x]) == elem_x) if index_x == 1 else \
+                                      ((plane_higher_SED_2.T[index_x]) == elem_x))
+
+            mask_y_valid_SED_2_higher = ((np.log10(plane_higher_SED_2.T[index_y]) == elem_y) if index_y == 1 else \
+                                      ((plane_higher_SED_2.T[index_y]) == elem_y))
+
+
+            mask_valid_SED_1_higher=mask_x_valid_SED_1_higher & mask_y_valid_SED_1_higher
+            mask_valid_SED_2_higher=mask_x_valid_SED_2_higher & mask_y_valid_SED_2_higher
+            
 
             # x_square=[[range_v_turb[i_v_turb],range_v_turb[i_v_turb+1]],range_v_turb[i_v_turb],range_v_turb[i_v_turb+1]]
             #
             # y_square=[[range_nh[i_nh],range_nh[i_nh]],range_nh[i_nh+1],range_nh[i_nh+1]]
 
-            if mask_valid_SED_1.any():
-                surface_SED_1[i_v_turb][i_nh]=1
+            if mask_valid_SED_1_lower.any() or mask_valid_SED_1_higher.any():
+                surface_SED_1[i_x][i_y]=1
                 # ax_dist.pcolor(x_square,y_square,[[1]],cmap='viridis',alpha=1,hash='//',vmin=0,vmax=1)
 
-            if mask_valid_SED_2.any():
-                surface_SED_2[i_v_turb][i_nh]=1
+            if mask_valid_SED_2_lower.any() or mask_valid_SED_2_higher.any():
+                surface_SED_2[i_x][i_y]=1
                 # ax_dist.pcolor(x_square,y_square,1,[[1]],cmap='viridis',alpha=1,hash="\\",vmin=0,vmax=1)
 
-            if not (sum(mask_valid_SED_1)>0) & (sum(mask_valid_SED_2)>0):
+            if not (((sum(mask_valid_SED_1_lower)+sum(mask_valid_SED_1_higher))>0) and \
+                    ((sum(mask_valid_SED_2_lower)+sum(mask_valid_SED_2_higher))>0)):
 
                 continue
-            if sum(mask_valid_SED_1)>1 or sum(mask_valid_SED_2)>1:
+
+            if mode =='nR²' and (sum(mask_valid_SED_1_lower)>1 or sum(mask_valid_SED_1_higher)>1\
+                            or (sum(mask_valid_SED_2_lower)>1 or sum(mask_valid_SED_2_higher)>1)):
                 print('This should not happen')
                 breakpoint()
-                
-            nr_range_SED_1=np.array([plane_lower_SED_1[mask_valid_SED_1][0][2],plane_higher_SED_1[mask_valid_SED_1][0][2]])
-            nr_range_SED_2=np.array([plane_lower_SED_2[mask_valid_SED_2][0][2],plane_higher_SED_2[mask_valid_SED_2][0][2]])
 
-            #note that this value is positive if the intervals are compatible and negative otherwise
-            distance_vals=get_overlap(nr_range_SED_1,nr_range_SED_2,distance=True)
+            if mode=='nR²':
 
-            if distance_vals>=0:
-                distance_nr2[i_v_turb][i_nh] = 0.
+                if not (mask_valid_SED_1_lower==mask_valid_SED_1_higher).all() or \
+                   not (mask_valid_SED_2_lower == mask_valid_SED_2_higher).all():
+                    print('This should not happen')
+                    breakpoint()
+
+                #in this mode, each NH-v_turb couple only has one range of projection coordinate so computing the
+                #distance between that of the two SEDs is easy
+                projec_range_SED_1=np.array([plane_lower_SED_1[mask_valid_SED_1_lower][0][2],
+                                             plane_higher_SED_1[mask_valid_SED_1_higher][0][2]])
+                projec_range_SED_2=np.array([plane_lower_SED_2[mask_valid_SED_2_lower][0][2],
+                                             plane_higher_SED_2[mask_valid_SED_2_higher][0][2]])
+
+                #note that this value is positive if the intervals are compatible and negative otherwise
+                distance_vals=get_overlap(projec_range_SED_1,projec_range_SED_2,distance=True)
+
+                if distance_vals>=0:
+                    distance_arr[i_x][i_y] = 0.
+                else:
+                    distance_sign=(projec_range_SED_1[0]-projec_range_SED_2[0])/abs(projec_range_SED_1[0]-projec_range_SED_2[0])
+
+                    distance_arr[i_x][i_y] = distance_sign*abs(distance_vals)
             else:
-                distance_sign=(nr_range_SED_1[0]-nr_range_SED_2[0])/abs(nr_range_SED_1[0]-nr_range_SED_2[0])
+                #otherwise, it is necessary to compute all the continuous intervals of the projection for each SED
+                #then find the smallest distance between each of them
+                if mode=='v_turb':
 
-                distance_nr2[i_v_turb][i_nh] = distance_sign*abs(distance_vals)
+                    if sum(mask_valid_SED_1_lower)>0:
+                        projec_ranges_SED_1_lower=np.argwhere([elem==range_v_turb for elem in
+                                                 np.log10(plane_lower_SED_1[mask_valid_SED_1_lower].T[1])]).T[1]
+                    else:
+                        projec_ranges_SED_1_lower=np.array([])
+
+                    if sum(mask_valid_SED_1_higher)>0:
+                        projec_ranges_SED_1_higher=np.argwhere([elem==range_v_turb for elem in
+                                                 np.log10(plane_lower_SED_1[mask_valid_SED_1_higher].T[1])]).T[1]
+                    else:
+                        projec_ranges_SED_1_higher=np.array([])
 
 
-    #note: lw=0 is used to remove the borders. The weird implementation of the hatch coloring is necesarry
+                    if sum(mask_valid_SED_2_lower)>0:
+                        projec_ranges_SED_2_lower=np.argwhere([elem==range_v_turb for elem in
+                                                 np.log10(plane_lower_SED_2[mask_valid_SED_2_lower].T[1])]).T[1]
+                    else:
+                        projec_ranges_SED_2_lower=np.array([])
+
+                    if sum(mask_valid_SED_2_higher)>0:
+                        projec_ranges_SED_2_higher=np.argwhere([elem==range_v_turb for elem in
+                                                 np.log10(plane_lower_SED_2[mask_valid_SED_2_higher].T[1])]).T[1]
+                    else:
+                        projec_ranges_SED_2_higher=np.array([])
+
+
+                if mode=='NH':
+
+                    if sum(mask_valid_SED_1_lower) > 0:
+                        projec_ranges_SED_1_lower = np.argwhere([round(elem,3) == range_nh.round(3) for elem in
+                                                                 plane_lower_SED_1[mask_valid_SED_1_lower].T[0]]).T[1]
+                    else:
+                        projec_ranges_SED_1_lower = np.array([])
+
+                    if sum(mask_valid_SED_1_higher) > 0:
+                        projec_ranges_SED_1_higher = np.argwhere([round(elem,3) == range_nh.round(3) for elem in
+                                                                  plane_lower_SED_1[mask_valid_SED_1_higher].T[0]]).T[1]
+                    else:
+                        projec_ranges_SED_1_higher = np.array([])
+
+                    if sum(mask_valid_SED_2_lower) > 0:
+                        projec_ranges_SED_2_lower = np.argwhere([round(elem,3) == range_nh.round(3) for elem in
+                                                                 plane_lower_SED_2[mask_valid_SED_2_lower].T[0]]).T[1]
+                    else:
+                        projec_ranges_SED_2_lower = np.array([])
+
+                    if sum(mask_valid_SED_2_higher) > 0:
+                        projec_ranges_SED_2_higher = np.argwhere([round(elem,3) == range_nh.round(3) for elem in
+                                                                  plane_lower_SED_2[mask_valid_SED_2_higher].T[0]]).T[1]
+                    else:
+                        projec_ranges_SED_2_higher = np.array([])
+
+
+                project_intervals_SED_1=list(interval_extract(np.unique(projec_ranges_SED_1_lower.tolist()+
+                                                              projec_ranges_SED_1_higher.tolist())))
+
+                project_intervals_SED_2 = list(interval_extract(np.unique(projec_ranges_SED_2_lower.tolist() +
+                                                                          projec_ranges_SED_2_higher.tolist())))
+
+                distance_couples = []
+                for elem_inter_1 in project_intervals_SED_1:
+                    for elem_inter_2 in project_intervals_SED_2:
+                        distance_vals = get_overlap(elem_inter_1, elem_inter_2, distance=True)
+
+                        if distance_vals >= 0:
+                            distance_couples += [0.]
+                        else:
+                            distance_sign = (elem_inter_1[0] - elem_inter_2[0]) / abs(
+                                elem_inter_1[0] - elem_inter_2[0])
+
+                            distance_couples += [distance_sign * abs(distance_vals)]
+
+                absmin_distance_id = np.argmin(abs(np.array(distance_couples)))
+                distance_arr[i_x][i_y] = distance_couples[absmin_distance_id] * (step_v_turb if mode=='v_turb' else step_nh)
+
+    #note: lw=0 is used to remove the borders. The weird implementation of the hatch coloring is necessary
     #because pcolor doesn't have enough arguments
-    hash_1=ax_dist.pcolor(np.repeat(range_v_turb-0.025,len(range_nh)).reshape(len(range_v_turb),len(range_nh)),
-                   np.repeat(range_nh-0.025,len(range_v_turb)).reshape(len(range_v_turb),len(range_nh)).T,
-                   surface_SED_1[:-1, :-1],
-                   cmap='viridis',alpha=1.,hatch='///',lw=0,vmin=0,vmax=1,zorder=10)
+    #this axis is always with either v_turb or nh so the delta is always 1/2*0.05
+    delta_hash_y=0.025
+
+    #this one can also be nR² when not in nR² mode
+    delta_hash_x=0.025 if mode == 'nR²' else 0.005
+
+
+    # try:
+    hash_x = np.repeat(range_x - delta_hash_x, len(range_y)).reshape(len(range_x), len(range_y))
+    hash_y = np.repeat(range_y - delta_hash_y, len(range_x)).reshape(len(range_y), len(range_x)).T
+
+    # breakpoint()
+    hash_1=ax_dist.pcolor(hash_x,
+           hash_y,
+           surface_SED_1[:-1, :-1],
+           cmap='viridis',alpha=1.,hatch='///',lw=0,vmin=0,vmax=1,zorder=10)
+    # except:
+    #     breakpoint()
+
+    # except:
+    #     breakpoint()
 
     hash_1.set_facecolor('none')
     hash_1.set_edgecolor('lightgrey')
 
+    hash_2=ax_dist.pcolor(hash_x,
+           hash_y,
+           surface_SED_2[:-1, :-1],
+           cmap='viridis',alpha=1.,hatch='\\\\\\',lw=0,vmin=0,vmax=1,zorder=10)
 
-    hash_2=ax_dist.pcolor(np.repeat(range_v_turb-0.025,len(range_nh)).reshape(len(range_v_turb),len(range_nh)),
-                   np.repeat(range_nh-0.025,len(range_v_turb)).reshape(len(range_v_turb),len(range_nh)).T,
-                   surface_SED_2[:-1, :-1],
-                   cmap='viridis',alpha=1.,hatch='\\\\\\',lw=0,vmin=0,vmax=1,zorder=10)
+    # hash_2=ax_dist.pcolor(np.repeat(range_x-delta_hash_x,len(range_y)).reshape(len(range_x),len(range_y)),
+    #                np.repeat(range_y-delta_hash_y,len(range_x)).reshape(len(range_x),len(range_y)).T,
+    #                surface_SED_2[:-1, :-1],
+    #                cmap='viridis',alpha=1.,hatch='\\\\\\',lw=0,vmin=0,vmax=1,zorder=10)
 
     hash_2.set_facecolor('none')
     hash_2.set_edgecolor('lightgrey')
 
-    cm_ticks = (np.linspace(np.nanmin(distance_nr2), 0, 6, endpoint=True).tolist() if np.nanmin(distance_nr2)<=0 else [-0.0001])+ \
-               (np.linspace(0, np.nanmax(distance_nr2), 6, endpoint=True).tolist() if np.nanmin(distance_nr2) >= 0 else [0.0001])
-
+    cm_ticks = (np.linspace(np.nanmin(distance_arr), 0, 6, endpoint=True).tolist() if np.nanmin(distance_arr)<=0 else [-0.0001])+ \
+               (np.linspace(0, np.nanmax(distance_arr), 6, endpoint=True).tolist() if np.nanmin(distance_arr) >= 0 else [0.0001])
 
     cm_norm = colors.TwoSlopeNorm(vcenter=0,
-                                  vmin=np.nanmin(distance_nr2) if np.nanmin(distance_nr2)<0 else -0.0001,
-                                  vmax=np.nanmax(distance_nr2) if np.nanmax(distance_nr2)>0 else 0.0001)
+                                  vmin=np.nanmin(distance_arr) if np.nanmin(distance_arr)<0 else
+                                  (-0.0001 if np.nanmax(distance_arr)>0 else -1),
+                                  vmax=np.nanmax(distance_arr) if np.nanmax(distance_arr)>0 else
+                                  (0.0001 if np.nanmin(distance_arr)<0 else 1))
 
-    img=ax_dist.pcolormesh(range_v_turb,range_nh,distance_nr2.T,cmap=cmap_bipolar,norm=cm_norm,zorder=100)
+    img=ax_dist.pcolormesh(range_x,range_y,distance_arr.T,cmap=cmap_bipolar,norm=cm_norm,zorder=100)
 
-    cb=fig_dist.colorbar(img,location='bottom', orientation='horizontal',spacing='proportional',
-                         pad=0.3 if write_names else 0.2,
+    if _ax is None:
+        cb=fig_dist.colorbar(img,location='bottom', orientation='horizontal',spacing='proportional',
+                         pad=0.16 if write_names else 0.16,
                          ticks=cm_ticks)
-    #important to rescale the colorbar properly, otherwise both sides will always be 50/50
-    # ('proportional' in the cb settings isn't really working for twoslopenorm)
-    cb.ax.set_xscale('linear')
+        #important to rescale the colorbar properly, otherwise both sides will always be 50/50
+        # ('proportional' in the cb settings isn't really working for twoslopenorm)
+        cb.ax.set_xscale('linear')
 
-    if write_names:
-        plt.suptitle(r'log$_{10}$nR²$_{' + SED_1.replace('_','\_') + '}$' + ' - log$_{10}$nR²$_{' + SED_2.replace('_','\_') + '}$')
+        if mode == 'nR²':
+            cb.ax.set_title(r'$\Delta$lognR$^{2}$')
+        if mode == 'v_turb':
+            cb.ax.set_title(r'$\Delta$log$_{10}v_{turb}$')
+
+        if mode == 'NH':
+            cb.ax.set_title(r'$\Delta$log$_{10}NH$')
+
+        if write_names:
+            if mode=='nR²':
+                plt.suptitle(r'log$_{10}$nR²$_{' + SED_1.replace('_','\_') + '}$' +
+                             ' - log$_{10}$nR²$_{' + SED_2.replace('_','\_') + '}$')
+            if mode=='v_turb':
+                plt.suptitle(r'log$_{10}v_{turb,' + SED_1.replace('_','\_') + '}$' +
+                             ' - log$_{10}v_{turb,' + SED_2.replace('_','\_') + '}$')
+
+            if mode=='NH':
+                plt.suptitle(r'log$_{10}NH_{' + SED_1.replace('_','\_') + '}$' +
+                             ' - log$_{10}NH_{' + SED_2.replace('_','\_') + '}$')
+
+        else:
+
+            SEDs_arr=np.array(list(SEDs.keys()))
+
+            color_SED_1=np.array(base_cmap)[np.argwhere(SEDs_arr==SED_1)[0]][0]
+            color_SED_2=np.array(base_cmap)[np.argwhere(SEDs_arr==SED_2)[0]][0]
+
+            #automatic text spacing
+            n_delta=(len(color_SED_1)+len(color_SED_2)+3)/100*1.2
+
+            plt.figtext(0.59, 0.24, '(', fontdict={'color':  'black','weight': 'normal','size': 10,})
+            plt.figtext(0.6+len(color_SED_1)*0.1/100, 0.24,
+                        color_SED_1.replace('powderblue','blue').replace('maroon','brown').replace('forestgreen','green'),
+                        fontdict={'color':  color_SED_1,'weight': 'normal','size': 10,})
+            plt.figtext(0.6+len(color_SED_1)*1.5/100, 0.24, '-', fontdict={'color':  'black','weight': 'normal','size': 10,})
+            plt.figtext(0.6++len(color_SED_2)*0.1/100+len(color_SED_1)*1.5/100+0.015, 0.24,
+                        color_SED_2.replace('powderblue','blue').replace('maroon','brown').replace('forestgreen','green'),
+                        fontdict={'color':  color_SED_2,'weight': 'normal','size': 10,})
+            plt.figtext(0.6+(len(color_SED_1)+len(color_SED_2))*1.5/100+0.02, 0.24, ')',
+                        fontdict={'color':  'black','weight': 'normal','size': 10,})
+
+    plt.xlim(range_x[0],range_x[-1])
+    plt.ylim(range_y[0],range_y[-1])
+
+    if _ax is None:
+        return fig_dist
     else:
-        cb.ax.set_title(r'$\Delta$lognR$^{2}$')
-
-        SEDs_arr=np.array(list(SEDs.keys()))
-
-        color_SED_1=np.array(base_cmap)[np.argwhere(SEDs_arr==SED_1)[0]][0]
-        color_SED_2=np.array(base_cmap)[np.argwhere(SEDs_arr==SED_2)[0]][0]
-
-        #automatic text spacing
-        n_delta=(len(color_SED_1)+len(color_SED_2)+3)/100*1.2
-
-        plt.figtext(0.59, 0.24, '(', fontdict={'color':  'black','weight': 'normal','size': 10,})
-        plt.figtext(0.6+len(color_SED_1)*0.1/100, 0.24,
-                    color_SED_1.replace('powderblue','blue').replace('maroon','brown').replace('forestgreen','green'),
-                    fontdict={'color':  color_SED_1,'weight': 'normal','size': 10,})
-        plt.figtext(0.6+len(color_SED_1)*1.5/100, 0.24, '-', fontdict={'color':  'black','weight': 'normal','size': 10,})
-        plt.figtext(0.6++len(color_SED_2)*0.1/100+len(color_SED_1)*1.5/100+0.015, 0.24,
-                    color_SED_2.replace('powderblue','blue').replace('maroon','brown').replace('forestgreen','green'),
-                    fontdict={'color':  color_SED_2,'weight': 'normal','size': 10,})
-        plt.figtext(0.6+(len(color_SED_1)+len(color_SED_2))*1.5/100+0.02, 0.24, ')',
-                    fontdict={'color':  'black','weight': 'normal','size': 10,})
-
-    plt.xlim(range_v_turb[0],range_v_turb[-1])
-    plt.ylim(range_nh[0],range_nh[-1])
-
-    return fig_dist
-
+        return img
 
 #finding all list of SED pairs:
 SED_pairs = [(a, b) for idx, a in enumerate(list_SEDs_disp) for b in list_SEDs_disp[idx + 1:]]
 
-with tab_delta:
-    column_list=st.columns(len(list_SEDs_disp)-1)
+
+def plot_distance_all(list_SEDs_disp,mode='nR²', write_names=False, interpolate_nr2=True):
+
+    n_seds=len(list_SEDs_disp)
+    # finding all list of SED pairs:
+    SED_pairs = [(a, b) for idx, a in enumerate(list_SEDs_disp) for b in list_SEDs_disp[idx + 1:]]
+
+    fig_corner, ax_corner = plt.subplots(n_seds, n_seds, figsize=(10, 8), sharey=True, sharex=True)
+    fig_corner.subplots_adjust(wspace=0)
+    fig_corner.subplots_adjust(hspace=0)
+
+    plot_positions=[[a,b] for idx,a in enumerate(np.arange(n_seds)) for b in np.arange(n_seds)[idx+1:]]
+
+    #inverting it for the axes placement
+    plot_positions_draw=np.array(plot_positions.copy())
+    plot_positions_draw.T[1]=n_seds-1-plot_positions_draw.T[1]
+    plot_positions_draw.T[0]=n_seds-1-plot_positions_draw.T[0]
+
+    plot_positions_draw=plot_positions_draw.tolist()
+
+    img_list=[]
+    glob_vmin=-0.0001
+    glob_vmax=0.0001
+
+    if mode=='nR²':
+
+        fig_corner.text(0.5, 0.04, r'log$_{10}$(v$_{turb}$)', ha='center')
+        fig_corner.text(0.04, 0.5, r'log$_{10}$(NH)', va='center', rotation='vertical')
+
+
+    if mode=='v_turb':
+
+        fig_corner.text(0.5, 0.04, r'log$_{10}$(nR$^2$)', ha='center')
+        fig_corner.text(0.04, 0.5, r'log$_{10}$(NH)', va='center', rotation='vertical')
+
+
+    if mode=='NH':
+        fig_corner.text(0.5, 0.04, r'log$_{10}$(nR$^2$)', ha='center')
+        fig_corner.text(0.04, 0.5, r'log$_{10}$(v_turb)', va='center', rotation='vertical')
+
+
+
+    for i_x in range(n_seds):
+        for i_y in range(n_seds):
+
+            if [i_x,i_y] in plot_positions_draw:
+
+                #a bit weird but works well
+                combi_index_prel=np.argwhere(np.sum(np.array(plot_positions_draw)==[i_x,i_y],1)==2)[0][0]
+
+                plot_positions_true=plot_positions[combi_index_prel]
+
+                breakpoint()
+
+                combi_index=np.argwhere(np.sum(np.array(plot_positions_draw)==plot_positions_true,1)==2)[0][0]
+
+                breakpoint()
+
+                SED_combi_1=SED_pairs[combi_index][0]
+                SED_combi_2=SED_pairs[combi_index][1]
+
+                img=plot_distance(ax_corner[i_x][i_y],SED_combi_1,SED_combi_2,mode=mode,write_names=write_names,
+                              interpolate_nr2=interpolate_nr2,)
+
+                if img.norm.vmin<glob_vmin:
+                    glob_vmin=img.norm.vmin
+                    glob.vmax=img.norm.vmax
+
+                img_list+=[img]
+
+                if i_x==0:
+
+                    '''
+                    Note: the x axis is labeled as the SED 2, the y axis as the SED 1
+                    '''
+
+                    SEDs_arr = np.array(list(SEDs.keys()))
+
+                    color_SED_2 = np.array(base_cmap)[np.argwhere(SEDs_arr == SED_combi_2)[0]][0]
+
+                    if write_names:
+                        label_x_str=SED_combi_2.replace('_', '\_')
+                    else:
+
+                        label_x_str=color_SED_2.replace('powderblue', 'blue').replace('maroon', 'brown').replace(
+                                        'forestgreen', 'green')
+
+                    label_x=ax_corner[i_x][i_y].set_xlabel(label_x_str)
+
+                    label_x.set_color(color_SED_2)
+
+
+                if i_y==0:
+
+                    '''
+                    Note: the y axis is labeled as the SED 2, the y axis as the SED 1
+                    '''
+
+                    SEDs_arr = np.array(list(SEDs.keys()))
+
+                    color_SED_1 = np.array(base_cmap)[np.argwhere(SEDs_arr == SED_combi_2)[0]][0]
+
+                    if write_names:
+                        label_y_str = SED_combi_1.replace('_', '\_')
+                    else:
+
+                        label_y_str = color_SED_1.replace('powderblue', 'blue').replace('maroon', 'brown').replace(
+                            'forestgreen', 'green')
+
+                    label_y = ax_corner[i_x][i_y].set_ylabel(label_y_str)
+
+                    label_y.set_color(color_SED_1)
+
+            else:
+
+                ax_corner[i_x][i_y].remove()
+
+    #climming everything to the extremal bounds
+    for elem_img in img_list:
+        elem_img.norm.vmin=glob_vmin
+        elem_img.norm.vmax=glob_vmax
+
+    #plotting the common elements
+    #one global colorbar
+
+
+    cm_ticks = np.linspace(glob_vmin,0, 6, endpoint=True).tolist() + \
+               np.linspace(0, glob_vmax, 6, endpoint=True).tolist()
+
+
+    cb=fig_corner.colorbar(img_list[0],location='bottom', orientation='horizontal',spacing='proportional',
+                     pad=0.16 if write_names else 0.16,
+                     ticks=cm_ticks)
+    #important to rescale the colorbar properly, otherwise both sides will always be 50/50
+    # ('proportional' in the cb settings isn't really working for twoslopenorm)
+    cb.ax.set_xscale('linear')
+
+    if mode == 'nR²':
+        cb.ax.set_title(r'$\Delta$lognR$^{2}$')
+    if mode == 'v_turb':
+        cb.ax.set_title(r'$\Delta$log$_{10}v_{turb}$')
+
+    if mode == 'NH':
+        cb.ax.set_title(r'$\Delta$log$_{10}NH$')
+
+    return fig_corner
 
 if plot_distance_SEDs:
 
-    for couple in SED_pairs:
+    if combine_plot_distance:
+        plot_distance_glob=plot_distance_all(list_SEDs_disp,mode=plot_distance_dim,write_names=plot_distance_names,
+                                             interpolate_nr2=interpolate_nr2)
+        with tab_delta:
+            st.pyplot(plot_distance_glob)
+    else:
 
-        plot_couple=plot_distance(couple[0],couple[1],write_names=plot_distance_names)
+        with tab_delta:
+            column_list = st.columns(len(list_SEDs_disp) - 1)
 
-        with column_list[np.argwhere(np.array(list_SEDs_disp)==couple[0])[0][0]]:
-            st.pyplot(plot_couple)
+        for couple in SED_pairs:
+
+            #note: the none is here for the ax argument that must be first to avoid hashing issues with caching
+            plot_couple=plot_distance(None,couple[0],couple[1],mode=plot_distance_dim,write_names=plot_distance_names,
+                                      interpolate_nr2=interpolate_nr2)
+
+            with column_list[np.argwhere(np.array(list_SEDs_disp)==couple[0])[0][0]]:
+                st.pyplot(plot_couple)
 
 def plot_3d_surface(planes, color='lightblue', volume_number=1, plot_points=False,
                     legendgroup='',i_SED=-1,draw_surface=True,full_planes=None,under_sampling_v_turb=1,under_sampling_nh=1,
@@ -1332,7 +1750,11 @@ def make_3D_figure(SEDs_disp, SEDs_surface, cmap, plot_points=False, under_sampl
         height=1000
     )
 
-    fig.update_layout(scene_camera=camera,scene_dragmode='orbit')
+    if setup_camera:
+        fig.update_layout(scene_camera=camera,scene_dragmode='orbit')
+    else:
+        fig.update_layout(scene_camera=camera)
+
     # fig_3D.show()
     # fig_3D.show()
 

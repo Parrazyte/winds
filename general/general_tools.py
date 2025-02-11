@@ -10,9 +10,53 @@ import numpy as np
 from matplotlib.ticker import Locator
 import time
 import os
-
+import astropy.units as u
 import random
 import glob
+
+h_cgs = 6.624e-27
+eV2erg = 1.6021773E-12
+erg2eV = 1.0/eV2erg
+Ryd2eV = 13.605693
+
+compton_thick_thresh=1.5e24
+
+# ! light speed in Km/s unit
+c_Km = 2.99792e5
+# ! light speed in cm/s unit
+c_cgs = 2.99792e10
+sigma_thomson_cgs = 6.6525e-25
+PI = 3.14159265
+
+
+def R_g(M_BH_sol):
+
+
+    c_SI = 2.99792e8
+    G_SI = 6.674e-11
+    Msol_SI = 1.98892e30
+
+    return 2*G_SI*M_BH_sol*Msol_SI/c_SI**2/1e3*u.km
+
+def dist_factor(d_kpc):
+    return 4*np.pi*(d_kpc*1e3*3.086e18)**2*u.cm*u.cm
+def norm_to_Rin(diskbb_norm,D_kpc=8,theta=45,phys=False,kappa=1.7):
+
+    '''
+    If phys is set to True, returns the physical radius instead using the correction of the appendix in
+    https://articles.adsabs.harvard.edu/pdf/1998PASJ...50..667K
+
+    '''
+
+    r_in=(diskbb_norm/np.cos(theta*np.pi/180))**0.5*D_kpc/10 * u.km
+
+    #from https://heasarc.gsfc.nasa.gov/xanadu/xspec/manual/node165.html (see Eq 3. Careful kappa is missing in appendix)
+    if phys:
+        R_in_factor=kappa**2*(3/7)**(1/2)*(6/7)**3
+        val_fin=r_in*R_in_factor
+    else:
+        val_fin=r_in
+    return val_fin
 
 # def ravel_ragged_test(array,mode=None):
 #

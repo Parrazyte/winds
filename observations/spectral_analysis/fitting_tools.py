@@ -45,7 +45,10 @@ lines_std={         #don't change the first 8, there are explicit calls in the c
                   'FeKa0em':r'Fe K$\alpha$',
                   'FeKb0em':r'Fe K$\beta$',
                   'calNICERSiem':r'Nicer Cal',
-                  'SiKa14abs': r'SiXIV K$\alpha$',
+
+                    'NeKa10abs': r'NeX K$\alpha$',
+
+                    'SiKa14abs': r'SiXIV K$\alpha$',
                   'SKa16abs':r'SXVI K$\alpha$',
                   'CaKa20abs':r'CaXX K$\alpha$',
                   # 'CrKa23abs':r'CrXXIII K$\alpha$',
@@ -115,6 +118,8 @@ lines_e_dict={
                    'FeKa0em':[6.400,-10000,10000],
                    'FeKb0em':[7.06,-10000,10000],
                    'calNICERSiem':[1.74],
+
+                  'NeKa10abs':[1.02180,-3000,3000],
                   #energy from http://www.atomdb.org/Webguide/transition_information.php?lower=1s&upper=2p&z0=14&z1=13
                   'SiKa14abs':[2.005494,-3000,3000],
                   'SKa16abs':[2.6215,-3000,3000],
@@ -218,6 +223,8 @@ lines_w_dict={
                   'FeKa26em':[1e-2,0.,0.05],
                   'calNICERSiem':[0.1,0.05,0.2],
                   'SiKa14abs': [1e-2,0.,0.05],
+
+                'NeKa10abs': [1e-2,0.,0.05],
                 'SKa16abs': [1e-2,0.,0.05],
                 'CaKa20abs': [1e-2,0.,0.05],
                 'CrKa23abs': [1e-2, 0., 0.05],

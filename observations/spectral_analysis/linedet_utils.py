@@ -16,7 +16,7 @@ from general_tools import ravel_ragged,MinorSymLogLocator
 from xspec import AllData,Plot,AllModels,Fit,Xset
 
 from xspec_config_multisp import xcolors_grp,addcomp,store_plot,allfreeze,xscorpeon,\
-                                model_load,xspec_globcomps
+                                model_load,xspec_globcomps,allmodel_data
 from fitting_tools import lines_std,lines_e_dict, lines_std_names
 
 #bipolar colormap from a custom library (https://github.com/endolith/bipolar-colormap)
@@ -31,6 +31,49 @@ from shapely.geometry import Polygon,Point
 #mask propagation for the peak detection
 from scipy.ndimage import binary_dilation
 import dill
+import time
+
+def narrow_line_cycle(low_e,high_e,e_step=2e-2,plot_suffix='',baseload=None,
+                      e_sat_low_indiv='auto',force_ylog_ratio=False,
+                      ratio_bounds=None,title=True):
+
+    '''
+    Simple wrapper to compute a line search and make an associated plot
+
+    baseload should be an XCM file with both the file and model
+
+    e_sat_low_indiv here assumes that a RESOLVE and EXTEND spectra are loaded
+
+    '''
+
+    prev_chatter=Xset.chatter
+    Xset.chatter=1
+
+    if type(e_sat_low_indiv)==str and e_sat_low_indiv=='auto':
+        ngroups=AllData.nGroups
+        Plot('data')
+        e_sat_low_indiv_use=[Plot.x(i_grp)[0] for i_grp in range(1,ngroups+1)]
+
+    else:
+        e_sat_low_indiv_use=e_sat_low_indiv
+
+
+    mod_ls=allmodel_data()
+    narrow_out_val=narrow_line_search(mod_ls,'mod_ls',e_sat_low_indiv_use,[low_e,high_e,e_step],
+                                      line_cont_range=[low_e,high_e],scorpeon=False)
+
+    if baseload is not None:
+        baseload_str=baseload[:baseload.rfind('.')]
+    else:
+        baseload_str=str(time.time()).split('.')[0]
+    with open(baseload_str+'_narrow_out_'+str(low_e)+'_'+str(high_e)+'.dill','wb+') as f:
+        dill.dump(narrow_out_val,f)
+
+    plot_line_search(narrow_out_val, './', 'XRISM', suffix='', save=True,
+                     epoch_observ=[plot_suffix], format='pdf',
+                     force_ylog_ratio=force_ylog_ratio,ratio_bounds=ratio_bounds,title=title)
+
+    Xset.chatter=prev_chatter
 
 def narrow_line_search(data_cont, suffix,e_sat_low_indiv,line_search_e=[4,10,0.05],line_search_norm=[0.01,10,500],
                        peak_thresh=9.21,peak_clean=False,line_cont_range=[4,10],trig_interval=[6.5,9.1],
@@ -893,7 +936,7 @@ def coltour_chi2map(fig, axe, chi_dict, title='', combined=False, ax_bar=None, n
     chi_arr_plot = chi_map
 
     #for the norm
-    chi_arr_plot_full=chi_map_full
+    chi_arr_plot_full=chi_map_full.copy()
     
     # swapping the sign of the delchis for the absorption and emission lines in order to display them
     # with both parts of the cmap + using a square root norm for easier visualisation
@@ -905,7 +948,7 @@ def coltour_chi2map(fig, axe, chi_dict, title='', combined=False, ax_bar=None, n
     for i in range(len(chi_arr_plot_full)):
         chi_arr_plot_full[i] = np.concatenate((-(chi_arr_plot_full[i][:int(len(chi_arr_plot_full[i]) / 2)]) ** (1 / 2),
                                           (chi_arr_plot_full[i][int(len(chi_arr_plot_full[i]) / 2):]) ** (1 / 2)))
-        
+
     if np.max(chi_arr_plot) >= 1e3 or (np.max(chi_arr_plot_full) >= 1e3 and not local_chi_bounds):
         chi_arr_plot = chi_arr_plot ** (1 / 2)
         chi_arr_plot_full=chi_arr_plot_full **(1/2)
@@ -1013,12 +1056,12 @@ def coltour_chi2map(fig, axe, chi_dict, title='', combined=False, ax_bar=None, n
 
         if show_peak_pos:
             #offset of one index (aka 1 line_search_e[2]) because of the internal offset in the values
-            axe.scatter(point_coords[0]+line_search_e[2], point_coords[1], marker='X', color='black',
+            axe.scatter(np.array(point_coords[0])+line_search_e[2], point_coords[1], marker='X', color='black',
                     label='peak' if elem_point[0] == 0 else None)
 
         if show_peak_width:
             #offset of one index (aka 1 line_search_e[2]) because of the internal offset in the values
-            axe.plot(segment_coords[0]+line_search_e[2], segment_coords[1], color='black',
+            axe.plot(np.array(segment_coords[0])+line_search_e[2], segment_coords[1], color='black',
                  label='max peak structure width' if elem_point[0] == 0 else None)
     # except:
     #     pass

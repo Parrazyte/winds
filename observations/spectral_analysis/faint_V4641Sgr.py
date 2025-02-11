@@ -36,7 +36,10 @@ Xset.restore('fit.xcm')
 Fit.statMethod='cstat'
 
 
-AllData.ignore('**-1.5 10.-**')
+#AllData.ignore('**-1.5 10.-**')
+
+AllData.ignore('0.9-11')
+
 
 AllData.ignore('2.55-2.65')
 AllData.ignore('3.3-3.4')
@@ -146,4 +149,25 @@ fig=plt.gca().get_figure()
 fig.set_size_inches(10,5)
 plt.subplots_adjust(bottom=0.1)
 
+'''
+
+'''
+for i in range(1,10):
+    if i%2==1:
+        AllData(i).ignore('**-1.5 10.-**')
+    else:
+        AllData(i).ignore('**-0.5 10.-**')
+
+    AllData.ignore('2.55-2.65')
+    AllData.ignore('3.3-3.4')
+
+    AllData.ignore('4.05-4.15')
+
+    AllData.ignore('5.65-5.75')
+
+    AllData.ignore('6.35-6.45')
+
+    AllData.ignore('6.6-6.8')
+
+    AllData.ignore('6.9-7.15')
 '''

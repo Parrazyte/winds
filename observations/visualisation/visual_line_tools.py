@@ -1394,6 +1394,9 @@ def plot_lightcurve(dict_linevis,ctl_maxi_df,ctl_maxi_simbad,name,ctl_bat_df,ctl
     tot_dates_list+=[] if maxi_lc_df is None else num_maxi_dates.tolist()
     tot_dates_list+=[] if rxte_lc_df is None else num_rxte_dates.tolist()
     tot_dates_list+=[] if bat_lc_df is None else  num_bat_dates.tolist()
+
+    # and offsetting if they're too close to the bounds because otherwise the ticks can be missplaced
+
     if zoom_lc:
 
         time_range=min(mdates.date2num(slider_date[1]),max(tot_dates_list))-max(mdates.date2num(slider_date[0]),min(tot_dates_list))
@@ -1411,46 +1414,48 @@ def plot_lightcurve(dict_linevis,ctl_maxi_df,ctl_maxi_simbad,name,ctl_bat_df,ctl
         if display_hid_interval:
             plt.axvspan(mdates.date2num(slider_date[0]),mdates.date2num(slider_date[1]),0,1,color='grey',alpha=0.3,
                         label='HID interval')
-        
-    #creating an appropriate date axis
-    #manually readjusting for small durations because the AutoDateLocator doesn't work well
-    if time_range<10:
-        date_format=mdates.DateFormatter('%Y-%m-%d %H:%M:%S')
-    elif time_range<365:
-        date_format=mdates.DateFormatter('%Y-%m-%d')
+
+    if time_range<=0:
+        no_monit_points=True
     else:
-        date_format=mdates.DateFormatter('%Y-%m')
-    # else:
-    #     date_format=mdates.AutoDateFormatter(mdates.AutoDateLocator())
+        #creating an appropriate date axis
+        #manually readjusting for small durations because the AutoDateLocator doesn't work well
+        if time_range<10:
+            date_format=mdates.DateFormatter('%Y-%m-%d %H:%M:%S')
+        elif time_range<365:
+            date_format=mdates.DateFormatter('%Y-%m-%d')
+        else:
+            date_format=mdates.DateFormatter('%Y-%m')
+        # else:
+        #     date_format=mdates.AutoDateFormatter(mdates.AutoDateLocator())
 
-    ax_lc.xaxis.set_major_formatter(date_format)
+        ax_lc.xaxis.set_major_formatter(date_format)
 
-    #forcing 8 xticks along the ax
-    ax_lc.set_xlim(ax_lc.get_xlim())
+        #forcing 8 xticks along the ax
+        ax_lc.set_xlim(ax_lc.get_xlim())
 
-    #putting an interval in minutes (to avoid imprecisions when zooming)
-    date_tick_inter=int((ax_lc.get_xlim()[1]-ax_lc.get_xlim()[0])*24*60/10)
+        #putting an interval in minutes (to avoid imprecisions when zooming)
+        date_tick_inter=int((ax_lc.get_xlim()[1]-ax_lc.get_xlim()[0])*24*60/10)
 
-    #above 10 days ticks
-    if date_tick_inter>60*24*10:
-        ax_lc.xaxis.set_major_locator(mdates.DayLocator(interval=int(date_tick_inter/(24*60))))
-    #above 1 day ticks
-    elif date_tick_inter>60*24:
-        ax_lc.xaxis.set_major_locator(mdates.HourLocator(interval=int(date_tick_inter/60)))
-    else:
-        ax_lc.xaxis.set_major_locator(mdates.MinuteLocator(interval=date_tick_inter))
+        #above 10 days ticks
+        if date_tick_inter>60*24*10:
+            ax_lc.xaxis.set_major_locator(mdates.DayLocator(interval=int(date_tick_inter/(24*60))))
+        #above 1 day ticks
+        elif date_tick_inter>60*24:
+            ax_lc.xaxis.set_major_locator(mdates.HourLocator(interval=int(date_tick_inter/60)))
+        else:
+            ax_lc.xaxis.set_major_locator(mdates.MinuteLocator(interval=date_tick_inter))
 
-    #and offsetting if they're too close to the bounds because otherwise the ticks can be missplaced
-    if ax_lc.get_xticks()[0]-ax_lc.get_xlim()[0]>date_tick_inter/(24*60)*3/4:
-        ax_lc.set_xticks(ax_lc.get_xticks()-date_tick_inter/(2*24*60))
+        if ax_lc.get_xticks()[0]-ax_lc.get_xlim()[0]>date_tick_inter/(24*60)*3/4:
+            ax_lc.set_xticks(ax_lc.get_xticks()-date_tick_inter/(2*24*60))
 
-    if ax_lc.get_xticks()[0]-ax_lc.get_xlim()[0]<date_tick_inter/(24*60)*1/4:
-        ax_lc.set_xticks(ax_lc.get_xticks()+date_tick_inter/(2*24*60))
+        if ax_lc.get_xticks()[0]-ax_lc.get_xlim()[0]<date_tick_inter/(24*60)*1/4:
+            ax_lc.set_xticks(ax_lc.get_xticks()+date_tick_inter/(2*24*60))
 
-    # ax_lc.set_xticks(ax_lc.get_xticks()[::2])
-                    
-    for label in ax_lc.get_xticklabels(which='major'):
-        label.set(rotation=0 if date_tick_inter>60*24*10 else 45, horizontalalignment='center')
+        # ax_lc.set_xticks(ax_lc.get_xticks()[::2])
+
+        for label in ax_lc.get_xticklabels(which='major'):
+            label.set(rotation=0 if date_tick_inter>60*24*10 else 45, horizontalalignment='center')
 
         #prettier but takes too much space
         # label.set(rotation=45, horizontalalignment='right')

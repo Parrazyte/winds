@@ -826,6 +826,44 @@ class scorpeon_manager:
             except:
                 pass
 
+        self.nxb_frozen_states=np.repeat(None,AllData.nGroups)
+        self.sky_frozen_states=np.repeat(None,AllData.nGroups)
+
+        #saving the initial freeze states if the saves have been reloaded
+        if self.bgload_paths is not None:
+
+            for i_grp in range(AllData.nGroups):
+
+                if self.bgload_paths[i_grp] is None:
+                    continue
+
+                try:
+                    mod_nxb=AllModels(i_grp+1,modName='nxb')
+
+                    nxb_frozen_states_grp=np.repeat(None,mod_nxb.nParameters)
+
+                    for i_par in range(mod_nxb.nParameters):
+
+                        nxb_frozen_states_grp[i_par]=mod_nxb(i_par+1).frozen
+
+                    self.nxb_frozen_states[i_grp]=nxb_frozen_states_grp
+                except:
+                    pass
+
+                try:
+                    mod_sky=AllModels(i_grp+1,modName='sky')
+
+                    sky_frozen_states_grp=np.repeat(None,mod_sky.nParameters)
+
+                    for i_par in range(mod_sky.nParameters):
+
+                        sky_frozen_states_grp[i_par]=mod_sky(i_par+1).frozen
+
+                    self.sky_frozen_states[i_grp]=sky_frozen_states_grp
+
+                except:
+                    pass
+
         #loading all of the saves
         if scorpeon_save is not None:
             try:
@@ -862,13 +900,54 @@ class scorpeon_manager:
         AllModels.clear()
         mod_save.load(load_scorpeon=False)
 
-    # def freeze(self):
-    #     self.bgload_paths=None
-    #     self.load(frozen=True)
+    def freeze(self):
+
+        #freezing the model if asked to
+        for i_grp in range(AllData.nGroups):
+
+            try:
+                mod_nxb=AllModels(i_grp+1,modName='nxb')
+
+                for i_par in range(mod_nxb.nParameters):
+
+                    mod_nxb(i_par+1).frozen=True
+            except:
+                pass
+
+            try:
+                mod_sky=AllModels(i_grp+1,modName='sky')
+
+                for i_par in range(mod_sky.nParameters):
+
+                    mod_sky(i_par+1).frozen=True
+            except:
+                pass
 
     def unfreeze(self):
-        self.bgload_paths=None
-        self.load(frozen=False)
+        # self.bgload_paths=None
+        # self.load(frozen=False)
+
+        #unfreezing the model if asked to, using the freeze states
+        for i_grp in range(AllData.nGroups):
+
+            try:
+                mod_nxb=AllModels(i_grp+1,modName='nxb')
+
+                for i_par in range(mod_nxb.nParameters):
+
+                    mod_nxb(i_par+1).frozen=self.nxb_frozen_states[i_grp][i_par]
+            except:
+                pass
+
+            try:
+                mod_sky=AllModels(i_grp+1,modName='sky')
+
+                for i_par in range(mod_sky.nParameters):
+
+                    mod_sky(i_par+1).frozen=self.sky_frozen_states[i_grp][i_par]
+            except:
+                pass
+
 
 class scorpeon_data:
 
@@ -2673,7 +2752,7 @@ def delcomp(compname,modclass=AllModels,give_ndel=False):
     else:
         return new_models
 
-def par_error(group,par,n_round=3):
+def par_error(group,par,n_round=3,latex=False,mult=1):
 
     '''
     returns an array with the error of the chosen parameter
@@ -2681,17 +2760,37 @@ def par_error(group,par,n_round=3):
     n_round chooses the rounding of the returned elements
     if set to auto, uses 1e-3 times the first digit as a rounding reference
 
+    latex:
+        if True, returns a formated string for latex
+
+    mult:
+        multiplies the quantities by a given amount before truncating and returning them
     '''
     val_arr=np.array([AllModels(group)(par).values[0],
               0 if AllModels(group)(par).error[0]==0 else (AllModels(group)(par).values[0] - AllModels(group)(par).error[0]),
                       0 if AllModels(group)(par).error[1] == 0 else
                       AllModels(group)(par).error[1] - AllModels(group)(par).values[0]])
 
+    if mult!=1:
+        val_arr*=mult
+
     if n_round is not None:
 
-        return np.array([('%.'+str(n_round)+'e')%(elem) for elem in val_arr],dtype=float)
+        result_val=np.repeat(np.nan,3)
+        result_val[0]=('%.'+str(n_round)+'e')%(val_arr[0])
+        result_val[1]=('%.'+str(n_round)+'e')%(result_val[0]-float(('%.'+str(n_round)+'e')%(val_arr[0]-val_arr[1])))
+        result_val[2]=('%.'+str(n_round)+'e')%(float(('%.'+str(n_round)+'e')%(val_arr[0]+val_arr[2]))-result_val[0])
+
     else:
-        return val_arr
+        result_val=val_arr
+
+    if latex:
+        result_val_latex='$'+str(result_val[0])+('\pm '+str(result_val[1]) if result_val[1]==result_val[2] else
+                                            '_{-'+str(result_val[1])+'}^{+'+str(result_val[2])+'}')+'$'
+
+        return result_val_latex
+    else:
+        return result_val
 
 def display_mod_errors(n_round=2):
     '''

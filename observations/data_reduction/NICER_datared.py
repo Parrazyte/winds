@@ -110,7 +110,7 @@ ap.add_argument('-parallel',help='number of processors for parallel directories'
 
 #global choices
 ap.add_argument("-a","--action",nargs='?',help='Give which action(s) to proceed,separated by comas.',
-                default = 'fc,1,gti,fs,l,g,m,ml', type = str)
+                default = 'l,ml', type = str)
 #default: fc,1,gti,fs,l,g,m,ml,c
 
 #note: should be kept to true for most complicated tasks
@@ -227,7 +227,7 @@ ap.add_argument('-lc_bin_list',nargs=1,
 
 # lc_bands_list_det=['1-2','2-3','3-4','4-5','5-6','6-7','7-8','8-9','9-10']
 
-lc_bands_list_det=['1-3']
+lc_bands_list_det=['1-3','0.3-10']
 ap.add_argument('-lc_bands_str',nargs=1,help='Gives the list of bands to create lightcurves from',
                 default='3-10'+','+','.join(lc_bands_list_det),type=str)
 ap.add_argument('-hr_bands_str',nargs=1,help='Gives the list of bands to create hrsfrom',default='6-10/3-6',type=str)

@@ -32,6 +32,9 @@ def sp_anal(obs_path,mod='thcont',baseload=False,scorpeon=True,overwrite=False):
     if baseload:
         Xset.restore(obs_path)
         obs=AllData(1).fileName
+
+        AllModels.clear()
+
     else:
         AllData('1:1 '+obs_path)
         obs=obs_path
@@ -162,13 +165,13 @@ def NICER_run_all_sp(sort=False,reverse=False,mod='thcont'):
     for elem_sp in sp_list:
         sp_anal(elem_sp,mod=mod)
 
-def evol_plots(sp_infos_path_22,sp_infos_path_25,lc_infos_path_22,lc_infos_path_25):
+def evol_plots(sp_infos_path_22,sp_infos_path_25,lc_infos_path_22,lc_infos_path_25,path_BAT_lc):
     sp_infos_22_csv=pd.read_csv(sp_infos_path_22,sep="\t")
     sp_infos_25_csv=pd.read_csv(sp_infos_path_25,sep="\t")
 
     lc_infos_22_csv=pd.read_csv(lc_infos_path_22,sep="\t")
     lc_infos_25_csv=pd.read_csv(lc_infos_path_25,sep="\t")
-    
+
     import matplotlib.dates as mdates
 
 
@@ -225,7 +228,7 @@ def evol_plots(sp_infos_path_22,sp_infos_path_25,lc_infos_path_22,lc_infos_path_
     ax_lc_flux.set_yscale('log')
     ax_lc_HR.set_yscale('log')
 
-    date_offset_22_25=(Time('2025-02-13')-Time('2022-03-04')).value-5
+    date_offset_22_25=(Time('2025-02-25')-Time('2022-03-04')).value+3
 
     #add swift 22 point
     #add different markers for swift vs NICER
@@ -237,7 +240,7 @@ def evol_plots(sp_infos_path_22,sp_infos_path_25,lc_infos_path_22,lc_infos_path_
 
     secax_flux = ax_lc_flux.secondary_xaxis('top',functions=(func_date_22_to_25,func_date_25_to_22))
     secax_HR = ax_lc_HR.secondary_xaxis('top',functions=(func_date_22_to_25,func_date_25_to_22))
-    secax_RMS = ax_lc_HR.secondary_xaxis('top',functions=(func_date_22_to_25,func_date_25_to_22))
+    secax_RMS = ax_lc_RMS.secondary_xaxis('top',functions=(func_date_22_to_25,func_date_25_to_22))
 
     ax_lc_flux.xaxis.set_label('2025 observation dates')
     ax_lc_HR.xaxis.set_label('2025 observation dates')
@@ -280,6 +283,7 @@ def evol_plots(sp_infos_path_22,sp_infos_path_25,lc_infos_path_22,lc_infos_path_
     ax_lc_RMS.spines['top'].set_color('forestgreen')
     secax_RMS.xaxis.label.set_color('forestgreen')
     secax_RMS.tick_params(axis='x', colors='forestgreen')
+
     secax_RMS.xaxis.set_major_formatter(date_format)
     ax_lc_RMS.xaxis.set_minor_locator(MultipleLocator(1))
     secax_RMS.xaxis.set_minor_locator(MultipleLocator(1))
@@ -364,6 +368,84 @@ def evol_plots(sp_infos_path_22,sp_infos_path_25,lc_infos_path_22,lc_infos_path_
     ax_lc_HR.legend()
     ax_lc_RMS.legend()
 
+    fig_lc_BAT, ax_lc_BAT = plt.subplots(figsize=(14, 6))
+    ax_lc_BAT.xaxis.set_major_formatter(mdates.DateFormatter('%Y-%m-%d'))
+    ax_lc_BAT.xaxis.set_label('2025 observation dates')
+    ax_lc_BAT.set_ylabel('BAT count rate (15-50 keV)')
+    # ax_lc_BAT.spines['top'].set_color('forestgreen')
+    # secax_BAT.xaxis.label.set_color('forestgreen')
+    # secax_BAT.tick_params(axis='x', colors='forestgreen')
+    # secax_BAT.xaxis.set_major_formatter(date_format)
+    ax_lc_BAT.xaxis.set_minor_locator(MultipleLocator(1))
+    # secax_BAT.xaxis.set_minor_locator(MultipleLocator(1))
+    ax_lc_BAT.xaxis.set_tick_params(width=5)
+    # secax_BAT.xaxis.set_tick_params(width=5)
+
+    lc_BAT_infos = pd.read_csv(path_BAT_lc, delim_whitespace=True, skiprows=4, header=0)
+
+    mdates_BAT=mdates.date2num(Time(lc_BAT_infos['TIME'].values,format='mjd').isot)
+
+    range_BAT_2007 = [54225, 54322]
+    range_BAT_2011 = [55530, 55652]
+    range_BAT_2016 = [57384, 57662]
+    range_BAT_2022 = [59557, 59704]
+    #range_BAT_2022 = [59601, 59884]
+
+    range_BAT_2025 = [60680, 70000]
+
+    mask_BAT_2007=(lc_BAT_infos['TIME']>=range_BAT_2007[0]).values & (lc_BAT_infos['TIME']<=range_BAT_2007[1]).values
+    mask_BAT_2011=(lc_BAT_infos['TIME']>=range_BAT_2011[0]).values & (lc_BAT_infos['TIME']<=range_BAT_2011[1]).values
+    mask_BAT_2016=(lc_BAT_infos['TIME']>=range_BAT_2016[0]).values & (lc_BAT_infos['TIME']<=range_BAT_2016[1]).values
+    mask_BAT_2022=(lc_BAT_infos['TIME']>=range_BAT_2022[0]).values & (lc_BAT_infos['TIME']<=range_BAT_2022[1]).values
+    mask_BAT_2025=(lc_BAT_infos['TIME']>=range_BAT_2025[0]).values & (lc_BAT_infos['TIME']<=range_BAT_2025[1]).values
+
+    ax_lc_BAT.errorbar(mdates_BAT[mask_BAT_2007]-mdates_BAT[mask_BAT_2007][0]+mdates_BAT[mask_BAT_2025][0]+0.5,
+                       lc_BAT_infos['RATE'][mask_BAT_2007],xerr=0.5,alpha=0.5,
+                       yerr=lc_BAT_infos['ERROR'][mask_BAT_2007],
+                  marker='x', ls='',color='blue',label='2007 evolution')
+    ax_lc_BAT.errorbar(mdates_BAT[mask_BAT_2011]-mdates_BAT[mask_BAT_2011][0]+mdates_BAT[mask_BAT_2025][0]+0.5,
+                       lc_BAT_infos['RATE'][mask_BAT_2011],xerr=0.5,alpha=0.5,
+                       yerr=lc_BAT_infos['ERROR'][mask_BAT_2011],
+                  marker='x', ls='',color='purple',label='2011 evolution')
+    ax_lc_BAT.errorbar(mdates_BAT[mask_BAT_2016]-mdates_BAT[mask_BAT_2016][0]+mdates_BAT[mask_BAT_2025][0]+0.5,
+                       lc_BAT_infos['RATE'][mask_BAT_2016],xerr=0.5,alpha=0.5,
+                       yerr=lc_BAT_infos['ERROR'][mask_BAT_2016],
+                  marker='x', ls='',color='red',label='2016 evolution')
+    ax_lc_BAT.errorbar(mdates_BAT[mask_BAT_2022]-mdates_BAT[mask_BAT_2022][0]+mdates_BAT[mask_BAT_2025][0]+0.5-17,
+                       lc_BAT_infos['RATE'][mask_BAT_2022],xerr=0.5,alpha=0.5,
+                       yerr=lc_BAT_infos['ERROR'][mask_BAT_2022],
+                  marker='x', ls='',color='orange',label='2022 evolution')
+    ax_lc_BAT.errorbar(mdates_BAT[mask_BAT_2025]+0.5,
+                       lc_BAT_infos['RATE'][mask_BAT_2025],xerr=0.5,alpha=0.5,
+                       yerr=lc_BAT_infos['ERROR'][mask_BAT_2025],
+                  marker='x', ls='',color='green',label='2025 evolution')
+
+    ax_lc_BAT.axvline(mdates.date2num([Time(54301,format='mjd').isot])
+                      -mdates_BAT[mask_BAT_2007][0]+mdates_BAT[mask_BAT_2025][0]+0.5,
+                      color='blue',alpha=0.5,zorder=-1,lw=2,ls='--',
+                      label='2006 state transition')
+
+    ax_lc_BAT.axvline(mdates.date2num([Time(55612,format='mjd').isot])
+                      -mdates_BAT[mask_BAT_2011][0]+mdates_BAT[mask_BAT_2025][0]+0.5,
+                      color='purple',alpha=0.5,zorder=-1,lw=2,ls='--',
+                      label='2011 state transition')
+
+    ax_lc_BAT.axvline(mdates.date2num([Time(57470,format='mjd').isot])
+                      -mdates_BAT[mask_BAT_2016][0]+mdates_BAT[mask_BAT_2025][0]+0.5,
+                      color='red',alpha=0.5,zorder=-1,lw=2,ls='--',
+                      label='2016 state transition')
+
+    ax_lc_BAT.axvline(mdates.date2num([Time(59659,format='mjd').isot])
+                      -mdates_BAT[mask_BAT_2022][0]+mdates_BAT[mask_BAT_2025][0]+0.5-17,
+                      color='orange',alpha=0.5,zorder=-1,lw=2,ls='--',
+                      label='2022 state transition')
+
+    ax_lc_BAT.set_xlim(mdates_BAT[mask_BAT_2025][0],mdates.date2num(['2025-05-01']))
+
+    ax_lc_BAT.set_ylim(0.,0.035)
+    fig_lc_BAT.legend()
+
+
     # fig_HID,ax_HID=plt.subplots(1,figsize=(8,8))
     #
     # ax_HID.set_xlabel('')
@@ -382,8 +464,9 @@ def evol_plots(sp_infos_path_22,sp_infos_path_25,lc_infos_path_22,lc_infos_path_
 def standard_plots(path_22='/media/parrama/crucial_SSD/Observ/BHLMXB/NICER/IGRJ17091/visu/infos_fit_22_NICER_Swift.txt',
                    path_25='/media/parrama/crucial_SSD/Observ/BHLMXB/Swift/Sample/IGRJ17091/infos_fit_25_rise_glob.txt',
                    path_lc_22='/media/parrama/crucial_SSD/Observ/BHLMXB/NICER/IGRJ17091/2022/obsid/lcbatch/lc_a/infos_var.txt',
-                   path_lc_25='/media/parrama/crucial_SSD/Observ/BHLMXB/Swift/Sample/IGRJ17091/2025-ToO/timing/infos_fit_timing.txt'):
-    evol_plots(path_22,path_25,path_lc_22,path_lc_25)
+                   path_lc_25='/media/parrama/crucial_SSD/Observ/BHLMXB/Swift/Sample/IGRJ17091/2025-ToO/timing/infos_fit_timing.txt',
+                   path_BAT_lc='/media/parrama/crucial_SSD/Observ/BHLMXB/Swift/Sample/IGRJ17091/IGRJ17091-3624_lc_BAT.txt'):
+    evol_plots(path_22,path_25,path_lc_22,path_lc_25,path_BAT_lc)
 
 def lc_anal(lc_path):
 
@@ -446,3 +529,10 @@ def compute_RMS(lc_path):
     lc = Lightcurve(lc_fits[1].data['TIME'], lc_fits[1].data['RATE'], err=lc_fits[1].data['ERROR'])
 
     return excess_variance(lc)
+
+from stingray import Powerspectrum
+
+plop=Powerspectrum(data=None)
+from stingray import fourier
+
+

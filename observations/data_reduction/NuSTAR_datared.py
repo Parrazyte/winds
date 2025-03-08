@@ -16,7 +16,6 @@ import threading
 import time
 from tee import StdoutTee, StderrTee
 import shutil
-import warnings
 import re
 import numpy as np
 import matplotlib as mpl
@@ -35,7 +34,6 @@ plt.ioff()
 # astro imports
 from astropy.time import Time,TimeDelta
 from astropy.io import fits
-from astroquery.simbad import Simbad
 from mpdaf.obj import sexa2deg, Image
 from mpdaf.obj import WCS as mpdaf_WCS
 from astropy.wcs import WCS as astroWCS
@@ -57,7 +55,7 @@ from rasterio.features import rasterize
 # shape merging
 from scipy.ndimage import binary_dilation
 
-from general_tools import file_edit, ravel_ragged,MinorSymLogLocator,interval_extract,str_orbit
+from general_tools import file_edit, ravel_ragged,MinorSymLogLocator,interval_extract,str_orbit,source_catal
 
 """
 Created on 09-11-2023
@@ -132,8 +130,9 @@ ap.add_argument('-caldbinit_init_alias', help="name of the caldbinit initialisat
 
 '''region computation'''
 
-ap.add_argument('-use_file_coords', nargs=1,
-                help='Allows to extract regions when Simbad doesnt recognize the name of the source', default=True)
+ap.add_argument('-use_file_target', nargs=1,
+                help='Allows to extract regions when Simbad doesnt recognize the name of the source from'
+                     'the directory structure', default=True)
 
 ap.add_argument("-target_only", nargs=1,
                 help='only extracts spectra when the source is the main focus of the observation',
@@ -246,7 +245,7 @@ grouptype=args.grouptype
 heasoft_init_alias=args.heasoft_init_alias
 caldbinit_init_alias=args.caldbinit_init_alias
 
-use_file_coords=args.use_file_coords
+use_file_target=args.use_file_target
 target_only=args.target_only
 rad_crop=args.rad_crop
 bigger_fit=args.bigger_fit
@@ -685,7 +684,7 @@ def imgarr_to_png(array, name, directory='./', astropy_wcs=None, mpdaf_wcs=None,
     fig.savefig(directory + sep + name + '.png')
     plt.close(fig)
 
-def xsel_img(bashproc,evt_path,save_path,e_low,e_high):
+def xsel_img(bashproc,evt_path,save_path,e_low,e_high,directory):
 
     '''
     Uses Xselect to create a NuSTAR image from bashproc
@@ -781,7 +780,7 @@ def ds9_to_reg(ds9_regfile):
             reg_coords+=[[indiv_coords[0],indiv_coords[1]],indiv_coords[2]]
     return reg_coords
 
-def extract_reg(directory, cams='all', use_file_coords=False,
+def extract_reg(directory, cams='all', use_file_target=False,
                 overwrite=True,e_low_img=3,e_high_img=79,rad_crop=120,bg_area_factor=2.,bg_rm_src_sigmas=10.,
                 bg_distrib_cut=0.99,
                 bright=False,sudo_mode=False,sudo_mdp=''):
@@ -809,90 +808,6 @@ def extract_reg(directory, cams='all', use_file_coords=False,
         '''
         required functions
         '''
-        def source_catal(dirpath, use_file_coords=False):
-
-            '''
-            Tries to identify a Simbad object from either the directory structure or the source name in the file itself
-
-            If use_file_coords is set to True, does not produce cancel the process when Simbad
-            doesn't recognize the source and uses the file coordinates instead
-
-            '''
-
-            # splitting the directories and searching every name in Simbad
-            dir_list = dirpath.split('/')[1:]
-
-            # removing a few problematic names
-            crash_sources = ['M2', 'home', 'outputmos', 'BlackCAT', '']
-            # as well as obsid type names that can cause crashes
-            for elem_dir in dir_list:
-                if len(elem_dir) == 10 and elem_dir.isdigit() or elem_dir in crash_sources:
-                    dir_list.remove(elem_dir)
-
-            # Simbad.query_object gives a warning for a lot of folder names so we just skip them
-            obj_list = None
-            for elem_dir in dir_list:
-                try:
-                    with warnings.catch_warnings():
-                        # warnings.filterwarnings('ignore','.*No known catalog could be found.*',)
-                        # warnings.filterwarnings('ignore','.*Identifier not found.*',)
-                        warnings.filterwarnings('ignore', category=UserWarning)
-                        elem_obj = Simbad.query_object(elem_dir)
-                        if type(elem_obj) != type(None):
-                            obj_list = elem_obj
-                except:
-                    breakpoint()
-                    print('\nProblem during the Simbad query. This is the current directory list:')
-                    print(dir_list)
-                    spawn.sendline('\ncd $currdir')
-                    return 'Problem during the Simbad query.'
-
-            target_name = fits.open(dirpath + '/' + file)[0].header['OBJECT']
-            try:
-                with warnings.catch_warnings():
-                    # warnings.filterwarnings('ignore','.*No known catalog could be found.*',)
-                    # warnings.filterwarnings('ignore','.*Identifier not found.*',)
-                    warnings.filterwarnings('ignore', category=UserWarning)
-                    file_query = Simbad.query_object(target_name)
-            except:
-                print('\nProblem during the Simbad query. This is the current obj name:')
-                print(dir_list)
-                spawn.sendline('\ncd $currdir')
-                return 'Problem during the Simbad query.'
-
-            if obj_list is None:
-                print("\nSimbad didn't recognize any object name in the directories." +
-                      " Using the target of the observation instead...")
-                obj_list = file_query
-
-            if type(file_query) == type(None):
-                print("\nSimbad didn't recognize the object name from the file header." +
-                      " Using the name of the directory...")
-                target_query = ''
-            else:
-                target_query = file_query[0]['MAIN_ID']
-
-            if type(obj_list) == type(file_query) and type(obj_list) == type(None):
-
-                print("\nSimbad couldn't detect an object name.")
-                if not use_file_coords:
-                    print("\nSkipping this observation...")
-                    spawn.sendline('\ncd $currdir')
-
-                return "Simbad couldn't detect an object name."
-
-            # if we have at least one detections, it is assumed the "last" find is the name of the object
-            obj_catal = obj_list[-1]
-
-            print('\nValid name(s) detected. Object name assumed to be ' + obj_catal['MAIN_ID'])
-
-            if obj_catal['MAIN_ID'] != target_query and target_only:
-                print('\nTarget only mode activated and the source studied is not the main focus of the observation.' +
-                      '\nSkipping...')
-                spawn.sendline('\ncd $currdir')
-                return 'Target only mode activated and the source studied is not the main focus of the observation.'
-
-            return obj_catal
 
         def opti_bg_imaging():
             '''
@@ -1059,7 +974,8 @@ def extract_reg(directory, cams='all', use_file_coords=False,
         img_file=file_id+'_img_'+str(e_low_img)+'_'+str(e_high_img)+'.ds'
 
         #creating an image to load with mpdaf for image analysis
-        xsel_img(spawn,os.path.join(spawndir,file),os.path.join(spawndir,img_file),e_low=e_low_img,e_high=e_high_img)
+        xsel_img(spawn,os.path.join(spawndir,file),os.path.join(spawndir,img_file),e_low=e_low_img,e_high=e_high_img,
+                 directory=directory)
 
         spawn.sendline('\ncurrdir=$(pwd)')
         spawn.sendline('\ncd '+filedir)
@@ -1085,11 +1001,14 @@ def extract_reg(directory, cams='all', use_file_coords=False,
 
         try:
             fits_img = fits.open(os.path.join(filedir,img_file))
+            fits_img.close()
         except:
             print("\nCould not load the image fits file. There must be a problem with the exposure." +
                   "\nSkipping spectrum computation...")
             spawn.sendline('\ncd $currdir')
             return "Could not load the image fits file. There must be a problem with the exposure."
+
+
 
         if ds9_pid_sp_start == 0:
             print("\nCould not load the image file with ds9. There must be a problem with the exposure." +
@@ -1101,7 +1020,7 @@ def extract_reg(directory, cams='all', use_file_coords=False,
         with fits.open(os.path.join(filedir,img_file)) as hdul:
             img_data=hdul[0].data
             src_mpdaf_WCS=mpdaf_WCS(hdul[0].header)
-            src_astro_WCS=astroWCS(fits_img[0].header)
+            src_astro_WCS=astroWCS(hdul[0].header)
             main_source_name=hdul[0].header['object']
             main_source_ra=hdul[0].header['RA_OBJ']
             main_source_dec=hdul[0].header['DEC_OBJ']
@@ -1112,11 +1031,13 @@ def extract_reg(directory, cams='all', use_file_coords=False,
         prefix = '_auto'
 
         #using the full directory structure here
-        obj_auto = source_catal(os.path.join(os.getcwd(),filedir), use_file_coords=use_file_coords)
+        obj_auto = source_catal(spawn, os.path.join(os.getcwd(),filedir), file,
+                                target_only=target_only,
+                                use_file_target=use_file_target, )
 
         # checking if the function returned an error message (folder movement done in the function)
         if type(obj_auto) == str:
-            if not use_file_coords:
+            if not use_file_target:
                 return obj_auto
             else:
                 obj_auto = {'MAIN_ID': main_source_name}
@@ -2536,7 +2457,7 @@ if not local:
 
                         #note: the first actions are not performed with bright mode
                         if curr_action=='reg':
-                            output_err=extract_reg(dirname,cams=cameras_glob,use_file_coords=use_file_coords,overwrite=overwrite_glob,
+                            output_err=extract_reg(dirname,cams=cameras_glob,use_file_target=use_file_target,overwrite=overwrite_glob,
                                                    e_low_img=e_low_img,e_high_img=e_high_img,rad_crop=rad_crop,
                                                    bg_area_factor=bg_area_factor,
                                                    bg_rm_src_sigmas=bg_rm_src_sigmas,
@@ -2624,7 +2545,7 @@ if not local:
 
                     # note: the first actions are not performed with bright mode
                     if curr_action == 'reg':
-                        output_err = extract_reg(dirname, cams=cameras_glob, use_file_coords=use_file_coords,
+                        output_err = extract_reg(dirname, cams=cameras_glob, use_file_target=use_file_target,
                                                  overwrite=overwrite_glob,
                                                  e_low_img=e_low_img, e_high_img=e_high_img, rad_crop=rad_crop,
                                                  bg_area_factor=bg_area_factor,
@@ -2715,7 +2636,7 @@ else:
 
         # note: the first actions are not performed with bright mode
         if curr_action == 'reg':
-            output_err = extract_reg(absdir, cams=cameras_glob, use_file_coords=use_file_coords,
+            output_err = extract_reg(absdir, cams=cameras_glob, use_file_target=use_file_target,
                                      overwrite=overwrite_glob,
                                      e_low_img=e_low_img, e_high_img=e_high_img, rad_crop=rad_crop,
                                      bg_area_factor=bg_area_factor,

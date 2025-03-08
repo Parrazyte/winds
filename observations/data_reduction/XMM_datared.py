@@ -122,7 +122,7 @@ from rasterio.features import rasterize
 #shape merging
 from scipy.ndimage import binary_dilation
 
-from general_tools import file_edit,interval_extract
+from general_tools import file_edit,interval_extract,source_catal
 
 #to visualise the alphashape :
 # from descartes import PolygonPatch
@@ -186,8 +186,9 @@ ap.add_argument('-flareband',nargs=1,help='flare computation band',default='6.-1
 
 '''region computation'''
 
-ap.add_argument('-use_file_coords',nargs=1,
-                help='Allows to extract regions when Simbad doesnt recognize the name of the source',default=True)
+ap.add_argument('-use_file_target',nargs=1,
+                help='Allows to extract regions when Simbad doesnt recognize the name of the source from'
+                     'the directory structure',default=True)
 
 ap.add_argument("-mainfocus",nargs=1,help='only extracts spectra when the source is the main focus of the observation',
                 default=False,type=bool)
@@ -268,7 +269,7 @@ point_source=args.point_source
 maxrad_source=args.maxrad_source
 pileup_max_ex=args.pileup_max_ex
 pileup_threshold=args.pileup_threshold
-use_file_coords_glob=args.use_file_coords
+use_file_target_glob=args.use_file_target
 
 '''''''''''''''''
 ''''FUNCTIONS''''
@@ -1210,7 +1211,7 @@ def pileup_bool(pileup_line):
     else:
         return abs(pattern_s_val-1)>pattern_s_err or d_pileup
 
-def extract_reg(directory,mode='manual',cams='all',expos_mode='all',use_file_coords=False,
+def extract_reg(directory,mode='manual',cams='all',expos_mode='all',use_file_target=False,
                 overwrite=True):
     
     '''
@@ -1277,92 +1278,6 @@ def extract_reg(directory,mode='manual',cams='all',expos_mode='all',use_file_coo
             spawn.sendline('\ncd $currdir')
             return "Could not load the image file with ds9. There must be a problem with the exposure."
 
-        def source_catal(dirpath,use_file_coords=False):
-            
-            '''
-            Tries to identify a Simbad object from either the directory structure or the source name in the file itself
-
-            If use_file_coords is set to True, does not produce cancel the process when Simbad
-            doesn't recognize the source and uses the file coordinates instead
-
-            '''
-            
-            #splitting the directories and searching every name in Simbad
-            dir_list=dirpath.split('/')[1:]
-            
-            #removing a few problematic names
-            crash_sources=['M2','home','outputmos','BlackCAT','']
-            #as well as obsid type names that can cause crashes
-            for elem_dir in dir_list:
-                if len(elem_dir)==10 and elem_dir.isdigit() or elem_dir in crash_sources:
-                    dir_list.remove(elem_dir)
-                    
-            #Simbad.query_object gives a warning for a lot of folder names so we just skip them
-            obj_list=None
-            for elem_dir in dir_list:
-                try:
-                    with warnings.catch_warnings():
-                        # warnings.filterwarnings('ignore','.*No known catalog could be found.*',)
-                        # warnings.filterwarnings('ignore','.*Identifier not found.*',)
-                        warnings.filterwarnings('ignore',category=UserWarning)
-                        elem_obj = Simbad.query_object(elem_dir)
-                        if type(elem_obj) != type(None):
-                            obj_list = elem_obj
-                except:
-                    breakpoint()
-                    print('\nProblem during the Simbad query. This is the current directory list:')
-                    print(dir_list)
-                    spawn.sendline('\ncd $currdir')
-                    return 'Problem during the Simbad query.'
-                
-            target_name=fits.open(dirpath+'/'+file)[0].header['OBJECT']
-            try:
-                with warnings.catch_warnings():
-                    # warnings.filterwarnings('ignore','.*No known catalog could be found.*',)
-                    # warnings.filterwarnings('ignore','.*Identifier not found.*',)
-                    warnings.filterwarnings('ignore',category=UserWarning)
-                    file_query=Simbad.query_object(target_name)
-            except:
-                print('\nProblem during the Simbad query. This is the current obj name:')
-                print(dir_list)
-                spawn.sendline('\ncd $currdir')
-                return 'Problem during the Simbad query.'
-                
-            if obj_list is None:
-                print("\nSimbad didn't recognize any object name in the directories."+
-                      " Using the target of the observation instead...")
-                obj_list=file_query
-
-            if type(file_query)==type(None):
-                print("\nSimbad didn't recognize the object name from the file header."+
-                      " Using the name of the directory...")
-                target_query=''
-            else:
-                target_query=file_query[0]['MAIN_ID']
-                
-            if type(obj_list)==type(file_query) and type(obj_list)==type(None):
-
-                print("\nSimbad couldn't detect an object name.")
-                if not use_file_coords:
-                    print("\nSkipping this observation...")
-                    spawn.sendline('\ncd $currdir')
-
-                return "Simbad couldn't detect an object name."
-
-            #if we have at least one detections, it is assumed the "last" find is the name of the object                
-            obj_catal=obj_list[-1]
-
-            print('\nValid name(s) detected. Object name assumed to be '+obj_catal['MAIN_ID'])
-
-            if obj_catal['MAIN_ID']!=target_query and target_only:
-                
-                print('\nTarget only mode activated and the source studied is not the main focus of the observation.'+
-                      '\nSkipping...')
-                spawn.sendline('\ncd $currdir')
-                return 'Target only mode activated and the source studied is not the main focus of the observation.'
-            
-            return obj_catal
-            
         def spatial_expression(coords,type='XMM',mode=expos_mode_single,excision_radius=None,rawx_off=0.,timing_ds9type='src',timing_fits=None):
             
             '''
@@ -1694,11 +1609,11 @@ def extract_reg(directory,mode='manual',cams='all',expos_mode='all',use_file_coo
                 
                 #But first, we check that the target of the timing observation is not too far from our own object.
                 if timing_check:
-                    obj_auto=source_catal(fulldir,use_file_coords=use_file_coords)
+                    obj_auto=source_catal(fulldir,use_file_target=use_file_target)
 
                     #checking if the function returned an error message (folder movement done in the function)
                     if type(obj_auto)==str:
-                        if not use_file_coords:
+                        if not use_file_target:
                             return obj_auto
                         else:
                             #making this to have a valid name for the DS9 region
@@ -2038,11 +1953,11 @@ def extract_reg(directory,mode='manual',cams='all',expos_mode='all',use_file_coo
                 
                 prefix='_auto'
                 
-                obj_auto=source_catal(fulldir,use_file_coords=use_file_coords)
+                obj_auto=source_catal(fulldir,use_file_target=use_file_target)
 
                 # checking if the function returned an error message (folder movement done in the function)
                 if type(obj_auto) == str:
-                    if not use_file_coords:
+                    if not use_file_target:
                         return obj_auto
                     else:
                         obj_auto = {'MAIN_ID': fits_evtclean[0].header['OBJECT']}
@@ -4249,7 +4164,7 @@ if local==False:
                         filter_evt_done.wait()
                     if curr_action=='3':
                         extract_reg(obsdir,mode='auto',cams=cameras_glob,expos_mode=expos_mode_glob,overwrite=overwrite_glob,
-                                    use_file_coords=use_file_coords_glob)
+                                    use_file_target=use_file_target_glob)
                         extract_reg_done.wait()
                     if curr_action=='l':
                         extract_lc(obsdir,mode='auto',cams=cameras_glob,expos_mode=expos_mode_glob,overwrite=overwrite_glob)
@@ -4304,7 +4219,7 @@ else:
                 filter_evt_done.wait()
             if curr_action=='3':
                 extract_reg(absdir,mode='auto',cams=cameras_glob,expos_mode=expos_mode_glob,overwrite=overwrite_glob,
-                            use_file_coords=use_file_coords_glob)
+                            use_file_target=use_file_target_glob)
                 extract_reg_done.wait()
             if curr_action=='l':
                 extract_lc(absdir,mode='auto',cams=cameras_glob,expos_mode=expos_mode_glob,overwrite=overwrite_glob)

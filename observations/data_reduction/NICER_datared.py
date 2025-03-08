@@ -690,7 +690,8 @@ def plot_event_diag(mode,obs_start_str,time_obs,id_gti_orbit,
         ax_slider=fig_events.add_axes([0.2, 0.02, 0.65, 0.03])
 
         slid = Slider(ax_slider, label='current gti',
-                      valmin=time_obs[id_gti_orbit][0] if len(orbit_cut_times)==0 else orbit_cut_times[-1], valmax=time_obs[id_gti_orbit][-1],valstep=1)
+                      valmin=time_obs[id_gti_orbit][0] if len(orbit_cut_times)==0 else orbit_cut_times[-1],
+                      valmax=time_obs[id_gti_orbit][-1],valstep=1)
 
         def slider_update(val):
 

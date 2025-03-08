@@ -4,6 +4,11 @@
 Created on Sun Nov 20 13:32:37 2022
 
 @author: parrama
+
+notes on xrt pipeline for XRT:
+it doesn't create an rmf because the default option is to take the standard rmfs in caldb
+see https://www.swift.ac.uk/analysis/Gain_RMF_releases.html for the most up-to-date calibrations
+see https://swift.gsfc.nasa.gov/analysis/xrt_swguide_v1_2.pdf for standard grade (PC 0-12, WT 0-2)
 """
 
 import argparse

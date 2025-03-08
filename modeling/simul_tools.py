@@ -384,7 +384,11 @@ def xstar_func(spectrum_file, lum, t_guess, n, nh, logxi, vturb_x, nbins, nsteps
         return_temp: directly returns the temperature (useful for stability curve loops)
 
     if path_logpars is not None, saves the list of modifiable parameters into a file
-    
+
+    spectrum_file:
+        Should always be extended to reasonably large bounds to avoid issues in the computation.
+        See https://heasarc.gsfc.nasa.gov/xstar/docs/xstarmanual.pdf page 14 for a description of potential issues.
+
     lum -> rlrad38
     
     -lcpres determines if the pressure is constant. In this case t stays constant. Should be kept at 0

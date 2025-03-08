@@ -7,8 +7,8 @@ import numpy as np
 import glob
 import os
 
-def rebinv_xrism(grp_number):
-    Plot.setRebin(2, 5000, grp_number)
+def rebinv_xrism(grp_number=1,sigma=2):
+    Plot.setRebin(sigma, 5000, grp_number)
 def xrism_ls(baseload,low_e,high_e,plot_suffix,e_step=5e-3,e_sat_low_indiv=[1.5,1.5],resolve_dg=1,
              force_ylog_ratio=True,ratio_bounds=[0.05,20],title=True):
 

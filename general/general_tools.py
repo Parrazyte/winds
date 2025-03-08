@@ -13,6 +13,9 @@ import os
 import astropy.units as u
 import random
 import glob
+import warnings
+from astropy.io import fits
+from astroquery.simbad import Simbad
 
 h_cgs = 6.624e-27
 eV2erg = 1.6021773E-12
@@ -75,6 +78,94 @@ def norm_to_Rin(diskbb_norm,D_kpc=8,theta=45,phys=False,kappa=1.7):
 #         return np.array([array[i][j][k] for i in range(len(array)) for j in range(len(array[i])) for k in range(len(array[i][j]))],dtype=mode)
 #     else:
 #         return np.array([array[i][j] for i in range(len(array)) for j in range(len(array[i]))],dtype=mode)
+
+def source_catal(spawn, dirpath, file, target_only=True, use_file_target=False):
+    '''
+    Tries to identify a Simbad object from either the directory structure or the source name in the file itself
+
+    If use_file_target is set to True, does not cancel the process when Simbad
+    doesn't recognize the source and uses the file target name instead
+
+    '''
+
+    # splitting the directories and searching every name in Simbad
+    dir_list = dirpath.split('/')[1:]
+
+    # removing a few problematic names
+    crash_sources = ['M2', 'home', 'outputmos', 'BlackCAT', '']
+    # as well as obsid type names that can cause crashes
+    for elem_dir in dir_list:
+        if len(elem_dir) == 10 and elem_dir.isdigit() or elem_dir in crash_sources:
+            dir_list.remove(elem_dir)
+
+    # Simbad.query_object gives a warning for a lot of folder names so we just skip them
+    obj_list = None
+    for elem_dir in dir_list:
+        try:
+            with warnings.catch_warnings():
+                # warnings.filterwarnings('ignore','.*No known catalog could be found.*',)
+                # warnings.filterwarnings('ignore','.*Identifier not found.*',)
+                warnings.filterwarnings('ignore', category=UserWarning)
+                elem_obj = Simbad.query_object(elem_dir)
+                if type(elem_obj) != type(None):
+                    obj_list = elem_obj
+        except:
+            breakpoint()
+            print('\nProblem during the Simbad query. This is the current directory list:')
+            print(dir_list)
+            spawn.sendline('\ncd $currdir')
+            return 'Problem during the Simbad query.'
+
+    try:
+        target_name = fits.open(os.path.join(dirpath,file))[0].header['OBJECT']
+    except:
+        target_name = fits.open(os.path.join(dirpath,file))[1].header['OBJECT']
+
+    try:
+        with warnings.catch_warnings():
+            # warnings.filterwarnings('ignore','.*No known catalog could be found.*',)
+            # warnings.filterwarnings('ignore','.*Identifier not found.*',)
+            warnings.filterwarnings('ignore', category=UserWarning)
+            file_query = Simbad.query_object(target_name)
+    except:
+        print('\nProblem during the Simbad query. This is the current obj name:')
+        print(dir_list)
+        spawn.sendline('\ncd $currdir')
+        return 'Problem during the Simbad query.'
+
+    if obj_list is None:
+        print("\nSimbad didn't recognize any object name in the directories." +
+              " Using the target of the observation instead...")
+        obj_list = file_query
+
+    if type(file_query) == type(None):
+        print("\nSimbad didn't recognize the object name from the file header." +
+              " Using the name of the directory...")
+        target_query = ''
+    else:
+        target_query = file_query[0]['MAIN_ID']
+
+    if type(obj_list) == type(file_query) and type(obj_list) == type(None):
+
+        print("\nSimbad couldn't detect an object name.")
+        if not use_file_target:
+            print("\nSkipping this observation...")
+            spawn.sendline('\ncd $currdir')
+
+        return "Simbad couldn't detect an object name."
+
+    # if we have at least one detections, it is assumed the "last" find is the name of the object
+    obj_catal = obj_list[-1]
+
+    print('\nValid name(s) detected. Object name assumed to be ' + obj_catal['MAIN_ID'])
+
+    if obj_catal['MAIN_ID'] != target_query and target_only:
+        print('\nTarget only mode activated and the source studied is not the main focus of the observation.' +
+              '\nSkipping...')
+        spawn.sendline('\ncd $currdir')
+        return 'Target only mode activated and the source studied is not the main focus of the observation.'
+
+    return obj_catal
 
 def get_overlap(a, b,distance=False):
     #compute overlap between two intervals. if distance is set to true, returns the distance between the

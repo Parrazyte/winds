@@ -2759,9 +2759,11 @@ def hid_graph(ax_hid,dict_linevis,
         [ravel_ragged(elem)[mask.astype(bool)] for elem, mask in zip(abslines_plot[4][0][mask_lines].T, mask_obs_intime_repeat)],
         dtype=object)
 
-    incl_cmap = np.array([incl_plot.T[0], incl_plot.T[0] - incl_plot.T[1], incl_plot.T[0] + incl_plot.T[2]]).T
-    incl_cmap_base = incl_cmap[mask_obj]
-    incl_cmap_restrict = incl_cmap[mask_obj]
+    if incl_plot is not None:
+        incl_cmap = np.array([incl_plot.T[0], incl_plot.T[0] - incl_plot.T[1], incl_plot.T[0] + incl_plot.T[2]]).T
+        incl_cmap_base = incl_cmap[mask_obj]
+        incl_cmap_restrict = incl_cmap[mask_obj]
+        incl_plot_restrict = incl_plot[mask_obj]
 
     nh_plot_restrict = deepcopy(nh_plot)
 
@@ -2772,7 +2774,6 @@ def hid_graph(ax_hid,dict_linevis,
     else:
         hid_plot_restrict = hid_plot_use.T[mask_obj].T
 
-    incl_plot_restrict = incl_plot[mask_obj]
 
     if display_nonsign:
         mask_obj_withdet = np.array([(elem > 0).any() for elem in global_displayed_sign])

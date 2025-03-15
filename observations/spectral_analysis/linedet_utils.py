@@ -76,7 +76,7 @@ def narrow_line_cycle(low_e,high_e,e_step=2e-2,plot_suffix='',baseload=None,
     Xset.chatter=prev_chatter
 
 def narrow_line_search(data_cont, suffix,e_sat_low_indiv,line_search_e=[4,10,0.05],line_search_norm=[0.01,10,500],
-                       peak_thresh=9.21,peak_clean=False,line_cont_range=[4,10],trig_interval=[6.5,9.1],
+                       lw=0.,peak_thresh=9.21,peak_clean=False,line_cont_range=[4,10],trig_interval=[6.5,9.1],
                        scorpeon_save=None,data_fluxcont=None,scorpeon=True):
 
     '''
@@ -183,7 +183,7 @@ def narrow_line_search(data_cont, suffix,e_sat_low_indiv,line_search_e=[4,10,0.0
     comp_gauss_cflux.Emax = 12.
 
     # narrow line locked
-    comp_gauss.Sigma = 0
+    comp_gauss.Sigma = lw
     comp_gauss.Sigma.frozen = 1
 
     ####TODO: test if this affects things

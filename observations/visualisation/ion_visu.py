@@ -431,7 +431,7 @@ if not plot_3D:
         st.info('To start plotting the 3D evolution, toggle the option in the sidebar.')
 
 list_SEDs_surface=st.sidebar.multiselect(label='SEDs to draw 3D surfaces for',
-                                        options=list_SEDs_disp,default=[elem for elem in base_nolag if elem in list_SEDs_disp])
+                                        options=list_SEDs_disp,default=[])
 
 
 with tab_3D:
@@ -439,7 +439,7 @@ with tab_3D:
         st.info('The volumes are undersampled according to the number of observations drawn.'
                 'To see the full volumes, select only one SED.')
 
-plot_points=st.sidebar.toggle(label='overlay points',value=False)
+plot_points=st.sidebar.toggle(label='overlay points',value=True)
 
 control_camera=st.sidebar.toggle(label='manual camera control',value=False)
 
@@ -1093,6 +1093,8 @@ def plot_distance(_ax,SED_1,SED_2,mode='nR²',write_names=True,interpolate_nr2=F
 
     plt.xlim(range_x[0],range_x[-1])
     plt.ylim(range_y[0],range_y[-1])
+
+    time.sleep(1)
 
     if _ax is None:
         return fig_dist
@@ -1755,6 +1757,79 @@ def make_3D_figure(SEDs_disp, SEDs_surface, cmap, plot_points=False, under_sampl
     else:
         fig.update_layout(scene_camera=camera)
 
+'''
+Scene 1 
+{
+   "scene.camera": {
+      "up": {
+         "x": 0,
+         "y": 0,
+         "z": 1
+      },
+      "center": {
+         "x": 0.056054707179730316,
+         "y": 0.18085227008326632,
+         "z": -0.2452768785382625
+      },
+      "eye": {
+         "x": 0.042026070354430976,
+         "y": -1.8966068771212834,
+         "z": 0.2061780252005996
+      },
+      "projection": {
+         "type": "perspective"
+      }
+   }
+}
+
+scene 2
+{
+   "scene.camera": {
+      "up": {
+         "x": 0,
+         "y": 0,
+         "z": 1
+      },
+      "center": {
+         "x": -0.054013450683093295,
+         "y": -0.11049597112968036,
+         "z": -0.22469931556338052
+      },
+      "eye": {
+         "x": 2.0326512403033576,
+         "y": -0.43746167742727043,
+         "z": 0.01772332232473678
+      },
+      "projection": {
+         "type": "perspective"
+      }
+   }
+}
+
+Scene 3
+{
+   "scene.camera": {
+      "up": {
+         "x": 0,
+         "y": 0,
+         "z": 1
+      },
+      "center": {
+         "x": 0.03316276075313898,
+         "y": 0.05391788901099013,
+         "z": -0.19031685934250334
+      },
+      "eye": {
+         "x": -1.4839948647837473,
+         "y": 0.22817296629219258,
+         "z": 1.2887750067638235
+      },
+      "projection": {
+         "type": "perspective"
+      }
+   }
+}
+'''
     # fig_3D.show()
     # fig_3D.show()
 

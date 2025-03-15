@@ -12,7 +12,7 @@ with previous data reduction results if any using the HID of visual_line
 If using multi_obj, it is assumed the lineplots directory is outdirf
 
 
-Changelog (very lazily updated, better check github):
+Changelog before 2024 (after, better check github):
 
 v1.4 in dev as of (12/23):
     -some changes to pdf summaries
@@ -214,7 +214,7 @@ ap.add_argument('-skip_started',nargs=1,help='skip all exposures listed in the l
                 default=False,type=bool)
 
 ap.add_argument('-skip_complete',nargs=1,help='skip completed exposures listed in the local summary_line_det file',
-                default=False,type=bool)
+                default=True,type=bool)
 
 ap.add_argument('-save_epoch_list',nargs=1,help='Save epoch list in a file before starting the line detections',
                 default=True,type=bool)
@@ -280,6 +280,11 @@ ap.add_argument('-reverse_spread',nargs=1,help='run the spread computation lists
 #note: having both reverse spread and reverse epoch with spread_comput>1 will give you back the normal order
 #note that reverse_epoch is done after the spread comput
 ap.add_argument('-reverse_epoch',nargs=1,help='reverse epoch list order',default=False,type=bool)
+
+#better when spread computations are not running
+ap.add_argument('-skip_complete_spread',nargs=1,
+                help='skip already finished computations when splitting the exposures',
+                default=True,type=bool)
 
 #better when spread computations are not running
 ap.add_argument('-skip_started_spread',nargs=1,
@@ -400,7 +405,7 @@ ap.add_argument('-compute_highflux_only',help='Reloads the autofit computation a
                 default=False,type=bool)
 
 ap.add_argument('-hid_only',nargs=1,help='skip the line detection and directly plot the hid',
-                default=False,type=bool)
+                default=True,type=bool)
 
 #date or HR
 ap.add_argument('-hid_sort_method',nargs=1,help='HID summary observation sorting',default='date',type=str)
@@ -753,6 +758,7 @@ focus_merges=args.focus_merges
 
 spread_comput=args.spread_comput
 skip_started_spread=args.skip_started_spread
+skip_complete_spread=args.skip_complete_spread
 
 filter_NuSTAR_SNR=args.filter_NuSTAR_SNR
 
@@ -1491,6 +1497,11 @@ if spread_comput!=1:
                     if shorten_epoch([elem_sp.split('_sp')[0]  for elem_sp in elem_epoch]) not in started_expos],
                             dtype=object)
 
+    if skip_complete_spread:
+        epoch_list=np.array([elem_epoch for elem_epoch in epoch_list\
+                    if shorten_epoch([elem_sp.split('_sp')[0]  for elem_sp in elem_epoch]) not in done_expos],
+                            dtype=object)
+
     spread_epochs=np.array_split(epoch_list, spread_comput)
 
     files_spread=glob.glob(os.path.join(outdir,'spread_epoch_'+('rev_' if reverse_spread else '')+'*'),recursive=True)
@@ -1722,7 +1733,7 @@ abslines_infos,autofit_infos=abslines_values(abslines_files,dict_linevis)
 
 # getting all the variations we need
 abslines_infos_perline, abslines_infos_perobj, abslines_plot, abslines_ener, \
-    lum_plot, hid_plot, incl_plot, width_plot, nh_plot, kt_plot = values_manip(abslines_infos, dict_linevis,
+    lum_plot, hid_plot, width_plot, nh_plot, kt_plot = values_manip(abslines_infos, dict_linevis,
                                                                                 autofit_infos,
                                                                                 lum_list)
 
@@ -1850,7 +1861,7 @@ else:
     kt_plot_restrict = kt_plot_restrict.T[mask_obj].T
 
 
-incl_plot_restrict = incl_plot[mask_obj]
+# incl_plot_restrict = incl_plot[mask_obj]
 
 # creating variables with values instead of uncertainties for the inclination and nh colormaps
 
@@ -1958,6 +1969,7 @@ mask_lines_ul=mask_lines
 choice_telescope=None
 bool_incl_inside=False
 bool_noincl=True
+incl_plot=None
 
 #necessary items for the hid graph run
 items_list=[
@@ -1996,7 +2008,7 @@ items_str_list=['abslines_infos_perobj',
 for dict_key, dict_item in zip(items_str_list,items_list):
     dict_linevis[dict_key]=dict_item
 
-#we don't use this one
+#we don't use these ones
 dict_linevis['Tin_diskbb_plot_restrict']=None
 dict_linevis['Tin_diskbb_plot']=None
 dict_linevis['diago_color']=None
@@ -2013,6 +2025,11 @@ dict_linevis['display_minorticks']=False
 dict_linevis['hatch_unstable']=False
 dict_linevis['change_legend_position']=False
 dict_linevis['observ_list']=None
+dict_linevis['restrict_Ledd_low']=0
+dict_linevis['restrict_Ledd_high']=0
+dict_linevis['restrict_HR_low']=0
+dict_linevis['restrict_HR_high']=0
+dict_linevis['additional_HLD_points']=[]
 
 #individual plotting options for the graph that will create the PDF
 display_single=not multi_obj

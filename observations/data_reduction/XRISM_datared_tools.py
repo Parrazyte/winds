@@ -36,7 +36,7 @@ from matplotlib.collections import LineCollection
 from astropy.time import Time,TimeDelta
 from astropy.io import fits
 from astroquery.simbad import Simbad
-from mpdaf.obj import sexa2deg, Image
+from mpdaf.obj import sexa2deg,deg2sexa, Image
 from mpdaf.obj import WCS as mpdaf_WCS
 from astropy.wcs import WCS as astroWCS
 # from mpdaf.obj import deg2sexa
@@ -232,7 +232,8 @@ def init_anal(directory,anal_dir_suffix='',resolve_filters='open',xtd_config='al
     #untarring the files that were just copied in anal_dir
     os.system('gunzip '+os.path.join(anal_dir,'**'))
 
-def resolve_RTS(directory,anal_dir_suffix='',heasoft_init_alias='heainit',caldb_init_alias='caldbinit'):
+def resolve_RTS(directory,anal_dir_suffix='',heasoft_init_alias='heainit',caldb_init_alias='caldbinit',
+                parallel=False):
 
     '''
     Filters all available resolve event files in the analysis subdirectory of a directory for Rise-Time Screening
@@ -250,21 +251,40 @@ def resolve_RTS(directory,anal_dir_suffix='',heasoft_init_alias='heainit',caldb_
 
     bashproc.sendline('cd '+os.path.join(os.getcwd(),anal_dir))
 
-    for indiv_file in resolve_files:
+    if os.path.isfile(directory + '/resolve_RTS.log'):
+        os.system('rm ' + directory + '/resolve_RTS.log')
 
-        # print('ftcopy infile="'+indiv_file.split('/')[-1]+'[EVENTS]'+
-        #                 '[(PI>=600) && (((((RISE_TIME+0.00075*DERIV_MAX)>46)&&((RISE_TIME+0.00075*DERIV_MAX)<58))'+
-        #                 '&&ITYPE<4)||(ITYPE==4))&&STATUS[4]==b0]" outfile='+
-        #                  indiv_file.split('/')[-1].replace('_cl.evt','_cl_RTS.evt')+
-        #                 ' copyall=yes clobber=yes history=yes')
+    with (no_op_context() if parallel else StdoutTee(directory + '/resolve_RTS.log', mode="a", buff=1,
+                                                     file_filters=[_remove_control_chars]), \
+          StderrTee(directory + '/resolve_RTS.log', buff=1, file_filters=[_remove_control_chars])):
 
-        bashproc.sendline('ftcopy infile="'+indiv_file.split('/')[-1]+'[EVENTS]'+
-                        '[(PI>=600) && (((((RISE_TIME+0.00075*DERIV_MAX)>46)&&((RISE_TIME+0.00075*DERIV_MAX)<58))'+
-                        '&&ITYPE<4)||(ITYPE==4))&&STATUS[4]==b0]" outfile='+
-                         indiv_file.split('/')[-1].replace('_cl.evt','_cl_RTS.evt')+
-                        ' copyall=yes clobber=yes history=yes')
+        if not parallel:
+            bashproc.logfile_read = sys.stdout
 
-        time.sleep(1)
+        for indiv_file in resolve_files:
+
+            # print('ftcopy infile="'+indiv_file.split('/')[-1]+'[EVENTS]'+
+            #                 '[(PI>=600) && (((((RISE_TIME+0.00075*DERIV_MAX)>46)&&((RISE_TIME+0.00075*DERIV_MAX)<58))'+
+            #                 '&&ITYPE<4)||(ITYPE==4))&&STATUS[4]==b0]" outfile='+
+            #                  indiv_file.split('/')[-1].replace('_cl.evt','_cl_RTS.evt')+
+            #                 ' copyall=yes clobber=yes history=yes')
+
+            bashproc.sendline('ftcopy infile="'+indiv_file.split('/')[-1]+'[EVENTS]'+
+                            '[(PI>=600) && (((((RISE_TIME+0.00075*DERIV_MAX)>46)&&((RISE_TIME+0.00075*DERIV_MAX)<58))'+
+                            '&&ITYPE<4)||(ITYPE==4))&&STATUS[4]==b0]" outfile='+
+                             indiv_file.split('/')[-1].replace('_cl.evt','_cl_RTS.evt')+
+                            ' copyall=yes clobber=yes history=yes')
+
+            while not os.path.isfile(os.path.join(anal_dir,indiv_file.split('/')[-1].replace('_cl.evt','_cl_RTS.evt'))):
+                time.sleep(1)
+
+            time.sleep(1)
+
+
+            bashproc.sendline('echo valid')
+
+            bashproc.expect('valid')
+
 
     bashproc.sendline('exit')
 
@@ -468,12 +488,16 @@ def xtend_SFP(directory,filtering='flat_top',
               #for flat_top
               base_config='313',threshold_mult=1.1,rad_psf=15,
               source_name='auto',
-              target_only=True,use_file_target=False,
+              target_coords=None,
+              target_only=False,use_file_target=True,use_file_target_coords=False,
               logprob2=None,bgd_level=None,cellsize=None,n_division=None,grade='ALL',
               logprob1=10,
               anal_dir_suffix='',parallel=False,sudo_screen=True,
               heasoft_init_alias='heainit',caldb_init_alias='caldbinit'):
     '''
+
+    MAXIJ1744 approximate coords: ['17:45:40.45','-29:00:46.6']
+
     Run searchflixpix to clean the xtend data of flickering pixels.
     See https://heasarc.gsfc.nasa.gov/docs/xrism/analysis/quickstart/xrism_quick_start_guide_v2p3_240918a.pdf
 
@@ -499,6 +523,11 @@ def xtend_SFP(directory,filtering='flat_top',
     -manual:
             runs searchflixpix manually with each logprob, thresh,...value for each event file
 
+    -target coords:
+        coordinates of the source for manual positioning.
+        Sexagecimal assumed if str, otherwise decimal.
+        If set to None, the script will search in the directory names or in the file target name,
+         or in the file target coordinates, in that order
     '''
 
     bashproc = pexpect.spawn("/bin/bash", encoding='utf-8')
@@ -555,33 +584,41 @@ def xtend_SFP(directory,filtering='flat_top',
                     main_source_ra = hdul[0].header['RA_OBJ']
                     main_source_dec = hdul[0].header['DEC_OBJ']
 
-                print('\nAuto mode.')
-                print('\nAutomatic search of the directory names in Simbad.')
+                if target_coords is None:
+                    print('\nAuto mode.')
+                    print('\nAutomatic search of the directory names in Simbad.')
 
-                prefix = '_auto'
+                    prefix = '_auto'
 
-                if source_name=='auto':
-                    # using the full directory structure here
-                    obj_auto = source_catal(bashproc, './', elem_evt_raw,
-                                            target_only=target_only,
-                                            use_file_target=use_file_target, )
-                else:
-                    obj_auto=Simbad.query_object(source_name)[0]
-                # checking if the function returned an error message (folder movement done in the function)
-                if type(obj_auto) == str:
-                    if not use_file_target:
-                        assert type(obj_auto) != str,obj_auto
+                    if source_name=='auto':
+                        # using the full directory structure here
+                        obj_auto = source_catal(bashproc, './', elem_evt_raw,
+                                                target_only=target_only,
+                                                use_file_target=use_file_target, )
                     else:
-                        obj_auto = {'MAIN_ID': main_source_name}
-                        obj_deg = [main_source_ra, main_source_dec]
+                        obj_auto=Simbad.query_object(source_name)[0]
+                    # checking if the function returned an error message (folder movement done in the function)
+                    if type(obj_auto) == str:
+                        if not use_file_target_coords:
+                            assert type(obj_auto) != str,obj_auto
+                        else:
+                            obj_auto = {'MAIN_ID': main_source_name}
+                            obj_deg = [main_source_ra, main_source_dec]
+                    else:
+                        # careful the output after the first line is in dec,ra not ra,dec
+                        obj_deg = sexa2deg([obj_auto['DEC'].replace(' ', ':'), obj_auto['RA'].replace(' ', ':')])[::-1]
+                        obj_deg = [str(obj_deg[0]), str(obj_deg[1])]
                 else:
-                    # careful the output after the first line is in dec,ra not ra,dec
-                    obj_deg = sexa2deg([obj_auto['DEC'].replace(' ', ':'), obj_auto['RA'].replace(' ', ':')])
-                    obj_deg = [str(obj_deg[1]), str(obj_deg[0])]
+                    if type(target_coords[0])==str:
+                        obj_deg=sexa2deg([target_coords[1].replace(' ',':'),target_coords[0].replace(' ',':')])[::-1]
+                    else:
+                        obj_deg=target_coords
 
                 img_obj_whole = Image(data=img_data, wcs=src_mpdaf_WCS)
 
                 rad_crop = 8*rad_psf
+
+                # breakpoint()
 
                 try:
                     imgcrop_src = img_obj_whole.copy().subimage(center=obj_deg[::-1], size=rad_crop)
@@ -1611,7 +1648,7 @@ def extract_lc(directory, anal_dir_suffix='',lc_subdir='lc',
                    region_src_xtd='auto', region_bg_xtd='auto',
                    pixel_str_rsl='branch_filter',grade_str_rsl=None,
                    remove_cal_pxl_resolve=True,
-                   gti='all',gti_subdir='gti',
+                   gti=None,gti_subdir='gti',
                    band='1-3+3-6+6-10+0.3-10',
                    binning='128+1',exposure_rsl=0.6,
                    exposure_xtd=0.0,
@@ -1777,9 +1814,9 @@ def extract_lc(directory, anal_dir_suffix='',lc_subdir='lc',
                     else:
                         pixel_str_rsl_use=pixel_str_rsl
 
-                    for elem_pixel_str in pixel_str_rsl.split('+'):
+                    for elem_pixel_str in pixel_str_rsl_use.split('+'):
 
-                        reg_str = pixel_str_rsl if pixel_str_rsl=='branch_filter' else pixel_str_rsl_use
+                        reg_str = pixel_str_rsl if pixel_str_rsl=='branch_filter' else elem_pixel_str
 
                         for elem_band in band.split('+'):
                             for elem_binning in binning.split('+'):
@@ -1811,8 +1848,9 @@ def extract_sp(directory, anal_dir_suffix='',sp_subdir='sp',
                    region_src_xtd='auto', region_bg_xtd='auto',
                    pixel_str_rsl='branch_filter', grade_str_rsl='0:0',
                    remove_cal_pxl_resolve=True,
-                   gti='all', gti_subdir='gti',
-                   e_low=0.3,e_high=12.,
+                   gti=None, gti_subdir='gti',
+                   e_low_rsl=0.3,e_high_rsl=12.,
+                   e_low_xtd=None,e_high_xtd=None,
                    sudo_screen=True,
                    heasoft_init_alias='heainit', caldb_init_alias='caldbinit',
                    parallel=False):
@@ -1964,7 +2002,7 @@ def extract_sp(directory, anal_dir_suffix='',sp_subdir='sp',
 
                         product_name = os.path.join(sp_subdir,
                                                     elem_evt.split('/')[-1].replace('.evt',reg_str + '_sp' +
-                                ('_' + e_low + '_' + e_high if e_low is not None and e_high is not None else '')
+                                ('_' + str(e_low_xtd) + '_' + str(e_high_xtd) if (e_low_xtd is not None and e_high_xtd is not None) else '')
                         +elem_gti_str +'.ds'))
 
                         xsel_util(elem_evt.split('/')[-1],
@@ -1972,8 +2010,8 @@ def extract_sp(directory, anal_dir_suffix='',sp_subdir='sp',
                                   mode='spectrum',
                                   directory=anal_dir,
                                   region_str=elem_region,
-                                  e_low=e_low,
-                                  e_high=e_high,
+                                  e_low=e_low_xtd,
+                                  e_high=e_high_xtd,
                                   spawn=bashproc,
                                   gti_file=elem_gti_file)
 
@@ -1990,9 +2028,9 @@ def extract_sp(directory, anal_dir_suffix='',sp_subdir='sp',
                     else:
                         pixel_str_rsl_use=pixel_str_rsl
 
-                    for elem_pixel_str in pixel_str_rsl.split('+'):
+                    for elem_pixel_str in pixel_str_rsl_use.split('+'):
 
-                        reg_str = pixel_str_rsl if pixel_str_rsl=='branch_filter' else pixel_str_rsl_use
+                        reg_str = pixel_str_rsl if pixel_str_rsl=='branch_filter' else elem_pixel_str
 
 
                         disp_ds9(os.path.join(os.getcwd(),elem_evt.replace('.evt','_img.ds')),scale='linear',
@@ -2004,7 +2042,7 @@ def extract_sp(directory, anal_dir_suffix='',sp_subdir='sp',
                                 '_pixel_'+reg_str.replace(':','to').replace(',','-').replace('-(','no').replace(')','')  +
                                 ('_withcal' if not remove_cal_pxl_resolve else '')+
                             ('' if grade_str_rsl is None else '_grade_'+grade_str_rsl.replace(':','to'))+ '_sp' +
-                            ('_' + e_low + '_' + e_high if e_low is not None and e_high is not None else '')
+                            ('_' + str(e_low_rsl) + '_' + str(e_high_rsl) if (e_low_rsl is not None and e_high_rsl is not None) else '')
                                                 +elem_gti_str +'.ds'))
 
                         xsel_util(elem_evt.split('/')[-1],
@@ -2014,11 +2052,28 @@ def extract_sp(directory, anal_dir_suffix='',sp_subdir='sp',
                                   region_str=elem_pixel_str if elem_pixel_str!='all' else None,
                                   grade_str=grade_str_rsl,
                                   remove_cal_pxl_resolve=remove_cal_pxl_resolve,
-                                  e_low=e_low,
-                                  e_high=e_high,
+                                  e_low=e_low_rsl,
+                                  e_high=e_high_rsl,
                                   spawn=bashproc,
                                   gti_file=elem_gti_file)
 
+                    if e_low_rsl is not None and e_high_rsl is not None:
+                        #creating a copy of the spectrum with only the right bins to be compatible with the cut rmf and arf
+
+                        cut_sp_path=os.path.join(anal_dir,product_name.replace('.ds','_cut.ds'))
+                        os.system('cp '+os.path.join(anal_dir,product_name)+' '+
+                                        cut_sp_path)
+                        with fits.open(cut_sp_path,mode='update') as cut_sp_file:
+
+                            pha_cutoff_low=kev_to_PI(e_low_rsl,instru='resolve')
+                            pha_cutoff_high=kev_to_PI(e_high_rsl,instru='resolve')
+                            cut_sp_file[1].data=cut_sp_file[1].data[pha_cutoff_low:pha_cutoff_high]
+                            cut_sp_file[1].header['DETCHANS']=pha_cutoff_high-pha_cutoff_low
+                            cut_sp_file[1].header['TLMIN1']=pha_cutoff_low
+                            cut_sp_file[1].header['TLMAX1']=pha_cutoff_high-1
+                            cut_sp_file[1].header['NAXIS2']=pha_cutoff_high-pha_cutoff_low
+
+                            cut_sp_file.flush()
 
 def xtd_mkrmf(infile,outfile,
               rmfparam=None,
@@ -2135,19 +2190,19 @@ def rsl_mkrmf(whichrmf,infile,outfileroot,
     #this is normally fast so their should be no need for a long time-out
     spawn_use.expect('valid')
 
-def extract_rmf(directory,instru='all',
+def extract_rmf(directory,instru='all',rmf_subdir='sp',
                 #resolve options
-                rmf_type_rsl='X',pixel_str_rsl='all',rsl_arf_grade='0',
+                rmf_type_rsl='X',pixel_str_rsl='branch_filter',rsl_arf_grade='0',
                 remove_cal_pxl_resolve=True,
                 # resolve grid
                 eminin_rsl=300,dein_rsl=0.5,nchanin_rsl=23400,
                 useingrd_rsl=True,
                 #xtend grid
                 eminin_xtd=200,dein_xtd='"2,24"',nchanin_xtd='"5900,500"',
-                eminout_xtd=0,deout_xtd=6,nchanout_xtd=4096,
+                eminout_xtd=0.,deout_xtd=6,nchanout_xtd=4096,
                 #general event options and gti selection
                 use_raw_evt_rsl=False,use_raw_evt_xtd=False,
-                gti='all', gti_subdir='gti',
+                gti=None, gti_subdir='gti',
                 #common arguments
                 anal_dir_suffix='', heasoft_init_alias='heainit', caldb_init_alias='caldbinit',
                 parallel=False):
@@ -2213,8 +2268,8 @@ def extract_rmf(directory,instru='all',
 
     #xtend input files are spectra, not event files
     xtend_files = [elem for elem in glob.glob(os.path.join(anal_dir, '**'),recursive=True) if 'xtd_' in elem.split('/')[-1] and
-                   elem.endswith('_sp.ds') and '_src_' in elem and '_grp_' not in elem and
-                   (1 if use_raw_evt_xtd else '_SFP' in elem)]
+                   '_sp' in elem and '_src_' in elem and '_grp_' not in elem and
+                   (1 if use_raw_evt_xtd else '_SFP' in elem) and elem.endswith('.ds')]
 
     if instru!='all':
         if instru=='xtend':
@@ -2279,20 +2334,20 @@ def extract_rmf(directory,instru='all',
                 else:
                     pixel_str_rsl_use = pixel_str_rsl
 
-                for elem_pixel_str in pixel_str_rsl.split('+'):
+                for elem_pixel_str in pixel_str_rsl_use.split('+'):
 
-                    reg_str = pixel_str_rsl if pixel_str_rsl == 'branch_filter' else pixel_str_rsl_use
+                    reg_str = pixel_str_rsl if pixel_str_rsl == 'branch_filter' else elem_pixel_str
 
-                    product_root = elem_evt.replace(anal_dir,'.').replace('.evt',
+                    product_root = os.path.join(rmf_subdir,elem_evt.replace(anal_dir,'.').replace('.evt',
                             '_pixel_'+reg_str.replace(':','to').replace(',','-').replace('-(','no').replace(')','')  +
                             ('_withcal' if not remove_cal_pxl_resolve else '')+
                         '_grade_'+rsl_arf_grade+ '_rmf' +
                         ('_' + str(eminin_rsl).replace('.','')+ '_' + str(dein_rsl).replace('.','')+'_'+str(nchanin_rsl))
-                                                                   +elem_gti_str)
+                                                                   +elem_gti_str))
 
                     rsl_mkrmf(infile=elem_evt.replace(anal_dir,'.'),
                               outfileroot=product_root,
-                              pixlist=rsl_pixel_manip(pixel_str_rsl,remove_cal_pxl_resolve=remove_cal_pxl_resolve,
+                              pixlist=rsl_pixel_manip(elem_pixel_str,remove_cal_pxl_resolve=remove_cal_pxl_resolve,
                                                       mode='rmf'),
                               whichrmf=rmf_type_rsl,
                               resolist=rsl_arf_grade,
@@ -2419,35 +2474,6 @@ def create_arf(directory,instrument,out_rtfile,source_ra,source_dec,emap_file,ou
 
     spawn_use.sendline('punlearn xaarfgen')
 
-    print('xaarfgen '+
-                       ' xrtevtfile='+out_rtfile+
-                       ' source_ra='+str(source_ra)+
-                       ' source_dec='+str(source_dec)+
-                       ' instrume='+instrument+
-                       ' emapfile='+emap_file+
-                       ' regmode=DET'+
-                       ' regionfile="'+region_file+'"'+
-                       ' sourcetype='+source_type+
-                       ' rmffile='+rmf_file+
-                       ' erange="'+str(e_low)+' '+str(e_high)+' '+str(e_low_image)+' '+str(e_high_image)+'"'+
-                       ' numphoton='+str(numphoton)+
-                       ' minphoton='+str(minphoton)+
-                       ' outfile='+out_file+
-                       ' clobber=YES'+
-                       ' telescop=XRISM'+
-                       ' qefile=CALDB'+
-                       ' contamifile=CALDB'+
-                       ' gatevalvefile=CALDB'+
-                       ' onaxisffile=CALDB'+
-                       ' onaxiscfile=CALDB'+
-                       ' mirrorfile=CALDB'+
-                       ' obstructfile=CALDB'+
-                       ' frontreffile=CALDB'+
-                       ' backreffile=CALDB'+
-                       ' pcolreffile=CALDB'+
-                       ' scatterfile=CALDB'+
-                       ' imgfile=NONE')
-
     spawn_use.sendline('xaarfgen '+
                        ' xrtevtfile='+out_rtfile+
                        ' source_ra='+str(source_ra)+''
@@ -2492,16 +2518,20 @@ def create_arf(directory,instrument,out_rtfile,source_ra,source_dec,emap_file,ou
     spawn_use.expect('valid')
 
 def extract_arf(directory,anal_dir_suffix='',on_axis_check=None,arf_subdir='sp',
-                source_coords='on-axis',source_name='auto',
+                source_coords='on-axis',
+                target_coords=None,
+                source_name='auto',
                 target_only=False,use_file_target=True,
                 source_type='POINT',
                 instru='all',
                 use_raw_evt_xtd=False, use_raw_evt_rsl=False,
                 region_src_xtd='auto', region_bg_xtd='auto',
-                pixel_str_rsl='all', grade_str_rsl='0:0',
+                pixel_str_rsl='branch_filter', grade_str_rsl='0:0',
                 remove_cal_pxl_resolve=True,
-                gti='all', gti_subdir='gti',
-                e_low=0.3, e_high=12.0,
+                gti=None, gti_subdir='gti',
+                e_low_rsl=0.3, e_high_rsl=12.0,
+                e_low_xtd=0.3, e_high_xtd=12.0,
+
                 numphoton=300000,
                 minphoton=100,
                 heasoft_init_alias='heainit', caldb_init_alias='caldbinit',
@@ -2570,20 +2600,31 @@ def extract_arf(directory,anal_dir_suffix='',on_axis_check=None,arf_subdir='sp',
     #here using any event file should work
     if len(resolve_files+xtend_files)==0:
         print('No event file satisfy the requirements. Skipping...')
+        return 0
     else:
-        any_event=(resolve_files+xtend_files)[0]
-        if source_coords == 'on-axis':
 
-            if source_name == 'auto':
+        if source_coords is None:
+            any_event=(resolve_files+xtend_files)[0]
+            if source_coords == 'on-axis':
 
-                obj_auto = source_catal(bashproc, './', any_event,
-                                        target_only=target_only,
-                                        use_file_target=use_file_target)
+                if source_name == 'auto':
 
+                    obj_auto = source_catal(bashproc, './', any_event,
+                                            target_only=target_only,
+                                            use_file_target=use_file_target)
+
+                else:
+                    obj_auto = Simbad.query_object(source_name)[0]
+
+            source_ra, source_dec = sexa2deg([obj_auto['DEC'], obj_auto['RA']])[::-1]
+
+        else:
+            if type(target_coords[0])==str:
+                obj_deg=sexa2deg([target_coords[1].replace(' ',':'),target_coords[0].replace(' ',':')])[::-1]
             else:
-                obj_auto = Simbad.query_object(source_name)[0]
+                obj_deg=target_coords
+            source_ra,source_dec=obj_deg
 
-    source_ra, source_dec = sexa2deg([obj_auto['DEC'], obj_auto['RA']])[::-1]
 
     if instru!='all':
         if instru=='xtend':
@@ -2688,7 +2729,7 @@ def extract_arf(directory,anal_dir_suffix='',on_axis_check=None,arf_subdir='sp',
                                    region_file=elem_region,
                                    rmf_file=rmf_path.replace(anal_dir,'.'),
                                    source_type=source_type,
-                                   e_low=e_low,e_high=e_high,
+                                   e_low=e_low_xtd,e_high=e_high_xtd,
                                    numphoton=numphoton,
                                    minphoton=minphoton,
                                    spawn=bashproc)
@@ -2705,7 +2746,7 @@ def extract_arf(directory,anal_dir_suffix='',on_axis_check=None,arf_subdir='sp',
                     else:
                         pixel_str_rsl_use=pixel_str_rsl
 
-                    for elem_pixel_str in pixel_str_rsl.split('+'):
+                    for elem_pixel_str in pixel_str_rsl_use.split('+'):
 
                         reg_str = pixel_str_rsl if pixel_str_rsl=='branch_filter' else pixel_str_rsl_use
 
@@ -2740,7 +2781,7 @@ def extract_arf(directory,anal_dir_suffix='',on_axis_check=None,arf_subdir='sp',
                                    region_file=region_path.replace(anal_dir,'.'),
                                    rmf_file=rmf_path.replace(anal_dir,'.'),
                                    source_type=source_type,
-                                   e_low=e_low, e_high=e_high,
+                                   e_low=e_low_rsl, e_high=e_high_rsl,
                                    numphoton=numphoton,
                                    minphoton=minphoton,
                                    spawn=bashproc)

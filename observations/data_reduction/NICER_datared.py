@@ -102,7 +102,7 @@ ap.add_argument("-dir", "--startdir", nargs='?', help="starting directory. Curre
 ap.add_argument("-l","--local",nargs=1,help='Launch actions directly in the current directory instead',
                 default=False,type=bool)
 ap.add_argument('-catch','--catch_errors',help='Catch errors while running the data reduction and continue',
-                default=False,type=bool)
+                default=True,type=bool)
 
 #1 for no parallelization
 ap.add_argument('-parallel',help='number of processors for parallel directories',
@@ -110,7 +110,7 @@ ap.add_argument('-parallel',help='number of processors for parallel directories'
 
 #global choices
 ap.add_argument("-a","--action",nargs='?',help='Give which action(s) to proceed,separated by comas.',
-                default = 'l,ml', type = str)
+                default = 'fc,1,gti,fs,l,g,m,ml,c', type = str)
 #default: fc,1,gti,fs,l,g,m,ml,c
 
 #note: should be kept to true for most complicated tasks
@@ -119,9 +119,12 @@ ap.add_argument("-over",nargs=1,help='overwrite computed tasks (i.e. with produc
 
 #directory level overwrite (not active in local)
 ap.add_argument('-folder_over',nargs=1,help='relaunch action through folders with completed analysis',
-                default=True, type=bool)
+                default=False, type=bool)
 ap.add_argument('-folder_cont',nargs=1,help='skips all but the last 2 directories in the summary folder file',
-                default=False,type=bool)
+                default=True,type=bool)
+
+ap.add_argument('-invert_subdirs',nargs=1,help='start the analysis from the subdirectories in reverse order',
+                default=True,type=bool)
 #note : we keep the previous 2 directories because bug or breaks can start actions on a directory following the initially stopped one
 
 #action specific overwrite
@@ -143,7 +146,7 @@ ap.add_argument('-keep_SAA',nargs=1,help='keep South Atlantic Anomaly (SAA) Peri
 #note: should be set to -1 if overdyn is activated in the gti filtering options
 ap.add_argument('-overshoot_limit',nargs=1,help='overshoot event rate limit',type=float,default=-1)
 
-ap.add_argument('-undershoot_limit',nargs=1,help='undershoot event rate limit',type=float,default=500)
+ap.add_argument('-undershoot_limit',nargs=1,help='undershoot event rate limit',type=float,default=800)
 
 ap.add_argument('-keep_lowmem',nargs=1,help='disable the memory discarding filtering for high count rates',type=bool,
                 default=False)
@@ -197,6 +200,19 @@ ap.add_argument('-erodedilate_hard_flare',nargs=1,
                 help='Erodes increasingly more gtis around the overshoot excluded intervals',
                 type=int,default=5)
 
+ap.add_argument('-overdyn_thresh',nargs=1,help='threshold between the two modes of overdyn filtering',
+                type=float,default=1.)
+
+ap.add_argument('-overdyn_factor_low',nargs=1,help='comparison factor for the low count rate part of overdyn filtering',
+                type=float,default=5.)
+
+ap.add_argument('-overdyn_factor_high',nargs=1,help='comparison factor for the high count rate part of overdyn filtering',
+                type=float,default=1.)
+
+ap.add_argument('-underdyn_method',nargs=1,help='method for underdyn filtering',type=str,
+                default='compa')
+
+#for underdyn gradient
 #also used for the leeway between both jumps
 ap.add_argument('-underdyn_jump_width',nargs=1,
                 help='Maximum duration and leeway of an undershoot+main counts jump',type=int,
@@ -222,17 +238,17 @@ ap.add_argument('-int_split_bin',nargs=1,help='binning of the light curve used f
 
 ap.add_argument('-lc_bin_list',nargs=1,
                 help='A list of binnings with which to generate all lightcurces/HR evolutions (in s)',
-                default=[1.],type=list)
+                default=[1.,0.01],type=list)
 #note: also defines the binning used for the gti definition
 
 # lc_bands_list_det=['1-2','2-3','3-4','4-5','5-6','6-7','7-8','8-9','9-10']
 
-lc_bands_list_det=['1-3','0.3-10']
+lc_bands_list_det=['1-3','0.3-10.']
 ap.add_argument('-lc_bands_str',nargs=1,help='Gives the list of bands to create lightcurves from',
                 default='3-10'+','+','.join(lc_bands_list_det),type=str)
 ap.add_argument('-hr_bands_str',nargs=1,help='Gives the list of bands to create hrsfrom',default='6-10/3-6',type=str)
 
-
+ap.add_argument('-skip_merge_lc',nargs=1,help='Skip merge GTIs for lightcurve computations',default=True,type=bool)
 '''spectra'''
 
 #note that the default of nicerl3-spect is True
@@ -289,6 +305,8 @@ action_list=args.action.split(',')
 local=args.local
 folder_over=args.folder_over
 folder_cont=args.folder_cont
+
+invert_subdirs=args.invert_subdirs
 overwrite_glob=args.over
 catch_errors=args.catch_errors
 bgmodel=args.bgmodel
@@ -322,6 +340,12 @@ parallel=args.parallel
 lc_bin_list=args.lc_bin_list
 lc_bands_str=args.lc_bands_str
 hr_bands_str=args.hr_bands_str
+skip_merge_lc=args.skip_merge_lc
+
+overdyn_thresh=args.overdyn_thresh
+overdyn_factor_low=args.overdyn_factor_low
+overdyn_factor_high=args.overdyn_factor_high
+underdyn_method=args.underdyn_method
 
 sp_systematics=args.sp_systematics
 
@@ -526,7 +550,7 @@ def select_detector(directory,detectors='-14,-34,-54',thread=None,parallel=False
             thread.set()
 
 def plot_event_diag(mode,obs_start_str,time_obs,id_gti_orbit,
-                    counts_035_8,counts_8_12,counts_overshoot,counts_undershoot,cutoff_rigidity,
+                    counts_035_8,counts_035_2,counts_2_8,counts_8_12,counts_overshoot,counts_undershoot,cutoff_rigidity,
                     counts_035_8_glob=None,
                     save_path=None,
                     id_gti=None,id_flares=None,id_overcut=None,
@@ -565,7 +589,13 @@ def plot_event_diag(mode,obs_start_str,time_obs,id_gti_orbit,
                 
             ax_events.errorbar(time_obs[id_gti_orbit[i_orbit]], counts_035_8[id_gti_orbit[i_orbit]],
                                color='red', label='0.35-8 keV Count Rate' if i_orbit==0 else '')
-        
+
+            ax_events.errorbar(time_obs[id_gti_orbit[i_orbit]], counts_035_2[id_gti_orbit[i_orbit]],
+                               color='pink', label='0.35-2 keV Count Rate' if i_orbit==0 else '')
+
+            ax_events.errorbar(time_obs[id_gti_orbit[i_orbit]], counts_2_8[id_gti_orbit[i_orbit]],
+                               color='magenta', label='2-8 keV Count Rate' if i_orbit==0 else '')
+
             ax_events.errorbar(time_obs[id_gti_orbit[i_orbit]], counts_8_12[id_gti_orbit[i_orbit]],
                                color='blue', label='8-12 keV Count Rate' if i_orbit==0 else '')
         
@@ -595,6 +625,12 @@ def plot_event_diag(mode,obs_start_str,time_obs,id_gti_orbit,
 
     ax_events.errorbar(time_obs[id_gti_orbit], counts_035_8,
                        color='red', label='0.35-8 keV Count Rate')
+
+    ax_events.errorbar(time_obs[id_gti_orbit], counts_035_2,
+                       color='pink', label='0.35-2 keV Count Rate')
+
+    ax_events.errorbar(time_obs[id_gti_orbit], counts_2_8,
+                       color='magenta', label='2-8 keV Count Rate')
 
     ax_events.errorbar(time_obs[id_gti_orbit], counts_8_12,
                        color='blue', label='8-12 keV Count Rate')
@@ -731,9 +767,20 @@ def create_gtis(directory,split_arg='orbit+flare+overdyn+underdyn',band='3-15',f
                 clip_sigma=2.,clip_band='8-12',peak_score_thresh=2.,
                 int_split_band='0.3-10.',int_split_bin=0.1,clip_int_delta=True,
                 flare_factor=2,gti_tool='NICERDAS',erodedilate_overdyn=5,
+
+                #for overdyn filtering
+                overdyn_thresh=1,overdyn_factor_low=2,overdyn_factor_high=1,
+
+                #for flare
                 hard_flare_segments=5,hard_flare_sigma=4,erodedilate_hard_flare=5,
                 hard_flare_min_duration=30,
+
+                #for underdyn
+                underdyn_method='compa',
+
+                #for underdyn_method=gradient
                 underdyn_jump_width=10,underdyn_jump_factor=5,
+
                 day_mode='both',thread=None,add_merge_gti=True,parallel=False):
     '''
     wrapper for a function to split nicer obsids into indivudal portions with different methods
@@ -754,19 +801,26 @@ def create_gtis(directory,split_arg='orbit+flare+overdyn+underdyn',band='3-15',f
 
         -overdyn: dynamically filters high overshoot regions by comparing the 0.35-8keV count rate and the overhsoot rate
 
-                  When the 0.35-8 count rate is <1 cts/s, filters when the overshoot rate is >2* the count rate
-                  When the 0.35-8 count rate is >1 ct/s, filters when the overshoot rate is >5* the count rate
+                  When the 2-8 count rate is <overdyn_thresh cts/s,
+                   filters when the overshoot rate is >overdyn_factor_low* the count rate
+                  When the 2-8 count rate is >overdyn_thresh ct/s,
+                   filters when the overshoot rate is >overdyn_factor_high* the count rate
 
                  dilates the resulting exclusion using the erodedilate_overdyn parameter (in s)
 
 
-        -underdyn: dynamically filters high undershoot regions by searching for jumps in both the 0.35-8. lightcurve
-                    and the undershoot lightcurve within a short period
-                    underdyn_jump_width defines the maximum width for a jump to take place
-                    underdyn_jump_factor defines the multiplicative height of a jump
-                    A jump is considered valid if an undershoot jump happens\
-                     within unerdyn_jump_width of a main counts jump
-                    For now, Removes the entirety of the following orbit
+        -underdyn: dynamically filters high undershoot regions
+                    if underdyn_method is set to compa:
+                        searches anormal high undershoot periods by comparing the 0.35-2, 2-8 and undershoot lightcurves
+
+                    if underdyn_method is set to gradient:
+                        by searching for jumps in both the 0.35-8. lightcurve
+                        and the undershoot lightcurve within a short period
+                        underdyn_jump_width defines the maximum width for a jump to take place
+                        underdyn_jump_factor defines the multiplicative height of a jump
+                        A jump is considered valid if an undershoot jump happens\
+                         within unerdyn_jump_width of a main counts jump
+                        For now, Removes the entirety of the following orbit
 
         -hard_flare:
                 isolate hard-only background flare periods in each observation from the non-nimkt excluded data
@@ -1075,6 +1129,10 @@ def create_gtis(directory,split_arg='orbit+flare+overdyn+underdyn',band='3-15',f
 
             counts_035_8=data_mkf['FPM_XRAY_PI_0035_0200']+data_mkf['FPM_XRAY_PI_0200_0800']
 
+            counts_035_2=data_mkf['FPM_XRAY_PI_0035_0200']
+
+            counts_2_8=data_mkf['FPM_XRAY_PI_0200_0800']
+
             counts_8_12=data_mkf['FPM_XRAY_PI_0800_1200']
 
             counts_overshoot=data_mkf['FPM_OVERONLY_COUNT']
@@ -1221,6 +1279,8 @@ def create_gtis(directory,split_arg='orbit+flare+overdyn+underdyn',band='3-15',f
             plot_event_diag('global',obs_start_str,time_obs,
                             id_gti_orbit=id_gti_orbit,
                             counts_035_8=counts_035_8,
+                            counts_035_2=counts_035_2,
+                            counts_2_8=counts_2_8,
                             counts_8_12=counts_8_12,
                             counts_overshoot=counts_overshoot,
                             counts_undershoot=counts_undershoot,
@@ -1409,15 +1469,16 @@ def create_gtis(directory,split_arg='orbit+flare+overdyn+underdyn',band='3-15',f
             id_overcut = np.array([None] * n_orbit)
 
             if 'overdyn' in split_arg:
+
                 for i_orbit, (elem_gti_orbit,id_nongti_nimkt_orbit) in enumerate(zip(id_gti,id_nongti_nimkt)):
 
                     # note that here we're only filtering what's not in the flares
 
                     # we cut with different criteria for high and low bg rates to have better filtering
-                    mask_over = ((counts_035_8[elem_gti_orbit] <= 1) & \
-                                 (counts_overshoot[elem_gti_orbit] > 2 * counts_035_8[elem_gti_orbit])) | \
-                                ((counts_035_8[elem_gti_orbit] > 1) & \
-                                 (counts_overshoot[elem_gti_orbit] > 5 * counts_035_8[elem_gti_orbit]))
+                    mask_over = ((counts_2_8[elem_gti_orbit] <= overdyn_thresh) & \
+                                 (counts_overshoot[elem_gti_orbit] > overdyn_factor_low * counts_2_8[elem_gti_orbit])) | \
+                                ((counts_2_8[elem_gti_orbit] > overdyn_thresh) & \
+                                 (counts_overshoot[elem_gti_orbit] > overdyn_factor_high * counts_2_8[elem_gti_orbit]))
 
                     id_over_orbit = np.array(elem_gti_orbit)[mask_over].tolist()
 
@@ -1455,61 +1516,95 @@ def create_gtis(directory,split_arg='orbit+flare+overdyn+underdyn',band='3-15',f
 
                     # note that here we're only filtering what's not in the flares
 
-                    '''
-                    Here we're looking for a gradien in undershoots that would be linked to a gradient in main count rate
-                    and not be diagnosed
-                    The jumps are usually very short
-                    '''
+                    if underdyn_method=='compa':
 
-                    assert type(underdyn_jump_width)==int,'Error: underdyn_jump_width must be an integer'
+                        '''
+                        We look at the combination of 3 criteria to assert whether the source is contaminated.
+                        1. abnormally high 0.35-2 count rate compared to the undershoots (>10%)
+                        2. abnormally low HR ratio in 2-8/0.35-2 (<2%)
+                        3. high undershoots (>100cts/s)
+                        '''
 
-                    jump_undershoot_id =[]
-                    jump_main_counts_id=[]
+                        for i_orbit, (elem_gti_orbit, id_nongti_nimkt_orbit) in enumerate(zip(id_gti, id_nongti_nimkt)):
 
-                    #note: here to avoid issues we only compute these starting from positions outside of nimkt,
-                    # to avoid issues with starting jumps
-                    for elem_gti in [gti for gti in elem_gti_orbit[:-1] if gti not in id_nongti_nimkt_orbit]:
+                            # note that here we're only filtering what's not in the flares
 
-                        #identifying the neighboring jumps that are also INSIDE the gtis and not in the nimkt excluded
-                        mask_jump_main_counts=(counts_035_8[elem_gti:min(elem_gti+underdyn_jump_width,elem_gti_orbit[-1])]>\
-                                               underdyn_jump_factor*counts_035_8[elem_gti])
-                        mask_okgti_main_counts=np.array([elem in elem_gti_orbit and elem not in id_nongti_nimkt_orbit for elem in \
-                                                np.arange(elem_gti,min(elem_gti+underdyn_jump_width,elem_gti_orbit[-1]))])
+                            # we cut with different criteria for high and low bg rates to have better filtering
+                            mask_under = ((counts_035_2[elem_gti_orbit] >= 0.1* counts_undershoot[elem_gti_orbit]) & \
+                                         (counts_2_8[elem_gti_orbit]/counts_035_2[elem_gti_orbit] <= 0.02) & \
+                                         (counts_undershoot[elem_gti_orbit]>100))
 
-                        if np.any((mask_jump_main_counts) & (mask_okgti_main_counts)):
-                            jump_main_counts_id+=[elem_gti]
+                            id_under_orbit = np.array(elem_gti_orbit)[mask_under].tolist()
 
-                        #same for undershoot jumps but we don't restrict them to the current gtis
+                            id_undercut[i_orbit] = id_under_orbit
 
-                        mask_jump_underdyn=(counts_undershoot[elem_gti:min(elem_gti+underdyn_jump_width,elem_gti_orbit[-1])]>\
-                                            underdyn_jump_factor*counts_undershoot[elem_gti])
+                            # redefining the gtis after the flares have been defined
+                            id_gti[i_orbit] = [elem for elem in elem_gti_orbit if elem not in id_under_orbit]
 
-                        if np.any(mask_jump_underdyn):
-                            jump_undershoot_id+=[elem_gti]
+                            # this one for is for the automatic split
+                            if 'split' in split_arg:
+                                for i_split in range(len(split_gti_arr[i_orbit])):
+                                    split_gti_arr[i_orbit][i_split] = [elem for elem in split_gti_arr[i_orbit][i_split] \
+                                                                       if elem not in id_under_orbit]
 
-                    jump_undershoot_id=np.array(jump_undershoot_id)
-                    jump_main_counts_id=np.array(jump_main_counts_id)
+                    elif underdyn_method=='gradient':
 
-                    #finding the ids where there is less than a 10 second gap between the jumps
+                        '''
+                        OUTDATED
+                        Here we're looking for a gradient in undershoots that would be linked to a gradient in main count rate
+                        and not be diagnosed
+                        The jumps are usually very short
+                        '''
 
-                    #note: there are some jumps with more than 10s at the end of orbits so using a higher value than
-                    #underdyn_jump_wdith can help
+                        assert type(underdyn_jump_width)==int,'Error: underdyn_jump_width must be an integer'
 
-                    if len(jump_undershoot_id)>0 and len(jump_main_counts_id)>0:
-                        id_jump_both=[elem_jump_main for elem_jump_main in jump_main_counts_id\
-                                        if np.any(abs(jump_undershoot_id-elem_jump_main)<3*underdyn_jump_width)]
-                    else:
-                        id_jump_both=[]
+                        jump_undershoot_id =[]
+                        jump_main_counts_id=[]
 
-                    #stopping the gti at the first id
-                    if len(id_jump_both)>0:
-                        elem_id_undercut = np.array(elem_gti_orbit)[elem_gti_orbit>id_jump_both[0]]
+                        #note: here to avoid issues we only compute these starting from positions outside of nimkt,
+                        # to avoid issues with starting jumps
+                        for elem_gti in [gti for gti in elem_gti_orbit[:-1] if gti not in id_nongti_nimkt_orbit]:
 
-                        # defining the gtis after the flares have been defined
-                        elem_id_gti = [elem for elem in elem_gti_orbit if elem not in elem_id_undercut]
+                            #identifying the neighboring jumps that are also INSIDE the gtis and not in the nimkt excluded
+                            mask_jump_main_counts=(counts_035_8[elem_gti:min(elem_gti+underdyn_jump_width,elem_gti_orbit[-1])]>\
+                                                   underdyn_jump_factor*counts_035_8[elem_gti])
+                            mask_okgti_main_counts=np.array([elem in elem_gti_orbit and elem not in id_nongti_nimkt_orbit for elem in \
+                                                    np.arange(elem_gti,min(elem_gti+underdyn_jump_width,elem_gti_orbit[-1]))])
 
-                        id_gti[i_orbit] = elem_id_gti
-                        id_undercut [i_orbit]= elem_id_undercut
+                            if np.any((mask_jump_main_counts) & (mask_okgti_main_counts)):
+                                jump_main_counts_id+=[elem_gti]
+
+                            #same for undershoot jumps but we don't restrict them to the current gtis
+
+                            mask_jump_underdyn=(counts_undershoot[elem_gti:min(elem_gti+underdyn_jump_width,elem_gti_orbit[-1])]>\
+                                                underdyn_jump_factor*counts_undershoot[elem_gti])
+
+                            if np.any(mask_jump_underdyn):
+                                jump_undershoot_id+=[elem_gti]
+
+                        jump_undershoot_id=np.array(jump_undershoot_id)
+                        jump_main_counts_id=np.array(jump_main_counts_id)
+
+                        #finding the ids where there is less than a 10 second gap between the jumps
+
+                        #note: there are some jumps with more than 10s at the end of orbits so using a higher value than
+                        #underdyn_jump_wdith can help
+
+                        if len(jump_undershoot_id)>0 and len(jump_main_counts_id)>0:
+                            id_jump_both=[elem_jump_main for elem_jump_main in jump_main_counts_id\
+                                            if np.any(abs(jump_undershoot_id-elem_jump_main)<3*underdyn_jump_width)]
+                        else:
+                            id_jump_both=[]
+
+                        #stopping the gti at the first id
+                        if len(id_jump_both)>0:
+                            elem_id_undercut = np.array(elem_gti_orbit)[elem_gti_orbit>id_jump_both[0]]
+
+                            # defining the gtis after the flares have been defined
+                            elem_id_gti = [elem for elem in elem_gti_orbit if elem not in elem_id_undercut]
+
+                            id_gti[i_orbit] = elem_id_gti
+                            id_undercut [i_orbit]= elem_id_undercut
 
 
             id_hard_flares=np.array([None] * n_orbit)
@@ -1606,6 +1701,8 @@ def create_gtis(directory,split_arg='orbit+flare+overdyn+underdyn',band='3-15',f
                                     [plot_event_diag(mode='manual', obs_start_str=obs_start_str, time_obs=time_obs,
                                     id_gti_orbit=id_gti_orbit[i_orbit],
                                     counts_035_8=counts_035_8[id_gti_orbit[i_orbit]],
+                                     counts_035_2=counts_035_2[id_gti_orbit[i_orbit]],
+                                     counts_2_8=counts_2_8[id_gti_orbit[i_orbit]],
                                     counts_8_12=counts_8_12[id_gti_orbit[i_orbit]],
                                     counts_overshoot=counts_overshoot[id_gti_orbit[i_orbit]],
                                     counts_undershoot=counts_undershoot[id_gti_orbit[i_orbit]],
@@ -1659,6 +1756,8 @@ def create_gtis(directory,split_arg='orbit+flare+overdyn+underdyn',band='3-15',f
                 plot_event_diag(mode='orbit',obs_start_str=obs_start_str,time_obs=time_obs,
                                 id_gti_orbit=id_gti_orbit[i_orbit],
                                 counts_035_8=counts_035_8[id_gti_orbit[i_orbit]],
+                                counts_035_2=counts_035_2[id_gti_orbit[i_orbit]],
+                                counts_2_8=counts_2_8[id_gti_orbit[i_orbit]],
                                 counts_8_12=counts_8_12[id_gti_orbit[i_orbit]],
                                 counts_overshoot=counts_overshoot[id_gti_orbit[i_orbit]],
                                 counts_undershoot=counts_undershoot[id_gti_orbit[i_orbit]],
@@ -1746,6 +1845,7 @@ def create_gtis(directory,split_arg='orbit+flare+overdyn+underdyn',band='3-15',f
                 #creating a lightcurve for all orbits with the given band and binning
                 #here we assume that orbit gtis are already created
                 extract_lc(directory,binning=int_split_bin,bands=int_split_band,HR=None,overwrite=True,
+                           skip_merge=True,
                            day_mode='day' if day_mode_str=='day mode' else\
                                     'night' if day_mode_str=='night mode' else '')
 
@@ -1808,6 +1908,8 @@ def create_gtis(directory,split_arg='orbit+flare+overdyn+underdyn',band='3-15',f
                     plot_event_diag(mode='orbit', obs_start_str=obs_start_str, time_obs=time_obs,
                                     id_gti_orbit=id_gti_orbit[i_orbit],
                                     counts_035_8=counts_035_8[id_gti_orbit[i_orbit]],
+                                    counts_035_2=counts_035_2[id_gti_orbit[i_orbit]],
+                                    counts_2_8=counts_2_8[id_gti_orbit[i_orbit]],
                                     counts_8_12=counts_8_12[id_gti_orbit[i_orbit]],
                                     counts_overshoot=counts_overshoot[id_gti_orbit[i_orbit]],
                                     counts_undershoot=counts_undershoot[id_gti_orbit[i_orbit]],
@@ -1865,7 +1967,7 @@ def extract_all_spectral(directory,bkgmodel='scorpeon_script',language='python',
         
         -scorpeon_file: uses scorpeon in file mode to produce a static background file
 
-        -scorpeon_all: first creates a model without background, then rerun the task 3 times to create
+        -scorpeon_all: first creates a spectrum without background, then rerun the task 3 times to create
                        the bg files in static, xspec and pyxspec modes
 
         -3c50: 3c50 model of Remillar et al., fetches data from the alias_3C50 argument
@@ -2122,7 +2224,7 @@ def extract_all_spectral(directory,bkgmodel='scorpeon_script',language='python',
 
 #### extract_lc
 def extract_lc(directory,binning_list=[1],bands='3-12',HR='6-10/3-6',overwrite=True,day_mode='both',
-               thread=None,parallel=False):
+               skip_merge=True,thread=None,parallel=False):
     
     '''
     Wrapper for nicerl3-lc, with added matplotlib plotting of requested lightcurves and HRs
@@ -2143,7 +2245,12 @@ def extract_lc(directory,binning_list=[1],bands='3-12',HR='6-10/3-6',overwrite=T
 
         -day_mode:      (day, night, both) use day, night or both products
                         (both gti and events are day/night specific)
-        
+
+        -skip_merge:
+            do not extract the lightcurve of merge products
+            (since they are typically big and redundant with
+                        individual orbit lightcurves)
+
     Note: can produce no output without error if no gti in the event file
 
     -parallel: bool:tells the function it's running in a parallel configuration.
@@ -2182,6 +2289,9 @@ def extract_lc(directory,binning_list=[1],bands='3-12',HR='6-10/3-6',overwrite=T
                         elem.endswith('.gti') and '_gti_' in elem and '_gti_mask_' not in elem])
 
         assert day_mode in ['both','day', 'night'], 'Error: day_mode not among the authorized values (day,night,both)'
+
+        if skip_merge:
+            gti_files=[elem for elem in gti_files if 'MRG_' not in elem]
 
         if day_mode!='both':
 
@@ -2890,9 +3000,6 @@ def startdir_state(action):
 if load_functions:
     breakpoint()
 
-
-started_folders,done_folders=startdir_state(args.action)
-
 def run_actions(obs_dir,action_list,parallel=False):
 
     '''
@@ -2942,6 +3049,8 @@ def run_actions(obs_dir,action_list,parallel=False):
     # create_gtis_thread = None
     #
     # batch_mover_timing_thread = None
+
+    started_folders, done_folders = startdir_state(args.action)
 
     # continue check
     if obs_dir in started_folders[:-2] and folder_cont:
@@ -2995,6 +3104,10 @@ def run_actions(obs_dir,action_list,parallel=False):
                                          clip_sigma=clip_sigma,
                                          peak_score_thresh=peak_score_thresh,
                                          gti_tool=gti_tool, erodedilate_overdyn=erodedilate_overdyn,
+                                         overdyn_thresh=overdyn_thresh,
+                                         overdyn_factor_low=overdyn_factor_low,
+                                         overdyn_factor_high=overdyn_factor_high,
+                                         underdyn_method=underdyn_method,
                                          underdyn_jump_width=underdyn_jump_width,underdyn_jump_factor=underdyn_jump_factor,
                                          hard_flare_segments=hard_flare_segments,hard_flare_sigma=hard_flare_sigma,
                                          erodedilate_hard_flare=erodedilate_hard_flare,
@@ -3026,7 +3139,7 @@ def run_actions(obs_dir,action_list,parallel=False):
             if curr_action == 'l':
                 output_err[0] = extract_lc(dirname, binning_list=lc_bin_list if 'intensity' \
                                                                              not in gti_split else [
-                    int_split_bin],
+                    int_split_bin],skip_merge=skip_merge_lc,
                                         bands=lc_bands_str, HR=hr_bands_str, overwrite=overwrite_glob,
                                         day_mode=day_mode, thread=extract_lc_thread,parallel=parallel)
                 if type(output_err[0]) == str:
@@ -3118,13 +3231,16 @@ if not local:
             for elem_directory in subdirs_obsid)
 
     else:
+
+        if invert_subdirs:
+            subdirs_obsid=subdirs_obsid[::-1]
         for directory in subdirs_obsid:
             run_actions(directory, action_list,parallel=False)
 
 
 # if local:
 #
-#     #OUTDATED
+#     #HEAVILY OUTDATED
 #     assert True,'local mode currently outdated'
 #     #taking of the merge action if local is set since there is no point to merge in local (the batch directory acts as merge)
 #     action_list=[elem for elem in action_list if elem in ['m','ml']]

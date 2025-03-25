@@ -49,6 +49,7 @@ from bs4 import BeautifulSoup
 
 #correlation values and trend plots with MC distribution from the uncertainties
 from custom_pymccorrelation import pymccorrelation,perturb_values
+from io import StringIO
 from lmplot_uncert import lmplot_uncert_a
 
 #Note : as of the writing of this code, the standard pymccorrelation doesn't accept differing +/- uncertainties, so I tweaked their 
@@ -693,7 +694,7 @@ def load_catalogs():
         ctl_blackcat=pd.read_html('https://www.astro.puc.cl/BlackCAT/transients.php')[0]
     except:
         st.warning('BlackCAT webpage offline. Using saved equivalent from 03-2023...')
-        ctl_blackcat=pd.read_html('https://web.archive.org/web/20230311033338/https://astro.puc.cl/BlackCAT/transients.php')[1]
+        ctl_blackcat=pd.read_html('https://web.archive.org/web/20250325064252/https://www.astro.puc.cl/BlackCAT/transients.php')[1]
 
     print('\nBH catalogs loading complete.')
     ctl_watchdog_obj=np.array(ctl_watchdog['Name'])
@@ -711,7 +712,7 @@ def load_catalogs():
 
             maxi_html_table = BeautifulSoup(maxi_r.text,features='lxml').find('table')
 
-        ctl_maxi_df = pd.read_html(str(maxi_html_table), header=0)[0]
+        ctl_maxi_df = pd.read_html(StringIO(str(maxi_html_table)), header=0)[0]
 
         #we create the request for the Simbad names of all MAXI sources here
         #so that it is done only once per script launch as it takes some time to run
@@ -728,7 +729,7 @@ def load_catalogs():
         with requests.get(bat_url) as bat_r:
             bat_html_table = BeautifulSoup(bat_r.text, features='lxml').find('table')
 
-        ctl_bat_df = pd.read_html(str(bat_html_table), header=0)[0]
+        ctl_bat_df = pd.read_html(StringIO(str(bat_html_table)), header=0)[0]
 
         # we create the request for the Simbad names of all bat sources here
         # so that it is done only once per script launch as it takes some time to run
@@ -766,6 +767,9 @@ def load_catalogs():
         included_mask=[str(elem) not in excluded_types for elem in ctl_bat_types]
 
         ctl_bat_simbad = silent_Simbad_query(np.array(ctl_bat_df['Source Name'])[included_mask])
+
+        print('ctl_bat_simbad:')
+        print(ctl_bat_simbad)
 
         ctl_bat_df=ctl_bat_df[included_mask]
 
@@ -833,6 +837,10 @@ def fetch_bat_lightcurve(ctl_bat_df,_ctl_bat_simbad,name,binning='day'):
     '''
 
     simbad_query = silent_Simbad_query([name[0].split('_')[0]])
+
+    print('simbad query:')
+    print(simbad_query)
+
 
     if simbad_query is None:
         return None

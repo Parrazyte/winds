@@ -899,13 +899,13 @@ A1: For Heasoft ver. 6.34, you need to execute the save command between "pixel s
     spawn_use.expect('XSELECT')
 
     # session name
-    spawn_use.sendline('')
+    spawn_use.sendline('new')
 
     # reading events
     spawn_use.sendline('read events')
 
     #removing the saved session if need bes
-    line_code=spawn_use.expect(['Use saved session?','SUZAKU'])
+    line_code=spawn_use.expect(['Use saved session?','XRISM'])
     if line_code==0:
         spawn_use.sendline('no')
 
@@ -919,9 +919,10 @@ A1: For Heasoft ver. 6.34, you need to execute the save command between "pixel s
     spawn_use.sendline(evt_file)
 
     # resetting mission
-    spawn_use.expect('Reset')
-    spawn_use.sendline('yes')
-
+    line_code=spawn_use.expect(['Reset','Observation Catalogue'])
+    if line_code==0:
+        spawn_use.sendline('yes')
+        spawn_use.expect(['Observation Catalogue'])
     spawn_use.sendline('set image '+image_mode)
 
     temp_evt_name=None
@@ -1038,52 +1039,117 @@ A1: For Heasoft ver. 6.34, you need to execute the save command between "pixel s
 
         spawn_use.sendline('rm '+temp_evt_name)
 
-def plot_lc_xrism(lc_path,binning='auto',directory='./',e_low='',e_high='',
+def plot_lc_xrism(lc_paths,binning='auto',directory='./',e_low='',e_high='',
+                  lc_paths_HR_num=None,
                   interact=False,
                   interact_tstart=None,
+                  instru='xrism',
                   save=False,suffix='',outdir=''):
 
     '''
 
     Wrapper to plot xrism lightcurves with or without interactivity
 
+    if lc_path_HR is not None, assumes it is also an lc path with the same binning and properties and
+    builds an HR from that as lc_path_HR/lc_path
+
     outdir: if set to None, saves the lightcure where lc_path is, otherwise in the outdir subdirectory
     '''
 
-    with fits.open(os.path.join(directory, lc_path)) as fits_lc:
-        data_lc_arr = fits_lc[1].data
+    if type(lc_paths)==str:
+        lc_path_list=[lc_paths]
+    else:
+        lc_path_list=lc_paths
 
-        telescope = fits_lc[1].header['TELESCOP']
-        instru = fits_lc[1].header['INSTRUME']
+    if type(lc_paths_HR_num)==str:
+        lc_path_HR_num_list=[lc_paths_HR_num]
+    elif type(lc_paths_HR_num)==type(None):
+        lc_path_HR_num_list=np.repeat(None,len(lc_paths))
+    else:
+        lc_path_HR_num_list=lc_paths_HR_num
 
-        time_zero = Time(fits_lc[1].header['MJDREFI'] + fits_lc[1].header['MJDREFF'], format='mjd')
-        time_zero += TimeDelta(fits_lc[1].header['TIMEZERO'], format='sec')
+    default_mpl_cycle=plt.rcParams['axes.prop_cycle'].by_key()['color']
 
-    # and plotting it
-
-    if save:
-        plt.ioff()
     fig_lc, ax_lc = plt.subplots(1, figsize=(16, 8))
 
-    if binning=='auto':
-        binning_use=data_lc_arr['TIME'][1]-data_lc_arr['TIME'][0]
-    else:
-        binning_use=str(binning)
 
-    plt.errorbar(data_lc_arr['TIME'], data_lc_arr['RATE'], xerr=float(binning_use) / 2,
-                 yerr=data_lc_arr['ERROR'], ls='-', lw=1, color='grey', ecolor='blue')
+    for i_lc,(elem_lc,elem_lc_HR_num) in enumerate(zip(lc_path_list,lc_path_HR_num_list)):
 
+        print("tchou")
+        with fits.open(os.path.join(directory, elem_lc)) as fits_lc:
+            data_lc_arr = fits_lc[1].data
+
+            telescope = fits_lc[1].header['TELESCOP']
+            instru = fits_lc[1].header['INSTRUME']
+
+            time_zero = Time(fits_lc[1].header['MJDREFI'] + fits_lc[1].header['MJDREFF'], format='mjd')
+            time_zero += TimeDelta(fits_lc[1].header['TIMEZERO'], format='sec')
+
+        # and plotting it
+
+        if save:
+            plt.ioff()
+
+        if binning=='auto':
+            binning_use=data_lc_arr['TIME'][1]-data_lc_arr['TIME'][0]
+        else:
+            binning_use=str(binning)
+
+        if elem_lc_HR_num is not None:
+            with fits.open(os.path.join(directory, elem_lc_HR_num)) as fits_lc:
+                data_lc_arr_num = fits_lc[1].data
+
+            HR=data_lc_arr_num['RATE']/data_lc_arr['RATE']
+            HR_err=((data_lc_arr_num['ERROR']/data_lc_arr_num['RATE'])**2+
+                    (data_lc_arr['ERROR']/data_lc_arr['RATE'])**2)**(1/2)*HR
+
+            plt.errorbar(data_lc_arr['TIME'], HR,xerr=float(binning_use) / 2,yerr=HR_err,
+                         ls='-', lw=1, color=(0.5, 0.5, 0.5,1/len(lc_path_list)),
+                         ecolor='blue' if len(lc_path_list)==1 else default_mpl_cycle[i_lc],
+                         label=elem_lc_HR_num+'/'+elem_lc if len(lc_path_list)>1 else '')
+
+        else:
+
+            plt.errorbar(data_lc_arr['TIME'], data_lc_arr['RATE'], xerr=float(binning_use) / 2,
+                     yerr=data_lc_arr['ERROR'], ls='-', lw=1, color=(0.5, 0.5, 0.5, 1/len(lc_path_list)),
+                         ecolor='blue' if len(lc_path_list)==1 else default_mpl_cycle[i_lc],
+                         label=elem_lc if len(lc_path_list)>1 else '' )
+
+    plt.legend()
 
     binning_str=str(binning_use)
 
-    plt.suptitle(
-        telescope + ' ' + instru + ' lightcurve for observation ' + lc_path.split('_lc')[0].split('_pixel')[0] +
-        (' with pixel ' + lc_path.split('_pixel_')[-1].split('_')[0] if instru == 'RESOLVE' else
-         ' with region ' + lc_path.split('_cl_')[-1].split('_lc')[0]) +
-        ' in [' + str(e_low) + '-' + str(e_high) + '] keV with ' + binning_str + ' s binning')
+    if instru=='xrism':
+        if lc_paths_HR_num is not None:
+            plt.suptitle(
+            telescope + ' ' + instru + ' Hardness Ratio for observation ' + lc_path_list[0].split('_lc')[0].split('_pixel')[0] +
+            (' with pixel ' + lc_path_list[0].split('_pixel_')[-1].split('_')[0] if instru == 'RESOLVE' else
+             ' with region ' + lc_path_list[0].split('_cl_')[-1].split('_lc')[0]) +
+            ' in [' + str(e_high) +']/[' + str(e_low) + '] keV with ' + binning_str + ' s binning')
+        else:
+            plt.suptitle(
+            telescope + ' ' + instru + ' lightcurve for observation ' + lc_path_list[0].split('_lc')[0].split('_pixel')[0] +
+            (' with pixel ' + lc_path_list[0].split('_pixel_')[-1].split('_')[0] if instru == 'RESOLVE' else
+             ' with region ' + lc_path_list[0].split('_cl_')[-1].split('_lc')[0]) +
+            ' in [' + str(e_low) + '-' + str(e_high) + '] keV with ' + binning_str + ' s binning')
+    else:
+
+        if lc_paths_HR_num is not None:
+            plt.suptitle(
+            telescope + ' ' + instru + ' Hardness Ratio for observation(s) ' + lc_path_list[0].split('_lc')[0].split('_pixel')[0] +
+        ' in [' + str(e_high) +']/[' + str(e_low) + '] keV with ' + binning_str + ' s binning')
+        else:
+            plt.suptitle(
+            telescope + ' ' + instru + ' lightcurve for observation(s) ' + lc_path_list[0].split('_lc')[0].split('_pixel')[0] +
+            'in [' + str(e_low) + '-' + str(e_high) + '] keV with ' + binning_str + ' s binning')
 
     plt.xlabel('Time (s) after ' + time_zero.isot)
-    plt.ylabel('RATE (counts/s)')
+
+    if lc_paths_HR_num is not None:
+        plt.ylabel('Hardness Ratio')
+
+    else:
+        plt.ylabel('RATE (counts/s)')
 
     plt.tight_layout()
 
@@ -1136,11 +1202,11 @@ def plot_lc_xrism(lc_path,binning='auto',directory='./',e_low='',e_high='',
             return slider_start.val,slider_end.val
 
     if save:
-        lc_path_extension=lc_path[lc_path.rfind('.'):]
+        lc_path_extension=lc_path_list[0][lc_path_list[0].rfind('.'):]
 
         os.system('mkdir -p '+os.path.join(directory, outdir))
 
-        fig_lc.savefig(os.path.join(directory, outdir, lc_path.replace(lc_path_extension,
+        fig_lc.savefig(os.path.join(directory, outdir, lc_path_list[0].replace(lc_path_extension,
                                                         ('_'+ suffix if suffix!='' else '')+'_screen.png')))
         plt.close()
         plt.ion()
@@ -2195,7 +2261,9 @@ def extract_rmf(directory,instru='all',rmf_subdir='sp',
                 rmf_type_rsl='X',pixel_str_rsl='branch_filter',rsl_arf_grade='0',
                 remove_cal_pxl_resolve=True,
                 # resolve grid
-                eminin_rsl=300,dein_rsl=0.5,nchanin_rsl=23400,
+                # eminin_rsl=300,dein_rsl=0.5,nchanin_rsl=23400,
+                eminin_rsl=0, dein_rsl=0.5, nchanin_rsl=60000,
+
                 useingrd_rsl=True,
                 #xtend grid
                 eminin_xtd=200,dein_xtd='"2,24"',nchanin_xtd='"5900,500"',

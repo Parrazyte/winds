@@ -851,7 +851,7 @@ def fetch_bat_lightcurve(ctl_bat_df,_ctl_bat_simbad,name,binning='day'):
 
     # we fetch the script id instead of the direct column number because Simbad erases the columns with no match
     # (-1 because the id starts at 1)
-    source_id = _ctl_bat_simbad['SCRIPT_NUMBER_ID'][_ctl_bat_simbad['main_id'] == simbad_query['main_id'][0]][0] - 1
+    source_id = _ctl_bat_simbad['object_number_id'][_ctl_bat_simbad['main_id'] == simbad_query['main_id'][0]][0] - 1
 
     bat_link = ctl_bat_df['standard'][source_id]
 
@@ -908,7 +908,7 @@ def fetch_maxi_lightcurve(ctl_maxi_df,_ctl_maxi_simbad,name,binning='day'):
     
     #we fetch the script id instead of the direct column number because Simbad erases the columns with no match 
     #(-1 because the id starts at 1)
-    source_id=_ctl_maxi_simbad['SCRIPT_NUMBER_ID'][_ctl_maxi_simbad['main_id']==simbad_query['main_id']][0]-1
+    source_id=_ctl_maxi_simbad['object_number_id'][_ctl_maxi_simbad['main_id']==simbad_query['main_id']][0]-1
 
     maxi_link=ctl_maxi_df['standard'][source_id]
 

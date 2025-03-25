@@ -62,7 +62,7 @@ from visual_line_tools import load_catalogs,dist_mass,obj_values,abslines_values
     int_rate_to_flux,incl_dyn_dict,incl_jet_dict,incl_misc_dict,incl_refl_dict,Porb_dict,wind_det_dict,wind_det_sources
 
 from lmplot_uncert import lmplot_uncert_a
-from general_tools import get_overlap
+from general_tools import get_overlap,make_zip
 # import mpld3
 
 # import streamlit.components.v1 as components
@@ -1427,17 +1427,6 @@ if alpha_abs:
     alpha_abs=0.5
 else:
     alpha_abs=1
-
-
-def make_zip(filebites_arr,filename_arr):
-    zip_buffer = io.BytesIO()
-
-    with zipfile.ZipFile(zip_buffer, "a",
-                         zipfile.ZIP_DEFLATED, False) as zip_file:
-        for file_name, data in zip(filename_arr,filebites_arr):
-            zip_file.writestr(file_name, data.getvalue())
-
-    return zip_buffer
 
 
 with st.sidebar.expander('Broad band HID'):

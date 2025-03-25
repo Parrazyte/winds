@@ -62,6 +62,7 @@ from visual_line_tools import load_catalogs,dist_mass,obj_values,abslines_values
     int_rate_to_flux,incl_dyn_dict,incl_jet_dict,incl_misc_dict,incl_refl_dict,Porb_dict,wind_det_dict,wind_det_sources
 
 from lmplot_uncert import lmplot_uncert_a
+from general_tools import get_overlap,make_zip
 # import mpld3
 
 # import streamlit.components.v1 as components
@@ -186,9 +187,6 @@ else:
     if 'imaging' in expmodes[0] or 'Imaging' in expmodes[0]:
         expmodes=expmodes+['Imaging']
     expmodes=expmodes[1:]
-    
-def getoverlap(a, b):
-    return max(0, min(a[1], b[1]) - max(a[0], b[0]))
 
 def convert_df(df):
     # IMPORTANT: Cache the conversion to prevent computation on every rerun
@@ -1431,17 +1429,6 @@ else:
     alpha_abs=1
 
 
-def make_zip(filebites_arr,filename_arr):
-    zip_buffer = io.BytesIO()
-
-    with zipfile.ZipFile(zip_buffer, "a",
-                         zipfile.ZIP_DEFLATED, False) as zip_file:
-        for file_name, data in zip(filename_arr,filebites_arr):
-            zip_file.writestr(file_name, data.getvalue())
-
-    return zip_buffer
-
-
 with st.sidebar.expander('Broad band HID'):
 
     display_broad_hid_BAT = st.toggle('Display broad band HID (HARD BAND=15-50)', value=False)
@@ -1553,11 +1540,11 @@ radio_info_label=['Velocity shift', r'$\Delta-C$', 'Equivalent width ratio']
 
 
 #masking the objects depending on inclination
-mask_inclin=[include_noinclin if elem not in incl_dict_use else getoverlap((incl_dict_use[elem][0]-incl_dict_use[elem][1],incl_dict_use[elem][0]+incl_dict_use[elem][2]),slider_inclin)>0 for elem in obj_list]
+mask_inclin=[include_noinclin if elem not in incl_dict_use else get_overlap((incl_dict_use[elem][0]-incl_dict_use[elem][1],incl_dict_use[elem][0]+incl_dict_use[elem][2]),slider_inclin,distance=True)>=0 for elem in obj_list]
 
 #creating the mask for highlighting objects whose inclination limits go beyond the inclination restrictions if asked to
 bool_incl_inside=np.array([False if elem not in incl_dict_use else\
-                           round(getoverlap((incl_dict_use[elem][0]-incl_dict_use[elem][1],
+                           round(get_overlap((incl_dict_use[elem][0]-incl_dict_use[elem][1],
                                  incl_dict_use[elem][0]+incl_dict_use[elem][2]),slider_inclin),3)==\
                            incl_dict_use[elem][1]+incl_dict_use[elem][2] and\
                            (incl_dict_use[elem][0]>=slider_inclin[0] and incl_dict_use[elem][0]<=slider_inclin[1])\
@@ -1591,6 +1578,7 @@ delta_1m=TimeDelta(30,format='jd')
 delta_1w=TimeDelta(7,format='jd')
 delta_1h=TimeDelta(3600,format='sec')
 delta_1s=TimeDelta(1,format='sec')
+
 if restrict_time:
 
     with container_date_change:

@@ -16,6 +16,8 @@ import glob
 import warnings
 from astropy.io import fits
 from astroquery.simbad import Simbad
+import io
+import zipfile
 
 h_cgs = 6.624e-27
 eV2erg = 1.6021773E-12
@@ -31,6 +33,15 @@ c_cgs = 2.99792e10
 sigma_thomson_cgs = 6.6525e-25
 PI = 3.14159265
 
+def make_zip(filebites_arr,filename_arr):
+    zip_buffer = io.BytesIO()
+
+    with zipfile.ZipFile(zip_buffer, "a",
+                         zipfile.ZIP_DEFLATED, False) as zip_file:
+        for file_name, data in zip(filename_arr,filebites_arr):
+            zip_file.writestr(file_name, data.getvalue())
+
+    return zip_buffer
 
 def R_g(M_BH_sol):
 

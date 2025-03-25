@@ -1071,8 +1071,11 @@ def plot_lightcurve(dict_linevis,ctl_maxi_df,ctl_maxi_simbad,name,ctl_bat_df,ctl
             
             rxte_hr_denom=rxte_lc_df[rxte_lc_df.columns[3]]+rxte_lc_df[rxte_lc_df.columns[5]]
             rxte_hr=rxte_lc_df[rxte_lc_df.columns[7]]/rxte_hr_denom
-            
-            rxte_hr_err=abs((rxte_lc_df[rxte_lc_df.columns[8]]/rxte_lc_df[rxte_lc_df.columns[7]]+(rxte_lc_df[rxte_lc_df.columns[4]]+rxte_lc_df[rxte_lc_df.columns[6]])/rxte_hr_denom)*rxte_hr)
+
+            #this is a "worst case" error composition
+            rxte_hr_err=abs((rxte_lc_df[rxte_lc_df.columns[8]]/rxte_lc_df[rxte_lc_df.columns[7]]+
+                             (rxte_lc_df[rxte_lc_df.columns[4]]+rxte_lc_df[rxte_lc_df.columns[6]])
+                             /rxte_hr_denom)*rxte_hr)
             
             ax_lc.set_yscale('log')
             

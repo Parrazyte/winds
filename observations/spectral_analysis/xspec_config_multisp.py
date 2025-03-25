@@ -1172,6 +1172,7 @@ def reset():
     Plot.add=True
     Fit.statMethod='cstat'
     Fit.query='no'
+    Plot.xLog=False
 
 def xLog_rw(path):
 
@@ -6500,8 +6501,10 @@ def EW_ang2keV(x,e_line):
     return x*(h_keV*3*10**18)/l_line**2
 
 
-def xPlot(types,axes_input=None,plot_saves_input=None,plot_arg=None,includedlist=None,group_names='auto',hide_ticks=True,
+def xPlot(types,axes_input=None,plot_saves_input=None,plot_arg=None,includedlist=None,group_names='auto',
+          hide_ticks=True,
           secondary_x=True,legend_position=None,xlims=None,ylims=None,label_bg=False,
+          mult_factors=None,
           no_name_data='auto',force_ylog_ratio=False,legend_ncols=None,
           data_colors=None,model_colors=None,addcomp_colors=None,data_alpha=1):
 
@@ -6523,7 +6526,9 @@ def xPlot(types,axes_input=None,plot_saves_input=None,plot_arg=None,includedlist
         can be made for individual subplots plot types independantly if set to 2-dimensionnal tuples
         in this case the null value is [None,None]
 
-
+    mult_factors:
+        if not None, a list of multiplicative factors for each datagroups,
+        to offset their values for visual purposes
 
     If plot_saves is not None, uses its array elements as inputs to create the plots.
     Else, creates a range of plot_saves using plot_saver from the asked set of plot types
@@ -6654,6 +6659,11 @@ def xPlot(types,axes_input=None,plot_saves_input=None,plot_arg=None,includedlist
 
         for id_grp in range(max(1,curr_save.nGroups)):
 
+            if mult_factors is not None:
+                mult_factor_grp=mult_factors[id_grp]
+            else:
+                mult_factor_grp=1
+
             if group_names=='auto':
                 #auto naming the group from header infos
                 try:
@@ -6707,8 +6717,11 @@ def xPlot(types,axes_input=None,plot_saves_input=None,plot_arg=None,includedlist
             if curr_save.y[id_grp] is not None:
                 #plotting each data group
 
-                curr_ax.errorbar(curr_save.x[id_grp],curr_save.y[id_grp],xerr=curr_save.xErr[id_grp],yerr=curr_save.yErr[id_grp].clip(0),
-                                 color=xcolors_grp[id_grp] if data_colors is None else data_colors[id_grp],linestyle='None',
+                curr_ax.errorbar(curr_save.x[id_grp],curr_save.y[id_grp]*mult_factor_grp,
+                                 xerr=curr_save.xErr[id_grp],
+                                 yerr=curr_save.yErr[id_grp].clip(0)*mult_factor_grp,
+                                 color=xcolors_grp[id_grp] if data_colors is None else data_colors[id_grp],
+                                 linestyle='None',
                                  elinewidth=0.75,alpha=data_alpha,
                                  label='' if group_names=='nolabel' or (no_name_data=='auto' and i_ax!=len(types_split)-1) else grp_name)
 
@@ -6723,7 +6736,7 @@ def xPlot(types,axes_input=None,plot_saves_input=None,plot_arg=None,includedlist
                 else:
                     model_color_grp=None
                     
-                curr_ax.plot(curr_save.x[id_grp],curr_save.model[id_grp],
+                curr_ax.plot(curr_save.x[id_grp],curr_save.model[id_grp]*mult_factor_grp,
                              color=xcolors_grp[id_grp] if model_color_grp is None else model_color_grp,alpha=0.5,
                              label='' if group_names=='nolabel' else '')
 
@@ -6733,8 +6746,10 @@ def xPlot(types,axes_input=None,plot_saves_input=None,plot_arg=None,includedlist
                 #plotting backgrounds
                 #empty backgrounds are stored as 0 values everywhere so we test for that to avoid plotting them for nothing
                 if curr_save.addbg and curr_save.background_y[id_grp] is not None:
-                    curr_ax.errorbar(curr_save.background_x[id_grp],curr_save.background_y[id_grp],xerr=curr_save.background_xErr[id_grp],
-                                     yerr=curr_save.background_yErr[id_grp],
+                    curr_ax.errorbar(curr_save.background_x[id_grp],
+                                     curr_save.background_y[id_grp]*mult_factor_grp,
+                                     xerr=curr_save.background_xErr[id_grp],
+                                     yerr=curr_save.background_yErr[id_grp]*mult_factor_grp,
                                      color=xcolors_grp[id_grp] if data_colors is None else data_colors[id_grp],
                                      linestyle='None',elinewidth=0.5,alpha=data_alpha,
                                      marker='x',mew=0.5,label='' if not label_bg or group_names=='nolabel' else grp_name+' background')
@@ -6747,7 +6762,8 @@ def xPlot(types,axes_input=None,plot_saves_input=None,plot_arg=None,includedlist
         '''
 
         if xlims_use is None or xlims_use[i_ax][0] is None:
-            curr_ax.set_xlim(round(min(ravel_ragged(curr_save.x-curr_save.xErr)),2),round(max(ravel_ragged(curr_save.x+curr_save.xErr)),2))
+            curr_ax.set_xlim(round(min(ravel_ragged(curr_save.x-curr_save.xErr)),2),
+                             round(max(ravel_ragged(curr_save.x+curr_save.xErr)),2))
 
         #with condition to avoid rescaling if there is no data (e.g. for eemo)
         if (ylims_use is None or ylims_use[i_ax][0] is None) and len(np.argwhere(ravel_ragged(curr_save.y)!=None))!=0:
@@ -6803,6 +6819,11 @@ def xPlot(types,axes_input=None,plot_saves_input=None,plot_arg=None,includedlist
 
             for id_grp in range(curr_save.nGroups):
 
+                if mult_factors is not None:
+                    mult_factor_grp = mult_factors[id_grp]
+                else:
+                    mult_factor_grp = 1
+
                 if addcomp_colors is not None:
                     if addcomp_colors == 'data':
                         addcomp_color_grp=data_colors[id_grp]
@@ -6815,12 +6836,12 @@ def xPlot(types,axes_input=None,plot_saves_input=None,plot_arg=None,includedlist
                 for i_comp in range(len(curr_save.addcomps[id_grp])):
 
                     try:
-                        curr_ax.plot(curr_save.x[id_grp],curr_save.addcomps[id_grp][i_comp],
+                        curr_ax.plot(curr_save.x[id_grp],curr_save.addcomps[id_grp][i_comp]*mult_factor_grp,
                                      color=colors_addcomp.to_rgba(i_comp) if  addcomp_colors not in [None,'data'] else  addcomp_color_grp,
                                  label=label_comps[i_comp] if id_grp==0 else '',linestyle=ls_types[i_comp%len(ls_types)],linewidth=1)
                     except:
                         try:
-                            curr_ax.plot(curr_save.x[0],curr_save.addcomps[id_grp][i_comp],
+                            curr_ax.plot(curr_save.x[0],curr_save.addcomps[id_grp][i_comp]*mult_factor_grp,
                                          color=colors_addcomp.to_rgba(i_comp)  if  addcomp_colors not in [None,'data']  else  addcomp_color_grp,
                                      label=label_comps[i_comp] if id_grp==0 else '',linestyle=ls_types[i_comp%len(ls_types)],linewidth=1)
                         except:

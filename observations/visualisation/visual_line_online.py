@@ -311,7 +311,7 @@ if online:
     ''', icon="ℹ️")
 
     st.info('''
-    The BAT Transient Monitoring lighcurves are in the process of being reprocessed and thus some chunk of data may be missing and/or incorrects.
+    The BAT Transient Monitoring lighcurves are in the process of being reprocessed and thus some chunks of data may be missing and/or incorrects.
     ''', icon="ℹ️")
 
 

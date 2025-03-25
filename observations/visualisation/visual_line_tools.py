@@ -768,9 +768,6 @@ def load_catalogs():
 
         ctl_bat_simbad = silent_Simbad_query(np.array(ctl_bat_df['Source Name'])[included_mask])
 
-        print('ctl_bat_simbad:')
-        print(ctl_bat_simbad)
-
         ctl_bat_df=ctl_bat_df[included_mask]
 
         #resetting the index to avoid issues
@@ -837,10 +834,6 @@ def fetch_bat_lightcurve(ctl_bat_df,_ctl_bat_simbad,name,binning='day'):
     '''
 
     simbad_query = silent_Simbad_query([name[0].split('_')[0]])
-
-    print('simbad query:')
-    print(simbad_query)
-
 
     if simbad_query is None:
         return None

@@ -1617,7 +1617,7 @@ def extract_reg(directory,mode='manual',cams='all',expos_mode='all',use_file_tar
                             return obj_auto
                         else:
                             #making this to have a valid name for the DS9 region
-                            obj_auto = {'MAIN_ID':fits_evtclean[0].header['OBJECT']}
+                            obj_auto = {'main_id':fits_evtclean[0].header['OBJECT']}
                             obj_deg=fits_evtclean[0].header['RA_OBJ'],fits_evtclean[0].header['DEC_OBJ']
                     else:
                         #if not, we compare the distance to the coordinates given in the file's header
@@ -1960,7 +1960,7 @@ def extract_reg(directory,mode='manual',cams='all',expos_mode='all',use_file_tar
                     if not use_file_target:
                         return obj_auto
                     else:
-                        obj_auto = {'MAIN_ID': fits_evtclean[0].header['OBJECT']}
+                        obj_auto = {'main_id': fits_evtclean[0].header['OBJECT']}
                         obj_deg =[fits_evtclean[0].header['RA_OBJ'],fits_evtclean[0].header['DEC_OBJ']]
                 else:
                     #careful the output after the first line is in dec,ra not ra,dec
@@ -1983,7 +1983,7 @@ def extract_reg(directory,mode='manual',cams='all',expos_mode='all',use_file_tar
                                   ' highlite=1 dash=0 fixed=0 edit=1 move=1 delete=1 include=1 source=1'+
                                   '\nfk5'+
                                   '\n'+spatial_expression((obj_deg,str(rad_crop_arg)),type='ds9')
-                                  +' # text={'+obj_auto['MAIN_ID']+' initial cropping zone}')
+                                  +' # text={'+obj_auto['main_id']+' initial cropping zone}')
                 
                 ds9_pid_sp_start=disp_ds9(spawn,file_img,regfile=catal_reg_name,zoom=1.2,
                                         screenfile=fulldir+'/'+camera+suffix_evt+prefix+'_catal_reg_screen.png',give_pid=True,
@@ -2662,7 +2662,7 @@ def extract_reg(directory,mode='manual',cams='all',expos_mode='all',use_file_tar
                                   ' highlite=1 dash=0 fixed=0 edit=1 move=1 delete=1 include=1 source=1'+
                                   '\nfk5'+
                                   '\n'+spatial_expression((src_coords[0],str(round(float(src_coords[1])*3600,4))),type='ds9')
-                                  +' # text={'+obj_auto['MAIN_ID']+'}'+
+                                  +' # text={'+obj_auto['main_id']+'}'+
                                   '\n'+spatial_expression((bg_coords_im[0],str(round(float(bg_coords_im[1])*3600,4))),type='ds9')
                                   +' # text={automatic background}'+
                                   excis_reg_string_intr)

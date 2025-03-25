@@ -162,6 +162,7 @@ ap.add_argument('-erodedilate',nargs=1,help='Erodes increasingly more gtis aroun
 
 '''gti creation'''
 #keyword for split: split_timeinsec
+#note: split is broken in the new version, needs fixing
 ap.add_argument('-gti_split',nargs=1,help='GTI split method',default='orbit+flare+overdyn+underdyn',type=str)
 ap.add_argument('-flare_method',nargs=1,help='Flare extraction method(s)',default='clip+peak',type=str)
 

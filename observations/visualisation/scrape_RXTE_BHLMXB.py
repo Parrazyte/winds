@@ -141,7 +141,7 @@ for elem in source_list:
     if elem_Simbad is None:
         continue
     
-    elem_Simbad_id=elem_Simbad[0]['MAIN_ID']
+    elem_Simbad_id=elem_Simbad[0]['main_id']
         
     #skipping sources not in the current sample
     if elem_Simbad_id not in sample_ids:

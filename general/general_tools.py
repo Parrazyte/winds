@@ -154,7 +154,7 @@ def source_catal(spawn, dirpath, file, target_only=True, use_file_target=False):
               " Using the name of the directory...")
         target_query = ''
     else:
-        target_query = file_query[0]['MAIN_ID']
+        target_query = file_query[0]['main_id']
 
     if type(obj_list) == type(file_query) and type(obj_list) == type(None):
 
@@ -168,9 +168,9 @@ def source_catal(spawn, dirpath, file, target_only=True, use_file_target=False):
     # if we have at least one detections, it is assumed the "last" find is the name of the object
     obj_catal = obj_list[-1]
 
-    print('\nValid name(s) detected. Object name assumed to be ' + obj_catal['MAIN_ID'])
+    print('\nValid name(s) detected. Object name assumed to be ' + obj_catal['main_id'])
 
-    if obj_catal['MAIN_ID'] != target_query and target_only:
+    if obj_catal['main_id'] != target_query and target_only:
         print('\nTarget only mode activated and the source studied is not the main focus of the observation.' +
               '\nSkipping...')
         spawn.sendline('\ncd $currdir')

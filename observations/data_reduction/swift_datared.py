@@ -96,7 +96,7 @@ def source_catal(dirpath):
     # if we have at least one detections, it is assumed the "last" find is the name of the object
     obj_catal = obj_list[-1]
 
-    print('\nValid source(s) detected. Object name assumed to be ' + obj_catal['MAIN_ID'])
+    print('\nValid source(s) detected. Object name assumed to be ' + obj_catal['main_id'])
 
     return obj_catal
 
@@ -772,7 +772,7 @@ def loop_cycle_BAT(object_name,input_days_file=None,interval_start=None,interval
         object_simbad=Simbad.query_object(object_name)[0]
     else:
         object_simbad=source_catal(object_name)
-        object_name_use=object_simbad['MAIN_ID'].replace(' ','')
+        object_name_use=object_simbad['main_id'].replace(' ','')
 
     object_sky = SkyCoord(ra=object_simbad.columns['RA'], dec=object_simbad.columns['DEC'],
                           unit=(u.hourangle, u.deg))

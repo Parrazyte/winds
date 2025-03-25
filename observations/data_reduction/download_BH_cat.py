@@ -157,7 +157,7 @@ def export_watchdog_ids(path='./',write=True):
         if Simbad.query_object(name_watchdog) is not None:
             id_watchdog=name_watchdog
         else:
-            id_watchdog=Simbad.query_objects(catal_watchdog['OName'][catal_watchdog['Name']==name_watchdog][0].split(';'))[0]['MAIN_ID']
+            id_watchdog=Simbad.query_objects(catal_watchdog['OName'][catal_watchdog['Name']==name_watchdog][0].split(';'))[0]['main_id']
             if id_watchdog is None:
                 print("\nNone of the object's names were found in Simbad. Switching to manual input.")
                 breakpoint()
@@ -167,7 +167,7 @@ def export_watchdog_ids(path='./',write=True):
             #manipulating the blackCAT first names a bit so Simbad can read them
             id_blackCAT=' '.join(name_blackCAT.split('=')[0].split(' ')[:2])
             
-            if Simbad.query_object(id_watchdog)[0]['MAIN_ID']==Simbad.query_object(id_blackCAT)[0]['MAIN_ID']:
+            if Simbad.query_object(id_watchdog)[0]['main_id']==Simbad.query_object(id_blackCAT)[0]['main_id']:
                 in_blackCAT=True
                 print('\nSource found in BlackCAT under the name '+id_blackCAT)
                 break
@@ -296,7 +296,7 @@ def export_all_Simbad_ids(catal_name,exceptions,ids=None,path='./',write=True):
     for name in ids:
         if name not in exceptions:
             if Simbad.query_object(name) is not None:
-                Simbad_ids+=[Simbad.query_object(name)[0]['MAIN_ID']]
+                Simbad_ids+=[Simbad.query_object(name)[0]['main_id']]
             else:
                 print('\nCould not find a Simbad ID for object '+name)
                 

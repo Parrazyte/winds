@@ -1040,7 +1040,7 @@ def extract_reg(directory, cams='all', use_file_target=False,
             if not use_file_target:
                 return obj_auto
             else:
-                obj_auto = {'MAIN_ID': main_source_name}
+                obj_auto = {'main_id': main_source_name}
                 obj_deg = [main_source_ra,main_source_dec]
         else:
             # careful the output after the first line is in dec,ra not ra,dec
@@ -1059,7 +1059,7 @@ def extract_reg(directory, cams='all', use_file_target=False,
                           ' highlite=1 dash=0 fixed=0 edit=1 move=1 delete=1 include=1 source=1' +
                           '\nfk5' +
                           '\n' + spatial_expression((obj_deg, str(rad_crop)))
-                          + ' # text={' + obj_auto['MAIN_ID'] + ' initial cropping zone}')
+                          + ' # text={' + obj_auto['main_id'] + ' initial cropping zone}')
 
         ds9_pid_sp_start = disp_ds9(spawn, os.path.join(spawndir,img_file), regfile=os.path.join(spawndir,reg_catal_name),
                                     zoom=1.2,
@@ -1225,7 +1225,7 @@ def extract_reg(directory, cams='all', use_file_target=False,
                           ' highlite=1 dash=0 fixed=0 edit=1 move=1 delete=1 include=1 source=1' +
                           '\nfk5' +
                           '\n' + spatial_expression(src_coords)
-                          + ' # text={' + obj_auto['MAIN_ID'] + '}' +
+                          + ' # text={' + obj_auto['main_id'] + '}' +
                           '\n' + spatial_expression(bg_coords_im)
                           + ' # text={automatic background}' )
 
@@ -1249,7 +1249,7 @@ def extract_reg(directory, cams='all', use_file_target=False,
                           ' highlite=1 dash=0 fixed=0 edit=1 move=1 delete=1 include=1 source=1' +
                           '\nfk5' +
                           '\n' + spatial_expression(src_coords)
-                          + ' # text={' + obj_auto['MAIN_ID'] + '}')
+                          + ' # text={' + obj_auto['main_id'] + '}')
 
         with open(os.path.join(filedir,reg_bg_name), 'w+') as regfile:
 

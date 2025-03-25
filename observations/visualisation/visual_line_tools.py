@@ -845,13 +845,13 @@ def fetch_bat_lightcurve(ctl_bat_df,_ctl_bat_simbad,name,binning='day'):
     if simbad_query is None:
         return None
 
-    if simbad_query['MAIN_ID'][0] not in _ctl_bat_simbad['MAIN_ID']:
+    if simbad_query['main_id'][0] not in _ctl_bat_simbad['main_id']:
         return None
 
 
     # we fetch the script id instead of the direct column number because Simbad erases the columns with no match
     # (-1 because the id starts at 1)
-    source_id = _ctl_bat_simbad['SCRIPT_NUMBER_ID'][_ctl_bat_simbad['MAIN_ID'] == simbad_query['MAIN_ID'][0]][0] - 1
+    source_id = _ctl_bat_simbad['SCRIPT_NUMBER_ID'][_ctl_bat_simbad['main_id'] == simbad_query['main_id'][0]][0] - 1
 
     bat_link = ctl_bat_df['standard'][source_id]
 
@@ -903,12 +903,12 @@ def fetch_maxi_lightcurve(ctl_maxi_df,_ctl_maxi_simbad,name,binning='day'):
     if simbad_query is None:
         return None
     
-    if simbad_query['MAIN_ID'][0] not in _ctl_maxi_simbad['MAIN_ID']:
+    if simbad_query['main_id'][0] not in _ctl_maxi_simbad['main_id']:
         return None
     
     #we fetch the script id instead of the direct column number because Simbad erases the columns with no match 
     #(-1 because the id starts at 1)
-    source_id=_ctl_maxi_simbad['SCRIPT_NUMBER_ID'][_ctl_maxi_simbad['MAIN_ID']==simbad_query['MAIN_ID']][0]-1
+    source_id=_ctl_maxi_simbad['SCRIPT_NUMBER_ID'][_ctl_maxi_simbad['main_id']==simbad_query['main_id']][0]-1
 
     maxi_link=ctl_maxi_df['standard'][source_id]
 
@@ -937,10 +937,10 @@ def fetch_rxte_lightcurve(name,dict_rxte=dict_lc_rxte):
     if simbad_query is None:
         return None
 
-    if simbad_query[0]['MAIN_ID'] not in dict_rxte.keys():
+    if simbad_query[0]['main_id'] not in dict_rxte.keys():
         return None
     
-    return dict_rxte[simbad_query[0]['MAIN_ID']]
+    return dict_rxte[simbad_query[0]['main_id']]
 
 def plot_lightcurve(dict_linevis,ctl_maxi_df,ctl_maxi_simbad,name,ctl_bat_df,ctl_bat_simbad,
                     lc_integral_sw_dict,fit_integral_revol_dict,dist_factor=None,

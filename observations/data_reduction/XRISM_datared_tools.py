@@ -602,7 +602,7 @@ def xtend_SFP(directory,filtering='flat_top',
                         if not use_file_target_coords:
                             assert type(obj_auto) != str,obj_auto
                         else:
-                            obj_auto = {'MAIN_ID': main_source_name}
+                            obj_auto = {'main_id': main_source_name}
                             obj_deg = [main_source_ra, main_source_dec]
                     else:
                         # careful the output after the first line is in dec,ra not ra,dec

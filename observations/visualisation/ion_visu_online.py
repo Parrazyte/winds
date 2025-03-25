@@ -25,7 +25,7 @@ else:
 
 sys.path.append(project_dir+'/general/')
 
-from general_tools import interval_extract,get_overlap
+from general_tools import interval_extract,get_overlap,make_zip
 from bipolar import hotcold
 
 from scipy.interpolate import CubicSpline
@@ -34,6 +34,7 @@ from scipy.spatial import Delaunay
 
 import plotly.graph_objects as go
 from webcolors import name_to_rgb
+import io
 from scipy.spatial import ConvexHull
 
 import dill
@@ -431,7 +432,7 @@ if not plot_3D:
         st.info('To start plotting the 3D evolution, toggle the option in the sidebar.')
 
 list_SEDs_surface=st.sidebar.multiselect(label='SEDs to draw 3D surfaces for',
-                                        options=list_SEDs_disp,default=[elem for elem in base_nolag if elem in list_SEDs_disp])
+                                        options=list_SEDs_disp,default=[])
 
 
 with tab_3D:
@@ -439,7 +440,7 @@ with tab_3D:
         st.info('The volumes are undersampled according to the number of observations drawn.'
                 'To see the full volumes, select only one SED.')
 
-plot_points=st.sidebar.toggle(label='overlay points',value=False)
+plot_points=st.sidebar.toggle(label='overlay points',value=True)
 
 control_camera=st.sidebar.toggle(label='manual camera control',value=False)
 
@@ -458,6 +459,8 @@ if setup_camera and not online:
     val_eye_x=st.sidebar.number_input('camera eye x',format="%.3f")
     val_eye_y=st.sidebar.number_input('camera eye y',format="%.3f")
     val_eye_z=st.sidebar.number_input('camera eye z',format="%.3f")
+
+    dragmode=st.sidebar.radio('Dragmode',('turntable','orbit'))
 
     camera = dict(
         up=dict(x=val_up_x,y=val_up_y,z=val_up_z),
@@ -722,8 +725,9 @@ with tab_2D:
 #distance plots
 
 
-@st.cache_data
-def plot_distance(_ax,SED_1,SED_2,mode='nR²',write_names=True,interpolate_nr2=False):
+# @st.cache_data
+def plot_distance(_ax,SED_1,SED_2,mode='nR²',write_names=True,interpolate_nr2=False,
+                  corner=False):
 
     '''
     2D projections of the 3D graphs for couples of 2 SEDs.
@@ -818,7 +822,7 @@ def plot_distance(_ax,SED_1,SED_2,mode='nR²',write_names=True,interpolate_nr2=F
 
         if _ax is None:
             ax_dist.set_xlabel(r'log$_{10}$(nR$^2$)')
-            ax_dist.set_ylabel(r'log$_{10}$(v_turb)')
+            ax_dist.set_ylabel(r'log$_{10}$(v$_{turb}$)')
 
     distance_arr = np.repeat(np.nan, len(range_x) * len(range_y)).reshape((len(range_x), len(range_y)))
 
@@ -1080,7 +1084,7 @@ def plot_distance(_ax,SED_1,SED_2,mode='nR²',write_names=True,interpolate_nr2=F
             #automatic text spacing
             n_delta=(len(color_SED_1)+len(color_SED_2)+3)/100*1.2
 
-            plt.figtext(0.59, 0.24, '(', fontdict={'color':  'black','weight': 'normal','size': 10,})
+            plt.figtext(0.59, 0.24, '(', fontdict={'color':  'black','weight': 'normal','size': 10 })
             plt.figtext(0.6+len(color_SED_1)*0.1/100, 0.24,
                         color_SED_1.replace('powderblue','blue').replace('maroon','brown').replace('forestgreen','green'),
                         fontdict={'color':  color_SED_1,'weight': 'normal','size': 10,})
@@ -1094,6 +1098,21 @@ def plot_distance(_ax,SED_1,SED_2,mode='nR²',write_names=True,interpolate_nr2=F
     plt.xlim(range_x[0],range_x[-1])
     plt.ylim(range_y[0],range_y[-1])
 
+    if corner:
+        #removing the leftmost and lowmost ticks on the x and y axese
+        if mode=='nR²':
+            _ax.set_xticks(np.arange(1.,4.1,0.5))
+            _ax.set_yticks(np.arange(22.,25.1,0.5))
+        elif mode=='v_turb':
+            _ax.set_xticks(np.arange(33.5,36.6,0.5))
+            _ax.set_yticks(np.arange(22.,25.1,0.5))
+
+        elif mode=='NH':
+            _ax.set_xticks(np.arange(33.5, 36.6, 0.5))
+            _ax.set_yticks(np.arange(1.,4.1, 0.5))
+
+    time.sleep(1)
+
     if _ax is None:
         return fig_dist
     else:
@@ -1106,19 +1125,25 @@ SED_pairs = [(a, b) for idx, a in enumerate(list_SEDs_disp) for b in list_SEDs_d
 def plot_distance_all(list_SEDs_disp,mode='nR²', write_names=False, interpolate_nr2=True):
 
     n_seds=len(list_SEDs_disp)
-    # finding all list of SED pairs:
-    SED_pairs = [(a, b) for idx, a in enumerate(list_SEDs_disp) for b in list_SEDs_disp[idx + 1:]]
+    # finding all list of SED pairs, and inversing the order of the pairs for an easier time later
+    SED_pairs = [(a,b) for idx, a in enumerate(list_SEDs_disp)
+                                         for b in list_SEDs_disp[idx + 1:]]
 
-    fig_corner, ax_corner = plt.subplots(n_seds, n_seds, figsize=(10, 8), sharey=True, sharex=True)
+    fig_corner, ax_corner = plt.subplots(n_seds-1, n_seds-1, figsize=(4*n_seds,4*n_seds),
+                                                                    sharey=True, sharex=True)
     fig_corner.subplots_adjust(wspace=0)
     fig_corner.subplots_adjust(hspace=0)
 
+
+    #same with indexes
     plot_positions=[[a,b] for idx,a in enumerate(np.arange(n_seds)) for b in np.arange(n_seds)[idx+1:]]
+
+    plot_positions_draw=plot_positions
 
     #inverting it for the axes placement
     plot_positions_draw=np.array(plot_positions.copy())
-    plot_positions_draw.T[1]=n_seds-1-plot_positions_draw.T[1]
-    plot_positions_draw.T[0]=n_seds-1-plot_positions_draw.T[0]
+    plot_positions_draw.T[1]=(n_seds-1-plot_positions_draw.T[1])
+    plot_positions_draw.T[0]=n_seds-2-plot_positions_draw.T[0]
 
     plot_positions_draw=plot_positions_draw.tolist()
 
@@ -1128,51 +1153,54 @@ def plot_distance_all(list_SEDs_disp,mode='nR²', write_names=False, interpolate
 
     if mode=='nR²':
 
-        fig_corner.text(0.5, 0.04, r'log$_{10}$(v$_{turb}$)', ha='center')
-        fig_corner.text(0.04, 0.5, r'log$_{10}$(NH)', va='center', rotation='vertical')
+        fig_corner.text(0.52, 0.15, r'log$_{10}$(v$_{turb}$)', ha='center',fontsize=8*n_seds)
+        fig_corner.text(0.04, 0.5, r'log$_{10}$(NH)', va='center', rotation='vertical',fontsize=8*n_seds)
 
 
     if mode=='v_turb':
 
-        fig_corner.text(0.5, 0.04, r'log$_{10}$(nR$^2$)', ha='center')
-        fig_corner.text(0.04, 0.5, r'log$_{10}$(NH)', va='center', rotation='vertical')
+        fig_corner.text(0.52, 0.15, r'log$_{10}$(nR$^2$)', ha='center',fontsize=8*n_seds)
+        fig_corner.text(0.04, 0.5, r'log$_{10}$(NH)', va='center', rotation='vertical',fontsize=8*n_seds)
 
 
     if mode=='NH':
-        fig_corner.text(0.5, 0.04, r'log$_{10}$(nR$^2$)', ha='center')
-        fig_corner.text(0.04, 0.5, r'log$_{10}$(v_turb)', va='center', rotation='vertical')
+        fig_corner.text(0.52, 0.15, r'log$_{10}$(nR$^2$)', ha='center',fontsize=8*n_seds)
+        fig_corner.text(0.04, 0.5, r'log$_{10}$(v_turb)', va='center', rotation='vertical',fontsize=8*n_seds)
 
 
-
-    for i_x in range(n_seds):
-        for i_y in range(n_seds):
+    # breakpoint()
+    for i_x in range(n_seds-1):
+        for i_y in range(n_seds-1):
 
             if [i_x,i_y] in plot_positions_draw:
+
+                ax_corner[i_x][i_y].tick_params(top=True, bottom=True)
 
                 #a bit weird but works well
                 combi_index_prel=np.argwhere(np.sum(np.array(plot_positions_draw)==[i_x,i_y],1)==2)[0][0]
 
                 plot_positions_true=plot_positions[combi_index_prel]
 
-                breakpoint()
+                combi_index=np.argwhere(np.sum(np.array(plot_positions)==plot_positions_true,1)==2)[0][0]
 
-                combi_index=np.argwhere(np.sum(np.array(plot_positions_draw)==plot_positions_true,1)==2)[0][0]
-
-                breakpoint()
 
                 SED_combi_1=SED_pairs[combi_index][0]
                 SED_combi_2=SED_pairs[combi_index][1]
 
                 img=plot_distance(ax_corner[i_x][i_y],SED_combi_1,SED_combi_2,mode=mode,write_names=write_names,
-                              interpolate_nr2=interpolate_nr2,)
+                          interpolate_nr2=interpolate_nr2,
+                                  #this makes a xor
+                                  corner=bool(i_x==n_seds-2) != bool(i_y==0))
+
 
                 if img.norm.vmin<glob_vmin:
                     glob_vmin=img.norm.vmin
-                    glob.vmax=img.norm.vmax
+                if img.norm.vmax > glob_vmax:
+                    glob_vmax=img.norm.vmax
 
                 img_list+=[img]
 
-                if i_x==0:
+                if i_x==n_seds-2:
 
                     '''
                     Note: the x axis is labeled as the SED 2, the y axis as the SED 1
@@ -1192,6 +1220,7 @@ def plot_distance_all(list_SEDs_disp,mode='nR²', write_names=False, interpolate
                     label_x=ax_corner[i_x][i_y].set_xlabel(label_x_str)
 
                     label_x.set_color(color_SED_2)
+                    label_x.set_fontsize(4*n_seds)
 
 
                 if i_y==0:
@@ -1202,7 +1231,7 @@ def plot_distance_all(list_SEDs_disp,mode='nR²', write_names=False, interpolate
 
                     SEDs_arr = np.array(list(SEDs.keys()))
 
-                    color_SED_1 = np.array(base_cmap)[np.argwhere(SEDs_arr == SED_combi_2)[0]][0]
+                    color_SED_1 = np.array(base_cmap)[np.argwhere(SEDs_arr == SED_combi_1)[0]][0]
 
                     if write_names:
                         label_y_str = SED_combi_1.replace('_', '\_')
@@ -1214,9 +1243,9 @@ def plot_distance_all(list_SEDs_disp,mode='nR²', write_names=False, interpolate
                     label_y = ax_corner[i_x][i_y].set_ylabel(label_y_str)
 
                     label_y.set_color(color_SED_1)
+                    label_y.set_fontsize(4*n_seds)
 
             else:
-
                 ax_corner[i_x][i_y].remove()
 
     #climming everything to the extremal bounds
@@ -1227,25 +1256,31 @@ def plot_distance_all(list_SEDs_disp,mode='nR²', write_names=False, interpolate
     #plotting the common elements
     #one global colorbar
 
-
     cm_ticks = np.linspace(glob_vmin,0, 6, endpoint=True).tolist() + \
                np.linspace(0, glob_vmax, 6, endpoint=True).tolist()
 
+    fig_corner.subplots_adjust(bottom=0.2)
+    cbar_ax = fig_corner.add_axes([0.15, 0.04, 0.7, 0.05])
 
-    cb=fig_corner.colorbar(img_list[0],location='bottom', orientation='horizontal',spacing='proportional',
-                     pad=0.16 if write_names else 0.16,
-                     ticks=cm_ticks)
+    cb=fig_corner.colorbar(img_list[0],ax=cbar_ax,location='bottom', orientation='horizontal',spacing='proportional',
+                     fraction=1.,ticks=cm_ticks)
+
+    #changing the font size
+    cb.ax.tick_params(labelsize=4*n_seds)
+
+    cbar_ax.remove()
+
     #important to rescale the colorbar properly, otherwise both sides will always be 50/50
     # ('proportional' in the cb settings isn't really working for twoslopenorm)
     cb.ax.set_xscale('linear')
 
     if mode == 'nR²':
-        cb.ax.set_title(r'$\Delta$lognR$^{2}$')
+        cb.ax.set_title(r'$\Delta$lognR$^{2}$',size=4*n_seds)
     if mode == 'v_turb':
-        cb.ax.set_title(r'$\Delta$log$_{10}v_{turb}$')
+        cb.ax.set_title(r'$\Delta$log$_{10}v_{turb}$',size=4*n_seds)
 
     if mode == 'NH':
-        cb.ax.set_title(r'$\Delta$log$_{10}NH$')
+        cb.ax.set_title(r'$\Delta$log$_{10}NH$',size=4*n_seds)
 
     return fig_corner
 
@@ -1256,6 +1291,26 @@ if plot_distance_SEDs:
                                              interpolate_nr2=interpolate_nr2)
         with tab_delta:
             st.pyplot(plot_distance_glob)
+
+            if not online:
+                with tab_delta:
+
+                    savedir='/home/parrama/Documents/Work/PhD/docs/papers/wind_4U/global/ion_visu/save_figs'
+                    def save_cornerfig_local():
+
+                        '''
+                        # Saves the current maxi_graphs in a svg (i.e. with clickable points) format.
+                        '''
+
+                        if plot_distance_glob is not None:
+                            plot_distance_glob.savefig(savedir+'/'+'fig_corner_'+str(round(time.time()))+'.pdf')
+
+                    st.button('Save current cornerplot figure',on_click=save_cornerfig_local,key='save_cornerfig_local')
+
+
+                    with open(savedir+'/fig_corner_'+str(round(time.time()))+'.pkl', 'wb+') as f:
+                        dill.dump(plot_distance_glob,f)
+
     else:
 
         with tab_delta:
@@ -1751,14 +1806,162 @@ def make_3D_figure(SEDs_disp, SEDs_surface, cmap, plot_points=False, under_sampl
     )
 
     if setup_camera:
-        fig.update_layout(scene_camera=camera,scene_dragmode='orbit')
+        fig.update_layout(scene_camera=camera,scene_dragmode=dragmode)
     else:
         fig.update_layout(scene_camera=camera)
 
-    # fig_3D.show()
-    # fig_3D.show()
+    '''
+    
+    HR_diff
+    Scene1
+        {
+       "scene.camera": {
+          "up": {
+             "x": 0,
+             "y": 0,
+             "z": 1
+          },
+          "center": {
+             "x": -0.011561242146683033,
+             "y": 0.0615438052530668,
+             "z": -0.13967155381726762
+          },
+          "eye": {
+             "x": 0.02292241402406233,
+             "y": -1.931445977659636,
+             "z": 0.5971367066295568
+          },
+          "projection": {
+             "type": "perspective"
+          }
+       }
+    }
+    
+    {
+       "scene.camera": {
+          "up": {
+             "x": 0,
+             "y": 0,
+             "z": 1
+          },
+          "center": {
+             "x": 0.02609992411948365,
+             "y": -0.08245373336849121,
+             "z": -0.11688986226312341
+          },
+          "eye": {
+             "x": 1.7758188512454969,
+             "y": 1.0827026755202735,
+             "z": 0.19452309328373568
+          },
+          "projection": {
+             "type": "perspective"
+          }
+       }
+    }
 
-    #
+
+    {
+       "scene.camera": {
+          "up": {
+             "x": 0,
+             "y": 0,
+             "z": 1
+          },
+          "center": {
+             "x": -0.0008454535765910267,
+             "y": 0.10535128460061818,
+             "z": -0.13129259622447703
+          },
+          "eye": {
+             "x": -1.1180687726241156,
+             "y": 0.12381669731249678,
+             "z": 1.200974044684989
+          },
+          "projection": {
+             "type": "perspective"
+          }
+       }
+    }
+
+    
+    
+    lumdiff
+    
+    Scene 1 
+    {
+       "scene.camera": {
+          "up": {
+             "x": 0,
+             "y": 0,
+             "z": 1
+          },
+          "center": {
+             "x": 0.056054707179730316,
+             "y": 0.18085227008326632,
+             "z": -0.2452768785382625
+          },
+          "eye": {
+             "x": 0.042026070354430976,
+             "y": -1.8966068771212834,
+             "z": 0.2061780252005996
+          },
+          "projection": {
+             "type": "perspective"
+          }
+       }
+    }
+    
+    scene 2
+    {
+       "scene.camera": {
+          "up": {
+             "x": 0,
+             "y": 0,
+             "z": 1
+          },
+          "center": {
+             "x": -0.054013450683093295,
+             "y": -0.11049597112968036,
+             "z": -0.22469931556338052
+          },
+          "eye": {
+             "x": 2.0326512403033576,
+             "y": -0.43746167742727043,
+             "z": 0.01772332232473678
+          },
+          "projection": {
+             "type": "perspective"
+          }
+       }
+    }
+    
+    Scene 3
+    {
+       "scene.camera": {
+          "up": {
+             "x": 0,
+             "y": 0,
+             "z": 1
+          },
+          "center": {
+             "x": 0.03316276075313898,
+             "y": 0.05391788901099013,
+             "z": -0.19031685934250334
+          },
+          "eye": {
+             "x": -1.4839948647837473,
+             "y": 0.22817296629219258,
+             "z": 1.2887750067638235
+          },
+          "projection": {
+             "type": "perspective"
+          }
+       }
+    }
+    '''
+
+
     with tab_3D:
         st.plotly_chart(fig, use_container_width=True, theme=None)
 
@@ -1784,7 +1987,7 @@ if plot_3D:
             st.button('Save current 3D figure',on_click=save_3dfig_local,key='save_3dfig_local')
 
 
-            with open(savedir+'/fig_3D.pkl', 'wb+') as f:
+            with open(savedir+'/fig_3D_'+str(round(time.time()))+'.pkl', 'wb+') as f:
                 dill.dump(fig_3D,f)
         #
         # this doesn't work

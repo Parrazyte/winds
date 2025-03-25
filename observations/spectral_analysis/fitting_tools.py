@@ -114,6 +114,8 @@ lines_e_dict={
                   #this are the narrow equivalent to FeKa and FeKb, but they are used as much more "physical" lines and as such 
                   #have restrained energy ranges compared to their broad counterparts
 
+                    #see https://iopscience.iop.org/article/10.3847/0004-637X/818/2/164/pdf for precise edge
+                    #and neutral K energies if needed
                     #this one is the average of the 6.391 (1/3) and 6.404 (2/3)
                    'FeKa0em':[6.400,-10000,10000],
                    'FeKb0em':[7.06,-10000,10000],

@@ -310,7 +310,7 @@ if online:
     Feel free to contact me at maxime.parrastro@gmail.com if you find bugs.
     ''', icon="ℹ️")
 
-    st.warning(###
+    st.info('''
     The BAT Transient Monitoring lighcurves are in the process of being reprocessed and thus some chunk of data may be missing and/or incorrects.
     ''', icon="ℹ️")
 

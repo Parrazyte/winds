@@ -102,15 +102,15 @@ ap.add_argument("-dir", "--startdir", nargs='?', help="starting directory. Curre
 ap.add_argument("-l","--local",nargs=1,help='Launch actions directly in the current directory instead',
                 default=False,type=bool)
 ap.add_argument('-catch','--catch_errors',help='Catch errors while running the data reduction and continue',
-                default=True,type=bool)
+                default=False,type=bool)
 
 #1 for no parallelization
 ap.add_argument('-parallel',help='number of processors for parallel directories',
                 default=1,type=bool)
 
 #global choices
-ap.add_argument("-a","--action",nargs='?',help='Give which action(s) to proceed,separated by comas.',
-                default = 'fc,1,gti,fs,l,g,m,ml,c', type = str)
+ap.add_argument("-a","--action",nargs='?',help='List which action(s) to run,separated by comas',
+                default = 'm,ml', type = str)
 #default: fc,1,gti,fs,l,g,m,ml,c
 
 #note: should be kept to true for most complicated tasks
@@ -121,10 +121,10 @@ ap.add_argument("-over",nargs=1,help='overwrite computed tasks (i.e. with produc
 ap.add_argument('-folder_over',nargs=1,help='relaunch action through folders with completed analysis',
                 default=False, type=bool)
 ap.add_argument('-folder_cont',nargs=1,help='skips all but the last 2 directories in the summary folder file',
-                default=True,type=bool)
+                default=False,type=bool)
 
 ap.add_argument('-invert_subdirs',nargs=1,help='start the analysis from the subdirectories in reverse order',
-                default=True,type=bool)
+                default=False,type=bool)
 #note : we keep the previous 2 directories because bug or breaks can start actions on a directory following the initially stopped one
 
 #action specific overwrite
@@ -940,16 +940,23 @@ def create_gtis(directory,split_arg='orbit+flare+overdyn+underdyn',band='3-15',f
             # preparing the list of gtis to replace manually
             gti_intervals = np.array(list(interval_extract(id_gti))).T
         else:
-            # doing the interval extract within eahc subarray to automatically get the splits
+            # doing the interval extract within each subarray to automatically get the splits
             gti_intervals_full = [list(interval_extract(id_gti_multi[i_orbit])) for i_orbit in
             range(len(id_gti_multi))]
             gti_intervals = [[], []]
 
             for i_orbit in range(len(id_gti_split)):
+                if len(gti_intervals_full[i_orbit])==0:
+                    continue
                 gti_intervals[0] += np.array(gti_intervals_full[i_orbit]).T[0].tolist()
                 gti_intervals[1] += np.array(gti_intervals_full[i_orbit]).T[1].tolist()
 
+
             gti_intervals = np.array(gti_intervals)
+
+        #returning if there is no gti_intervals at all
+        if len(gti_intervals)==0:
+            return
 
         delta_time_gtis = (time_gtis[1] - time_gtis[0]) / 2
 
@@ -975,7 +982,7 @@ def create_gtis(directory,split_arg='orbit+flare+overdyn+underdyn',band='3-15',f
                                     for i in range(len(gti_intervals.T))])
 
             bashproc.sendline('nigti @'+gti_input_path+' '+gti_path+' clobber=YES chatter=4')
-            bashproc.expect('ngti=')
+            bashproc.expect('ngti=',timeout=60)
 
         if gti_tool=='SAS':
 
@@ -1466,49 +1473,6 @@ def create_gtis(directory,split_arg='orbit+flare+overdyn+underdyn',band='3-15',f
                 id_flares=[]
                 id_dips=[]
 
-            id_overcut = np.array([None] * n_orbit)
-
-            if 'overdyn' in split_arg:
-
-                for i_orbit, (elem_gti_orbit,id_nongti_nimkt_orbit) in enumerate(zip(id_gti,id_nongti_nimkt)):
-
-                    # note that here we're only filtering what's not in the flares
-
-                    # we cut with different criteria for high and low bg rates to have better filtering
-                    mask_over = ((counts_2_8[elem_gti_orbit] <= overdyn_thresh) & \
-                                 (counts_overshoot[elem_gti_orbit] > overdyn_factor_low * counts_2_8[elem_gti_orbit])) | \
-                                ((counts_2_8[elem_gti_orbit] > overdyn_thresh) & \
-                                 (counts_overshoot[elem_gti_orbit] > overdyn_factor_high * counts_2_8[elem_gti_orbit]))
-
-                    id_over_orbit = np.array(elem_gti_orbit)[mask_over].tolist()
-
-                    if erodedilate_overdyn > 0:
-
-                        assert type(erodedilate_overdyn) == int, 'Error: erodedilate_overdyn should be an integer'
-
-                        id_over_orbit_eroded = np.unique(ravel_ragged([ \
-                            np.arange(elem - erodedilate_overdyn, elem + erodedilate_overdyn + 1) \
-                            for elem in id_over_orbit]))
-
-                        # limiting to the initial range of gtis to avoid eroded beyond the bounds
-                        id_over_orbit_eroded = [elem for elem in elem_gti_orbit if elem in id_over_orbit_eroded]
-                    else:
-                        id_over_orbit_eroded = id_over_orbit
-
-                    # removing nimaketime exclusions
-                    id_over_orbit_eroded = [elem for elem in id_over_orbit_eroded if elem not in id_nongti_nimkt_orbit]
-
-                    id_overcut[i_orbit] = id_over_orbit_eroded
-
-                    # redefining the gtis after the flares have been defined
-                    id_gti[i_orbit] = [elem for elem in elem_gti_orbit if elem not in id_over_orbit_eroded]
-
-                    # this one for is for the automatic split
-                    if 'split' in split_arg:
-                        for i_split in range(len(split_gti_arr[i_orbit])):
-                            split_gti_arr[i_orbit][i_split] = [elem for elem in split_gti_arr[i_orbit][i_split] \
-                                                               if elem not in id_over_orbit_eroded]
-
             id_undercut = np.array([None] * n_orbit)
 
             if 'underdyn' in split_arg:
@@ -1524,28 +1488,26 @@ def create_gtis(directory,split_arg='orbit+flare+overdyn+underdyn',band='3-15',f
                         2. abnormally low HR ratio in 2-8/0.35-2 (<2%)
                         3. high undershoots (>100cts/s)
                         '''
+                        # note that here we're only filtering what's not in the flares
 
-                        for i_orbit, (elem_gti_orbit, id_nongti_nimkt_orbit) in enumerate(zip(id_gti, id_nongti_nimkt)):
+                        # we cut with different criteria for high and low bg rates to have better filtering
+                        mask_under = ((counts_035_2[elem_gti_orbit] >= 0.1* counts_undershoot[elem_gti_orbit]) & \
+                                     (counts_2_8[elem_gti_orbit]/counts_035_2[elem_gti_orbit] <= 0.02) & \
+                                     (counts_undershoot[elem_gti_orbit]>100))
 
-                            # note that here we're only filtering what's not in the flares
+                        id_under_orbit = np.array(elem_gti_orbit)[mask_under].tolist()
 
-                            # we cut with different criteria for high and low bg rates to have better filtering
-                            mask_under = ((counts_035_2[elem_gti_orbit] >= 0.1* counts_undershoot[elem_gti_orbit]) & \
-                                         (counts_2_8[elem_gti_orbit]/counts_035_2[elem_gti_orbit] <= 0.02) & \
-                                         (counts_undershoot[elem_gti_orbit]>100))
+                        id_undercut[i_orbit] = id_under_orbit
 
-                            id_under_orbit = np.array(elem_gti_orbit)[mask_under].tolist()
+                        # redefining the gtis after the flares have been defined
+                        id_gti[i_orbit] = [elem for elem in elem_gti_orbit if elem not in id_under_orbit]
 
-                            id_undercut[i_orbit] = id_under_orbit
+                        # this one for is for the automatic split
+                        if 'split' in split_arg:
+                            for i_split in range(len(split_gti_arr[i_orbit])):
+                                split_gti_arr[i_orbit][i_split] = [elem for elem in split_gti_arr[i_orbit][i_split] \
+                                                                   if elem not in id_under_orbit]
 
-                            # redefining the gtis after the flares have been defined
-                            id_gti[i_orbit] = [elem for elem in elem_gti_orbit if elem not in id_under_orbit]
-
-                            # this one for is for the automatic split
-                            if 'split' in split_arg:
-                                for i_split in range(len(split_gti_arr[i_orbit])):
-                                    split_gti_arr[i_orbit][i_split] = [elem for elem in split_gti_arr[i_orbit][i_split] \
-                                                                       if elem not in id_under_orbit]
 
                     elif underdyn_method=='gradient':
 
@@ -1606,6 +1568,50 @@ def create_gtis(directory,split_arg='orbit+flare+overdyn+underdyn',band='3-15',f
                             id_gti[i_orbit] = elem_id_gti
                             id_undercut [i_orbit]= elem_id_undercut
 
+
+
+            id_overcut = np.array([None] * n_orbit)
+
+            if 'overdyn' in split_arg:
+
+                for i_orbit, (elem_gti_orbit,id_nongti_nimkt_orbit) in enumerate(zip(id_gti,id_nongti_nimkt)):
+
+                    # note that here we're only filtering what's not in the flares
+
+                    # we cut with different criteria for high and low bg rates to have better filtering
+                    mask_over = ((counts_2_8[elem_gti_orbit] <= overdyn_thresh) & \
+                                 (counts_overshoot[elem_gti_orbit] > overdyn_factor_low * counts_2_8[elem_gti_orbit])) | \
+                                ((counts_2_8[elem_gti_orbit] > overdyn_thresh) & \
+                                 (counts_overshoot[elem_gti_orbit] > overdyn_factor_high * counts_2_8[elem_gti_orbit]))
+
+                    id_over_orbit = np.array(elem_gti_orbit)[mask_over].tolist()
+
+                    if erodedilate_overdyn > 0:
+
+                        assert type(erodedilate_overdyn) == int, 'Error: erodedilate_overdyn should be an integer'
+
+                        id_over_orbit_eroded = np.unique(ravel_ragged([ \
+                            np.arange(elem - erodedilate_overdyn, elem + erodedilate_overdyn + 1) \
+                            for elem in id_over_orbit]))
+
+                        # limiting to the initial range of gtis to avoid eroded beyond the bounds
+                        id_over_orbit_eroded = [elem for elem in elem_gti_orbit if elem in id_over_orbit_eroded]
+                    else:
+                        id_over_orbit_eroded = id_over_orbit
+
+                    # removing nimaketime exclusions
+                    id_over_orbit_eroded = [elem for elem in id_over_orbit_eroded if elem not in id_nongti_nimkt_orbit]
+
+                    id_overcut[i_orbit] = id_over_orbit_eroded
+
+                    # redefining the gtis after the flares have been defined
+                    id_gti[i_orbit] = [elem for elem in elem_gti_orbit if elem not in id_over_orbit_eroded]
+
+                    # this one for is for the automatic split
+                    if 'split' in split_arg:
+                        for i_split in range(len(split_gti_arr[i_orbit])):
+                            split_gti_arr[i_orbit][i_split] = [elem for elem in split_gti_arr[i_orbit][i_split] \
+                                                               if elem not in id_over_orbit_eroded]
 
             id_hard_flares=np.array([None] * n_orbit)
 
@@ -1743,7 +1749,7 @@ def create_gtis(directory,split_arg='orbit+flare+overdyn+underdyn',band='3-15',f
                                                                if elem not in id_undercut[i_orbit]])
 
                     #removing hard flares if necesary
-                    if 'underdyn' in split_arg:
+                    if 'hard_flare' in split_arg:
                         for i_split in range(len(split_gti_arr[i_orbit])):
                             split_gti_arr[i_orbit][i_split] = np.array([elem for elem in split_gti_arr[i_orbit][i_split] \
                                                                if elem not in id_hard_flares[i_orbit]])
@@ -2827,15 +2833,30 @@ def batch_mover(directory,thread=None,parallel=False):
     bashproc.sendline('mkdir -p bigbatch')
     
     bashproc.sendline('cd '+directory)
-    
+
+    #number of files to copy
+    n_files_copy=len(glob.glob(os.path.join(directory,directory)+'**'))
+
     bashproc.sendline('cp --verbose '+directory+'* ../bigbatch'+' >batch_mover_list.log')
-    
+
+    #checking the log file
+    copy_ok=False
+    while not copy_ok:
+        time.sleep(0.5)
+        with open(os.path.join(directory,'batch_mover_list.log')) as f:
+            n_lines=len(f.readlines())
+        if n_lines==n_files_copy:
+            copy_ok=1
+        else:
+            print('waiting for copy...')
+
     #reasonable waiting time to make sure files can be copied
-    time.sleep(2)
+    time.sleep(0.5)
     
     bashproc.sendline('exit')
     if thread is not None:
         thread.set()
+
 
 def batch_mover_timing(directory,thread=None,parallel=False):
 
@@ -2862,10 +2883,24 @@ def batch_mover_timing(directory,thread=None,parallel=False):
 
     bashproc.sendline('cd ' + directory)
 
+    #number of files to copy
+    n_files_copy=len(glob.glob(os.path.join(directory,'xti','**.lc')))
+
     bashproc.sendline('cp --verbose ./xti/'+directory+'*.lc ../lcbatch' + ' >batch_mover_timing_list.log')
 
+    #checking the log file
+    copy_ok=False
+    while not copy_ok:
+        time.sleep(0.5)
+        with open(os.path.join(directory,'batch_mover_timing_list.log')) as f:
+            n_lines=len(f.readlines())
+        if n_lines==n_files_copy:
+            copy_ok=1
+        else:
+            print('waiting for copy...')
+
     # reasonable waiting time to make sure files can be copied
-    time.sleep(2)
+    time.sleep(0.5)
 
     bashproc.sendline('exit')
     if thread is not None:

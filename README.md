@@ -1,5 +1,5 @@
 # winds
-Main PhD project on BHLMXB wind signatures
+Current project on X-ray data
 
 -If you're not me, better ask me about what's in this before any headache-
 

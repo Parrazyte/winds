@@ -307,8 +307,13 @@ if online:
     
     The "about" part will be updated once the first paper on 4U 1630-47 will be accepted.
     
-    Please send an email if you find bugs
+    Feel free to contact me at maxime.parrastro@gmail.com if you find bugs.
     ''', icon="ℹ️")
+
+    st.warning(###
+    The BAT Transient Monitoring lighcurves are in the process of being reprocessed and thus some chunk of data may be missing and/or incorrects.
+    ''', icon="ℹ️")
+
 
 else:
     with st.sidebar:

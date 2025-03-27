@@ -741,11 +741,12 @@ def radial_plot(rad,sol_sampl,c_val_sampl,log_x=False,log_y=False,xaxis_title=''
                 color_label='θ'):
 
     if color_type=='angle':
-        norm_angl= (c_val_sampl-val_angle_low)/(val_angle_high-val_angle_low)
+        norm_angl= ((c_val_sampl-val_angle_low)/(val_angle_high-val_angle_low)).clip(0,1)
     else:
-        norm_angl=(c_val_sampl-c_val_sampl[0])/(c_val_sampl[-1]-c_val_sampl[0])
+        norm_angl=((c_val_sampl-c_val_sampl[0])/(c_val_sampl[-1]-c_val_sampl[0])).clip(0,1)
 
     ang_colors = sample_colorscale(cmap,norm_angl)
+
 
     #creating the theme with the first line
     fig_rad=plotly_line_wrapper(rad[0],sol_sampl[0],log_x=log_x,log_y='auto',xaxis_title=xaxis_title,yaxis_title=yaxis_title,
@@ -837,7 +838,8 @@ if split_angle and n_sel==1:
 
     sol_p_mhd=selected_sol_split_angle[0][0][3]
 
-    cyl_cst_sampl=np.sqrt(1+sol_sampl_z_over_r**2)
+    cyl_cst_sampl=(1+sol_sampl_z_over_r**2)**(1/2)
+
 
     r_sph_sampl=np.array([np.logspace(np.log10(rj*cyl_cst_sampl[i]),7,300) for i in range(n_sol)])
 

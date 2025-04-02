@@ -57,9 +57,15 @@ if not streamlit_mode and model_dir!=None:
     AllModels.lmod('relxill',dirPath=model_dir+'/relxill')
     AllModels.lmod('fullkerr',dirPath=model_dir+'/fullkerr')
     #swiftJ1658 dust scattering halo model from Jin2019
+
+    AllModels.lmod('ismabs', dirPath=model_dir + '/ismabs.v1.2')
+    Xset.addModelString('ISMABSROOT', os.path.join(model_dir,'ismabs.v1.2/'))
+
+
     AllModels.lmod('dscor', dirPath=model_dir + '/dscor')
     #which needs an absolute path to a directory
     Xset.addModelString('DSCOR_MODEL_DIR', os.path.join(model_dir,'dscor/mtables_swf1658m42'))
+
     # instype is the
     # type
     # of
@@ -346,6 +352,22 @@ def load_mod(path,load_xspec=True):
 
 mod_sky=None
 mod_nxb=None
+
+def obs_loader(grp_str,i_grp=1,mode='swift_mela',save_baseload=True):
+    if mode=='swift_mela':
+        grp_str_use=[]
+        if os.path.isfile(grp_str+'wtsource.pi'):
+            grp_str_use+=[grp_str+'wt']
+        if os.path.isfile(grp_str+'pcsource.pi'):
+            grp_str_use+=[grp_str+'pc']
+        for id_obs,obs_str in enumerate(grp_str_use):
+            AllData(str(i_grp+id_obs)+":"+str(i_grp+id_obs)+' '+obs_str+'source.pi')
+            AllData(i_grp+id_obs).response=obs_str+'.rmf'
+            AllData(i_grp+id_obs).response.arf=obs_str+'.arf'
+            AllData(i_grp+id_obs).background=obs_str+'back.pi'
+
+    if save_baseload:
+        Xset.save('baseload.xcm')
 
 def set_ener(mode='thcomp',xrism=False):
     if mode=='thcomp':
@@ -2442,6 +2464,28 @@ def addcomp(compname,position='last',endmult=None,return_pos=False,modclass=AllM
             if comp_custom.replace('glob','') in list(xscat_pos_dict.keys()):
                 AllModels(1)(gap_end-2).values=xscat_pos_dict[comp_custom.replace('glob','')]
                 AllModels(1)(gap_end-2).frozen=True
+
+
+    '''ISM model specifics'''
+
+    if comp_split== 'ismabs':
+        if comp_custom is not None and 'link' in comp_custom:
+
+            #removing the redshift
+            AllModels(1)(gap_end).values=0.
+            AllModels(1)(gap_end).frozen=True
+
+            '''
+            The default neutral column densities in ISMABS are all from the equivalent of the TBabs values 
+            for NH=1e21
+            We ca 
+            #linking all the individual densities to the H density so that they can scale together
+            '''
+
+            for id_par in np.arange(3,31,3)-1:
+
+                AllModels(1)(int(gap_start+id_par)).link=str(AllModels(1)(int(gap_start+id_par)).values[0])+'*p1/0.1'
+
 
     '''Physical model specifics'''
 

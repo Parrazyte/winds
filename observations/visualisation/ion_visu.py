@@ -1165,7 +1165,7 @@ def plot_distance_all(list_SEDs_disp,mode='nR²', write_names=False, interpolate
 
     if mode=='NH':
         fig_corner.text(0.52, 0.15, r'log$_{10}$(nR$^2$)', ha='center',fontsize=8*n_seds)
-        fig_corner.text(0.04, 0.5, r'log$_{10}$(v_turb)', va='center', rotation='vertical',fontsize=8*n_seds)
+        fig_corner.text(0.04, 0.5, r'log$_{10}$($v_{turb}$)', va='center', rotation='vertical',fontsize=8*n_seds)
 
 
     # breakpoint()
@@ -1280,7 +1280,7 @@ def plot_distance_all(list_SEDs_disp,mode='nR²', write_names=False, interpolate
         cb.ax.set_title(r'$\Delta$log$_{10}v_{turb}$',size=4*n_seds)
 
     if mode == 'NH':
-        cb.ax.set_title(r'$\Delta$log$_{10}NH$',size=4*n_seds)
+        cb.ax.set_title(r'$\Delta$log$_{10}$NH',size=4*n_seds)
 
     return fig_corner
 
@@ -1794,7 +1794,7 @@ def make_3D_figure(SEDs_disp, SEDs_surface, cmap, plot_points=False, under_sampl
     # Layout settings with custom axis names
     fig.update_layout(
         scene=dict(
-            xaxis_title='nH',  # Custom X-axis label
+            xaxis_title='NH',  # Custom X-axis label
             yaxis_title='v_turb',  # Custom Y-axis label
             zaxis_title='log10(nR²)',  # Custom Z-axis label
             aspectmode="cube",

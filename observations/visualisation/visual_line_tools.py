@@ -523,20 +523,39 @@ wind_det_sources=list(wind_det_dict.keys())
 #from Tristan
 kev_to_erg = 1.60218e-9 # convertion factor from keV to erg
 
+# def flux_erg_pow(g,K,e1,e2):
+#     '''integrated flux between e1 and e2 from photon index (g) and norm (K) (with F = K*E**(-g)), in erg/s/cm2'''
+#     return (K/(2-g))*(e2**(2-g) - e1**(2-g))*kev_to_erg
+#
+# def err_flux_erg_pow(g, K, dg, dK, e1,e2):
+#     '''finds the error on flux from photon index (g, dg) and norm (K,dK) in erg/s/cm2'''
+#     F12 = (K/(2-g))*(e2**(2-g) - e1**(2-g))
+#     if K==0. : return 0
+#     else : return F12 * np.sqrt( (dK/K)**2 + ((K/(F12*(2-g)))* (np.log(e2)*e2**(2-g)-np.log(e1)*e1**(2-g)) - 1/(2-g))**2 * (dg)**2 ) * kev_to_erg
+
+# # example with Crab nebula:
+# flux_erg_pow(2.09,9.9 ,30,50), err_flux_erg_pow(2.09,9.9,0.01,0.4 ,30,50)
+
+
 def flux_erg_pow(g,K,e1,e2):
-    '''integrated flux between e1 and e2 from photon index (g) and norm (K) (with F = K*E**(-g)), in erg/s/cm2'''
+    '''
+    from Tristan Bouchet
+    integrated flux between e1 and e2 from photon index (g) and norm (K) (with F = K*E**(-g)), in erg/s/cm2
+    '''
     return (K/(2-g))*(e2**(2-g) - e1**(2-g))*kev_to_erg
 
 def err_flux_erg_pow(g, K, dg, dK, e1,e2):
-    '''finds the error on flux from photon index (g, dg) and norm (K,dK) in erg/s/cm2'''
+    '''
+    from Tristan Bouchet
+    finds the error on flux from photon index (g, dg) and norm (K,dK) in erg/s/cm2
+    '''
     F12 = (K/(2-g))*(e2**(2-g) - e1**(2-g))
     if K==0. : return 0
     else : return F12 * np.sqrt( (dK/K)**2 + ((K/(F12*(2-g)))* (np.log(e2)*e2**(2-g)-np.log(e1)*e1**(2-g)) - 1/(2-g))**2 * (dg)**2 ) * kev_to_erg
 
-# example with Crab nebula:
-flux_erg_pow(2.09,9.9 ,30,50), err_flux_erg_pow(2.09,9.9,0.01,0.4 ,30,50)
 
 #--------------------
+
 
 
 #BAT conversion factors for 1 cts/s in 15-50 keV counts to 15-50keV flux
@@ -6745,19 +6764,3 @@ def correl_graph(data_perinfo,infos,data_ener,dict_linevis,mode='intrinsic',mode
 
 kev_to_erg = 1.60218e-9 # convertion factor from keV to erg
 
-
-def flux_erg_pow(g,K,e1,e2):
-    '''
-    from Tristan Bouchet
-    integrated flux between e1 and e2 from photon index (g) and norm (K) (with F = K*E**(-g)), in erg/s/cm2
-    '''
-    return (K/(2-g))*(e2**(2-g) - e1**(2-g))*kev_to_erg
-
-def err_flux_erg_pow(g, K, dg, dK, e1,e2):
-    '''
-    from Tristan Bouchet
-    finds the error on flux from photon index (g, dg) and norm (K,dK) in erg/s/cm2
-    '''
-    F12 = (K/(2-g))*(e2**(2-g) - e1**(2-g))
-    if K==0. : return 0
-    else : return F12 * np.sqrt( (dK/K)**2 + ((K/(F12*(2-g)))* (np.log(e2)*e2**(2-g)-np.log(e1)*e1**(2-g)) - 1/(2-g))**2 * (dg)**2 ) * kev_to_erg

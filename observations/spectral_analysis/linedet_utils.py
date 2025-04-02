@@ -98,7 +98,7 @@ def narrow_line_search(data_cont, suffix,e_sat_low_indiv,line_search_e=[4,10,0.0
 
     line_search_e_space = np.arange(line_search_e[0], line_search_e[1] + line_search_e[2] / 2, line_search_e[2])
     # this one is here to avoid adding one point if incorrect roundings create problem
-    line_search_e_space = line_search_e_space[line_search_e_space <= line_search_e[1]]
+    line_search_e_space = line_search_e_space[line_search_e_space <= line_search_e[1]+1e-5]
 
     norm_par_space = np.concatenate((-np.logspace(np.log10(line_search_norm[1]), np.log10(line_search_norm[0]),
                                                   int(line_search_norm[2] / 2)), np.array([0]),
@@ -1200,12 +1200,16 @@ def comb_chi2map(fig_comb, chi_dict, title='', comb_label='',
                   squished_mode=squished_mode,force_side=force_side_lines)
 
 
-def merge_chi_dict(chi_dict_files):
+def merge_chi_dict(chi_dict_files,skip_chi_base_equal=False):
 
     '''
     attempts to merge a series of chi_dict binary files saved by dill
 
     First checks if all the parameters that should be the same are the same, and if so, combines them into a new file
+
+    bypass_chi_base can be useful when ls where run on subsections of the spectra and thus chi_base is not
+    representative
+
     '''
 
     chi_dict_arr=[]
@@ -1222,7 +1226,8 @@ def merge_chi_dict(chi_dict_files):
     chi_dict_files_sorted=np.array(chi_dict_files)[np.argsort(line_search_e_arr.T[0])]
 
     #testing whether the files are compatible
-    chi_base_equal=len(np.unique([elem['chi_base'] for elem in chi_dict_arr]))==1
+
+    chi_base_equal=skip_chi_base_equal or len(np.unique([elem['chi_base'] for elem in chi_dict_arr]))==1
     line_threshold_equal=len(np.unique([elem['line_threshold'] for elem in chi_dict_arr]))==1
     line_search_norm_equal=len(np.unique([str(elem['line_search_norm']) for elem in chi_dict_arr]))==1
 
@@ -1238,7 +1243,7 @@ def merge_chi_dict(chi_dict_files):
 
     chi_dict_merge={}
     #directly giving it the elements that remain common
-    chi_dict_merge['chi_base']=chi_dict_arr[0]['chi_base']
+    chi_dict_merge['chi_base']=1e4 if skip_chi_base_equal else chi_dict_arr[0]['chi_base']
     chi_dict_merge['line_threshold']=chi_dict_arr[0]['line_threshold']
     chi_dict_merge['line_search_norm']=chi_dict_arr[0]['line_search_norm']
     chi_dict_merge['norm_par_space']=chi_dict_arr[0]['norm_par_space']
@@ -1260,9 +1265,16 @@ def merge_chi_dict(chi_dict_files):
 
     for i_elem,elem in enumerate(chi_dict_arr):
 
+        #testing if the last element is in the array or not (failsafe for previous issue with narrow_line_search)
 
-        #-1 to avoid redundancy for the bridge energy value
-        chi_arr_merge+=elem['chi_arr'][:-1].tolist()
+        complete_set=abs(elem['line_search_e_space'][-1]-elem['line_search_e'][1])<1e-5
+
+        if complete_set:
+            #-1 to avoid redundancy for the bridge energy value
+            chi_arr_merge+=(1e4+elem['chi_arr'][:-1]-elem['chi_base']).tolist()
+        else:
+            #-1 to avoid redundancy for the bridge energy value
+            chi_arr_merge+=(1e4+elem['chi_arr']-elem['chi_base']).tolist()
 
         elem_peak_points=elem['peak_points']
         if len(elem_peak_points)!=0:
@@ -1273,10 +1285,13 @@ def merge_chi_dict(chi_dict_files):
         if len(elem['peak_widths'])!=0:
             peak_widths+=elem['peak_widths'].tolist()
 
-        n_ener_added=len(chi_arr_merge[:-1])
+        if complete_set:
+            n_ener_added=len(chi_arr_merge[:-1])
+        else:
+            n_ener_added=len(chi_arr_merge)
 
     #adding the missing last element of the last band for the chi_arr
-    chi_arr_merge+=chi_dict_arr[-1]['chi_arr'][-1:].tolist()
+    chi_arr_merge+=(1e4+chi_dict_arr[-1]['chi_arr'][-1:]-chi_dict_arr[-1]['chi_base']).tolist()
 
     if len(chi_arr_merge)!=len(chi_dict_merge['line_search_e_space']):
         if len(chi_arr_merge)==len(chi_dict_merge['line_search_e_space'])-1:

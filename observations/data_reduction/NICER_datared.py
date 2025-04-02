@@ -764,7 +764,8 @@ def plot_event_diag(mode,obs_start_str,time_obs,id_gti_orbit,
 
         plt.close()
     
-def create_gtis(directory,split_arg='orbit+flare+overdyn+underdyn',band='3-15',flare_method='clip+peak',clip_method='median',
+def create_gtis(directory,split_arg='orbit+flare+overdyn+underdyn',band='3-15',flare_method='clip+peak',
+                clip_method='median',
                 clip_sigma=2.,clip_band='8-12',peak_score_thresh=2.,
                 int_split_band='0.3-10.',int_split_bin=0.1,clip_int_delta=True,
                 flare_factor=2,gti_tool='NICERDAS',erodedilate_overdyn=5,

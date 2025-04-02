@@ -8,7 +8,7 @@ from astropy.time import Time,TimeDelta
 from general_tools import file_edit
 from matplotlib.ticker import MultipleLocator
 
-def sp_anal(obs_path,mod='thcont',baseload=False,scorpeon=True,overwrite=False):
+def sp_anal(obs_path,mod='powerlaw',baseload=False,scorpeon=True,overwrite=False):
 
     plt.ioff()
 
@@ -229,6 +229,12 @@ def evol_plots(sp_infos_path_22,sp_infos_path_25,lc_infos_path_22,lc_infos_path_
     ax_lc_HR.set_yscale('log')
 
     date_offset_22_25=(Time('2025-02-25')-Time('2022-03-04')).value+3
+    ax_lc_flux.axvspan(mdates.date2num(Time('2025-03-07T07:17').datetime)-date_offset_22_25,
+                       mdates.date2num(Time('2025-03-10T18:51').datetime)-date_offset_22_25,
+                       label='IXPE observation window')
+    ax_lc_HR.axvspan(mdates.date2num(Time('2025-03-07T07:17').datetime)-date_offset_22_25,
+                     mdates.date2num(Time('2025-03-10T18:51').datetime)-date_offset_22_25,
+                       label='IXPE observation window')
 
     #add swift 22 point
     #add different markers for swift vs NICER

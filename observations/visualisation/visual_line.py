@@ -2140,6 +2140,33 @@ if display_single and choice_source[0] == '4U1630-47' and sum(ravel_ragged(mask_
 
 dict_linevis['custom_ionization_color'] = custom_ionization_color
 
+custom_gamma_satur_color = deepcopy(hid_plot[1][0])
+if display_single and choice_source[0] == '4U1630-47' and sum(ravel_ragged(mask_intime_plot)) > 0:
+    for i_obj in range(len(custom_gamma_satur_color)):
+        if obj_list[i_obj] == '4U1630-47':
+            for i_obs in range(len(custom_gamma_satur_color[i_obj])):
+
+
+                # no specific state
+
+                custom_gamma_satur_color[i_obj][i_obs] = 'grey'
+
+                if ~(np.isnan(lum_high_sign_plot_restrict[0][0][i_obs])):
+                    #for the significant detections below that value
+                    if lum_high_sign_plot_restrict[0][0][i_obs]<4e-3:
+                        custom_gamma_satur_color[i_obj][i_obs] = 'red'
+                else:
+
+                    #for the 1sig upper limits below that value
+                    if not np.isnan(lum_high_1sig_plot_restrict[1][0][i_obs]):
+                        if lum_high_1sig_plot_restrict[1][0][i_obs]+lum_high_1sig_plot_restrict[1][0][i_obs]<4e-3:
+                            custom_gamma_satur_color[i_obj][i_obs] = 'red'
+
+#unused for now
+dict_linevis['custom_gamma_satur_color'] = custom_gamma_satur_color
+
+# dict_linevis['custom_ionization_color'] = custom_gamma_satur_color
+
 #outburst coloring
 color_cmap_outburst = mpl.cm.tab10
 
@@ -4227,7 +4254,7 @@ if display_single and choice_source[0]=='4U1630-47' and plot_gamma_correl:
                  lum_high_list_single_withBAT[0],
                  xerr=lum_BAT_single[1][flux_high_list_single_mask & mask_match_BAT_main],
                  yerr=lum_high_list_single_withBAT[1:],
-                 ls='',color='blue',label='NuSTAR/Suzaku-PIN (nthcom)')
+                 ls='',color='blue',label='NuSTAR/Suzaku-PIN (nthcomp)')
 
     #computing the linear regression
 
@@ -4265,20 +4292,111 @@ if display_single and choice_source[0]=='4U1630-47' and plot_gamma_correl:
     # fig_flux_BAT_native.suptitle('BAT projected vs observed high energy luminosity')
     plt.legend(fontsize=10,)
 
+
+
+    # BONUS figure back to the BAT rate for the paper
+    bat_lum_rate_convert= 1/ (convert_BAT_count_flux['4U1630-47'] * Edd_factor_restrict)
+
+    # BAT flux- Observed flux figure
+    fig_rate_BAT_native, ax_rate_BAT_native = plt.subplots(figsize=(6, 6))
+    ax_rate_BAT_native.set_xlim(5e-4, 2e-1)
+    ax_rate_BAT_native.set_ylim(5e-4, 2e-1)
+    ax_rate_BAT_native.set_xscale('log')
+    ax_rate_BAT_native.set_yscale('log')
+    ax_rate_BAT_native.set_xlabel(r'[15-50] BAT Count Rate (cts/cm$^2$/s)')
+    ax_rate_BAT_native.set_ylabel('[15-50] keV measured luminosity ($L/L_{Edd}$)')
+
+    # integral errorbar
+    for i_int_withBAT in range(sum(mask_int_withBAT)):
+        ax_rate_BAT_native.errorbar(lum_bat_match_int[i_int_withBAT]*bat_lum_rate_convert,
+                                    lum_int_15_50[mask_int_withBAT][i_int_withBAT],
+                                    xerr=lum_bat_err_match_int[i_int_withBAT]*bat_lum_rate_convert,
+                                    yerr=np.array([lum_int_15_50_err.T[mask_int_withBAT][i_int_withBAT]]).T,
+                                    # alpha=1,
+                                    alpha=int_fit_gamma_alpha[i_int_withBAT],
+                                    label='INTEGRAL (powerlaw)' if i_int_withBAT == i_max_alpha_gamma else '',
+                                    color='black', ls='')
+
+    plt.errorbar(lum_BAT_single[0][flux_high_list_single_mask & mask_match_BAT_main]*bat_lum_rate_convert,
+                 lum_high_list_single_withBAT[0],
+                 xerr=lum_BAT_single[1][flux_high_list_single_mask & mask_match_BAT_main]*bat_lum_rate_convert,
+                 yerr=lum_high_list_single_withBAT[1:],
+                 ls='', color='blue', label='NuSTAR/Suzaku-PIN (nthcomp)')
+
+    # computing the linear regression
+
+    lum_bat_regress = np.array(lum_bat_match_int.tolist() + \
+                               lum_BAT_single[0][flux_high_list_single_mask & mask_match_BAT_main].tolist())
+    lum_bat_regress_err = np.array(lum_bat_err_match_int.tolist() + \
+                                   lum_BAT_single[1][flux_high_list_single_mask & mask_match_BAT_main].tolist())
+
+    lum_15_50_regress = np.array(lum_int_15_50[mask_int_withBAT].tolist() + lum_high_list_single_withBAT[0].tolist())
+
+    # here we resize the 90% errors of our dataset assuming a gaussian distribution
+    lum_15_50_regress_err = np.array([lum_int_15_50_err[i_incert].T[mask_int_withBAT].T.tolist() + \
+                                      (lum_high_list_single_withBAT[1:][i_incert] \
+                                       * 1 / norm.ppf((1 + 90 / 100) / 2)).tolist() for i_incert in range(2)])
+
+    bat_corr_slope_arr, bat_corr_intercept_arr, bat_corr_sigma_arr, bat_corr_x_intercept = \
+        lmplot_uncert_a(ax_rate_BAT_native, lum_bat_regress*bat_lum_rate_convert, lum_15_50_regress,
+                        lum_bat_regress_err*bat_lum_rate_convert, lum_15_50_regress_err,
+                        xlim=None, ylim=None, percent=68.26, nsim=1000,
+                        intercept_pos='auto',
+                        return_linreg=True, infer_log_scale=True, log_sampling=True, nanzero_err=True,
+                        xbounds=None, ybounds=None,
+                        line_color='brown', lw=1.3, inter_color='lightgrey')
+
+    corr_str_rate = r'$L_{Obs}=(\frac{R_{BAT}}{10^{%.1e' % (bat_corr_x_intercept) + '}})^{%.2f' \
+               % bat_corr_slope_arr[0] + '_{-%.2f' % bat_corr_slope_arr[1] + '}^{+%.2f' % bat_corr_slope_arr[2] + '}}' \
+               + '\\times 10^{' + ('+' if bat_corr_intercept_arr[0] > 0 else '') + '%.2f' % bat_corr_intercept_arr[0] \
+               + '_{-%.2f' % bat_corr_intercept_arr[1] + '}^{+%.2f' % bat_corr_intercept_arr[2] + '}' \
+               + '}$'
+
+    plt.suptitle(corr_str_rate)
+
+    # fig_rate_BAT_native.suptitle('BAT projected vs observed high energy luminosity')
+    plt.legend(fontsize=10, )
+
+
+
     #fourth figure to look at the flux vs gamma evolution internally
-    fig_native_flux_gamma,ax_native_flux_gamma=plt.subplots(figsize=(6,6))
+    fig_native_flux_gamma,ax_native_flux_gamma=plt.subplots(figsize=(6,6),layout='constrained')
     ax_native_flux_gamma.set_xlim(1.,3.5)
     ax_native_flux_gamma.set_ylim(1e-4, 1e-1)
     ax_native_flux_gamma.set_yscale('log')
-    ax_native_flux_gamma.set_xlabel(r'nthcomp $\Gamma$')
+    ax_native_flux_gamma.set_xlabel(r'slope of the high-energy component ($\Gamma$)')
     ax_native_flux_gamma.set_ylabel('15-50 keV luminosity ($L/L_{Edd}$)')
     
     plt.errorbar(gamma_nthcomp_single[flux_high_list_single_mask].T[0],lum_high_list_single[0],
                  xerr=gamma_nthcomp_single[flux_high_list_single_mask].T[1:],yerr=lum_high_list_single[1:],ls='',
-                 color='blue',label='NuSTAR/Suzaku-PIN',marker='d')
+                 color='blue',label='NuSTAR/Suzaku-PIN (nthcomp)',marker='d')
+
+
+    plt.errorbar(int_fit_gamma,lum_int_15_50,
+                 xerr=int_fit_gamma_err,yerr=lum_int_15_50_err,ls='',
+                 color='grey',label='INTEGRAL (powerlaw)',marker='d',alpha=0.5)
+
+    #note: the 2 2024 orbits
+    # 0.00025141484646483593 converted to 5.730E-04 in 15-50 with webpimms
+    plt.errorbar(1.93173,5.730E-04,
+                               xerr=0.1,yerr=0.000573/10,
+                               color='grey',marker='d',alpha=0.5)
+    #march 0.0004436682181837173 to 1.066e-3,
+    plt.errorbar(2.07,1.066e-3,
+                               xerr=0.1,yerr=0.0001066e-3/10,
+                               color='grey',marker='d',alpha=0.5)
+
+    #adding a shading for the low luminosity region
+    #plt.axhspan(1e-4,4e-3,color='red',alpha=0.15)
+
+    plt.axhline(4e-3,color='red',alpha=1,ls='--',label=r'$\Gamma$ saturation threshold')
+
 
     # fig_native_flux_gamma.suptitle(r'Observed nthcomp $\Gamma$ vs high energy luminosity')
     plt.legend(fontsize=10,)
+
+    plt.savefig('fig.pdf')
+
 
     fig_high_soft, ax_high_soft = plt.subplots()
 
@@ -4333,6 +4451,7 @@ if display_single and choice_source[0]=='4U1630-47' and plot_gamma_correl:
             with he_cols[0]:
                 st.pyplot(fig_gamma_bat_rate)
                 st.pyplot(fig_flux_BAT_native)
+                st.pyplot(fig_rate_BAT_native)
                 st.pyplot(fig_rate_flux_15_50_int)
                 st.pyplot(fig_gamma_rate_int)
 

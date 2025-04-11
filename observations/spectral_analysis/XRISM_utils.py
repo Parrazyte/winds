@@ -1,6 +1,6 @@
 
 from xspec import Xset, Plot, Fit,AllData, AllModels
-from xspec_config_multisp import freeze, allmodel_data
+from xspec_config_multisp import freeze, allmodel_data,set_ener
 from linedet_utils import narrow_line_search,plot_line_search
 import matplotlib.pyplot as plt
 import dill
@@ -11,8 +11,8 @@ import os
 def rebinv_xrism(grp_number=1,sigma=2):
     Plot.setRebin(sigma, 5000, grp_number)
 def xrism_ls(baseload,low_e,high_e,plot_suffix="",bound_around=0.1,e_step=5e-3,lw=5e-3,
-             e_sat_low_indiv=[1.5,1.5],resolve_dg=1,rebinv=20,
-             force_ylog_ratio=True,ratio_bounds=[0.5,2],title=True):
+             e_sat_low_indiv=[1.5,1.5],resolve_dg=1,rebinv=[20],
+             force_ylog_ratio=True,ratio_bounds=[0.5,2],title=True,set_ener_str=None,set_ener_xrism=False):
 
     '''
 
@@ -22,6 +22,7 @@ def xrism_ls(baseload,low_e,high_e,plot_suffix="",bound_around=0.1,e_step=5e-3,l
 
     e_sat_low_indiv here assumes that a RESOLVE and EXTEND spectra are loaded
 
+    rebinv should be an iterable of len the amount of DGs that should be rebinned
     '''
     Plot.xLog = False
     Fit.statMethod = 'cstat'
@@ -33,8 +34,12 @@ def xrism_ls(baseload,low_e,high_e,plot_suffix="",bound_around=0.1,e_step=5e-3,l
     AllModels.clear()
 
     Xset.restore(baseload)
-    rebinv_xrism(1,sigma=rebinv)
+    if rebinv is not None:
+        for i_dg,elem_rebinv in enumerate(rebinv):
+            rebinv_xrism(i_dg+1,sigma=elem_rebinv)
 
+    if set_ener_str is not None:
+        set_ener(set_ener_str,xrism=set_ener_xrism)
     freeze()
 
 
@@ -60,6 +65,9 @@ def xrism_ls(baseload,low_e,high_e,plot_suffix="",bound_around=0.1,e_step=5e-3,l
     plt.ion()
 
     Xset.chatter=prev_chatter
+    AllModels.clear()
+    AllData.clear()
+
 
 def xrism_ls_loader(dump_path,ener_show_range,force_ylog_ratio=True,ratio_bounds=[0.05,10.],squished_mode=False,
                     local_chi_bounds=True,force_side_lines='none',save=False,show_indiv_transi=True,

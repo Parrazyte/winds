@@ -311,7 +311,7 @@ if online:
     #''', icon="ℹ️")
 
     st.info('''
-    The BAT Transient Monitoring lighcurves are in the process of being reprocessed and thus some chunks of data may be missing and/or incorrects.
+    The BAT Transient Monitoring lighcurves are in the process of being reprocessed and thus some chunks of data may be missing and/or incorrect.
     #''', icon="ℹ️")
 
 
@@ -1761,6 +1761,7 @@ if add_BAT_flux_corr and display_single and choice_source[0]=='4U1630-47' and su
     bat_lc_expos_rate=np.array(bat_lc_df_scat['TIMEDEL_CODED'])
 
     # converting to 15-50keV luminosity in Eddington units, removing negative values
+    #note that at this point it's the same as doing *10**(-0.36+np.log10((D_4U/8kpc)**2))
     bat_lc_lum_nocorr_scat = bat_lc_arr_rate.T \
                         * convert_BAT_count_flux['4U1630-47'] * Edd_factor_restrict
 
@@ -4299,13 +4300,12 @@ if display_single and choice_source[0]=='4U1630-47' and plot_gamma_correl:
 
     # BAT flux- Observed flux figure
     fig_rate_BAT_native, ax_rate_BAT_native = plt.subplots(figsize=(6, 6))
-    ax_rate_BAT_native.set_xlim(5e-4, 2e-1)
-    ax_rate_BAT_native.set_ylim(5e-4, 2e-1)
+    ax_rate_BAT_native.set_xlim(2e-4, 2e-1)
+    ax_rate_BAT_native.set_ylim(2e-4, 2e-1)
     ax_rate_BAT_native.set_xscale('log')
     ax_rate_BAT_native.set_yscale('log')
     ax_rate_BAT_native.set_xlabel(r'[15-50] BAT Count Rate (cts/cm$^2$/s)')
     ax_rate_BAT_native.set_ylabel('[15-50] keV measured luminosity ($L/L_{Edd}$)')
-
     # integral errorbar
     for i_int_withBAT in range(sum(mask_int_withBAT)):
         ax_rate_BAT_native.errorbar(lum_bat_match_int[i_int_withBAT]*bat_lum_rate_convert,

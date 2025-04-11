@@ -154,7 +154,227 @@ def rsl_npixel_to_coord(number):
 
     return coord_dict[str(number)]
 
-def init_anal(directory,anal_dir_suffix='',resolve_filters='open',xtd_config='all'):
+def repro_dir(directory='auto',repro_suffix='repro',overwrite=False,
+               heasoft_init_alias='heainit',caldb_init_alias='caldbinit',parallel=False):
+
+    '''
+
+    Reprocesses directory using xapipeline then copies the initial directory to a directory_repro version,
+    where all the files created by xapipeline replace the initial files.
+    Logs the value of heasoft and caldb used for comparisons, since currently the headers are not properly updated
+
+    Important to do if the data was downloaded before a new heasoft/CALDB version got released
+
+    '''
+
+    def copy_checker(spawn,init_path_spawn,end_path_spawn,init_path,path_spawn,logfile_prefix):
+
+        # number of files to copy
+        n_files_copy = len(glob.glob(os.path.join(init_path, "**"),recursive=True))
+
+        logfile_name=logfile_prefix+'_cp_list.log'
+
+        # copying the individual xrism obs subdirs
+        spawn.sendline('cp -rv '+init_path_spawn+' '+end_path_spawn+' >'+logfile_name)
+
+        # checking the log file
+        copy_ok = False
+        while not copy_ok:
+            time.sleep(0.5)
+            with open(os.path.join(path_spawn,logfile_name)) as f:
+                n_lines = len(f.readlines())
+            if n_lines == n_files_copy:
+                copy_ok = 1
+            else:
+                print('waiting for copy...')
+                pass
+        # reasonable waiting time to make sure files can be copied
+        time.sleep(0.5)
+
+
+    bashproc = pexpect.spawn("/bin/bash", encoding='utf-8')
+
+    set_var(bashproc,heasoft_init_alias,caldb_init_alias)
+
+    if directory=='auto':
+        #fetching the first obsid-like directory in the cwd
+        directory_use=[elem[:-1] for elem in glob.glob('**/') if len(elem[:-1])==9 and elem[:-1].isdigit()][0]
+    else:
+        directory_use=directory
+
+    bashproc.sendline('cd '+os.getcwd())
+
+    if os.path.isfile(directory_use + '/repro_dir.log'):
+        os.system('rm ' + directory_use + '/repro_dir.log')
+
+    with (no_op_context() if parallel else StdoutTee(directory_use + '/repro_dir.log', mode="a", buff=1,
+                                                     file_filters=[_remove_control_chars]), \
+          StderrTee(directory_use + '/repro_dir.log', buff=1, file_filters=[_remove_control_chars])):
+
+        if not parallel:
+            bashproc.logfile_read = sys.stdout
+
+        # testing whether there is already a reprocessed directory
+        repro_dir=str(directory_use)+'_'+str(repro_suffix)
+
+        repro_version_match=False
+        # getting the version of heasoft and the calibration used for the reprocessing
+        bashproc.sendline('fversion >'+os.path.join(directory_use,'heasoft_version.txt'))
+        time.sleep(1.)
+        with open(os.path.join(directory_use,'heasoft_version.txt')) as f:
+            heasoft_ver=f.readlines()[0].replace('\n','').split('_')[1]
+
+
+        os.system('rm '+os.path.join(directory_use,'heasoft_version.txt'))
+
+        # heasoft_ver = os.environ['HEADAS']
+
+        caldb_ver = 'gen' + os.path.realpath(os.path.join(os.environ['CALDB'],
+                                                          'data/xrism/gen/caldb.indx')).split('indx')[-1]
+        caldb_ver += '_xtd' + os.path.realpath(os.path.join(os.environ['CALDB'],
+                                                            'data/xrism/xtend/caldb.indx')).split('indx')[-1]
+        caldb_ver += '_res' + os.path.realpath(os.path.join(os.environ['CALDB'],
+                                                            'data/xrism/resolve/caldb.indx')).split('indx')[-1]
+
+        if os.path.isdir(repro_dir):
+
+            #and comparing to existing logs
+            repro_ver_file=os.path.join(repro_dir, 'repro_ver.txt')
+            if os.path.isfile(repro_ver_file):
+
+                with open(repro_ver_file) as f:
+                    repro_lines=f.readlines()
+
+                repro_version_match=repro_lines[0].replace('\n','')==heasoft_ver \
+                                    and repro_lines[1].replace('\n','')==caldb_ver
+        else:
+             #reading a file from one of the files in the initial directory
+            with fits.open(glob.glob(os.path.join(directory_use,'auxil','**'))[0]) as hdul:
+                init_version_heasoft=hdul[1].header['SOFTVER'].split('_')[2]
+                init_version_caldb=hdul[1].header['CALDBVER']
+
+            repro_version_match=init_version_heasoft==heasoft_ver and init_version_caldb==caldb_ver
+
+        if not repro_version_match or overwrite:
+
+            bashproc.sendline('mkdir -p '+repro_dir)
+            bashproc.sendline('cd '+repro_dir)
+
+            bashproc.sendline('echo valid')
+            bashproc.expect('valid')
+            bashproc.sendline('rm -rf resolve repro_logs log  xtend  auxil')
+            time.sleep(5)
+
+            bashproc.sendline('xapipeline'+
+                          ' indir= ../'+str(directory_use)+
+                          ' outdir= ./'+
+                          ' steminputs=xa'+str(directory_use)+
+                          ' STEMOUTPUTS=DEFAULT'+
+                          ' instrument=ALL'+
+                          ' verify_input=no'
+                          ' entry_stage=1'+
+                          ' exit_stage=2'+
+                          ' clobber=YES')
+
+            #note that the exit code is a bit annoying to parse so we're using sevral lines to isolate it
+            bashproc.expect('Total warnings/errors',timeout=None)
+            bashproc.expect('Running xapipeline')
+            bashproc.expect('Exit with no errors')
+            time.sleep(1)
+            bashproc.sendline('echo valid')
+
+            bashproc.expect('valid')
+
+            #moving the logfiles to a log folder
+            bashproc.sendline('mkdir -p repro_logs')
+            bashproc.sendline('mv xapipeline**.log repro_logs')
+
+            copy_checker(bashproc,'../'+directory_use+'/resolve','./',
+                         init_path=directory_use+'/resolve',path_spawn=repro_dir,
+                         logfile_prefix='resolve')
+
+            copy_checker(bashproc,'../'+directory_use+'/xtend','./',
+                         init_path=directory_use+'/xtend',path_spawn=repro_dir,
+                         logfile_prefix='xtend')
+
+            copy_checker(bashproc,'../'+directory_use+'/log','./',
+                         init_path=directory_use+'/log',path_spawn=repro_dir,
+                         logfile_prefix='log')
+
+            copy_checker(bashproc,'../'+directory_use+'/auxil','./',
+                         init_path=directory_use+'/auxil',path_spawn=repro_dir,
+                         logfile_prefix='auxil')
+
+            #replacing each file for which xaapipeline created a new version
+            #listing the files in one of the subdirs. We need 2 / to ensure we're in one
+            file_list=\
+                [elem for elem in np.unique(glob.glob(os.path.join(repro_dir,'**'),
+                                                      recursive=True))
+                 if 'repro_logs' not in elem and elem.count('/')>1]
+
+            file_move_list=[elem.split('/')[-1] for elem in
+                                    glob.glob(os.path.join(repro_dir,'**'))
+                                              if 'xa' in elem]
+
+            #reading all the lines to reset the buffer
+            try:
+
+                bashproc.timeout=1
+                bashproc.readlines()
+            except:
+                bashproc.timeout=30
+
+
+
+            for elem_file_repro in file_move_list:
+                file_arbo_pos=[elem for elem in file_list if elem_file_repro in elem]
+                if len(file_arbo_pos)>1:
+                    breakpoint()
+                elif len(file_arbo_pos)==0:
+                    continue
+
+                #cutting the first dir since that will be the repro obsid
+                file_arbo_dir='/'.join(file_arbo_pos[0].split('/')[:-1])
+                file_arbo_spawn_dir='/'.join(file_arbo_pos[0].split('/')[1:-1])
+                file_arbo_spawn_path='/'.join(file_arbo_pos[0].split('/')[1:])
+
+                bashproc.sendline('rm '+file_arbo_spawn_path)
+                bashproc.sendline('mv '+elem_file_repro+' '+file_arbo_spawn_dir)
+                while not os.path.isfile(os.path.join(file_arbo_dir,elem_file_repro)):
+                    time.sleep(0.5)
+                    print('Wating for file move...')
+                    if not os.path.isfile(os.path.join(file_arbo_dir,elem_file_repro)):
+                        time.sleep(2.5)
+                        if not os.path.isfile(os.path.join(file_arbo_dir, elem_file_repro)):
+                            breakpoint()
+                            pass
+                time.sleep(0.5)
+
+                bashproc.sendline('echo valid')
+                bashproc.expect('valid')
+
+                print('Replaced file '+elem_file_repro)
+
+            #logging the version of heasoft and the calibration used for the reprocessing
+            heasoft_ver=os.environ['HEADAS']
+
+            caldb_ver='gen_'+os.path.realpath(os.path.join(os.environ['CALDB'],
+                                                           'data/xrism/gen/caldb.indx')).split('indx')[-1]
+            caldb_ver+='_res_'+os.path.realpath(os.path.join(os.environ['CALDB'],
+                                                           'data/xrism/resolve/caldb.indx')).split('indx')[-1]
+            caldb_ver+='_xtd_'+os.path.realpath(os.path.join(os.environ['CALDB'],
+                                                           'data/xrism/xtend/caldb.indx')).split('indx')[-1]
+
+            with open(os.path.join(repro_dir,'repro_ver.txt'),'w+') as f:
+                f.write(heasoft_ver+'\n')
+                f.write(caldb_ver+'\n')
+
+        else:
+            print('overwrite not selected and repro versions matching. Skipping xapipeline...')
+
+        bashproc.sendline('exit')
+
+def init_anal(directory='auto',anal_dir_suffix='',resolve_filters='open',xtd_config='all',gz=True):
     '''
 
     Copies main event lists and other useful files to an analysis directory
@@ -188,13 +408,19 @@ def init_anal(directory,anal_dir_suffix='',resolve_filters='open',xtd_config='al
     xtd_config_disp=np.array(["all_FW","1-2_1/8","1-2_FW_burst","1-2_1/8_burst","3-4_FW"])
     xtd_config_namecodes=np.array(['p0300','p0311','p0312','p0313','p0320'])
 
-    anal_dir=os.path.join(directory,'analysis'+('_'+anal_dir_suffix if anal_dir_suffix!='' else ''))
+    if directory=='auto':
+        #fetching the first obsid-like directory in the cwd
+        directory_use=[elem[:-1] for elem in glob.glob('**/') if len(elem[:-1])==9 and elem[:-1].isdigit()][0]
+    else:
+        directory_use=directory
+
+    anal_dir=os.path.join(directory_use,'analysis'+('_'+anal_dir_suffix if anal_dir_suffix!='' else ''))
 
     os.system('mkdir -p '+anal_dir)
 
-    dirfiles=glob.glob(os.path.join(directory,'**'),recursive=True)
+    dirfiles=glob.glob(os.path.join(directory_use,'**'),recursive=True)
 
-    resolve_evts=[elem for elem in dirfiles if elem.endswith('cl.evt.gz') and len(elem.split('/'))>2 and
+    resolve_evts=[elem for elem in dirfiles if elem.endswith('cl.evt'+('.gz' if gz else '')) and len(elem.split('/'))>2 and
                   elem.split('/')[-3]=='resolve']
     print('Found '+str(len(resolve_evts))+' resolve event files')
     print(resolve_evts)
@@ -210,7 +436,7 @@ def init_anal(directory,anal_dir_suffix='',resolve_filters='open',xtd_config='al
         resolve_evts_use=resolve_evts
 
 
-    xtd_evts=[elem for elem in dirfiles if elem.endswith('cl.evt.gz') and len(elem.split('/'))>2 and
+    xtd_evts=[elem for elem in dirfiles if elem.endswith('cl.evt'+('.gz' if gz else '')) and len(elem.split('/'))>2 and
                   elem.split('/')[-3]=='xtend']
     print('Found '+str(len(xtd_evts))+' xtend event files')
     print(xtd_evts)
@@ -232,7 +458,7 @@ def init_anal(directory,anal_dir_suffix='',resolve_filters='open',xtd_config='al
     #untarring the files that were just copied in anal_dir
     os.system('gunzip '+os.path.join(anal_dir,'**'))
 
-def resolve_RTS(directory,anal_dir_suffix='',heasoft_init_alias='heainit',caldb_init_alias='caldbinit',
+def resolve_RTS(directory='auto',anal_dir_suffix='',heasoft_init_alias='heainit',caldb_init_alias='caldbinit',
                 parallel=False):
 
     '''
@@ -244,19 +470,25 @@ def resolve_RTS(directory,anal_dir_suffix='',heasoft_init_alias='heainit',caldb_
 
     set_var(bashproc,heasoft_init_alias,caldb_init_alias)
 
-    anal_dir=os.path.join(directory,'analysis'+('_'+anal_dir_suffix if anal_dir_suffix!='' else ''))
+    if directory=='auto':
+        #fetching the first obsid-like directory in the cwd
+        directory_use=[elem[:-1] for elem in glob.glob('**/') if len(elem[:-1])==9 and elem[:-1].isdigit()][0]
+    else:
+        directory_use=directory
+
+    anal_dir=os.path.join(directory_use,'analysis'+('_'+anal_dir_suffix if anal_dir_suffix!='' else ''))
 
     resolve_files=[elem for elem in glob.glob(os.path.join(anal_dir,'**')) if 'rsl_' in elem.split('/')[-1] and
                    elem.endswith('_cl.evt')]
 
     bashproc.sendline('cd '+os.path.join(os.getcwd(),anal_dir))
 
-    if os.path.isfile(directory + '/resolve_RTS.log'):
-        os.system('rm ' + directory + '/resolve_RTS.log')
+    if os.path.isfile(directory_use + '/resolve_RTS.log'):
+        os.system('rm ' + directory_use + '/resolve_RTS.log')
 
-    with (no_op_context() if parallel else StdoutTee(directory + '/resolve_RTS.log', mode="a", buff=1,
+    with (no_op_context() if parallel else StdoutTee(directory_use + '/resolve_RTS.log', mode="a", buff=1,
                                                      file_filters=[_remove_control_chars]), \
-          StderrTee(directory + '/resolve_RTS.log', buff=1, file_filters=[_remove_control_chars])):
+          StderrTee(directory_use + '/resolve_RTS.log', buff=1, file_filters=[_remove_control_chars])):
 
         if not parallel:
             bashproc.logfile_read = sys.stdout
@@ -276,9 +508,10 @@ def resolve_RTS(directory,anal_dir_suffix='',heasoft_init_alias='heainit',caldb_
                             ' copyall=yes clobber=yes history=yes')
 
             while not os.path.isfile(os.path.join(anal_dir,indiv_file.split('/')[-1].replace('_cl.evt','_cl_RTS.evt'))):
+                print('waiting for copy...')
                 time.sleep(1)
 
-            time.sleep(1)
+            time.sleep(5)
 
 
             bashproc.sendline('echo valid')
@@ -289,101 +522,388 @@ def resolve_RTS(directory,anal_dir_suffix='',heasoft_init_alias='heainit',caldb_
     bashproc.sendline('exit')
 
 
-def plot_BR(branch_file, save_path=None, excl_pixel=[]):
+def plot_BR(branch_file, save_paths=None, excl_pixel=[],task='rslbratios'):
     '''
     Wrapper around the branching ratios plotting function
 
+    Different versions for the new and old tasks
+    if the old versions with rslbranch:
+    1 plot with the actual values
+
+    in the new version with rslbratios, makes 3 plots:
+    1 in the energy band with only the actual values
+    2 in the full band: one with the values and the predictions, one with the ratios between the two
     if save_path is not None, will disable the gui and save before closing the plot
 
     excl_pixel can be an interable of excluded pixels to highlight
     '''
 
-    with fits.open(branch_file) as branch_fits:
-        branch_data = branch_fits[2].data
 
-    # removing pixel 12 to avoid problems later with ordering
-    branch_data = branch_data[[elem for elem in range(36) if elem != 12]]
+    if task=='rslbranch':
+        with fits.open(branch_file) as branch_fits:
+            branch_data = branch_fits[2].data
 
-    if save_path is not None:
-        plt.ioff()
+        # removing pixel 12 to avoid problems later with ordering
+        branch_data = branch_data[[elem for elem in range(36) if elem != 12]]
 
-    # making a plot with the information
-    fig_branch, ax_branch = plt.subplots(figsize=(16, 10))
-    ax_branch.set_yscale('log')
-    ax_branch.set_xscale('log')
-    ax_branch.set_ylim(1e-3, 1.1)
-    ax_branch.set_xlabel(r'Pixel count rate (s$^{-1}$)')
-    ax_branch.set_ylabel('Pixel branching ratios')
+        if save_paths is not None:
+            plt.ioff()
 
-    # showcasing the branching ratios
-    plt.plot(branch_data['RATETOT'], branch_data['BRANCHHP'], ls='', marker='d',
-             color='green', label='Hp')
-    plt.plot(branch_data['RATETOT'], branch_data['BRANCHMP'], ls='', marker='d',
-             color='blue', label='Mp')
-    plt.plot(branch_data['RATETOT'], branch_data['BRANCHMS'], ls='', marker='d',
-             color='cyan', label='Ms')
-    plt.plot(branch_data['RATETOT'], branch_data['BRANCHLP'], ls='', marker='d',
-             color='orange', label='Lp')
-    plt.plot(branch_data['RATETOT'], branch_data['BRANCHLS'], ls='', marker='d',
-             color='red', label='Ls')
+        # making a plot with the information
+        fig_branch, ax_branch = plt.subplots(figsize=(16, 10))
+        ax_branch.set_yscale('log')
+        ax_branch.set_xscale('log')
+        ax_branch.set_ylim(1e-3, 1.1)
+        ax_branch.set_xlabel(r'Pixel count rate (s$^{-1}$)')
+        ax_branch.set_ylabel('Pixel branching ratios')
 
-    # creating a secondary axis to show the pixel positions
-    ax_up = ax_branch.secondary_xaxis('top')
+        # showcasing the branching ratios
+        plt.plot(branch_data['RATETOT'],
+                 branch_data['BRANCHHP'], ls='', marker='d',
+                 color='green', label='Hp')
+        plt.plot(branch_data['RATETOT'],
+                 branch_data['BRANCHMP'], ls='', marker='d',
+                 color='blue', label='Mp')
+        plt.plot(branch_data['RATETOT'],
+                 branch_data['BRANCHMS'], ls='', marker='d',
+                 color='cyan', label='Ms')
+        plt.plot(branch_data['RATETOT'],
+                 branch_data['BRANCHLP'], ls='', marker='d',
+                 color='orange', label='Lp')
+        plt.plot(branch_data['RATETOT'],
+                 branch_data['BRANCHLS'], ls='', marker='d',
+                 color='red', label='Ls')
 
-    # removing the ticks
-    ax_up.set_xticks([], minor=True)
-    ax_up.set_xticks([], minor=True)
+        # creating a secondary axis to show the pixel positions
+        ax_up = ax_branch.secondary_xaxis('top')
 
-    # replacing them with the pixel ids
-    pixel_order = branch_data['RATETOT'].argsort()
+        # removing the ticks
+        ax_up.set_xticks([], minor=True)
+        ax_up.set_xticks([], minor=True)
 
-    # the random addition is here to avoid ticks overlapping if the count rate is the same
-    # (which makes the labels disappear
-    ax_up.set_xticks(branch_data['RATETOT'][pixel_order] + np.random.rand(35) * 1e-5)
+        # replacing them with the pixel ids
+        pixel_order = branch_data['RATETOT'].argsort()
 
-    # and putting labels on differnet lines to avoid cluttering
-    arr_pxl_names = branch_data['PIXEL'][pixel_order].astype(str)
-    arr_pxl_shifted = [elem + ('\n' * (i % 5)) for i, elem in enumerate(arr_pxl_names)]
+        # the random addition is here to avoid ticks overlapping if the count rate is the same
+        # (which makes the labels disappear
+        ax_up.set_xticks(branch_data['RATETOT'][pixel_order] + np.random.rand(35) * 1e-5)
 
-    ax_up.set_xticklabels(arr_pxl_shifted)
-    # adjusting the color of the excluded pixel labels
-    color_arr_label = np.where([int(elem) in excl_pixel for elem in arr_pxl_names], 'red', 'black')
-    for xtick, color in zip(ax_up.get_xticklabels(), color_arr_label):
-        xtick.set_color(color)
+        # and putting labels on differnet lines to avoid cluttering
+        arr_pxl_names = branch_data['PIXEL'][pixel_order].astype(str)
+        arr_pxl_shifted = [elem + ('\n' * (i % 5)) for i, elem in enumerate(arr_pxl_names)]
 
-    ax_up.set_xlabel('Pixel number (excluded in red)')
+        ax_up.set_xticklabels(arr_pxl_shifted)
+        # adjusting the color of the excluded pixel labels
+        color_arr_label = np.where([int(elem) in excl_pixel for elem in arr_pxl_names], 'red', 'black')
+        for xtick, color in zip(ax_up.get_xticklabels(), color_arr_label):
+            xtick.set_color(color)
 
-    # adding vertical lines
-    for pix_number, pix_rate in zip(branch_data['PIXEL'], branch_data['RATETOT']):
-        plt.axvline(pix_rate, ls=':', color='red' if pix_number in excl_pixel else 'grey',
-                    zorder=-1)
+        ax_up.set_xlabel('Pixel number (excluded in red)')
 
-    plt.legend(loc='lower right')
-    plt.tight_layout()
+        # adding vertical lines
+        for pix_number, pix_rate in zip(branch_data['PIXEL'], branch_data['RATETOT']):
+            plt.axvline(pix_rate, ls=':', color='red' if pix_number in excl_pixel else 'grey',
+                        zorder=-1)
 
-    if save_path is not None:
-        plt.savefig(save_path)
-        plt.close()
-        plt.ion()
+        plt.legend(loc='lower right')
+        plt.tight_layout()
+
+        if save_paths is not None:
+            plt.savefig(save_paths[0])
+            plt.close()
+            plt.ion()
+
+    elif task=='rslbratios':
+
+        if save_paths is not None:
+            plt.ioff()
+
+        with fits.open(branch_file) as branch_fits:
+            branch_data_lsreal_efull = branch_fits[1].data
+            branch_simu_lsreal_efull = branch_fits[3].data
+            branch_data_lsreal_eband = branch_fits[4].data
+
+            branch_band=[elem for elem in branch_fits[4].header['history'] if 'eband' in elem][0].split(' = ')[1]
 
 
-def resolve_BR(directory, anal_dir_suffix='',
+        # removing pixel 12 to avoid problems later with ordering
+        branch_data_lsreal_efull = branch_data_lsreal_efull[[elem for elem in range(36) if elem != 12]]
+        branch_simu_lsreal_efull = branch_simu_lsreal_efull[[elem for elem in range(36) if elem != 12]]
+        branch_data_lsreal_eband= branch_data_lsreal_eband[[elem for elem in range(36) if elem != 12]]
+
+        # making a plot with the information for the eband
+        fig_branch_band_eband, ax_brand_band_eband = plt.subplots(figsize=(16, 10))
+        ax_brand_band_eband.set_yscale('log')
+        ax_brand_band_eband.set_xscale('log')
+        ax_brand_band_eband.set_xlabel(r'Pixel count rate (s$^{-1}$)')
+        ax_brand_band_eband.set_ylabel('Pixel branching ratios')
+        ax_brand_band_eband.set_title('Observed branching ratios in the '+branch_band+' keV band')
+        # showcasing the branch_banding ratios
+        plt.plot(branch_data_lsreal_eband['RATETOT'],
+                 branch_data_lsreal_eband['BRANCHHP'],
+                 ls='', marker='d',
+                 color='green', label='Hp')
+        plt.plot(branch_data_lsreal_eband['RATETOT'],
+                 branch_data_lsreal_eband['BRANCHMP'],
+                 ls='', marker='d',
+                 color='blue', label='Mp')
+        plt.plot(branch_data_lsreal_eband['RATETOT'],
+                 branch_data_lsreal_eband['BRANCHMS'],
+                 ls='', marker='d',
+                 color='cyan', label='Ms')
+        plt.plot(branch_data_lsreal_eband['RATETOT'],
+                 branch_data_lsreal_eband['BRANCHLP'],
+                 ls='', marker='d',
+                 color='orange', label='Lp')
+        plt.plot(branch_data_lsreal_eband['RATETOT'],
+                 branch_data_lsreal_eband['BRANCHLS'],
+                 ls='', marker='d',
+                 color='red', label='Ls')
+
+        # creating a secondary axis to show the pixel positions
+        ax_up = ax_brand_band_eband.secondary_xaxis('top')
+
+        # removing the ticks
+        ax_up.set_xticks([], minor=True)
+        ax_up.set_xticks([], minor=True)
+
+        # replacing them with the pixel ids
+        pixel_order = branch_data_lsreal_eband['RATETOT'].argsort()
+
+        # the random addition is here to avoid ticks overlapping if the count rate is the same
+        # (which makes the labels disappear
+        ax_up.set_xticks(branch_data_lsreal_eband['RATETOT'][pixel_order] + np.random.rand(35) * 1e-5)
+
+        # and putting labels on differnet lines to avoid cluttering
+        arr_pxl_names = branch_data_lsreal_eband['PIXEL'][pixel_order].astype(str)
+        arr_pxl_shifted = [elem + ('\n' * (i % 5)) for i, elem in enumerate(arr_pxl_names)]
+
+        ax_up.set_xticklabels(arr_pxl_shifted)
+        # adjusting the color of the excluded pixel labels
+        color_arr_label = np.where([int(elem) in excl_pixel for elem in arr_pxl_names], 'red', 'black')
+        for xtick, color in zip(ax_up.get_xticklabels(), color_arr_label):
+            xtick.set_color(color)
+
+        ax_up.set_xlabel('Pixel number (excluded in red)')
+
+        # adding vertical lines
+        for pix_number, pix_rate in zip(branch_data_lsreal_eband['PIXEL'], branch_data_lsreal_eband['RATETOT']):
+            plt.axvline(pix_rate, ls=':', color='red' if pix_number in excl_pixel else 'grey',
+                        zorder=-1)
+
+        #ax_brand_band_eband.set_ylim(ax_brand_band_eband.get_ylim()[0], 1.1)
+        ax_brand_band_eband.set_ylim(5e-4, 1.1)
+
+        plt.legend(loc='lower right')
+        plt.tight_layout()
+
+        if save_paths is not None:
+            plt.savefig(save_paths[0])
+            plt.close()
+
+
+        # making a plot with the information and the prediction for the full band
+        fig_branch_band_full, ax_branch_band_full = plt.subplots(figsize=(16, 10))
+        ax_branch_band_full.set_yscale('log')
+        ax_branch_band_full.set_xscale('log')
+        ax_branch_band_full.set_xlabel(r'Pixel count rate (s$^{-1}$)')
+        ax_branch_band_full.set_ylabel('Pixel branching ratios')
+        ax_branch_band_full.set_title('Observed and theoretical branching ratios in the full XRISM band')
+
+        # showcasing the branch_banding ratios
+        plt.plot(branch_data_lsreal_efull['RATETOT'],
+                 branch_data_lsreal_efull['BRANCHHP'],
+                 ls='', marker='d',
+                 color='green', label='Hp')
+        plt.plot(branch_data_lsreal_efull['RATETOT'],
+                 branch_data_lsreal_efull['BRANCHMP'],
+                 ls='', marker='d',
+                 color='blue', label='Mp')
+        plt.plot(branch_data_lsreal_efull['RATETOT'],
+                 branch_data_lsreal_efull['BRANCHMS'],
+                 ls='', marker='d',
+                 color='cyan', label='Ms')
+        plt.plot(branch_data_lsreal_efull['RATETOT'],
+                 branch_data_lsreal_efull['BRANCHLP'],
+                 ls='', marker='d',
+                 color='orange', label='Lp')
+        plt.plot(branch_data_lsreal_efull['RATETOT'],
+                 branch_data_lsreal_efull['BRANCHLS'],
+                 ls='', marker='d',
+                 color='red', label='Ls')
+
+        rate_pred_order=branch_simu_lsreal_efull['RATETOT'].argsort()
+
+        plt.plot(branch_simu_lsreal_efull['RATETOT'][rate_pred_order],
+                 branch_simu_lsreal_efull['BRANCHHP'][rate_pred_order],
+                 ls='-', marker='',
+                 color='green', label='')
+
+        plt.plot(branch_simu_lsreal_efull['RATETOT'][rate_pred_order],
+                 branch_simu_lsreal_efull['BRANCHMP'][rate_pred_order],
+                 ls='-', marker='',
+                 color='blue', label='')
+
+        plt.plot(branch_simu_lsreal_efull['RATETOT'][rate_pred_order],
+                 branch_simu_lsreal_efull['BRANCHMS'][rate_pred_order],
+                 ls='-', marker='',
+                 color='cyan', label='')
+
+        plt.plot(branch_simu_lsreal_efull['RATETOT'][rate_pred_order],
+                 branch_simu_lsreal_efull['BRANCHLP'][rate_pred_order],
+                 ls='-', marker='',
+                 color='orange', label='')
+
+        plt.plot(branch_simu_lsreal_efull['RATETOT'][rate_pred_order],
+                 branch_simu_lsreal_efull['BRANCHLS'][rate_pred_order],
+                 ls='-', marker='',
+                 color='red', label='')
+
+        plt.plot([],[],
+                 ls='-', marker='',
+                 color='black', label='')
+
+        # creating a secondary axis to show the pixel positions
+        ax_up = ax_branch_band_full.secondary_xaxis('top')
+
+        # removing the ticks
+        ax_up.set_xticks([], minor=True)
+        ax_up.set_xticks([], minor=True)
+
+        # replacing them with the pixel ids
+        pixel_order = branch_data_lsreal_efull['RATETOT'].argsort()
+
+        # the random addition is here to avoid ticks overlapping if the count rate is the same
+        # (which makes the labels disappear
+        ax_up.set_xticks(branch_data_lsreal_efull['RATETOT'][pixel_order] + np.random.rand(35) * 1e-5)
+
+        # and putting labels on differnet lines to avoid cluttering
+        arr_pxl_names = branch_data_lsreal_efull['PIXEL'][pixel_order].astype(str)
+        arr_pxl_shifted = [elem + ('\n' * (i % 5)) for i, elem in enumerate(arr_pxl_names)]
+
+        ax_up.set_xticklabels(arr_pxl_shifted)
+        # adjusting the color of the excluded pixel labels
+        color_arr_label = np.where([int(elem) in excl_pixel for elem in arr_pxl_names], 'red', 'black')
+        for xtick, color in zip(ax_up.get_xticklabels(), color_arr_label):
+            xtick.set_color(color)
+
+        ax_up.set_xlabel('Pixel number (excluded in red)')
+
+        # adding vertical lines
+        for pix_number, pix_rate in zip(branch_data_lsreal_efull['PIXEL'], branch_data_lsreal_efull['RATETOT']):
+            plt.axvline(pix_rate, ls=':', color='red' if pix_number in excl_pixel else 'grey',
+                        zorder=-1)
+
+        #upper-only ylim
+        #ax_branch_band_full.set_ylim(ax_branch_band_full.get_ylim()[0], 1.1)
+        ax_branch_band_full.set_ylim(5e-4, 1.1)
+
+        plt.legend(loc='lower right')
+        plt.tight_layout()
+
+        if save_paths is not None:
+            plt.savefig(save_paths[1])
+            plt.close()
+
+        # making a plot with the data to prediction ratio for the full band
+        fig_branch_band_ratio, ax_branch_band_ratio = plt.subplots(figsize=(16, 10))
+        ax_branch_band_ratio.set_yscale('log')
+        ax_branch_band_ratio.set_xscale('log')
+        ax_branch_band_ratio.set_xlabel(r'Pixel count rate (s$^{-1}$)')
+        ax_branch_band_ratio.set_ylabel('Pixel branching observed/theoretical ratio')
+        ax_branch_band_full.set_title('Ratio between Observed and theoretical branching ratios '
+                                      'in the full XRISM band')
+
+        # showcasing the branch_banding ratios
+        plt.plot(branch_data_lsreal_efull['RATETOT'],
+                 branch_data_lsreal_efull['BRANCHHP']/branch_simu_lsreal_efull['BRANCHHP'],
+                 ls='', marker='d',
+                 color='green', label='Hp')
+        plt.plot(branch_data_lsreal_efull['RATETOT'],
+                 branch_data_lsreal_efull['BRANCHMP']/branch_simu_lsreal_efull['BRANCHMP'],
+                 ls='', marker='d',
+                 color='blue', label='Mp')
+        plt.plot(branch_data_lsreal_efull['RATETOT'],
+                 branch_data_lsreal_efull['BRANCHMS']/branch_simu_lsreal_efull['BRANCHMS'],
+                 ls='', marker='d',
+                 color='cyan', label='Ms')
+        plt.plot(branch_data_lsreal_efull['RATETOT'],
+                 branch_data_lsreal_efull['BRANCHLP']/branch_simu_lsreal_efull['BRANCHLP'],
+                 ls='', marker='d',
+                 color='orange', label='Lp')
+        plt.plot(branch_data_lsreal_efull['RATETOT'],
+                 branch_data_lsreal_efull['BRANCHLS']/branch_simu_lsreal_efull['BRANCHLS'],
+                 ls='', marker='d',
+                 color='red', label='Ls')
+
+        # creating a secondary axis to show the pixel positions
+        ax_up = ax_branch_band_ratio.secondary_xaxis('top')
+
+        # removing the ticks
+        ax_up.set_xticks([], minor=True)
+        ax_up.set_xticks([], minor=True)
+
+        # replacing them with the pixel ids
+        pixel_order = branch_data_lsreal_efull['RATETOT'].argsort()
+
+        # the random addition is here to avoid ticks overlapping if the count rate is the same
+        # (which makes the labels disappear
+        ax_up.set_xticks(branch_data_lsreal_efull['RATETOT'][pixel_order] + np.random.rand(35) * 1e-5)
+
+        # and putting labels on differnet lines to avoid cluttering
+        arr_pxl_names = branch_data_lsreal_efull['PIXEL'][pixel_order].astype(str)
+        arr_pxl_shifted = [elem + ('\n' * (i % 5)) for i, elem in enumerate(arr_pxl_names)]
+
+        ax_up.set_xticklabels(arr_pxl_shifted)
+        # adjusting the color of the excluded pixel labels
+        color_arr_label = np.where([int(elem) in excl_pixel for elem in arr_pxl_names], 'red', 'black')
+        for xtick, color in zip(ax_up.get_xticklabels(), color_arr_label):
+            xtick.set_color(color)
+
+        ax_up.set_xlabel('Pixel number (excluded in red)')
+
+        # adding vertical lines
+        for pix_number, pix_rate in zip(branch_data_lsreal_efull['PIXEL'],
+                                        branch_data_lsreal_efull['RATETOT']):
+            plt.axvline(pix_rate, ls=':', color='red' if pix_number in excl_pixel else 'grey',
+                        zorder=-1)
+
+        plt.legend(loc='upper right')
+        plt.tight_layout()
+
+        if save_paths is not None:
+            plt.savefig(save_paths[2])
+            plt.close()
+            plt.ion()
+
+
+def resolve_BR(directory='auto', anal_dir_suffix='',
                use_raw_evt_rsl=False,
+               task='rslbratios',
+               lightcurves=True,
                pixel_str_rsl='all',
                remove_cal_pxl_resolve=False,
-               pixel_filter_rule='clip_LS_0.02andcompa_LS>MS+remove_27',
+               pixel_filter_rule='ratio_LS_6+remove_27',
                heasoft_init_alias='heainit', caldb_init_alias='caldbinit',
                parallel=False):
     '''
     Computes a file and plot with the branching ratio information for each resolve event file
-    see https://heasarc.gsfc.nasa.gov/lheasoft/help/rslbranch.html
+
+    Two commands exist:
+        -rslbranch (see https://heasarc.gsfc.nasa.gov/lheasoft/help/rslbranch.html)
+        -rslbratios (see yourheasoftpath/help/rslbratios.html)
+
+    -lghtcurve can be switched on or off for the rslbratios command, depending on whether the user wants
+    to compute lighcurves of the evolution of each event grade averaged over all pixels
 
     pixel_filter_rule:
         if not None, uses the rules to determine pixels to EXCLUDE
         creates a txt file with the information of the pixels removed and the remaining pixels
         (which works as an input for later commands)
-        different rules can be combined with +.
-        subrules with and
+        different rules can be combined with +. use "and" for subrules
+
+        example:clip_LS_0.02andcompa_LS>MS+remove_27
+
 
     '''
 
@@ -391,75 +911,146 @@ def resolve_BR(directory, anal_dir_suffix='',
 
     set_var(bashproc, heasoft_init_alias, caldb_init_alias)
 
-    anal_dir = os.path.join(directory, 'analysis' + ('_' + anal_dir_suffix if anal_dir_suffix != '' else ''))
+    if directory=='auto':
+        #fetching the first obsid-like directory in the cwd
+        directory_use=[elem[:-1] for elem in glob.glob('**/') if len(elem[:-1])==9 and elem[:-1].isdigit()][0]
+    else:
+        directory_use=directory
+
+    anal_dir = os.path.join(directory_use, 'analysis' + ('_' + anal_dir_suffix if anal_dir_suffix != '' else ''))
 
     resolve_files = [elem for elem in glob.glob(os.path.join(anal_dir, '**')) if 'rsl_' in elem.split('/')[-1] and
                      elem.endswith('_cl' + ('' if use_raw_evt_rsl else '_RTS') + '.evt')]
 
     bashproc.sendline('cd ' + os.path.join(os.getcwd(), anal_dir))
 
-    if os.path.isfile(directory + '/resolve_BR.log'):
-        os.system('rm ' + directory + '/resolve_BR.log')
+    if os.path.isfile(directory_use + '/resolve_BR.log'):
+        os.system('rm ' + directory_use + '/resolve_BR.log')
 
-    with (no_op_context() if parallel else StdoutTee(directory + '/resolve_BR.log', mode="a", buff=1,
+    with (no_op_context() if parallel else StdoutTee(directory_use + '/resolve_BR.log', mode="a", buff=1,
                                                      file_filters=[_remove_control_chars]), \
-          StderrTee(directory + '/resolve_BR.log', buff=1, file_filters=[_remove_control_chars])):
+          StderrTee(directory_use + '/resolve_BR.log', buff=1, file_filters=[_remove_control_chars])):
 
         if not parallel:
             bashproc.logfile_read = sys.stdout
 
         for indiv_file in resolve_files:
 
-            bashproc.sendline('rslbranch infile=' + indiv_file.split('/')[-1] +
-                              ' outfile=' + indiv_file.split('/')[-1].replace('.evt', '_branch.fits') +
-                              ' filetype=real' +
-                              ' pixfrac=NONE' +
-                              ' pixmask=NONE')
+            if task=='rslbranch':
+                bashproc.sendline('rslbranch infile=' + indiv_file.split('/')[-1] +
+                                  ' outfile=' + indiv_file.split('/')[-1].replace('.evt', '_branch.fits') +
+                                  ' filetype=real' +
+                                  ' pixfrac=NONE' +
+                                  ' pixmask=NONE')
 
-            bashproc.expect('Finished RSLBRANCH', timeout=60)
+                bashproc.expect('Finished RSLBRANCH', timeout=60)
 
-            time.sleep(1)
+                time.sleep(1)
+
+                # adding a filtering if it is requested
+                if pixel_filter_rule is not None:
+
+                    with fits.open(indiv_file.replace('.evt', '_branch.fits')) as branch_fits:
+                        branch_data = branch_fits[2].data
+
+                    mask_exclude = np.repeat(False, 36)
+
+                    for elem_rule in pixel_filter_rule.split('+'):
+
+                        mask_subexclude = np.repeat(True, 36)
+
+                        for subelem_rule in elem_rule.split('and'):
+
+                            if subelem_rule.split('_')[0] == 'clip':
+                                mask_subexclude = (mask_subexclude) & \
+                                                  (branch_data['BRANCH' + subelem_rule.split('_')[1]] > float(
+                                                      subelem_rule.split('_')[2]))
+
+                            if subelem_rule.split('_')[0] == 'compa':
+                                if '<' in subelem_rule.split('_')[1]:
+                                    mask_subexclude = (mask_subexclude) & \
+                                                      (branch_data['BRANCH' + subelem_rule.split('_')[1].split('<')[0]]
+                                                       < branch_data['BRANCH' + subelem_rule.split('_')[1].split('<')[1]])
+                                elif '>' in subelem_rule.split('_')[1]:
+                                    mask_subexclude = (mask_subexclude) & \
+                                                      (branch_data['BRANCH' + subelem_rule.split('_')[1].split('>')[0]]
+                                                       > branch_data['BRANCH' + subelem_rule.split('_')[1].split('>')[1]])
+
+                            if subelem_rule.split('_')[0] == 'remove':
+                                submask_remove = [str(elem) in subelem_rule.split('_')[1].split(',')
+                                                  for elem in range(36)]
+                                mask_subexclude = (mask_subexclude) & (submask_remove)
+
+                        mask_exclude = (mask_exclude) | mask_subexclude
+
+            elif task=='rslbratios':
+                bashproc.sendline('mkdir -p branch')
+                bashproc.sendline('cd branch')
+
+                bashproc.sendline('rslbratios'
+                                  +' infile=../'+indiv_file.split('/')[-1]
+                                  +' filetype="cl"'
+                                  +' outroot=branch'
+                                  +' eband=2-12'
+                                  +' lcurve='+str(lightcurves)+
+                                  ' clobber=yes')
+
+                bashproc.expect('Finished RSLBRATIOS',timeout=None)
+
+                time.sleep(1)
+
+                # adding a filtering if it is requested
+                if pixel_filter_rule is not None:
+
+                    with fits.open('/'.join(indiv_file.split('/')[:-1])+
+                                   '/branch/branch_2keVto12keV_brVpxcnt.fits') as branch_fits:
+                        branch_data_real_full = branch_fits[1].data
+                        branch_simu_real_full = branch_fits[3].data
+
+                        #for the pixel txt file
+                        branch_data = branch_fits[1].data
+
+
+                    mask_exclude = np.repeat(False, 36)
+
+                    for elem_rule in pixel_filter_rule.split('+'):
+
+                        mask_subexclude = np.repeat(True, 36)
+
+                        for subelem_rule in elem_rule.split('and'):
+
+                            if subelem_rule.split('_')[0] == 'clip':
+                                mask_subexclude = (mask_subexclude) & \
+                                                  (branch_data_real_full['BRANCH' + subelem_rule.split('_')[1]] > float(
+                                                      subelem_rule.split('_')[2]))
+
+                            if subelem_rule.split('_')[0] == 'ratio':
+                                mask_subexclude = (mask_subexclude) & \
+                                  (branch_data_real_full['BRANCH' + subelem_rule.split('_')[1]]\
+                                   /branch_simu_real_full['BRANCH' + subelem_rule.split('_')[1]] \
+                                   > float(subelem_rule.split('_')[2]))
+
+                            if subelem_rule.split('_')[0] == 'compa':
+                                if '<' in subelem_rule.split('_')[1]:
+                                    mask_subexclude = (mask_subexclude) & \
+                                                      (branch_data_real_full['BRANCH' + subelem_rule.split('_')[1].split('<')[0]]
+                                                       < branch_data_real_full['BRANCH' + subelem_rule.split('_')[1].split('<')[1]])
+                                elif '>' in subelem_rule.split('_')[1]:
+                                    mask_subexclude = (mask_subexclude) & \
+                                                      (branch_data_real_full['BRANCH' + subelem_rule.split('_')[1].split('>')[0]]
+                                                       > branch_data_real_full['BRANCH' + subelem_rule.split('_')[1].split('>')[1]])
+
+                            if subelem_rule.split('_')[0] == 'remove':
+                                submask_remove = [str(elem) in subelem_rule.split('_')[1].split(',')
+                                                  for elem in range(36)]
+                                mask_subexclude = (mask_subexclude) & (submask_remove)
+
+                        mask_exclude = (mask_exclude) | mask_subexclude
 
             bashproc.sendline('echo valid')
 
             # this is normally fast so their should be no need for a long time-out
             bashproc.expect('valid')
-
-            # adding a filtering if it is requested
-            if pixel_filter_rule is not None:
-
-                with fits.open(indiv_file.replace('.evt', '_branch.fits')) as branch_fits:
-                    branch_data = branch_fits[2].data
-
-                mask_exclude = np.repeat(False, 36)
-
-                for elem_rule in pixel_filter_rule.split('+'):
-
-                    mask_subexclude = np.repeat(True, 36)
-
-                    for subelem_rule in elem_rule.split('and'):
-
-                        if subelem_rule.split('_')[0] == 'clip':
-                            mask_subexclude = (mask_subexclude) & \
-                                              (branch_data['BRANCH' + subelem_rule.split('_')[1]] > float(
-                                                  subelem_rule.split('_')[2]))
-
-                        if subelem_rule.split('_')[0] == 'compa':
-                            if '<' in subelem_rule.split('_')[1]:
-                                mask_subexclude = (mask_subexclude) & \
-                                                  (branch_data['BRANCH' + subelem_rule.split('_')[1].split('<')[0]]
-                                                   < branch_data['BRANCH' + subelem_rule.split('_')[1].split('<')[1]])
-                            elif '>' in subelem_rule.split('_')[1]:
-                                mask_subexclude = (mask_subexclude) & \
-                                                  (branch_data['BRANCH' + subelem_rule.split('_')[1].split('>')[0]]
-                                                   > branch_data['BRANCH' + subelem_rule.split('_')[1].split('>')[1]])
-
-                        if subelem_rule.split('_')[0] == 'remove':
-                            submask_remove = [str(elem) in subelem_rule.split('_')[1].split(',')
-                                              for elem in range(36)]
-                            mask_subexclude = (mask_subexclude) & (submask_remove)
-
-                    mask_exclude = (mask_exclude) | mask_subexclude
 
             pixel_exclude_list = np.arange(36)[mask_exclude]
             # saving the output of the filtering in a file
@@ -477,14 +1068,22 @@ def resolve_BR(directory, anal_dir_suffix='',
                 f.write('#list of excluded pixels:\n')
                 f.write(str(pixel_exclude_list.tolist()) + '\n')
 
-            plot_BR(indiv_file.replace('.evt', '_branch.fits'),
-                    save_path=indiv_file.replace('.evt', '_branch_screen.png'),
+            if task=='rslbranch':
+                plot_BR(indiv_file.replace('.evt', '_branch.fits'),
+                    save_paths=[indiv_file.replace('.evt', '_branch_screen.png')],
+                    excl_pixel=pixel_exclude_list)
+
+            elif task=='rslbratios':
+                plot_BR('/'.join(indiv_file.split('/')[:-1])+'/branch/branch_2keVto12keV_brVpxcnt.fits',
+                    save_paths=[indiv_file.replace('.evt', '_branch_screen_2-12.png'),
+                                indiv_file.replace('.evt', '_branch_screen_full.png'),
+                                indiv_file.replace('.evt', '_branch_screen_full_ratio.png')],
                     excl_pixel=pixel_exclude_list)
 
             bashproc.sendline('exit')
 
 
-def xtend_SFP(directory,filtering='flat_top',
+def xtend_SFP(directory='auto',filtering='flat_top',
               #for flat_top
               base_config='313',threshold_mult=1.1,rad_psf=15,
               source_name='auto',
@@ -497,7 +1096,7 @@ def xtend_SFP(directory,filtering='flat_top',
     '''
 
     MAXIJ1744 approximate coords: ['17:45:40.45','-29:00:46.6']
-
+    MAXIJ1744 Chandra Atel Coords ['17:45:40.476', '-29:00:46.10']
     Run searchflixpix to clean the xtend data of flickering pixels.
     See https://heasarc.gsfc.nasa.gov/docs/xrism/analysis/quickstart/xrism_quick_start_guide_v2p3_240918a.pdf
 
@@ -539,20 +1138,25 @@ def xtend_SFP(directory,filtering='flat_top',
     else:
         sudo_mdp_use = ''
 
+    if directory=='auto':
+        #fetching the first obsid-like directory in the cwd
+        directory_use=[elem[:-1] for elem in glob.glob('**/') if len(elem[:-1])==9 and elem[:-1].isdigit()][0]
+    else:
+        directory_use=directory
 
-    anal_dir=os.path.join(directory,'analysis'+('_'+anal_dir_suffix if anal_dir_suffix!='' else ''))
+    anal_dir=os.path.join(directory_use,'analysis'+('_'+anal_dir_suffix if anal_dir_suffix!='' else ''))
 
     xtend_files=[elem for elem in glob.glob(os.path.join(anal_dir,'**')) if 'xtd_' in elem.split('/')[-1] and
                    elem.endswith('_cl.evt')]
 
     bashproc.sendline('cd '+os.path.join(os.getcwd(),anal_dir))
 
-    if os.path.isfile(directory + '/xtend_SFP.log'):
-        os.system('rm ' + directory + '/xtend_SFP.log')
+    if os.path.isfile(directory_use + '/xtend_SFP.log'):
+        os.system('rm ' + directory_use + '/xtend_SFP.log')
 
-    with (no_op_context() if parallel else StdoutTee(directory + '/xtend_SFP.log', mode="a", buff=1,
+    with (no_op_context() if parallel else StdoutTee(directory_use + '/xtend_SFP.log', mode="a", buff=1,
                                                      file_filters=[_remove_control_chars]), \
-          StderrTee(directory + '/xtend_SFP.log', buff=1, file_filters=[_remove_control_chars])):
+          StderrTee(directory_use + '/xtend_SFP.log', buff=1, file_filters=[_remove_control_chars])):
 
         if not parallel:
             bashproc.logfile_read = sys.stdout
@@ -717,6 +1321,9 @@ def xtend_SFP(directory,filtering='flat_top',
                               ' clobber=YES')
 
             bashproc.expect('Finished',timeout=None)
+
+            time.sleep(1)
+
             bashproc.sendline('echo valid')
 
             bashproc.expect('valid')
@@ -741,6 +1348,11 @@ def xtend_SFP(directory,filtering='flat_top',
             bashproc.expect('Finished',timeout=None)
 
             time.sleep(1)
+
+            #adding the GTI of the non_SFP event to the SFP event
+
+            bashproc.sendline('ftappend '+elem_evt_raw.split('/')[-1]+'+2 '+
+                              elem_evt_raw.split('/')[-1].replace('_cl.evt','_cl_SFP.evt'))
 
             bashproc.sendline('echo valid')
 
@@ -1070,12 +1682,14 @@ def plot_lc_xrism(lc_paths,binning='auto',directory='./',e_low='',e_high='',
 
     default_mpl_cycle=plt.rcParams['axes.prop_cycle'].by_key()['color']
 
+    if save:
+        plt.ioff()
+
     fig_lc, ax_lc = plt.subplots(1, figsize=(16, 8))
 
 
     for i_lc,(elem_lc,elem_lc_HR_num) in enumerate(zip(lc_path_list,lc_path_HR_num_list)):
 
-        print("tchou")
         with fits.open(os.path.join(directory, elem_lc)) as fits_lc:
             data_lc_arr = fits_lc[1].data
 
@@ -1086,9 +1700,6 @@ def plot_lc_xrism(lc_paths,binning='auto',directory='./',e_low='',e_high='',
             time_zero += TimeDelta(fits_lc[1].header['TIMEZERO'], format='sec')
 
         # and plotting it
-
-        if save:
-            plt.ioff()
 
         if binning=='auto':
             binning_use=data_lc_arr['TIME'][1]-data_lc_arr['TIME'][0]
@@ -1141,7 +1752,7 @@ def plot_lc_xrism(lc_paths,binning='auto',directory='./',e_low='',e_high='',
         else:
             plt.suptitle(
             telescope + ' ' + instru + ' lightcurve for observation(s) ' + lc_path_list[0].split('_lc')[0].split('_pixel')[0] +
-            'in [' + str(e_low) + '-' + str(e_high) + '] keV with ' + binning_str + ' s binning')
+            ' in [' + str(e_low) + '-' + str(e_high) + '] keV with ' + binning_str + ' s binning')
 
     plt.xlabel('Time (s) after ' + time_zero.isot)
 
@@ -1154,6 +1765,8 @@ def plot_lc_xrism(lc_paths,binning='auto',directory='./',e_low='',e_high='',
     plt.tight_layout()
 
     if interact:
+
+        plt.ion()
 
         plt.subplots_adjust(bottom=0.2)
 
@@ -1332,7 +1945,7 @@ def disp_ds9(file, zoom='auto', scale='log', regfile='', screenfile='', give_pid
     if give_pid:
         return ds9_pid
 
-def extract_img(directory,anal_dir_suffix='',
+def extract_img(directory='auto',anal_dir_suffix='',
                 instru='all',
                    use_raw_evt_xtd=False,use_raw_evt_rsl=False,
                    heasoft_init_alias='heainit',caldb_init_alias='caldbinit',
@@ -1354,7 +1967,13 @@ def extract_img(directory,anal_dir_suffix='',
     else:
         sudo_mdp_use = ''
 
-    anal_dir = os.path.join(directory, 'analysis' + ('_' + anal_dir_suffix if anal_dir_suffix != '' else ''))
+    if directory=='auto':
+        #fetching the first obsid-like directory in the cwd
+        directory_use=[elem[:-1] for elem in glob.glob('**/') if len(elem[:-1])==9 and elem[:-1].isdigit()][0]
+    else:
+        directory_use=directory
+
+    anal_dir = os.path.join(directory_use, 'analysis' + ('_' + anal_dir_suffix if anal_dir_suffix != '' else ''))
 
     resolve_files = [elem for elem in glob.glob(os.path.join(anal_dir, '**')) if 'rsl_' in elem.split('/')[-1] and
                      elem.endswith('_cl' + ('' if use_raw_evt_rsl else '_RTS') + '.evt')]
@@ -1368,11 +1987,11 @@ def extract_img(directory,anal_dir_suffix='',
         elif instru=='resolve':
             xtend_files=[]
 
-    if os.path.isfile(directory + '/extract_img.log'):
-        os.system('rm ' + directory + '/extract_img.log')
+    if os.path.isfile(directory_use + '/extract_img.log'):
+        os.system('rm ' + directory_use + '/extract_img.log')
 
-    with (no_op_context() if parallel else StdoutTee(directory+'/extract_img.log',mode="a",buff=1,file_filters=[_remove_control_chars]),\
-        StderrTee(directory+'/extract_img.log',buff=1,file_filters=[_remove_control_chars])):
+    with (no_op_context() if parallel else StdoutTee(directory_use+'/extract_img.log',mode="a",buff=1,file_filters=[_remove_control_chars]),\
+        StderrTee(directory_use+'/extract_img.log',buff=1,file_filters=[_remove_control_chars])):
 
         if not parallel:
             bashproc.logfile_read=sys.stdout
@@ -1390,7 +2009,7 @@ def extract_img(directory,anal_dir_suffix='',
                       spawn=bashproc)
 
 
-def create_gtis(directory, split_arg='orbit',split_lc_file='file',split_lc_method=None,
+def create_gtis(directory='auto', split_arg='orbit',split_lc_file='file',split_lc_method=None,
                 split_auto_bin=1,
                 gti_tool='NICERDAS',
                 anal_dir_suffix='', heasoft_init_alias='heainit', caldb_init_alias='caldbinit',
@@ -1479,7 +2098,7 @@ def create_gtis(directory, split_arg='orbit',split_lc_file='file',split_lc_metho
 
         if outdir!='':
 
-            os.system(' mkdir -p '+os.path.join(directory,input_dir))
+            os.system(' mkdir -p '+os.path.join(directory_use,input_dir))
 
         if id_gti_multi is None:
             # preparing the list of gtis to replace manually
@@ -1526,35 +2145,41 @@ def create_gtis(directory, split_arg='orbit',split_lc_file='file',split_lc_metho
                 fits_gti[1].header['MJDREFF']=mjd_reff_xrism
                 fits_gti.flush()
 
-    io_log = open(directory + '/create_gtis.log', 'w+')
+    if directory=='auto':
+        #fetching the first obsid-like directory in the cwd
+        directory_use=[elem[:-1] for elem in glob.glob('**/') if len(elem[:-1])==9 and elem[:-1].isdigit()][0]
+    else:
+        directory_use=directory
+
+    io_log = open(directory_use + '/create_gtis.log', 'w+')
 
     # ensuring a good obsid name even in local
-    if directory == './':
+    if directory_use == './':
         obsid = os.getcwd().split('/')[-1]
     else:
-        obsid = directory
+        obsid = directory_use
 
     bashproc = pexpect.spawn("/bin/bash", encoding='utf-8', logfile=io_log if parallel else None)
 
-    anal_dir = os.path.join(directory, 'analysis' + ('_' + anal_dir_suffix if anal_dir_suffix != '' else ''))
+    anal_dir = os.path.join(directory_use, 'analysis' + ('_' + anal_dir_suffix if anal_dir_suffix != '' else ''))
 
     print('\n\n\nCreating gtis products...')
 
     set_var(bashproc)
 
-    if os.path.isfile(os.path.join(directory + '/extract_gtis.log')):
-        os.system('rm ' + os.path.join(directory + '/extract_gtis.log'))
+    if os.path.isfile(os.path.join(directory_use + '/extract_gtis.log')):
+        os.system('rm ' + os.path.join(directory_use + '/extract_gtis.log'))
 
     # removing old gti files
-    old_files_gti = [elem for elem in glob.glob(os.path.join(directory, 'analysis/**'), recursive=True) if
+    old_files_gti = [elem for elem in glob.glob(os.path.join(directory_use, 'analysis/**'), recursive=True) if
                      '_gti_' in elem]
 
     for elem_file_gti in old_files_gti:
         os.remove(elem_file_gti)
 
-    with (no_op_context() if parallel else StdoutTee(os.path.join(directory + '/create_gtis.log'), mode="a", buff=1,
+    with (no_op_context() if parallel else StdoutTee(os.path.join(directory_use + '/create_gtis.log'), mode="a", buff=1,
                                                      file_filters=[_remove_control_chars]), \
-          StderrTee(os.path.join(directory + '/create_gtis.log'), buff=1, file_filters=[_remove_control_chars])):
+          StderrTee(os.path.join(directory_use + '/create_gtis.log'), buff=1, file_filters=[_remove_control_chars])):
 
         if not parallel:
             bashproc.logfile_read = sys.stdout
@@ -1569,17 +2194,17 @@ def create_gtis(directory, split_arg='orbit',split_lc_file='file',split_lc_metho
             lc_input=os.path.join(anal_dir,split_lc_file)
         else:
             if split_lc_method=='resolve_allpixel':
-                
+
                 split_lc_for_gti=split_lc_file.replace(split_lc_file[split_lc_file.rfind('.'):],
                                                        '_auto_gti_input'+split_lc_file[split_lc_file.rfind('.'):])
 
                 xsel_util(split_lc_file,save_path=split_lc_for_gti,
                           mode='lc',e_low=2,e_high=10,grade_str='0:0',binning=split_auto_bin)
-                
+
                 lc_input=split_lc_for_gti
-                          
+
         with fits.open(lc_input) as fits_input:
-            
+
             data_input = fits_input[1].data
 
             # from https://heasarc.gsfc.nasa.gov/docs/nicer/analysis_threads/time_resolved_spec/
@@ -1708,7 +2333,7 @@ def create_gtis(directory, split_arg='orbit',split_lc_file='file',split_lc_metho
             thread.set()
 
 
-def extract_lc(directory, anal_dir_suffix='',lc_subdir='lc',
+def extract_lc(directory='auto', anal_dir_suffix='',lc_subdir='lc',
                    use_raw_evt_xtd=False, use_raw_evt_rsl=False,
                     instru='all',
                    region_src_xtd='auto', region_bg_xtd='auto',
@@ -1733,6 +2358,7 @@ def extract_lc(directory, anal_dir_suffix='',lc_subdir='lc',
         if set to auto, fetches source/background regions with the evt file name _src_reg.reg/_bg_reg.reg
         as the base, and only extracts products when corresponding files are found
         Regions are assumed to be in DET coordinates
+        Will make a screenshot of the regions before saving the spectra
 
     pixel_str_xrism:
         pixel filtering list for xrism
@@ -1772,7 +2398,13 @@ def extract_lc(directory, anal_dir_suffix='',lc_subdir='lc',
 
     set_var(bashproc, heasoft_init_alias, caldb_init_alias)
 
-    anal_dir = os.path.join(directory, 'analysis' + ('_' + anal_dir_suffix if anal_dir_suffix != '' else ''))
+    if directory=='auto':
+        #fetching the first obsid-like directory in the cwd
+        directory_use=[elem[:-1] for elem in glob.glob('**/') if len(elem[:-1])==9 and elem[:-1].isdigit()][0]
+    else:
+        directory_use=directory
+
+    anal_dir = os.path.join(directory_use, 'analysis' + ('_' + anal_dir_suffix if anal_dir_suffix != '' else ''))
 
     os.system('mkdir -p '+os.path.join(anal_dir,lc_subdir))
 
@@ -1789,12 +2421,12 @@ def extract_lc(directory, anal_dir_suffix='',lc_subdir='lc',
         elif instru=='resolve':
             xtend_files=[]
 
-    if os.path.isfile(directory + '/extract_lc.log'):
-        os.system('rm ' + directory + '/extract_lc.log')
+    if os.path.isfile(directory_use + '/extract_lc.log'):
+        os.system('rm ' + directory_use + '/extract_lc.log')
 
-    with (no_op_context() if parallel else StdoutTee(directory + '/extract_lc.log', mode="a", buff=1,
+    with (no_op_context() if parallel else StdoutTee(directory_use + '/extract_lc.log', mode="a", buff=1,
                                                      file_filters=[_remove_control_chars]), \
-          StderrTee(directory + '/extract_lc.log', buff=1, file_filters=[_remove_control_chars])):
+          StderrTee(directory_use + '/extract_lc.log', buff=1, file_filters=[_remove_control_chars])):
 
         if not parallel:
             bashproc.logfile_read = sys.stdout
@@ -1860,7 +2492,7 @@ def extract_lc(directory, anal_dir_suffix='',lc_subdir='lc',
                                           product_name,
                                           mode='lc',
                                           directory=anal_dir,
-                                          region_str=elem_region,
+                                          region_str=elem_region.split('/')[-1],
                                           e_low=float(elem_band.split('-')[0]),
                                           e_high=float(elem_band.split('-')[1]),
                                           binning=elem_binning,
@@ -1908,14 +2540,14 @@ def extract_lc(directory, anal_dir_suffix='',lc_subdir='lc',
                                           spawn=bashproc,
                                           gti_file=elem_gti_file)
 
-def extract_sp(directory, anal_dir_suffix='',sp_subdir='sp',
+def extract_sp(directory='auto', anal_dir_suffix='',sp_subdir='sp',
                    use_raw_evt_xtd=False, use_raw_evt_rsl=False,
                     instru='all',
                    region_src_xtd='auto', region_bg_xtd='auto',
                    pixel_str_rsl='branch_filter', grade_str_rsl='0:0',
                    remove_cal_pxl_resolve=True,
                    gti=None, gti_subdir='gti',
-                   e_low_rsl=0.3,e_high_rsl=12.,
+                   e_low_rsl=None,e_high_rsl=None,
                    e_low_xtd=None,e_high_xtd=None,
                    sudo_screen=True,
                    heasoft_init_alias='heainit', caldb_init_alias='caldbinit',
@@ -1936,6 +2568,8 @@ def extract_sp(directory, anal_dir_suffix='',sp_subdir='sp',
         if set to auto, fetches source/background regions with the evt file name _src_reg.reg/_bg_reg.reg
         as the base, and only extracts products when corresponding files are found
         Regions are assumed to be in DET coordinates
+
+        ds9 saves should be in physical
 
         Will make a screenshot of the regions before saving the spectra
 
@@ -1977,7 +2611,13 @@ def extract_sp(directory, anal_dir_suffix='',sp_subdir='sp',
 
     set_var(bashproc, heasoft_init_alias, caldb_init_alias)
 
-    anal_dir = os.path.join(directory, 'analysis' + ('_' + anal_dir_suffix if anal_dir_suffix != '' else ''))
+    if directory=='auto':
+        #fetching the first obsid-like directory in the cwd
+        directory_use=[elem[:-1] for elem in glob.glob('**/') if len(elem[:-1])==9 and elem[:-1].isdigit()][0]
+    else:
+        directory_use=directory
+
+    anal_dir = os.path.join(directory_use, 'analysis' + ('_' + anal_dir_suffix if anal_dir_suffix != '' else ''))
 
     os.system('mkdir -p '+os.path.join(anal_dir,sp_subdir))
 
@@ -1999,12 +2639,12 @@ def extract_sp(directory, anal_dir_suffix='',sp_subdir='sp',
         elif instru=='resolve':
             xtend_files=[]
 
-    if os.path.isfile(directory + '/extract_sp.log'):
-        os.system('rm ' + directory + '/extract_sp.log')
+    if os.path.isfile(directory_use + '/extract_sp.log'):
+        os.system('rm ' + directory_use + '/extract_sp.log')
 
-    with (no_op_context() if parallel else StdoutTee(directory + '/extract_sp.log', mode="a", buff=1,
+    with (no_op_context() if parallel else StdoutTee(directory_use + '/extract_sp.log', mode="a", buff=1,
                                                      file_filters=[_remove_control_chars]), \
-          StderrTee(directory + '/extract_sp.log', buff=1, file_filters=[_remove_control_chars])):
+          StderrTee(directory_use + '/extract_sp.log', buff=1, file_filters=[_remove_control_chars])):
 
         if not parallel:
             bashproc.logfile_read = sys.stdout
@@ -2207,6 +2847,8 @@ def rsl_mkrmf(whichrmf,infile,outfileroot,
                 regionfile='NONE',
                 spawn=None,
               overwrite=True,
+              splitrmf=True,
+              splitcomb=True,
               heasoft_init_alias='heainit',caldb_init_alias='caldbinit'):
 
     '''
@@ -2244,6 +2886,8 @@ def rsl_mkrmf(whichrmf,infile,outfileroot,
     ' dein=' + str(dein) +
     ' nchanin=' + str(nchanin)+
     ' useingrd='+str(useingrd)+
+    ' splitrmf='+str(splitrmf)+
+    ' splitcomb='+str(splitcomb)+
     ' chatter=2 '+
                        (' clobber=YES' if overwrite else ''))
 
@@ -2256,17 +2900,18 @@ def rsl_mkrmf(whichrmf,infile,outfileroot,
     #this is normally fast so their should be no need for a long time-out
     spawn_use.expect('valid')
 
-def extract_rmf(directory,instru='all',rmf_subdir='sp',
+def extract_rmf(directory='auto',instru='all',rmf_subdir='sp',
                 #resolve options
-                rmf_type_rsl='X',pixel_str_rsl='branch_filter',rsl_arf_grade='0',
+                rmf_type_rsl='X',pixel_str_rsl='branch_filter',rsl_rmf_grade='0',
+                split_rmf_rsl=True,
+                comb_rmf_rsl=True,
                 remove_cal_pxl_resolve=True,
                 # resolve grid
                 # eminin_rsl=300,dein_rsl=0.5,nchanin_rsl=23400,
                 eminin_rsl=0, dein_rsl=0.5, nchanin_rsl=60000,
-
                 useingrd_rsl=True,
                 #xtend grid
-                eminin_xtd=200,dein_xtd='"2,24"',nchanin_xtd='"5900,500"',
+                eminin_xtd=200.,dein_xtd='"2,24"',nchanin_xtd='"5900,500"',
                 eminout_xtd=0.,deout_xtd=6,nchanout_xtd=4096,
                 #general event options and gti selection
                 use_raw_evt_rsl=False,use_raw_evt_xtd=False,
@@ -2316,8 +2961,9 @@ def extract_rmf(directory,instru='all',rmf_subdir='sp',
 
             products are named according to their pixel combination if there is more than one pixel_str
 
-    rsl_arf_grade:the event grade of the arf. Different syntax so no ":" in the string
+    rsl_rmf_grade:the event grade of the arf. Different syntax so no ":" in the string
                     (see https://heasarc.gsfc.nasa.gov/lheasoft/help/rslmkrmf.html)
+                    To use several grades, if the event file is made from several, use '0,1,...'  instead
 
     no matter the selection of pixel_str_xrism, if remove_cal_px_resolve is set to True, pixel 12 (calibration pixel)
     will be removed
@@ -2329,7 +2975,13 @@ def extract_rmf(directory,instru='all',rmf_subdir='sp',
 
     set_var(bashproc, heasoft_init_alias, caldb_init_alias)
 
-    anal_dir = os.path.join(directory, 'analysis' + ('_' + anal_dir_suffix if anal_dir_suffix != '' else ''))
+    if directory=='auto':
+        #fetching the first obsid-like directory in the cwd
+        directory_use=[elem[:-1] for elem in glob.glob('**/') if len(elem[:-1])==9 and elem[:-1].isdigit()][0]
+    else:
+        directory_use=directory
+
+    anal_dir = os.path.join(directory_use, 'analysis' + ('_' + anal_dir_suffix if anal_dir_suffix != '' else ''))
 
     resolve_files = [elem for elem in glob.glob(os.path.join(anal_dir, '**')) if 'rsl_' in elem.split('/')[-1] and
                      elem.endswith('_cl' + ('' if use_raw_evt_rsl else '_RTS') + '.evt')]
@@ -2345,12 +2997,12 @@ def extract_rmf(directory,instru='all',rmf_subdir='sp',
         elif instru=='resolve':
             xtend_files=[]
 
-    if os.path.isfile(directory + '/extract_rmf.log'):
-        os.system('rm ' + directory + '/extract_rmf.log')
+    if os.path.isfile(directory_use + '/extract_rmf.log'):
+        os.system('rm ' + directory_use + '/extract_rmf.log')
 
-    with (no_op_context() if parallel else StdoutTee(directory + '/extract_rmf.log', mode="a", buff=1,
+    with (no_op_context() if parallel else StdoutTee(directory_use + '/extract_rmf.log', mode="a", buff=1,
                                                      file_filters=[_remove_control_chars]), \
-          StderrTee(directory + '/extract_rmf.log', buff=1, file_filters=[_remove_control_chars])):
+          StderrTee(directory_use + '/extract_rmf.log', buff=1, file_filters=[_remove_control_chars])):
 
         if not parallel:
             bashproc.logfile_read = sys.stdout
@@ -2409,7 +3061,7 @@ def extract_rmf(directory,instru='all',rmf_subdir='sp',
                     product_root = os.path.join(rmf_subdir,elem_evt.replace(anal_dir,'.').replace('.evt',
                             '_pixel_'+reg_str.replace(':','to').replace(',','-').replace('-(','no').replace(')','')  +
                             ('_withcal' if not remove_cal_pxl_resolve else '')+
-                        '_grade_'+rsl_arf_grade+ '_rmf' +
+                        '_grade_'+rsl_rmf_grade+ '_rmf' +
                         ('_' + str(eminin_rsl).replace('.','')+ '_' + str(dein_rsl).replace('.','')+'_'+str(nchanin_rsl))
                                                                    +elem_gti_str))
 
@@ -2418,14 +3070,16 @@ def extract_rmf(directory,instru='all',rmf_subdir='sp',
                               pixlist=rsl_pixel_manip(elem_pixel_str,remove_cal_pxl_resolve=remove_cal_pxl_resolve,
                                                       mode='rmf'),
                               whichrmf=rmf_type_rsl,
-                              resolist=rsl_arf_grade,
+                              resolist=rsl_rmf_grade,
                               eminin=eminin_rsl,
                               dein=dein_rsl,
+                              splitrmf=split_rmf_rsl,
+                              splitcomb=comb_rmf_rsl,
                               nchanin=nchanin_rsl,
                               useingrd=useingrd_rsl,
                               spawn=bashproc,heasoft_init_alias=heasoft_init_alias,caldb_init_alias=caldb_init_alias)
 
-def create_expo(directory,anal_dir,instrument,evt_file,gti_file,out_file='auto',
+def create_expo(anal_dir,instrument,evt_file,gti_file,directory='auto',out_file='auto',
                 spawn=None,heasoft_init_alias='heainit', caldb_init_alias='caldbinit',
                 delta=20,numphi=1):
 
@@ -2442,7 +3096,13 @@ def create_expo(directory,anal_dir,instrument,evt_file,gti_file,out_file='auto',
     if no gti cut is desired, gtifile should be the event file instead
     '''
 
-    files_dir=glob.glob(directory+'/**',recursive=True)
+    if directory=='auto':
+        #fetching the first obsid-like directory in the cwd
+        directory_use=[elem[:-1] for elem in glob.glob('**/') if len(elem[:-1])==9 and elem[:-1].isdigit()][0]
+    else:
+        directory_use=directory
+
+    files_dir=glob.glob(directory_use+'/**',recursive=True)
 
     #note: here the paths to the ehk, pixgti,...file must be adapted to come out of the analysis directory first
 
@@ -2488,7 +3148,7 @@ def create_expo(directory,anal_dir,instrument,evt_file,gti_file,out_file='auto',
 
     spawn_use.sendline('xaexpmap '+
                        ' ehkfile='+ehk_file+
-                       ' gtifile='+gti_file_use.replace('_SFP','')+
+                       ' gtifile='+gti_file_use+
                        ' instrume='+instrument+
                        ' badimgfile='+badimg_file+
                        ' pixgtifile='+pixgti_file+
@@ -2585,7 +3245,7 @@ def create_arf(directory,instrument,out_rtfile,source_ra,source_dec,emap_file,ou
     #this is normally fast so their should be no need for a long time-out
     spawn_use.expect('valid')
 
-def extract_arf(directory,anal_dir_suffix='',on_axis_check=None,arf_subdir='sp',
+def extract_arf(directory='auto',anal_dir_suffix='',on_axis_check=None,arf_subdir='sp',
                 source_coords='on-axis',
                 target_coords=None,
                 source_name='auto',
@@ -2597,8 +3257,11 @@ def extract_arf(directory,anal_dir_suffix='',on_axis_check=None,arf_subdir='sp',
                 pixel_str_rsl='branch_filter', grade_str_rsl='0:0',
                 remove_cal_pxl_resolve=True,
                 gti=None, gti_subdir='gti',
-                e_low_rsl=0.3, e_high_rsl=12.0,
-                e_low_xtd=0.3, e_high_xtd=12.0,
+                e_low_rsl=None, e_high_rsl=None,
+                # e_low_rsl=0.3, e_high_rsl=12.0,
+
+                #default values in hte pipeline
+                e_low_xtd=0.3, e_high_xtd=15.0,
 
                 numphoton=300000,
                 minphoton=100,
@@ -2649,11 +3312,17 @@ def extract_arf(directory,anal_dir_suffix='',on_axis_check=None,arf_subdir='sp',
     e_low/e_high: if not None, the energy bounds of the arf
     '''
 
+    if directory=='auto':
+        #fetching the first obsid-like directory in the cwd
+        directory_use=[elem[:-1] for elem in glob.glob('**/') if len(elem[:-1])==9 and elem[:-1].isdigit()][0]
+    else:
+        directory_use=directory
+
     bashproc = pexpect.spawn("/bin/bash", encoding='utf-8')
 
     set_var(bashproc, heasoft_init_alias, caldb_init_alias)
 
-    anal_dir = os.path.join(directory, 'analysis' + ('_' + anal_dir_suffix if anal_dir_suffix != '' else ''))
+    anal_dir = os.path.join(directory_use, 'analysis' + ('_' + anal_dir_suffix if anal_dir_suffix != '' else ''))
 
 
     os.system('mkdir -p '+os.path.join(anal_dir,arf_subdir))
@@ -2700,17 +3369,17 @@ def extract_arf(directory,anal_dir_suffix='',on_axis_check=None,arf_subdir='sp',
         elif instru=='resolve':
             xtend_files=[]
 
-    if os.path.isfile(directory + '/extract_arf.log'):
-        os.system('rm ' + directory + '/extract_arf.log')
+    if os.path.isfile(directory_use + '/extract_arf.log'):
+        os.system('rm ' + directory_use + '/extract_arf.log')
 
     if os.path.isfile('~/pfiles/xaarfgen.par'):
         os.system('rm ~/pfiles/xaarfgen.par')
     if os.path.isfile('~/pfiles/xaxmaarfgen.par'):
         os.system('rm ~/pfiles/xaxmaarfgen.par')
 
-    with (no_op_context() if parallel else StdoutTee(directory + '/extract_arf.log', mode="a", buff=1,
+    with (no_op_context() if parallel else StdoutTee(directory_use + '/extract_arf.log', mode="a", buff=1,
                                                      file_filters=[_remove_control_chars]), \
-          StderrTee(directory + '/extract_arf.log', buff=1, file_filters=[_remove_control_chars])):
+          StderrTee(directory_use + '/extract_arf.log', buff=1, file_filters=[_remove_control_chars])):
 
         if not parallel:
             bashproc.logfile_read = sys.stdout
@@ -2741,7 +3410,8 @@ def extract_arf(directory,anal_dir_suffix='',on_axis_check=None,arf_subdir='sp',
                 xtd_mode='xtd_' in elem_evt
 
                 #building the exposure map
-                expo_path=create_expo(directory,anal_dir,instrument='xtend' if xtd_mode else 'resolve',
+                expo_path=create_expo(anal_dir,
+                                      instrument='xtend' if xtd_mode else 'resolve',
                             evt_file=elem_evt.replace(anal_dir,'.'),
                             gti_file=elem_evt.replace(anal_dir,'.') if elem_gti_file is None else
                                      elem_gti_file.replace(anal_dir,'.'))
@@ -2788,7 +3458,7 @@ def extract_arf(directory,anal_dir_suffix='',on_axis_check=None,arf_subdir='sp',
                             os.remove(elem_evt.replace('.evt','_raytracing.evt'))
 
                         rmf_path=rmf_list[0]
-                        create_arf(directory,instrument='xtend',
+                        create_arf(directory_use,instrument='xtend',
                                    out_rtfile=elem_evt.replace(anal_dir,'.').replace('.evt','_raytracing.evt'),
                                    out_file=rmf_path.replace('.rmf','.arf').replace(anal_dir,'.'),
                                    source_ra=source_ra,
@@ -2840,7 +3510,7 @@ def extract_arf(directory,anal_dir_suffix='',on_axis_check=None,arf_subdir='sp',
                         if os.path.isfile(elem_evt.replace('.evt','_raytracing.evt')):
                             os.remove(elem_evt.replace('.evt','_raytracing.evt'))
 
-                        create_arf(directory, instrument='resolve',
+                        create_arf(directory_use, instrument='resolve',
                                    out_rtfile=elem_evt.replace(anal_dir,'.').replace('.evt','_raytracing.evt'),
                                    out_file=rmf_path.replace('.rmf', '.arf').replace(anal_dir,'.'),
                                    source_ra=source_ra,

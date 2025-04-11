@@ -54,17 +54,17 @@ else:
     model_dir=None
 # custom model loads
 if not streamlit_mode and model_dir!=None:
-    AllModels.lmod('relxill',dirPath=model_dir+'/relxill')
-    AllModels.lmod('fullkerr',dirPath=model_dir+'/fullkerr')
-    #swiftJ1658 dust scattering halo model from Jin2019
-
-    AllModels.lmod('ismabs', dirPath=model_dir + '/ismabs.v1.2')
-    Xset.addModelString('ISMABSROOT', os.path.join(model_dir,'ismabs.v1.2/'))
-
-
-    AllModels.lmod('dscor', dirPath=model_dir + '/dscor')
-    #which needs an absolute path to a directory
-    Xset.addModelString('DSCOR_MODEL_DIR', os.path.join(model_dir,'dscor/mtables_swf1658m42'))
+    # AllModels.lmod('relxill',dirPath=model_dir+'/relxill')
+    # AllModels.lmod('fullkerr',dirPath=model_dir+'/fullkerr')
+    # #swiftJ1658 dust scattering halo model from Jin2019
+    #
+    # AllModels.lmod('ismabs', dirPath=model_dir + '/ismabs.v1.2')
+    # Xset.addModelString('ISMABSROOT', os.path.join(model_dir,'ismabs.v1.2/'))
+    #
+    #
+    # AllModels.lmod('dscor', dirPath=model_dir + '/dscor')
+    # #which needs an absolute path to a directory
+    # Xset.addModelString('DSCOR_MODEL_DIR', os.path.join(model_dir,'dscor/mtables_swf1658m42'))
 
     # instype is the
     # type
@@ -77,6 +77,7 @@ if not streamlit_mode and model_dir!=None:
     # 4: Swift / XRT
     # 5: NuSTAR / FPMA
     # 6: NuSTAR / FPMB
+    pass
 
 AllModels.mdefine('crabcorr (1./E^dGamma)crabcorrNorm : mul')
 

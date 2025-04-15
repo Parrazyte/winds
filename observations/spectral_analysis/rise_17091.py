@@ -8,7 +8,20 @@ from astropy.time import Time,TimeDelta
 from general_tools import file_edit
 from matplotlib.ticker import MultipleLocator
 
-def sp_anal(obs_path,mod='powerlaw',baseload=False,scorpeon=True,overwrite=False):
+def swift_loader_mela(obs_number):
+    '''
+    obs_number should be something like '+obs_number+'
+    '''
+    
+    AllData('1:1 Obs_'+obs_number+'wtsource.pi 2:2 Obs_'+obs_number+'pcsource.pi')
+    AllData(1).response = 'Obs_'+obs_number+'wt.rmf'
+    AllData(1).response.arf = 'Obs_'+obs_number+'wt.arf'
+    AllData(1).background = 'Obs_'+obs_number+'wtback.pi'
+    AllData(2).response = 'Obs_'+obs_number+'pc.rmf'
+    AllData(2).response.arf = 'Obs_'+obs_number+'pc.arf'
+    AllData(2).background = 'Obs_'+obs_number+'pcback.pi'
+
+def sp_anal(obs_path,mod='powerlaw',baseload=False,obj='',scorpeon=True,overwrite=False):
 
     plt.ioff()
 
@@ -85,10 +98,20 @@ def sp_anal(obs_path,mod='powerlaw',baseload=False,scorpeon=True,overwrite=False
 
     fitlines_strong.add_allcomps(split_fit=False)
 
-    AllModels(1).TBfeo.nH.values=1.537
-    AllModels(1).TBfeo.nH.frozen=True
-    AllModels(1)(2).values=0.452
-    AllModels(1)(3).values=2.33
+    if obj=='4U1630-47':
+        AllModels(1).TBfeo.nH.values=10.7
+        AllModels(1).TBfeo.nH.frozen=True
+
+    if obj=='4U1630-47_lock':
+        AllModels(1).TBfeo.nH.values=10.7
+        AllModels(1).TBfeo.nH.frozen=True
+        AllModels(1).powerlaw.PhoIndex.values = 1.5
+        AllModels(1).powerlaw.PhoIndex.frozen=True
+    if obj=='17091':
+        AllModels(1).TBfeo.nH.values=1.537
+        AllModels(1).TBfeo.nH.frozen=True
+        AllModels(1)(2).values=0.452
+        AllModels(1)(3).values=2.33
     # AllModels(1)(2).frozen=False
     # AllModels(1)(3).frozen=False
     if mod=='thcont':

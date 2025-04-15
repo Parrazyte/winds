@@ -749,8 +749,12 @@ if multi_obj:
 
         restrict_match_INT=st.toggle('Restrict to Observations with INTEGRAL coverage',value=False)
 
+        base_exclude=[elem for elem in sorted_choice_obs if elem in ['4U1630-47_405051010_xis1',
+                                                                     '4U1630-47_4130010111-004',
+                                                                     '4U1630-47_4130010114-004']]
+
         choice_obs=st.multiselect('Exclude individual observations:',sorted_choice_obs,
-                                  default=None if '4U1630-47_405051010_xis1' not in sorted_choice_obs else ['4U1630-47_405051010_xis1'])
+                                  default=base_exclude)
 
 
 #masking for restriction to single objects
@@ -1749,6 +1753,9 @@ else:
 
 #adding the significant BAT extrapolated fluxes to the lum_high_list array if asked to (for the scatter plots)
 #the sum mask_obj condition skips issues when no observation is kept
+
+bat_lc_df_scat=None
+
 if add_BAT_flux_corr and display_single and choice_source[0]=='4U1630-47' and sum(mask_obj)>0 and use_obsids:
 
     bat_lc_df_scat = fetch_bat_lightcurve(catal_bat_df, catal_bat_simbad, choice_source, binning=BAT_binning_scat)
@@ -1810,6 +1817,8 @@ if add_BAT_flux_corr and display_single and choice_source[0]=='4U1630-47' and su
         if lum_high_1sig_list[mask_obj][0][i_obs][0]-lum_high_1sig_list[mask_obj][0][i_obs][1]*2<=0:
             lum_high_sign_list[mask_obj][0][i_obs]=np.repeat(np.nan,3)
             mask_added_BAT_sign[i_obs]=False
+
+dict_linevis['bat_lc_df_scat']=bat_lc_df_scat
 
 if sum(mask_obj)>0:
     mask_added_INT_sign=np.repeat(False,len(lum_high_list[mask_obj][0]))
@@ -1999,6 +2008,8 @@ n_obj_r=sum(mask_obj)
 mask_intime_plot=np.array([(Time(date_list[mask_obj][i_obj_r].astype(str))>=Time(slider_date[0])) & (Time(date_list[mask_obj][i_obj_r].astype(str))<=Time(slider_date[1])) for i_obj_r in range(n_obj_r)],dtype=object)
 
 #custom colorbar for the line substructure and outliers (needs the high energy elements)
+edd_factor_8kpc = 7598382.454
+
 
 diago_color=deepcopy(hid_plot[1][0])
 if display_single and choice_source[0]=='4U1630-47' and sum(ravel_ragged(mask_intime_plot))>0:
@@ -2006,8 +2017,8 @@ if display_single and choice_source[0]=='4U1630-47' and sum(ravel_ragged(mask_in
         if obj_list[i_obj]=='4U1630-47':
             for i_obs in range(len(diago_color[i_obj])):
 
-                edd_factor_8kpc=7598382.454
-                edd_factor_converter=1/edd_factor_8kpc*Edd_factor_restrict[0]
+                edd_factor_converter=Edd_factor_restrict[0]/edd_factor_8kpc
+
                 #first rule is for luminosity and HR + HR broad or det treshold to remove things
                 # that stay in intermediate states
                 # second rule is for a significant detection in suzeaku above 3.8 EWratio
@@ -2056,7 +2067,9 @@ if display_single and choice_source[0]=='4U1630-47' and sum(ravel_ragged(mask_in
                 #first rule is for luminosity and HR + HR broad or det treshold to remove things
                 # that stay in intermediate states
                 # second rule is for a significant detection in suzeaku above 3.8 EWratio
-                
+
+                edd_factor_converter=Edd_factor_restrict[0]/edd_factor_8kpc
+
                 obs_soft_lum=hid_plot[1][0][i_obj][i_obs]
                 obs_soft_HR=hid_plot[0][0][i_obj][i_obs]
                 obs_broad_HR=hr_high_plot_restrict[0][0][i_obs]
@@ -2071,16 +2084,17 @@ if display_single and choice_source[0]=='4U1630-47' and sum(ravel_ragged(mask_in
                                   (lum_high_plot_restrict[0][0][i_obs]>2*lum_high_plot_restrict[1][0][i_obs]/1.65)
 
                 # note that the 6.1 limit is done explicitely to only take the right points during the 2021 outburst
-                is_standard_hard=obs_soft_HR>6.1e-1 and obs_soft_lum<1e-1
+                is_standard_hard=obs_soft_HR>6.1e-1 and obs_soft_lum<1e-1*edd_factor_converter
 
-                is_QRM=obs_soft_lum>1e-1 and obs_soft_lum<1.2e-1 and obs_soft_HR>6e-1
+                is_QRM=obs_soft_lum>1e-1*edd_factor_converter and obs_soft_lum<1.2e-1*edd_factor_converter\
+                       and obs_soft_HR>6e-1
 
                 is_soft=obs_broad_HR<1e-1 if obs_broad_HR_sign else obs_broad_HR_UL<1e-1
 
                 is_inter=not np.isnan(obs_broad_HR) and \
                          ((obs_broad_HR_sign and obs_broad_HR>1e-1) or (not obs_broad_HR_sign and obs_broad_HR_UL>0.1))
 
-                is_SPL=not np.isnan(obs_broad_HR) and obs_broad_HR>2.8e-1 and obs_soft_lum>5e-2
+                is_SPL=not np.isnan(obs_broad_HR) and obs_broad_HR>2.8e-1 and obs_soft_lum>5e-2*edd_factor_converter
 
                 #no decidable state
                 custom_states_color[i_obj][i_obs]='grey'
@@ -2147,6 +2161,7 @@ if display_single and choice_source[0] == '4U1630-47' and sum(ravel_ragged(mask_
         if obj_list[i_obj] == '4U1630-47':
             for i_obs in range(len(custom_gamma_satur_color[i_obj])):
 
+                edd_factor_converter=Edd_factor_restrict[0]/edd_factor_8kpc
 
                 # no specific state
 
@@ -2154,13 +2169,13 @@ if display_single and choice_source[0] == '4U1630-47' and sum(ravel_ragged(mask_
 
                 if ~(np.isnan(lum_high_sign_plot_restrict[0][0][i_obs])):
                     #for the significant detections below that value
-                    if lum_high_sign_plot_restrict[0][0][i_obs]<4e-3:
+                    if lum_high_sign_plot_restrict[0][0][i_obs]<4e-3*edd_factor_converter:
                         custom_gamma_satur_color[i_obj][i_obs] = 'red'
                 else:
 
                     #for the 1sig upper limits below that value
                     if not np.isnan(lum_high_1sig_plot_restrict[1][0][i_obs]):
-                        if lum_high_1sig_plot_restrict[1][0][i_obs]+lum_high_1sig_plot_restrict[1][0][i_obs]<4e-3:
+                        if lum_high_1sig_plot_restrict[1][0][i_obs]+lum_high_1sig_plot_restrict[1][0][i_obs]<4e-3*edd_factor_converter:
                             custom_gamma_satur_color[i_obj][i_obs] = 'red'
 
 #unused for now
@@ -2389,14 +2404,14 @@ with tab_add_data:
     st.markdown('These data points will be added to the soft and/or broad HLDs.')
     st.info('Remember to make your Eddington ratio compatible with this work by choosing the same D and M '
               'than the ones I am using')
-    df = pd.DataFrame(
+    df_HLD_points_LEdd = pd.DataFrame(
         [
             {"ObsID":'', "Date (UTC)":None,"Telescope": '', "L_3-10/L_Edd": 0.,"HR_[6-10]/[3-6]":0.,'HR_[15-50]/[3-6]':0.,
              'color':''},
         ]
     )
-    additional_HLD_points = st.data_editor(
-        df,
+    additional_HLD_points_LEdd = st.data_editor(
+        df_HLD_points_LEdd,
         column_config={
             "ObsID": st.column_config.TextColumn(
                 "ObsID of the observation",
@@ -2425,6 +2440,81 @@ with tab_add_data:
 
         },
         hide_index=True,num_rows="dynamic")
+
+    df_HLD_points_flux = pd.DataFrame(
+        [
+            {"Source":'',
+             "ObsID":'', "Date (UTC)":None,"Telescope": '',
+             "flux_1-2": 0.,
+             "flux_2-3": 0.,
+             "flux_3-4": 0.,
+             "flux_4-5": 0.,
+             "flux_5-6": 0.,
+             "flux_6-7": 0.,
+             "flux_7-8": 0.,
+             "flux_8-9": 0.,
+             "flux_9-10": 0.,
+             'color':''},
+        ]
+    )
+    additional_HLD_points_flux = st.data_editor(
+        df_HLD_points_flux,
+        column_config={
+            "Source": st.column_config.TextColumn(
+                "Source observed",
+                help="for Eddington factor identification", ),
+            "ObsID": st.column_config.TextColumn(
+                "ObsID of the observation",
+                help="Mostly for avoiding confusion",),
+            "Date (UTC)": st.column_config.DatetimeColumn(
+                "Date of the observation in UTC format",
+                help="Mostly for avoiding confusion"),
+            "Telescope": st.column_config.TextColumn(
+                "Instrument taking the observation",
+                help="Mostly for avoiding confusion",),
+            "flux_1-2": st.column_config.NumberColumn(
+                "1-2 keV flux in cgs units",
+                help="",
+                format="%.3e"),
+            "flux_2-3": st.column_config.NumberColumn(
+                "2-3 keV flux in cgs units",
+                help="",
+                format="%.3e"),
+            "flux_3-4": st.column_config.NumberColumn(
+                "3-4 keV flux in cgs units",
+                help="",
+                format="%.3e"),
+            "flux_4-5": st.column_config.NumberColumn(
+                "4-5 keV flux in cgs units",
+                help="",
+                format="%.3e"),
+            "flux_5-6": st.column_config.NumberColumn(
+                "5-6 keV flux in cgs units",
+                help="",
+                format="%.3e"),
+            "flux_6-7": st.column_config.NumberColumn(
+                "6-7 keV flux in cgs units",
+                help="",
+                format="%.3e"),
+            "flux_7-8": st.column_config.NumberColumn(
+                "7-8 keV flux in cgs units",
+                help="",
+                format="%.3e"),
+            "flux_8-9": st.column_config.NumberColumn(
+                "8-9 keV flux in cgs units",
+                help="",
+                format="%.3e"),
+            "flux_9-10": st.column_config.NumberColumn(
+                "9-10 keV flux in cgs units",
+                help="",
+                format="%.3e"),
+            "color": st.column_config.TextColumn(
+                "Color for the display",
+                help="Mostly for avoiding confusion", ),
+
+        },
+        hide_index=True,num_rows="dynamic")
+
 
     # favorite_command = edited_df.loc[edited_df["rating"].idxmax()]["command"]
     # st.markdown(f"Your favorite command is **{favorite_command}** 🎈")
@@ -2464,7 +2554,9 @@ dict_linevis['exptime_list'] = exptime_list
 dict_linevis['hid_log_HR'] = hid_log_HR
 dict_linevis['display_minorticks']=display_minorticks
 
-dict_linevis['additional_HLD_points']=additional_HLD_points
+dict_linevis['additional_HLD_points_LEdd']=additional_HLD_points_LEdd
+dict_linevis['additional_HLD_points_flux']=additional_HLD_points_flux
+
 
 if len(global_plotted_datetime)==0:
     st.warning('No points remaining with current sample/date selection')

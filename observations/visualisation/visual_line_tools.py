@@ -1197,7 +1197,9 @@ def plot_lightcurve(dict_linevis,ctl_maxi_df,ctl_maxi_simbad,name,ctl_bat_df,ctl
         elif binning=='orbit':
 
             #base time value + TIME in seconds + half of the exposure to center the point
-            base_date=Time('51910',format='mjd')+TimeDelta(bat_lc_df['TIME'],format='sec')+\
+            #base value taken from MJDREFI+MJDREFF in obs with the instrument
+            base_date=Time(51910.00074287037,format='mjd')+\
+                                                 TimeDelta(bat_lc_df['TIME'],format='sec')+\
                                                  TimeDelta(bat_lc_df['TIMEDEL'],format='sec')/2
             base_date=base_date.datetime
             num_bat_dates=mdates.date2num(base_date)
@@ -2560,12 +2562,15 @@ def hid_graph(ax_hid,dict_linevis,
     restrict_HR_low=dict_linevis['restrict_HR_low']
     restrict_HR_high=dict_linevis['restrict_HR_high']
 
-    additional_HLD_points=dict_linevis['additional_HLD_points']
+    Edd_factor_restrict = dict_linevis['Edd_factor_restrict']
 
+    additional_HLD_points_LEdd=dict_linevis['additional_HLD_points_LEdd']
+    additional_HLD_points_flux=dict_linevis['additional_HLD_points_flux']
+
+    #weird setup but due to the variable being either a bool or a str
     if not broad_mode==False:
         HR_broad_bands=dict_linevis['HR_broad_bands']
         lum_broad_bands= dict_linevis['lum_broad_bands']
-        Edd_factor_restrict=dict_linevis['Edd_factor_restrict']
         lum_plot = dict_linevis['lum_plot']
 
     if broad_mode=='BAT':
@@ -3891,13 +3896,19 @@ def hid_graph(ax_hid,dict_linevis,
     x_hid_time_evol=deepcopy(x_hid_base[mask_intime[0]])
     y_hid_time_evol=deepcopy(y_hid_base[mask_intime[0]])
 
+    #for the LEdd additional points only
+    HLD_hard_rescale=False
+    HLD_soft_rescale=False
 
-    #displaying the additional points if any
-    for i in range(len(additional_HLD_points)):
-        point_row=additional_HLD_points.iloc[i]
+    #displaying the additional points with LEdd values if any
+    for i in range(len(additional_HLD_points_LEdd)):
+        point_row=additional_HLD_points_LEdd.iloc[i]
         if point_row['L_3-10/L_Edd'] not in [0.,None]:
 
             if point_row['HR_[6-10]/[3-6]'] not in [0.,None] and not broad_mode:
+
+                HLD_soft_rescale=True
+
                 ax_hid.scatter(point_row['HR_[6-10]/[3-6]'],point_row['L_3-10/L_Edd'],
                                color=point_row['color'] if point_row['color'] not in ['',None] else 'black',marker="X",
                                edgecolor='black',zorder=1e6)
@@ -3911,6 +3922,9 @@ def hid_graph(ax_hid,dict_linevis,
 
 
             if point_row['HR_[15-50]/[3-6]'] not in [0.,None] and broad_mode:
+
+                HLD_hard_rescale=True
+
                 ax_hid.scatter(point_row['HR_[15-50]/[3-6]'],point_row['L_3-10/L_Edd'],
                                color=point_row['color'] if point_row['color'] not in ['',None] else 'black',marker="X")
 
@@ -3920,6 +3934,111 @@ def hid_graph(ax_hid,dict_linevis,
                     datelist_time_evol=datelist_time_evol.insert(0, Time(point_row['Date (UTC)']))
                     x_hid_time_evol=np.concatenate([np.array([point_row['HR_[15-50]/[3-6]']]),x_hid_time_evol])
                     y_hid_time_evol=np.concatenate([np.array([point_row['L_3-10/L_Edd']]),y_hid_time_evol])
+
+        if broad_mode!=False or zoom=='auto':
+            #recomputing the x and ylims
+
+            if HLD_hard_rescale:
+
+                xlims=[min(xlims[0],min(additional_HLD_points_LEdd['HR_[15-50]/[3-6]'])),
+                       max(xlims[1],max(additional_HLD_points_LEdd['HR_[15-50]/[3-6]']))]
+            if HLD_soft_rescale:
+                xlims = [min(xlims[0], min(additional_HLD_points_LEdd['HR_[6-10]/[3-6]'])),
+                         max(xlims[1], max(additional_HLD_points_LEdd['HR_[6-10]/[3-6]']))]
+
+            if HLD_hard_rescale or HLD_soft_rescale:
+                ylims=[min(ylims[0],min(additional_HLD_points_LEdd['L_3-10/L_Edd'])),
+                        max(ylims[1],max(additional_HLD_points_LEdd['L_3-10/L_Edd']))]
+
+            rescale_flex(ax_hid,xlims,ylims,0.05)
+
+    #displaying the additional points with flux values if any
+    for i in range(len(additional_HLD_points_flux)):
+        point_row=additional_HLD_points_flux.iloc[i]
+
+        column_3_10_df=['flux_3-4','flux_4-5','flux_5-6','flux_6-7','flux_7-8','flux_8-9','flux_9-10']
+        column_3_6_df=['flux_3-4','flux_4-5','flux_5-6']
+        column_6_10_df=['flux_6-7','flux_7-8','flux_8-9','flux_9-10']
+
+        point_list_LEdd_3_10=[]
+        point_list_LEdd_HR_soft=[]
+        point_list_LEdd_HR_hard=[]
+
+        if np.sum([point_row[column] in [0.,None] for column in column_3_10_df])==0:
+
+            obj_obs=np.argwhere([point_row['Source']==obj_list[mask_obj]])
+
+
+            if len(obj_obs)!=0:
+                edd_factor_point=Edd_factor_restrict[obj_obs[0][0]]
+            else:
+                #standard 8M_sun 8kpc factor
+                edd_factor_point=7598382.454
+
+            point_LEdd_3_10=np.sum([point_row[column] for column in column_3_10_df])*edd_factor_point
+            point_list_LEdd_3_10+=[point_LEdd_3_10]
+            point_LEdd_3_6=np.sum([point_row[column] for column in column_3_6_df])*edd_factor_point
+            point_LEdd_6_10=np.sum([point_row[column] for column in column_6_10_df])*edd_factor_point
+            point_LEdd_HR_soft=point_LEdd_6_10/point_LEdd_3_6
+            point_list_LEdd_HR_soft+=[point_LEdd_HR_soft]
+
+            if not broad_mode:
+                ax_hid.scatter(point_LEdd_HR_soft,point_LEdd_3_10,
+                               color=point_row['color'] if point_row['color'] not in ['',None] else 'black',
+                               marker="P",
+                               edgecolor='black',zorder=1e6)
+
+                #adding to x_hid_base if there is a date
+                if point_row['Date (UTC)'] not in ['',None]:
+
+                    datelist_time_evol=datelist_time_evol.insert(0, Time(point_row['Date (UTC)']))
+                    x_hid_time_evol=np.concatenate([np.array([point_LEdd_HR_soft]),x_hid_time_evol])
+                    y_hid_time_evol=np.concatenate([np.array([point_LEdd_3_10]),y_hid_time_evol])
+
+            if broad_mode and point_row['Date (UTC)'] not in ['',None] and point_row['Source']=='4U1630-47':
+
+                bat_lc_df_scat=dict_linevis['bat_lc_df_scat']
+
+                bat_lc_mjd_scat = np.array(bat_lc_df_scat[bat_lc_df_scat.columns[0]])
+
+                mjd_point=int(Time(point_row['Date (UTC)']).mjd)
+
+                if mjd_point in bat_lc_mjd_scat:
+
+                    bat_rate_point=float(bat_lc_df_scat[bat_lc_df_scat.columns[1]]\
+                                             [bat_lc_mjd_scat==mjd_point].iloc[0])
+
+                    #using the more direct conversion here
+                    point_LEdd_15_50=bat_rate_point*10**(-0.36+np.log10(edd_factor_point/7598382.454))
+
+                    point_LEdd_HR_hard=point_LEdd_15_50/point_LEdd_3_6
+
+                    point_list_LEdd_HR_hard += [point_LEdd_HR_hard]
+
+                    ax_hid.scatter(point_LEdd_HR_hard,point_LEdd_3_10,
+                                   color=point_row['color'] if point_row['color'] not in ['',None] else 'black',
+                                   marker="P",
+                                   edgecolor='black', zorder=1e6)
+
+                    datelist_time_evol=datelist_time_evol.insert(0, Time(point_row['Date (UTC)']))
+                    x_hid_time_evol=np.concatenate([np.array([point_LEdd_HR_hard]),x_hid_time_evol])
+                    y_hid_time_evol=np.concatenate([np.array([point_LEdd_3_10]),y_hid_time_evol])
+
+        if broad_mode!=False or zoom=='auto':
+            # recomputing the x and ylims
+            if broad_mode!=False and len(point_list_LEdd_HR_hard)>0:
+                xlims = [min(xlims[0], min(point_list_LEdd_HR_hard)),
+                         max(xlims[1], max(point_list_LEdd_HR_hard))]
+            else:
+
+                xlims = [min(xlims[0], min(point_list_LEdd_HR_soft)),
+                         max(xlims[1], max(point_list_LEdd_HR_soft))]
+
+            if len(point_list_LEdd_3_10)>0:
+                ylims = [min(ylims[0], min(point_list_LEdd_3_10)),
+                         max(ylims[1], max(point_list_LEdd_3_10))]
+
+            rescale_flex(ax_hid, xlims, ylims, 0.05)
 
     #### Displaying arrow evolution if needed and if there are points
     if display_single and display_evol_single and sum(global_mask_intime_norepeat) > 1 and display_nondet:

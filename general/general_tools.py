@@ -18,6 +18,10 @@ from astropy.io import fits
 from astroquery.simbad import Simbad
 import io
 import zipfile
+import matplotlib.pyplot as plt
+import matplotlib.dates as mdates
+from astropy.time import Time,TimeDelta
+from matplotlib.widgets import Slider,Button
 
 h_cgs = 6.624e-27
 eV2erg = 1.6021773E-12
@@ -295,6 +299,237 @@ def str_orbit(i_orbit):
     return regular str expression of orbit
     '''
     return ('%3.f' % (i_orbit + 1)).replace(' ', '0')
+
+
+def plot_lc(lc_paths,binning='auto',directory='./',e_low='',e_high='',
+                  lc_paths_HR_num=None,
+                  interact=False,
+                  interact_tstart=None,
+                  instru='xrism',
+                  show_date_evol=True,
+                  save=False,suffix='',outdir=''):
+
+    '''
+
+    Wrapper to plot xrism lightcurves with or without interactivity
+
+    if lc_path_HR is not None, assumes it is also an lc path with the same binning and properties and
+    builds an HR from that as lc_path_HR/lc_path
+
+    show_date_evol: if set to true, adds a secondary axis on top of the graph to show date formatters
+
+    outdir: if set to None, saves the lightcure where lc_path is, otherwise in the outdir subdirectory
+    '''
+
+    if type(lc_paths)==str:
+        lc_path_list=[lc_paths]
+    else:
+        lc_path_list=lc_paths
+
+    if type(lc_paths_HR_num)==str:
+        lc_path_HR_num_list=[lc_paths_HR_num]
+    elif type(lc_paths_HR_num)==type(None):
+        lc_path_HR_num_list=np.repeat(None,len(lc_paths))
+    else:
+        lc_path_HR_num_list=lc_paths_HR_num
+
+    default_mpl_cycle=plt.rcParams['axes.prop_cycle'].by_key()['color']
+
+    if save:
+        plt.ioff()
+
+    fig_lc, ax_lc = plt.subplots(1, figsize=(16, 8))
+
+
+    for i_lc,(elem_lc,elem_lc_HR_num) in enumerate(zip(lc_path_list,lc_path_HR_num_list)):
+
+        with fits.open(os.path.join(directory, elem_lc)) as fits_lc:
+            data_lc_arr = fits_lc[1].data
+
+            telescope = fits_lc[1].header['TELESCOP']
+            instru = fits_lc[1].header['INSTRUME']
+
+            time_zero = Time(fits_lc[1].header['MJDREFI'] + fits_lc[1].header['MJDREFF'], format='mjd')
+            time_zero += TimeDelta(fits_lc[1].header['TIMEZERO'], format='sec')
+
+        # and plotting it
+
+        if binning=='auto':
+            binning_use=data_lc_arr['TIME'][1]-data_lc_arr['TIME'][0]
+        else:
+            binning_use=str(binning)
+
+        if elem_lc_HR_num is not None:
+            with fits.open(os.path.join(directory, elem_lc_HR_num)) as fits_lc:
+                data_lc_arr_num = fits_lc[1].data
+
+            HR=data_lc_arr_num['RATE']/data_lc_arr['RATE']
+            HR_err=((data_lc_arr_num['ERROR']/data_lc_arr_num['RATE'])**2+
+                    (data_lc_arr['ERROR']/data_lc_arr['RATE'])**2)**(1/2)*HR
+
+            plt.errorbar(data_lc_arr['TIME'], HR,xerr=float(binning_use) / 2,yerr=HR_err,
+                         ls='-', lw=1, color=(0.5, 0.5, 0.5,1/len(lc_path_list)),
+                         ecolor='blue' if len(lc_path_list)==1 else default_mpl_cycle[i_lc],
+                         label=elem_lc_HR_num+'/'+elem_lc if len(lc_path_list)>1 else '')
+
+        else:
+
+            plt.errorbar(data_lc_arr['TIME'], data_lc_arr['RATE'], xerr=float(binning_use) / 2,
+                     yerr=data_lc_arr['ERROR'], ls='-', lw=1, color=(0.5, 0.5, 0.5, 1/len(lc_path_list)),
+                         ecolor='blue' if len(lc_path_list)==1 else default_mpl_cycle[i_lc],
+                         label=elem_lc if len(lc_path_list)>1 else '' )
+
+    plt.legend()
+
+    binning_str=str(binning_use)
+
+    if instru=='xrism':
+        if lc_paths_HR_num is not None:
+            plt.suptitle(
+            telescope + ' ' + instru + ' Hardness Ratio for observation ' + lc_path_list[0].split('_lc')[0].split('_pixel')[0] +
+            (' with pixel ' + lc_path_list[0].split('_pixel_')[-1].split('_')[0] if instru == 'RESOLVE' else
+             ' with region ' + lc_path_list[0].split('_cl_')[-1].split('_lc')[0]) +
+            ' in [' + str(e_high) +']/[' + str(e_low) + '] keV with ' + binning_str + ' s binning')
+        else:
+            plt.suptitle(
+            telescope + ' ' + instru + ' lightcurve for observation ' + lc_path_list[0].split('_lc')[0].split('_pixel')[0] +
+            (' with pixel ' + lc_path_list[0].split('_pixel_')[-1].split('_')[0] if instru == 'RESOLVE' else
+             ' with region ' + lc_path_list[0].split('_cl_')[-1].split('_lc')[0]) +
+            ' in [' + str(e_low) + '-' + str(e_high) + '] keV with ' + binning_str + ' s binning')
+    else:
+
+        if lc_paths_HR_num is not None:
+            plt.suptitle(
+            telescope + ' ' + instru + ' Hardness Ratio for observation(s) ' + lc_path_list[0].split('_lc')[0].split('_pixel')[0] +
+        ' in [' + str(e_high) +']/[' + str(e_low) + '] keV with ' + binning_str + ' s binning')
+        else:
+            plt.suptitle(
+            telescope + ' ' + instru + ' lightcurve for observation(s) ' + lc_path_list[0].split('_lc')[0].split('_pixel')[0] +
+            ' in [' + str(e_low) + '-' + str(e_high) + '] keV with ' + binning_str + ' s binning')
+
+    plt.xlabel('Time (s) after ' + time_zero.isot)
+
+    if show_date_evol:
+
+        def func_time_to_date(x):
+            print('time to date x init')
+            print(x)
+            val_out= mdates.date2num([(time_zero+TimeDelta(x,format='sec')).isot])[0]
+            print('time to date x out')
+            print(val_out)
+            return val_out
+        def func_date_to_time(x):
+            print('date_to_time x init')
+            print(x)
+            # breakpoint()
+
+            if type(x) in (np.ndarray,list):
+                x_use=x
+
+                val_out=np.copy(x_use)
+                print(x_use)
+                for i,elem in enumerate(x_use):
+                    if type(elem) in (np.ndarray,list):
+                        for j,elem in enumerate(x_use[i]):
+                            val_out[i][j] = (Time(str(mdates.num2date(elem)).split('+')[0]) - time_zero).to_value('sec')
+                    else:
+                        val_out[i]=(Time(str(mdates.num2date(elem)).split('+')[0])-time_zero).to_value('sec')
+
+            else:
+                val_out=(Time(str(mdates.num2date([x])).split('+')[0])-time_zero).to_value('sec')
+
+            print('date_to_time x out')
+            print(val_out)
+            # breakpoint()
+            print('tchou')
+            return val_out
+
+        secax_lc = ax_lc.secondary_xaxis('top',functions=(func_time_to_date,func_date_to_time))
+
+        #adding the formatter
+        x_bounds_sec=ax_lc.get_xlim()[1]-ax_lc.get_xlim()[0]
+
+        if x_bounds_sec< 10*86400:
+            date_format = mdates.DateFormatter('%Y-%m-%d %H:%M:%S')
+        elif x_bounds_sec < 365*86400:
+            date_format = mdates.DateFormatter('%Y-%m-%d')
+        else:
+            date_format = mdates.DateFormatter('%Y-%m')
+
+        secax_lc.xaxis.set_major_formatter(date_format)
+
+
+    if lc_paths_HR_num is not None:
+        plt.ylabel('Hardness Ratio')
+
+    else:
+        plt.ylabel('RATE (counts/s)')
+
+    plt.tight_layout()
+
+    if interact:
+
+        plt.ion()
+
+        plt.subplots_adjust(bottom=0.2)
+
+        ax_slider_start = fig_lc.add_axes([0.2, 0.1, 0.65, 0.03])
+
+        ax_slider_end = fig_lc.add_axes([0.2, 0.05, 0.65, 0.03])
+
+
+        #note: we add one binning unit to allow to go all the way and take the last bin
+        slider_start = Slider(ax_slider_start, label='gti start (s)',
+                      valmin=data_lc_arr['TIME'][0]+float(binning_use)/2 if interact_tstart is None else interact_tstart,
+                      valmax=data_lc_arr['TIME'][-1]+float(binning_use), valstep=float(binning_use))
+
+        slider_end = Slider(ax_slider_end, label='gti end (s)',
+                      valmin=data_lc_arr['TIME'][0]+float(binning_use)/2,
+                      valmax=data_lc_arr['TIME'][-1]+float(binning_use)/2, valstep=float(binning_use))
+        def slider_update(val):
+
+            for elem_child in ax_lc.get_children():
+                if elem_child._label == 'current gti':
+                    elem_child.remove()
+
+            ax_lc.axvspan(slider_start.val, slider_end.val,0, 1, alpha=0.3, color='green', label='current gti')
+
+            fig_lc.legend()
+
+        slider_start.on_changed(slider_update)
+        slider_end.on_changed(slider_update)
+
+        ax_button = fig_lc.add_axes([0.9, 0.025, 0.08, 0.04])
+
+        but = Button(ax=ax_button, label='Save GTI')
+
+        def func_button(val):
+            plt.close()
+            print(slider_start.val)
+            print(slider_end.val)
+
+        plt.show()
+        but.on_clicked(func_button)
+
+        #will block the code as long as the button isn't pressed
+        plt.show(block=True)
+
+        if not save:
+            return slider_start.val,slider_end.val
+
+    if save:
+        lc_path_extension=lc_path_list[0][lc_path_list[0].rfind('.'):]
+
+        os.system('mkdir -p '+os.path.join(directory, outdir))
+
+        fig_lc.savefig(os.path.join(directory, outdir, lc_path_list[0].replace(lc_path_extension,
+                                                        ('_'+ suffix if suffix!='' else '')+'_screen.png')))
+        plt.close()
+        plt.ion()
+
+        if interact:
+            return slider_start.val,slider_end.val
+
 def rescale_flex(ax,xlims,ylims,margin,std_x=None,std_y=None):
 
     '''

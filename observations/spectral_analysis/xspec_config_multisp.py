@@ -3227,7 +3227,10 @@ def parse_xlog(log_lines,goal='lastmodel',no_display=False,replace_frozen=False,
                 #note: there can be problems with paramater with very precise bounds from custom models,
                 #so we adapt these bounds if necessary
 
-                par_values=AllModels(i_grp,modName=model_name)(i_par).values
+                try:
+                    par_values=AllModels(i_grp,modName=model_name)(i_par).values
+                except:
+                    breakpoint()
 
                 if float(line.split()[-3])<par_values[2]:
                     par_values[2]=float(line.split()[-3])
@@ -6483,10 +6486,21 @@ class plot_save:
 
             #adding NICER background component Names
             if 'nxb' in list_models:
-                self.addcompnames+=AllModels(1,'sky').componentNames
+                for i in range(1,AllData.nGroups+1):
+                    try:
+                        self.addcompnames+=AllModels(i,'sky').componentNames
+                        break
+                    except:
+                        pass
 
             if 'sky' in list_models:
-                self.addcompnames+=AllModels(1,'nxb').componentNames
+                for i in range(1,AllData.nGroups+1):
+                    try:
+                        self.addcompnames += AllModels(i, 'nxb').componentNames
+                        break
+                    except:
+                        pass
+
         else:
             self.addcomps=None
             self.addcompnames=[]

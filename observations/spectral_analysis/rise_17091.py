@@ -21,16 +21,15 @@ def swift_loader_mela(obs_number):
     AllData(2).response.arf = 'Obs_'+obs_number+'pc.arf'
     AllData(2).background = 'Obs_'+obs_number+'pcback.pi'
 
-def sp_anal(obs_path,mod='powerlaw',baseload=False,obj='',scorpeon=True,overwrite=False):
+def sp_anal(obs_path,mod='powerlaw',baseload=False,obj='',scorpeon=True,overwrite=False,
+            outdir='s_a',absval=None):
 
     plt.ioff()
 
-    outdir='s_a'
-
     os.system('mkdir -p '+outdir)
 
-    if os.path.isfile("s_a/infos_fit.txt"):
-        lines_infos=pd.read_csv('s_a/infos_fit.txt',sep='\t')
+    if os.path.isfile(outdir+"/infos_fit.txt"):
+        lines_infos=pd.read_csv(os.path.join(outdir,'infos_fit.txt'),sep='\t')
 
         if not overwrite:
 
@@ -80,10 +79,10 @@ def sp_anal(obs_path,mod='powerlaw',baseload=False,obj='',scorpeon=True,overwrit
     if telescope=='NICER' and scorpeon:
         xscorpeon.load('auto',frozen=True)
 
-        if os.path.isfile('s_a/'+obs.split('.')[0]+'_baseload.xcm'):
-            os.remove('s_a/'+obs.split('.')[0]+'_baseload.xcm')
+        if os.path.isfile(os.path.join(outdir,obs.split('.')[0]+'_baseload.xcm')):
+            os.remove(os.path.join(outdir,obs.split('.')[0]+'_baseload.xcm'))
 
-        Xset.save('s_a/'+obs.split('.')[0]+'_baseload.xcm')
+        Xset.save(os.path.join(outdir,obs.split('.')[0]+'_baseload.xcm'))
 
     if mod=='thcont':
         mod_list=['cont_diskbb', 'disk_thcomp', 'glob_TBfeo']
@@ -91,25 +90,36 @@ def sp_anal(obs_path,mod='powerlaw',baseload=False,obj='',scorpeon=True,overwrit
         mod_list=['powerlaw', 'glob_TBfeo']
 
 
-    logfile_write, logfile = xLog_rw('s_a/'+obs.split('.')[0]+'_xlog.log')
+    logfile_write, logfile = xLog_rw(os.path.join(outdir,obs.split('.')[0]+'_xlog.log'))
 
 
-    fitlines_strong=fitmod(mod_list,logfile,logfile_write)
+    fitlines_strong=fitmod(mod_list,logfile,logfile_write,
+                           absval=absval if absval is not None else
+                                    10.7 if '4U1630-47' in obj else 0.25 if obj=='V4641Sgr' else None)
 
     fitlines_strong.add_allcomps(split_fit=False)
 
-    if obj=='4U1630-47':
-        AllModels(1).TBfeo.nH.values=10.7
+    if absval is not None:
+        AllModels(1).TBfeo.nH.values=absval
         AllModels(1).TBfeo.nH.frozen=True
 
+    # if obj=='4U1630-47' and abs:
+    #     AllModels(1).TBfeo.nH.values=10.7
+    #     AllModels(1).TBfeo.nH.frozen=True
+
     if obj=='4U1630-47_lock':
-        AllModels(1).TBfeo.nH.values=10.7
-        AllModels(1).TBfeo.nH.frozen=True
+        # AllModels(1).TBfeo.nH.values=10.7
+        # AllModels(1).TBfeo.nH.frozen=True
         AllModels(1).powerlaw.PhoIndex.values = 1.5
         AllModels(1).powerlaw.PhoIndex.frozen=True
+
+    # if obj=='V4641Sgr':
+    #     AllModels(1).TBfeo.nH.values=0.25
+    #     AllModels(1).TBfeo.nH.frozen=True
+
     if obj=='17091':
-        AllModels(1).TBfeo.nH.values=1.537
-        AllModels(1).TBfeo.nH.frozen=True
+        # AllModels(1).TBfeo.nH.values=1.537
+        # AllModels(1).TBfeo.nH.frozen=True
         AllModels(1)(2).values=0.452
         AllModels(1)(3).values=2.33
     # AllModels(1)(2).frozen=False
@@ -132,21 +142,45 @@ def sp_anal(obs_path,mod='powerlaw',baseload=False,obj='',scorpeon=True,overwrit
     # except:
     #     pass
 
-    if os.path.isfile('s_a/'+obs.split('.')[0]+'_mod.xcm'):
-        os.remove('s_a/'+obs.split('.')[0]+'_mod.xcm')
+    if os.path.isfile(os.path.join(outdir,obs.split('.')[0]+'_mod.xcm')):
+        os.remove(os.path.join(outdir,obs.split('.')[0]+'_mod.xcm'))
 
-    Xset.save('s_a/'+obs.split('.')[0]+'_mod.xcm')
+    Xset.save(os.path.join(outdir,obs.split('.')[0]+'_mod.xcm'))
 
     #removing the calibation components and the interstellar absorption
 
-    Plot_screen('ldata,ratio,delchi','s_a/'+obs.split('.')[0]+'_resid_screen.png')
+    Plot_screen('ldata,ratio,delchi',os.path.join(outdir,obs.split('.')[0]+'_resid_screen.png'))
 
     # saving the model str
-    catch_model_str(logfile, savepath='s_a/'+obs.split('.')[0]+'_mod.txt')
+    catch_model_str(logfile, savepath=os.path.join(outdir,obs.split('.')[0]+'_mod.txt'))
 
-    # if telescope=='NICER':
-    #     delcomp('edge')
-    #     delcomp('gaussian')
+    #computing the fluxes in different bands
+    flux_arr=np.repeat(np.nan,9)
+    for i in range(9):
+        AllModels.calcFlux(str(float(i+1))+' '+str(float(i+2)))
+        flux_arr[i]= AllData(1).flux[0]
+
+
+    infos_store_path=os.path.join(outdir,'infos_fit_abs.txt')
+    line_str = obs + \
+               '\t' +str(obs_start)+\
+               '\t' + telescope+\
+               '\t%.4e' %flux_arr[0]+ \
+               '\t%.4e' %flux_arr[1] + \
+               '\t%.4e' %flux_arr[2] + \
+               '\t%.4e' %flux_arr[3] + \
+               '\t%.4e' %flux_arr[4] + \
+               '\t%.4e' %flux_arr[5] + \
+               '\t%.4e' %flux_arr[6] + \
+               '\t%.4e' %flux_arr[7] + \
+               '\t%.4e' %flux_arr[8] + \
+                '\n'
+
+    line_store_header = 'Observ_file\tt_start\ttelescope\t'+\
+                        'flux_1-2\tflux_2-3\tflux_3-4\tflux_4-5\tflux_5-6\tflux_6-7\tflux_7-8\tflux_8-9\tflux_9-10\n'
+
+    file_edit(path=infos_store_path, line_id=obs, line_data=line_str, header=line_store_header)
+
     delcomp('TBfeo')
 
     #computing the fluxes in different bands
@@ -156,7 +190,7 @@ def sp_anal(obs_path,mod='powerlaw',baseload=False,obj='',scorpeon=True,overwrit
         flux_arr[i]= AllData(1).flux[0]
 
 
-    infos_store_path='s_a/'+'infos_fit.txt'
+    infos_store_path=os.path.join(outdir,'infos_fit_deabs.txt')
     line_str = obs + \
                '\t' +str(obs_start)+\
                '\t' + telescope+\
@@ -187,6 +221,44 @@ def NICER_run_all_sp(sort=False,reverse=False,mod='thcont'):
 
     for elem_sp in sp_list:
         sp_anal(elem_sp,mod=mod)
+
+def swift_OT_run_all_sp(sort=False,reverse=False,mod='thcont',obj='V4641Sgr',outdir='s_a',absval=None,
+                        overwrite_baseload=False):
+    sp_list=glob.glob('**_grp_opt.pi')
+
+    epoch_list=np.unique([elem.split('source_')[0][:-2] for elem in sp_list])
+
+    epoch_list=np.array(epoch_list)
+    if sort:
+        epoch_list.sort()
+    if reverse:
+        epoch_list=epoch_list[::-1]
+
+    for elem_epoch in epoch_list:
+
+        if overwrite_baseload or not os.path.isfile(elem_epoch+'_baseload.xcm'):
+
+            if os.path.isfile(elem_epoch+'_baseload.xcm'):
+                os.remove(elem_epoch+'_baseload.xcm')
+
+            elem_sp=[elem for elem in sp_list if elem.startswith(elem_epoch)]
+
+            elem_sp.sort()
+            two_sp=len(elem_sp)>1
+
+            AllData('1:1 '+elem_sp[0]+('' if not two_sp else' 2:2 '+elem_sp[1]))
+            AllData(1).response.arf=elem_sp[0].replace('source_grp_opt.pi','.arf')
+            AllData(1).background=elem_sp[0].replace('source_grp_opt.pi','back.pi')
+
+            if two_sp:
+                AllData(2).response.arf = elem_sp[1].replace('source_grp_opt.pi', '.arf')
+                AllData(2).background = elem_sp[1].replace('source_grp_opt.pi', 'back.pi')
+
+            Xset.save(elem_epoch+'_baseload.xcm')
+            AllData.clear()
+
+        sp_anal(elem_epoch+'_baseload.xcm',mod=mod,baseload=True,obj=obj,outdir=outdir,absval=absval)
+
 
 def evol_plots(sp_infos_path_22,sp_infos_path_25,lc_infos_path_22,lc_infos_path_25,path_BAT_lc):
     sp_infos_22_csv=pd.read_csv(sp_infos_path_22,sep="\t")

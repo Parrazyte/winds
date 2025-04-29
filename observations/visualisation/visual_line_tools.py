@@ -4027,12 +4027,11 @@ def hid_graph(ax_hid,dict_linevis,
         if broad_mode!=False or zoom=='auto':
             # recomputing the x and ylims
             if broad_mode!=False and len(point_list_LEdd_HR_hard)>0:
-                xlims = [min(xlims[0], min(point_list_LEdd_HR_hard)),
-                         max(xlims[1], max(point_list_LEdd_HR_hard))]
-            else:
-
-                xlims = [min(xlims[0], min(point_list_LEdd_HR_soft)),
-                         max(xlims[1], max(point_list_LEdd_HR_soft))]
+                    xlims = [min(xlims[0], min(point_list_LEdd_HR_hard)),
+                             max(xlims[1], max(point_list_LEdd_HR_hard))]
+            if broad_mode==False and len(point_list_LEdd_HR_soft) > 0:
+                    xlims = [min(xlims[0], min(point_list_LEdd_HR_soft)),
+                             max(xlims[1], max(point_list_LEdd_HR_soft))]
 
             if len(point_list_LEdd_3_10)>0:
                 ylims = [min(ylims[0], min(point_list_LEdd_3_10)),

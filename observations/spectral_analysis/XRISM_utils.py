@@ -10,6 +10,7 @@ import os
 
 def rebinv_xrism(grp_number=1,sigma=2):
     Plot.setRebin(sigma, 5000, grp_number)
+
 def xrism_ls(baseload,low_e,high_e,plot_suffix="",bound_around=0.1,e_step=5e-3,lw=5e-3,
              e_sat_low_indiv=[1.5,1.5],resolve_dg=1,rebinv=[20],
              force_ylog_ratio=True,ratio_bounds=[0.5,2],title=True,set_ener_str=None,set_ener_xrism=False):
@@ -35,7 +36,11 @@ def xrism_ls(baseload,low_e,high_e,plot_suffix="",bound_around=0.1,e_step=5e-3,l
 
     Xset.restore(baseload)
     if rebinv is not None:
-        for i_dg,elem_rebinv in enumerate(rebinv):
+        if type(rebinv) not in [list,np.ndarray]:
+            rebinv_use=[rebinv]
+        else:
+            rebinv_use=rebinv
+        for i_dg,elem_rebinv in enumerate(rebinv_use):
             rebinv_xrism(i_dg+1,sigma=elem_rebinv)
 
     if set_ener_str is not None:
@@ -81,6 +86,7 @@ def xrism_ls_loader(dump_path,ener_show_range,force_ylog_ratio=True,ratio_bounds
 
     # breakpoint()
     suffix_list=np.array(ratio_bounds).astype(str).tolist()
+
     suffix='zoom_'+'_'.join(np.array(ener_show_range).round(2).astype(str).tolist())+'_'+\
                   '_'.join(np.array(ratio_bounds).round(2).astype(str).tolist())+('_squished' if squished_mode else '')+\
                   ('_global_chi' if not local_chi_bounds else '')+\

@@ -246,10 +246,19 @@ def plot_4U_2021_curves(save_path_curves=None,save_path_SEDs=None,label=False,co
         plt.savefig(save_path_SEDs)
 
 
-def plot_4U_state_curves(save_path_curves=None,save_path_SEDs=None,label=False,colormap='plasma',restrict_range=None,
-                        plot_hmxt=True,plot_zoom=False):
+def plot_4U_state_curves(
+        indir_curves='/home/parrama/Documents/Work/PhD/docs/papers/wind_4U/global/SEDs/stability/states',
+                         save_path_curves=None,save_path_SEDs=None,label=False,colormap='plasma',restrict_range=None,
+                        plot_hmxt=True,plot_zoom=False,mode='paper'):
 
-    os.chdir('/home/parrama/Documents/Work/PhD/docs/papers/wind_4U/global/SEDs/stability/states')
+    '''
+
+    mode=paper for Parra24 style
+    mode=proposal for the XRISM AO style
+
+    '''
+
+    os.chdir(indir_curves)
 
 
     scurves_path=[elem for elem in glob.glob('**scurve.dat')]
@@ -289,12 +298,18 @@ def plot_4U_state_curves(save_path_curves=None,save_path_SEDs=None,label=False,c
 
     mesh = [xi_i(np.linspace(-4.5, -2., 50), elem) for elem in np.linspace(4.1, 8., 60)]
 
-    contours_nolabel= ax_use.contour(np.linspace(-4.5, -2., 50), np.linspace(4.1, 8., 60), mesh,
-                               levels=[0., 5.], colors='grey', linewidths=1.)
+    if mode=='paper':
+
+        contours_nolabel= ax_use.contour(np.linspace(-4.5, -2., 50), np.linspace(4.1, 8., 60), mesh,
+                                   levels=[0., 5.], colors='grey', linewidths=1.)
 
 
-    contours= ax_use.contour(np.linspace(-4.5, -2., 50), np.linspace(4.1, 8., 60), mesh,
-                               levels=[1., 2., 3, 4., ], colors='grey', linewidths=1.)
+        contours= ax_use.contour(np.linspace(-4.5, -2., 50), np.linspace(4.1, 8., 60), mesh,
+                                   levels=[1., 2., 3, 4., ], colors='grey', linewidths=1.)
+    elif mode=='proposal':
+
+        contours = ax_use.contour(np.linspace(-4.5, -2., 50), np.linspace(4.1, 8., 60), mesh,
+                                  levels=[ 3, 4., ], colors='grey', linewidths=1.)
 
     plot_scurves=[]
     for i in range(len(s_curves)):
@@ -304,7 +319,10 @@ def plot_4U_state_curves(save_path_curves=None,save_path_SEDs=None,label=False,c
                 continue
 
         plot_scurves+=[plot_scurve(s_curves[i][0],s_curves[i][1],ax=ax_use,
-                    color=colors[i],return_plot=True,ls_main=ls_list[i])]
+                color=colors[i],return_plot=True,ls_main=ls_list[i],
+                               ion_range=[3.35 if i==2 else 3., 3.95 if i==2 else 3.75 if i==0 else 3.85 if i==1 else 4] if mode == 'proposal' and colors[i] == 'blue' else None,
+                               color_ion_range='grey' if mode == 'proposal' and colors[i] == 'blue' else None,
+                                   label_ion='no wind' if i==0 and mode=='proposal' else '')]
 
     if plot_zoom:
         # inset Axes....
@@ -321,23 +339,27 @@ def plot_4U_state_curves(save_path_curves=None,save_path_SEDs=None,label=False,c
                     continue
 
             plot_scurves+=[plot_scurve(s_curves[i][0],s_curves[i][1],ax=axins,
-                        color=colors[i],return_plot=True,ls_main=ls_list[i])]
+                        color=colors[i],return_plot=True,ls_main=ls_list[i],
+                                       ion_range=[3,4] if mode=='proposal' else None,
+                                       color_ion_range='grey' if mode=='proposal' and colors[i]=='blue' else None)]
 
         ax_use.indicate_inset_zoom(axins, edgecolor="black")
 
     plt.tight_layout()
 
     fmt_clabels = {}
-    label_names = [ r'log($\xi$)=1',
-                   r'log($\xi$)=2',r'log($\xi$)=3',
-                   r'log($\xi$)=4',]
+
+    label_names = [ r'log($\xi$)=1', r'log($\xi$)=2'] if mode=='paper' else [] +[r'log($\xi$)=3',r'log($\xi$)=4',]
     for i,(l, s) in enumerate(zip(contours.levels, label_names)):
 
         fmt_clabels[l] = s
 
-    manual_locs=[(-4.15,5.15),(-2.8,4.8),(-4.,7.),(-2.45,6.45)]
+    manual_locs=[(-4.15,5.15),(-2.8,4.8)] if mode=='paper' else [] + [(-4.,7.),(-2.45,6.45)]
 
     contour_labels=ax_use.clabel(contours, inline=True, fontsize=10,fmt=fmt_clabels,manual=manual_locs)
+
+    if mode=='proposal':
+        plt.legend(loc='lower right')
 
     if save_path_curves is not None:
         plt.savefig(save_path_curves)

@@ -340,6 +340,7 @@ def plot_lc(lc_paths,binning='auto',directory='./',e_low='',e_high='',
 
     fig_lc, ax_lc = plt.subplots(1, figsize=(16, 8))
 
+    time_zero_base=0
 
     for i_lc,(elem_lc,elem_lc_HR_num) in enumerate(zip(lc_path_list,lc_path_HR_num_list)):
 
@@ -352,6 +353,10 @@ def plot_lc(lc_paths,binning='auto',directory='./',e_low='',e_high='',
             time_zero = Time(fits_lc[1].header['MJDREFI'] + fits_lc[1].header['MJDREFF'], format='mjd')
             time_zero += TimeDelta(fits_lc[1].header['TIMEZERO'], format='sec')
 
+            print(time_zero)
+
+        if i_lc==0:
+            time_zero_base=time_zero
         # and plotting it
 
         if binning=='auto':
@@ -367,14 +372,15 @@ def plot_lc(lc_paths,binning='auto',directory='./',e_low='',e_high='',
             HR_err=((data_lc_arr_num['ERROR']/data_lc_arr_num['RATE'])**2+
                     (data_lc_arr['ERROR']/data_lc_arr['RATE'])**2)**(1/2)*HR
 
-            plt.errorbar(data_lc_arr['TIME'], HR,xerr=float(binning_use) / 2,yerr=HR_err,
+            plt.errorbar(data_lc_arr['TIME']+(time_zero-time_zero_base).value*86400,
+                         HR,xerr=float(binning_use) / 2,yerr=HR_err,
                          ls='-', lw=1, color=(0.5, 0.5, 0.5,1/len(lc_path_list)),
                          ecolor='blue' if len(lc_path_list)==1 else default_mpl_cycle[i_lc],
                          label=elem_lc_HR_num+'/'+elem_lc if len(lc_path_list)>1 else '')
 
         else:
 
-            plt.errorbar(data_lc_arr['TIME'], data_lc_arr['RATE'], xerr=float(binning_use) / 2,
+            plt.errorbar(data_lc_arr['TIME']+(time_zero-time_zero_base).value*86400, data_lc_arr['RATE'], xerr=float(binning_use) / 2,
                      yerr=data_lc_arr['ERROR'], ls='-', lw=1, color=(0.5, 0.5, 0.5, 1/len(lc_path_list)),
                          ecolor='blue' if len(lc_path_list)==1 else default_mpl_cycle[i_lc],
                          label=elem_lc if len(lc_path_list)>1 else '' )
@@ -412,22 +418,16 @@ def plot_lc(lc_paths,binning='auto',directory='./',e_low='',e_high='',
     if show_date_evol:
 
         def func_time_to_date(x):
-            print('time to date x init')
-            print(x)
+
             val_out= mdates.date2num([(time_zero+TimeDelta(x,format='sec')).isot])[0]
-            print('time to date x out')
-            print(val_out)
+
             return val_out
         def func_date_to_time(x):
-            print('date_to_time x init')
-            print(x)
-            # breakpoint()
 
             if type(x) in (np.ndarray,list):
                 x_use=x
 
                 val_out=np.copy(x_use)
-                print(x_use)
                 for i,elem in enumerate(x_use):
                     if type(elem) in (np.ndarray,list):
                         for j,elem in enumerate(x_use[i]):
@@ -438,10 +438,6 @@ def plot_lc(lc_paths,binning='auto',directory='./',e_low='',e_high='',
             else:
                 val_out=(Time(str(mdates.num2date([x])).split('+')[0])-time_zero).to_value('sec')
 
-            print('date_to_time x out')
-            print(val_out)
-            # breakpoint()
-            print('tchou')
             return val_out
 
         secax_lc = ax_lc.secondary_xaxis('top',functions=(func_time_to_date,func_date_to_time))
@@ -499,36 +495,55 @@ def plot_lc(lc_paths,binning='auto',directory='./',e_low='',e_high='',
         slider_start.on_changed(slider_update)
         slider_end.on_changed(slider_update)
 
+        ax_button_finish = fig_lc.add_axes([0.9, 0.1, 0.08, 0.05])
+
         ax_button = fig_lc.add_axes([0.9, 0.025, 0.08, 0.04])
 
+
         but = Button(ax=ax_button, label='Save GTI')
+
+        but_stop = Button(ax=ax_button_finish, label='Save GTI &    \n end computation')
 
         def func_button(val):
             plt.close()
             print(slider_start.val)
             print(slider_end.val)
 
+        class finish_button:
+            def __init__(self):
+                self.finish=False
+
+            def press(self,event):
+                self.finish=True
+                plt.close()
+                print(slider_start.val)
+                print(slider_end.val)
+
         plt.show()
+
         but.on_clicked(func_button)
+
+        button_end=finish_button()
+        but_stop.on_clicked(button_end.press)
 
         #will block the code as long as the button isn't pressed
         plt.show(block=True)
 
         if not save:
-            return slider_start.val,slider_end.val
+            return slider_start.val,slider_end.val,button_end.finish
 
     if save:
         lc_path_extension=lc_path_list[0][lc_path_list[0].rfind('.'):]
 
         os.system('mkdir -p '+os.path.join(directory, outdir))
 
-        fig_lc.savefig(os.path.join(directory, outdir, lc_path_list[0].replace(lc_path_extension,
+        fig_lc.savefig(os.path.join(directory, outdir, lc_path_list[0].split('/')[-1].replace(lc_path_extension,
                                                         ('_'+ suffix if suffix!='' else '')+'_screen.png')))
         plt.close()
         plt.ion()
 
         if interact:
-            return slider_start.val,slider_end.val
+            return slider_start.val,slider_end.val,button_end.finish
 
 def rescale_flex(ax,xlims,ylims,margin,std_x=None,std_y=None):
 

@@ -115,13 +115,14 @@ def untar_spectra():
         time.sleep(0.1)
         os.chdir(currdir)
 
-def merge_swift_spectra():
+def merge_swift_spectra_OT(overwrite=True):
 
     '''
-    moves all swift spectra to a merge "bigbatch" directory
+    moves all swift spectral products with extensions from the online tool
+    to a merge "bigbatch" directory
     '''
     
-    allfiles=glob.glob('**',recursive=True)
+    allfiles=[elem for elem in glob.glob('**',recursive=True) if 'bigbatch' not in elem]
     specfiles=[elem for elem in allfiles if elem.endswith('source.pi') or elem.endswith('back.pi')\
                or elem.endswith('.rmf') or elem.endswith('.arf')]
     
@@ -129,13 +130,17 @@ def merge_swift_spectra():
     currdir=os.getcwd()
     
     for elemfile in specfiles:
-        shutil.copy(elemfile,os.path.join(currdir,'bigbatch','xrt'+elemfile.split('/')[-1].replace('Obs_','')))
+        if not os.path.isfile(os.path.join(currdir,'bigbatch','xrt'+elemfile.split('/')[-1].replace('Obs_','')))\
+                              or overwrite:
+            shutil.copy(elemfile,os.path.join(currdir,'bigbatch','xrt'+elemfile.split('/')[-1].replace('Obs_','')))
+            time.sleep(0.1)
         
     
-def regroup_swift_spectra(extension='source.pi',group='opt',skip_started=True):
+def regroup_swift_spectra_OT(extension='source.pi',group='opt',skip_started=True):
     
     '''
-    To be launched above all spectra to regroup IN BIGBATCH DIRECTORY
+    run above the bigbatch directory
+    To be launched above all spectra with extensions from the online tool to regroup
     Note: for now, needs to be launched a bunch of times because things dont work every time for some reason
     '''
 

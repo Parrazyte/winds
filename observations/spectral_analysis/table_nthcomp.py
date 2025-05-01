@@ -1,6 +1,6 @@
 
 
-from xspec_config_multisp import addcomp,delcomp,reset
+from xspec_config_multisp import addcomp,delcomp
 from xspec import AllModels,AllData,Xset
 from visual_line_tools import corr_factor_lbat,bat_rate_to_gamma,convert_BAT_count_flux
 import numpy as np

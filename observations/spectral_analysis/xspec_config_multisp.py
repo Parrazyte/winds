@@ -5,7 +5,6 @@ Created on Wed Oct 13 11:01:03 2021
 
 @author: parrama
 """
-import sys
 import matplotlib as mpl
 import matplotlib.pyplot as plt
 
@@ -27,8 +26,8 @@ except:
     AllModels, AllData, Fit, Spectrum, Model, Plot, Xset, AllChains, Chain=[None]*9
 
 
-from fitting_tools import sign_delchis_table,lines_std,lines_e_dict,lines_w_dict,lines_broad_w_dict,\
-        link_groups,lines_std_names,def_ftest_threshold,def_ftest_leeway,ang2kev,sign_sigmas_delchi_1dof
+from fitting_tools import sign_delchis_table, lines_e_dict,lines_w_dict,lines_broad_w_dict,\
+        link_groups,lines_std_names,def_ftest_threshold,def_ftest_leeway,ang2kev
 
 from general_tools import ravel_ragged,get_overlap,shorten_epoch
 
@@ -41,7 +40,6 @@ import re
 from tqdm import tqdm
 import time
 import multiprocessing
-import pandas as pd
 from copy import copy
 import dill
 

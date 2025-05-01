@@ -1,23 +1,17 @@
 
 #general imports
-import os,sys
+import os
 import glob
-import argparse
-import re as re
 import time
 
 import numpy as np
 
 #matplotlib imports
-import matplotlib as mpl
 import matplotlib.pyplot as plt
-import matplotlib.colors as colors
-
 
 from matplotlib.gridspec import GridSpec
 
 #other stuff
-from ast import literal_eval
 from copy import deepcopy
 
 #powerful saves
@@ -34,23 +28,18 @@ class PDF(FPDF, HTMLMixin):
     pass
 
 #pdf merging
-from PyPDF2 import PdfMerger
 
 #trapezoid integration
 from scipy.integrate import trapezoid
 
-from astropy.time import Time,TimeDelta
-
 '''Astro'''
 #general astro importss
 from astropy.io import fits
-from astropy.time import Time
-from xspec import AllModels,AllData,Fit,Spectrum,Model,Plot,Xset,FakeitSettings,Chain
-from xspec import AllChains
+from xspec import AllModels,AllData,Fit,Spectrum, Plot,Xset,FakeitSettings,Chain
 
 #custom script with a few shorter xspec commands
-from xspec_config_multisp import allmodel_data,model_load,addcomp,Pset,Pnull,rescale,reset,Plot_screen,store_plot,freeze,allfreeze,unfreeze,\
-                         calc_error,delcomp,fitmod,calc_fit,xcolors_grp,xPlot,xscorpeon,catch_model_str,\
+from xspec_config_multisp import allmodel_data, addcomp,Pset, rescale,reset,Plot_screen,store_plot,freeze,allfreeze,unfreeze,\
+                         calc_error, fitmod,calc_fit, xPlot,xscorpeon,catch_model_str,\
                          load_fitmod, ignore_data_indiv,par_degroup,xspec_globcomps,store_fit,\
                          ignore_indiv_ig,notice_indiv_ig,xLog_rw
 
@@ -61,7 +50,7 @@ from linedet_utils import plot_line_comps,plot_line_search,plot_std_ener,coltour
 from fitting_tools import c_light,lines_std_names,lines_e_dict,n_absline,range_absline,\
                           model_list,line_e_ranges_fullarg,file_to_obs
 
-from general_tools import file_edit,ravel_ragged,shorten_epoch,expand_epoch,get_overlap,interval_extract
+from general_tools import file_edit,ravel_ragged, interval_extract
 
 from pdf_summary import pdf_summary
 # #importing the pileup evaluation function
@@ -69,15 +58,12 @@ from pdf_summary import pdf_summary
 #defined here instead because it tends to launch datared functions when importing from it
 
 #Catalogs and manipulation
-from astroquery.vizier import Vizier
 
 '''peak detection'''
-from findpeaks import findpeaks
+
+
 #mask to polygon conversion
-from imantics import Mask
-from shapely.geometry import Polygon,Point
 #mask propagation for the peak detection
-from scipy.ndimage import binary_dilation
 
 def pileup_val(pileup_line):
 

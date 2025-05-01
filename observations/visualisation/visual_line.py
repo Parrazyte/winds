@@ -55,11 +55,46 @@ import dill
 #Catalogs and manipulation
 from astroquery.vizier import Vizier
 
+#adding the top directory to the path to avoid issues when importing fitting_tools
+
+
+
+#rough way of testing if online or not
+online=os.getcwd().startswith('/mount/src')
+project_dir='/'.join(__file__.split('/')[:-3])
+
+#to be tested online
+sys.path.append(os.path.join(project_dir,'observations/spectral_analysis/'))
+sys.path.append(os.path.join(project_dir,'general/'))
+sys.path.append(os.path.join(project_dir,'observations/visualisation/visual_line_tools'))
+
+
+#custom script with some lines and fit utilities and variables
+from fitting_tools import lines_std,lines_std_names,range_absline
+
+from general_tools import ravel_ragged,MinorSymLogLocator
+
+
+# if online:
+#     project_dir='/mount/src/winds/'
+#     sys.path.append('/mount/src/winds/observations/spectral_analysis/')
+#     sys.path.append('/mount/src/winds/general/')
+# else:
+#     project_dir='/home/parrama/Documents/Work/PhD/Scripts/Python/'
+#     sys.path.append('/home/parrama/Documents/Work/PhD/Scripts/Python/observations/visualisation/visual_line_tools/')
+#     #local
+#     sys.path.append('/home/parrama/Documents/Work/PhD/Scripts/Python/general/')
+#     sys.path.append('/home/parrama/Documents/Work/PhD/Scripts/Python/observations/spectral_analysis/')
+
 #visualisation functions
-from visual_line_tools import load_catalogs,dist_mass,obj_values,abslines_values,values_manip,distrib_graph,correl_graph,\
-    n_infos, plot_lightcurve, hid_graph, sources_det_dic, dippers_list,telescope_list,load_integral,telescope_colors,\
+from visual_line_tools import load_catalogs,dist_mass,obj_values,abslines_values,values_manip,\
+    n_infos, plot_lightcurve,sources_det_dic, dippers_list,telescope_list,load_integral,telescope_colors,\
     convert_BAT_count_flux,flux_erg_pow,err_flux_erg_pow,values_manip_var,corr_factor_lbat,fetch_bat_lightcurve,\
     int_rate_to_flux,incl_dyn_dict,incl_jet_dict,incl_misc_dict,incl_refl_dict,Porb_dict,wind_det_dict,wind_det_sources
+
+from distrib_graph import distrib_graph
+from correl_graph import correl_graph
+from hid_graph import hid_graph
 
 from lmplot_uncert import lmplot_uncert_a
 from general_tools import get_overlap,make_zip
@@ -111,20 +146,7 @@ ap.add_argument("-line_search_norm",nargs=1,help='min, max and nsteps (for one s
 
 args=ap.parse_args()
 
-#adding the top directory to the path to avoid issues when importing fitting_tools
 
-#local
-sys.path.append('/home/parrama/Documents/Work/PhD/Scripts/Python/general/')
-sys.path.append('/home/parrama/Documents/Work/PhD/Scripts/Python/observations/spectral_analysis/')
-
-#online
-sys.path.append('/mount/src/winds/observations/spectral_analysis/')
-sys.path.append('/mount/src/winds/general/')
-
-#custom script with some lines and fit utilities and variables
-from fitting_tools import lines_std,lines_std_names,range_absline
-
-from general_tools import ravel_ragged,MinorSymLogLocator
 '''
 # Notes:
 # -Only works for the auto observations (due to prefix naming) for now
@@ -141,12 +163,7 @@ expmodes=args.expmodes
 prefix=args.prefix
 outdir=args.outdir
 
-#rough way of testing if online or not
-online='parrama' not in os.getcwd()
-if online:
-    project_dir='/mount/src/winds/'
-else:
-    project_dir='/home/parrama/Documents/Work/PhD/Scripts/Python/'
+
 
 
 line_cont_range=np.array(args.line_cont_range.split(' ')).astype(float)
@@ -2402,44 +2419,48 @@ with tab_hid:
 with tab_add_data:
 
     st.markdown('These data points will be added to the soft and/or broad HLDs.')
-    st.info('Remember to make your Eddington ratio compatible with this work by choosing the same D and M '
-              'than the ones I am using')
-    df_HLD_points_LEdd = pd.DataFrame(
-        [
-            {"ObsID":'', "Date (UTC)":None,"Telescope": '', "L_3-10/L_Edd": 0.,"HR_[6-10]/[3-6]":0.,'HR_[15-50]/[3-6]':0.,
-             'color':''},
-        ]
-    )
-    additional_HLD_points_LEdd = st.data_editor(
-        df_HLD_points_LEdd,
-        column_config={
-            "ObsID": st.column_config.TextColumn(
-                "ObsID of the observation",
-                help="Mostly for avoiding confusion",),
-            "Date (UTC)": st.column_config.DatetimeColumn(
-                "Date of the observation in UTC format",
-                help="Mostly for avoiding confusion"),
-            "Telescope": st.column_config.TextColumn(
-                "Instrument taking the observation",
-                help="Mostly for avoiding confusion",),
-            "L_3-10/L_Edd": st.column_config.NumberColumn(
-                "3-10 keV Eddington ratio",
-                help="",
-                format="%.3e"),
-            "HR_[6-10]/[3-6]": st.column_config.NumberColumn(
-                "[6-10]/[3-6] keV HR",
-                help="",
-                format="%.3e",),
-            "HR_[15-50]/[3-6]": st.column_config.NumberColumn(
-                "[15-50]/[3-6] keV HR",
-                help="",
-                format="%.3e",),
-            "color": st.column_config.TextColumn(
-                "Color for the display",
-                help="Mostly for avoiding confusion", ),
 
-        },
-        hide_index=True,num_rows="dynamic")
+    with st.expander('New points in Eddington ratio units'):
+        st.info('Remember to make your Eddington ratio compatible with this work by choosing the same D and M '
+                'than the ones in the Source Table')
+        df_HLD_points_LEdd = pd.DataFrame(
+            [
+                {"ObsID": '', "Date (UTC)": None, "Telescope": '', "L_3-10/L_Edd": 0., "HR_[6-10]/[3-6]": 0.,
+                 'HR_[15-50]/[3-6]': 0.,
+                 'color': ''},
+            ]
+        )
+
+        additional_HLD_points_LEdd = st.data_editor(
+            df_HLD_points_LEdd,
+            column_config={
+                "ObsID": st.column_config.TextColumn(
+                    "ObsID",
+                    help="Mostly for avoiding confusion",),
+                "Date (UTC)": st.column_config.DatetimeColumn(
+                    "Date (UTC)",
+                    help="Date of the observation in UTC format"),
+                "Telescope": st.column_config.TextColumn(
+                    "Telescope",
+                    help="Instrument taking the observation",),
+                "L_3-10/L_Edd": st.column_config.NumberColumn(
+                    "3-10 keV Eddington ratio",
+                    help="",
+                    format="%.3e"),
+                "HR_[6-10]/[3-6]": st.column_config.NumberColumn(
+                    "[6-10]/[3-6] keV HR",
+                    help="",
+                    format="%.3e",),
+                "HR_[15-50]/[3-6]": st.column_config.NumberColumn(
+                    "[15-50]/[3-6] keV HR",
+                    help="",
+                    format="%.3e",),
+                "color": st.column_config.TextColumn(
+                    "Color for the display",
+                    help="Mostly for avoiding confusion", ),
+
+            },
+            hide_index=True,num_rows="dynamic")
 
     df_HLD_points_flux = pd.DataFrame(
         [
@@ -2457,64 +2478,162 @@ with tab_add_data:
              'color':''},
         ]
     )
-    additional_HLD_points_flux = st.data_editor(
-        df_HLD_points_flux,
-        column_config={
-            "Source": st.column_config.TextColumn(
-                "Source observed",
-                help="for Eddington factor identification", ),
-            "ObsID": st.column_config.TextColumn(
-                "ObsID of the observation",
-                help="Mostly for avoiding confusion",),
-            "Date (UTC)": st.column_config.DatetimeColumn(
-                "Date of the observation in UTC format",
-                help="Mostly for avoiding confusion"),
-            "Telescope": st.column_config.TextColumn(
-                "Instrument taking the observation",
-                help="Mostly for avoiding confusion",),
-            "flux_1-2": st.column_config.NumberColumn(
-                "1-2 keV flux in cgs units",
-                help="",
-                format="%.3e"),
-            "flux_2-3": st.column_config.NumberColumn(
-                "2-3 keV flux in cgs units",
-                help="",
-                format="%.3e"),
-            "flux_3-4": st.column_config.NumberColumn(
-                "3-4 keV flux in cgs units",
-                help="",
-                format="%.3e"),
-            "flux_4-5": st.column_config.NumberColumn(
-                "4-5 keV flux in cgs units",
-                help="",
-                format="%.3e"),
-            "flux_5-6": st.column_config.NumberColumn(
-                "5-6 keV flux in cgs units",
-                help="",
-                format="%.3e"),
-            "flux_6-7": st.column_config.NumberColumn(
-                "6-7 keV flux in cgs units",
-                help="",
-                format="%.3e"),
-            "flux_7-8": st.column_config.NumberColumn(
-                "7-8 keV flux in cgs units",
-                help="",
-                format="%.3e"),
-            "flux_8-9": st.column_config.NumberColumn(
-                "8-9 keV flux in cgs units",
-                help="",
-                format="%.3e"),
-            "flux_9-10": st.column_config.NumberColumn(
-                "9-10 keV flux in cgs units",
-                help="",
-                format="%.3e"),
-            "color": st.column_config.TextColumn(
-                "Color for the display",
-                help="Mostly for avoiding confusion", ),
 
-        },
-        hide_index=True,num_rows="dynamic")
+    with st.expander('New points in flux units'):
 
+        additional_HLD_points_flux = st.data_editor(
+            df_HLD_points_flux,
+            column_config={
+                "Source": st.column_config.TextColumn(
+                    "Source",
+                    help="Source observed, for Eddington factor identification", ),
+                "ObsID": st.column_config.TextColumn(
+                    "ObsID",
+                    help="Mostly for avoiding confusion",),
+                "Date (UTC)": st.column_config.DatetimeColumn(
+                    "Date (UTC)",
+                    help="Date of the observation in UTC format"),
+                "Telescope": st.column_config.TextColumn(
+                    "Telescope",
+                    help="Instrument taking the observation",),
+                "flux_1-2": st.column_config.NumberColumn(
+                    "flux_1-2keV",
+                    help="1-2 keV flux in cgs units",
+                    format="%.3e"),
+                "flux_2-3": st.column_config.NumberColumn(
+                    "flux_2-3keV",
+                    help="2-3 keV flux in cgs units",
+                    format="%.3e"),
+                "flux_3-4": st.column_config.NumberColumn(
+                    "flux_3-4keV",
+                    help="3-4 keV flux in cgs units",
+                    format="%.3e"),
+                "flux_4-5": st.column_config.NumberColumn(
+                    "flux_4-5keV",
+                    help="4-5 keV flux in cgs units",
+                    format="%.3e"),
+                "flux_5-6": st.column_config.NumberColumn(
+                    "flux_5-6keV",
+                    help="5-6 keV flux in cgs units",
+                    format="%.3e"),
+                "flux_6-7": st.column_config.NumberColumn(
+                    "flux_6-7keV",
+                    help="6-7 keV flux in cgs units",
+                    format="%.3e"),
+                "flux_7-8": st.column_config.NumberColumn(
+                    "flux_7-8keV",
+                    help="7-8 keV flux in cgs units",
+                    format="%.3e"),
+                "flux_8-9": st.column_config.NumberColumn(
+                    "flux_8-9keV",
+                    help="8-9 keV flux in cgs units",
+                    format="%.3e"),
+                "flux_9-10": st.column_config.NumberColumn(
+                    "flux_9-10keV",
+                    help="9-10 keV flux in cgs units",
+                    format="%.3e"),
+                "color": st.column_config.TextColumn(
+                    "color",
+                    help="Color for the display", ),
+
+            },
+            hide_index=True,num_rows="dynamic")
+
+    with st.expander('Line parameters of new points'):
+
+        df_line_points = pd.DataFrame(
+            [
+                {"Source": '',
+                 "ObsID": '', "Date (UTC)": None, "Telescope": '',
+                 "EW_FeKa25": 0.,
+                 "EW_FeKa26": 0.,
+                 "vshift_FeKa25": 0.,
+                 "vshift_FeKa26": 0.,
+                 "EW_FeKa25_err-": 0.,
+                 "EW_FeKa25_err+": 0.,
+                 "EW_FeKa26_err-": 0.,
+                 "EW_FeKa26_err+": 0.,
+                 "vshift_FeKa25_err-": 0.,
+                 "vshift_FeKa25_err+": 0.,
+                 "vshift_FeKa26_err-": 0.,
+                 "vshift_FeKa26_err+": 0.,},
+            ]
+        )
+
+        additional_line_points = st.data_editor(
+            df_line_points,
+            column_config={
+                "Source": st.column_config.TextColumn(
+                    "Source",
+                    help="Source observed, for Eddington factor identification", ),
+                "ObsID": st.column_config.TextColumn(
+                    "ObsID",
+                    help="Mostly for avoiding confusion",),
+                "Date (UTC)": st.column_config.DatetimeColumn(
+                    "Date (UTC)",
+                    help="Date of the observation in UTC format"),
+                "Telescope": st.column_config.TextColumn(
+                    "Telescope",
+                    help="Instrument taking the observation",),
+                "EW_FeKa25": st.column_config.NumberColumn(
+                    "EW_FeKa25",
+                    help="Fe XXV Ka EW in eV",
+                    format="%.3e"),
+                "EW_FeKa26": st.column_config.NumberColumn(
+                    "EW_FeKa26",
+                    help="Fe XXVI Ka EW in eV",
+                    format="%.3e"),
+                "EW_FeKa25_UL": st.column_config.NumberColumn(
+                    "EW_FeKa25_UL",
+                    help="Fe XXV Ka EW upper limit in eV",
+                    format="%.3e"),
+                "EW_FeKa26_UL": st.column_config.NumberColumn(
+                    "EW_FeKa26_UL",
+                    help="Fe XXVI Ka EW upper limit in eV",
+                    format="%.3e"),
+                "vshift_FeKa25": st.column_config.NumberColumn(
+                    "vshift_FeKa25",
+                    help="Fe XXV Ka velocity shift in km/s (<0 for blueshifts)",
+                    format="%.3e"),
+                "vshift_FeKa26": st.column_config.NumberColumn(
+                    "vshift_FeKa26",
+                    help="Fe XXVI Ka velocity shift in km/s (<0 for blueshifts)",
+                    format="%.3e"),
+                "EW_FeKa25_err-": st.column_config.NumberColumn(
+                    "EW_FeKa25_err-",
+                    help="Fe XXV Ka EW negative error at 90% C.L. in eV",
+                    format="%.3e"),
+                "EW_FeKa25_err+": st.column_config.NumberColumn(
+                    "EW_FeKa25_err+",
+                    help="Fe XXV Ka EW positive error at 90% C.L. in eV",
+                    format="%.3e"),
+                "EW_FeKa26_err-": st.column_config.NumberColumn(
+                    "EW_FeKa26_err-",
+                    help="Fe XXVI Ka EW negative error at 90% C.L. in eV",
+                    format="%.3e"),
+                "EW_FeKa26_err+": st.column_config.NumberColumn(
+                    "EW_FeKa25_err+",
+                    help="Fe XXVI Ka EW positive error at 90% C.L. in eV",
+                    format="%.3e"),
+                "vshift_FeKa25_err-": st.column_config.NumberColumn(
+                    "vshift_FeKa25_err-",
+                    help="Fe XXV Ka velocity shift negative error at 90% C.L. in km/s (<0 for blueshifts)",
+                    format="%.3e"),
+                "vshift_FeKa25_err+": st.column_config.NumberColumn(
+                    "vshift_FeKa25_err+",
+                    help="Fe XXV Ka velocity shift positive error at 90% C.L. in km/s (<0 for blueshifts)",
+                    format="%.3e"),
+                "vshift_FeKa26_err-": st.column_config.NumberColumn(
+                    "vshift_FeKa26_err-",
+                    help="Fe XXVI Ka velocity shift negative error at 90% C.L. in km/s (<0 for blueshifts)",
+                    format="%.3e"),
+                "vshift_FeKa26_err+": st.column_config.NumberColumn(
+                    "vshift_FeKa26_err+",
+                    help="Fe XXVI Ka velocity shift positive error at 90% C.L. in km/s (<0 for blueshifts)",
+                    format="%.3e"),
+
+            },
+            hide_index=True,num_rows="dynamic")
 
     # favorite_command = edited_df.loc[edited_df["rating"].idxmax()]["command"]
     # st.markdown(f"Your favorite command is **{favorite_command}** 🎈")
@@ -2556,6 +2675,7 @@ dict_linevis['display_minorticks']=display_minorticks
 
 dict_linevis['additional_HLD_points_LEdd']=additional_HLD_points_LEdd
 dict_linevis['additional_HLD_points_flux']=additional_HLD_points_flux
+dict_linevis['additional_line_points']=additional_line_points
 
 
 if len(global_plotted_datetime)==0:

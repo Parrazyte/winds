@@ -273,7 +273,7 @@ Porb_dict={'1E1740.7-2942':[303,2,1,1],
            'MAXIJ1820+270':[16.5,0,0,1],
            'NovaMuscae1991':[10.4,0,0,1],
            'SwiftJ1357.2-0933':[2.8,0.3,0.3,1],
-           'SwiftJ1727.8-1613':[7.6,0.2,0.2,1],
+           'SwiftJ1727.8-1613':[10.8,0.,0.,1],
            'SwiftJ174510.8-262411':[11.3,11.3,0,0],
            'SwiftJ1753.5-0127':[3.26,0.02,0.02,1],
            'SwiftJ1910.2-0546':[2.4,0.1,0.1,1],
@@ -311,7 +311,7 @@ dist_dict={
     'MAXIJ1836-194':[7,3,3,1],
     'MAXIJ1848-015':[3.4,0.3,0.3,1],
     'NovaMuscae1991':[5,0.7,0.7,1],
-    'SwiftJ1727.8-1613':[2.7,0.3,0.3,1],
+    'SwiftJ1727.8-1613':[3.4,0.3,0.3,1],
     'SwiftJ1728.9-3613':[8.4,0.8,0.8,1],
     'SwiftJ174510.8-262411':[3.7,1.1,1.1,0],
     'SwiftJ1753.5-0127':[3.9,0.7,0.7,1],
@@ -1528,6 +1528,94 @@ def plot_lightcurve(dict_linevis,ctl_maxi_df,ctl_maxi_simbad,name,ctl_bat_df,ctl
     return fig_lc
 
 # @st.cache_data
+
+def dist_mass_indiv(dict_linevis,obj_name,use_unsure_mass_dist=True):
+
+    ####TODO: add Simbad matching for the names
+
+    ctl_blackcat=dict_linevis['ctl_blackcat']
+    ctl_blackcat_obj=dict_linevis['ctl_blackcat_obj']
+    ctl_watchdog=dict_linevis['ctl_watchdog']
+    ctl_watchdog_obj=dict_linevis['ctl_watchdog_obj']
+
+    d_obj_indiv= 'nan'
+
+    if obj_name in dist_dict:
+        try:
+            if dist_dict[obj_name][3] == 1 or use_unsure_mass_dist:
+                # putting manual/updated distance values first
+                d_obj_indiv = dist_dict[obj_name][0]
+        except:
+            breakpoint()
+            pass
+    else:
+
+        obj_row = None
+        # searching for the distances corresponding to the object namess in the first (most recently updated) catalog
+        for elem in ctl_blackcat_obj:
+            if obj_name in elem:
+                obj_row = np.argwhere(ctl_blackcat_obj == elem)[0][0]
+                break
+
+        if obj_row is not None:
+
+            obj_d_key = ctl_blackcat.iloc[obj_row]['d [kpc]']
+
+            if not (type(obj_d_key) == str or np.isnan(obj_d_key)) and \
+                    ('≥' not in obj_d_key and '>' not in obj_d_key):
+
+                print('New measurement found in BlackCAT, not found in the biblio. Please check.')
+                breakpoint()
+                d_obj_indiv = ctl_blackcat.iloc[obj_row]['d [kpc]']
+
+                # formatting : using only the main values + we do not want to use this catalog's results if they are simply upper/lower limits
+                d_obj_indiv = str(d_obj_indiv)
+                d_obj_indiv = d_obj_indiv.split('/')[-1].split('±')[0].split('~')[-1].split('∼')[-1]
+
+                if '≥' in d_obj_indiv or '>' in d_obj_indiv or '<' in d_obj_indiv or '≤' in d_obj_indiv:
+                    d_obj_indiv = 'nan'
+
+                if '-' in d_obj_indiv:
+                    if '+' in d_obj_indiv:
+                        # taking the mean value if it's an uncertainty
+                        d_obj_indiv = float(d_obj_indiv.split('+')[0].split('-')[0])
+                    else:
+                        # taking the mean if it's an interval
+                        d_obj_indiv = (float(d_obj_indiv.split('-')[0]) + float(d_obj_indiv.split('-')[-1])) / 2
+
+        # searching in the second catalog if nothing was found in the first one
+        if d_obj_indiv == 'nan':
+            if len(np.argwhere(ctl_watchdog_obj == obj_name)) != 0:
+
+                # watchdog assigns by default 5+-3 kpc to sources with no distance estimate so we need to check for that
+                # (there is no source with an actual 5kpc distance)
+                watchdog_d_val = float(ctl_watchdog[np.argwhere(ctl_watchdog_obj == obj_name)[0][0]]['Dist1'])
+
+                # these ones are false/outdated
+                # here same, the lower limit quoted in WATCHDOG has been disproved in Charles19
+                watchdog_d_exclu = ['SwiftJ1357.2-0933']
+
+                if obj_name not in watchdog_d_exclu and watchdog_d_val not in [5., 8.]:
+                    print('New measurement found in WATCHDOG, not found in the biblio. Please check.')
+                    breakpoint()
+                    d_obj_indiv = watchdog_d_val
+
+    if d_obj_indiv == 'nan':
+        # giving a default value of 8kpc to the objects for which we do not have good distance measurements
+        d_obj_indiv = 8
+
+    else:
+        d_obj_indiv = float(d_obj_indiv)
+
+    # fixing the source mass at 8 solar Masses if not in the local list since we have very few reliable estimates
+    # of the BH masses anyway except for NS whose masses are in a dictionnary
+    if obj_name in mass_dict and (mass_dict[obj_name][3] == 1 or use_unsure_mass_dist):
+        m_obj_indiv = mass_dict[obj_name][0]
+    else:
+        m_obj_indiv = 8
+
+    return d_obj_indiv,m_obj_indiv
+
 def dist_mass(dict_linevis,use_unsure_mass_dist=True):
 
     '''
@@ -1538,94 +1626,17 @@ def dist_mass(dict_linevis,use_unsure_mass_dist=True):
         (with 0 for the last element of their measurement array)
     '''
     
-    ctl_blackcat=dict_linevis['ctl_blackcat']
-    ctl_blackcat_obj=dict_linevis['ctl_blackcat_obj']
-    ctl_watchdog=dict_linevis['ctl_watchdog']
-    ctl_watchdog_obj=dict_linevis['ctl_watchdog_obj']
+
     names=dict_linevis['obj_list']
     
     d_obj=np.array([None]*len(names))
     m_obj=np.array([None]*len(names))
-    
+
+
     for i in range(len(names)):
-        d_obj[i]='nan'
 
-        if names[i] in dist_dict:
-            try:
-                if dist_dict[names[i]][3]==1 or use_unsure_mass_dist:
-                    #putting manual/updated distance values first
-                    d_obj[i]=dist_dict[names[i]][0]
-            except:
-                breakpoint()
-                pass
-        else:
-            
-            obj_row=None
-            #searching for the distances corresponding to the object namess in the first (most recently updated) catalog
-            for elem in ctl_blackcat_obj:
-                if names[i] in elem:
-                    obj_row=np.argwhere(ctl_blackcat_obj==elem)[0][0]
-                    break                    
+        d_obj[i],m_obj[i]=dist_mass_indiv(dict_linevis,names[i],use_unsure_mass_dist)
 
-            if obj_row is not None:
-
-                obj_d_key = ctl_blackcat.iloc[obj_row]['d [kpc]']
-
-                if not (type(obj_d_key)==str or np.isnan(obj_d_key)) and \
-                    ('≥' not in obj_d_key and '>' not in obj_d_key):
-
-                    print('New measurement found in BlackCAT, not found in the biblio. Please check.')
-                    breakpoint()
-                    d_obj[i]=ctl_blackcat.iloc[obj_row]['d [kpc]']
-
-                    #formatting : using only the main values + we do not want to use this catalog's results if they are simply upper/lower limits
-                    d_obj[i]=str(d_obj[i])
-                    d_obj[i]=d_obj[i].split('/')[-1].split('±')[0].split('~')[-1].split('∼')[-1]
-
-                    if '≥' in d_obj[i] or '>' in d_obj[i] or '<' in d_obj[i] or '≤' in d_obj[i]:
-                        d_obj[i]='nan'
-
-                    if '-' in d_obj[i]:
-                        if '+' in d_obj[i]:
-                            #taking the mean value if it's an uncertainty
-                            d_obj[i]=float(d_obj[i].split('+')[0].split('-')[0])
-                        else:
-                            #taking the mean if it's an interval
-                            d_obj[i]=(float(d_obj[i].split('-')[0])+float(d_obj[i].split('-')[-1]))/2
-            
-            
-            #searching in the second catalog if nothing was found in the first one
-            if d_obj[i]=='nan':
-                if len(np.argwhere(ctl_watchdog_obj==names[i]))!=0:
-                    
-                    #watchdog assigns by default 5+-3 kpc to sources with no distance estimate so we need to check for that
-                    #(there is no source with an actual 5kpc distance)
-                    watchdog_d_val=float(ctl_watchdog[np.argwhere(ctl_watchdog_obj==names[i])[0][0]]['Dist1'])
-
-                    #these ones are false/outdated
-                    # here same, the lower limit quoted in WATCHDOG has been disproved in Charles19
-                    watchdog_d_exclu=['SwiftJ1357.2-0933']
-
-                    if names[i] not in watchdog_d_exclu and watchdog_d_val not in [5.,8.]:
-
-                        print('New measurement found in WATCHDOG, not found in the biblio. Please check.')
-                        breakpoint()
-                        d_obj[i]=watchdog_d_val
-                        
-        if d_obj[i]=='nan':
-            #giving a default value of 8kpc to the objects for which we do not have good distance measurements
-            d_obj[i]=8
-
-        else:
-            d_obj[i]=float(d_obj[i])
-
-        #fixing the source mass at 8 solar Masses if not in the local list since we have very few reliable estimates
-        # of the BH masses anyway except for NS whose masses are in a dictionnary
-        if names[i] in mass_dict and (mass_dict[names[i]][3]==1 or use_unsure_mass_dist):
-            m_obj[i]=mass_dict[names[i]][0]
-        else:
-            m_obj[i]=8
-    
     return d_obj,m_obj
 
 #@st.cache_data

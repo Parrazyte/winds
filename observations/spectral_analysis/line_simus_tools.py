@@ -10,45 +10,54 @@ from fitting_tools import sign_sigmas_delchi_1dof
 #custom script with a few shorter xspec commands
 from xspec_config_multisp import allmodel_data,model_load,addcomp,Pset,Pnull,rescale,reset,Plot_screen,store_plot,freeze,allfreeze,unfreeze,\
                          calc_error,delcomp,fitmod,calc_fit,xcolors_grp,xPlot,xscorpeon,catch_model_str,\
-                         load_fitmod, ignore_data_indiv,par_degroup,xspec_globcomps,is_abs,lines_e_dict,calc_EW
-
+                         load_fitmod, ignore_data_indiv,par_degroup,xspec_globcomps,is_abs,lines_e_dict,calc_EW,set_ener
 reset()
 Fit.query='yes'
 Plot.xLog=False
 
-rmf_abv = {'XRISM_Hp': '/media/parrama/SSD/Observ/highres/XRISM_responses/rsl_Hp_5eV.rmf',
-           'XRISM_Mp': '/media/parrama/SSD/Observ/highres/XRISM_responses/rsl_Mp_6eV.rmf',
-           'XRISM_Lp': '/media/parrama/SSD/Observ/highres/XRISM_responses/rsl_Lp_18eV.rmf',
-        'PN_Timing': '/media/parrama/SSD/Observ/highres/linedet_compa/resp_XMM/Timing/0670672901_pn_S003_Timing_auto.rmf',
-        'heg_graded_-1':'/media/parrama/SSD/Observ/highres/linedet_compa/resp_Chandra/graded/13716_heg_-1.rmf',
-         'heg_graded_1':'/media/parrama/SSD/Observ/highres/linedet_compa/resp_Chandra/graded/13716_heg_1.rmf'}
+rmf_abv = {'XRISM_Hp_AO2': '/media/parrama/crucial_SSD/Observ/BHLMXB/XRISM/Simu/rsl_Hp_L_2025.rmf',
+            'XRISM_Hp_AO1': '/media/parrama/crucial_SSD/Observ/highres/XRISM_responses/rsl_Hp_5eV.rmf',
+           'XRISM_Mp': '/media/parrama/crucial_SSD/Observ/highres/XRISM_responses/rsl_Mp_6eV.rmf',
+           'XRISM_Lp': '/media/parrama/crucial_SSD/Observ/highres/XRISM_responses/rsl_Lp_18eV.rmf',
+        'PN_Timing': '/media/parrama/crucial_SSD/Observ/highres/linedet_compa/AO2/resp_XMM/Timing/0670672901_pn_S003_Timing_auto.rmf',
+        'heg_graded_-1':'/media/parrama/crucial_SSD/Observ/highres/linedet_compa/AO2/resp_Chandra/graded/13716_heg_-1.rmf',
+         'heg_graded_1':'/media/parrama/crucial_SSD/Observ/highres/linedet_compa/AO2/resp_Chandra/graded/13716_heg_1.rmf'}
 
 rmf_abv_list = list(rmf_abv.keys())
 
-arf_abv = {'XRISM_pointsource_GVclosed': '/media/parrama/SSD/Observ/highres/XRISM_responses/rsl_pointsource_GVclosed.arf',
-           'XRISM_pointsource_off_GVclosed': '/media/parrama/SSD/Observ/highres/XRISM_responses/rsl_pointsource_off_GVclosed.arf',
-           'PN_Timing': '/media/parrama/SSD/Observ/highres/linedet_compa/resp_XMM/Timing/0670672901_pn_S003_Timing_auto.arf',
-           'heg_graded_-1': '/media/parrama/SSD/Observ/highres/linedet_compa/resp_Chandra/graded/13716_heg_-1.arf',
-           'heg_graded_1': '/media/parrama/SSD/Observ/highres/linedet_compa/resp_Chandra/graded/13716_heg_1.arf'}
+arf_abv = {'XRISM_pointsource_GVclosed_AO2':'/media/parrama/crucial_SSD/Observ/BHLMXB/XRISM/Simu/rsl_pntsrc_GVC_2025.arf',
+           'XRISM_pointsource_GVclosed_AO1': '/media/parrama/crucial_SSD/Observ/highres/XRISM_responses/rsl_pointsource_GVclosed.arf',
+           'XRISM_pointsource_off_GVclosed': '/media/parrama/crucial_SSD/Observ/highres/XRISM_responses/rsl_pointsource_off_GVclosed.arf',
+           'PN_Timing': '/media/parrama/crucial_SSD/Observ/highres/linedet_compa/AO2/resp_XMM/Timing/0670672901_pn_S003_Timing_auto.arf',
+           'heg_graded_-1': '/media/parrama/crucial_SSD/Observ/highres/linedet_compa/AO2/resp_Chandra/graded/13716_heg_-1.arf',
+           'heg_graded_1': '/media/parrama/crucial_SSD/Observ/highres/linedet_compa/AO2/resp_Chandra/graded/13716_heg_1.arf'}
 
 
 arf_abv_list = list(arf_abv.keys())
 
 
-#line_simu('test_SED.xcm',mode='bshift_err',rmf_path='XRISM_Hp',arf_path='XRISM_pointsource_GVclosed',chatter=0,n_iter=10)
+#line_simu('test_SED.xcm',mode='ew_lim',rmf_path='XRISM_Hp_AO2',
+#                          arf_path='XRISM_pointsource_GVclosed_AO2',expos=50,
+#                           line='FeKa26abs',
+#                          chatter=0,n_iter=10)
+
+#line_simu('test_SED.xcm',mode='bshift_err',rmf_path='XRISM_Hp_AO2',arf_path='XRISM_pointsource_GVclosed',chatter=0,n_iter=10)
 
 #line_simu('test_SED.xcm',mode='bshift_err',rmf_path='PN_Timing',arf_path='PN_Timing',chatter=0,n_iter=100)
-#line_simu('test_SED.xcm',mode='bshift_err',rmf_path=['heg_graded_-1','heg_graded_1'],arf_path=['heg_graded_-1','heg_graded_1'])
+#line_simu('test_SED.xcm',mode='bshift_err',rmf_path=['heg_graded_-1','heg_graded_1'],arf_path=['heg_graded_-1','heg_graded_1'],
+# ,n_iter=100)
 
 
-def line_simu(mod_path=None,mode='ew_lim',rmf_path='XRISM_Hp',arf_path='XRISM_pointsource_GVclosed',
-              expos=50,flux_range='1_100_20',chatter=1,
-              regroup=False,fakestats=True,n_iter=10,
+def line_simu(outdir='./',mod_path=None,mode='ew_lim',rmf_path='XRISM_Hp_AO2',arf_path='XRISM_pointsource_GVclosed_AO2',
+              expos=50,flux_range='1_100_10',chatter=1,
+              regroup=False,fakestats=True,n_iter=10,set_ener_data=False,
               line='FeKa26abs',line_v=[-3000,3000],line_w=[0.005,0.005],
               width_test_val=0.005,width_EW_resol=0.05,width_EW_inter=[0.1,100],
               EW_bshift_lim=20,width_bshift_val=0.005,sampl_gabs_string='-3_2_500'):
 
     '''
+    REGROUP IS OUTDATED
+
     Computes simulations of line detection with given rmf and paths
 
     Note that
@@ -64,7 +73,8 @@ def line_simu(mod_path=None,mode='ew_lim',rmf_path='XRISM_Hp',arf_path='XRISM_po
 
         -rmf_path/arf_path: rmf/arf to use for the fakes. must be an absolute path. available shortcuts:
             rmf_path:
-                'XRISM_Hp': rsl_Hp_5eV.rmf
+                'XRISM_Hp_AO2': rsl_Hp_5eV.rmf from AO2
+                'XRISM_Hp_AO1': rsl_Hp_5eV.rmf from AO1
                 'XRISM_Mp': rsl_Mp_6eV.rmf
                 'XRISM_Lp': rsl_Lp_18eV.rmf
                 'PN_Timing': 0670672901_pn_S003_Timing_auto.rmf
@@ -72,7 +82,10 @@ def line_simu(mod_path=None,mode='ew_lim',rmf_path='XRISM_Hp',arf_path='XRISM_po
                 'heg_graded_1': 13716_heg_1.rmf
 
             arf_path:
-                'XRISM_pointsource_GVclosed'        rsl_pointsource_GVclosed.arf
+
+                'XRISM_pointsource_GVclosed_AO2'        rsl_pointsource_GVclosed.arf from AO2
+                'XRISM_pointsource_GVclosed_AO1'        rsl_pointsource_GVclosed.arf from AO1
+
                 'XRISM_pointsource_off_GVclosed'    rsl_pointsource_off_GVclosed.arf
                 'PN_Timing'                         0670672901_pn_S003_Timing_auto.arf
                 'heg_graded_-1': 13716_heg_-1.arf
@@ -131,6 +144,13 @@ def line_simu(mod_path=None,mode='ew_lim',rmf_path='XRISM_Hp',arf_path='XRISM_po
 
     AllData.clear()
 
+    if outdir is not None:
+        os.system('mkdir -p '+outdir)
+    if mod_path is not None:
+        os.system('cp '+mod_path+' '+outdir)
+
+    os.chdir(outdir)
+
     #here we assume that the elements are the same size
 
     rmf_path_use=[]
@@ -145,16 +165,16 @@ def line_simu(mod_path=None,mode='ew_lim',rmf_path='XRISM_Hp',arf_path='XRISM_po
 
     for elem_rmf, elem_arf in zip(rmf_path_list,arf_path_list):
         if elem_rmf in rmf_abv_list:
-            rmf_path_use+=[os.path.relpath(rmf_abv[elem_rmf])]
+            rmf_path_use+=[rmf_abv[elem_rmf]]
         else:
             rmf_path_use+=[elem_rmf]
 
         if elem_arf in arf_abv_list:
-            arf_path_use+=[os.path.relpath(arf_abv[elem_arf])]
+            arf_path_use+=[arf_abv[elem_arf]]
         else:
             arf_path_use+=[elem_arf]
 
-    logfile_write=Xset.openLog('line_simu.log')
+    logfile_write=Xset.openLog('line_simu'+mode+'.log')
     #ensuring the log information gets in the correct place in the log file by forcing line to line buffering
     logfile_write.reconfigure(line_buffering=True)
 
@@ -186,7 +206,7 @@ def line_simu(mod_path=None,mode='ew_lim',rmf_path='XRISM_Hp',arf_path='XRISM_po
 
     fakeset = [FakeitSettings(response=elem_rmf,arf=elem_arf,exposure=expos*1000,
                               background='',
-                              fileName='temp_sp_'+str(i_grp+1)+'.pi') for i_grp,(elem_rmf,elem_arf) in\
+                              fileName='temp_sp_'+mode+'_'+str(i_grp+1)+'.pi') for i_grp,(elem_rmf,elem_arf) in\
                                 enumerate(zip(rmf_path_use,arf_path_use))]
 
     #creating a bash process to run ftgrouppha on the fake spectra
@@ -246,6 +266,9 @@ def line_simu(mod_path=None,mode='ew_lim',rmf_path='XRISM_Hp',arf_path='XRISM_po
                     AllData.ignore('**-2. 10.-**')
                     AllData.ignore('bad')
 
+                    if set_ener_data:
+                        set_ener('thcomp', xrism=True)
+
                     for i_grp in range(1,AllData.nGroups+1):
                         AllData(i_grp).response.arf=arf_path_use[i_grp-1]
 
@@ -302,13 +325,13 @@ def line_simu(mod_path=None,mode='ew_lim',rmf_path='XRISM_Hp',arf_path='XRISM_po
 
                     #and computing the eqwidth of the best fit in the interval
                     try:
-                        AllModels.eqwidth(int(comp_num[-1]), err=True, number=1000, level=68)
+                        AllModels.eqwidth(int(comp_num[-1]), err=True, number=1000, level=68.3)
                     except:
                         #this means both of the parameters are unconstrained and pegged
                         #thus here we fix the blueshift and rerun the eqwidth test
                         AllModels(1)(comp_par[0]).frozen=True
                         calc_fit()
-                        AllModels.eqwidth(int(comp_num[-1]), err=True, number=1000, level=68)
+                        AllModels.eqwidth(int(comp_num[-1]), err=True, number=1000, level=68.3)
 
                     ew_lim_distrib[0][i_iter]=-AllData(1).eqwidth[1]*1e3
 
@@ -343,8 +366,10 @@ def line_simu(mod_path=None,mode='ew_lim',rmf_path='XRISM_Hp',arf_path='XRISM_po
                    ('_nostat' if not fakestats else '')+
                     '_'+str(expos)+'ks'+
                    '_'+str(n_iter)+'_iter'+
+                   '_line_' + str(line) +
                    '_flux_' + flux_range +
-                   '_width_'+str(line_w[0])+'_'+str(line_w[1])+'.txt',save_arr,header='\n'.join(header_elems))
+                   '_width_'+str(line_w[0])+
+                   '_'+str(line_w[1])+'.txt',save_arr,header='\n'.join(header_elems))
 
         Xset.chatter=old_chatter
 
@@ -639,7 +664,7 @@ def line_simu(mod_path=None,mode='ew_lim',rmf_path='XRISM_Hp',arf_path='XRISM_po
                       'Fake stats '+str(fakestats),
                       'n_iter '+str(n_iter),
                       'flux_range logspace('+flux_range+') (e-10 erg/s/cm²) ',
-                      'line '+line,'line_EW '+str(EW_bshift_lim)+' (km/s)','line_w '+str(width_bshift_val)+' (keV)',
+                      'line '+line,'line_EW '+str(EW_bshift_lim)+' (eV)','line_w '+str(width_bshift_val)+' (keV)',
                       'columns: flux | bshift_limit at 1/2/3 sigma (eV)']
 
         np.savetxt('bshift_err_mod'+
@@ -648,6 +673,7 @@ def line_simu(mod_path=None,mode='ew_lim',rmf_path='XRISM_Hp',arf_path='XRISM_po
                    '_' + str(expos) + 'ks' +
                    '_'+str(n_iter)+'_iter'+
                    '_flux_'+flux_range+
+                   '_line_'+str(line)+
                    '_EW_'+str(EW_bshift_lim)+
                    '_width_'+str(width_bshift_val)+'.txt',save_arr,header='\n'.join(header_elems))
 
@@ -767,6 +793,9 @@ def line_simu(mod_path=None,mode='ew_lim',rmf_path='XRISM_Hp',arf_path='XRISM_po
 
                     AllData.ignore('**-2. 10.-**')
                     AllData.ignore('bad')
+
+                    if set_ener_data:
+                        set_ener('thcomp', xrism=True)
 
                     for i_grp in range(1, AllData.nGroups + 1):
                         AllData(i_grp).response.arf = arf_path_use[i_grp - 1]

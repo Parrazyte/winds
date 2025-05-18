@@ -24,6 +24,8 @@ import streamlit as st
 
 import matplotlib as mpl
 import matplotlib.pyplot as plt
+from datetime import datetime
+
 import streamlit.components.v1
 
 #disabling the warning for many open figures because that's exactly the point of the code
@@ -697,10 +699,22 @@ if multi_obj:
     if display_multi:
         restrict_sources_detection=st.sidebar.toggle('Restrict to sources with significant detection')
         ####source with det restriction done manually as of now, should be changed
-        
+
+        #'SwiftJ1727.8-1613' is outside of the main sample
+        choice_sources_AO2=['4U1543-475', 'GRS1716-249', 'GX339-4','MAXIJ1348-630',
+                            'SwiftJ1357.2-0933','XTEJ1650-500']
+        if not online:
+            restrict_sources_AO2=st.sidebar.toggle('Restrict to AO2 mid inclined prop sources')
+        else:
+            restrict_sources_AO2=False
+
     if display_multi:
         with st.sidebar.expander('Source'):
-            choice_source=st.multiselect('',options=[elem for elem in obj_list if elem in sources_det_dic] if restrict_sources_detection else obj_list,default=[elem for elem in obj_list if elem in sources_det_dic] if restrict_sources_detection else obj_list)     
+            choice_source=st.multiselect('',options= choice_sources_AO2 if restrict_sources_AO2 else\
+                    [elem for elem in obj_list if elem in sources_det_dic] \
+                        if restrict_sources_detection else obj_list,
+                    default=choice_sources_AO2 if restrict_sources_AO2 else [elem for elem in obj_list if elem in sources_det_dic] if restrict_sources_detection \
+                        else obj_list)
 
     if display_single:
         #switching to array to keep the same syntax later on
@@ -1356,7 +1370,7 @@ elif radio_zoom_hid=='manual bounds':
 
     values_zoom_hr=st.sidebar.select_slider('Displayed HR range',options=np.logspace(-2,1,num=100),
                                             value=[0.1,2.0092330025650478],format_func=format_slider)
-    values_zoom_lum = st.sidebar.select_slider('Displayed luminosity range', options=np.logspace(-5,0,num=100),
+    values_zoom_lum = st.sidebar.select_slider('Displayed luminosity range', options=np.logspace(-5,1,num=121),
                                         value=[1e-5, 1.],format_func=format_slider)
     zoom_hid=[values_zoom_hr,values_zoom_lum]
 
@@ -1626,8 +1640,7 @@ if restrict_time:
         manual_date_vals=st.toggle('Manual Date bounds')
 
         if manual_date_vals:
-
-            man_min_date_val = st.date_input('Minimum date', value=None)
+            man_min_date_val = st.date_input('Minimum date', min_value=datetime(1990,1,1))
             time_min_date_val=slider_date_coarse[0] if man_min_date_val is None else Time(man_min_date_val.isoformat()).datetime
             man_max_date_val = st.date_input('Maximum date', value=None)
             time_max_date_val=slider_date_coarse[1] if man_max_date_val is None else Time(man_max_date_val.isoformat()).datetime
@@ -2425,24 +2438,42 @@ with tab_add_data:
                 'than the ones in the Source Table')
         df_HLD_points_LEdd = pd.DataFrame(
             [
-                {"ObsID": '', "Date (UTC)": None, "Telescope": '', "L_3-10/L_Edd": 0., "HR_[6-10]/[3-6]": 0.,
+                { 'obscured': False,
+                  'color': '',
+                  "Source":'',
+                 "ObsID": '',
+                 "Date (UTC)": None,
+                 "Telescope": '',
+                 "L_3-10/L_Edd": 0.,
+                 "HR_[6-10]/[3-6]": 0.,
                  'HR_[15-50]/[3-6]': 0.,
-                 'color': ''},
+                },
             ]
         )
 
         additional_HLD_points_LEdd = st.data_editor(
             df_HLD_points_LEdd,
             column_config={
+                "obscured": st.column_config.CheckboxColumn(
+                    "obscured",
+                    help="Boolean for the source being obscured (will use a special marker)",
+                    pinned=True),
+                "color": st.column_config.TextColumn(
+                    "color",
+                    help="Color for the display",
+                    pinned=True),
+                "Source": st.column_config.TextColumn(
+                    "Source",
+                    help="Source observed, for Eddington factor identification",pinned=True ),
                 "ObsID": st.column_config.TextColumn(
                     "ObsID",
-                    help="Mostly for avoiding confusion",),
+                    help="Mostly for avoiding confusion",pinned=True),
                 "Date (UTC)": st.column_config.DatetimeColumn(
                     "Date (UTC)",
-                    help="Date of the observation in UTC format"),
+                    help="Date of the observation in UTC format",pinned=True),
                 "Telescope": st.column_config.TextColumn(
                     "Telescope",
-                    help="Instrument taking the observation",),
+                    help="Instrument taking the observation",pinned=True),
                 "L_3-10/L_Edd": st.column_config.NumberColumn(
                     "3-10 keV Eddington ratio",
                     help="",
@@ -2455,47 +2486,62 @@ with tab_add_data:
                     "[15-50]/[3-6] keV HR",
                     help="",
                     format="%.3e",),
-                "color": st.column_config.TextColumn(
-                    "Color for the display",
-                    help="Mostly for avoiding confusion", ),
 
             },
             hide_index=True,num_rows="dynamic")
 
-    df_HLD_points_flux = pd.DataFrame(
-        [
-            {"Source":'',
-             "ObsID":'', "Date (UTC)":None,"Telescope": '',
-             "flux_1-2": 0.,
-             "flux_2-3": 0.,
-             "flux_3-4": 0.,
-             "flux_4-5": 0.,
-             "flux_5-6": 0.,
-             "flux_6-7": 0.,
-             "flux_7-8": 0.,
-             "flux_8-9": 0.,
-             "flux_9-10": 0.,
-             'color':''},
-        ]
-    )
+        plot_HLD_points_LEdd=st.toggle('Plot these additional points in HLD graphs',value=True)
+        if not plot_HLD_points_LEdd:
+            additional_HLD_points_LEdd=df_HLD_points_LEdd
+
+
 
     with st.expander('New points in flux units'):
+        st.info('Here the 15-50 keV flux is extrapolated from the BAT monitoring using the dates of the observations')
+
+        df_HLD_points_flux = pd.DataFrame(
+            [
+                {
+                    'obscured': False,
+                    'color': '',
+                    "Source": '',
+                 "ObsID": '', "Date (UTC)": None, "Telescope": '',
+                 "flux_1-2": 0.,
+                 "flux_2-3": 0.,
+                 "flux_3-4": 0.,
+                 "flux_4-5": 0.,
+                 "flux_5-6": 0.,
+                 "flux_6-7": 0.,
+                 "flux_7-8": 0.,
+                 "flux_8-9": 0.,
+                 "flux_9-10": 0.,
+                },
+            ]
+        )
 
         additional_HLD_points_flux = st.data_editor(
             df_HLD_points_flux,
             column_config={
+                "obscured": st.column_config.CheckboxColumn(
+                    "obscured",
+                    help="Boolean for the source being obscured (will give a special marker)",
+                    pinned=True),
+                "color": st.column_config.TextColumn(
+                    "color",
+                    help="Color for the display",
+                    pinned=True),
                 "Source": st.column_config.TextColumn(
                     "Source",
-                    help="Source observed, for Eddington factor identification", ),
+                    help="Source observed, for Eddington factor identification", pinned=True ),
                 "ObsID": st.column_config.TextColumn(
                     "ObsID",
-                    help="Mostly for avoiding confusion",),
+                    help="Mostly for avoiding confusion", pinned=True ),
                 "Date (UTC)": st.column_config.DatetimeColumn(
                     "Date (UTC)",
-                    help="Date of the observation in UTC format"),
+                    help="Date of the observation in UTC format", pinned=True ),
                 "Telescope": st.column_config.TextColumn(
                     "Telescope",
-                    help="Instrument taking the observation",),
+                    help="Instrument taking the observation", pinned=True ),
                 "flux_1-2": st.column_config.NumberColumn(
                     "flux_1-2keV",
                     help="1-2 keV flux in cgs units",
@@ -2532,12 +2578,14 @@ with tab_add_data:
                     "flux_9-10keV",
                     help="9-10 keV flux in cgs units",
                     format="%.3e"),
-                "color": st.column_config.TextColumn(
-                    "color",
-                    help="Color for the display", ),
 
             },
             hide_index=True,num_rows="dynamic")
+
+        plot_HLD_points_flux=st.toggle('Plot these additional points in HLD graphs',value=True,
+                                       key='plot_HLD_points_flux')
+        if not plot_HLD_points_flux:
+            additional_HLD_points_flux=df_HLD_points_flux
 
     with st.expander('Line parameters of new points'):
 
@@ -2547,6 +2595,8 @@ with tab_add_data:
                  "ObsID": '', "Date (UTC)": None, "Telescope": '',
                  "EW_FeKa25": 0.,
                  "EW_FeKa26": 0.,
+                 "EW_FeKa25_UL": 0.,
+                 "EW_FeKa26_UL": 0.,
                  "vshift_FeKa25": 0.,
                  "vshift_FeKa26": 0.,
                  "EW_FeKa25_err-": 0.,
@@ -2635,8 +2685,10 @@ with tab_add_data:
             },
             hide_index=True,num_rows="dynamic")
 
-    # favorite_command = edited_df.loc[edited_df["rating"].idxmax()]["command"]
-    # st.markdown(f"Your favorite command is **{favorite_command}** 🎈")
+        plot_HLD_points_line=st.toggle('Plot these line properties in HLD graphs',value=True)
+        if not plot_HLD_points_line:
+            additional_line_points=df_line_points
+
 
 #necessary items for the hid graph run
 items_list=[
@@ -2677,10 +2729,28 @@ dict_linevis['additional_HLD_points_LEdd']=additional_HLD_points_LEdd
 dict_linevis['additional_HLD_points_flux']=additional_HLD_points_flux
 dict_linevis['additional_line_points']=additional_line_points
 
+#testing which type of points remains
+base_sample_points_bool=True
 
 if len(global_plotted_datetime)==0:
-    st.warning('No points remaining with current sample/date selection')
-elif not skip_HID:
+    st.warning('No sample points remaining with current subsample/date selection')
+    base_sample_points_bool=False
+
+dict_linevis['base_sample_points_bool']=base_sample_points_bool
+
+#testing if any valid coordinates remain for additional LEdd points
+additional_LEdd_points_coords=np.array(additional_HLD_points_LEdd[['L_3-10/L_Edd','HR_[6-10]/[3-6]']])
+additional_LEdd_points_bool=np.array([[subelem not in [0.,None] for subelem in elem] for elem in
+                                      additional_LEdd_points_coords]).all(1).any()
+
+#testing if any valid coordinates remain for additional flux points
+additional_flux_points_coords=np.array(additional_HLD_points_flux[additional_HLD_points_flux.columns[4:13]])
+additional_flux_points_bool=np.array([[subelem not in [0.,None] for subelem in elem] for elem in
+                                      additional_flux_points_coords]).all(1).any()
+
+any_points_bool=base_sample_points_bool or additional_LEdd_points_bool or additional_flux_points_bool
+
+if any_points_bool and not skip_HID:
     hid_graph(ax_hid,dict_linevis,
               display_single=display_single, display_nondet=display_nondet, display_upper=display_upper,
               cyclic_cmap_nondet=cyclic_cmap_nondet, cyclic_cmap_det=cyclic_cmap_det, cyclic_cmap=cyclic_cmap,

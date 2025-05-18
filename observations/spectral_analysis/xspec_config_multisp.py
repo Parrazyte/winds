@@ -52,7 +52,7 @@ else:
     model_dir=None
 # custom model loads
 if not streamlit_mode and model_dir!=None:
-    # AllModels.lmod('relxill',dirPath=model_dir+'/relxill')
+    AllModels.lmod('relxill',dirPath=model_dir+'/relxill')
     # AllModels.lmod('fullkerr',dirPath=model_dir+'/fullkerr')
     # #swiftJ1658 dust scattering halo model from Jin2019
     #
@@ -77,7 +77,7 @@ if not streamlit_mode and model_dir!=None:
     # 6: NuSTAR / FPMB
     pass
 
-AllModels.mdefine('crabcorr (1./E^dGamma)crabcorrNorm : mul')
+# AllModels.mdefine('crabcorr (1./E^dGamma)crabcorrNorm : mul')
 
 #example of model loading
 # AllModels.initpackage('tbnew_mod',"lmodel_tbnew.dat",dirPath=model_dir+'/tbnew')
@@ -6161,7 +6161,7 @@ class fitcomp_line(fitcomp):
 
         return ew_arr
 
-    def get_ew_ul(self,bshift_range,line_width=0,pre_delete=False,ul_level=99.7):
+    def get_ew_ul(self,bshift_range,line_width=0,pre_delete=False,ul_level=99.7,n_ul_comp=101):
 
         '''
         Note : we compute the ew ul from the first data group
@@ -6183,10 +6183,10 @@ class fitcomp_line(fitcomp):
         Xset.logChatter=5
 
         if type(bshift_range) not in (list,np.ndarray):
-            #skipping interval computations when a precise value for the EQW is provided
+            #skipping interval computations when a precise value for the space is provided
             bshift_space=bshift_range
         else:
-            bshift_space=np.linspace(-bshift_range[1],-bshift_range[0],101)
+            bshift_space=np.linspace(-bshift_range[1],-bshift_range[0],n_ul_comp)
 
 
         with tqdm(total=len(bshift_space)) as pbar:

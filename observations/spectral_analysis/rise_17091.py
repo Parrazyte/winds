@@ -21,8 +21,9 @@ def swift_loader_mela(obs_number):
     AllData(2).response.arf = 'Obs_'+obs_number+'pc.arf'
     AllData(2).background = 'Obs_'+obs_number+'pcback.pi'
 
-def sp_anal(obs_path,mod='powerlaw',baseload=False,obj='',scorpeon=True,overwrite=False,
-            outdir='s_a',absval=None):
+def sp_anal(obs_path,mod='powerlaw',baseload=False,model_load=False,obj='',scorpeon=True,overwrite=False,
+            outdir='s_a',absval=None,set_ener_str=None,set_ener_xrism=False,line_ul='',freeze_cont_ul=True,
+            bshift_range_ul=[-3000,3000],ul_level=99.7,n_ul_comp=101,ul_ener_range=[6.5,7.5]):
 
     plt.ioff()
 
@@ -41,18 +42,24 @@ def sp_anal(obs_path,mod='powerlaw',baseload=False,obj='',scorpeon=True,overwrit
     AllData.clear()
     AllModels.clear()
 
-    if baseload:
+    if model_load:
         Xset.restore(obs_path)
+        if set_ener_str is not None:
+            set_ener(set_ener_str,xrism=set_ener_xrism)
+
         obs=AllData(1).fileName
 
+    elif baseload:
+        Xset.restore(obs_path)
+        obs=AllData(1).fileName
         AllModels.clear()
-
     else:
         AllData('1:1 '+obs_path)
         obs=obs_path
 
-    AllData.ignore('**-0.3 10.-**')
-    #file infos
+    if not model_load:
+        AllData.ignore('**-0.3 10.-**')
+        #file infos
 
     with fits.open(obs) as hdul:
         telescope=hdul[1].header['TELESCOP']
@@ -66,7 +73,7 @@ def sp_anal(obs_path,mod='powerlaw',baseload=False,obj='',scorpeon=True,overwrit
 
             obs_start=obs_start.isot
 
-        elif telescope=='SWIFT':
+        else:
             try:
                 obs_start = hdul[0].header['DATE-OBS']
             except:
@@ -75,72 +82,73 @@ def sp_anal(obs_path,mod='powerlaw',baseload=False,obj='',scorpeon=True,overwrit
                 except:
                     obs_start = Time(hdul[1].header['MJDSTART'], format='mjd').isot
 
-
-    if telescope=='NICER' and scorpeon:
-        xscorpeon.load('auto',frozen=True)
-
-        if os.path.isfile(os.path.join(outdir,obs.split('.')[0]+'_baseload.xcm')):
-            os.remove(os.path.join(outdir,obs.split('.')[0]+'_baseload.xcm'))
-
-        Xset.save(os.path.join(outdir,obs.split('.')[0]+'_baseload.xcm'))
-
-    if mod=='thcont':
-        mod_list=['cont_diskbb', 'disk_thcomp', 'glob_TBfeo']
-    elif mod=="powerlaw":
-        mod_list=['powerlaw', 'glob_TBfeo']
-
-
     logfile_write, logfile = xLog_rw(os.path.join(outdir,obs.split('.')[0]+'_xlog.log'))
 
+    if not model_load:
+        if telescope=='NICER' and scorpeon:
+            xscorpeon.load('auto',frozen=True)
 
-    fitlines_strong=fitmod(mod_list,logfile,logfile_write,
-                           absval=absval if absval is not None else
-                                    10.7 if '4U1630-47' in obj else 0.25 if obj=='V4641Sgr' else None)
+            if os.path.isfile(os.path.join(outdir,obs.split('.')[0]+'_baseload.xcm')):
+                os.remove(os.path.join(outdir,obs.split('.')[0]+'_baseload.xcm'))
 
-    fitlines_strong.add_allcomps(split_fit=False)
+            Xset.save(os.path.join(outdir,obs.split('.')[0]+'_baseload.xcm'))
 
-    if absval is not None:
-        AllModels(1).TBfeo.nH.values=absval
-        AllModels(1).TBfeo.nH.frozen=True
+        if mod=='thcont':
+            mod_list=['cont_diskbb', 'disk_thcomp', 'glob_TBfeo']
+        elif mod=="powerlaw":
+            mod_list=['powerlaw', 'glob_TBfeo']
 
-    # if obj=='4U1630-47' and abs:
-    #     AllModels(1).TBfeo.nH.values=10.7
-    #     AllModels(1).TBfeo.nH.frozen=True
 
-    if obj=='4U1630-47_lock':
-        # AllModels(1).TBfeo.nH.values=10.7
-        # AllModels(1).TBfeo.nH.frozen=True
-        AllModels(1).powerlaw.PhoIndex.values = 1.5
-        AllModels(1).powerlaw.PhoIndex.frozen=True
 
-    # if obj=='V4641Sgr':
-    #     AllModels(1).TBfeo.nH.values=0.25
-    #     AllModels(1).TBfeo.nH.frozen=True
 
-    if obj=='17091':
-        # AllModels(1).TBfeo.nH.values=1.537
-        # AllModels(1).TBfeo.nH.frozen=True
-        AllModels(1)(2).values=0.452
-        AllModels(1)(3).values=2.33
-    # AllModels(1)(2).frozen=False
-    # AllModels(1)(3).frozen=False
-    if mod=='thcont':
-        AllModels(1).diskbb.Tin.values=[1.,0.01,0.4,0.4,2.,2.]
+        fitlines_strong=fitmod(mod_list,logfile,logfile_write,
+                               absval=absval if absval is not None else
+                                        10.7 if '4U1630-47' in obj else 0.25 if obj=='V4641Sgr' else None)
 
-    Fit.perform()
-    try:
-        Fit.error('1-'+str(AllModels(1).nParameters))
-    except:
-        pass
+        fitlines_strong.add_allcomps(split_fit=False)
 
-    # if telescope=='NICER' and scorpeon:
-    #     xscorpeon.load('auto',frozen=False,fit_SAA_norm=True)
-    #
-    # Fit.perform()
-    # try:
-    #     calc_error(logfile)
-    # except:
-    #     pass
+        if absval is not None:
+            AllModels(1).TBfeo.nH.values=absval
+            AllModels(1).TBfeo.nH.frozen=True
+
+        # if obj=='4U1630-47' and abs:
+        #     AllModels(1).TBfeo.nH.values=10.7
+        #     AllModels(1).TBfeo.nH.frozen=True
+
+        if obj=='4U1630-47_lock':
+            # AllModels(1).TBfeo.nH.values=10.7
+            # AllModels(1).TBfeo.nH.frozen=True
+            AllModels(1).powerlaw.PhoIndex.values = 1.5
+            AllModels(1).powerlaw.PhoIndex.frozen=True
+
+        # if obj=='V4641Sgr':
+        #     AllModels(1).TBfeo.nH.values=0.25
+        #     AllModels(1).TBfeo.nH.frozen=True
+
+        if obj=='17091':
+            # AllModels(1).TBfeo.nH.values=1.537
+            # AllModels(1).TBfeo.nH.frozen=True
+            AllModels(1)(2).values=0.452
+            AllModels(1)(3).values=2.33
+        # AllModels(1)(2).frozen=False
+        # AllModels(1)(3).frozen=False
+        if mod=='thcont':
+            AllModels(1).diskbb.Tin.values=[1.,0.01,0.4,0.4,2.,2.]
+
+        Fit.perform()
+        try:
+            Fit.error('1-'+str(AllModels(1).nParameters))
+        except:
+            pass
+
+        # if telescope=='NICER' and scorpeon:
+        #     xscorpeon.load('auto',frozen=False,fit_SAA_norm=True)
+        #
+        # Fit.perform()
+        # try:
+        #     calc_error(logfile)
+        # except:
+        #     pass
 
     if os.path.isfile(os.path.join(outdir,obs.split('.')[0]+'_mod.xcm')):
         os.remove(os.path.join(outdir,obs.split('.')[0]+'_mod.xcm'))
@@ -181,7 +189,12 @@ def sp_anal(obs_path,mod='powerlaw',baseload=False,obj='',scorpeon=True,overwrit
 
     file_edit(path=infos_store_path, line_id=obs, line_data=line_str, header=line_store_header)
 
-    delcomp('TBfeo')
+    mod_withabs=allmodel_data()
+
+    if 'TBfeo' in AllModels(1).componentNames:
+        delcomp('TBfeo')
+    if 'TBabs' in AllModels(1).componentNames:
+        delcomp('TBabs')
 
     #computing the fluxes in different bands
     flux_arr=np.repeat(np.nan,9)
@@ -209,6 +222,40 @@ def sp_anal(obs_path,mod='powerlaw',baseload=False,obj='',scorpeon=True,overwrit
                         'flux_1-2\tflux_2-3\tflux_3-4\tflux_4-5\tflux_5-6\tflux_6-7\tflux_7-8\tflux_8-9\tflux_9-10\n'
 
     file_edit(path=infos_store_path, line_id=obs, line_data=line_str, header=line_store_header)
+
+    if line_ul!='':
+
+        mod_withabs.load()
+
+        if freeze_cont_ul:
+            allfreeze()
+
+        if ul_ener_range is not None:
+            AllData.ignore('**-'+str(ul_ener_range[0])+' '+str(ul_ener_range[1])+'-**')
+
+        res_ul=np.array([None]*len(line_ul.split('+')))
+
+        infos_store_path=os.path.join(outdir,'infos_line_deabs.txt')
+        line_str = obs + \
+                   '\t' +str(obs_start)+\
+                   '\t' + telescope
+
+        for i,elem_line in enumerate(line_ul.split('+')):
+
+            elem_line_comp=fitcomp_line(elem_line,logfile=logfile,logfile_write=logfile_write)
+
+            res_ul[i]=elem_line_comp.get_ew_ul(bshift_range=bshift_range_ul, line_width=5e-3, ul_level=ul_level,
+                                               n_ul_comp=n_ul_comp)
+
+            line_str+='\t%.4e' %res_ul[i]
+
+        line_str+='\n'
+
+        line_store_header = 'Observ_file\tt_start\ttelescope\t'+('\t'.join(line_ul.split('+')))+'\n'
+
+        file_edit(path=infos_store_path, line_id=obs, line_data=line_str, header=line_store_header)
+
+        mod_withabs.load()
 
 def NICER_run_all_sp(sort=False,reverse=False,mod='thcont'):
     sp_list=glob.glob('**_grp_opt.pha')

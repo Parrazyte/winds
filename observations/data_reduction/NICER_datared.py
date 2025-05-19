@@ -109,8 +109,9 @@ ap.add_argument('-parallel',help='number of processors for parallel directories'
                 default=1,type=bool)
 
 #global choices
-ap.add_argument("-a","--action",nargs='?',help='List which action(s) to run,separated by comas',
-                default = 'm,ml', type = str)
+ap.add_argument("-a","--action",nargs=1,help='List which action(s) to run,separated by comas',
+                default ='l', type = str)
+
 #default: fc,1,gti,fs,l,g,m,ml,c
 
 #note: should be kept to true for most complicated tasks
@@ -124,7 +125,7 @@ ap.add_argument('-folder_cont',nargs=1,help='skips all but the last 2 directorie
                 default=False,type=bool)
 
 ap.add_argument('-invert_subdirs',nargs=1,help='start the analysis from the subdirectories in reverse order',
-                default=False,type=bool)
+                default=True,type=bool)
 #note : we keep the previous 2 directories because bug or breaks can start actions on a directory following the initially stopped one
 
 #action specific overwrite
@@ -163,7 +164,7 @@ ap.add_argument('-erodedilate',nargs=1,help='Erodes increasingly more gtis aroun
 '''gti creation'''
 #keyword for split: split_timeinsec
 #note: split is broken in the new version, needs fixing
-ap.add_argument('-gti_split',nargs=1,help='GTI split method',default='orbit+flare+overdyn+underdyn',type=str)
+ap.add_argument('-gti_split',nargs=1,help='GTI split method',default='orbit+flare+overdyn+underdyn+HR_flare',type=str)
 ap.add_argument('-flare_method',nargs=1,help='Flare extraction method(s)',default='clip+peak',type=str)
 
 #previous version was with a SAS, tool, which required installing SAS. Now the default is NICER directly
@@ -198,7 +199,15 @@ ap.add_argument('-hard_flare_min_duration',nargs=1,help='minimum duration of a s
                 default=30)
 
 ap.add_argument('-erodedilate_hard_flare',nargs=1,
-                help='Erodes increasingly more gtis around the overshoot excluded intervals',
+                help='Erodes increasingly more gtis around the hard flare excluded intervals',
+                type=int,default=5)
+
+ap.add_argument('-gti_HR_threshold',nargs=1,
+                help='lower limit for the [8-12]/[2-8] HR ratio to remove flares',
+                type=float,default=0.1)
+
+ap.add_argument('-erodedilate_HR',nargs=1,
+                help='Erodes increasingly more gtis around the HR flare excluded intervals',
                 type=int,default=5)
 
 ap.add_argument('-overdyn_thresh',nargs=1,help='threshold between the two modes of overdyn filtering',
@@ -239,15 +248,17 @@ ap.add_argument('-int_split_bin',nargs=1,help='binning of the light curve used f
 
 ap.add_argument('-lc_bin_list',nargs=1,
                 help='A list of binnings with which to generate all lightcurces/HR evolutions (in s)',
-                default=[1.,0.01],type=list)
+                default=[1.,60.],type=list)
 #note: also defines the binning used for the gti definition
 
 # lc_bands_list_det=['1-2','2-3','3-4','4-5','5-6','6-7','7-8','8-9','9-10']
 
 lc_bands_list_det=['1-3','0.3-10.']
+#default='3-10'+','+','.join(lc_bands_list_det)
 ap.add_argument('-lc_bands_str',nargs=1,help='Gives the list of bands to create lightcurves from',
-                default='3-10'+','+','.join(lc_bands_list_det),type=str)
-ap.add_argument('-hr_bands_str',nargs=1,help='Gives the list of bands to create hrsfrom',default='6-10/3-6',type=str)
+                default=','.join(lc_bands_list_det),type=str)
+
+ap.add_argument('-hr_bands_str',nargs=1,help='Gives the list of bands to create hrs from',default='6-10/3-6',type=str)
 
 ap.add_argument('-skip_merge_lc',nargs=1,help='Skip merge GTIs for lightcurve computations',default=True,type=bool)
 '''spectra'''
@@ -327,6 +338,8 @@ gti_split=args.gti_split
 gti_lc_band=args.gti_lc_band
 flare_method=args.flare_method
 add_merge_gti=args.add_merge_gti
+gti_HR_threshold=args.gti_HR_threshold
+erodedilate_HR=args.erodedilate_HR
 
 gti_tool=args.gti_tool
 
@@ -557,6 +570,7 @@ def plot_event_diag(mode,obs_start_str,time_obs,id_gti_orbit,
                     id_gti=None,id_flares=None,id_overcut=None,
                     id_undercut=None,
                     id_hard_flares=None,
+                    id_HR_flares=None,
                     gti_nimkt_arr=None,split_arg=None,split_gti_arr=None,
                     orbit_cut_times=None):
     
@@ -672,6 +686,13 @@ def plot_event_diag(mode,obs_start_str,time_obs,id_gti_orbit,
                                 alpha=0.2,
                                 label='hard flare gtis' if id_inter == 0 else '')
 
+    if id_HR_flares is not None:
+
+        for id_inter, list_inter in enumerate(list(interval_extract(id_HR_flares))):
+            ax_rigidity.axvspan(time_obs[min(list_inter)] - 1 / 2, time_obs[max(list_inter)] + 1 / 2, color='purple',
+                                alpha=0.2,
+                                label='HR flare gtis' if id_inter == 0 else '')
+
     # computing the non-gti intervals from nimaketime
     id_nongti_nimkt = []
 
@@ -764,7 +785,7 @@ def plot_event_diag(mode,obs_start_str,time_obs,id_gti_orbit,
 
         plt.close()
     
-def create_gtis(directory,split_arg='orbit+flare+overdyn+underdyn',band='3-15',flare_method='clip+peak',
+def create_gtis(directory,split_arg='orbit+flare+overdyn+underdyn+HR_flare',band='3-15',flare_method='clip+peak',
                 clip_method='median',
                 clip_sigma=2.,clip_band='8-12',peak_score_thresh=2.,
                 int_split_band='0.3-10.',int_split_bin=0.1,clip_int_delta=True,
@@ -783,6 +804,9 @@ def create_gtis(directory,split_arg='orbit+flare+overdyn+underdyn',band='3-15',f
                 #for underdyn_method=gradient
                 underdyn_jump_width=10,underdyn_jump_factor=5,
 
+                #for HR
+                HR_threshold=0.1,erodedilate_HR=5,
+
                 day_mode='both',thread=None,add_merge_gti=True,parallel=False):
     '''
     wrapper for a function to split nicer obsids into indivudal portions with different methods
@@ -800,6 +824,10 @@ def create_gtis(directory,split_arg='orbit+flare+overdyn+underdyn',band='3-15',f
         -flare: isolates background flare periods in each observation from the main data
                 GTI naming: obsid-XXXFYYY
 
+
+        -HR_flare: filters observations with unrealistically high HR in the 8-12/2-8 keV band
+                    HR_threshold: sets the lower limit for the filtering criteria
+                    erodedilate_HR: number of s of eroding on each side above the flaring gtis
 
         -overdyn: dynamically filters high overshoot regions by comparing the 0.35-8keV count rate and the overhsoot rate
 
@@ -1615,8 +1643,50 @@ def create_gtis(directory,split_arg='orbit+flare+overdyn+underdyn',band='3-15',f
                             split_gti_arr[i_orbit][i_split] = [elem for elem in split_gti_arr[i_orbit][i_split] \
                                                                if elem not in id_over_orbit_eroded]
 
-            id_hard_flares=np.array([None] * n_orbit)
+            id_HR_flares=np.array([None] * n_orbit)
 
+            if 'HR' in split_arg:
+
+                for i_orbit, (elem_gti_orbit,id_nongti_nimkt_orbit) in enumerate(zip(id_gti,id_nongti_nimkt)):
+
+                    # note that here we're only filtering what's not in the flares
+
+                    # we cut with different criteria for high and low bg rates to have better filtering
+                    #we only filter when the 2_8 count rate per FPM is above 0.2 to avoid issues with high uncertainties
+                    #at low count rates
+                    mask_HR_thresh = (counts_8_12[elem_gti_orbit]/counts_2_8[elem_gti_orbit] >= HR_threshold)\
+                                    & (counts_8_12[elem_gti_orbit] >= 0.2)
+
+                    id_HR_flare_orbit = np.array(elem_gti_orbit)[mask_HR_thresh].tolist()
+
+                    if erodedilate_HR > 0:
+
+                        assert type(erodedilate_HR) == int, 'Error: erodedilate_HR should be an integer'
+
+                        id_HR_flare_orbit_eroded = np.unique(ravel_ragged([ \
+                            np.arange(elem - erodedilate_HR, elem + erodedilate_HR + 1) \
+                            for elem in id_HR_flare_orbit]))
+
+                        # limiting to the initial range of gtis to avoid eroding beyond the bounds
+                        id_HR_flare_orbit_eroded = [elem for elem in elem_gti_orbit if elem in id_HR_flare_orbit_eroded]
+                    else:
+                        id_HR_flare_orbit_eroded = id_over_orbit
+
+                    # removing nimaketime exclusions
+                    id_HR_flare_orbit_eroded = [elem for elem in id_HR_flare_orbit_eroded if elem not in id_nongti_nimkt_orbit]
+
+                    id_HR_flares[i_orbit] = id_HR_flare_orbit_eroded
+
+                    # redefining the gtis after the flares have been defined
+                    id_gti[i_orbit] = [elem for elem in elem_gti_orbit if elem not in id_HR_flare_orbit_eroded]
+
+                    # this one for is for the automatic split
+                    if 'split' in split_arg:
+                        for i_split in range(len(split_gti_arr[i_orbit])):
+                            split_gti_arr[i_orbit][i_split] = [elem for elem in split_gti_arr[i_orbit][i_split] \
+                                                               if elem not in id_HR_flare_orbit_eroded]
+
+            id_hard_flares=np.array([None] * n_orbit)
 
             if 'hard_flare' in split_arg:
 
@@ -1719,6 +1789,7 @@ def create_gtis(directory,split_arg='orbit+flare+overdyn+underdyn',band='3-15',f
                                     id_gti=id_gti[i_orbit], id_flares=id_flares[i_orbit],
                                     id_overcut=id_overcut[i_orbit],id_undercut=id_undercut[i_orbit],
                                     id_hard_flares=id_hard_flares[i_orbit],
+                                    id_HR_flares=id_HR_flares[i_orbit],
                                     gti_nimkt_arr=gti_nimkt_arr, split_arg=split_arg,
                                     split_gti_arr=split_gti_arr[i_orbit],orbit_cut_times=orbit_cut_times)]
 
@@ -1774,6 +1845,7 @@ def create_gtis(directory,split_arg='orbit+flare+overdyn+underdyn',band='3-15',f
                                 id_gti=id_gti[i_orbit],id_flares=id_flares[i_orbit],
                                 id_overcut=id_overcut[i_orbit],id_undercut=id_undercut[i_orbit],
                                 id_hard_flares=id_hard_flares[i_orbit],
+                                id_HR_flares=id_HR_flares[i_orbit],
                                 gti_nimkt_arr=gti_nimkt_arr,split_arg=split_arg,
                                 split_gti_arr=split_gti_arr[i_orbit])
 
@@ -1926,6 +1998,7 @@ def create_gtis(directory,split_arg='orbit+flare+overdyn+underdyn',band='3-15',f
                                     save_path=save_path_str,
                                     id_gti=id_gti[i_orbit], id_flares=id_flares[i_orbit],
                                     id_hard_flares=id_hard_flares[i_orbit],
+                                    id_HR_flares=id_HR_flares[i_orbit],
                                     gti_nimkt_arr=gti_nimkt_arr, split_arg=split_arg,
                                     id_overcut=id_overcut[i_orbit],
                                     id_undercut=id_undercut[i_orbit],
@@ -2361,10 +2434,12 @@ def extract_lc(directory,binning_list=[1],bands='3-12',HR='6-10/3-6',overwrite=T
                                   ((" clfile='$CLDIR/ni$OBSID_0mpu7_cl_day.evt'  suffix=" + extract_suffix)
                                    if extract_mode == 'day' else ''))
 
-                process_state=bashproc.expect(['DONE','ERROR: could not recompute normalized RATE/ERROR','Task aborting due','Task nicerl3-lc','Killed'],timeout=None)
+                #updated for heasoft 6.35
+                process_state=bashproc.expect(['DONE','ERROR: could not recompute normalized RATE/ERROR',
+                                               'has EXPOSURE=0','Task aborting due','Task nicerl3-lc','Killed'],timeout=None)
 
                 #raising an error to stop the process if the command has crashed for some reason
-                if process_state>1:
+                if process_state>2:
                     if process_state==4:
                         return 'RAM Overload'
 
@@ -2374,10 +2449,10 @@ def extract_lc(directory,binning_list=[1],bands='3-12',HR='6-10/3-6',overwrite=T
                     return lines[-1].replace('\n','')
 
                 #this one is for empty lc, which is normal for day gtis of night orbits and vice-versa
-                if process_state==1:
+                if process_state in [1,2]:
 
-                    #emptying the buffer
-                    bashproc.expect('Task nicerl3-lc')
+                    #emptying the buffer updated for heasoft 6.35
+                    bashproc.expect(['Task nicerl3-lc','Task aborting due to zero EXPOSURE'])
 
                     #skipping the computation
                     return 'skip'
@@ -3149,6 +3224,7 @@ def run_actions(obs_dir,action_list,parallel=False):
                                          hard_flare_segments=hard_flare_segments,hard_flare_sigma=hard_flare_sigma,
                                          erodedilate_hard_flare=erodedilate_hard_flare,
                                          hard_flare_min_duration=hard_flare_min_duration,
+                                         HR_threshold=gti_HR_threshold,erodedilate_HR=erodedilate_HR,
                                          day_mode=day_mode, thread=create_gtis_thread,
                                          add_merge_gti=add_merge_gti,parallel=parallel)
                 if type(output_err[0]) == str:

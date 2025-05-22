@@ -1734,6 +1734,9 @@ def addcomp(compname,position='last',endmult=None,return_pos=False,modclass=AllM
         'FeKb26' -> FeXXVI absorption at 8.25keV
         'FeKg26' -> FeXXVI absorption at 8.70 keV
 
+        lineAem/abs_gaussian/lorentz
+        ->adds a linked complex with all the subcomponents of the line linked together in width and velocity
+
             (old models)
         'FeKa'->neutral Fe emission at 6.40
         'FeKb'->neutral Fe emission at 7.06
@@ -1771,9 +1774,10 @@ def addcomp(compname,position='last',endmult=None,return_pos=False,modclass=AllM
     start_position=position
     end_multipl=endmult
 
-    gaussian_type=None
-    narrow_gaussian=False
-    abs_gaussian=False
+    line_type=None
+    line_set=False
+    narrow_line=False
+    abs_line=False
     added_link_group=None
 
     #splitting custom parts of the component
@@ -1841,34 +1845,53 @@ def addcomp(compname,position='last',endmult=None,return_pos=False,modclass=AllM
             pass
 
     #testing for lines
-    if 'gaussian' in comp_split:
+    if 'gaussian' in comp_split or 'lorentz' in comp_split:
 
         line=True
 
-        gaussian_type=comp_custom
+        line_type=comp_custom
 
         #restricting to the letter prefix
-        comp_split_prefix=comp_split.replace('gaussian','')
+        comp_split_prefix=comp_split.replace('gaussian','').replace('lorentz','')
 
         #identifying the shape of the line
-        narrow_gaussian='n' in comp_split_prefix
-        broad_gaussian='b' in comp_split_prefix
-        abs_gaussian='a' in comp_split_prefix
+        narrow_line='n' in comp_split_prefix
+        broad_line='b' in comp_split_prefix
+        abs_line='a' in comp_split_prefix
 
         #updating the comp split which will be implemented without the letter keywords
-        comp_split='gaussian'
+        comp_split='gaussian' if 'gaussian' in comp_split else 'lorentz'
 
         #restricting vashift use to named lines
-        if gaussian_type is not None and sum([char.isdigit() for char in gaussian_type])>0:
+        if line_type is not None and sum([char.isdigit() for char in line_type])>0:
 
-            comp_split='vashift*gaussian'
+            #identifying line sets
+            if line_type.replace('em','').replace('abs','').endswith('A'):
+                line_set=True
+                #identifying the number of line candidates
+
+                #e.g. FeKa25
+                line_set_complex=line_type.split('A')[0]
+
+                #e.g. abs
+                line_set_type=line_type.split('A')[-1]
+
+                line_set_comps=[elem for elem in list(lines_e_dict.keys()) if
+                line_set_complex in elem and line_set_type in elem
+                                #here to only use resolved components
+                                 and len(elem.split(line_set_complex)[1].split(line_set_type)[0]) > 0]
+
+                comp_split='vashift*('+'+'.join([comp_split]*len(line_set_comps))+')'
+            else:
+                comp_split='vashift*'+comp_split
+
             named_line=True
 
-            #### link groups off for now
-            # #and link groups to absorption lines (stays None for emission lines)
-            # if gaussian_type.endswith('abs'):
-            #     #(there can only be one since they do not share any element)
-            #     added_link_group=[elem for elem in link_groups if gaussian_type in elem][0]
+                #### link groups off for now
+                # #and link groups to absorption lines (stays None for emission lines)
+                # if line_type.endswith('abs'):
+                #     #(there can only be one since they do not share any element)
+                #     added_link_group=[elem for elem in link_groups if line_type in elem][0]
         else:
             named_line=False
     else:
@@ -2079,23 +2102,24 @@ def addcomp(compname,position='last',endmult=None,return_pos=False,modclass=AllM
     if compname=='c_zxipcf':
         #linking the cabs absorption to the zxipcf absorption
         xspec_model(gap_end-4).link=str(gap_end-3)
-    '''gaussian specifics (additive only)'''
+
+    '''line specifics (additive only)'''
 
     #this only works for non continuum components but we can assume gaussian lines will never be continuum components
 
     #switching the norm values of the gaussian
-    if line:
-        if abs_gaussian:
+    if line and not line_set:
+        if abs_line:
 
             xspec_model(gap_end).values=[-1e-4,1e-7,-5e-2,-5e-2,0,0]
 
             # #### ON: disabling FeKa25
-            # if gaussian_type=='FeKa25abs':
+            # if line_type=='FeKa25abs':
             #     xspec_model(gap_end).values=[-1e-7,1e-7,-5e-2,-5e-2,0,0]
             #     xspec_model(gap_end).frozen=True
 
             #### ON: disabling NiKa27 to avoid degeneracies
-            if gaussian_type=='NiKa27abs':
+            if line_type=='NiKa27abs':
                 xspec_model(gap_end).values=[-1e-7,1e-7,-5e-2,-5e-2,0,0]
                 xspec_model(gap_end).frozen=True
 
@@ -2113,78 +2137,112 @@ def addcomp(compname,position='last',endmult=None,return_pos=False,modclass=AllM
             # xspec_model(gap_end).frozen=True
 
     #switching the width values of the lines
-    if narrow_gaussian:
+    if narrow_line:
         xspec_model(gap_end-1).values=[0]+xspec_model(gap_end-1).values[1:]
         xspec_model(gap_end-1).frozen=True
 
     #changing more infos for specific lines
-    if gaussian_type is not None:
+    if line_type is not None:
 
-        #selecting the corresponding energy
-        ener_line=lines_e_dict[gaussian_type][0]
-
-        #selecting the energy for non broad (named) lines
-        if named_line:
-            xspec_model(gap_end-2).values=[ener_line]+xspec_model(gap_end-2).values[1:]
-
+        if line_set:
+            #selecting the entire set of lines
+            line_comps_use=line_set_comps
         else:
-            #restricting energies for emission lines
-            if gaussian_type in ['FeDiaz']:
-                xspec_model(gap_end-2).values=[ener_line,ener_line/100,6.0,6.0,8.0,8.0]
-            else:
-                if 'cal' in gaussian_type:
-                    xspec_model(gap_end - 2).values = [ener_line, ener_line / 100, ener_line, ener_line,
-                                                       ener_line,
-                                                       ener_line]
+            line_comps_use=[line_type]
+        
+        n_line_comps=len(line_comps_use)
 
-                    #freezing the energy
-                    xspec_model(gap_end - 2).frozen=True
+        #in reverse to add them in forward order
+        for i_line_type,elem_line_type in enumerate(line_comps_use[::-1]):
+
+            #adjusting the norm if in a set since its more practical to do it here
+
+            if line_set:
+
+                if abs_line:
+                    xspec_model(gap_end-3*i_line_type).values = [-1e-4, 1e-7, -5e-2, -5e-2, 0, 0]
                 else:
-                    #outputing the line values (delta of 1/100 of the line ener, no redshift, +0.4keV blueshift max)
-                    xspec_model(gap_end-2).values=[ener_line,ener_line/100,ener_line-0.2,ener_line-0.2,ener_line+0.2,
-                                                   ener_line+0.2]
+                    # stronger normalisations allowed for the emission lines
+                    xspec_model(gap_end-3*i_line_type).values = [1e-3, 1e-6, 0, 0, 1, 1]
+
+                if narrow_line:
+                    xspec_model(gap_end - 1-3*i_line_type).values = [0] + \
+                                                                    xspec_model(gap_end - 1-3*i_line_type).values[1:]
+                    xspec_model(gap_end - 1-3*i_line_type).frozen = True
 
 
-        #resticting the with of broad lines
-        if broad_gaussian:
+            #selecting the corresponding energy
+            ener_line=lines_e_dict[elem_line_type][0]
 
-            #widths changes
-            width_line=lines_broad_w_dict[gaussian_type]
+            #selecting the energy for non broad (named) lines
+            if named_line:
+                xspec_model(gap_end-2-3*i_line_type).values=[ener_line]+\
+                                                            xspec_model(gap_end-2-3*i_line_type).values[1:]
 
-            #restricting widths of absorption lines and narrow emission lines
-            xspec_model(gap_end-1).values=[width_line[0],
-                                           (1e-3),
-                                           width_line[1],width_line[1],
-                                           width_line[2],width_line[2]]
-        #and non-0 width lines
-        elif not narrow_gaussian:
+            else:
+                #restricting energies for emission lines
+                if elem_line_type in ['FeDiaz']:
+                    xspec_model(gap_end-2-3*i_line_type).values=[ener_line,ener_line/100,6.0,6.0,8.0,8.0]
+                else:
+                    if 'cal' in elem_line_type:
+                        xspec_model(gap_end - 2-3*i_line_type).values = [ener_line, ener_line / 100,
+                                                                         ener_line, ener_line,
+                                                           ener_line,
+                                                           ener_line]
 
-            #widths changes
-            width_line=lines_w_dict[gaussian_type]
+                        #freezing the energy
+                        xspec_model(gap_end - 2-3*i_line_type).frozen=True
+                    else:
+                        #outputing the line values (delta of 1/100 of the line ener, no redshift, +0.4keV blueshift max)
+                        xspec_model(gap_end-2-3*i_line_type).values=[ener_line,ener_line/100,
+                                                                     ener_line-0.2,ener_line-0.2,
+                                                                     ener_line+0.2,ener_line+0.2]
 
-            #restricting widths of absorption lines and narrow emission lines
-            xspec_model(gap_end-1).values=[width_line[0],
-                                           (1e-3),
-                                           width_line[1],width_line[1],
-                                           width_line[2],width_line[2]]
 
-        #for named physical lines we freeze the gaussian energy and use the vashift instead
-        if named_line:
+            #resticting the width of broad lines
+            if broad_line:
 
-            #freezing the energy
-            xspec_model(gap_end-2).frozen=1
+                #widths changes
+                width_line=lines_broad_w_dict[elem_line_type]
 
-            #unfreezing the vashift
-            xspec_model(gap_end-3).frozen=0
+                #restricting widths of absorption lines and narrow emission lines
+                xspec_model(gap_end-1-3*i_line_type).values=[width_line[0],
+                                               (1e-3),
+                                               width_line[1],width_line[1],
+                                               width_line[2],width_line[2]]
+            #and non-0 width lines
+            elif not narrow_line:
 
-            #and forcing a specific range of blueshift/redshift depending on the line
+                #widths changes
+                width_line=lines_w_dict[elem_line_type]
 
-            #note : we differenciate absorption an narrow emission through the 'em' in the lines energy dictionnary
-            xspec_model(gap_end-3).values=[0,lines_e_dict[gaussian_type][2]/1e3,
-                                           -lines_e_dict[gaussian_type][2],
-                                           -lines_e_dict[gaussian_type][2],
-                                           -lines_e_dict[gaussian_type][1],
-                                           -lines_e_dict[gaussian_type][1]]
+                #restricting widths of absorption lines and narrow emission lines
+                xspec_model(gap_end-1-3*i_line_type).values=[width_line[0],
+                                               (1e-3),
+                                               width_line[1],width_line[1],
+                                               width_line[2],width_line[2]]
+
+            #linking the widths if in a set
+            if line_set and i_line_type!=n_line_comps-1:
+                xspec_model(gap_end - 1 - 3 * i_line_type).link=str(gap_end - 1 - 3 * (n_line_comps-1))
+            #for named physical lines we freeze the gaussian energy and use the vashift instead
+            if named_line:
+
+                #freezing the energy
+                xspec_model(gap_end-2-3*i_line_type).frozen=1
+
+                #unfreezing the vashift for the very first component in the list
+                if i_line_type==len(line_comps_use)-1:
+                    xspec_model(gap_end-3-3*i_line_type).frozen=0
+
+                    #and forcing a specific range of blueshift/redshift depending on the line
+
+                    #note : we differenciate absorption an narrow emission through the 'em' in the lines energy dictionnary
+                    xspec_model(gap_end-3-3*i_line_type).values=[0,lines_e_dict[elem_line_type][2]/1e3,
+                                                   -lines_e_dict[elem_line_type][2],
+                                                   -lines_e_dict[elem_line_type][2],
+                                                   -lines_e_dict[elem_line_type][1],
+                                                   -lines_e_dict[elem_line_type][1]]
 
     '''laor specifics'''
 
@@ -2238,7 +2296,7 @@ def addcomp(compname,position='last',endmult=None,return_pos=False,modclass=AllM
 
             if comp.compname.split('_')[0] in added_link_group:
                 if np.argwhere(np.array(added_link_group)\
-                ==gaussian_type)[0][0]>np.argwhere(np.array(added_link_group)==comp.compname.split('_')[0])[0][0]:
+                ==line_type)[0][0]>np.argwhere(np.array(added_link_group)==comp.compname.split('_')[0])[0][0]:
                     #if we detect a component from the same group, its first parameter should be its vashift
                     xspec_model(gap_end-3).link='p'+str(comp.parlist[0])
                     break

@@ -96,6 +96,7 @@ n_absline=6
 
 range_absline=range(n_absline)
 
+#no "A" (in caps) in the line names ! Used for recognition of line sets
 lines_e_dict={
                     'FeKaem':[6.404],
                     'FeKbem':[7.06],

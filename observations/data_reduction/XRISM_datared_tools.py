@@ -499,12 +499,12 @@ def resolve_RTS(directory='auto_repro',anal_dir_suffix='',heasoft_init_alias='he
 
     bashproc.sendline('cd '+os.path.join(os.getcwd(),anal_dir))
 
-    if os.path.isfile(directory_use + '/resolve_RTS'+anal_dir_suffix+'.log'):
-        os.system('rm ' + directory_use + '/resolve_RTS'+anal_dir_suffix+'.log')
+    if os.path.isfile(directory_use + '/resolve_RTS'+('_'+anal_dir_suffix if anal_dir_suffix!='' else '')+'.log'):
+        os.system('rm ' + directory_use + '/resolve_RTS'+('_'+anal_dir_suffix if anal_dir_suffix!='' else '')+'.log')
 
-    with (no_op_context() if parallel else StdoutTee(directory_use + '/resolve_RTS'+anal_dir_suffix+'.log', mode="a", buff=1,
+    with (no_op_context() if parallel else StdoutTee(directory_use + '/resolve_RTS'+('_'+anal_dir_suffix if anal_dir_suffix!='' else '')+'.log', mode="a", buff=1,
                                                      file_filters=[_remove_control_chars]), \
-          StderrTee(directory_use + '/resolve_RTS'+anal_dir_suffix+'.log', buff=1, file_filters=[_remove_control_chars])):
+          StderrTee(directory_use + '/resolve_RTS'+('_'+anal_dir_suffix if anal_dir_suffix!='' else '')+'.log', buff=1, file_filters=[_remove_control_chars])):
 
         if not parallel:
             bashproc.logfile_read = sys.stdout
@@ -537,27 +537,66 @@ def resolve_RTS(directory='auto_repro',anal_dir_suffix='',heasoft_init_alias='he
 
     bashproc.sendline('exit')
 
-def compute_avg_BR_pixlist(branch_file,excl_pixel_list=None,pixel_str=None,band=True):
+def compute_avg_BR_pixlist(branch_file='auto',pixel_str='branch_filter',branch_txt_file='auto',
+                           excl_pixel_list=None,band=True):
 
     '''
     Computes the time-averaged, pixel averaged branching ratio for a combination of pixels
 
     the input can be either directly from a list of excluded pixel (excl_pixel_list) or a pixel_str in the style of
     the other commands of this script
+
+    branch_file:
+        if set to 'auto', searches for the first file in the current directories ending with '_brVpxcnt.fits'
+
+    pixel_str:
+        pixel filtering list for xrism
+            if set to branch_filter, excludes the pixels listed in the **branch_filter.txt file of
+            the observation, made by resolve_BR
+            can be taken automatically if branch_txt_file is set to auto, otherwise manually
+            otherwise, manual input:
+
+            example:for 'PIXEL=0:11,13:35', put '0:11,13:35'
+            also accepts pixels to exclude, such as '-(10:14,28,32)'
+
     '''
 
-    if excl_pixel_list is not None:
-        valid_pix_list=[elem for elem in np.arange(36) if elem not in excl_pixel_list and elem!=12]
+    if branch_file=='auto':
+        branch_file_use=glob.glob('**/**_brVpxcnt.fits',recursive=True)[0]
+        print('Using branch file '+branch_file_use)
     else:
-        valid_pix_list=rsl_pixel_manip(pixel_str,mode='pix_list',remove_cal_pxl_resolve=True)
+        branch_file_use=branch_file
 
-    with fits.open(branch_file) as hdul:
+    if pixel_str.startswith('branch_filter'):
+        # reading the branch filter file
+
+        if branch_txt_file == 'auto':
+            branch_txt_use = glob.glob('**_branch_filter.txt', recursive=True)[0]
+            print('Using branch file ' + branch_txt_use)
+        else:
+            branch_txt_use = branch_txt_file
+
+        with open(branch_txt_use) as branch_f:
+            branch_lines = branch_f.readlines()
+        branch_filter_line = [elem for elem in branch_lines if not elem.startswith('#')][0]
+        # reformatting the string
+        valid_pix_list = rsl_pixel_manip('-(' + branch_filter_line[1:-2] + ')',
+                                            mode='pix_list',remove_cal_pxl_resolve=True)
+    elif pixel_str is not None:
+        valid_pix_list=rsl_pixel_manip(pixel_str,mode='pix_list',remove_cal_pxl_resolve=True)
+    elif excl_pixel_list is not None:
+        valid_pix_list=[elem for elem in np.arange(36) if elem not in excl_pixel_list and elem!=12]
+
+    with fits.open(branch_file_use) as hdul:
         branch_data=hdul[4 if band else 1].data
 
-    branch_avg=(branch_data['RATETOT'][valid_pix_list]/np.sum(branch_data['RATETOT'][valid_pix_list])\
-                *branch_data['BRANCHHP'][valid_pix_list]).sum()
+    branch_grade_names=['BRANCHHP','BRANCHMP','BRANCHMS','BRANCHLP','BRANCHLS']
 
-    return branch_avg
+    branch_avg_list=np.array([(branch_data['RATETOT'][valid_pix_list]/np.sum(branch_data['RATETOT'][valid_pix_list])\
+                *branch_data[elem_name][valid_pix_list]).sum() for elem_name in branch_grade_names])
+
+
+    return branch_avg_list
 
 
 def plot_BR(branch_file, save_paths=None, excl_pixel=[],task='rslbratios'):
@@ -1000,12 +1039,12 @@ def resolve_BR(directory='auto_repro', anal_dir_suffix='',
 
     bashproc.sendline('cd ' + os.path.join(os.getcwd(), anal_dir))
 
-    if os.path.isfile(directory_use + '/resolve_BR'+anal_dir_suffix+'.log'):
-        os.system('rm ' + directory_use + '/resolve_BR'+anal_dir_suffix+'.log')
+    if os.path.isfile(directory_use + '/resolve_BR'+('_'+anal_dir_suffix if anal_dir_suffix!='' else '')+'.log'):
+        os.system('rm ' + directory_use + '/resolve_BR'+('_'+anal_dir_suffix if anal_dir_suffix!='' else '')+'.log')
 
-    with (no_op_context() if parallel else StdoutTee(directory_use + '/resolve_BR'+anal_dir_suffix+'.log', mode="a", buff=1,
+    with (no_op_context() if parallel else StdoutTee(directory_use + '/resolve_BR'+('_'+anal_dir_suffix if anal_dir_suffix!='' else '')+'.log', mode="a", buff=1,
                                                      file_filters=[_remove_control_chars]), \
-          StderrTee(directory_use + '/resolve_BR'+anal_dir_suffix+'.log', buff=1, file_filters=[_remove_control_chars])):
+          StderrTee(directory_use + '/resolve_BR'+('_'+anal_dir_suffix if anal_dir_suffix!='' else '')+'.log', buff=1, file_filters=[_remove_control_chars])):
 
         if not parallel:
             bashproc.logfile_read = sys.stdout
@@ -1057,7 +1096,14 @@ def resolve_BR(directory='auto_repro', anal_dir_suffix='',
                                                   for elem in range(36)]
                                 mask_subexclude = (mask_subexclude) & (submask_remove)
 
+                            if subelem_rule.split('_')[0] == 'only':
+                                submask_only = [str(elem) not in subelem_rule.split('_')[1].split(',')
+                                                  for elem in range(36)]
+                                mask_subexclude = (mask_subexclude) &  (submask_only)
+
                         mask_exclude = (mask_exclude) | mask_subexclude
+
+
 
             elif task=='rslbratios':
                 bashproc.sendline('mkdir -p branch')
@@ -1132,6 +1178,11 @@ def resolve_BR(directory='auto_repro', anal_dir_suffix='',
                                                   for elem in range(36)]
                                 mask_subexclude = (mask_subexclude) & (submask_remove)
 
+                            if subelem_rule.split('_')[0] == 'only':
+                                submask_only = [str(elem) not in subelem_rule.split('_')[1].split(',')
+                                                  for elem in range(36)]
+                                mask_subexclude = (mask_subexclude) &  (submask_only)
+
                         mask_exclude = (mask_exclude) | mask_subexclude
 
             bashproc.sendline('echo valid')
@@ -1144,6 +1195,10 @@ def resolve_BR(directory='auto_repro', anal_dir_suffix='',
 
             pixel_filter_file = indiv_file.replace('.evt', '_branch_filter.txt')
 
+            pixel_avg_branch=compute_avg_BR_pixlist(
+                branch_file='/'.join(indiv_file.split('/')[:-1])+'/branch/branch_2keVto12keV_brVpxcnt.fits',
+                pixel_str='-(' + str(pixel_exclude_list.tolist())[1:-2] + ')')
+
             with open(pixel_filter_file, 'w+') as f:
                 f.write('#Filter applied: ' + str(pixel_filter_rule) + '\n')
                 f.write('#Combined count rate of excluded pixels: %.3e' % (
@@ -1154,6 +1209,9 @@ def resolve_BR(directory='auto_repro', anal_dir_suffix='',
 
                 f.write('#list of excluded pixels:\n')
                 f.write(str(pixel_exclude_list.tolist()) + '\n')
+                f.write('#pixel-averaged 2-12 keV branching ratios with current pixel selection for HP-MP-MS-LP-LS:\n')
+                f.write(str(pixel_avg_branch.tolist()) + '\n')
+
 
             if task=='rslbranch':
                 plot_BR(indiv_file.replace('.evt', '_branch.fits'),
@@ -1244,12 +1302,12 @@ def xtend_SFP(directory='auto_repro',filtering='flat_top',
 
     bashproc.sendline('cd '+os.path.join(os.getcwd(),anal_dir))
 
-    if os.path.isfile(directory_use + '/xtend_SFP'+anal_dir_suffix+'.log'):
-        os.system('rm ' + directory_use + '/xtend_SFP'+anal_dir_suffix+'.log')
+    if os.path.isfile(directory_use + '/xtend_SFP'+('_'+anal_dir_suffix if anal_dir_suffix!='' else '')+'.log'):
+        os.system('rm ' + directory_use + '/xtend_SFP'+('_'+anal_dir_suffix if anal_dir_suffix!='' else '')+'.log')
 
-    with (no_op_context() if parallel else StdoutTee(directory_use + '/xtend_SFP'+anal_dir_suffix+'.log', mode="a", buff=1,
+    with (no_op_context() if parallel else StdoutTee(directory_use + '/xtend_SFP'+('_'+anal_dir_suffix if anal_dir_suffix!='' else '')+'.log', mode="a", buff=1,
                                                      file_filters=[_remove_control_chars]), \
-          StderrTee(directory_use + '/xtend_SFP'+anal_dir_suffix+'.log', buff=1, file_filters=[_remove_control_chars])):
+          StderrTee(directory_use + '/xtend_SFP'+('_'+anal_dir_suffix if anal_dir_suffix!='' else '')+'.log', buff=1, file_filters=[_remove_control_chars])):
 
         if not parallel:
             bashproc.logfile_read = sys.stdout
@@ -1755,8 +1813,9 @@ A1: For Heasoft ver. 6.34, you need to execute the save command between "pixel s
         if not os.path.isfile(os.path.join(directory, save_path)):
             print('File still not ready. Letting more time...')
             time.sleep(5)
-            breakpoint()
-            pass
+            if not os.path.isfile(os.path.join(directory, save_path)):
+                breakpoint()
+                pass
 
     if not os.path.isfile(os.path.join(directory, save_path)):
         print('Issue with file check or file creation')
@@ -1954,11 +2013,11 @@ def extract_img(directory='auto_repro',anal_dir_suffix='',
         elif instru=='resolve':
             xtend_files=[]
 
-    if os.path.isfile(directory_use + '/extract_img'+anal_dir_suffix+'.log'):
-        os.system('rm ' + directory_use + '/extract_img'+anal_dir_suffix+'.log')
+    if os.path.isfile(directory_use + '/extract_img'+('_'+anal_dir_suffix if anal_dir_suffix!='' else '')+'.log'):
+        os.system('rm ' + directory_use + '/extract_img'+('_'+anal_dir_suffix if anal_dir_suffix!='' else '')+'.log')
 
-    with (no_op_context() if parallel else StdoutTee(directory_use+'/extract_img'+anal_dir_suffix+'.log',mode="a",buff=1,file_filters=[_remove_control_chars]),\
-        StderrTee(directory_use+'/extract_img'+anal_dir_suffix+'.log',buff=1,file_filters=[_remove_control_chars])):
+    with (no_op_context() if parallel else StdoutTee(directory_use+'/extract_img'+('_'+anal_dir_suffix if anal_dir_suffix!='' else '')+'.log',mode="a",buff=1,file_filters=[_remove_control_chars]),\
+        StderrTee(directory_use+'/extract_img'+('_'+anal_dir_suffix if anal_dir_suffix!='' else '')+'.log',buff=1,file_filters=[_remove_control_chars])):
 
         if not parallel:
             bashproc.logfile_read=sys.stdout
@@ -2126,7 +2185,7 @@ def create_gtis(directory='auto_repro',anal_dir_suffix='',
     else:
         directory_use=directory
 
-    io_log = open(directory_use + '/create_gtis'+anal_dir_suffix+'.log', 'w+')
+    io_log = open(directory_use + '/create_gtis'+('_'+anal_dir_suffix if anal_dir_suffix!='' else '')+'.log', 'w+')
 
     # ensuring a good obsid name even in local
     if directory_use == './':
@@ -2142,8 +2201,10 @@ def create_gtis(directory='auto_repro',anal_dir_suffix='',
 
     set_var(bashproc)
 
-    if os.path.isfile(os.path.join(directory_use + '/extract_gtis'+anal_dir_suffix+'_'+gti_subdir+'.log')):
-        os.system('rm ' + os.path.join(directory_use + '/extract_gtis'+anal_dir_suffix+'_'+gti_subdir+'.log'))
+    if os.path.isfile(os.path.join(directory_use + '/extract_gtis'+('_'+anal_dir_suffix if anal_dir_suffix!='' else '')
+                                   +'_'+gti_subdir+'.log')):
+        os.system('rm ' + os.path.join(directory_use + '/extract_gtis'+('_'+anal_dir_suffix if anal_dir_suffix!='' else '')
+                                       +'_'+gti_subdir+'.log'))
 
     # removing old gti files
     old_files_gti = [elem for elem in glob.glob(os.path.join(directory_use, 'analysis/**'), recursive=True) if
@@ -2153,9 +2214,11 @@ def create_gtis(directory='auto_repro',anal_dir_suffix='',
         os.remove(elem_file_gti)
 
     with (no_op_context() if parallel else StdoutTee(os.path.join(directory_use +
-                                        '/extract_gtis'+anal_dir_suffix+'_'+gti_subdir+'.log'), mode="a", buff=1,
+                                        '/extract_gtis'+('_'+anal_dir_suffix if anal_dir_suffix!='' else '')
+                                        +'_'+gti_subdir+'.log'), mode="a", buff=1,
                                                      file_filters=[_remove_control_chars]), \
-          StderrTee(os.path.join(directory_use + '/extract_gtis'+anal_dir_suffix+'_'+gti_subdir+'.log'),
+          StderrTee(os.path.join(directory_use + '/extract_gtis'+('_'+anal_dir_suffix if anal_dir_suffix!='' else '')
+                                   +'_'+gti_subdir+'.log'),
                     buff=1, file_filters=[_remove_control_chars])):
 
         if not parallel:
@@ -2418,14 +2481,18 @@ def extract_lc(directory='auto_repro', anal_dir_suffix='',lc_subdir='lc',
         elif instru=='resolve':
             xtend_files=[]
 
-    if os.path.isfile(directory_use + '/extract_lc'+anal_dir_suffix+'_'+lc_subdir+'_'+gti_subdir+'.log'):
-        os.system('rm ' + directory_use + '/extract_lc'+anal_dir_suffix+'_'+lc_subdir+'_'+gti_subdir+'.log')
+    if os.path.isfile(directory_use + '/extract_lc'+('_'+anal_dir_suffix if anal_dir_suffix!='' else '')
+                                   +'_'+lc_subdir+'_'+gti_subdir+'.log'):
+        os.system('rm ' + directory_use + '/extract_lc'+('_'+anal_dir_suffix if anal_dir_suffix!='' else '')+
+                  '_'+lc_subdir+'_'+gti_subdir+'.log')
 
     with (no_op_context() if parallel else StdoutTee(directory_use +
-                                                     '/extract_lc'+anal_dir_suffix+'_'+lc_subdir+'_'+gti_subdir+'.log',
+                                                     '/extract_lc'+('_'+anal_dir_suffix if anal_dir_suffix!='' else '')
+                                                     +'_'+lc_subdir+'_'+gti_subdir+'.log',
                                                      mode="a", buff=1,
                                                      file_filters=[_remove_control_chars]), \
-          StderrTee(directory_use + '/extract_lc'+anal_dir_suffix+'_'+lc_subdir+'_'+gti_subdir+'.log',
+          StderrTee(directory_use + '/extract_lc'+('_'+anal_dir_suffix if anal_dir_suffix!='' else '')
+                    +'_'+lc_subdir+'_'+gti_subdir+'.log',
                     buff=1, file_filters=[_remove_control_chars])):
 
         if not parallel:
@@ -2544,7 +2611,7 @@ def extract_sp(directory='auto_repro', anal_dir_suffix='',sp_subdir='sp',
                    use_raw_evt_xtd=False, use_raw_evt_rsl=False,
                     instru='all',
                    region_src_xtd='auto', region_bg_xtd='auto',
-                   pixel_str_rsl='branch_filter', grade_str_rsl='0:0',
+                   pixel_str_rsl='branch_filter', grade_str_rsl='0:1',
                    remove_cal_pxl_resolve=True,
                    gti=None, gti_subdir='gti',
                    e_low_rsl=None,e_high_rsl=None,
@@ -2643,14 +2710,17 @@ def extract_sp(directory='auto_repro', anal_dir_suffix='',sp_subdir='sp',
         elif instru=='resolve':
             xtend_files=[]
 
-    if os.path.isfile(directory_use + '/extract_sp'+anal_dir_suffix+'_'+sp_subdir+'_'+gti_subdir+'.log'):
-        os.system('rm ' + directory_use + '/extract_sp'+anal_dir_suffix+'_'+sp_subdir+'_'+gti_subdir+'.log')
+    if os.path.isfile(directory_use + '/extract_sp'+('_'+anal_dir_suffix if anal_dir_suffix!='' else '')
+                      +'_'+sp_subdir+'_'+gti_subdir+'.log'):
+        os.system('rm ' + directory_use + '/extract_sp'+('_'+anal_dir_suffix if anal_dir_suffix!='' else '')
+                  +'_'+sp_subdir+'_'+gti_subdir+'.log')
 
     with (no_op_context() if parallel else StdoutTee(directory_use + '/extract_sp'
-                                        +anal_dir_suffix+'_'+sp_subdir+'_'+gti_subdir+'.log', mode="a", buff=1,
+                                        +('_'+anal_dir_suffix if anal_dir_suffix!='' else '')
+                                                     +'_'+sp_subdir+'_'+gti_subdir+'.log', mode="a", buff=1,
                                                      file_filters=[_remove_control_chars]), \
           StderrTee(directory_use + '/extract_sp'+
-                    anal_dir_suffix+'_'+sp_subdir+'_'+gti_subdir+'.log',
+                    ('_'+anal_dir_suffix if anal_dir_suffix!='' else '')+'_'+sp_subdir+'_'+gti_subdir+'.log',
                     buff=1, file_filters=[_remove_control_chars])):
 
         if not parallel:
@@ -2909,7 +2979,7 @@ def rsl_mkrmf(whichrmf,infile,outfileroot,
 
 def extract_rmf(directory='auto_repro',instru='all',rmf_subdir='sp',
                 #resolve options
-                rmf_type_rsl='X',pixel_str_rsl='branch_filter',rsl_rmf_grade='0',
+                rmf_type_rsl='X',pixel_str_rsl='branch_filter',rsl_rmf_grade='0,1',
                 split_rmf_rsl=True,
                 comb_rmf_rsl=True,
                 remove_cal_pxl_resolve=True,
@@ -2975,6 +3045,7 @@ def extract_rmf(directory='auto_repro',instru='all',rmf_subdir='sp',
     rsl_rmf_grade:the event grade of the arf. Different syntax so no ":" in the string
                     (see https://heasarc.gsfc.nasa.gov/lheasoft/help/rslmkrmf.html)
                     To use several grades, if the event file is made from several, use '0,1,...'  instead
+                    note that the fil will be written using '_' to avoid issues
 
     no matter the selection of pixel_str_xrism, if remove_cal_px_resolve is set to True, pixel 12 (calibration pixel)
     will be removed
@@ -3012,13 +3083,17 @@ def extract_rmf(directory='auto_repro',instru='all',rmf_subdir='sp',
         elif instru=='resolve':
             xtend_files=[]
 
-    if os.path.isfile(directory_use + '/extract_rmf'+anal_dir_suffix+'_'+rmf_subdir+'_'+gti_subdir+'.log'):
-        os.system('rm ' + directory_use + '/extract_rmf'+anal_dir_suffix+'_'+rmf_subdir+'_'+gti_subdir+'.log')
+    if os.path.isfile(directory_use + '/extract_rmf'+('_'+anal_dir_suffix if anal_dir_suffix!='' else '')
+                      +'_'+rmf_subdir+'_'+gti_subdir+'.log'):
+        os.system('rm ' + directory_use + '/extract_rmf'+('_'+anal_dir_suffix if anal_dir_suffix!='' else '')
+                  +'_'+rmf_subdir+'_'+gti_subdir+'.log')
 
     with (no_op_context() if parallel else StdoutTee(directory_use +
-                                '/extract_rmf'+anal_dir_suffix+'_'+rmf_subdir+'_'+gti_subdir+'.log', mode="a", buff=1,
+                                '/extract_rmf'+('_'+anal_dir_suffix if anal_dir_suffix!='' else '')
+                                                     +'_'+rmf_subdir+'_'+gti_subdir+'.log', mode="a", buff=1,
                                                      file_filters=[_remove_control_chars]), \
-          StderrTee(directory_use + '/extract_rmf'+anal_dir_suffix+'_'+rmf_subdir+'_'+gti_subdir+'.log',
+          StderrTee(directory_use + '/extract_rmf'+('_'+anal_dir_suffix if anal_dir_suffix!='' else '')
+                    +'_'+rmf_subdir+'_'+gti_subdir+'.log',
                     buff=1, file_filters=[_remove_control_chars])):
 
         if not parallel:
@@ -3078,7 +3153,7 @@ def extract_rmf(directory='auto_repro',instru='all',rmf_subdir='sp',
                     product_root = os.path.join(rmf_subdir,elem_evt.replace(anal_dir,'.').replace('.evt',
                             '_pixel_'+reg_str.replace(':','to').replace(',','-').replace('-(','no').replace(')','')  +
                             ('_withcal' if not remove_cal_pxl_resolve else '')+
-                        '_grade_'+rsl_rmf_grade+ '_rmf' +
+                        '_grade_'+rsl_rmf_grade.replace(',','and')+ '_rmf' +
                         ('_' + str(eminin_rsl).replace('.','')+ '_' + str(dein_rsl).replace('.','')+'_'+str(nchanin_rsl))
                                                                    +elem_gti_str))
 
@@ -3416,8 +3491,10 @@ def extract_arf(directory='auto_repro',anal_dir_suffix='',on_axis_check=None,arf
         elif instru=='resolve':
             xtend_files=[]
 
-    if os.path.isfile(directory_use + '/extract_arf'+anal_dir_suffix+'_'+arf_subdir+'_'+gti_subdir+'.log'):
-        os.system('rm ' + directory_use + '/extract_arf'+anal_dir_suffix+'_'+arf_subdir+'_'+gti_subdir+'.log')
+    if os.path.isfile(directory_use + '/extract_arf'+('_'+anal_dir_suffix if anal_dir_suffix!='' else '')
+                      +'_'+arf_subdir+'_'+gti_subdir+'.log'):
+        os.system('rm ' + directory_use + '/extract_arf'+('_'+anal_dir_suffix if anal_dir_suffix!='' else '')
+                  +'_'+arf_subdir+'_'+gti_subdir+'.log')
 
     if os.path.isfile('~/pfiles/xaarfgen.par'):
         os.system('rm ~/pfiles/xaarfgen.par')
@@ -3425,9 +3502,11 @@ def extract_arf(directory='auto_repro',anal_dir_suffix='',on_axis_check=None,arf
         os.system('rm ~/pfiles/xaxmaarfgen.par')
 
     with (no_op_context() if parallel else StdoutTee(directory_use
-                            + '/extract_arf'+anal_dir_suffix+'_'+arf_subdir+'_'+gti_subdir+'.log', mode="a", buff=1,
+                            + '/extract_arf'+('_'+anal_dir_suffix if anal_dir_suffix!='' else '')
+                                                     +'_'+arf_subdir+'_'+gti_subdir+'.log', mode="a", buff=1,
                                                      file_filters=[_remove_control_chars]), \
-          StderrTee(directory_use + '/extract_arf'+anal_dir_suffix+'_'+
+          StderrTee(directory_use + '/extract_arf'+('_'+anal_dir_suffix if anal_dir_suffix!='' else '')
+                    +'_'+
                     arf_subdir+'_'+gti_subdir+'.log', buff=1, file_filters=[_remove_control_chars])):
 
         if not parallel:
@@ -3509,7 +3588,8 @@ def extract_arf(directory='auto_repro',anal_dir_suffix='',on_axis_check=None,arf
                         rmf_path=rmf_list[0]
                         create_arf(directory_use,instrument='xtend',
                                    out_rtfile=elem_evt.replace(anal_dir,'.').replace('.evt','_raytracing.evt'),
-                                   out_file=rmf_path.replace('.rmf','.arf').replace(anal_dir,'.'),
+                                   #need to replace the ',' with '_' because it splits the file otherwise
+                                   out_file=rmf_path.replace('.rmf','.arf').replace(anal_dir,'.').replace(',','and'),
                                    source_ra=source_ra,
                                    source_dec=source_dec,
                                    emap_file=os.path.join(os.getcwd(),anal_dir,expo_path.split('/')[-1]),

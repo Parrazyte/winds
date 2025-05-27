@@ -12,7 +12,7 @@ def rebinv_xrism(grp_number=1,sigma=2):
     Plot.setRebin(sigma, 5000, grp_number)
 
 def xrism_ls(baseload,low_e,high_e,plot_suffix="",bound_around=0.1,e_step=5e-3,lw=5e-3,
-             e_sat_low_indiv=[1.5,1.5],resolve_dg=1,rebinv=[20],
+             e_sat_low_indiv=[1.5,1.5],resolve_dg=1,rebinv=[20],line_search_norm=[0.01,50,500],
              force_ylog_ratio=True,ratio_bounds=[0.5,2],title=True,set_ener_str=None,set_ener_xrism=False):
 
     '''
@@ -54,7 +54,7 @@ def xrism_ls(baseload,low_e,high_e,plot_suffix="",bound_around=0.1,e_step=5e-3,l
 
     mod_ls=allmodel_data()
     narrow_out_val=narrow_line_search(mod_ls,'mod_ls',
-                                      e_sat_low_indiv,[low_e,high_e,e_step],
+                                      e_sat_low_indiv,[low_e,high_e,e_step],line_search_norm=line_search_norm,
                                       line_cont_range=[low_e,high_e],lw=lw,scorpeon=False)
 
     lw_str='_lw_'+str(round(lw*1e3))
@@ -64,7 +64,7 @@ def xrism_ls(baseload,low_e,high_e,plot_suffix="",bound_around=0.1,e_step=5e-3,l
         dill.dump(narrow_out_val,f)
 
     plt.ioff()
-    plot_line_search(narrow_out_val, './', 'XRISM', suffix=lw_str, save=True,
+    plot_line_search(narrow_out_val, './', 'XRISM', suffix=baseload[:baseload.rfind('.')]+'_'+lw_str, save=True,
                      epoch_observ=[plot_suffix], format='pdf',
                      force_ylog_ratio=force_ylog_ratio,ratio_bounds=ratio_bounds,title=title)
     plt.ion()

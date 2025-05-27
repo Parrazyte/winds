@@ -196,13 +196,18 @@ def line_detect(epoch_id,arg_dict):
     compute_highflux_only=arg_dict['compute_highflux_only']
     peak_thresh=arg_dict['peak_thresh']
     line_search_norm=arg_dict['line_search_norm']
-    freeze_nH=arg_dict['freeze_nh']
+
+    freeze_nH_NuSTAR=arg_dict['freeze_nH_NuSTAR']
+    freeze_nH_NuSTAR_val=arg_dict['freeze_nH_NuSTAR_val']
+
+    freeze_nH_all=arg_dict['freeze_nH_all']
+    freeze_nH_all_val=arg_dict['freeze_nH_all_val']
+
     peak_clean=arg_dict['peak_clean']
     trig_interval=arg_dict['trig_interval']
     mandatory_abs=arg_dict['mandatory_abs']
     cont_fit_method=arg_dict['cont_fit_method']
     fit_SAA_norm=arg_dict['fit_SAA_norm']
-    freeze_nH_val=arg_dict['freeze_nH_val']
     force_autofit=arg_dict['force_autofit']
     autofit_model=arg_dict['autofit_model']
     refit_cont=arg_dict['refit_cont']
@@ -1504,7 +1509,7 @@ def line_detect(epoch_id,arg_dict):
                                       fixed_gamma=broad_gamma_nthcomp, thcomp_frac_frozen=thcomp_frac_frozen)
 
             # forcing the absorption component to be included for the broad band fit
-            if sat_glob == 'NuSTAR' and freeze_nH:
+            if (sat_glob == 'NuSTAR' and freeze_nH_NuSTAR) or freeze_nH_all:
                 main_abscomp = (np.array(fitcont_high.complist)[[elem.absorption for elem in \
                                                                  fitcont_high.complist]])[0]
                 main_abscomp.mandatory = True
@@ -1597,8 +1602,10 @@ def line_detect(epoch_id,arg_dict):
                 ignore_indiv_ig(line_cont_ig_indiv)
 
             # forcing an absorption value if asked to
-            if sat_glob == 'NuSTAR' and freeze_nH:
-                broad_absval = freeze_nH_val
+            if freeze_nH_all:
+                broad_absval=freeze_nH_all_val
+            elif (sat_glob == 'NuSTAR' and freeze_nH_NuSTAR):
+                broad_absval = freeze_nH_NuSTAR_val
             else:
                 broad_absval = None
 
@@ -1608,7 +1615,7 @@ def line_detect(epoch_id,arg_dict):
                                    mandatory_abs=mandatory_abs)
 
             # forcing the absorption component to be included for the broad band fit
-            if sat_glob == 'NuSTAR' and freeze_nH:
+            if (sat_glob == 'NuSTAR' and freeze_nH_NuSTAR) or freeze_nH_all:
                 main_abscomp = (np.array(fitcont_broad.complist)[[elem.absorption for elem in \
                                                                   fitcont_broad.complist]])[0]
                 main_abscomp.mandatory = True
@@ -1714,7 +1721,7 @@ def line_detect(epoch_id,arg_dict):
                                          curr_logfile, curr_logfile_write)
 
                 # forcing the absorption component to be included for the broad band fit
-                if sat_glob == 'NuSTAR' and freeze_nH:
+                if (sat_glob == 'NuSTAR' and freeze_nH_NuSTAR) or freeze_nH_all:
                     main_abscomp = (np.array(fitcont_hid.complist)[[elem.absorption for elem in \
                                                                     fitcont_hid.complist]])[0]
                     main_abscomp.mandatory = True
@@ -1917,7 +1924,7 @@ def line_detect(epoch_id,arg_dict):
                 # thawing the absorption to allow improving its value
 
                 # first we remove the fixed value from the fitmod itself
-                if not (sat_glob == 'NuSTAR' and freeze_nH):
+                if not ((sat_glob == 'NuSTAR' and freeze_nH_NuSTAR) or freeze_nH_all):
                     # we reset the value of the fixed abs to allow it to be free if it gets deleted and put again
                     fitlines.fixed_abs = None
 
@@ -1927,7 +1934,7 @@ def line_detect(epoch_id,arg_dict):
                                                                 if
                                                                 elem_comp is not None]]])
 
-                if len(abs_incl_comps) != 0 and not (sat_glob == 'NuSTAR' and freeze_nH):
+                if len(abs_incl_comps) != 0 and not ((sat_glob == 'NuSTAR' and freeze_nH_NuSTAR) or freeze_nH_all):
                     main_abscomp = abs_incl_comps[0]
                     main_abscomp.xcomps[0].nH.frozen = False
 

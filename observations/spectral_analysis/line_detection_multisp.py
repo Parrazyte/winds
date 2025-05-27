@@ -191,7 +191,7 @@ ap.add_argument("-prefix",nargs=1,help='restrict analysis to a specific prefix',
 
 ####output directory
 ap.add_argument("-outdir",nargs=1,help="name of output directory for line plots",
-                default="lineplots_opt_NHfix",type=str)
+                default="lineplots_opt_NHfix_v2",type=str)
 
 #give object name directly, otherwise it will be taken from the second last directory (above the bigbatch)
 #as usual, "False" to remove this
@@ -479,8 +479,8 @@ ap.add_argument("-line_search_norm",nargs=1,
 ap.add_argument('-restrict_fakes',nargs=1,
                 help='restrict range of fake computation to 8keV max',default=False,type=bool)
 
-ap.add_argument('-freeze_nH_all',nargs=1,help='Freeze main absorption to a fiducial value',default=False,type=bool)
-ap.add_argument('-freeze_nH_all_value',nargs=1,help='Frozen main absorption value (10^22 cm^-2)',default=14,type=bool)
+ap.add_argument('-freeze_nH_all',nargs=1,help='Freeze main absorption to a fiducial value',default=True,type=bool)
+ap.add_argument('-freeze_nH_all_val',nargs=1,help='Frozen main absorption value (10^22 cm^-2)',default=0.15,type=bool)
 
 
 '''MULTI'''

@@ -2887,8 +2887,9 @@ def par_error(group,par,n_round=3,latex=False,mult=1):
         result_val=val_arr
 
     if latex:
-        result_val_latex='$'+str(result_val[0])+('\pm '+str(result_val[1]) if result_val[1]==result_val[2] else
-                                            '_{-'+str(result_val[1])+'}^{+'+str(result_val[2])+'}')+'$'
+
+        result_val_latex='$'+str(result_val[0])+(r"\pm"+' '+str(result_val[1]) if result_val[1]==result_val[2] else
+                                        '_{-'+str(result_val[1])+'}^{+'+str(result_val[2])+'}')+'$'
 
         return result_val_latex
     else:
@@ -3899,6 +3900,8 @@ class fitmod:
                 norm_vals=[AllModels(i_grp+1)(1).values[0] for i_grp in range(AllData.nGroups)]
                 delcomp('constant')
 
+            fixed_vals=None
+
             if component.absorption:
                 fixed_vals=[self.fixed_abs]
             elif "nthcomp" in component.compname or "thcomp" in component.compname:
@@ -3907,9 +3910,6 @@ class fitmod:
             if component.compname=="disk_thcomp" and self.thcomp_frac_frozen:
                 #fixing the gamma and the covering fraction
                 fixed_vals=[3.5,None,0.,None]
-
-            else:
-                fixed_vals=None
 
             self.includedlist = component.addtomod(fixed_vals=fixed_vals,incl_list=self.includedlist)
 
@@ -4064,6 +4064,8 @@ class fitmod:
             if not component.cal_e-1>=ener_bounds[0] and component.cal_e+1<=ener_bounds[1]:
                 continue
 
+            fixed_vals=None
+
             if component.absorption:
                 fixed_vals=[self.fixed_abs]
             elif "nthcomp" in component.compname or "thcomp" in component.compname:
@@ -4072,8 +4074,6 @@ class fitmod:
                 #fixing the gamma and the covering fraction
                 fixed_vals=[3.5,None,0.,None]
 
-            else:
-                fixed_vals=None
             self.includedlist = component.addtomod(fixed_vals=fixed_vals,incl_list=self.includedlist)
             self.update_fitcomps()
 
@@ -4180,6 +4180,8 @@ class fitmod:
             #copy of the includedlist for rollback after testing the component significance
             prev_includedlist=copy(self.includedlist)
 
+            fixed_vals = None
+
             if component.absorption:
                 fixed_vals=[self.fixed_abs]
             elif "nthcomp" in component.compname or "thcomp" in component.compname:
@@ -4187,9 +4189,6 @@ class fitmod:
             if component.compname=="disk_thcomp" and self.thcomp_frac_frozen:
                 #fixing the gamma and the covering fraction
                 fixed_vals=[3.5,None,0.,None]
-
-            else:
-                fixed_vals=None
 
             self.includedlist=component.addtomod(fixed_vals=fixed_vals,incl_list=self.includedlist)
 

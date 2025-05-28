@@ -24,6 +24,9 @@ from fitting_tools import lines_std,lines_e_dict, lines_std_names
 from bipolar import hotcold
 
 '''peak detection'''
+
+#2.6.6 version doesn't work, and 2.5 is out of date with newer scipy structure so have to modify
+#findpeaks to put from scipy.fft import fft, ifft instead of from from scipy import fft, ifft
 from findpeaks import findpeaks
 #mask to polygon conversion
 from imantics import Mask
@@ -844,8 +847,14 @@ def contour_chi2map(fig, axe, chi_dict, title='', combined=False):
                                 linewidths=0.5, linestyles='dashed')
     contours_base_labels = [r'base level ($\Delta C=0.5$)']
 
-    for l in range(len(contours_base_labels)):
-        contours_base.collections[l].set_label(contours_base_labels[l])
+    # avoiding error if there are no contours to plot
+    if float(mpl.__version__.split('.')[0])>=3 and float(mpl.__version__.split('.')[1])>=8:
+        contour_looper_base=contours_base.legend_elements()[0]
+    else:
+        contour_looper_base=contours_base.collections
+
+    for l in range(len(contour_looper_base)):
+        plt.plot([],[],label=contours_base_labels[l], colors='black',linewidths=0.5, linestyles='dashed')
 
     # for each peak and width, the coordinates need to be translated in real energy and norm coordinates
     try:
@@ -1025,8 +1034,13 @@ def coltour_chi2map(fig, axe, chi_dict, title='', combined=False, ax_bar=None, n
                                linestyles=contours_var_ls, label=contours_var_labels)
 
     # avoiding error if there are no contours to plot
-    for l in range(len(contours_var.collections)):
-        # there is an issue in the current matplotlib version with contour labels crashing the legend so we use proxies instead
+    if float(mpl.__version__.split('.')[0])>=3 and float(mpl.__version__.split('.')[1])>=8:
+        contour_looper=contours_var.legend_elements()[0]
+    else:
+        contour_looper=contours_var.collections
+
+    for l in range(len(contour_looper)):
+    # there is an issue in the current matplotlib version with contour labels crashing the legend so we use proxies instead
         axe.plot([], [], ls=contours_var_ls[l], label=contours_var_labels[l], color='black')
 
         # not using this
@@ -1038,7 +1052,12 @@ def coltour_chi2map(fig, axe, chi_dict, title='', combined=False, ax_bar=None, n
     contours_base = axe.contour(line_search_e_space, norm_par_space, chi_arr.T, levels=[chi_base + 0.5], colors='grey',
                                 linewidths=0.5, linestyles=contours_base_ls)
 
-    for l in range(len(contours_base.collections)):
+    if float(mpl.__version__.split('.')[0])>=3 and float(mpl.__version__.split('.')[1])>=8:
+        contour_looper_base=contours_base.legend_elements()[0]
+    else:
+        contour_looper_base=contours_base.collections
+
+    for l in range(len( contour_looper_base)):
         # same workaround here
         axe.plot([], [], ls=contours_base_ls[l], lw=0.5, label=contours_base_labels[l], color='black')
 

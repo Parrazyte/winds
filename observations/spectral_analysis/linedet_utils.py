@@ -35,10 +35,11 @@ from shapely.geometry import Polygon,Point
 from scipy.ndimage import binary_dilation
 import dill
 import time
+from xspec_config_multisp import set_ener
 
 def narrow_line_cycle(low_e,high_e,e_step=2e-2,plot_suffix='',baseload=None,
                       e_sat_low_indiv='auto',force_ylog_ratio=False,
-                      ratio_bounds=None,title=True):
+                      ratio_bounds=None,title=True,set_ener_str=None,set_ener_xrism=False):
 
     '''
     Simple wrapper to compute a line search and make an associated plot
@@ -52,6 +53,9 @@ def narrow_line_cycle(low_e,high_e,e_step=2e-2,plot_suffix='',baseload=None,
     prev_chatter=Xset.chatter
     Xset.chatter=1
 
+    if baseload is not None:
+        Xset.restore(baseload)
+
     if type(e_sat_low_indiv)==str and e_sat_low_indiv=='auto':
         ngroups=AllData.nGroups
         Plot('data')
@@ -59,6 +63,9 @@ def narrow_line_cycle(low_e,high_e,e_step=2e-2,plot_suffix='',baseload=None,
 
     else:
         e_sat_low_indiv_use=e_sat_low_indiv
+
+    if set_ener_str is not None:
+        set_ener(set_ener_str,xrism=set_ener_xrism)
 
 
     mod_ls=allmodel_data()

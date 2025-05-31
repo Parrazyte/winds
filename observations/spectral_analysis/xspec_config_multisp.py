@@ -372,7 +372,7 @@ def set_ener(mode='thcomp',xrism=False):
     if mode=='thcomp':
 
         if xrism:
-            AllModels.setEnergies('0.01 0.1 1000 log, 10. 19801 lin, 1000. 1000 log')
+            AllModels.setEnergies('0.01 0.1 1000 log, 10. 19800 lin, 1000. 1000 log')
         else:
             AllModels.setEnergies('0.01 1000. 10000 log')
 
@@ -2613,7 +2613,7 @@ def delcomp(compname,modclass=AllModels,give_ndel=False):
     else:
         return new_models
 
-def par_error(group,par,n_round=3,latex=False,mult=1):
+def par_error(group=1,par=1,n_round=3,latex=False,mult=1,man_val_arr=[]):
 
     '''
     returns an array with the error of the chosen parameter
@@ -2626,8 +2626,15 @@ def par_error(group,par,n_round=3,latex=False,mult=1):
 
     mult:
         multiplies the quantities by a given amount before truncating and returning them
+
+    if man_val_arr is not an empty array, uses that instead of fetching a parameter error
     '''
-    val_arr=np.array([AllModels(group)(par).values[0],
+
+
+    if len(man_val_arr)!=0:
+        val_arr=[man_val_arr[0],man_val_arr[0]-man_val_arr[1],man_val_arr[2]-man_val_arr[0]]
+    else:
+        val_arr=np.array([AllModels(group)(par).values[0],
               0 if AllModels(group)(par).error[0]==0 else (AllModels(group)(par).values[0] - AllModels(group)(par).error[0]),
                       0 if AllModels(group)(par).error[1] == 0 else
                       AllModels(group)(par).error[1] - AllModels(group)(par).values[0]])
@@ -2640,7 +2647,12 @@ def par_error(group,par,n_round=3,latex=False,mult=1):
         result_val=np.repeat(np.nan,3)
         result_val[0]=('%.'+str(n_round)+'e')%(val_arr[0])
         result_val[1]=('%.'+str(n_round)+'e')%(result_val[0]-float(('%.'+str(n_round)+'e')%(val_arr[0]-val_arr[1])))
-        result_val[2]=('%.'+str(n_round)+'e')%(float(('%.'+str(n_round)+'e')%(val_arr[0]+val_arr[2]))-result_val[0])
+        #result_val[2]=('%.'+str(n_round)+'e')%(float(('%.'+str(n_round)+'e')%(val_arr[0]+val_arr[2]))-result_val[0])
+
+        upper_decade_change=int(np.floor(np.log10(val_arr[0] + val_arr[2])) - np.floor(np.log10(val_arr[0])))
+
+        result_val[2]=('%.'+str(n_round+upper_decade_change)+'e')%(float(('%.'+str(n_round+upper_decade_change)+'e')
+                                                     %(val_arr[0]+val_arr[2]))-result_val[0])
 
     else:
         result_val=val_arr
@@ -6444,7 +6456,7 @@ def xPlot(types,axes_input=None,plot_saves_input=None,plot_arg=None,includedlist
         axes=[plt.subplot(elem) for elem in grid]
 
     else:
-        axes=[axes_input] if type(axes_input) is not list else axes_input
+        axes=[axes_input] if type(axes_input) not in [list,np.ndarray] else axes_input
 
     if plot_saves_input is None:
         plot_saves=plot_saver(','.join([elem if '_' not in elem else elem.split('_')[1] for elem in types.split(',')]))

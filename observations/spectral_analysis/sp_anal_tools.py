@@ -7,8 +7,38 @@ from astropy.time import Time,TimeDelta
 from general_tools import file_edit
 
 def sp_anal(obs_path,mod='powerlaw',baseload=False,model_load=False,obj='',scorpeon=True,overwrite=False,
-            outdir='s_a',absval=None,set_ener_str=None,set_ener_xrism=False,line_ul='',freeze_cont_ul=True,
-            bshift_range_ul=[-3000,3000],ul_level=99.7,n_ul_comp=101,ul_ener_range=[6.5,7.5]):
+            addcomp_list=[],freeze_nH_postfit=False,remove_edge_postfit=True,remove_calgaussian_postfit=True,
+
+            outdir='s_a',absval=None,set_ener_str=None,set_ener_xrism=False,
+
+            line_ul='',
+            freeze_cont_ul=True,
+            bshift_range_ul=[-3000,3000],
+            ul_level=99.7,
+            n_ul_comp=101,
+            ul_ener_range=[6.5,7.5]):
+
+    '''
+    Shorter code for spectral analysis
+    1. Can take:
+     -an observation path/a baseload (if baseload=True)
+        ->will then fit with the "mod" model
+     -a model_load (if model_load=True)
+        -> won't fit
+
+    2.1 if freeze_nh_postfit is not False, changes nH in a TBabs/TBfeo component to the value provided AFTER the fit
+    and BEFORE the addcomp_list
+
+    2.2 if remove_edge_postfit is True, removes all edges after the eift and before step 3.
+
+    3. No matter the choice, adds and fits the components in addcomp_list afterwards
+
+    4. Saves the result
+
+    5. computes line UL for the line_ul line (if line_ul is not set to '') w
+
+
+    '''
 
     plt.ioff()
 
@@ -135,6 +165,29 @@ def sp_anal(obs_path,mod='powerlaw',baseload=False,model_load=False,obj='',scorp
         # except:
         #     pass
 
+    if freeze_nH_postfit is not False:
+        if 'TBabs' in AllModels(1).componentNames:
+            AllModels(1).TBabs.nH.values=freeze_nH_postfit
+            AllModels(1).TBabs.nH.frozen=True
+        elif 'TBabs' in AllModels(1).componentNames:
+            AllModels(1).TBfeo.nH.values=freeze_nH_postfit
+            AllModels(1).TBfeo.nH.frozen=True
+
+    if remove_edge_postfit:
+        while 'edge' in AllModels(1).componentNames:
+            delcomp('edge')
+
+    if remove_calgaussian_postfit:
+        gauss_comp_list=[elem_comp for elem_comp in AllModels(1).componentNames if 'gaussian' in elem_comp]
+        #checking in reverse order to avoid changingn the component names
+        for elem in gauss_comp_list[::-1]:
+            if getattr(AllModels(1),elem).LineE.values[0] in [1.74]:
+                delcomp(elem)
+
+    for elem_comp in addcomp_list:
+            addcomp(elem_comp)
+            Fit.perform()
+
     if os.path.isfile(os.path.join(outdir,obs.split('.')[0]+'_mod.xcm')):
         os.remove(os.path.join(outdir,obs.split('.')[0]+'_mod.xcm'))
 
@@ -257,7 +310,7 @@ def NICER_run_all_sp(sort=False,reverse=False,mod='thcont'):
     for elem_sp in sp_list:
         sp_anal(elem_sp,mod=mod)
 
-def swift_OT_run_all_sp(sort=False,reverse=False,mod='thcont',obj='V4641Sgr',outdir='s_a',absval=None,
+def swift_OT_run_all_sp(sort=False,reverse=False,mod='thcont',obj='V4641Sgr',outdir='s_a',absval=None,addcomp_list=[],freeze_nH_postfit=False,
                         overwrite_baseload=False):
     sp_list=glob.glob('**_grp_opt.pi')
 
@@ -292,7 +345,7 @@ def swift_OT_run_all_sp(sort=False,reverse=False,mod='thcont',obj='V4641Sgr',out
             Xset.save(elem_epoch+'_baseload.xcm')
             AllData.clear()
 
-        sp_anal(elem_epoch+'_baseload.xcm',mod=mod,baseload=True,obj=obj,outdir=outdir,absval=absval)
+        sp_anal(elem_epoch+'_baseload.xcm',mod=mod,baseload=True,obj=obj,outdir=outdir,absval=absval,addcomp_list=addcomp_list,freeze_nH_postfit=freeze_nH_postfit)
 
 
 def fit_broader(epoch_id,add_gaussem=True,bat_interp_dir='/home/parrama/Documents/Observ/copy_SSD/Swift/BAT_interp',

@@ -47,7 +47,7 @@ def make_zip(filebites_arr,filename_arr):
 
     return zip_buffer
 
-def R_g(M_BH_sol):
+def R_s(M_BH_sol):
 
 
     c_SI = 2.99792e8
@@ -56,8 +56,21 @@ def R_g(M_BH_sol):
 
     return 2*G_SI*M_BH_sol*Msol_SI/c_SI**2/1e3*u.km
 
+def R_g(M_BH_sol):
+
+
+    c_SI = 2.99792e8
+    G_SI = 6.674e-11
+    Msol_SI = 1.98892e30
+
+    return G_SI*M_BH_sol*Msol_SI/c_SI**2/1e3*u.km
+
 def dist_factor(d_kpc):
     return 4*np.pi*(d_kpc*1e3*3.086e18)**2*u.cm*u.cm
+
+def edd_factor(d_kpc,m_sun):
+    return dist_factor(d_kpc) / (1.26e38 * m_sun)
+
 def norm_to_Rin(diskbb_norm,D_kpc=8,theta=45,phys=False,kappa=1.7):
 
     '''
@@ -76,6 +89,12 @@ def norm_to_Rin(diskbb_norm,D_kpc=8,theta=45,phys=False,kappa=1.7):
         val_fin=r_in
     return val_fin
 
+def par_norm_to_Rin(par_number,model_number=1,D_kpc=8,theta=45,phys=False,kappa=1.7):
+
+    from xspec import AllModels
+    par_val=[AllModels(model_number)(par_number).values[0],AllModels(model_number)(par_number).error[0],
+             AllModels(model_number)(par_number).error[1]]
+    return norm_to_Rin(par_val,D_kpc,theta,phys,kappa)
 # def ravel_ragged_test(array,mode=None):
 #
 #     '''ravels a 2/3d array/list even with ragged nested sequences'''

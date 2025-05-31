@@ -33,8 +33,8 @@ from astropy.io import fits
 from astropy.time import Time, TimeDelta
 from astroquery.simbad import Simbad
 
-from general_tools import interval_extract
-
+from general_tools import interval_extract,edd_factor
+from xspec_config_multisp import xPlot
 
 from copy import deepcopy
 
@@ -73,7 +73,7 @@ def lc_internal_paper():
 
     binning=128
 
-    figdir='/media/parrama/crucial_SSD/Observ/BHLMXB/XRISM/V4641Sgr/timeres/v4641dat/xtd/lc'
+    figdir='/media/parrazyte/crucial_SSD/Observ/BHLMXB/XRISM/V4641Sgr/timeres/v4641dat/xtd/lc'
     lc_03_4 = fits.open(figdir+'/xa901001010xtd_src_0p3to4p0_bin128s.lc')
     lc_03_4_bg = fits.open(figdir+'/xa901001010xtd_bgd_0p3to4p0_bin128s.lc')
 
@@ -137,7 +137,7 @@ def lc_internal_paper():
 
 def lc_optical_monit():
 
-    lc_optical_dir='/media/parrama/crucial_SSD/Observ/BHLMXB/Optical/V4641Sgr'
+    lc_optical_dir='/media/parrazyte/crucial_SSD/Observ/BHLMXB/Optical/V4641Sgr'
 
     lc_V=pd.read_csv(os.path.join(lc_optical_dir,'v4641Vpe-ccd_clean.dat'),
                      sep=' ',names=['MJD','V','ST'])
@@ -244,7 +244,7 @@ def vrot_earth(source='V4641sgr',date='2024-09-30'):
 
 
 def lc_paper_monit(spec_mode='Eddington'):
-    lc_dir = '/home/parrama/Documents/Work/PostDoc/docs/docs_XRISM/V4641Sgr_docs/'
+    lc_dir = '/home/parrazyte/Documents/Work/PostDoc/docs/docs_XRISM/V4641Sgr_docs/'
 
     MAXI_psf_csv = pd.read_csv(os.path.join(lc_dir, 'MAXI_megumi/v4640_241111/gsc_final', 'V4641_Sgr_1d.qdp'),
                                skiprows=7,
@@ -255,46 +255,43 @@ def lc_paper_monit(spec_mode='Eddington'):
                               skiprows=1,
                               names=['MJD_start', 'MJD_end', 'counts', 'counts_err'], sep=' ')
 
-    NICER_dates_csv = pd.read_csv(os.path.join(lc_dir, 'NICER', 'NICER_epoch_bounds.txt'), skiprows=1,
-                                  names=['tstart', 'tstop', 'mjdstart', 'mjdstop'], sep='\t')
-
     EP_csv =pd.read_csv(os.path.join(lc_dir,'EP','V4641_wxt_lc_0515_154_ord_v2_0.txt'),skiprows=4,header=None,
                                   names=['mjd', 'exposure', 'rate_tot','rate_tot_err',
                                          'rate_soft','rate_soft_err',
                                          'rate_hard','rate_hard_err'],sep=' ')
 
-    swift_dir='/media/parrama/crucial_SSD/Observ/BHLMXB/Swift/Sample/V4641Sgr/specfiles_V4641Sgr/bigbatch/s_a'
-    swift_csv=pd.read_csv(os.path.join(swift_dir,'infos_fit.txt'),header=0,sep='\t')
-
-    swift_f_3_10=np.array(swift_csv[swift_csv.columns[5:12]].sum(1))
+    sp_anal_dir='/media/parrazyte/crucial_SSD/Observ/BHLMXB/XRISM/V4641Sgr/simultaneous'
+    swift_csv=pd.read_csv(os.path.join(sp_anal_dir,'infos_fit_deabs_minus_highbg_Swift_NH_015.txt'),
+                          header=0,sep='\t')
+    NICER_csv=pd.read_csv(os.path.join(sp_anal_dir,'infos_fit_deabs_minus_highbg_NICER_NH_015.txt'),
+                          header=0,sep='\t')
+    swift_f_1_10=np.array(swift_csv[swift_csv.columns[5:12]].sum(1))
     swift_f_3_6=np.array(swift_csv[swift_csv.columns[5:8]].sum(1))
     swift_f_6_10=np.array(swift_csv[swift_csv.columns[8:12]].sum(1))
     swift_HR=np.array(swift_f_6_10/swift_f_3_6)
     swift_dates=np.array(mdates.date2num(swift_csv['t_start']))
 
     swift_dates_order=swift_dates.argsort()
-    swift_f_3_10=swift_f_3_10[swift_dates_order]
+    swift_f_1_10=swift_f_1_10[swift_dates_order]
     swift_f_3_6=swift_f_3_6[swift_dates_order]
     swift_f_6_10=swift_f_6_10[swift_dates_order]
     swift_HR=swift_HR[swift_dates_order]
     swift_dates=swift_dates[swift_dates_order]
 
-    NICER_mjds = Time(NICER_dates_csv['mjdstart'], format='mjd')
-    NICER_mjde = Time(NICER_dates_csv['mjdstop'], format='mjd')
+    NICER_f_1_10=np.array(NICER_csv[NICER_csv.columns[5:12]].sum(1))
+    NICER_f_3_6=np.array(NICER_csv[NICER_csv.columns[5:8]].sum(1))
+    NICER_f_6_10=np.array(NICER_csv[NICER_csv.columns[8:12]].sum(1))
+    NICER_HR=np.array(NICER_f_6_10/NICER_f_3_6)
+    NICER_dates=np.array(mdates.date2num(NICER_csv['t_start']))
 
-    NICER_mjd_err = (NICER_mjde - NICER_mjds) / 2
-    NICER_mjd = NICER_mjds + NICER_mjd_err
-    NICER_dates = mdates.date2num(NICER_mjd.datetime)
-    NICER_dateserr = NICER_mjd_err.to_value('jd')
+    NICER_dates_order=NICER_dates.argsort()
+    NICER_f_1_10=NICER_f_1_10[NICER_dates_order]
+    NICER_f_3_6=NICER_f_3_6[NICER_dates_order]
+    NICER_f_6_10=NICER_f_6_10[NICER_dates_order]
+    NICER_HR=NICER_HR[NICER_dates_order]
+    NICER_dates=NICER_dates[NICER_dates_order]
 
-    NICER_flux_csv = pd.read_csv(os.path.join(lc_dir, 'NICER', 'NICER_line_values_4_10_0.02_0.01_10_500.txt'), sep='\t')
-
-    #ordering the NICER array by date (here using obsid, which works in this case)
-    NICER_flux_csv=NICER_flux_csv.reindex(NICER_flux_csv.index[NICER_flux_csv.index.argsort()])
-
-    NICER_flux_arr = np.array([literal_eval(elem) for elem in NICER_flux_csv['broad_flux']])
-
-    edd_factor_source=5704723.076
+    edd_factor_source=edd_factor(6.2,6.4)
 
     # assuming an HR of 0.5 here
     MAXI_od_210_f = MAXI_od_csv['counts'] * 1 / (1.065 + 1.172) * 2 * 2.4e-8
@@ -447,30 +444,30 @@ def lc_paper_monit(spec_mode='Eddington'):
 
     plt.subplots_adjust(hspace=0)
 
-    ax_lc[1].set_ylim(0, 0.29)
+    ax_lc[1].set_ylim(0.0, 0.29)
 
     flux_convert=1
     if spec_mode=='flux':
         flux_convert=1
-        ax_lc[2].set_ylabel('NICER/$Swift$\n[3-10]keV unabsorbed flux\n($10^{-9}$ erg/s/cm²)')
+        ax_lc[2].set_ylabel('[3-10]keV unabsorbed flux\n($10^{-9}$ erg/s/cm²)')
         ax_lc[2].set_ylim(0, 2e-9 * 1e9)
 
     elif spec_mode=='Eddington':
         flux_convert=edd_factor_source
         ax_lc[2].set_yscale('log')
-        ax_lc[2].set_ylabel('NICER/$Swift$\n [3-10]keV unabsorbed luminosity\n(L/L$_{Edd}$)')
+        ax_lc[2].set_ylabel('unabsorbed luminosity \n in [1-10]keV (L/L$_{Edd}$)')
         # ax_lc[2].set_ylim(6e-5, 5e-3)
 
     ax_lc[0].xaxis.set_major_formatter(date_format)
 
     ax_lc[0].set_ylabel('MAXI [2-10]keV flux\n($10^{-9}$ ergs/s/cm²)')
-    ax_lc[3].set_ylabel('NICER/$Swift$\n[6-10]/[3-10]keV\nHR')
+    ax_lc[3].set_ylabel('unabsorbed HR \n [6-10]/[3-10]keV')
 
-    ax_lc[1].set_ylabel('Einstein Probe count rate \n[0.5-4] keV')
+    ax_lc[1].set_ylabel('Einstein Probe \n[0.5-4] keV count rate ')
 
     ax_lc[1].errorbar(x=mdates.date2num(Time(EP_csv['mjd'],format='mjd').datetime),
                       y=EP_csv['rate_tot'],yerr=EP_csv['rate_tot_err'],
-                      marker='d', markersize=3,
+                      marker='s', markersize=5,
                       linewidth=0.5,elinewidth=1.,ls=':',color='black')
 
     ax_lc[0].errorbar(x=MAXI_psf_dates, xerr=0.5, y=MAXI_psf_210_f * 1e9, yerr=MAXI_psf_210_err * 1e9, linewidth=0.5,
@@ -518,40 +515,53 @@ def lc_paper_monit(spec_mode='Eddington'):
 
 
     #NICER points
-    ax_lc[2].errorbar(NICER_dates, xerr=NICER_dateserr, y=NICER_flux_arr.T[4][0] * flux_convert,
-                      yerr=NICER_flux_arr.T[4][1:] * flux_convert,marker='d',markersize=3,
+    NICER_y=(NICER_f_1_10 * flux_convert)
+    ax_lc[2].errorbar(NICER_dates,y=NICER_y,xerr=0,yerr=0,marker='d',markersize=5,
+                      linewidth=0.5,
+                      elinewidth=1., ls=':', color='black',label="NICER")
+
+    ax_lc[3].errorbar(NICER_dates,y=NICER_HR,xerr=0,yerr=0,marker='d',markersize=5,
                       linewidth=0.5,
                       elinewidth=1., ls=':', color='black')
 
     #Swift points
-    swift_y=(swift_f_3_10 * flux_convert)[swift_dates>19500]
-    ax_lc[2].errorbar(swift_dates[swift_dates>19500],y=swift_y,xerr=0,yerr=0,marker='d',markersize=3,
+    swift_y=(swift_f_1_10 * flux_convert)[swift_dates>19500]
+    ax_lc[2].errorbar(swift_dates[swift_dates>19500],y=swift_y,
+                      xerr=0,yerr=0,
+                      marker='d',markersize=5,
+                      linewidth=0.5,
+                      elinewidth=1., ls=':', color='brown',label=r"Swift")
+    ax_lc[3].errorbar(swift_dates[swift_dates>19500],y=swift_HR[swift_dates>19500],
+                      xerr=0,yerr=0,
+                      marker='d',markersize=5,
                       linewidth=0.5,
                       elinewidth=1., ls=':', color='brown')
 
+
+
     #for adding the XRISM point
-    #from a disk with 1.84 tin and 0.13 norm
-    # Model Flux 0.0020637 photons (1.6137e-11 ergs/cm^2/s) range (3.0000 - 10.000 keV)
+    #from the full_lines model
+    # Model Flux 0.0055709 photons (2.5823e-11 ergs/cm^2/s) range (1.0000 - 10.000 keV)
+    # Model Flux 0.0015144 photons (1.0085e-11 ergs/cm^2/s) range (3.0000 - 6.0000 keV)
+    # Model Flux 0.00046412 photons (5.4538e-12 ergs/cm^2/s) range (6.0000 - 10.000 keV)
+
     ax_lc[2].errorbar((mdates.date2num((xrism_interval[0]+TimeDelta(3.5*3600,format='sec')).datetime)),
-                      1.6137e-11*edd_factor_source,marker='X',color='green',markersize=5)
+                      2.5823e-11*edd_factor_source,marker='X',color='green',markersize=10,label="XRISM")
 
-    NICER_HR = NICER_flux_arr.T[2][0] / NICER_flux_arr.T[1][0]
+    ax_lc[3].errorbar((mdates.date2num((xrism_interval[0]+TimeDelta(3.5*3600,format='sec')).datetime)),
+                      5.4538e-12/1.0085e-11,marker='X',color='green',markersize=10)
 
-    NICER_HR_err = np.array([((NICER_flux_arr.T[2][i] / NICER_flux_arr.T[2][0]) ** 2 + \
-                              (NICER_flux_arr.T[1][i] / NICER_flux_arr.T[1][0]) ** 2) ** (1 / 2) * NICER_HR for i in
-                             [1, 2]])
+    ax_lc[2].legend(loc='lower left')
 
-    ax_lc[3].errorbar(NICER_dates, xerr=NICER_dateserr, y=NICER_HR, yerr=NICER_HR_err,
-                      linewidth=0.5,marker='d',markersize=3,
-                      elinewidth=1., ls=':', color='black')
 
-    ax_lc[3].set_ylim(0.1, 2)
+    ax_lc[2].set_ylim(6e-5,2e-3)
+    ax_lc[3].set_ylim(0.1, 1.5)
 
     plt.show()
 
     ax_lc[0].set_xlim(NICER_dates[0] - 15.5, NICER_dates[-1] + 7.5)
 
-    plt.subplots_adjust(left=0.16, right=0.96, top=0.97, bottom=0.03)
+    plt.subplots_adjust(left=0.15, right=0.96, top=0.97, bottom=0.03)
 
     plt.show()
 
@@ -559,4 +569,15 @@ def lc_paper_monit(spec_mode='Eddington'):
     plt.setp(ax_lc[2].get_yticklabels()[-1], visible=False)
     plt.setp(ax_lc[3].get_yticklabels()[-1], visible=False)
 
+def xcustom_eeuf(mode='ratio'):
+    fig,ax=plt.subplots(2, 1, figsize=(10, 6),)
+    if mode=='ratio':
+        xPlot('eeuf,ratio',axes_input=ax.tolist(),force_ylog_ratio=True,ylims=[[5e-4, 7e-2],[3e-1, 9.1]])
+    if mode=='delchi':
+        xPlot('eeuf,delchi',axes_input=ax.tolist(),)
+        ax[0].set_yscale('log')
+        ax[0].set_ylim([5e-4, 7e-2])
+        ax[1].tick_params(
+            axis='x', which='both', bottom=True, labelbottom=True)
+    plt.subplots_adjust(hspace=0)
 

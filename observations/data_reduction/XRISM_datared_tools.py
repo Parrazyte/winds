@@ -599,7 +599,7 @@ def compute_avg_BR_pixlist(branch_file='auto',pixel_str='branch_filter',branch_t
     return branch_avg_list
 
 
-def plot_BR(branch_file, save_paths=None, excl_pixel=[],task='rslbratios'):
+def plot_BR(branch_file, save_paths=None, excl_pixel=[],task='rslbratios',plot_hp_sim_curve_band=True):
     '''
     Wrapper around the branching ratios plotting function
 
@@ -715,7 +715,8 @@ def plot_BR(branch_file, save_paths=None, excl_pixel=[],task='rslbratios'):
         ax_brand_band_eband.set_xlabel(r'Pixel count rate (s$^{-1}$)')
         ax_brand_band_eband.set_ylabel('Pixel branching ratios')
         ax_brand_band_eband.set_title('Observed branching ratios in the '+branch_band+' keV band')
-        # showcasing the branch_banding ratios
+
+        # showcasing the branch_band ratios
         plt.plot(branch_data_lsreal_eband['RATETOT'],
                  branch_data_lsreal_eband['BRANCHHP'],
                  ls='', marker='d',
@@ -773,10 +774,14 @@ def plot_BR(branch_file, save_paths=None, excl_pixel=[],task='rslbratios'):
 
         rate_pred_order=branch_simu_lsreal_efull['RATETOT'].argsort()
 
-        plt.plot(branch_simu_lsreal_efull['RATETOT'][rate_pred_order],
-                 branch_simu_lsreal_efull['BRANCHHP'][rate_pred_order],
-                 ls='-', marker='',
-                 color='green', label='')
+        if plot_hp_sim_curve_band:
+            plt.plot(branch_simu_lsreal_efull['RATETOT'][rate_pred_order],
+                     branch_simu_lsreal_efull['BRANCHHP'][rate_pred_order],
+                     ls='-', marker='',
+                     color='green', label='')
+
+        # plt.axhline(1,0,1,ls='-', marker='',
+        #              color='green', label='')
 
         plt.plot(branch_simu_lsreal_efull['RATETOT'][rate_pred_order],
                  branch_simu_lsreal_efull['BRANCHMP'][rate_pred_order],
@@ -845,10 +850,13 @@ def plot_BR(branch_file, save_paths=None, excl_pixel=[],task='rslbratios'):
 
         rate_pred_order=branch_simu_lsreal_efull['RATETOT'].argsort()
 
+        #simulated values
+
         plt.plot(branch_simu_lsreal_efull['RATETOT'][rate_pred_order],
                  branch_simu_lsreal_efull['BRANCHHP'][rate_pred_order],
                  ls='-', marker='',
                  color='green', label='')
+
 
         plt.plot(branch_simu_lsreal_efull['RATETOT'][rate_pred_order],
                  branch_simu_lsreal_efull['BRANCHMP'][rate_pred_order],
@@ -869,10 +877,6 @@ def plot_BR(branch_file, save_paths=None, excl_pixel=[],task='rslbratios'):
                  branch_simu_lsreal_efull['BRANCHLS'][rate_pred_order],
                  ls='-', marker='',
                  color='red', label='')
-
-        plt.plot([],[],
-                 ls='-', marker='',
-                 color='black', label='theoretical values')
 
         # creating a secondary axis to show the pixel positions
         ax_up = ax_branch_band_full.secondary_xaxis('top')
@@ -996,7 +1000,7 @@ def resolve_BR(directory='auto_repro', anal_dir_suffix='',
                remove_cal_pxl_resolve=False,
                pixel_filter_rule='ratio_LS_6+remove_27',
                heasoft_init_alias='heainit', caldb_init_alias='caldbinit',
-               parallel=False,repro_suffix='repro'):
+               parallel=False,repro_suffix='repro',plot_hp_sim_curve_band=True):
     '''
     Computes a file and plot with the branching ratio information for each resolve event file
 
@@ -1223,7 +1227,13 @@ def resolve_BR(directory='auto_repro', anal_dir_suffix='',
                     save_paths=[indiv_file.replace('.evt', '_branch_screen_2-12.png'),
                                 indiv_file.replace('.evt', '_branch_screen_full.png'),
                                 indiv_file.replace('.evt', '_branch_screen_full_ratio.png')],
-                    excl_pixel=pixel_exclude_list)
+                    excl_pixel=pixel_exclude_list,plot_hp_sim_curve_band=plot_hp_sim_curve_band)
+
+                plot_BR('/'.join(indiv_file.split('/')[:-1])+'/branch/branch_2keVto12keV_brVpxcnt.fits',
+                    save_paths=[indiv_file.replace('.evt', '_branch_screen_2-12.pdf'),
+                                indiv_file.replace('.evt', '_branch_screen_full.pdf'),
+                                indiv_file.replace('.evt', '_branch_screen_full_ratio.pdf')],
+                    excl_pixel=pixel_exclude_list,plot_hp_sim_curve_band=plot_hp_sim_curve_band)
 
             bashproc.sendline('exit')
 

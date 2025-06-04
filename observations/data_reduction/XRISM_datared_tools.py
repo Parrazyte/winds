@@ -499,12 +499,18 @@ def resolve_RTS(directory='auto_repro',anal_dir_suffix='',heasoft_init_alias='he
 
     bashproc.sendline('cd '+os.path.join(os.getcwd(),anal_dir))
 
-    if os.path.isfile(directory_use + '/resolve_RTS'+('_'+anal_dir_suffix if anal_dir_suffix!='' else '')+'.log'):
-        os.system('rm ' + directory_use + '/resolve_RTS'+('_'+anal_dir_suffix if anal_dir_suffix!='' else '')+'.log')
+    log_dir=os.path.join(os.getcwd(),anal_dir,'log')
+    os.system('mkdir -p '+os.path.join(os.getcwd(),anal_dir,'log'))
 
-    with (no_op_context() if parallel else StdoutTee(directory_use + '/resolve_RTS'+('_'+anal_dir_suffix if anal_dir_suffix!='' else '')+'.log', mode="a", buff=1,
+    log_path=os.path.join(log_dir,'resolve_RTS'+('_'+anal_dir_suffix if anal_dir_suffix!='' else '')+'.log')
+
+
+    if os.path.isfile(log_path):
+        os.system('rm ' + log_path)
+
+    with (no_op_context() if parallel else StdoutTee(log_path, mode="a", buff=1,
                                                      file_filters=[_remove_control_chars]), \
-          StderrTee(directory_use + '/resolve_RTS'+('_'+anal_dir_suffix if anal_dir_suffix!='' else '')+'.log', buff=1, file_filters=[_remove_control_chars])):
+          StderrTee(log_path, buff=1, file_filters=[_remove_control_chars])):
 
         if not parallel:
             bashproc.logfile_read = sys.stdout
@@ -1043,12 +1049,18 @@ def resolve_BR(directory='auto_repro', anal_dir_suffix='',
 
     bashproc.sendline('cd ' + os.path.join(os.getcwd(), anal_dir))
 
-    if os.path.isfile(directory_use + '/resolve_BR'+('_'+anal_dir_suffix if anal_dir_suffix!='' else '')+'.log'):
-        os.system('rm ' + directory_use + '/resolve_BR'+('_'+anal_dir_suffix if anal_dir_suffix!='' else '')+'.log')
+    log_dir=os.path.join(os.getcwd(),anal_dir,'log')
+    os.system('mkdir -p '+os.path.join(os.getcwd(),anal_dir,'log'))
 
-    with (no_op_context() if parallel else StdoutTee(directory_use + '/resolve_BR'+('_'+anal_dir_suffix if anal_dir_suffix!='' else '')+'.log', mode="a", buff=1,
+    log_path=os.path.join(log_dir,'resolve_BR'+('_'+anal_dir_suffix if anal_dir_suffix!='' else '')+'.log')
+
+
+    if os.path.isfile(log_path):
+        os.system('rm ' + log_path)
+
+    with (no_op_context() if parallel else StdoutTee(log_path, mode="a", buff=1,
                                                      file_filters=[_remove_control_chars]), \
-          StderrTee(directory_use + '/resolve_BR'+('_'+anal_dir_suffix if anal_dir_suffix!='' else '')+'.log', buff=1, file_filters=[_remove_control_chars])):
+          StderrTee(log_path, buff=1, file_filters=[_remove_control_chars])):
 
         if not parallel:
             bashproc.logfile_read = sys.stdout
@@ -1237,6 +1249,211 @@ def resolve_BR(directory='auto_repro', anal_dir_suffix='',
 
             bashproc.sendline('exit')
 
+def mpdaf_load_img(sky_img_path):
+    # loading the IMG file with mpdaf
+    with fits.open(sky_img_path) as hdul:
+        try:
+
+            img_data = hdul[0].data
+            src_mpdaf_WCS = mpdaf_WCS(hdul[0].header)
+            src_astro_WCS = astroWCS(hdul[0].header)
+
+            img_obj_whole = Image(data=img_data, wcs=src_mpdaf_WCS)
+        except:
+
+            img_data = hdul[1].data
+            src_mpdaf_WCS = mpdaf_WCS(hdul[1].header)
+            src_astro_WCS = astroWCS(hdul[1].header)
+
+            img_obj_whole = Image(data=img_data, wcs=src_mpdaf_WCS)
+
+    return img_obj_whole,src_mpdaf_WCS,src_astro_WCS
+
+def target_deg(source_name,target_coords=None):
+    '''
+    source_name will be passed into simbad
+
+    target_coords can be a [str,str] (will then be converted from sexa to deg)
+                         a [float,float] (in which case it remains unchanged)
+    '''
+
+    if target_coords is None:
+        print('\nAuto mode.')
+        print('\nAutomatic search of the directory names in Simbad.')
+
+        obj_auto = Simbad.query_object(source_name)[0]
+
+        # if the output is already in degree units
+        if type(obj_auto['dec']) == np.float64 and type(obj_auto['ra']) == np.float64:
+            obj_deg = [str(obj_auto['ra']), str(obj_auto['dec'])]
+        else:
+            # careful the output after the first line is in dec,ra not ra,dec
+            obj_deg = sexa2deg([float(obj_auto['dec']).replace(' ', ':'), float(obj_auto['ra']).replace(' ', ':')])[
+                      ::-1]
+            obj_deg = [str(obj_deg[0]), str(obj_deg[1])]
+    else:
+        if type(target_coords[0]) == str:
+            obj_deg = sexa2deg([target_coords[1].replace(' ', ':'), target_coords[0].replace(' ', ':')])[::-1]
+        else:
+            obj_deg = target_coords
+
+    return obj_deg
+
+def mpdaf_plot_img(sky_img_path,rad_crop=[200,200],crop_coords=None,
+                   target_name_list=[None],target_coords_list='target',
+                   target_sizes=[10],target_colors=['red'],
+                   target_names=['auto'],target_names_offset=[1.1],
+                   title='',save=False):
+
+    '''
+    Plot an mpdaf image in sky coordinates, with a given cropping if requested,
+        and additional regions highlighting sources if requested.
+        The crop is made centered on the position of the first source if crop_coords is None, otherwise to
+        the coordinates given
+
+        source_names/target_coords/target_sizes: iterables of the same len
+        source_names/target_coords are used in target_deg to get the position of the sources
+        target_sizes gives the source region
+    '''
+
+    img_obj_whole,src_mpdaf_WCS,src_astro_WCS=mpdaf_load_img(sky_img_path)
+
+    if target_name_list[0] is None and target_coords_list[0] is None:
+        obj_deg_list=[]
+    else:
+        obj_deg_list=np.array([target_deg(elem_source_name,elem_target_coords) for
+                  (elem_source_name,elem_target_coords) in zip(target_name_list,target_coords_list)],dtype=float)
+
+    if crop_coords is None:
+        crop_center=obj_deg_list[0]
+    elif type(crop_coords)==str and crop_coords=='auto':
+        with fits.open(sky_img_path) as hdul:
+            crop_center=[hdul[0].header['RA_PNT'],hdul[0].header['DEC_PNT']]
+    else:
+        crop_center=crop_coords
+    if len(obj_deg_list)!=0:
+        try:
+            imgcrop_src = img_obj_whole.copy().subimage(center=crop_center[::-1], size=rad_crop)
+        except:
+            print('\nCropping region entirely out of the image. Field of view issue....')
+            return '\nCropping region entirely out of the image. Field of view issue....'
+    else:
+        imgcrop_src=img_obj_whole
+    '''
+    showing the bounds of the desired region
+    no easy way to do it currently so we draw a circle manually after converting
+    the angular coordinates to physical coordinates with the WCS
+    note that the crop re-sizes the axes so we need to offset the position of the circle afterwards
+    the "0,0" ends up at the bottom left of the graph 
+    so we need to remove half a rad_crop in y and add half a rad_crop in x
+    '''
+
+    if save:
+        plt.ioff()
+    # plotting and saving imgcrop
+    fig_catal_crop, ax_catal_crop = plt.subplots(1, 1, subplot_kw={'projection': src_astro_WCS},
+                                                 figsize=(12, 10))
+
+    circle_rad_pos=[]
+    target_circles=[]
+
+    coord_crop_eff=[imgcrop_src.wcs.naxis1,imgcrop_src.wcs.naxis2][::-1]
+    coord_start_eff=imgcrop_src.wcs.get_start()[::-1]
+
+    #the axis increment is actually modified afte resizing and doesnt' match the intiial values, so
+    #we update it aswell
+    axis_increment_eff=imgcrop_src.get_axis_increments()*(np.array(coord_crop_eff))/np.array(rad_crop)*2
+    for i_target,(elem_ra_deg,elem_dec_deg) in enumerate(obj_deg_list):
+
+        #kinda fucked up but I think it works and my brain can't figure out the simple formula
+        #note that manual checking with ds9 showed that there was a 0.5 pixel offset on the y axis
+        #so we correct that manually
+        #note that the sub-pixel accuracy is so-so
+        # circle_rad_pos+= [[ \
+        #     ((rad_crop[0]/2) if i_target==0 else (rad_crop[0]  + (elem_ra_deg - obj_deg_list[0][0])*3600/2))/ \
+        #                                                     (imgcrop_src.get_axis_increments()[0] * 3600)\
+        #     %(rad_crop[0]/(-imgcrop_src.get_axis_increments()[1] * 3600)),
+        #     (rad_crop[1] / 2 + (elem_dec_deg - obj_deg_list[0][1])*3600) / \
+        #                                                     (-imgcrop_src.get_axis_increments()[1] * 3600)\
+        #     %(rad_crop[1]/(-imgcrop_src.get_axis_increments()[1] * 3600))-0.5]]
+
+        # circle_rad_pos+= [[ \
+        #     ((rad_crop[0] / 2) if elem_ra_deg==crop_center[0] else (rad_crop[0]  + (elem_ra_deg - crop_center[0])*3600/2))/ \
+        #                                                     (imgcrop_src.get_axis_increments()[0] * 3600)\
+        #     %(rad_crop[0]/(imgcrop_src.get_axis_increments()[0] * 3600)),
+        #     (rad_crop[1] / 2 + (elem_dec_deg - crop_center[1])*3600) / \
+        #                                                     (-imgcrop_src.get_axis_increments()[1] * 3600)\
+        #     %(rad_crop[1]/(-imgcrop_src.get_axis_increments()[1] * 3600))-0.5]]
+
+        circle_rad_pos+= [[(coord_start_eff[0]-elem_ra_deg)/axis_increment_eff[0]-0.5,
+            (rad_crop[1] / 2 + (elem_dec_deg - crop_center[1])*3600) / \
+                                                            (-imgcrop_src.get_axis_increments()[1] * 3600)\
+            %(rad_crop[1]/(-imgcrop_src.get_axis_increments()[1] * 3600))-0.5]]
+
+        # circle_rad_pos+= [[ \
+        #     rad_crop_eff[0]/2+((crop_center[0]-elem_ra_deg)*3600)/ \
+        #                                                     (imgcrop_src.get_axis_increments()[0] * 3600)\
+        #     %(rad_crop[0]/(imgcrop_src.get_axis_increments()[0] * 3600)),
+        #     (rad_crop[1] / 2 + (elem_dec_deg - crop_center[1])*3600) / \
+        #                                                     (-imgcrop_src.get_axis_increments()[1] * 3600)\
+        #     %(rad_crop[1]/(-imgcrop_src.get_axis_increments()[1] * 3600))-0.5]]
+        # if i_target==1:
+        #
+        #     middle=rad_crop_eff[0]/(imgcrop_src.get_axis_increments()[0] * 3600)
+        #
+        #     fac=1/(imgcrop_src.get_axis_increments()[0] * 3600)
+        #     cc=crop_center[0]*3600
+        #     raa=elem_ra_deg*3600
+        #
+        #     fv=(cc-raa)*fac
+        #     breakpoint()
+        #
+        # breakpoint()
+
+        target_circles+= [plt.Circle([circle_rad_pos[-1][0], circle_rad_pos[-1][1]], target_sizes[i_target],
+                            color=target_colors[i_target], zorder=1000, fill=False)]
+        if target_names[i_target]!='':
+            if target_names[i_target]=='auto':
+                curr_target_name=target_name_list[i_target]
+            else:
+                curr_target_name=target_names[i_target]
+
+            ax_catal_crop.text(circle_rad_pos[-1][0],circle_rad_pos[-1][1]+target_sizes[i_target]*target_names_offset[i_target],
+                               curr_target_name,
+                     color=target_colors[i_target],horizontalalignment='center')
+
+    breakpoint()
+
+    # testing if the resulting image is empty
+    if len(imgcrop_src.data.nonzero()[0]) == 0:
+        print('Cropped image empty.')
+        return 'Cropped image empty.'
+
+    if title!='':
+        ax_catal_crop.set_title(title)
+    catal_plot = imgcrop_src.plot(cmap='plasma', scale='log')
+    plt.colorbar(catal_plot, location='bottom', fraction=0.046, pad=0.04)
+    for elem_circle in target_circles:
+        ax_catal_crop.add_patch(elem_circle)
+
+    #updating the colorbar
+    ax_cb=ax_catal_crop.get_figure().get_children()[-1]
+    ax_cb.set_xticks(np.logspace(0, np.log10(imgcrop_src.data.max()), 8))
+
+    #adding a top xaxis label since the cmap is hiding the bottom one
+    ax_catal_crop.tick_params(
+        axis='x',  # changes apply to the x-axis
+        which='both',  # both major and minor ticks are affected
+        bottom=True,  # ticks along the bottom edge are off
+        top=True,  # ticks along the top edge are off
+        labelbottom=True,
+        labeltop=True,
+        direction='out')
+
+    if save:
+        plt.savefig(sky_img_path[:sky_img_path.rfind('.')]+'_mpdaf_img.pdf')
+        plt.close()
+        plt.ion()
 
 def xtend_SFP(directory='auto_repro',filtering='flat_top',
               #for flat_top
@@ -1312,12 +1529,18 @@ def xtend_SFP(directory='auto_repro',filtering='flat_top',
 
     bashproc.sendline('cd '+os.path.join(os.getcwd(),anal_dir))
 
-    if os.path.isfile(directory_use + '/xtend_SFP'+('_'+anal_dir_suffix if anal_dir_suffix!='' else '')+'.log'):
-        os.system('rm ' + directory_use + '/xtend_SFP'+('_'+anal_dir_suffix if anal_dir_suffix!='' else '')+'.log')
+    log_dir=os.path.join(os.getcwd(),anal_dir,'log')
+    os.system('mkdir -p '+os.path.join(os.getcwd(),anal_dir,'log'))
 
-    with (no_op_context() if parallel else StdoutTee(directory_use + '/xtend_SFP'+('_'+anal_dir_suffix if anal_dir_suffix!='' else '')+'.log', mode="a", buff=1,
+    log_path=os.path.join(log_dir,'xtend_SFP'+('_'+anal_dir_suffix if anal_dir_suffix!='' else '')+'.log')
+
+
+    if os.path.isfile(log_path):
+        os.system('rm ' + log_path)
+
+    with (no_op_context() if parallel else StdoutTee(log_path, mode="a", buff=1,
                                                      file_filters=[_remove_control_chars]), \
-          StderrTee(directory_use + '/xtend_SFP'+('_'+anal_dir_suffix if anal_dir_suffix!='' else '')+'.log', buff=1, file_filters=[_remove_control_chars])):
+          StderrTee(log_path, buff=1, file_filters=[_remove_control_chars])):
 
         if not parallel:
             bashproc.logfile_read = sys.stdout
@@ -1339,16 +1562,6 @@ def xtend_SFP(directory='auto_repro',filtering='flat_top',
                           mode='image',image_mode='SKY',directory=anal_dir,
                           spawn=bashproc,heasoft_init_alias=heasoft_init_alias,caldb_init_alias=caldb_init_alias,
                           sudo_screen=sudo_screen,sudo_mdp=sudo_mdp_use)
-
-                # loading the IMG file with mpdaf
-                with fits.open(sky_image_file) as hdul:
-                    img_data = hdul[0].data
-                    src_mpdaf_WCS = mpdaf_WCS(hdul[0].header)
-                    src_astro_WCS = astroWCS(hdul[0].header)
-                    main_source_name = hdul[0].header['object']
-                    main_source_ra = hdul[0].header['RA_OBJ']
-                    main_source_dec = hdul[0].header['DEC_OBJ']
-
                 if target_coords is None:
                     print('\nAuto mode.')
                     print('\nAutomatic search of the directory names in Simbad.')
@@ -1384,6 +1597,15 @@ def xtend_SFP(directory='auto_repro',filtering='flat_top',
                         obj_deg=sexa2deg([target_coords[1].replace(' ',':'),target_coords[0].replace(' ',':')])[::-1]
                     else:
                         obj_deg=target_coords
+
+                # loading the IMG file with mpdaf
+                with fits.open(sky_image_file) as hdul:
+                    img_data = hdul[0].data
+                    src_mpdaf_WCS = mpdaf_WCS(hdul[0].header)
+                    src_astro_WCS = astroWCS(hdul[0].header)
+                    main_source_name = hdul[0].header['object']
+                    main_source_ra = hdul[0].header['RA_OBJ']
+                    main_source_dec = hdul[0].header['DEC_OBJ']
 
                 img_obj_whole = Image(data=img_data, wcs=src_mpdaf_WCS)
 
@@ -1747,9 +1969,7 @@ A1: For Heasoft ver. 6.34, you need to execute the save command between "pixel s
                 #reloading the events directly from the newly saved event list
                 spawn_use.sendline('yes')
 
-                spawn_use.sendline('set image DET')
-
-
+                spawn_use.sendline('set image ' + image_mode)
 
             spawn_use.sendline('filter column "PIXEL='+rsl_pixel_manip(region_str,
                                 remove_cal_pxl_resolve=remove_cal_pxl_resolve)+'"')
@@ -1876,6 +2096,8 @@ def disp_ds9(file, zoom='auto', scale='log', regfile='', screenfile='', give_pid
      so there is a sudo mode where a sudo command
     (with password) is used to launch and remove ds9
 
+    ds9 window handling and screenshoting require the ubuntu packages wmctrl and imagemagick
+
     '''
 
     if scale == 'linear 99.5':
@@ -1952,6 +2174,7 @@ def disp_ds9(file, zoom='auto', scale='log', regfile='', screenfile='', give_pid
         delay = 0
         while len(windows_after) == len(windows_before) and delay <= 10:
             time.sleep(1)
+            #requires wmctrl
             windows_after = subprocess.run(['wmctrl', '-l'], stdout=subprocess.PIPE).stdout.decode('utf-8').split('\n')
             delay += 1
 
@@ -1962,6 +2185,7 @@ def disp_ds9(file, zoom='auto', scale='log', regfile='', screenfile='', give_pid
 
                 if screenfile != '':
                     print('\nSaving screenshot...')
+                    #requires imagemagick
                     os.system('import -window ' + ds9_pid + ' ' + screenfile)
 
     if close:
@@ -2023,11 +2247,18 @@ def extract_img(directory='auto_repro',anal_dir_suffix='',
         elif instru=='resolve':
             xtend_files=[]
 
-    if os.path.isfile(directory_use + '/extract_img'+('_'+anal_dir_suffix if anal_dir_suffix!='' else '')+'.log'):
-        os.system('rm ' + directory_use + '/extract_img'+('_'+anal_dir_suffix if anal_dir_suffix!='' else '')+'.log')
+    log_dir=os.path.join(os.getcwd(),anal_dir,'log')
+    os.system('mkdir -p '+os.path.join(os.getcwd(),anal_dir,'log'))
 
-    with (no_op_context() if parallel else StdoutTee(directory_use+'/extract_img'+('_'+anal_dir_suffix if anal_dir_suffix!='' else '')+'.log',mode="a",buff=1,file_filters=[_remove_control_chars]),\
-        StderrTee(directory_use+'/extract_img'+('_'+anal_dir_suffix if anal_dir_suffix!='' else '')+'.log',buff=1,file_filters=[_remove_control_chars])):
+    log_path=os.path.join(log_dir,'extract_img'+('_'+anal_dir_suffix if anal_dir_suffix!='' else '')+'.log')
+
+    if os.path.isfile(log_path):
+        os.system('rm ' + log_path)
+
+    with (no_op_context() if parallel else StdoutTee(log_path, mode="a", buff=1,
+                                                     file_filters=[_remove_control_chars]), \
+          StderrTee(log_path, buff=1, file_filters=[_remove_control_chars])):
+
 
         if not parallel:
             bashproc.logfile_read=sys.stdout
@@ -2211,11 +2442,6 @@ def create_gtis(directory='auto_repro',anal_dir_suffix='',
 
     set_var(bashproc)
 
-    if os.path.isfile(os.path.join(directory_use + '/extract_gtis'+('_'+anal_dir_suffix if anal_dir_suffix!='' else '')
-                                   +'_'+gti_subdir+'.log')):
-        os.system('rm ' + os.path.join(directory_use + '/extract_gtis'+('_'+anal_dir_suffix if anal_dir_suffix!='' else '')
-                                       +'_'+gti_subdir+'.log'))
-
     # removing old gti files
     old_files_gti = [elem for elem in glob.glob(os.path.join(directory_use, 'analysis/**'), recursive=True) if
                      '_gti_' in elem]
@@ -2223,13 +2449,19 @@ def create_gtis(directory='auto_repro',anal_dir_suffix='',
     for elem_file_gti in old_files_gti:
         os.remove(elem_file_gti)
 
-    with (no_op_context() if parallel else StdoutTee(os.path.join(directory_use +
-                                        '/extract_gtis'+('_'+anal_dir_suffix if anal_dir_suffix!='' else '')
-                                        +'_'+gti_subdir+'.log'), mode="a", buff=1,
+    log_dir=os.path.join(os.getcwd(),anal_dir,'log')
+    os.system('mkdir -p '+os.path.join(os.getcwd(),anal_dir,'log'))
+
+    log_path=os.path.join(log_dir,'extract_gtis'+('_'+anal_dir_suffix if anal_dir_suffix!='' else '')
+                                        +'_'+gti_subdir+'.log')
+
+    if os.path.isfile(log_path):
+        os.system('rm ' + log_path)
+
+    with (no_op_context() if parallel else StdoutTee(log_path, mode="a", buff=1,
                                                      file_filters=[_remove_control_chars]), \
-          StderrTee(os.path.join(directory_use + '/extract_gtis'+('_'+anal_dir_suffix if anal_dir_suffix!='' else '')
-                                   +'_'+gti_subdir+'.log'),
-                    buff=1, file_filters=[_remove_control_chars])):
+          StderrTee(log_path, buff=1, file_filters=[_remove_control_chars])):
+
 
         if not parallel:
             bashproc.logfile_read = sys.stdout
@@ -2491,19 +2723,19 @@ def extract_lc(directory='auto_repro', anal_dir_suffix='',lc_subdir='lc',
         elif instru=='resolve':
             xtend_files=[]
 
-    if os.path.isfile(directory_use + '/extract_lc'+('_'+anal_dir_suffix if anal_dir_suffix!='' else '')
-                                   +'_'+lc_subdir+'_'+gti_subdir+'.log'):
-        os.system('rm ' + directory_use + '/extract_lc'+('_'+anal_dir_suffix if anal_dir_suffix!='' else '')+
-                  '_'+lc_subdir+'_'+gti_subdir+'.log')
 
-    with (no_op_context() if parallel else StdoutTee(directory_use +
-                                                     '/extract_lc'+('_'+anal_dir_suffix if anal_dir_suffix!='' else '')
-                                                     +'_'+lc_subdir+'_'+gti_subdir+'.log',
-                                                     mode="a", buff=1,
+    log_dir=os.path.join(os.getcwd(),anal_dir,'log')
+    os.system('mkdir -p '+os.path.join(os.getcwd(),anal_dir,'log'))
+
+    log_path=os.path.join(log_dir,'extract_lc'+('_'+anal_dir_suffix if anal_dir_suffix!='' else '')
+                                   +'_'+lc_subdir+'_'+gti_subdir+'.log')
+
+    if os.path.isfile(log_path):
+        os.system('rm ' + log_path)
+
+    with (no_op_context() if parallel else StdoutTee(log_path, mode="a", buff=1,
                                                      file_filters=[_remove_control_chars]), \
-          StderrTee(directory_use + '/extract_lc'+('_'+anal_dir_suffix if anal_dir_suffix!='' else '')
-                    +'_'+lc_subdir+'_'+gti_subdir+'.log',
-                    buff=1, file_filters=[_remove_control_chars])):
+          StderrTee(log_path, buff=1, file_filters=[_remove_control_chars])):
 
         if not parallel:
             bashproc.logfile_read = sys.stdout
@@ -2720,18 +2952,18 @@ def extract_sp(directory='auto_repro', anal_dir_suffix='',sp_subdir='sp',
         elif instru=='resolve':
             xtend_files=[]
 
-    if os.path.isfile(directory_use + '/extract_sp'+('_'+anal_dir_suffix if anal_dir_suffix!='' else '')
-                      +'_'+sp_subdir+'_'+gti_subdir+'.log'):
-        os.system('rm ' + directory_use + '/extract_sp'+('_'+anal_dir_suffix if anal_dir_suffix!='' else '')
-                  +'_'+sp_subdir+'_'+gti_subdir+'.log')
+    log_dir=os.path.join(os.getcwd(),anal_dir,'log')
+    os.system('mkdir -p '+os.path.join(os.getcwd(),anal_dir,'log'))
 
-    with (no_op_context() if parallel else StdoutTee(directory_use + '/extract_sp'
-                                        +('_'+anal_dir_suffix if anal_dir_suffix!='' else '')
-                                                     +'_'+sp_subdir+'_'+gti_subdir+'.log', mode="a", buff=1,
+    log_path=os.path.join(log_dir,'extract_sp'+('_'+anal_dir_suffix if anal_dir_suffix!='' else '')
+                      +'_'+sp_subdir+'_'+gti_subdir+'.log')
+
+    if os.path.isfile(log_path):
+        os.system('rm ' + log_path)
+
+    with (no_op_context() if parallel else StdoutTee(log_path, mode="a", buff=1,
                                                      file_filters=[_remove_control_chars]), \
-          StderrTee(directory_use + '/extract_sp'+
-                    ('_'+anal_dir_suffix if anal_dir_suffix!='' else '')+'_'+sp_subdir+'_'+gti_subdir+'.log',
-                    buff=1, file_filters=[_remove_control_chars])):
+          StderrTee(log_path, buff=1, file_filters=[_remove_control_chars])):
 
         if not parallel:
             bashproc.logfile_read = sys.stdout
@@ -3093,18 +3325,19 @@ def extract_rmf(directory='auto_repro',instru='all',rmf_subdir='sp',
         elif instru=='resolve':
             xtend_files=[]
 
-    if os.path.isfile(directory_use + '/extract_rmf'+('_'+anal_dir_suffix if anal_dir_suffix!='' else '')
-                      +'_'+rmf_subdir+'_'+gti_subdir+'.log'):
-        os.system('rm ' + directory_use + '/extract_rmf'+('_'+anal_dir_suffix if anal_dir_suffix!='' else '')
-                  +'_'+rmf_subdir+'_'+gti_subdir+'.log')
+    log_dir=os.path.join(os.getcwd(),anal_dir,'log')
+    os.system('mkdir -p '+os.path.join(os.getcwd(),anal_dir,'log'))
 
-    with (no_op_context() if parallel else StdoutTee(directory_use +
-                                '/extract_rmf'+('_'+anal_dir_suffix if anal_dir_suffix!='' else '')
-                                                     +'_'+rmf_subdir+'_'+gti_subdir+'.log', mode="a", buff=1,
+    log_path=os.path.join(log_dir,'extract_rmf'+('_'+anal_dir_suffix if anal_dir_suffix!='' else '')
+                      +'_'+rmf_subdir+'_'+gti_subdir+'.log')
+
+    if os.path.isfile(log_path):
+        os.system('rm ' + log_path)
+
+    with (no_op_context() if parallel else StdoutTee(log_path, mode="a", buff=1,
                                                      file_filters=[_remove_control_chars]), \
-          StderrTee(directory_use + '/extract_rmf'+('_'+anal_dir_suffix if anal_dir_suffix!='' else '')
-                    +'_'+rmf_subdir+'_'+gti_subdir+'.log',
-                    buff=1, file_filters=[_remove_control_chars])):
+          StderrTee(log_path, buff=1, file_filters=[_remove_control_chars])):
+
 
         if not parallel:
             bashproc.logfile_read = sys.stdout
@@ -3501,23 +3734,23 @@ def extract_arf(directory='auto_repro',anal_dir_suffix='',on_axis_check=None,arf
         elif instru=='resolve':
             xtend_files=[]
 
-    if os.path.isfile(directory_use + '/extract_arf'+('_'+anal_dir_suffix if anal_dir_suffix!='' else '')
-                      +'_'+arf_subdir+'_'+gti_subdir+'.log'):
-        os.system('rm ' + directory_use + '/extract_arf'+('_'+anal_dir_suffix if anal_dir_suffix!='' else '')
-                  +'_'+arf_subdir+'_'+gti_subdir+'.log')
-
     if os.path.isfile('~/pfiles/xaarfgen.par'):
         os.system('rm ~/pfiles/xaarfgen.par')
     if os.path.isfile('~/pfiles/xaxmaarfgen.par'):
         os.system('rm ~/pfiles/xaxmaarfgen.par')
 
-    with (no_op_context() if parallel else StdoutTee(directory_use
-                            + '/extract_arf'+('_'+anal_dir_suffix if anal_dir_suffix!='' else '')
-                                                     +'_'+arf_subdir+'_'+gti_subdir+'.log', mode="a", buff=1,
+    log_dir=os.path.join(os.getcwd(),anal_dir,'log')
+    os.system('mkdir -p '+os.path.join(os.getcwd(),anal_dir,'log'))
+
+    log_path=os.path.join(log_dir,'extract_arf'+('_'+anal_dir_suffix if anal_dir_suffix!='' else '')
+                      +'_'+arf_subdir+'_'+gti_subdir+'.log')
+
+    if os.path.isfile(log_path):
+        os.system('rm ' + log_path)
+
+    with (no_op_context() if parallel else StdoutTee(log_path, mode="a", buff=1,
                                                      file_filters=[_remove_control_chars]), \
-          StderrTee(directory_use + '/extract_arf'+('_'+anal_dir_suffix if anal_dir_suffix!='' else '')
-                    +'_'+
-                    arf_subdir+'_'+gti_subdir+'.log', buff=1, file_filters=[_remove_control_chars])):
+          StderrTee(log_path, buff=1, file_filters=[_remove_control_chars])):
 
         if not parallel:
             bashproc.logfile_read = sys.stdout

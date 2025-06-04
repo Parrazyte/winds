@@ -1,18 +1,15 @@
 
 from xspec import Xset, Plot, Fit,AllData, AllModels
-from xspec_config_multisp import freeze, allmodel_data,set_ener
-from linedet_utils import narrow_line_search,plot_line_search
+from xspec_config_multisp import freeze, allmodel_data,set_ener,store_plot
+from linedet_utils import narrow_line_search,plot_line_search,rebinv_xrism
 import matplotlib.pyplot as plt
 import dill
 import numpy as np
 import glob
 import os
 
-def rebinv_xrism(grp_number=1,sigma=2):
-    Plot.setRebin(sigma, 5000, grp_number)
-
 def xrism_ls(baseload,low_e,high_e,plot_suffix="",bound_around=0.1,e_step=5e-3,lw=5e-3,
-             e_sat_low_indiv=[1.5,1.5],resolve_dg=1,rebinv=[20],line_search_norm=[0.01,50,500],
+             e_sat_low_indiv=[1.5,1.5],resolve_dg=1,rebinv=[20],line_search_norm=[0.01,50,700],
              force_ylog_ratio=True,ratio_bounds=[0.5,2],title=True,set_ener_str=None,set_ener_xrism=False):
 
     '''
@@ -76,13 +73,35 @@ def xrism_ls(baseload,low_e,high_e,plot_suffix="",bound_around=0.1,e_step=5e-3,l
 
 def xrism_ls_loader(dump_path,ener_show_range,force_ylog_ratio=True,ratio_bounds=[0.05,10.],squished_mode=False,
                     local_chi_bounds=True,force_side_lines='none',save=False,show_indiv_transi=True,
-                    minor_locator=20,show_peak_pos=True,show_peak_width=False):
+                    minor_locator=20,show_peak_pos=True,show_peak_width=False,
+
+                    plot_ratio_baseload='',set_ener_str=None,set_ener_xrism=False,rebinv=[]):
     '''
     More simple version to simply load the dump and make a figure out of it
+
+
     '''
 
     with open(dump_path,'rb') as f:
         narrow_out_val=dill.load(f)
+
+    if plot_ratio_baseload!='':
+        Xset.restore(plot_ratio_baseload)
+
+        if rebinv is not None:
+            if type(rebinv) not in [list, np.ndarray]:
+                rebinv_use = [rebinv]
+            else:
+                rebinv_use = rebinv
+            for i_dg, elem_rebinv in enumerate(rebinv_use):
+                rebinv_xrism(i_dg + 1, sigma=elem_rebinv)
+
+        if set_ener_str is not None:
+            set_ener(set_ener_str, xrism=set_ener_xrism)
+
+        narrow_out_val['plot_ratio_values']=store_plot('ratio')
+        AllData.clear()
+        AllModels.clear()
 
     # breakpoint()
     suffix_list=np.array(ratio_bounds).astype(str).tolist()
@@ -92,14 +111,21 @@ def xrism_ls_loader(dump_path,ener_show_range,force_ylog_ratio=True,ratio_bounds
                   ('_global_chi' if not local_chi_bounds else '')+\
                   '_'+dump_path[:dump_path.rfind('narrow')]
 
-    plot_line_search(narrow_out_val, './', 'XRISM', suffix='', save=save,
-                     epoch_observ=[suffix], format='png',
+    plot_line_search(narrow_out_val, './', 'XRISM', suffix=dump_path[:dump_path.rfind('.')], save=save,
+                     epoch_observ=[suffix], format='pdf',
                      force_ylog_ratio=force_ylog_ratio,ratio_bounds=ratio_bounds,ener_show_range=ener_show_range,
                      show_indiv_transi=show_indiv_transi,title=False,squished_mode=squished_mode,
                      local_chi_bounds=local_chi_bounds,
                      force_side_lines=force_side_lines,minor_locator=minor_locator,
                      show_peak_pos=show_peak_pos,show_peak_width=show_peak_width)
 
+    plot_line_search(narrow_out_val, './', 'XRISM', suffix=dump_path[:dump_path.rfind('.')], save=save,
+                     epoch_observ=[suffix], format='png',
+                     force_ylog_ratio=force_ylog_ratio,ratio_bounds=ratio_bounds,ener_show_range=ener_show_range,
+                     show_indiv_transi=show_indiv_transi,title=False,squished_mode=squished_mode,
+                     local_chi_bounds=local_chi_bounds,
+                     force_side_lines=force_side_lines,minor_locator=minor_locator,
+                     show_peak_pos=show_peak_pos,show_peak_width=show_peak_width)
 
 def rename_plots(arg='squished_global_chi_save'):
     #for renaming
@@ -111,9 +137,17 @@ def rename_plots(arg='squished_global_chi_save'):
 
 #redo 04 with a single component to get the values
 #redo 03 to get the values 
-def width_todv(val,ener,err=[0,0]):
+def width_todv(ener=7.0,par=None,val=None,err=[0,0]):
+
+    if par is not None:
+        val_use=AllModels(1)(par).values[0]
+        err_use=AllModels(1)(par).error[:2]
+    else:
+        val_use=val
+        err_use=err
+
     c_0=299792.458
-    dv_ctr=val/ener*c_0
-    dv_sides=np.array([val-err[0],val+err[1]])/ener*c_0
+    dv_ctr=val_use/ener*c_0
+    dv_sides=np.array([val_use-err_use[0],val_use+err_use[1]])/ener*c_0
 
     return dv_ctr,dv_ctr-dv_sides[0],dv_sides[1]-dv_ctr

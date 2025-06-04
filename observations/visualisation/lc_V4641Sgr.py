@@ -135,6 +135,36 @@ def lc_internal_paper():
     # ax_lc_intra[0].xaxis.set_ticklabels(ax_lc_intra[-1].xaxis.get_ticklabels())
     # plt.suptitle('Xtend lightcurve of the source in bins of 128s')
 
+def phase_time(time,to,period):
+    '''
+    V4641 half XRISM obs HJD: 2460584.0073253559
+    middle phase: 0.5712
+    phase 3.5 hours before: 0.5195
+    phase 3.5h later: 0.6230
+    '''
+    phased_time=(time-to)%period/period
+
+    return phased_time
+
+def vcor_porb(vrotsini,Q,phi_obj):
+    '''
+
+    Here we assume phase_0 is the eclipse, aka the BH in between the star an us (so 0 vcor).
+    at a phase of 0.25, the BH has the maximum redshift, and at 0.75, the maximum blueshift
+    Since this is the velocity of the object compared to us, it should be substracted from the velocity computations
+
+    # Careful: if computing CO velocities, may need to be offset phi_star by 0.5 to consider the phase of the CO
+    #     (If the companion velocity is maximum at phi_star=0,
+    #     the BH velocity is inverted compared to star, so it will be maximum at phi_star+0.5)
+    #     however if To is To photo, then it is already shifted by 0.5 from T_spectro if taken within the eclipse
+    #     and thus already matches the BH velocity
+
+    And a maximum as in going away from us (redshift)
+    '''
+
+    vcor_phi=vrotsini/Q*np.sin(2*np.pi*phi_obj)
+    return vcor_phi
+
 def lc_optical_monit():
 
     lc_optical_dir='/media/parrazyte/crucial_SSD/Observ/BHLMXB/Optical/V4641Sgr'
@@ -152,11 +182,6 @@ def lc_optical_monit():
     #from the Goranskij
     to_jd_gor24=2459410.4080208335
     period_gor24=2.81727
-
-    def phase_time(time,to,period):
-        phased_time=(time-to)%period/period
-
-        return phased_time
 
     time_mjd=Time(lc_V['MJD'],format='mjd')
     time_phased_mc=phase_time(time_mjd.jd,to_jd_mc14,period_mc14)
@@ -185,7 +210,7 @@ def lc_optical_monit():
     plt.gca().invert_yaxis()
 
 
-def vrad_V4641():
+def vrad_obj(source='V4641Sgr',d_source=6.2,man_gal_coords=[],d_galc=8.5,sun_angl_vel=240):
 
     '''
     Here the result is the radial velocity of the system, and thus should be substracted
@@ -195,22 +220,31 @@ def vrad_V4641():
     #from vizier, slightly different than the ones of Gaia for some reason.
     #in [l,b], l is longitude (in plane), b is latitude (vertical)
     #reminder: https://en.wikipedia.org/wiki/Galactic_coordinate_system
-    galcoords=[006.7739158,-4.7888593]
-    l,d=galcoords
+
+    if source!='':
+        sc_source_vals = np.array(Simbad.query_object(source)[0]['ra', 'dec'][:2])
+
+        sc = SkyCoord(ra=sc_source_vals[0] * u.deg, dec=sc_source_vals[1] * u.deg)
+
+        l,d=np.array(sc.galactic.to_string().split(' '),dtype=float)
+    else:
+        #galcoords=[006.7739158,-4.7888593]
+        l,d=man_gal_coords
+
     #deprojecting the distance to the galactic plane
     #pm0.7
-    d_full=6.2
-    d_galplane=6.2*np.cos(-4.7888593*2*np.pi/360)
+    d_galplane=d_source*np.cos(-4.7888593*2*np.pi/360)
 
     #assuming a galactic center distance of 8.5 kpc
-    d_galc=8.5
+    d_galc=d_galc
 
     #distance from the galactic center to the source
     #see https://www.omnicalculator.com/math/triangle-side
     d_galc_s=(d_galc**2 + d_galplane**2 -2*d_galc*d_galplane*np.cos(6.7739158*2*np.pi/360))**(1/2)
 
      #our angular velocity
-    w_0=240
+    w_0=sun_angl_vel
+
     #w velocity of the source from https://www.aanda.org/articles/aa/abs/2017/05/aa30540-17/aa30540-17.html
     w_source=1.022*(d_galc_s/d_galc)**(0.0803)*w_0
 
@@ -221,6 +255,7 @@ def vrad_V4641():
     w_los=np.sin(beta)*w_source
     #final value: 65.42 (coming away from us because the rotation curve of the galaxy is clockwise)
 
+    return w_los
 
 
 def vrot_earth(source='V4641sgr',date='2024-09-30'):
@@ -235,7 +270,9 @@ def vrot_earth(source='V4641sgr',date='2024-09-30'):
 
     north_p = EarthLocation.from_geodetic(lat=0*u.deg, lon=90*u.deg,height=0*u.m)
 
-    sc_source_vals=sexa2deg([Simbad.query_object(source)[0]['RA'],Simbad.query_object(source)[0]['DEC']][::-1])[::-1]
+    #sc_source_vals=sexa2deg([Simbad.query_object(source)[0]['RA'],Simbad.query_object(source)[0]['DEC']][::-1])[::-1]
+
+    sc_source_vals=np.array(Simbad.query_object(source)[0]['ra','dec'][:2])
 
     sc = SkyCoord(ra=sc_source_vals[0]*u.deg, dec=sc_source_vals[1]*u.deg)
 

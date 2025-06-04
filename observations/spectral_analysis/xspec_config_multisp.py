@@ -2613,10 +2613,13 @@ def delcomp(compname,modclass=AllModels,give_ndel=False):
     else:
         return new_models
 
+
 def par_error(group=1,par=1,n_round=3,latex=False,mult=1,man_val_arr=[]):
 
     '''
     returns an array with the error of the chosen parameter
+
+    still imperfect
 
     n_round chooses the rounding of the returned elements
     if set to auto, uses 1e-3 times the first digit as a rounding reference
@@ -2649,7 +2652,7 @@ def par_error(group=1,par=1,n_round=3,latex=False,mult=1,man_val_arr=[]):
         result_val[1]=('%.'+str(n_round)+'e')%(result_val[0]-float(('%.'+str(n_round)+'e')%(val_arr[0]-val_arr[1])))
         #result_val[2]=('%.'+str(n_round)+'e')%(float(('%.'+str(n_round)+'e')%(val_arr[0]+val_arr[2]))-result_val[0])
 
-        upper_decade_change=int(np.floor(np.log10(val_arr[0] + val_arr[2])) - np.floor(np.log10(val_arr[0])))
+        upper_decade_change=int(np.floor(np.log10(abs(val_arr[0] + val_arr[2]))) - np.floor(np.log10(abs(val_arr[0]))))
 
         result_val[2]=('%.'+str(n_round+upper_decade_change)+'e')%(float(('%.'+str(n_round+upper_decade_change)+'e')
                                                      %(val_arr[0]+val_arr[2]))-result_val[0])

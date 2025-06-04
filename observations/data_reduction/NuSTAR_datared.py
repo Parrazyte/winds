@@ -44,6 +44,7 @@ from astropy.wcs import WCS as astroWCS
 from imantics import Mask
 
 # point of inaccessibility
+#note that the python version (python-polylabel) is heavily outdated compared to the java one
 from polylabel import polylabel
 
 # alphashape

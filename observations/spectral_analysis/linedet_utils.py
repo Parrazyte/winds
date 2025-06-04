@@ -417,6 +417,40 @@ def narrow_line_search(data_cont, suffix,e_sat_low_indiv,line_search_e=[4,10,0.0
     else:
         return chi_dict_plot
 
+def rebinv_xrism(grp_number=1,sigma=2,max_bins=5000):
+    Plot.setRebin(sigma, max_bins, grp_number)
+
+def swap_ratio_dump_path(dump_path,plot_ratio_baseload,
+                         out_suffix='',set_ener_str=None,set_ener_xrism=False,rebinv=[],
+                         invert_dg=False):
+
+    with open(dump_path,'rb') as f:
+        narrow_out_val=dill.load(f)
+
+    if plot_ratio_baseload!=':':
+        Xset.restore(plot_ratio_baseload)
+
+        if rebinv is not None:
+            if type(rebinv) not in [list, np.ndarray]:
+                rebinv_use = [rebinv]
+            else:
+                rebinv_use = rebinv
+            for i_dg, elem_rebinv in enumerate(rebinv_use):
+                rebinv_xrism(i_dg + 1, sigma=elem_rebinv)
+
+        if set_ener_str is not None:
+            set_ener(set_ener_str, xrism=set_ener_xrism)
+
+        narrow_out_val['plot_ratio_values']=store_plot('ratio')
+        if invert_dg:
+            narrow_out_val['plot_ratio_values']=narrow_out_val['plot_ratio_values'][::-1]
+        AllData.clear()
+        AllModels.clear()
+
+    with open(dump_path[:dump_path.rfind('.')]+'_ratio_update_'+out_suffix+dump_path[dump_path.rfind('.'):],'wb+') as f:
+        dill.dump(narrow_out_val,f)
+
+
 def plot_line_search(chi_dict_plot,outdir,sat,save=True,suffix=None,epoch_observ=None,format='png',
                      force_ylog_ratio=False,ratio_bounds=None,ener_show_range=None,show_indiv_transi=False,
                      title=True,squished_mode=False,local_chi_bounds=False,force_side_lines='none',
@@ -594,10 +628,15 @@ def plot_std_ener(ax_ratio, ax_contour=None, plot_em=False, mode='ratio',exclude
 
     -force_side: shows all lines either in emission if 'em' or in absorption if 'abs'
     '''
-    # since for the first plot the 1. ratio is not necessarily centered, we need to fetch the absolute position of the y=1.0 line
-    # in graph height fraction
-    pos_ctr_ratio = 0.5 if mode=='chimap' else\
-                    (1 - ax_ratio.get_ylim()[0]) / (ax_ratio.get_ylim()[1] - ax_ratio.get_ylim()[0])
+    # since for the first plot the 1. ratio is not necessarily centered,
+    # we need to fetch the absolute position of the y=1.0 line in graph height fraction
+    # pos_ctr_ratio = 0.5 if mode=='chimap' else\
+    #                 (1 - ax_ratio.get_ylim()[0]) / (ax_ratio.get_ylim()[1] - ax_ratio.get_ylim()[0])
+
+    if ax_ratio.get_yscale() == 'log':
+        pos_ctr_ratio = np.log10(1 / ax_ratio.get_ylim()[0]) / (np.log10(ax_ratio.get_ylim()[1]/ax_ratio.get_ylim()[0]))
+    elif ax_ratio.get_yscale() == 'linear':
+        pos_ctr_ratio = (1 - ax_ratio.get_ylim()[0]) / (ax_ratio.get_ylim()[1] - ax_ratio.get_ylim()[0])
 
     lines_names = np.array(lines_std_names)
 
@@ -843,6 +882,9 @@ def contour_chi2map(fig, axe, chi_dict, title='', combined=False):
     contours_var_labels = [r'99% conf. with 2 d.o.f.', r'90% conf. with 2 d.o.f.',
                            r'68% conf. with 2 d.o.f.']
 
+    contours_var_labels = [r'99% conf.', r'90% conf.',
+                           r'68% conf.']
+
     # avoiding error if there are no contours to plot
     for l in range(len(contours_var_labels)):
         try:
@@ -902,10 +944,10 @@ def contour_chi2map(fig, axe, chi_dict, title='', combined=False):
 
 
 def coltour_chi2map(fig, axe, chi_dict, title='', combined=False, ax_bar=None, norm=None,
-                    squished_mode=False,local_chi_bounds=False,ener_show_range=None,
-                    show_peak_pos=True,show_peak_width=True):
+                    local_chi_bounds=False,ener_show_range=None,
+                    show_peak_pos=True,show_peak_width=True,squished_mode=False):
     '''
-        squished_mode: adds a bunch of line separators in th colormap label to avoid display issues
+        TBD: squished_mode: adds a bunch of line separators in the colormap label to avoid display issues
 
     '''
     chi_arr = chi_dict['chi_arr']
@@ -1019,7 +1061,7 @@ def coltour_chi2map(fig, axe, chi_dict, title='', combined=False, ax_bar=None, n
             colorbar = plt.colorbar(img, ax=axe, spacing='proportional', ticks=cm_ticks)
             colorbar.ax.set_yticklabels(cm_ticklabels)
         else:
-            colorbar = plt.colorbar(img, cax=ax_bar, spacing='proportional', ticks=cm_ticks)
+            colorbar = plt.colorbar(img, cax=ax_bar, ticks=cm_ticks,spacing='proportional')
             colorbar.ax.set_yticklabels(cm_ticklabels)
 
         if bigline_flag == 1:
@@ -1028,13 +1070,16 @@ def coltour_chi2map(fig, axe, chi_dict, title='', combined=False, ax_bar=None, n
         else:
             colorbar.set_label(r'$\Delta C$'+('\n' if squished_mode else ' ')+
                                'with separated scales'+('\n' if squished_mode else '')+'for absorption and emission')
-
     '''CONTOUR PLOT'''
 
     chi_contours = [chi_base - 9.21, chi_base - 4.61, chi_base - 2.3]
 
-    contours_var_labels = [r'99% conf. with 2 d.o.f.', r'90% conf. with 2 d.o.f.',
-                           r'68% conf. with 2 d.o.f.']
+    # contours_var_labels = [r'99% conf. with 2 d.o.f.', r'90% conf. with 2 d.o.f.',
+    #                        r'68% conf. with 2 d.o.f.']
+
+    contours_var_labels = [r'99% conf.', r'90% conf.',
+                           r'68% conf.']
+
     contours_var_ls = ['solid', 'dashed', 'dotted']
 
     contours_var = axe.contour(line_search_e_space, norm_par_space, chi_arr.T, levels=chi_contours, colors='black',
@@ -1053,7 +1098,7 @@ def coltour_chi2map(fig, axe, chi_dict, title='', combined=False, ax_bar=None, n
         # not using this
         # contours_var.collections[l].set_label(contours_var_labels[l])
 
-    contours_base_labels = [r'base level ($\Delta C=0.5$)']
+    contours_base_labels = [r'base level' "\n" r'($\Delta C=0.5$)']
     contours_base_ls = ['dashed']
 
     contours_base = axe.contour(line_search_e_space, norm_par_space, chi_arr.T, levels=[chi_base + 0.5], colors='grey',
@@ -1108,7 +1153,8 @@ def coltour_chi2map(fig, axe, chi_dict, title='', combined=False, ax_bar=None, n
         elif combined == 'nolegend':
             pass
         else:
-            axe.legend(title='Bottom panel labels', loc='right', bbox_to_anchor=(1.25, 1.5))
+            axe.legend(title='Bottom panel \n  labels (2 d.o.f.)', loc='right',
+                       bbox_to_anchor=(1.12, 1.5))
 
 
 def comb_chi2map(fig_comb, chi_dict, title='', comb_label='',
@@ -1135,7 +1181,10 @@ def comb_chi2map(fig_comb, chi_dict, title='', comb_label='',
 
     # gridspec creates a grid of spaces for subplots. We use 2 rows for the 2 plots
     # Second column is there to keep space for the colorbar. Hspace=0. sticks the plots together
-    gs_comb = GridSpec(2, 2, figure=fig_comb, width_ratios=[98, 2], hspace=0.)
+    gs_comb = GridSpec(2, 2, figure=fig_comb,
+                       width_ratios=[98,2],hspace=0.,wspace=0.02)
+
+    plt.subplots_adjust(left=0.065, right=0.925,bottom=0.05,top=0.92)
 
     # first subplot is the ratio
     ax_comb[0] = plt.subplot(gs_comb[0, 0])
@@ -1187,8 +1236,8 @@ def comb_chi2map(fig_comb, chi_dict, title='', comb_label='',
     ax_comb[1] = plt.subplot(gs_comb[1, 0], sharex=ax_comb[0])
     ax_colorbar = plt.subplot(gs_comb[1, 1])
     coltour_chi2map(fig_comb, ax_comb[1], chi_dict, combined=True, ax_bar=ax_colorbar,
-                    squished_mode=squished_mode,local_chi_bounds=local_chi_bounds,ener_show_range=ener_show_range,
-                    show_peak_pos=show_peak_pos,show_peak_width=show_peak_width)
+                    local_chi_bounds=local_chi_bounds,ener_show_range=ener_show_range,
+                    show_peak_pos=show_peak_pos,show_peak_width=show_peak_width,squished_mode=squished_mode)
 
     ax_comb[1].set_xlim(line_cont_range)
     # #third plot (color), with a separate colorbar plot on the second column of the gridspec

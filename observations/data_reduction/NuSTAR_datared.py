@@ -1390,97 +1390,6 @@ def extract_reg(directory, cams='all', use_file_target=False,
 
     extract_reg_done.set()
 
-
-
-
-    def extract_lc_single(spawn, directory, binning, instru, steminput, src_reg, bg_reg, e_low, e_high,bright=False,backscale=1):
-
-        lc_src_name = steminput + '_' + instru + '_lc_src_' + e_low + '_' + e_high + '_bin_' + binning + '.lc'
-        lc_bg_name = steminput + '_' + instru + '_lc_bg_' + e_low + '_' + e_high + '_bin_' + binning + '.lc'
-
-        #the spawn paths are different because in the spawn we cd in the obsid directory to avoid
-        #putting the temp files everywhere
-        lc_src_path = os.path.join(directory,'products'+('_bright' if bright else ''), lc_src_name)
-        lc_bg_path = os.path.join(directory,'products'+('_bright' if bright else ''), lc_bg_name)
-
-        pi_low = str(kev_to_PI(float(e_low)))
-        pi_high = str(kev_to_PI(float(e_high)))
-
-        # building the lightcurve
-        spawn.sendline('nuproducts indir=./out'+('_bright' if bright else '')+
-                       ' instrument=' + instru + ' steminputs=' + steminput +
-                       ' lcfile=' + lc_src_name +  ' srcregionfile=' + src_reg +
-                       ' bkgextract=yes'+
-                       ' bkglcfile=' + lc_bg_name + ' bkgregionfile=' + bg_reg +
-                       ' pilow=' + pi_low + ' pihigh=' + pi_high + ' binsize=' + binning+
-                       ' outdir=./products'+('_bright' if bright else '')+
-                       ' barycorr=no phafile=NONE bkgphafile=NONE' + ' imagefile=NONE runmkarf=no runmkrmf=no'+
-                       ' clobber=YES cleanup=YES')
-
-        ####TODO: check what's the standard message here
-        err_code=spawn.expect(['nuproducts_0.3.5: Exit with success','nuproducts error'],timeout=None)
-
-        if err_code!=0:
-            return 'Nuproduct error','',''
-
-        # loading the data of both lc
-        with fits.open(lc_src_path) as fits_lc:
-            # time zero of the lc file (different from the time zeros of the gti files)
-            time_zero = Time(fits_lc[1].header['MJDREFI'] + fits_lc[1].header['MJDREFF'], format='mjd')
-
-            # and offsetting the data array to match this
-            delta_lc_src = fits_lc[1].header['TIMEZERO']
-
-            # storing the lightcurve
-            data_lc_src = fits_lc[1].data
-
-            time_zero_str = str((time_zero+TimeDelta(delta_lc_src,format='sec')).to_datetime())
-
-        if float(binning)>=1 and e_low=='3' and e_high=='79' and not bright:
-            bright_flag=max(data_lc_src['RATE'])>100
-        else:
-            bright_flag=False
-
-        with fits.open(lc_bg_path) as fits_lc:
-            # and offsetting the data array to match this
-            delta_lc_bg = fits_lc[1].header['TIMEZERO']
-
-            fits_lc[1].data['TIME'] += delta_lc_bg -delta_lc_src
-
-            # storing the shifted lightcurve
-            data_lc_bg = fits_lc[1].data
-
-        # plotting the source and bg lightcurves together
-
-        fig_lc, ax_lc = plt.subplots(1, figsize=(10, 8))
-
-        ax_lc.set_yscale('symlog', linthresh=0.1, linscale=0.1)
-        ax_lc.yaxis.set_minor_locator(MinorSymLogLocator(linthresh=0.1))
-
-        ax_lc.errorbar(data_lc_src['TIME'], data_lc_src['RATE'], xerr=float(binning),
-                     yerr=data_lc_src['ERROR'], ls='-', lw=1, color='grey', ecolor='blue', label='raw source')
-
-        ax_lc.errorbar(data_lc_bg['TIME'], data_lc_bg['RATE']*backscale, xerr=float(binning),
-                     yerr=data_lc_bg['ERROR']*backscale, ls='-', lw=1, color='grey', ecolor='brown', label='scaled background')
-
-        ax_lc.axhline(100,0,1,color='red',ls='-',lw=1,label='bright obs threshold')
-
-        plt.suptitle('NuSTAR ' + instru + ' lightcurve for observation ' + steminput +
-                     ' in the ' + e_low + '-' + e_high + ' keV band with ' + binning + ' s binning')
-
-        ax_lc.set_xlabel('Time (s) after ' + time_zero_str)
-        ax_lc.set_ylabel('RATE (counts/s)')
-
-        ax_lc.set_ylim(0,ax_lc.get_ylim()[1])
-        plt.legend()
-        plt.tight_layout()
-        plt.savefig(os.path.join(directory,'products'+('_bright' if bright else ''),
-                                 steminput + '_' + instru + '_lc_screen_' + e_low + '_' + e_high + '_bin_' + binning + '.png'))
-        plt.close()
-
-        return 'Lightcurve creation complete',[time_zero_str,data_lc_src['TIME'],data_lc_src['RATE']-data_lc_bg['RATE']*backscale,
-                                                data_lc_src['ERROR']+data_lc_bg['ERROR']*backscale],bright_flag
-
 def extract_lc_single(spawn, directory, binning, instru, steminput, src_reg, bg_reg, e_low, e_high,bright=False,
                       backscale=1,gti_mode=False,gti=None,id_orbit=''):
 
@@ -1782,13 +1691,13 @@ def extract_lc(directory,binning='1',lc_bands_str='3-79',hr_bands='10-50/3-10',c
 
             for id_orbit,elem_gti in enumerate(gti_list):
 
-                lc_prods=np.array([[None]*len(binning_list)]*len(lc_bands))
+                lc_prods=np.array([[None]*len(lc_bands)]*len(binning_list))
 
-                for id_band,band in enumerate(lc_bands):
+                for id_binning, elem_binning in enumerate(binning_list):
 
-                    for id_binning,elem_binning in enumerate(binning_list):
+                    for id_band,band in enumerate(lc_bands):
 
-                        summary_line,lc_prods[id_band][id_binning],bright_flag_single = extract_lc_single(bashproc,directory=directory,
+                        summary_line,lc_prods[id_binning][id_band],bright_flag_single = extract_lc_single(bashproc,directory=directory,
                                                     binning=elem_binning,instru=camlist[i_cam],steminput='nu'+obsid,
                                                     src_reg=src_reg_indiv_spawn,bg_reg=bg_reg_indiv_spawn,
                                                     e_low=band.split('-')[0],e_high=band.split('-')[1],
@@ -1804,52 +1713,57 @@ def extract_lc(directory,binning='1',lc_bands_str='3-79',hr_bands='10-50/3-10',c
 
                         id_orbit_str = '-' + str_orbit(id_orbit) if elem_gti is not None else ''
 
-                        summary_content = obsid + '\t' + camlist[i_cam] +'\t'+ band + '\t'+ elem_binning + '\t' + summary_line
-                        file_edit(os.path.join(directory, 'summary_extract_lc.log'), obsid + id_orbit_str + '\t' + camlist[i_cam] +'\t'+ band ,
+                        summary_content = obsid + '\t' + camlist[i_cam] +'\t'+ band + '\t' +\
+                                             elem_binning + '\t' + summary_line
+                        file_edit(os.path.join(directory, 'summary_extract_lc_indiv.log'), obsid +
+                                  id_orbit_str + '\t' + camlist[i_cam] +'\t'+ band + '\t' + elem_binning ,
                                   summary_content + '\n',
                                   summary_header)
 
                         #updating the global bright flag if a flagged obs appears (note: the bright_flag is force to False when not in the 3-79 band)
                         bright_flag_tot=bright_flag_tot or bright_flag_single
 
-                #potentially skipping the HR computation
-                if no_HR_flag:
-                   continue
+                    #potentially skipping the HR computation
+                    if no_HR_flag:
+                       continue
 
-                assert lc_prods[id_band_den_HR][0]==lc_prods[id_band_num_HR][0], 'Differing timezero values between HR lightcurves'
+                    assert lc_prods[id_binning][id_band_den_HR][0]==lc_prods[id_binning][id_band_num_HR][0],\
+                            'Differing timezero values between HR lightcurves'
 
-                time_zero_HR=lc_prods[id_band_num_HR][0]
+                    time_zero_HR=lc_prods[id_binning][id_band_num_HR][0]
 
-                #here we implicitely assume the time array is identical for both lightcurves and for source/bg
-                time_HR=lc_prods[id_band_num_HR][1]
+                    #here we implicitely assume the time array is identical for both lightcurves and for source/bg
+                    time_HR=lc_prods[id_binning][id_band_num_HR][1]
 
-                rate_num_HR=lc_prods[id_band_num_HR][2]
-                rate_err_num_HR=lc_prods[id_band_num_HR][3]
+                    rate_num_HR=lc_prods[id_binning][id_band_num_HR][2]
+                    rate_err_num_HR=lc_prods[id_binning][id_band_num_HR][3]
 
-                rate_den_HR=lc_prods[id_band_den_HR][2]
-                rate_err_den_HR=lc_prods[id_band_den_HR][3]
+                    rate_den_HR=lc_prods[id_binning][id_band_den_HR][2]
+                    rate_err_den_HR=lc_prods[id_binning][id_band_den_HR][3]
 
-                fig_hr, ax_hr = plt.subplots(1, figsize=(10, 8))
+                    fig_hr, ax_hr = plt.subplots(1, figsize=(10, 8))
 
-                hr_vals = rate_num_HR /rate_den_HR
+                    hr_vals = rate_num_HR /rate_den_HR
 
-                hr_err = hr_vals * (((rate_err_num_HR / rate_num_HR) ** 2 +
-                                     (rate_err_den_HR / rate_den_HR) ** 2) ** (
-                                                1 / 2))
+                    hr_err = hr_vals * (((rate_err_num_HR / rate_num_HR) ** 2 +
+                                         (rate_err_den_HR / rate_den_HR) ** 2) ** (
+                                                    1 / 2))
 
-                plt.errorbar(time_HR, hr_vals, xerr=float(binning), yerr=hr_err.clip(0), ls='-', lw=1,
-                         color='grey', ecolor='blue')
+                    plt.errorbar(time_HR, hr_vals, xerr=float(elem_binning), yerr=hr_err.clip(0), ls='-', lw=1,
+                             color='grey', ecolor='blue')
 
-                plt.suptitle('NuSTAR '+camlist[i_cam]+' net HR evolution for observation ' + obsid + id_orbit_str+' in the ' + hr_bands + ' keV band'+
-                             'with '+binning+' s binning')
+                    plt.suptitle('NuSTAR '+camlist[i_cam]+' net HR evolution for observation ' + obsid +
+                                 id_orbit_str+' in the ' + hr_bands + ' keV band'+
+                                 'with '+elem_binning+' s binning')
 
-                plt.xlabel('Time (s) after ' + time_zero_HR)
-                plt.ylabel('Hardness Ratio (' + hr_bands + ' keV)')
+                    plt.xlabel('Time (s) after ' + time_zero_HR)
+                    plt.ylabel('Hardness Ratio (' + hr_bands + ' keV)')
 
-                plt.tight_layout()
-                plt.savefig(os.path.join(directory,'products'+('_bright' if bright else ''),
-                            'nu'+obsid + id_orbit_str+'_' + camlist[i_cam]+ '_hr_screen_'+hr_bands.replace('/','_')+'_bin_' + binning + '.png'))
-                plt.close()
+                    plt.tight_layout()
+                    plt.savefig(os.path.join(directory,'products'+('_bright' if bright else ''),
+                                'nu'+obsid + id_orbit_str+'_' + camlist[i_cam]+ '_hr_screen_'+
+                                             hr_bands.replace('/','_')+'_bin_' + elem_binning + '.png'))
+                    plt.close()
 
     extract_lc_done.set()
 
@@ -2250,7 +2164,7 @@ def extract_sp(directory,cams='all',e_low=None,e_high=None,bright=False,gti_mode
                                                 e_low=e_low,e_high=e_high,bright=bright)
 
                 summary_content = obsid + '\t' + camlist[i_cam] +'\t'+ summary_line
-                file_edit(os.path.join(directory, 'summary_extract_lc.log'), obsid + '\t' + camlist[i_cam],
+                file_edit(os.path.join(directory, 'summary_extract_sp.log'), obsid + '\t' + camlist[i_cam],
                           summary_content + '\n',
                           summary_header)
 

@@ -901,6 +901,69 @@ def save_broad_SED(path=None,e_low=0.1,e_high=100,nbins=1e3,retain_session=False
     else:
         return save_arr
 
+def compute_snr(sp_source,emin,emax,sp_back=None,rmf_source=None,e_step=None,mode='keV'):
+
+    '''
+    Careful, will need to rescale the bakcscale for the Resolve spectra to consider the branching ratios
+
+    mode can be keV or channel
+    In channel mode, emin and emax need to be integers ,and e_step must be big enough so that it doesn't create floats
+
+    6.4-7 is 12600-14000 in XRISM channels
+
+    '''
+
+    AllData.clear()
+    AllModels.clear()
+
+    AllData('1:1 '+sp_source)
+    if rmf_source is not None:
+        AllData(1).response=rmf_source
+
+    if sp_back is not None:
+        AllData(1).background=sp_back
+
+    Plot.xAxis=mode
+
+    if e_step is None:
+        AllData.ignore('**-'+str(emin)+' '+str(emax)+'-**')
+
+        SNR=np.sqrt(AllData(1).rate[0] * AllData(1).exposure)
+        return SNR
+    else:
+        e_range=np.arange(emin,emax+e_step/2,e_step,dtype=int if mode=='channel' else float)
+        SNR_arr=np.repeat(np.nan,len(e_range)-1)
+
+        for i in range(len(e_range)-1):
+            AllData.notice('**')
+            AllData.ignore('**-'+str(e_range[i])+' '+str(e_range[i+1])+'-**')
+            SNR_arr[i]=np.sqrt(AllData(1).rate[0] * AllData(1).exposure)
+
+        return SNR_arr
+
+def compa_SNR(sp_source_list,sp_back_list,
+              emin,emax,e_step,
+              rmf_source_list=None,mode='keV',
+              save_suffix='',):
+    '''
+    Makes a SNR comparison for a list of spectra and/or backgrounds, and stores it in an array that is saved
+    '''
+
+    if rmf_source_list is None:
+        rmf_source_list_use=np.repeat([None,len(sp_source_list)])
+    else:
+        rmf_source_list_use=rmf_source_list
+
+    SNR_arr_list=np.array([None]*len(sp_source_list))
+
+    for i_src,(elem_sp_source,elem_sp_back,elem_rmf_source) in enumerate(zip(sp_source_list,sp_back_list,rmf_source_list_use)):
+        SNR_arr_list[i_src]=compute_snr(elem_sp_source,elem_sp_back,emin=emin,emax=emax,e_step=e_step,
+                                        rmf_source=elem_rmf_source,
+                                        mode=mode)
+
+    with open('compa_SNR_dump'+('_' if save_suffix!='' else '')+save_suffix+'.dill','wb+') as f:
+        dill.dump(SNR_arr_list,f)
+
 class component_data:
 
     '''
@@ -1483,8 +1546,8 @@ def addcomp(compname,position='last',endmult=None,return_pos=False,modclass=AllM
         for 'named' lines with the ionisation number, adds a vashift component with [X,Yk] in blueshift and a gaussian with energy frozen at the line
         baseline energy level (see constants at the start of the code for up to date parameter definitions)
 
-        'FeKa0' ->  neutral Fe emission at 6.40
-        'FeKb0' ->  neutral Fe emission at 7.06
+        'FeKa1' ->  neutral Fe emission at 6.40
+        'FeKb1' ->  neutral Fe emission at 7.06
         'FeKa25' -> FeXXV absorption at 6.70keV.
         'FeKa26' -> FeXXVI absorption at 6.97keV
 

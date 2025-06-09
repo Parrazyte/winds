@@ -102,7 +102,7 @@ ap.add_argument('-catch', '--catch_errors', help='Catch errors while running the
 
 # global choices
 ap.add_argument("-a", "--action", nargs='?', help='Give which action(s) to proceed,separated by comas.',
-                default='build,reg,lc,sp,g,m', type=str)
+                default='lc,sp', type=str)
 # default: build,reg,lc,sp,g,m
 
 ap.add_argument("-over", nargs=1, help='overwrite computed tasks (i.e. with products in the batch, or merge directory\
@@ -176,24 +176,47 @@ ap.add_argument('-point_source', nargs=1,
 ap.add_argument('-sudo_mode',nargs=1,help='put to true if the ds9 installation needs to be run in sudo',
                default=False,type=bool)
 
+
+'''spectra and lightcurve'''
+
+ap.add_argument('-regions_mode',nargs=1,help='region choosing mode between auto, input and manual',
+                default='manual',type=str)
+
+#only used if regions_mode is set to manual
+ap.add_argument('-man_src_reg_FPMA',nargs=1,
+               help='manual source region relative path inside the osbid directory for FPMA',
+               default='out/reg_src_fk5.reg',type=str)
+ap.add_argument('-man_src_reg_FPMB',nargs=1,
+               help='manual source region relative path inside the osbid directory for FPMB',
+               default='out/reg_src_fk5.reg',type=str)
+ap.add_argument('-man_bg_reg_FPMA',nargs=1,
+               help='manual background region relative path inside the osbid directory for FPMA',
+               default='out/reg_bg_fk5.reg',type=str)
+ap.add_argument('-man_bg_reg_FPMB',nargs=1,
+               help='manual background region relative path inside the osbid directory for FPMB',
+               default='out/reg_bg_fk5.reg',type=str)
+
 '''lightcurve'''
 
 #note: this binning will also be used to CREATE the gtis
 ap.add_argument('-lc_bin_std', nargs=1, help='Gives the binning of all standard lightcurces/HR evolutions (in s)',
-                default='10',type=str)
+                default='1000,10',type=str)
 
 ap.add_argument('-lc_bin_gti', nargs=1, help='Gives the binning of all lightcurves used for gti cutting (in s)',
                 default='1',type=str)
 
 # note: also defines the binning used for the gti definition
 
-ap.add_argument('-lc_bands_str', nargs=1, help='Gives the list of bands to create lightcurves from', default='3-79',
+ap.add_argument('-lc_bands_str', nargs=1,
+                help='Gives the list of bands to create lightcurves from', default='3-79',
                 type=str)
-ap.add_argument('-hr_bands_str', nargs=1, help='Gives the list of bands to create hrs from', default='10-50/3-10',
+ap.add_argument('-hr_bands_str', nargs=1,
+                help='Gives the list of bands to create hrs from', default='10-50/3-10',
                 type=str)
 
 #note: also makes the spectrum function create spectra uniquely from GTIs
-ap.add_argument('-make_gti_orbit',nargs=1,help='cut individual observations per orbits with gtis',default=False,
+ap.add_argument('-make_gti_orbit',nargs=1,help='cut individual observations per orbits with gtis',
+                default=False,
                 type=bool)
 
 ap.add_argument('-gti_tool',nargs=1,help='tool to make gti files',default='NICERDAS',type=str)
@@ -230,6 +253,12 @@ sudo_mode=args.sudo_mode
 
 bright_check=args.bright_check
 force_bright=args.force_bright
+
+man_src_reg_FPMA=args.man_src_reg_FPMA
+man_src_reg_FPMB=args.man_src_reg_FPMB
+man_bg_reg_FPMA=args.man_bg_reg_FPMA
+man_bg_reg_FPMB=args.man_bg_reg_FPMB
+regions_mode=args.regions_mode
 
 lc_bin_std=args.lc_bin_std
 lc_bin_gti=args.lc_bin_gti
@@ -302,7 +331,7 @@ def set_var(spawn):
         spawn.sendline(caldbinit_init_alias)
 
 
-def file_evt_selector(filetype, cameras='all', bright=False):
+def file_evt_selector(filetype, directory, cameras='all', bright=False):
     '''
     Searches for all of the files of a specific type (among the ones used in the data reduction),
     and asks for input if more than one are detected.
@@ -418,7 +447,7 @@ def process_obsdir(directory, overwrite=True, bright=False):
                           ' clobber=' + ('YES' if overwrite else 'FALSE')+bright_str)
 
         #will need to update this in case of updates
-        process_state = bashproc.expect(['nupipeline_0.4.9: Exit','ERROR: Pipeline exit with error'], timeout=None)
+        process_state = bashproc.expect(['nupipeline_0.4.12: Exit','ERROR: Pipeline exit with error'], timeout=None)
 
         # exiting the bashproc
         bashproc.sendline('exit')
@@ -1292,7 +1321,7 @@ def extract_reg(directory, cams='all', use_file_target=False,
 
     # recensing the cleaned event files available for each camera
     # clean_filelist shape : [[FPMA_files,FPMA_dirs],[FPMB_files,FPMB_dirs]]
-    clean_filelist = file_evt_selector('evt_clean',cameras=cams,bright=bright)
+    clean_filelist = file_evt_selector('evt_clean',directory=directory,cameras=cams,bright=bright)
 
     # summary file header
     if directory.endswith('/'):
@@ -1389,7 +1418,7 @@ def extract_reg(directory, cams='all', use_file_target=False,
                        ' clobber=YES cleanup=YES')
 
         ####TODO: check what's the standard message here
-        err_code=spawn.expect(['nuproducts_0.3.3: Exit with success','nuproducts error'],timeout=None)
+        err_code=spawn.expect(['nuproducts_0.3.5: Exit with success','nuproducts error'],timeout=None)
 
         if err_code!=0:
             return 'Nuproduct error','',''
@@ -1483,9 +1512,9 @@ def extract_lc_single(spawn, directory, binning, instru, steminput, src_reg, bg_
                    ' clobber=YES cleanup=YES'+(' usrgtifile=./'+gti_spawn if gti is not None else ''))
 
     ####TODO: check what's the standard message here
-    err_code=spawn.expect(['nuproducts_0.3.3: Exit with success',"nuproducts_0.3.3: ERROR running 'nulivetime'",
+    err_code=spawn.expect(['nuproducts_0.3.5: Exit with success',"nuproducts_0.3.5: ERROR running 'nulivetime'",
                            '-------------------- nuproducts  error',
-                           "nuproducts_0.3.3: Error: running 'lcurve'"],timeout=None)
+                           "nuproducts_0.3.5: Error: running 'lcurve'"],timeout=None)
 
     if err_code!=0:
         return 'Nuproduct error','',''
@@ -1563,6 +1592,7 @@ def extract_lc_single(spawn, directory, binning, instru, steminput, src_reg, bg_
         return lc_src_path
 
 def extract_lc(directory,binning='1',lc_bands_str='3-79',hr_bands='10-50/3-10',cams='all',bright=False,
+               regions="auto",
                make_gtis=False,use_gtis=True,gti_binning='1',gti_tool='NICERDAS'):
 
     '''
@@ -1574,7 +1604,7 @@ def extract_lc(directory,binning='1',lc_bands_str='3-79',hr_bands='10-50/3-10',c
 
     We follow the steps highlighted in https://heasarc.gsfc.nasa.gov/docs/nustar/analysis/nustar_swguide.pdf 5.3D
     options:
-        -binning: binning of the LC in seconds
+        -binning: binning(s) of the LC in seconds. Several binnings should be split by ,
 
         -bands: bands for each lightcurve to be created.
                 The numbers should be in keV, separated by "-", and different lightcurves by ","
@@ -1609,8 +1639,45 @@ def extract_lc(directory,binning='1',lc_bands_str='3-79',hr_bands='10-50/3-10',c
 
     # recensing the reg files available for each camera
     # clean_filelist shape : [[FPMA_files,FPMA_dirs],[FPMB_files,FPMB_dirs]]
-    src_reg = file_evt_selector('src_reg',cameras=cams,bright=bright)
-    bg_reg = file_evt_selector('bg_reg',cameras=cams,bright=bright)
+    if regions=="auto":
+        src_reg = file_evt_selector('src_reg',directory=directory,cameras=cams,bright=bright)
+        bg_reg = file_evt_selector('bg_reg',directory=directory,cameras=cams,bright=bright)
+    elif regions=='input':
+        reg_src_str_FMPA=input('Relative path of FPMA source region inside the obsid directory')
+
+        assert ('bright/' in reg_src_str_FPMA if bright else 'bright/' not in reg_src_str_FPMA),\
+            'Error: region in the wrong output directory with current bright option'
+        
+        reg_src_str_FMPB=input('Relative path of FPMA source region inside the obsid directory')
+
+        assert ('bright/' in reg_src_str_FPMA if bright else 'bright/' not in reg_src_str_FPMN),\
+            'Error: region in the wrong output directory with current bright option'
+
+        src_reg = [[[reg_src_str_FPMA.split('/')[-1]],['/'.join([directory]+reg_src_str_FPMA.split('/')[:-1])]],
+                       [[reg_src_str_FPMB.split('/')[-1]],['/'.join([directory]+reg_src_str_FPMB.split('/')[:-1])]]]
+        
+        reg_bg_str_FMPA = input('Relative path of FPMA source region inside the obsid directory')
+
+        assert ('bright/' in reg_bg_str_FPMA if bright else 'bright/' not in reg_bg_str_FPMA), \
+            'Error: region in the wrong output directory with current bright option'
+
+        reg_bg_str_FMPB = input('Relative path of FPMA source region inside the obsid directory')
+
+        assert ('bright/' in reg_bg_str_FPMA if bright else 'bright/' not in reg_bg_str_FPMN), \
+            'Error: region in the wrong output directory with current bright option'
+
+        bg_reg = [[[reg_src_str_FPMA.split('/')[-1]],['/'.join([directory]+reg_src_str_FPMA.split('/')[:-1])]],
+                       [[reg_bg_str_FPMB.split('/')[-1]], ['/'.join([directory]+reg_bg_str_FPMB.split('/')[:-1])]]]
+        
+    elif regions=='manual':
+        src_reg_str_FPMA,src_reg_str_FPMB,bg_reg_str_FPMA,bg_reg_str_FPMB=\
+        man_src_reg_FPMA,man_src_reg_FPMB,man_bg_reg_FPMA,man_bg_reg_FPMB
+
+        src_reg = [[[src_reg_str_FPMA.split('/')[-1]], ['/'.join([directory]+src_reg_str_FPMA.split('/')[:-1])]],
+                       [[src_reg_str_FPMB.split('/')[-1]], ['/'.join([directory]+src_reg_str_FPMB.split('/')[:-1])]]]
+
+        bg_reg = [[[bg_reg_str_FPMA.split('/')[-1]],['/'.join([directory]+bg_reg_str_FPMA.split('/')[:-1])]],
+                       [[bg_reg_str_FPMB.split('/')[-1]], ['/'.join([directory]+bg_reg_str_FPMB.split('/')[:-1])]]]
 
     if len(src_reg[0][0])!=1 or len(src_reg[1][0])!=1 or len(bg_reg[0][0])!=1 or len(bg_reg[1][0])!=1:
 
@@ -1631,11 +1698,13 @@ def extract_lc(directory,binning='1',lc_bands_str='3-79',hr_bands='10-50/3-10',c
 
     lc_bands = np.unique(lc_bands)[::-1]
 
+    binning_list=binning.split(',')
+
     # storing the ids for the HR bands
     id_band_num_HR = np.argwhere(hr_bands.split('/')[0] == lc_bands)[0][0]
     id_band_den_HR = np.argwhere(hr_bands.split('/')[1] == lc_bands)[0][0]
 
-    summary_header='Obsid\tcamera\tenergy band\tLightcurve extraction result\n'
+    summary_header='Obsid\tcamera\tenergy band (keV)\tBinning (s)\tLightcurve extraction result\n'
 
     set_var(bashproc)
 
@@ -1713,33 +1782,35 @@ def extract_lc(directory,binning='1',lc_bands_str='3-79',hr_bands='10-50/3-10',c
 
             for id_orbit,elem_gti in enumerate(gti_list):
 
-                lc_prods=np.array([None]*len(lc_bands))
+                lc_prods=np.array([[None]*len(binning_list)]*len(lc_bands))
 
                 for id_band,band in enumerate(lc_bands):
 
-                    summary_line,lc_prods[id_band],bright_flag_single = extract_lc_single(bashproc,directory=directory,
-                                                    binning=binning,instru=camlist[i_cam],steminput='nu'+obsid,
+                    for id_binning,elem_binning in enumerate(binning_list):
+
+                        summary_line,lc_prods[id_band][id_binning],bright_flag_single = extract_lc_single(bashproc,directory=directory,
+                                                    binning=elem_binning,instru=camlist[i_cam],steminput='nu'+obsid,
                                                     src_reg=src_reg_indiv_spawn,bg_reg=bg_reg_indiv_spawn,
                                                     e_low=band.split('-')[0],e_high=band.split('-')[1],
                                                     bright=bright,backscale=backscale,
                                                     gti=elem_gti,id_orbit=id_orbit)
 
-                    #adding a flag to skip the computation of the HR if the lc computation crashed in at least
-                    #one band
-                    if type(lc_prods)==str:
-                        no_HR_flag=1
-                    else:
-                        no_HR_flag=0
+                        #adding a flag to skip the computation of the HR if the lc computation crashed in at least
+                        #one band
+                        if type(lc_prods)==str:
+                            no_HR_flag=1
+                        else:
+                            no_HR_flag=0
 
-                    id_orbit_str = '-' + str_orbit(id_orbit) if elem_gti is not None else ''
+                        id_orbit_str = '-' + str_orbit(id_orbit) if elem_gti is not None else ''
 
-                    summary_content = obsid + '\t' + camlist[i_cam] +'\t'+ band + '\t' + summary_line
-                    file_edit(os.path.join(directory, 'summary_extract_lc.log'), obsid + id_orbit_str + '\t' + camlist[i_cam] +'\t'+ band ,
-                              summary_content + '\n',
-                              summary_header)
+                        summary_content = obsid + '\t' + camlist[i_cam] +'\t'+ band + '\t'+ elem_binning + '\t' + summary_line
+                        file_edit(os.path.join(directory, 'summary_extract_lc.log'), obsid + id_orbit_str + '\t' + camlist[i_cam] +'\t'+ band ,
+                                  summary_content + '\n',
+                                  summary_header)
 
-                    #updating the global bright flag if a flagged obs appears (note: the bright_flag is force to False when not in the 3-79 band)
-                    bright_flag_tot=bright_flag_tot or bright_flag_single
+                        #updating the global bright flag if a flagged obs appears (note: the bright_flag is force to False when not in the 3-79 band)
+                        bright_flag_tot=bright_flag_tot or bright_flag_single
 
                 #potentially skipping the HR computation
                 if no_HR_flag:
@@ -1990,21 +2061,18 @@ def create_gtis(spawn,cut_lc,fig_cut_lc,gti_tool='NICERDAS'):
 
         return gti_path_list
 
-def extract_sp(directory,cams='all',e_low=None,e_high=None,bright=False,gti_mode=False):
+def extract_sp(directory,cams='all',e_low=None,e_high=None,bright=False,gti_mode=False,
+               regions="auto",):
 
     '''
     Wrapper for a version of nuproducts to computes only spectral products
 
     We follow the steps highlighted in https://heasarc.gsfc.nasa.gov/docs/nustar/analysis/nustar_swguide.pdf 5.3B
     options:
-        -binning: binning of the LC in seconds
+        -e_low-e_high: low and high energy bounds of the specturm if necessary
 
-        -bands: bands for each lightcurve to be created.
-                The numbers should be in keV, separated by "-", and different lightcurves by ","
-                ex: to create two lightcurves for, the 1-3 and 4-12 band, use '1-3,4-12'
-
-        -hr: bands to be used for the HR plot creation.
-             A single plot is possible for now. Creates its own lightcurve bands if necessary
+        -gti_mode: if True, computes the spectrum for all gti files created by create_gtis found in the arborescence.
+                    Otherwise computes the time-averaged spectrum
 
         -overwrite: overwrite products or not
 
@@ -2040,7 +2108,7 @@ def extract_sp(directory,cams='all',e_low=None,e_high=None,bright=False,gti_mode
                        ' clobber=yes'+(' usrgtifile='+gti_spawn if gti is not None else ''))
 
         ####TODO: check what's the standard message here
-        err_code=spawn.expect(['nuproducts_0.3.3: Exit with success','nuproducts error'],timeout=None)
+        err_code=spawn.expect(['nuproducts_0.3.5: Exit with success','nuproducts error'],timeout=None)
 
         if err_code!=0:
             return 'Nuproducts error'
@@ -2056,10 +2124,48 @@ def extract_sp(directory,cams='all',e_low=None,e_high=None,bright=False,gti_mode
         if 'FPMB' in [elem.upper() for elem in cams]:
             camid_list.append(1)
 
-    # recensing the reg files available for each camera
+    # censing the reg files available for each camera
     # clean_filelist shape : [[FPMA_files,FPMA_dirs],[FPMB_files,FPMB_dirs]]
-    src_reg = file_evt_selector('src_reg',cameras=cams,bright=bright)
-    bg_reg = file_evt_selector('bg_reg',cameras=cams,bright=bright)
+
+    if regions == "auto":
+        src_reg = file_evt_selector('src_reg', directory=directory, cameras=cams, bright=bright)
+        bg_reg = file_evt_selector('bg_reg', directory=directory, cameras=cams, bright=bright)
+    elif regions == 'input':
+        reg_src_str_FMPA = input('Relative path of FPMA source region inside the obsid directory')
+
+        assert ('bright/' in reg_src_str_FPMA if bright else 'bright/' not in reg_src_str_FPMA), \
+            'Error: region in the wrong output directory with current bright option'
+
+        reg_src_str_FMPB = input('Relative path of FPMA source region inside the obsid directory')
+
+        assert ('bright/' in reg_src_str_FPMA if bright else 'bright/' not in reg_src_str_FPMN), \
+            'Error: region in the wrong output directory with current bright option'
+
+        src_reg = [[[reg_src_str_FPMA.split('/')[-1]], ['/'.join([directory] + reg_src_str_FPMA.split('/')[:-1])]],
+                   [[reg_src_str_FPMB.split('/')[-1]], ['/'.join([directory] + reg_src_str_FPMB.split('/')[:-1])]]]
+
+        reg_bg_str_FMPA = input('Relative path of FPMA source region inside the obsid directory')
+
+        assert ('bright/' in reg_bg_str_FPMA if bright else 'bright/' not in reg_bg_str_FPMA), \
+            'Error: region in the wrong output directory with current bright option'
+
+        reg_bg_str_FMPB = input('Relative path of FPMA source region inside the obsid directory')
+
+        assert ('bright/' in reg_bg_str_FPMA if bright else 'bright/' not in reg_bg_str_FPMN), \
+            'Error: region in the wrong output directory with current bright option'
+
+        bg_reg = [[[reg_src_str_FPMA.split('/')[-1]], ['/'.join([directory] + reg_src_str_FPMA.split('/')[:-1])]],
+                  [[reg_bg_str_FPMB.split('/')[-1]], ['/'.join([directory] + reg_bg_str_FPMB.split('/')[:-1])]]]
+
+    elif regions == 'manual':
+        src_reg_str_FPMA, src_reg_str_FPMB, bg_reg_str_FPMA, bg_reg_str_FPMB = \
+            man_src_reg_FPMA, man_src_reg_FPMB, man_bg_reg_FPMA, man_bg_reg_FPMB
+
+        src_reg = [[[src_reg_str_FPMA.split('/')[-1]], ['/'.join([directory] + src_reg_str_FPMA.split('/')[:-1])]],
+                   [[src_reg_str_FPMB.split('/')[-1]], ['/'.join([directory] + src_reg_str_FPMB.split('/')[:-1])]]]
+
+        bg_reg = [[[bg_reg_str_FPMA.split('/')[-1]], ['/'.join([directory] + bg_reg_str_FPMA.split('/')[:-1])]],
+                  [[bg_reg_str_FPMB.split('/')[-1]], ['/'.join([directory] + bg_reg_str_FPMB.split('/')[:-1])]]]
 
     if len(src_reg[0][0])!=1 or len(src_reg[0][0])!=1:
 
@@ -2472,7 +2578,8 @@ if not local:
                         if curr_action=='lc':
                             output_lc=extract_lc(dirname,binning=lc_bin_std,lc_bands_str=lc_bands_str,hr_bands=hr_bands_str,cams=cameras_glob,
                                                   bright=force_bright or bright_flag_dir,make_gtis=make_gti_orbit,
-                                                 gti_tool=gti_tool,gti_binning=lc_bin_gti,use_gtis=use_gtis)
+                                                 gti_tool=gti_tool,gti_binning=lc_bin_gti,use_gtis=use_gtis,
+                                                 regions=regions_mode)
 
                             if type(output_lc)==str:
                                 raise ValueError
@@ -2500,7 +2607,8 @@ if not local:
 
                         if curr_action=='sp':
                             output_err=extract_sp(dirname,cams=cameras_glob,e_low=e_low_sp,e_high=e_high_sp,
-                                                  bright=force_bright or bright_flag_dir,gti_mode=make_gti_orbit)
+                                                  bright=force_bright or bright_flag_dir,gti_mode=make_gti_orbit,
+                                                 regions=regions_mode)
 
                             if type(output_err)==str:
                                 raise ValueError
@@ -2562,9 +2670,12 @@ if not local:
                         output_lc = extract_lc(dirname, binning=lc_bin_std, lc_bands_str=lc_bands_str, hr_bands=hr_bands_str,
                                                cams=cameras_glob,
                                                bright=force_bright or bright_flag_dir,make_gtis=make_gti_orbit,
-                                                 gti_tool=gti_tool,gti_binning=lc_bin_gti,use_gtis=use_gtis)
+                                                 gti_tool=gti_tool,gti_binning=lc_bin_gti,use_gtis=use_gtis,
+                                                 regions=regions_mode)
 
                         if type(output_lc) == str:
+                            breakpoint()
+
                             raise ValueError
 
                         elif output_lc:
@@ -2589,7 +2700,8 @@ if not local:
 
                     if curr_action == 'sp':
                         output_err = extract_sp(dirname, cams=cameras_glob, e_low=e_low_sp, e_high=e_high_sp,
-                                                bright=force_bright or bright_flag_dir,gti_mode=make_gti_orbit)
+                                                bright=force_bright or bright_flag_dir,gti_mode=make_gti_orbit,
+                                                 regions=regions_mode)
 
                         if type(output_err) == str:
                             raise ValueError
@@ -2653,7 +2765,8 @@ else:
             output_lc = extract_lc(absdir, binning=lc_bin_std, lc_bands_str=lc_bands_str, hr_bands=hr_bands_str,
                                    cams=cameras_glob,
                                    bright=force_bright or bright_flag_dir,make_gtis=make_gti_orbit,
-                                                 gti_tool=gti_tool,gti_binning=lc_bin_gti,use_gtis=use_gtis)
+                                                 gti_tool=gti_tool,gti_binning=lc_bin_gti,use_gtis=use_gtis,
+                                                 regions=regions_mode)
 
             if type(output_lc) == str:
                 raise ValueError
@@ -2679,7 +2792,8 @@ else:
 
         if curr_action == 'sp':
             output_err = extract_sp(absdir, cams=cameras_glob, e_low=e_low_sp, e_high=e_high_sp,
-                                    bright=force_bright or bright_flag_dir,gti_mode=make_gti_orbit)
+                                    bright=force_bright or bright_flag_dir,gti_mode=make_gti_orbit,
+                                                 regions=regions_mode)
 
             if type(output_err) == str:
                 raise ValueError

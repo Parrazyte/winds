@@ -668,7 +668,7 @@ def plot_std_ener(ax_ratio, ax_contour=None, plot_em=False, mode='ratio',exclude
             continue
 
         # skipping redundant indexes
-        if line in ['FeKa25em','FeKa26em','FeKa0em','FeKb0em','calNICERSiem','FeDiazem']:
+        if line in ['FeKa25em','FeKa26em','FeKa1em','FeKb1em','calNICERSiem','FeDiazem']:
             continue
 
         # skipping Nika27, FeKa25em, FeKa26em:

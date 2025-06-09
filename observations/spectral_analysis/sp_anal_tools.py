@@ -426,7 +426,7 @@ def fit_broader(epoch_id,add_gaussem=True,bat_interp_dir='/home/parrama/Document
     calc_fit()
 
     if add_gaussem:
-        addcomp('FeKa0em_bgaussian', position='thcomp')
+        addcomp('FeKa1em_bgaussian', position='thcomp')
 
         #not that here the NICER edge is not removed for the BAT datagroup, but we don't care considering the energy
         addcomp('calNICER_edge')
@@ -545,7 +545,7 @@ def fit_broader_BAT(epoch_list,
     calc_fit()
 
     if add_gaussem:
-        addcomp('FeKa0em_bgaussian', position='thcomp')
+        addcomp('FeKa1em_bgaussian', position='thcomp')
 
         #not that here the NICER edge is not removed for the BAT datagroup, but we don't care considering the energy
         addcomp('calNICER_edge')

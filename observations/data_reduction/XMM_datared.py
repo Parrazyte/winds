@@ -157,7 +157,7 @@ ap.add_argument("-evtname",nargs='?',help='substring present in previously proce
 
 #global choices
 ap.add_argument("-a","--action",nargs='?',help='Give which action(s) to proceed,separated by comas.'+
-                '\n1.evt_build\n2.filter_evt\n3.extract_reg...',default='l,s',type=str)
+                '\n1.evt_build\n2.filter_evt\n3.extract_reg...',default='l,s,m',type=str)
 
 #,2n,3,l,s,m
 #std : '1' puis '2n,3,l,s,m'
@@ -178,11 +178,21 @@ ap.add_argument("-over",nargs=1,help='overwrite computed tasks (i.e. with produc
 
 #action specifics : 
 '''event cleaning'''
-ap.add_argument('-pnflare',nargs=1,help='pn flaring limit standard value',default=0.7,type=float)
+ap.add_argument('-pnflare',nargs=1,help='pn flaring limit standard value',default=0.38,type=float)
 ap.add_argument('-mosflare',nargs=1,help='mos flaring limit standard value',default=0.35,type=float)
 
-ap.add_argument('-flareband',nargs=1,help='flare computation band',default='6.-10.',type=str)
+ap.add_argument('-flareband',nargs=1,help='flare computation band',default='0.3-10.',type=str)
 #Should correspond to the most important energy band for subsequent science analysis. also used in the region computation
+
+#otherwise use [10-12]keV for PN and <10keV for MOS
+ap.add_argument('-replace_std_flare_band',nargs=1,help='replace the standard flare band by flareband in 2std mode',
+                default=True,type=bool)
+
+
+ap.add_argument('-man_lc_flare',nargs=1,
+                help='manual flare lightcurve input for std mode if need be. Warning: hacky',
+                default='pn_S003_Imaging_MAXIJ1744_v2_lc_src_broad.ds',type=str)
+
 
 '''region computation'''
 
@@ -265,6 +275,8 @@ pnflare_lim=args.pnflare
 mosflare_lim=args.mosflare
 lc_bins=args.bin
 flare_band=np.array(args.flareband.split('-')).astype(float)
+replace_std_flare_band=args.replace_std_flare_band
+man_lc_flare=args.man_lc_flare
 
 pileup_test=args.pileup_test
 
@@ -584,7 +596,7 @@ def file_selector(directory,filetype,camera='all'):
 
     return result_list
 
-def filter_evt(directory,mode='std',cams='all',expos_mode='all',overwrite=True):
+def filter_evt(directory,mode='std',cams='all',expos_mode='all',man_lc_flare='',overwrite=True):
     
     '''
     Filters existing event files following the standard procedure, with some small modifications for better visibility in 
@@ -649,13 +661,24 @@ def filter_evt(directory,mode='std',cams='all',expos_mode='all',overwrite=True):
         camera=fits.open(fulldir+'/'+file)[0].header['INSTRUME'][1:].swapcase()
         
         #expressions for the plot and filtering commands for later
-        if camera=='pn':
-            expression_plot='"#XMMEA_EP&&(PI>10000&&PI<12000)&&(PATTERN==0)"'
-            expression_filter='"#XMMEA_EP && gti('+camera+'gti_'+suffix_evt+'.ds,TIME) && (PI>200&&PI<12000)"'
-        elif camera in {'mos1','mos2'}:
-            expression_plot='"#XMMEA_EM&&(PI>10000)&&(PATTERN==0)"'
-            expression_filter='"#XMMEA_EM && gti('+camera+'gti_'+suffix_evt+'.ds,TIME) && (PI>200&&PI<12000)"'
-         
+
+        if replace_std_flare_band:
+            if camera == 'pn':
+                expression_plot = '"#XMMEA_EP && (PI in [' + str(int(1000 * flare_band[0])) + ':' + str(
+                    int(1000 * flare_band[1])) + '])&&(PATTERN==0)"'
+                expression_filter = '"#XMMEA_EP && gti(' + camera + 'gti_' + suffix_evt + '.ds,TIME) && (PI>200&&PI<12000)"'
+            elif camera in {'mos1', 'mos2'}:
+                expression_plot = '"#XMMEA_EM && (PI in [' + str(int(1000 * flare_band[0])) + ':' + str(
+                    int(1000 * flare_band[1])) + '])&&(PATTERN==0)"'
+                expression_filter = '"#XMMEA_EM && gti(' + camera + 'gti_' + suffix_evt + '.ds,TIME) && (PI>200&&PI<12000)"'
+        else:
+            if camera=='pn':
+                expression_plot='"#XMMEA_EP&&(PI>10000&&PI<12000)&&(PATTERN==0)"'
+                expression_filter='"#XMMEA_EP && gti('+camera+'gti_'+suffix_evt+'.ds,TIME) && (PI>200&&PI<12000)"'
+            elif camera in {'mos1','mos2'}:
+                expression_plot='"#XMMEA_EM&&(PI>10000)&&(PATTERN==0)"'
+                expression_filter='"#XMMEA_EM && gti('+camera+'gti_'+suffix_evt+'.ds,TIME) && (PI>200&&PI<12000)"'
+
         #creation of the high-energy rate table
         spawn.sendline('\nevselect table='+file+' withrateset=Y rateset=rate'+camera+'_'+suffix_evt+'.ds '+
                        ' maketimecolumn=Y timebinsize=100 makeratecolumn=Y  expression='+expression_plot)
@@ -833,7 +856,11 @@ def filter_evt(directory,mode='std',cams='all',expos_mode='all',overwrite=True):
             spawn.sendline('\ntabgtigen table='+lc_src_flare_path.replace('lc_src_flare','gti_flare')+' expression="IS_GTI==1"'+
                            ' gtiset='+camera+'gti_'+suffix_evt+'.ds')
         else:
-            spawn.sendline('\ntabgtigen table=rate'+camera+'_'+suffix_evt+'.ds expression="RATE<='+str(ratelim)
+            if man_lc_flare!='':
+                spawn.sendline('\ntabgtigen table=' + man_lc_flare + ' expression="RATE<=' + str(ratelim)
+                               + '" gtiset=' + camera + 'gti_' + suffix_evt + '.ds')
+            else:
+                spawn.sendline('\ntabgtigen table=rate'+camera+'_'+suffix_evt+'.ds expression="RATE<='+str(ratelim)
                            +'" gtiset='+camera+'gti_'+suffix_evt+'.ds')
             
         spawn.expect([pexpect.TIMEOUT,'ended'],timeout=None)
@@ -3215,7 +3242,7 @@ def plot_lc(lc_src_path,lc_bg_path=None,area_ratio=1,save=True,close=True,mode='
     
     if 'broad' not in mode:
         if 'rate' in mode:
-            lc_ener_str='[10-12] keV' if lc_cam=='pn' else '>=10 keV'
+            lc_ener_str='['+(args.flareband if replace_std_flare_band else ('10-12'))+'] keV' if lc_cam=='pn' else '>=10 keV'
         else:
             lc_ener_str='['+args.flareband+']'+' keV'
         if lc_cam=='pn':
@@ -4255,7 +4282,8 @@ if local==False:
                             filter_mode='auto'
                         elif 'n' in curr_action:
                             filter_mode='nolim'
-                        filter_evt(obsdir,cams=cameras_glob,expos_mode=expos_mode_glob,overwrite=True,mode=filter_mode)
+                        filter_evt(obsdir,cams=cameras_glob,expos_mode=expos_mode_glob,overwrite=True,
+                                   mode=filter_mode,man_lc_flare=man_lc_flare)
                         filter_evt_done.wait()
                     if curr_action=='3':
                         extract_reg(obsdir,mode=extract_reg_mode,cams=cameras_glob,expos_mode=expos_mode_glob,overwrite=overwrite_glob,
@@ -4310,7 +4338,8 @@ else:
                     filter_mode='auto'
                 elif 'n' in curr_action:
                     filter_mode='nolim'
-                filter_evt(absdir,cams=cameras_glob,expos_mode=expos_mode_glob,overwrite=True,mode=filter_mode)
+                filter_evt(absdir,cams=cameras_glob,expos_mode=expos_mode_glob,overwrite=True,mode=filter_mode,
+                           man_lc_flare=man_lc_flare)
                 filter_evt_done.wait()
             if curr_action=='3':
                 extract_reg(absdir, mode=extract_reg_mode, cams=cameras_glob, expos_mode=expos_mode_glob,

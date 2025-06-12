@@ -15,22 +15,26 @@ reset()
 Fit.query='yes'
 Plot.xLog=False
 
-rmf_abv = {'XRISM_Hp_AO2': '/media/parrama/crucial_SSD/Observ/BHLMXB/XRISM/Simu/rsl_Hp_L_2025.rmf',
-            'XRISM_Hp_AO1': '/media/parrama/crucial_SSD/Observ/highres/XRISM_responses/rsl_Hp_5eV.rmf',
-           'XRISM_Mp': '/media/parrama/crucial_SSD/Observ/highres/XRISM_responses/rsl_Mp_6eV.rmf',
-           'XRISM_Lp': '/media/parrama/crucial_SSD/Observ/highres/XRISM_responses/rsl_Lp_18eV.rmf',
-        'PN_Timing': '/media/parrama/crucial_SSD/Observ/highres/linedet_compa/AO2/resp_XMM/Timing/0670672901_pn_S003_Timing_auto.rmf',
-        'heg_graded_-1':'/media/parrama/crucial_SSD/Observ/highres/linedet_compa/AO2/resp_Chandra/graded/13716_heg_-1.rmf',
-         'heg_graded_1':'/media/parrama/crucial_SSD/Observ/highres/linedet_compa/AO2/resp_Chandra/graded/13716_heg_1.rmf'}
+import getpass
+username=getpass.getuser()
+
+
+rmf_abv = {'XRISM_Hp_AO2': '/media/'+username+'/crucial_SSD/Observ/BHLMXB/XRISM/Simu/rsl_Hp_L_2025.rmf',
+            'XRISM_Hp_AO1': '/media/'+username+'/crucial_SSD/Observ/highres/XRISM_responses/rsl_Hp_5eV.rmf',
+           'XRISM_Mp': '/media/'+username+'/crucial_SSD/Observ/highres/XRISM_responses/rsl_Mp_6eV.rmf',
+           'XRISM_Lp': '/media/'+username+'/crucial_SSD/Observ/highres/XRISM_responses/rsl_Lp_18eV.rmf',
+        'PN_Timing': '/media/'+username+'/crucial_SSD/Observ/highres/linedet_compa/AO2/resp_XMM/Timing/0670672901_pn_S003_Timing_auto.rmf',
+        'heg_graded_-1':'/media/'+username+'/crucial_SSD/Observ/highres/linedet_compa/AO2/resp_Chandra/graded/13716_heg_-1.rmf',
+         'heg_graded_1':'/media/'+username+'/crucial_SSD/Observ/highres/linedet_compa/AO2/resp_Chandra/graded/13716_heg_1.rmf'}
 
 rmf_abv_list = list(rmf_abv.keys())
 
-arf_abv = {'XRISM_pointsource_GVclosed_AO2':'/media/parrama/crucial_SSD/Observ/BHLMXB/XRISM/Simu/rsl_pntsrc_GVC_2025.arf',
-           'XRISM_pointsource_GVclosed_AO1': '/media/parrama/crucial_SSD/Observ/highres/XRISM_responses/rsl_pointsource_GVclosed.arf',
-           'XRISM_pointsource_off_GVclosed': '/media/parrama/crucial_SSD/Observ/highres/XRISM_responses/rsl_pointsource_off_GVclosed.arf',
-           'PN_Timing': '/media/parrama/crucial_SSD/Observ/highres/linedet_compa/AO2/resp_XMM/Timing/0670672901_pn_S003_Timing_auto.arf',
-           'heg_graded_-1': '/media/parrama/crucial_SSD/Observ/highres/linedet_compa/AO2/resp_Chandra/graded/13716_heg_-1.arf',
-           'heg_graded_1': '/media/parrama/crucial_SSD/Observ/highres/linedet_compa/AO2/resp_Chandra/graded/13716_heg_1.arf'}
+arf_abv = {'XRISM_pointsource_GVclosed_AO2':'/media/'+username+'/crucial_SSD/Observ/BHLMXB/XRISM/Simu/rsl_pntsrc_GVC_2025.arf',
+           'XRISM_pointsource_GVclosed_AO1': '/media/'+username+'/crucial_SSD/Observ/highres/XRISM_responses/rsl_pointsource_GVclosed.arf',
+           'XRISM_pointsource_off_GVclosed': '/media/'+username+'/crucial_SSD/Observ/highres/XRISM_responses/rsl_pointsource_off_GVclosed.arf',
+           'PN_Timing': '/media/'+username+'/crucial_SSD/Observ/highres/linedet_compa/AO2/resp_XMM/Timing/0670672901_pn_S003_Timing_auto.arf',
+           'heg_graded_-1': '/media/'+username+'/crucial_SSD/Observ/highres/linedet_compa/AO2/resp_Chandra/graded/13716_heg_-1.arf',
+           'heg_graded_1': '/media/'+username+'/crucial_SSD/Observ/highres/linedet_compa/AO2/resp_Chandra/graded/13716_heg_1.arf'}
 
 
 arf_abv_list = list(arf_abv.keys())

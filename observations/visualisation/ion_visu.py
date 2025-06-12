@@ -17,11 +17,14 @@ import matplotlib.pyplot as plt
 import matplotlib.colors as colors
 import plotly.graph_objects as go
 
-online='parrama' not in os.getcwd()
+import getpass
+username=getpass.getuser()
+
+online=''+username+'' not in os.getcwd()
 if online:
     project_dir='/mount/src/winds/'
 else:
-    project_dir='/home/parrama/Documents/Work/PhD/Scripts/Python/'
+    project_dir='/home/'+username+'/Documents/Work/PhD/Scripts/Python/'
 
 sys.path.append(project_dir+'/general/')
 
@@ -70,7 +73,7 @@ if online:
         print(dump_path)
         st.error('Dump file not found for this configuration')
 else:
-    dump_path = '/home/parrama/Documents/Work/PhD/docs/Observations/4U/photo_Stefano/dump_ions.pkl'
+    dump_path = '/home/'+username+'/Documents/Work/PhD/docs/Observations/4U/photo_Stefano/dump_ions.pkl'
 
     update_dump = st.sidebar.button('Update dump')
 
@@ -91,9 +94,9 @@ if update_online:
 
 if update_dump or not os.path.isfile(dump_path):
 
-    base_photo_dir = '/home/parrama/Documents/Work/PhD/docs/Observations/4U/photo_Stefano'
+    base_photo_dir = '/home/'+username+'/Documents/Work/PhD/docs/Observations/4U/photo_Stefano'
 
-    explore_photo_dir = '/home/parrama/Documents/Work/PhD/docs/Observations/4U/photo_Stefano/better_sampling/4U'
+    explore_photo_dir = '/home/'+username+'/Documents/Work/PhD/docs/Observations/4U/photo_Stefano/better_sampling/4U'
 
     flux_3_10_csv = pd.read_csv(base_photo_dir + '/ionization_observ.txt')
 
@@ -1295,7 +1298,7 @@ if plot_distance_SEDs:
             if not online:
                 with tab_delta:
 
-                    savedir='/home/parrama/Documents/Work/PhD/docs/papers/wind_4U/global/ion_visu/save_figs'
+                    savedir='/home/'+username+'/Documents/Work/PhD/docs/papers/wind_4U/global/ion_visu/save_figs'
                     def save_cornerfig_local():
 
                         '''
@@ -1973,7 +1976,7 @@ if plot_3D:
     if not online:
         with tab_3D:
 
-            savedir='/home/parrama/Documents/Work/PhD/docs/papers/wind_4U/global/ion_visu/save_figs'
+            savedir='/home/'+username+'/Documents/Work/PhD/docs/papers/wind_4U/global/ion_visu/save_figs'
             def save_3dfig_local():
 
                 '''

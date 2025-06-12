@@ -5,21 +5,28 @@ import plotly.graph_objects as go
 from streamlit_plotly_events import plotly_events
 from plotly.express.colors import sample_colorscale
 from plotly.subplots import make_subplots
+
+#from the st-theme component
 from streamlit_theme import st_theme
+
 import scipy
 import io
 import zipfile
 
+import getpass
+username=getpass.getuser()
+
 from scipy.interpolate import interp1d
 from scipy.ndimage import map_coordinates
 
-#local
-sys.path.append('/home/parrama/Documents/Work/PhD/Scripts/Python/general/')
-sys.path.append('/home/parrama/Documents/Work/PhD/Scripts/Python/observations/spectral_analysis/')
-sys.path.append('/home/parrama/Documents/Work/PhD/Scripts/Python/modeling/PyXstar')
-#online
-sys.path.append('/app/winds/observations/spectral_analysis/')
-sys.path.append('/app/winds/modeling/PyXstar')
+#rough way of testing if online or not
+online=os.getcwd().startswith('/mount/src')
+project_dir='/'.join(__file__.split('/')[:-3])
+
+#to be tested online
+sys.path.append(os.path.join(project_dir,'observations/spectral_analysis/'))
+sys.path.append(os.path.join(project_dir,'general/'))
+sys.path.append(os.path.join(project_dir,'modeling/PyXstar'))
 
 from general_tools import interval_extract,ravel_ragged
 
@@ -80,19 +87,19 @@ def check_password():
         return True
 
 #rough way of testing if online or not
-online='parrama' not in os.getcwd()
+online=''+username+'' not in os.getcwd()
 
 if not online:
     update_online = st.sidebar.button('Update online version')
 
-    solutions_path='/media/parrama/crucial_SSD/Simu/MHD/solutions/nathan_init/nathan_init.txt'
+    solutions_path='/media/'+username+'/crucial_SSD/Simu/MHD/solutions/nathan_init/nathan_init.txt'
 
-    possible_sol_path='/media/parrama/crucial_SSD/Simu/MHD/solutions/nathan_init/super_a_0.0.dat'
+    possible_sol_path='/media/'+username+'/crucial_SSD/Simu/MHD/solutions/nathan_init/super_a_0.0.dat'
 
-    #solutions_path='/media/parrama/SSD/Simu/MHD/solutions/nathan_init/nathan_init.txt'
+    #solutions_path='/media/'+username+'/SSD/Simu/MHD/solutions/nathan_init/nathan_init.txt'
     #refaire un merge des trois epsilon
 
-    #possible_sol_path='/media/parrama/SSD/Simu/MHD/solutions/nathan_new/a_alphat_0.0_ep_0.10.dat'
+    #possible_sol_path='/media/'+username+'/SSD/Simu/MHD/solutions/nathan_new/a_alphat_0.0_ep_0.10.dat'
     #et le reste
 
 else:

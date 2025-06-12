@@ -4,6 +4,9 @@ import matplotlib as mpl
 import numpy as np
 import glob
 
+import getpass
+username=getpass.getuser()
+
 def xi_i(log_xi_div_T,log_T):
 
     '''
@@ -64,7 +67,7 @@ def plot_scurve(x,y,ax=None,ion_range=None,ion_range_stable=True,color=None,
 def plot_4U_2021_curves(save_path_curves=None,save_path_SEDs=None,label=False,colormap='plasma',restrict_range=None,
                         plot_hmxt=True,plot_inset=True):
 
-    os.chdir('/home/parrama/Documents/Work/PhD/docs/papers/wind_4U/global/SEDs/stability/2021/curves/scurves')
+    os.chdir('/home/'+username+'/Documents/Work/PhD/docs/papers/wind_4U/global/SEDs/stability/2021/curves/scurves')
 
 
     scurves_path=[elem for elem in glob.glob('**_scurve.dat') if not "insight_SED" in elem]
@@ -198,7 +201,7 @@ def plot_4U_2021_curves(save_path_curves=None,save_path_SEDs=None,label=False,co
 
 
     #switching to the SEDs directory
-    os.chdir('/home/parrama/Documents/Work/PhD/docs/papers/wind_4U/global/SEDs/stability/2021/SEDs')
+    os.chdir('/home/'+username+'/Documents/Work/PhD/docs/papers/wind_4U/global/SEDs/stability/2021/SEDs')
 
     #loading the SEDs
 
@@ -247,7 +250,7 @@ def plot_4U_2021_curves(save_path_curves=None,save_path_SEDs=None,label=False,co
 
 
 def plot_4U_state_curves(
-        indir_curves='/home/parrama/Documents/Work/PhD/docs/papers/wind_4U/global/SEDs/stability/states',
+        indir_curves='/home/'+username+'/Documents/Work/PhD/docs/papers/wind_4U/global/SEDs/stability/states',
                          save_path_curves=None,save_path_SEDs=None,label=False,colormap='plasma',restrict_range=None,
                         plot_hmxt=True,plot_zoom=False,mode='paper'):
 

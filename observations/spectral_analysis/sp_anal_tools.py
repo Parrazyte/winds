@@ -348,7 +348,7 @@ def swift_OT_run_all_sp(sort=False,reverse=False,mod='thcont',obj='V4641Sgr',out
         sp_anal(elem_epoch+'_baseload.xcm',mod=mod,baseload=True,obj=obj,outdir=outdir,absval=absval,addcomp_list=addcomp_list,freeze_nH_postfit=freeze_nH_postfit)
 
 
-def fit_broader(epoch_id,add_gaussem=True,bat_interp_dir='/home/parrama/Documents/Observ/copy_SSD/Swift/BAT_interp',
+def fit_broader(epoch_id,bat_interp_dir,add_gaussem=True,
                 n_add=1,outdir='fit_broader',bat_emin=15.,bat_emax=50.,avg_BAT_norm=True):
     '''
     for quick refitting in broader bands

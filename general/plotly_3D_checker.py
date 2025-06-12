@@ -4,6 +4,9 @@ from dash import html, dcc, Input, Output, State, clientside_callback
 import plotly.graph_objects as go
 import dill
 
+import getpass
+username=getpass.getuser()
+
 '''
 Loads a 3D plot saved with dill 
 and gives an interactive view of the camera layout 
@@ -11,7 +14,7 @@ largely taken from https://community.plotly.com/t/how-to-obtain-camera-variables
 '''
 
 
-plot_path='/home/parrama/Documents/Work/PhD/docs/papers/wind_4U/global/ion_visu/save_figs/fig_3D.pkl'
+plot_path='/home/'+username+'/Documents/Work/PhD/docs/papers/wind_4U/global/ion_visu/save_figs/fig_3D.pkl'
 
 with open(plot_path,'rb') as f:
     fig=dill.load(f)

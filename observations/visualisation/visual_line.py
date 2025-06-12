@@ -89,11 +89,12 @@ from general_tools import ravel_ragged,MinorSymLogLocator
 #     sys.path.append('/home/parrama/Documents/Work/PhD/Scripts/Python/observations/spectral_analysis/')
 
 #visualisation functions
-from visual_line_tools import load_catalogs,dist_mass,obj_values,abslines_values,values_manip,\
+from visual_line_tools import load_catalogs,obj_values,abslines_values,values_manip,\
     n_infos, plot_lightcurve,sources_det_dic, dippers_list,telescope_list,load_integral,telescope_colors,\
     convert_BAT_count_flux,flux_erg_pow,err_flux_erg_pow,values_manip_var,corr_factor_lbat,fetch_bat_lightcurve,\
     int_rate_to_flux,incl_dyn_dict,incl_jet_dict,incl_misc_dict,incl_refl_dict,Porb_dict,wind_det_dict,wind_det_sources
 
+from dist_mass_tools import dist_mass
 from distrib_graph import distrib_graph
 from correl_graph import correl_graph
 from hid_graph import hid_graph

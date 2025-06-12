@@ -2,9 +2,13 @@ import os,sys
 import numpy as np
 import glob
 
-#ensuring general_tools can be imported in local and on streamlit
-sys.path.append('/home/parrama/Documents/Work/PhD/Scripts/Python/general/')
-sys.path.append('/app/winds/observations/general/')
+#rough way of testing if online or not
+online=os.getcwd().startswith('/mount/src')
+project_dir='/'.join(__file__.split('/')[:-3])
+
+#to be tested online
+sys.path.append(os.path.join(project_dir,'general/'))
+
 
 from general_tools import print_log
 

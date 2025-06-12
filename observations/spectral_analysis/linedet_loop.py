@@ -13,6 +13,9 @@ import subprocess
 from joblib import Parallel, delayed
 import pexpect
 
+import getpass
+username=getpass.getuser()
+
 import time
 def linedet_loop(epoch_list,arg_dict,arg_dict_path=None,parallel=1,heasoft_init_alias='heainit',
                  container_mode='python',container='default',job_id='default',
@@ -566,7 +569,7 @@ def make_linedet_script(startdir,cores,parfile_path,cpus=2,nodes=1,
     "#OAR --stderr "+startdir+".%jobid%.err\n"+\
     "#OAR --notify mail:"+mail+"\n"+\
     "shopt -s expand_aliases\n"+\
-    "source /user/home/parrama/.bashrc\n"+\
+    "source /user/home/"+username+"/.bashrc\n"+\
     "\npyload_3.9"+\
     "\npyloadenv_linedet\n"+\
     "\ncd "+startdir+"\n"+\

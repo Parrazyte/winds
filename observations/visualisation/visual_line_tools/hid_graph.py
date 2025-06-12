@@ -1,5 +1,5 @@
 #general imports
-import sys
+import sys,os
 
 import matplotlib.collections
 import numpy as np
@@ -31,18 +31,18 @@ mpl_cut_star = mpath.Path(
 
 '''Astro'''
 
-#local
-sys.path.append('/home/parrama/Documents/Work/PhD/Scripts/Python/general/')
-sys.path.append('/home/parrama/Documents/Work/PhD/Scripts/Python/observations/spectral_analysis/')
+#rough way of testing if online or not
+online=os.getcwd().startswith('/mount/src')
+project_dir='/'.join(__file__.split('/')[:-3])
 
-#online
-sys.path.append('/mount/src/winds/observations/spectral_analysis/')
-sys.path.append('/mount/src/winds/general/')
-
+#to be tested online
+sys.path.append(os.path.join(project_dir,'observations/spectral_analysis/'))
+sys.path.append(os.path.join(project_dir,'general/'))
 
 from general_tools import ravel_ragged,rescale_flex
 
-from visual_line_tools import telescope_colors,dist_mass_indiv
+from visual_line_tools import telescope_colors
+from dist_mass_tools import dist_mass_indiv
 
 
 def hid_graph(ax_hid, dict_linevis,

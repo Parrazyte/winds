@@ -1,5 +1,5 @@
 #general imports
-import sys
+import sys,os
 
 import numpy as np
 
@@ -23,13 +23,13 @@ from matplotlib.ticker import MaxNLocator,AutoMinorLocator
 
 '''Astro'''
 
-#local
-sys.path.append('/home/parrama/Documents/Work/PhD/Scripts/Python/general/')
-sys.path.append('/home/parrama/Documents/Work/PhD/Scripts/Python/observations/spectral_analysis/')
+#rough way of testing if online or not
+online=os.getcwd().startswith('/mount/src')
+project_dir='/'.join(__file__.split('/')[:-3])
 
-#online
-sys.path.append('/mount/src/winds/observations/spectral_analysis/')
-sys.path.append('/mount/src/winds/general/')
+#to be tested online
+sys.path.append(os.path.join(project_dir,'observations/spectral_analysis/'))
+sys.path.append(os.path.join(project_dir,'general/'))
 
 #custom script with some lines and fit utilities and variables
 from fitting_tools import lines_std, lines_std_names

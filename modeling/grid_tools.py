@@ -31,6 +31,9 @@ import numpy as np
 import pexpect
 import glob
 
+import getpass
+username=getpass.getuser()
+
 from solution_tools import sample_angle
 
 compton_thick_thresh=1.5e24
@@ -319,7 +322,7 @@ def create_oar_script(grid_folder,parfile,cores,cpus=2,nodes=1,
     "#OAR --stderr grid_folder.%jobid%.err\n"+\
     "#OAR --notify mail:"+mail+"\n"+\
     "shopt -s expand_aliases\n"+\
-    "source /user/home/parrama/.bashrc\n"+\
+    "source /user/home/"+username+"/.bashrc\n"+\
     "\npyload"+\
     "\npyloadenv\n"+\
     "\npython $wind_runner -parfile "+parfile_path

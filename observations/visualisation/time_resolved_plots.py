@@ -1,10 +1,10 @@
 import numpy as np
 
-from visual_line_tools import load_catalogs,dist_mass,obj_values,abslines_values,values_manip,distrib_graph,correl_graph,incl_dic,\
+from visual_line_tools import load_catalogs,obj_values,abslines_values,values_manip,distrib_graph,correl_graph,\
     n_infos, plot_lightcurve, hid_graph, sources_det_dic, dippers_list,telescope_list,load_integral
 
 from fitting_tools import lines_std,lines_std_names,range_absline
-
+from dist_mass_tools import dist_mass
 
 catal_blackcat, catal_watchdog, catal_blackcat_obj, catal_watchdog_obj,\
     catal_maxi_df, catal_maxi_simbad, catal_bat_df, catal_bat_simbad = load_catalogs()

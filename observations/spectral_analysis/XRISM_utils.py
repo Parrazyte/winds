@@ -2,11 +2,15 @@
 from xspec import Xset, Plot, Fit,AllData, AllModels
 from xspec_config_multisp import freeze, allmodel_data,set_ener,store_plot
 from linedet_utils import narrow_line_search,plot_line_search,rebinv_xrism
+from general_tools import ang2kev
 import matplotlib.pyplot as plt
 import dill
 import numpy as np
 import glob
 import os
+
+c_0 = 299792.458
+
 
 def xrism_ls(baseload,low_e,high_e,plot_suffix="",bound_around=0.1,e_step=5e-3,lw=5e-3,
              e_sat_low_indiv=[1.5,1.5],resolve_dg=1,rebinv=[20],line_search_norm=[0.01,50,700],
@@ -137,17 +141,52 @@ def rename_plots(arg='squished_global_chi_save'):
 
 #redo 04 with a single component to get the values
 #redo 03 to get the values 
-def width_todv(ener=7.0,par=None,val=None,err=[0,0]):
+def width_todv(ener=7.0,par=None,val=None,err=[0,0],output_err=True):
 
     if par is not None:
         val_use=AllModels(1)(par).values[0]
         err_use=AllModels(1)(par).error[:2]
+        err_use=[val_use-err_use[0],err_use[1]-val_use]
     else:
         val_use=val
         err_use=err
 
-    c_0=299792.458
     dv_ctr=val_use/ener*c_0
     dv_sides=np.array([val_use-err_use[0],val_use+err_use[1]])/ener*c_0
 
-    return dv_ctr,dv_ctr-dv_sides[0],dv_sides[1]-dv_ctr
+    if output_err:
+        return dv_ctr,dv_ctr-dv_sides[0],dv_sides[1]-dv_ctr
+
+    else:
+        return dv_ctr,dv_ctr-dv_sides[0],dv_sides[1]-dv_ctr
+
+def dv_towidth(ener=7.0,val=None,err=[0,0]):
+
+    dv_sides=np.array([val-err[0],val+err[1]])
+
+    width_ctr=val*ener/c_0
+
+    width_sides=dv_sides*ener/c_0
+
+    return width_ctr,width_ctr-width_sides[0],width_sides[1]-width_ctr
+
+
+def ew_kevtoang(ener_rest=4861.3,loaded=True,val=None,err=[0,0]):
+    '''
+    converts an EW from kev to angstrom. ener_rest is assumed to be in angstrom
+    if loaded is true, uses the equivalent width values loaded in AllData(1)
+    '''
+
+    if loaded is not None:
+        val_use=AllData(1).eqwidth[0]
+        err_use=[AllData(1).eqwidth[0]-AllData(1).eqwidth[1],AllData(1).eqwidth[2]-AllData(1).eqwidth[0]]
+
+    else:
+        val_use=val
+        err_use=err
+
+    ew_dv=width_todv(ang2kev(ener_rest),val=val_use,err=err_use)
+
+    ew_ang=dv_towidth(ener_rest,val=ew_dv[0],err=ew_dv[1:])
+
+    return ew_ang

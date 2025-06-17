@@ -37,6 +37,15 @@ c_cgs = 2.99792e10
 sigma_thomson_cgs = 6.6525e-25
 PI = 3.14159265
 
+
+def ang2kev(x):
+    '''note : same thing on the other side due to the inverse
+
+    also same thing for mAngtoeV'''
+
+    return 12.398 / x
+
+
 def make_zip(filebites_arr,filename_arr):
     zip_buffer = io.BytesIO()
 

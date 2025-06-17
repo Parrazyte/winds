@@ -73,9 +73,9 @@ sys.path.append(os.path.join(project_dir,'general/'))
 sys.path.append(os.path.join(project_dir,'observations/visualisation/visual_line_tools'))
 
 #custom script with some lines and fit utilities and variables
-from fitting_tools import lines_std,c_light,lines_std_names,lines_e_dict,ang2kev
+from fitting_tools import lines_std,c_light,lines_std_names,lines_e_dict
 
-from general_tools import ravel_ragged,MinorSymLogLocator,rescale_flex,expand_epoch
+from general_tools import ravel_ragged,MinorSymLogLocator,rescale_flex,expand_epoch,ang2kev
 
 #Catalogs and manipulation
 from astroquery.vizier import Vizier

@@ -27,9 +27,9 @@ except:
 
 
 from fitting_tools import sign_delchis_table, lines_e_dict,lines_w_dict,lines_broad_w_dict,\
-        link_groups,lines_std_names,def_ftest_threshold,def_ftest_leeway,ang2kev
+        link_groups,lines_std_names,def_ftest_threshold,def_ftest_leeway
 
-from general_tools import ravel_ragged,get_overlap,shorten_epoch
+from general_tools import ravel_ragged,get_overlap,shorten_epoch,ang2kev
 
 
 from contextlib import redirect_stdout
@@ -77,7 +77,7 @@ if not streamlit_mode and model_dir!=None:
     # 6: NuSTAR / FPMB
     pass
 
-# AllModels.mdefine('crabcorr (1./E^dGamma)crabcorrNorm : mul')
+AllModels.mdefine('crabcorr (1./E^dGamma)crabcorrNorm : mul')
 
 #example of model loading
 # AllModels.initpackage('tbnew_mod',"lmodel_tbnew.dat",dirPath=model_dir+'/tbnew')
@@ -6574,10 +6574,10 @@ def xPlot(types,axes_input=None,plot_saves_input=None,plot_arg=None,includedlist
             if axes_input is None:
                 curr_ax.set_title(curr_save.labels[-1])
 
-            if secondary_x:
+            if secondary_x and Plot.xAxis in ['keV','angstrom']:
                 #putting a wavelength copy of the x axis at the top
                 curr_ax_second=curr_ax.secondary_xaxis('top',functions=(ang2kev,ang2kev))
-                curr_ax_second.set_xlabel('Angstrom')
+                curr_ax_second.set_xlabel('Angstrom' if Plot.xAxis=='keV' else 'keV')
                 curr_ax_second.minorticks_on()
 
         #hiding the ticks values for the lower x axis if it's not in the last plot or if we're in a provided subplot

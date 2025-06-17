@@ -300,14 +300,6 @@ lines_broad_w_dict={
 #link groups to tie line energies together
 link_groups=np.array([['FeKa25abs','FeKb25abs'],['FeKa26abs','FeKb26abs','FeKg26abs'],['NiKa27abs']],dtype=object)
 
-def ang2kev(x):
-
-    '''note : same thing on the other side due to the inverse
-    
-    also same thing for mAngtoeV'''
-
-    return 12.398/x
-
 def model_list(model_id='lines',give_groups=False,sat_list=[]):
     
     '''

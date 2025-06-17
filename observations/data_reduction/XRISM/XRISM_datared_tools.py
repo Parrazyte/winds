@@ -710,7 +710,7 @@ def plot_BR(branch_file, save_paths=None, excl_pixel=[],task='rslbratios',plot_h
         for xtick, color in zip(ax_up.get_xticklabels(), color_arr_label):
             xtick.set_color(color)
 
-        ax_up.set_xlabel('Pixel number (excluded in red)')
+        ax_up.set_xlabel('Pixel number' +('(excluded in red)' if len(excl_pixel)>0 else ''))
 
         # adding vertical lines
         for pix_number, pix_rate in zip(branch_data['PIXEL'], branch_data['RATETOT']):
@@ -797,7 +797,7 @@ def plot_BR(branch_file, save_paths=None, excl_pixel=[],task='rslbratios',plot_h
         for xtick, color in zip(ax_up.get_xticklabels(), color_arr_label):
             xtick.set_color(color)
 
-        ax_up.set_xlabel('Pixel number (excluded in red)')
+        ax_up.set_xlabel('Pixel number' +('(excluded in red)' if len(excl_pixel)>0 else ''))
 
         # adding vertical lines
         for pix_number, pix_rate in zip(branch_data_lsreal_eband['PIXEL'], branch_data_lsreal_eband['RATETOT']):
@@ -937,7 +937,6 @@ def plot_BR(branch_file, save_paths=None, excl_pixel=[],task='rslbratios',plot_h
         for xtick, color in zip(ax_up.get_xticklabels(), color_arr_label):
             xtick.set_color(color)
 
-        ax_up.set_xlabel('Pixel number (excluded in red)')
 
         # adding vertical lines
         for pix_number, pix_rate in zip(branch_data_lsreal_efull['PIXEL'], branch_data_lsreal_efull['RATETOT']):
@@ -1010,7 +1009,6 @@ def plot_BR(branch_file, save_paths=None, excl_pixel=[],task='rslbratios',plot_h
         for xtick, color in zip(ax_up.get_xticklabels(), color_arr_label):
             xtick.set_color(color)
 
-        ax_up.set_xlabel('Pixel number (excluded in red)')
 
         # adding vertical lines
         for pix_number, pix_rate in zip(branch_data_lsreal_efull['PIXEL'],
@@ -2114,6 +2112,75 @@ A1: For Heasoft ver. 6.34, you need to execute the save command between "pixel s
     if temp_evt_name is not None:
 
         spawn_use.sendline('rm '+temp_evt_name)
+
+def plot_temp_evol(directory='auto_repro',pixels='all',repro_suffix='repro',man_file='',save=True):
+
+    '''
+    plots the temperature evolution of individual pixels along an observation
+
+    if man_file is an empty string, searches in the directory (or auto directory if set to auto/auto_repro)
+    for the calibration file (in /resolve/event_uf/xaXXXXXXXXXrsl_000_fe55.ghf
+
+    Similarly to Figure 6 of the energy scale reports (https://heasarc.gsfc.nasa.gov/FTP/xrism/postlaunch/gainreports/)
+    pixels should be 'all' or a list of integers
+    '''
+
+    if directory=='auto_repro':
+        #fetching the first obsid-like directory in the cwd
+        directory_use=[elem[:-1] for elem in glob.glob('**/') if len(elem[:-1])==9 and elem[:-1].isdigit()][0]+'_'+\
+                      repro_suffix
+    elif directory=='auto':
+        #fetching the first obsid-like directory in the cwd
+        directory_use=[elem[:-1] for elem in glob.glob('**/') if len(elem[:-1])==9 and elem[:-1].isdigit()][0]
+    else:
+        directory_use=directory
+
+    if man_file!='':
+        fe55_file=man_file
+    else:
+        fe55_file=[elem for elem in glob.glob(os.path.join(directory_use,'resolve','event_uf','**'))\
+                   if 'fe55.ghf' in elem]
+        assert len(fe55_file)>0,'Error: fe55 file not found in the '+str(directory_use)+' directory'
+        fe55_file=fe55_file[0]
+
+    with fits.open(fe55_file) as hdul:
+
+        mjd_ref = Time(hdul[1].header['MJDREFI'] + hdul[1].header['MJDREFF'], format='mjd')
+
+        tstart_s=hdul[1].header['TSTART']
+        obs_start = mjd_ref + TimeDelta(tstart_s, format='sec')
+
+        cal_event_time=hdul[1].data['TIME']
+        cal_event_pix=hdul[1].data['PIXEL']
+        cal_event_temp=hdul[1].data['TEMP_FIT']*1000-50
+
+        file_obsid=hdul[1].header['OBS_ID']
+
+    fig_lc, ax_lc = plt.subplots(1, figsize=(16, 8),layout='constrained')
+
+    plt.suptitle( ' Temperature evolution by pixel for observation '+file_obsid)
+
+    plt.xlabel('Time (s) after ' + obs_start.isot)
+    plt.ylabel('pixel fit temperature -50mK (K)')
+
+    ls_list=['solid','dotted','dashed','dashdot']
+
+    indiv_plots=[]
+    for i_pix in range(36):
+        if pixels!='all' and i_pix not in pixels:
+            continue
+        pixel_mask=cal_event_pix==i_pix
+        indiv_plots+=[plt.plot(cal_event_time[pixel_mask]-tstart_s,cal_event_temp[pixel_mask],ls=ls_list[i_pix//9],
+                 marker='.',
+                 label=str(i_pix))]
+
+    plt.legend(bbox_to_anchor=(0.5, 1.07),loc='center',ncol=len(indiv_plots)//3)
+
+    plt.minorticks_on()
+
+    if save:
+        plt.savefig(os.path.join(directory_use if man_file=='' else '','temp_evol_pixels.pdf'))
+
 
 def disp_ds9(file, zoom='auto', scale='log', regfile='', screenfile='', give_pid=False, close=True,
              kill_last='',spawn=None,

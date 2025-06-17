@@ -102,7 +102,7 @@ ap.add_argument('-catch', '--catch_errors', help='Catch errors while running the
 
 # global choices
 ap.add_argument("-a", "--action", nargs='?', help='Give which action(s) to proceed,separated by comas.',
-                default='lc,sp', type=str)
+                default='sp,lc,g,m', type=str)
 # default: build,reg,lc,sp,g,m
 
 ap.add_argument("-over", nargs=1, help='overwrite computed tasks (i.e. with products in the batch, or merge directory\
@@ -117,7 +117,8 @@ ap.add_argument('-bright_check',nargs=1,help='recompute the entire set of action
 ap.add_argument('-force_bright',help="Force bright mode for the tasks from the get go",default=False)
 
 # directory level overwrite (not active in local)
-ap.add_argument('-folder_over', nargs=1, help='relaunch action through folders with completed analysis', default=True,
+ap.add_argument('-folder_over', nargs=1, help='relaunch action through folders with completed analysis',
+                default=False,
                 type=bool)
 ap.add_argument('-folder_cont', nargs=1, help='skip all but the last 2 directories in the summary folder file',
                 default=False, type=bool)
@@ -185,22 +186,22 @@ ap.add_argument('-regions_mode',nargs=1,help='region choosing mode between auto,
 #only used if regions_mode is set to manual
 ap.add_argument('-man_src_reg_FPMA',nargs=1,
                help='manual source region relative path inside the osbid directory for FPMA',
-               default='out/reg_src_fk5.reg',type=str)
+               default='src_SHIFRA_40asec.reg',type=str)
 ap.add_argument('-man_src_reg_FPMB',nargs=1,
                help='manual source region relative path inside the osbid directory for FPMB',
-               default='out/reg_src_fk5.reg',type=str)
+               default='src_SHIFRA_40asec.reg',type=str)
 ap.add_argument('-man_bg_reg_FPMA',nargs=1,
                help='manual background region relative path inside the osbid directory for FPMA',
-               default='out/reg_bg_fk5.reg',type=str)
+               default='bkg_SHIFRA_40asec.reg',type=str)
 ap.add_argument('-man_bg_reg_FPMB',nargs=1,
                help='manual background region relative path inside the osbid directory for FPMB',
-               default='out/reg_bg_fk5.reg',type=str)
+               default='bkg_SHIFRA_40asec.reg',type=str)
 
 '''lightcurve'''
 
 #note: this binning will also be used to CREATE the gtis
 ap.add_argument('-lc_bin_std', nargs=1, help='Gives the binning of all standard lightcurces/HR evolutions (in s)',
-                default='1000,10',type=str)
+                default='1000',type=str)
 
 ap.add_argument('-lc_bin_gti', nargs=1, help='Gives the binning of all lightcurves used for gti cutting (in s)',
                 default='1',type=str)

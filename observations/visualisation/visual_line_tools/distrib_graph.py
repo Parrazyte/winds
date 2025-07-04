@@ -30,6 +30,8 @@ project_dir='/'.join(__file__.split('/')[:-3])
 #to be tested online
 sys.path.append(os.path.join(project_dir,'observations/spectral_analysis/'))
 sys.path.append(os.path.join(project_dir,'general/'))
+import streamlit as st
+st.text(os.getcwd())
 
 #custom script with some lines and fit utilities and variables
 from fitting_tools import lines_std, lines_std_names

@@ -137,6 +137,7 @@ lines_e_dict={
                   #'CaKb20abs': [around 4.85, -3000, 3000],
 
     # resolved lines (from NIST 2023)
+    #a better model should use a 7 lorentzian components (https://heasarc.gsfc.nasa.gov/xanadu/xspec/manual/node179.html)
                 'FeKa1p1em': [6.39084, -30000, 1000],
                 'FeKa1p3em': [6.40384, -30000, 1000],
 
@@ -156,6 +157,8 @@ lines_e_dict={
                 'FeKb25p1abs':  [7.872,-3000,3000],
                 'FeKb25p3abs':  [7.881,-3000,3000],
 
+                #for high densities another line blends with the first transition and increases the norm ratio
+                #see https://www.aanda.org/articles/aa/abs/2025/02/aa53133-24/aa53133-24.html
                 'FeKa26p1abs':  [6.9520,-3000,3000],
                 'FeKa26p3abs':  [6.9732,-3000,3000],
 

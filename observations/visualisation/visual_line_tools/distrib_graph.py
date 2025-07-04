@@ -25,7 +25,10 @@ from matplotlib.ticker import MaxNLocator,AutoMinorLocator
 
 #rough way of testing if online or not
 online=os.getcwd().startswith('/mount/src')
-project_dir='/'.join(__file__.split('/')[:-3])
+if online:
+    project_dir='/'.join(__file__.split('/')[:-3])
+else:
+    project_dir=os.getcwd()
 
 #to be tested online
 sys.path.append(os.path.join(project_dir,'observations/spectral_analysis/'))

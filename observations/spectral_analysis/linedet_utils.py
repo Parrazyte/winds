@@ -42,10 +42,20 @@ def narrow_line_cycle(low_e,high_e,e_step=2e-2,plot_suffix='',baseload=None,
                       ratio_bounds=None,title=True,set_ener_str=None,set_ener_xrism=False):
 
     '''
-    Simple wrapper to compute a line search and make an associated plot
+    Simplified wrapper to compute a line search and make an associated plot with few options
 
     baseload should be an XCM file with both the file and model
 
+    low_e and high_e: bounds of the line search in keV
+    e_step: enerby step in keV
+    plot_suffix: additional str for the plot file name
+    baseload: xcm file if necessary to load before running the line search
+    e_sat_low_indiv: minimum non-ignored energy of the datagroups. if 'auto', computed automatically from the loaded data
+    force_ylog_ratio: use logarithmic yscale ratio in both panels
+    ratio_bounds (None or [float, float]): force bounds for the ratio plots
+    title: plot a title or not
+    set_ener_str: remap the energy scale with xspec's energies command if need be (important for e.g. thcomp continuums)
+    set_ener_xrism: match the xrism energy binning on top of extending the grid
     '''
 
     prev_chatter=Xset.chatter
@@ -88,10 +98,10 @@ def narrow_line_search(data_cont, suffix,e_sat_low_indiv,line_search_e=[4,10,0.0
                        scorpeon_save=None,data_fluxcont=None,scorpeon=True):
 
     '''
-    Wrapper for all the line search code and associated visualisation
+    Wrapper for all the line search code
 
     Explores the current model in a given range by adding a line of varying normalisation and energy and mapping the associated
-    2D delchi map
+    2D delta-stat map
 
     can use datafluxcont to compute the normalisation from the continuum of another spectrum
     useful when negative gaussians at 0 width that go below zero in flux (which you don't care about normally

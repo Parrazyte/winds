@@ -24,6 +24,8 @@ import streamlit as st
 
 import matplotlib as mpl
 import matplotlib.pyplot as plt
+from datetime import datetime
+
 import streamlit.components.v1
 
 #disabling the warning for many open figures because that's exactly the point of the code
@@ -55,11 +57,47 @@ import dill
 #Catalogs and manipulation
 from astroquery.vizier import Vizier
 
+#adding the top directory to the path to avoid issues when importing fitting_tools
+
+
+
+#rough way of testing if online or not
+online=os.getcwd().startswith('/mount/src')
+project_dir='/'.join(__file__.split('/')[:-3])
+
+#to be tested online
+sys.path.append(os.path.join(project_dir,'observations/spectral_analysis/'))
+sys.path.append(os.path.join(project_dir,'general/'))
+sys.path.append(os.path.join(project_dir,'observations/visualisation/visual_line_tools'))
+
+
+#custom script with some lines and fit utilities and variables
+from fitting_tools import lines_std,lines_std_names,range_absline
+
+from general_tools import ravel_ragged,MinorSymLogLocator
+
+
+# if online:
+#     project_dir='/mount/src/winds/'
+#     sys.path.append('/mount/src/winds/observations/spectral_analysis/')
+#     sys.path.append('/mount/src/winds/general/')
+# else:
+#     project_dir='/home/parrama/Documents/Work/PhD/Scripts/Python/'
+#     sys.path.append('/home/parrama/Documents/Work/PhD/Scripts/Python/observations/visualisation/visual_line_tools/')
+#     #local
+#     sys.path.append('/home/parrama/Documents/Work/PhD/Scripts/Python/general/')
+#     sys.path.append('/home/parrama/Documents/Work/PhD/Scripts/Python/observations/spectral_analysis/')
+
 #visualisation functions
-from visual_line_tools import load_catalogs,dist_mass,obj_values,abslines_values,values_manip,distrib_graph,correl_graph,\
-    n_infos, plot_lightcurve, hid_graph, sources_det_dic, dippers_list,telescope_list,load_integral,telescope_colors,\
+from visual_line_tools import load_catalogs,obj_values,abslines_values,values_manip,\
+    n_infos, plot_lightcurve,sources_det_dic, dippers_list,telescope_list,load_integral,telescope_colors,\
     convert_BAT_count_flux,flux_erg_pow,err_flux_erg_pow,values_manip_var,corr_factor_lbat,fetch_bat_lightcurve,\
     int_rate_to_flux,incl_dyn_dict,incl_jet_dict,incl_misc_dict,incl_refl_dict,Porb_dict,wind_det_dict,wind_det_sources
+
+from dist_mass_tools import dist_mass
+from distrib_graph import distrib_graph
+from correl_graph import correl_graph
+from hid_graph import hid_graph
 
 from lmplot_uncert import lmplot_uncert_a
 from general_tools import get_overlap,make_zip
@@ -111,20 +149,7 @@ ap.add_argument("-line_search_norm",nargs=1,help='min, max and nsteps (for one s
 
 args=ap.parse_args()
 
-#adding the top directory to the path to avoid issues when importing fitting_tools
 
-#local
-sys.path.append('/home/parrama/Documents/Work/PhD/Scripts/Python/general/')
-sys.path.append('/home/parrama/Documents/Work/PhD/Scripts/Python/observations/spectral_analysis/')
-
-#online
-sys.path.append('/mount/src/winds/observations/spectral_analysis/')
-sys.path.append('/mount/src/winds/general/')
-
-#custom script with some lines and fit utilities and variables
-from fitting_tools import lines_std,lines_std_names,range_absline
-
-from general_tools import ravel_ragged,MinorSymLogLocator
 ###
 # Notes:
 # -Only works for the auto observations (due to prefix naming) for now
@@ -141,12 +166,7 @@ expmodes=args.expmodes
 prefix=args.prefix
 outdir=args.outdir
 
-#rough way of testing if online or not
-online='parrama' not in os.getcwd()
-if online:
-    project_dir='/mount/src/winds/'
-else:
-    project_dir='/home/parrama/Documents/Work/PhD/Scripts/Python/'
+
 
 
 line_cont_range=np.array(args.line_cont_range.split(' ')).astype(float)
@@ -311,7 +331,7 @@ if online:
     ''', icon="ℹ️")
 
     st.info('''
-    The BAT Transient Monitoring lighcurves are in the process of being reprocessed and thus some chunks of data may be missing and/or incorrects.
+    The BAT Transient Monitoring lighcurves are in the process of being reprocessed and thus some chunks of data may be missing and/or incorrect.
     ''', icon="ℹ️")
 
 
@@ -680,10 +700,22 @@ if multi_obj:
     if display_multi:
         restrict_sources_detection=st.sidebar.toggle('Restrict to sources with significant detection')
         ####source with det restriction done manually as of now, should be changed
-        
+
+        #'SwiftJ1727.8-1613' is outside of the main sample
+        choice_sources_AO2=['4U1543-475', 'GRS1716-249', 'GX339-4','MAXIJ1348-630',
+                            'SwiftJ1357.2-0933','XTEJ1650-500']
+        if not online:
+            restrict_sources_AO2=st.sidebar.toggle('Restrict to AO2 mid inclined prop sources')
+        else:
+            restrict_sources_AO2=False
+
     if display_multi:
         with st.sidebar.expander('Source'):
-            choice_source=st.multiselect('',options=[elem for elem in obj_list if elem in sources_det_dic] if restrict_sources_detection else obj_list,default=[elem for elem in obj_list if elem in sources_det_dic] if restrict_sources_detection else obj_list)     
+            choice_source=st.multiselect('',options= choice_sources_AO2 if restrict_sources_AO2 else\
+                    [elem for elem in obj_list if elem in sources_det_dic] \
+                        if restrict_sources_detection else obj_list,
+                    default=choice_sources_AO2 if restrict_sources_AO2 else [elem for elem in obj_list if elem in sources_det_dic] if restrict_sources_detection \
+                        else obj_list)
 
     if display_single:
         #switching to array to keep the same syntax later on
@@ -749,8 +781,12 @@ if multi_obj:
 
         restrict_match_INT=st.toggle('Restrict to Observations with INTEGRAL coverage',value=False)
 
+        base_exclude=[elem for elem in sorted_choice_obs if elem in ['4U1630-47_405051010_xis1',
+                                                                     '4U1630-47_4130010111-004',
+                                                                     '4U1630-47_4130010114-004']]
+
         choice_obs=st.multiselect('Exclude individual observations:',sorted_choice_obs,
-                                  default=None if '4U1630-47_405051010_xis1' not in sorted_choice_obs else ['4U1630-47_405051010_xis1'])
+                                  default=base_exclude)
 
 
 #masking for restriction to single objects
@@ -1335,7 +1371,7 @@ elif radio_zoom_hid=='manual bounds':
 
     values_zoom_hr=st.sidebar.select_slider('Displayed HR range',options=np.logspace(-2,1,num=100),
                                             value=[0.1,2.0092330025650478],format_func=format_slider)
-    values_zoom_lum = st.sidebar.select_slider('Displayed luminosity range', options=np.logspace(-5,0,num=100),
+    values_zoom_lum = st.sidebar.select_slider('Displayed luminosity range', options=np.logspace(-5,1,num=121),
                                         value=[1e-5, 1.],format_func=format_slider)
     zoom_hid=[values_zoom_hr,values_zoom_lum]
 
@@ -1369,9 +1405,10 @@ if not online:
         ###
         # Saves the current graph in a svg (i.e. with clickable points) format.
         ###
-    
-        fig_hid.savefig(save_dir+'/'+save_str_prefix+'HID_cam_'+args.cameras+'_'+\
-                    line_search_e_str.replace(' ','_')+'_'+args.line_search_norm.replace(' ','_')+'curr_'+str(round(time.time()))+'.'+save_format,bbox_inches='tight')
+        save_path=(save_dir+'/'+save_str_prefix+'HID_cam_'+args.cameras+'_'+\
+                    line_search_e_str.replace(' ','_')+'_'+args.line_search_norm.replace(' ','_')+
+                   'curr_'+str(round(time.time()))+'.'+save_format)
+        fig_hid.savefig(save_path,bbox_inches='tight',dpi=300)
             
     st.sidebar.button('Save current HID view',on_click=save_HID)
 
@@ -1390,13 +1427,15 @@ with st.sidebar.expander('Visualisation'):
 
     else:
 
-        display_dicho=st.toggle('Display favourable zone',value=not display_single)
+        display_dicho=st.toggle('Display favourable zone',value=False)
 
         color_nondet=st.toggle('Color non-detections',value=True)
 
         display_central_abs=st.toggle('Display centers for absorption detections',value=False)
 
         split_cmap_source=st.toggle('Use different colormaps for detections and non-detections',value=True)
+
+    marker_ul_circle=st.toggle('Force circular UL markers',value=False)
 
     alpha_abs=st.toggle('Plot with transparency',value=False)
 
@@ -1605,8 +1644,7 @@ if restrict_time:
         manual_date_vals=st.toggle('Manual Date bounds')
 
         if manual_date_vals:
-
-            man_min_date_val = st.date_input('Minimum date', value=None)
+            man_min_date_val = st.date_input('Minimum date', min_value=datetime(1990,1,1))
             time_min_date_val=slider_date_coarse[0] if man_min_date_val is None else Time(man_min_date_val.isoformat()).datetime
             man_max_date_val = st.date_input('Maximum date', value=None)
             time_max_date_val=slider_date_coarse[1] if man_max_date_val is None else Time(man_max_date_val.isoformat()).datetime
@@ -1749,6 +1787,9 @@ else:
 
 #adding the significant BAT extrapolated fluxes to the lum_high_list array if asked to (for the scatter plots)
 #the sum mask_obj condition skips issues when no observation is kept
+
+bat_lc_df_scat=None
+
 if add_BAT_flux_corr and display_single and choice_source[0]=='4U1630-47' and sum(mask_obj)>0 and use_obsids:
 
     bat_lc_df_scat = fetch_bat_lightcurve(catal_bat_df, catal_bat_simbad, choice_source, binning=BAT_binning_scat)
@@ -1761,6 +1802,7 @@ if add_BAT_flux_corr and display_single and choice_source[0]=='4U1630-47' and su
     bat_lc_expos_rate=np.array(bat_lc_df_scat['TIMEDEL_CODED'])
 
     # converting to 15-50keV luminosity in Eddington units, removing negative values
+    #note that at this point it's the same as doing *10**(-0.36+np.log10((D_4U/8kpc)**2))
     bat_lc_lum_nocorr_scat = bat_lc_arr_rate.T \
                         * convert_BAT_count_flux['4U1630-47'] * Edd_factor_restrict
 
@@ -1809,6 +1851,8 @@ if add_BAT_flux_corr and display_single and choice_source[0]=='4U1630-47' and su
         if lum_high_1sig_list[mask_obj][0][i_obs][0]-lum_high_1sig_list[mask_obj][0][i_obs][1]*2<=0:
             lum_high_sign_list[mask_obj][0][i_obs]=np.repeat(np.nan,3)
             mask_added_BAT_sign[i_obs]=False
+
+dict_linevis['bat_lc_df_scat']=bat_lc_df_scat
 
 if sum(mask_obj)>0:
     mask_added_INT_sign=np.repeat(False,len(lum_high_list[mask_obj][0]))
@@ -1998,6 +2042,8 @@ n_obj_r=sum(mask_obj)
 mask_intime_plot=np.array([(Time(date_list[mask_obj][i_obj_r].astype(str))>=Time(slider_date[0])) & (Time(date_list[mask_obj][i_obj_r].astype(str))<=Time(slider_date[1])) for i_obj_r in range(n_obj_r)],dtype=object)
 
 #custom colorbar for the line substructure and outliers (needs the high energy elements)
+edd_factor_8kpc = 7598382.454
+
 
 diago_color=deepcopy(hid_plot[1][0])
 if display_single and choice_source[0]=='4U1630-47' and sum(ravel_ragged(mask_intime_plot))>0:
@@ -2005,8 +2051,8 @@ if display_single and choice_source[0]=='4U1630-47' and sum(ravel_ragged(mask_in
         if obj_list[i_obj]=='4U1630-47':
             for i_obs in range(len(diago_color[i_obj])):
 
-                edd_factor_8kpc=7598382.454
-                edd_factor_converter=1/edd_factor_8kpc*Edd_factor_restrict[0]
+                edd_factor_converter=Edd_factor_restrict[0]/edd_factor_8kpc
+
                 #first rule is for luminosity and HR + HR broad or det treshold to remove things
                 # that stay in intermediate states
                 # second rule is for a significant detection in suzeaku above 3.8 EWratio
@@ -2055,7 +2101,9 @@ if display_single and choice_source[0]=='4U1630-47' and sum(ravel_ragged(mask_in
                 #first rule is for luminosity and HR + HR broad or det treshold to remove things
                 # that stay in intermediate states
                 # second rule is for a significant detection in suzeaku above 3.8 EWratio
-                
+
+                edd_factor_converter=Edd_factor_restrict[0]/edd_factor_8kpc
+
                 obs_soft_lum=hid_plot[1][0][i_obj][i_obs]
                 obs_soft_HR=hid_plot[0][0][i_obj][i_obs]
                 obs_broad_HR=hr_high_plot_restrict[0][0][i_obs]
@@ -2070,16 +2118,17 @@ if display_single and choice_source[0]=='4U1630-47' and sum(ravel_ragged(mask_in
                                   (lum_high_plot_restrict[0][0][i_obs]>2*lum_high_plot_restrict[1][0][i_obs]/1.65)
 
                 # note that the 6.1 limit is done explicitely to only take the right points during the 2021 outburst
-                is_standard_hard=obs_soft_HR>6.1e-1 and obs_soft_lum<1e-1
+                is_standard_hard=obs_soft_HR>6.1e-1 and obs_soft_lum<1e-1*edd_factor_converter
 
-                is_QRM=obs_soft_lum>1e-1 and obs_soft_lum<1.2e-1 and obs_soft_HR>6e-1
+                is_QRM=obs_soft_lum>1e-1*edd_factor_converter and obs_soft_lum<1.2e-1*edd_factor_converter\
+                       and obs_soft_HR>6e-1
 
                 is_soft=obs_broad_HR<1e-1 if obs_broad_HR_sign else obs_broad_HR_UL<1e-1
 
                 is_inter=not np.isnan(obs_broad_HR) and \
                          ((obs_broad_HR_sign and obs_broad_HR>1e-1) or (not obs_broad_HR_sign and obs_broad_HR_UL>0.1))
 
-                is_SPL=not np.isnan(obs_broad_HR) and obs_broad_HR>2.8e-1 and obs_soft_lum>5e-2
+                is_SPL=not np.isnan(obs_broad_HR) and obs_broad_HR>2.8e-1 and obs_soft_lum>5e-2*edd_factor_converter
 
                 #no decidable state
                 custom_states_color[i_obj][i_obs]='grey'
@@ -2139,6 +2188,34 @@ if display_single and choice_source[0] == '4U1630-47' and sum(ravel_ragged(mask_
                     custom_ionization_color[i_obj][i_obs] = 'forestgreen'
 
 dict_linevis['custom_ionization_color'] = custom_ionization_color
+
+custom_gamma_satur_color = deepcopy(hid_plot[1][0])
+if display_single and choice_source[0] == '4U1630-47' and sum(ravel_ragged(mask_intime_plot)) > 0:
+    for i_obj in range(len(custom_gamma_satur_color)):
+        if obj_list[i_obj] == '4U1630-47':
+            for i_obs in range(len(custom_gamma_satur_color[i_obj])):
+
+                edd_factor_converter=Edd_factor_restrict[0]/edd_factor_8kpc
+
+                # no specific state
+
+                custom_gamma_satur_color[i_obj][i_obs] = 'grey'
+
+                if ~(np.isnan(lum_high_sign_plot_restrict[0][0][i_obs])):
+                    #for the significant detections below that value
+                    if lum_high_sign_plot_restrict[0][0][i_obs]<4e-3*edd_factor_converter:
+                        custom_gamma_satur_color[i_obj][i_obs] = 'red'
+                else:
+
+                    #for the 1sig upper limits below that value
+                    if not np.isnan(lum_high_1sig_plot_restrict[1][0][i_obs]):
+                        if lum_high_1sig_plot_restrict[1][0][i_obs]+lum_high_1sig_plot_restrict[1][0][i_obs]<4e-3*edd_factor_converter:
+                            custom_gamma_satur_color[i_obj][i_obs] = 'red'
+
+#unused for now
+dict_linevis['custom_gamma_satur_color'] = custom_gamma_satur_color
+
+# dict_linevis['custom_ionization_color'] = custom_gamma_satur_color
 
 #outburst coloring
 color_cmap_outburst = mpl.cm.tab10
@@ -2359,47 +2436,263 @@ with tab_hid:
 with tab_add_data:
 
     st.markdown('These data points will be added to the soft and/or broad HLDs.')
-    st.info('Remember to make your Eddington ratio compatible with this work by choosing the same D and M '
-              'than the ones I am using')
-    df = pd.DataFrame(
-        [
-            {"ObsID":'', "Date (UTC)":None,"Telescope": '', "L_3-10/L_Edd": 0.,"HR_[6-10]/[3-6]":0.,'HR_[15-50]/[3-6]':0.,
-             'color':''},
-        ]
-    )
-    additional_HLD_points = st.data_editor(
-        df,
-        column_config={
-            "ObsID": st.column_config.TextColumn(
-                "ObsID of the observation",
-                help="Mostly for avoiding confusion",),
-            "Date (UTC)": st.column_config.DatetimeColumn(
-                "Date of the observation in UTC format",
-                help="Mostly for avoiding confusion"),
-            "Telescope": st.column_config.TextColumn(
-                "Instrument taking the observation",
-                help="Mostly for avoiding confusion",),
-            "L_3-10/L_Edd": st.column_config.NumberColumn(
-                "3-10 keV Eddington ratio",
-                help="",
-                format="%.3e"),
-            "HR_[6-10]/[3-6]": st.column_config.NumberColumn(
-                "[6-10]/[3-6] keV HR",
-                help="",
-                format="%.3e",),
-            "HR_[15-50]/[3-6]": st.column_config.NumberColumn(
-                "[15-50]/[3-6] keV HR",
-                help="",
-                format="%.3e",),
-            "color": st.column_config.TextColumn(
-                "Color for the display",
-                help="Mostly for avoiding confusion", ),
 
-        },
-        hide_index=True,num_rows="dynamic")
+    with st.expander('New points in Eddington ratio units'):
+        st.info('Remember to make your Eddington ratio compatible with this work by choosing the same D and M '
+                'than the ones in the Source Table')
+        df_HLD_points_LEdd = pd.DataFrame(
+            [
+                { 'obscured': False,
+                  'color': '',
+                  "Source":'',
+                 "ObsID": '',
+                 "Date (UTC)": None,
+                 "Telescope": '',
+                 "L_3-10/L_Edd": 0.,
+                 "HR_[6-10]/[3-6]": 0.,
+                 'HR_[15-50]/[3-6]': 0.,
+                },
+            ]
+        )
 
-    # favorite_command = edited_df.loc[edited_df["rating"].idxmax()]["command"]
-    # st.markdown(f"Your favorite command is **{favorite_command}** 🎈")
+        additional_HLD_points_LEdd = st.data_editor(
+            df_HLD_points_LEdd,
+            column_config={
+                "obscured": st.column_config.CheckboxColumn(
+                    "obscured",
+                    help="Boolean for the source being obscured (will use a special marker)",
+                    pinned=True),
+                "color": st.column_config.TextColumn(
+                    "color",
+                    help="Color for the display",
+                    pinned=True),
+                "Source": st.column_config.TextColumn(
+                    "Source",
+                    help="Source observed, for Eddington factor identification",pinned=True ),
+                "ObsID": st.column_config.TextColumn(
+                    "ObsID",
+                    help="Mostly for avoiding confusion",pinned=True),
+                "Date (UTC)": st.column_config.DatetimeColumn(
+                    "Date (UTC)",
+                    help="Date of the observation in UTC format",pinned=True),
+                "Telescope": st.column_config.TextColumn(
+                    "Telescope",
+                    help="Instrument taking the observation",pinned=True),
+                "L_3-10/L_Edd": st.column_config.NumberColumn(
+                    "3-10 keV Eddington ratio",
+                    help="",
+                    format="%.3e"),
+                "HR_[6-10]/[3-6]": st.column_config.NumberColumn(
+                    "[6-10]/[3-6] keV HR",
+                    help="",
+                    format="%.3e",),
+                "HR_[15-50]/[3-6]": st.column_config.NumberColumn(
+                    "[15-50]/[3-6] keV HR",
+                    help="",
+                    format="%.3e",),
+
+            },
+            hide_index=True,num_rows="dynamic")
+
+        plot_HLD_points_LEdd=st.toggle('Plot these additional points in HLD graphs',value=True)
+        if not plot_HLD_points_LEdd:
+            additional_HLD_points_LEdd=df_HLD_points_LEdd
+
+
+
+    with st.expander('New points in flux units'):
+        st.info('Here the 15-50 keV flux is extrapolated from the BAT monitoring using the dates of the observations')
+
+        df_HLD_points_flux = pd.DataFrame(
+            [
+                {
+                    'obscured': False,
+                    'color': '',
+                    "Source": '',
+                 "ObsID": '', "Date (UTC)": None, "Telescope": '',
+                 "flux_1-2": 0.,
+                 "flux_2-3": 0.,
+                 "flux_3-4": 0.,
+                 "flux_4-5": 0.,
+                 "flux_5-6": 0.,
+                 "flux_6-7": 0.,
+                 "flux_7-8": 0.,
+                 "flux_8-9": 0.,
+                 "flux_9-10": 0.,
+                },
+            ]
+        )
+
+        additional_HLD_points_flux = st.data_editor(
+            df_HLD_points_flux,
+            column_config={
+                "obscured": st.column_config.CheckboxColumn(
+                    "obscured",
+                    help="Boolean for the source being obscured (will give a special marker)",
+                    pinned=True),
+                "color": st.column_config.TextColumn(
+                    "color",
+                    help="Color for the display",
+                    pinned=True),
+                "Source": st.column_config.TextColumn(
+                    "Source",
+                    help="Source observed, for Eddington factor identification", pinned=True ),
+                "ObsID": st.column_config.TextColumn(
+                    "ObsID",
+                    help="Mostly for avoiding confusion", pinned=True ),
+                "Date (UTC)": st.column_config.DatetimeColumn(
+                    "Date (UTC)",
+                    help="Date of the observation in UTC format", pinned=True ),
+                "Telescope": st.column_config.TextColumn(
+                    "Telescope",
+                    help="Instrument taking the observation", pinned=True ),
+                "flux_1-2": st.column_config.NumberColumn(
+                    "flux_1-2keV",
+                    help="1-2 keV flux in cgs units",
+                    format="%.3e"),
+                "flux_2-3": st.column_config.NumberColumn(
+                    "flux_2-3keV",
+                    help="2-3 keV flux in cgs units",
+                    format="%.3e"),
+                "flux_3-4": st.column_config.NumberColumn(
+                    "flux_3-4keV",
+                    help="3-4 keV flux in cgs units",
+                    format="%.3e"),
+                "flux_4-5": st.column_config.NumberColumn(
+                    "flux_4-5keV",
+                    help="4-5 keV flux in cgs units",
+                    format="%.3e"),
+                "flux_5-6": st.column_config.NumberColumn(
+                    "flux_5-6keV",
+                    help="5-6 keV flux in cgs units",
+                    format="%.3e"),
+                "flux_6-7": st.column_config.NumberColumn(
+                    "flux_6-7keV",
+                    help="6-7 keV flux in cgs units",
+                    format="%.3e"),
+                "flux_7-8": st.column_config.NumberColumn(
+                    "flux_7-8keV",
+                    help="7-8 keV flux in cgs units",
+                    format="%.3e"),
+                "flux_8-9": st.column_config.NumberColumn(
+                    "flux_8-9keV",
+                    help="8-9 keV flux in cgs units",
+                    format="%.3e"),
+                "flux_9-10": st.column_config.NumberColumn(
+                    "flux_9-10keV",
+                    help="9-10 keV flux in cgs units",
+                    format="%.3e"),
+
+            },
+            hide_index=True,num_rows="dynamic")
+
+        plot_HLD_points_flux=st.toggle('Plot these additional points in HLD graphs',value=True,
+                                       key='plot_HLD_points_flux')
+        if not plot_HLD_points_flux:
+            additional_HLD_points_flux=df_HLD_points_flux
+
+    with st.expander('Line parameters of new points'):
+
+        df_line_points = pd.DataFrame(
+            [
+                {"Source": '',
+                 "ObsID": '', "Date (UTC)": None, "Telescope": '',
+                 "EW_FeKa25": 0.,
+                 "EW_FeKa26": 0.,
+                 "EW_FeKa25_UL": 0.,
+                 "EW_FeKa26_UL": 0.,
+                 "vshift_FeKa25": 0.,
+                 "vshift_FeKa26": 0.,
+                 "EW_FeKa25_err-": 0.,
+                 "EW_FeKa25_err+": 0.,
+                 "EW_FeKa26_err-": 0.,
+                 "EW_FeKa26_err+": 0.,
+                 "vshift_FeKa25_err-": 0.,
+                 "vshift_FeKa25_err+": 0.,
+                 "vshift_FeKa26_err-": 0.,
+                 "vshift_FeKa26_err+": 0.,},
+            ]
+        )
+
+        additional_line_points = st.data_editor(
+            df_line_points,
+            column_config={
+                "Source": st.column_config.TextColumn(
+                    "Source",
+                    help="Source observed, for Eddington factor identification", ),
+                "ObsID": st.column_config.TextColumn(
+                    "ObsID",
+                    help="Mostly for avoiding confusion",),
+                "Date (UTC)": st.column_config.DatetimeColumn(
+                    "Date (UTC)",
+                    help="Date of the observation in UTC format"),
+                "Telescope": st.column_config.TextColumn(
+                    "Telescope",
+                    help="Instrument taking the observation",),
+                "EW_FeKa25": st.column_config.NumberColumn(
+                    "EW_FeKa25",
+                    help="Fe XXV Ka EW in eV",
+                    format="%.3e"),
+                "EW_FeKa26": st.column_config.NumberColumn(
+                    "EW_FeKa26",
+                    help="Fe XXVI Ka EW in eV",
+                    format="%.3e"),
+                "EW_FeKa25_UL": st.column_config.NumberColumn(
+                    "EW_FeKa25_UL",
+                    help="Fe XXV Ka EW upper limit in eV",
+                    format="%.3e"),
+                "EW_FeKa26_UL": st.column_config.NumberColumn(
+                    "EW_FeKa26_UL",
+                    help="Fe XXVI Ka EW upper limit in eV",
+                    format="%.3e"),
+                "vshift_FeKa25": st.column_config.NumberColumn(
+                    "vshift_FeKa25",
+                    help="Fe XXV Ka velocity shift in km/s (<0 for blueshifts)",
+                    format="%.3e"),
+                "vshift_FeKa26": st.column_config.NumberColumn(
+                    "vshift_FeKa26",
+                    help="Fe XXVI Ka velocity shift in km/s (<0 for blueshifts)",
+                    format="%.3e"),
+                "EW_FeKa25_err-": st.column_config.NumberColumn(
+                    "EW_FeKa25_err-",
+                    help="Fe XXV Ka EW negative error at 90% C.L. in eV",
+                    format="%.3e"),
+                "EW_FeKa25_err+": st.column_config.NumberColumn(
+                    "EW_FeKa25_err+",
+                    help="Fe XXV Ka EW positive error at 90% C.L. in eV",
+                    format="%.3e"),
+                "EW_FeKa26_err-": st.column_config.NumberColumn(
+                    "EW_FeKa26_err-",
+                    help="Fe XXVI Ka EW negative error at 90% C.L. in eV",
+                    format="%.3e"),
+                "EW_FeKa26_err+": st.column_config.NumberColumn(
+                    "EW_FeKa25_err+",
+                    help="Fe XXVI Ka EW positive error at 90% C.L. in eV",
+                    format="%.3e"),
+                "vshift_FeKa25_err-": st.column_config.NumberColumn(
+                    "vshift_FeKa25_err-",
+                    help="Fe XXV Ka velocity shift negative error at 90% C.L. in km/s (<0 for blueshifts)",
+                    format="%.3e"),
+                "vshift_FeKa25_err+": st.column_config.NumberColumn(
+                    "vshift_FeKa25_err+",
+                    help="Fe XXV Ka velocity shift positive error at 90% C.L. in km/s (<0 for blueshifts)",
+                    format="%.3e"),
+                "vshift_FeKa26_err-": st.column_config.NumberColumn(
+                    "vshift_FeKa26_err-",
+                    help="Fe XXVI Ka velocity shift negative error at 90% C.L. in km/s (<0 for blueshifts)",
+                    format="%.3e"),
+                "vshift_FeKa26_err+": st.column_config.NumberColumn(
+                    "vshift_FeKa26_err+",
+                    help="Fe XXVI Ka velocity shift positive error at 90% C.L. in km/s (<0 for blueshifts)",
+                    format="%.3e"),
+
+            },
+            hide_index=True,num_rows="dynamic")
+
+        plot_HLD_points_line=st.toggle('Plot these line properties in HLD graphs',value=True)
+        if not plot_HLD_points_line:
+            additional_line_points=df_line_points
+
 
 #necessary items for the hid graph run
 items_list=[
@@ -2436,11 +2729,33 @@ dict_linevis['exptime_list'] = exptime_list
 dict_linevis['hid_log_HR'] = hid_log_HR
 dict_linevis['display_minorticks']=display_minorticks
 
-dict_linevis['additional_HLD_points']=additional_HLD_points
+dict_linevis['additional_HLD_points_LEdd']=additional_HLD_points_LEdd
+dict_linevis['additional_HLD_points_flux']=additional_HLD_points_flux
+dict_linevis['additional_line_points']=additional_line_points
+
+dict_linevis['marker_ul_circle']=marker_ul_circle
+#testing which type of points remains
+base_sample_points_bool=True
 
 if len(global_plotted_datetime)==0:
-    st.warning('No points remaining with current sample/date selection')
-elif not skip_HID:
+    st.warning('No sample points remaining with current subsample/date selection')
+    base_sample_points_bool=False
+
+dict_linevis['base_sample_points_bool']=base_sample_points_bool
+
+#testing if any valid coordinates remain for additional LEdd points
+additional_LEdd_points_coords=np.array(additional_HLD_points_LEdd[['L_3-10/L_Edd','HR_[6-10]/[3-6]']])
+additional_LEdd_points_bool=np.array([[subelem not in [0.,None] for subelem in elem] for elem in
+                                      additional_LEdd_points_coords]).all(1).any()
+
+#testing if any valid coordinates remain for additional flux points
+additional_flux_points_coords=np.array(additional_HLD_points_flux[additional_HLD_points_flux.columns[4:13]])
+additional_flux_points_bool=np.array([[subelem not in [0.,None] for subelem in elem] for elem in
+                                      additional_flux_points_coords]).all(1).any()
+
+any_points_bool=base_sample_points_bool or additional_LEdd_points_bool or additional_flux_points_bool
+
+if any_points_bool and not skip_HID:
     hid_graph(ax_hid,dict_linevis,
               display_single=display_single, display_nondet=display_nondet, display_upper=display_upper,
               cyclic_cmap_nondet=cyclic_cmap_nondet, cyclic_cmap_det=cyclic_cmap_det, cyclic_cmap=cyclic_cmap,
@@ -4227,7 +4542,7 @@ if display_single and choice_source[0]=='4U1630-47' and plot_gamma_correl:
                  lum_high_list_single_withBAT[0],
                  xerr=lum_BAT_single[1][flux_high_list_single_mask & mask_match_BAT_main],
                  yerr=lum_high_list_single_withBAT[1:],
-                 ls='',color='blue',label='NuSTAR/Suzaku-PIN (nthcom)')
+                 ls='',color='blue',label='NuSTAR/Suzaku-PIN (nthcomp)')
 
     #computing the linear regression
 
@@ -4265,20 +4580,110 @@ if display_single and choice_source[0]=='4U1630-47' and plot_gamma_correl:
     # fig_flux_BAT_native.suptitle('BAT projected vs observed high energy luminosity')
     plt.legend(fontsize=10,)
 
+
+
+    # BONUS figure back to the BAT rate for the paper
+    bat_lum_rate_convert= 1/ (convert_BAT_count_flux['4U1630-47'] * Edd_factor_restrict)
+
+    # BAT flux- Observed flux figure
+    fig_rate_BAT_native, ax_rate_BAT_native = plt.subplots(figsize=(6, 6))
+    ax_rate_BAT_native.set_xlim(2e-4, 2e-1)
+    ax_rate_BAT_native.set_ylim(2e-4, 2e-1)
+    ax_rate_BAT_native.set_xscale('log')
+    ax_rate_BAT_native.set_yscale('log')
+    ax_rate_BAT_native.set_xlabel(r'[15-50] BAT Count Rate (cts/cm$^2$/s)')
+    ax_rate_BAT_native.set_ylabel('[15-50] keV measured luminosity ($L/L_{Edd}$)')
+    # integral errorbar
+    for i_int_withBAT in range(sum(mask_int_withBAT)):
+        ax_rate_BAT_native.errorbar(lum_bat_match_int[i_int_withBAT]*bat_lum_rate_convert,
+                                    lum_int_15_50[mask_int_withBAT][i_int_withBAT],
+                                    xerr=lum_bat_err_match_int[i_int_withBAT]*bat_lum_rate_convert,
+                                    yerr=np.array([lum_int_15_50_err.T[mask_int_withBAT][i_int_withBAT]]).T,
+                                    # alpha=1,
+                                    alpha=int_fit_gamma_alpha[i_int_withBAT],
+                                    label='INTEGRAL (powerlaw)' if i_int_withBAT == i_max_alpha_gamma else '',
+                                    color='black', ls='')
+
+    plt.errorbar(lum_BAT_single[0][flux_high_list_single_mask & mask_match_BAT_main]*bat_lum_rate_convert,
+                 lum_high_list_single_withBAT[0],
+                 xerr=lum_BAT_single[1][flux_high_list_single_mask & mask_match_BAT_main]*bat_lum_rate_convert,
+                 yerr=lum_high_list_single_withBAT[1:],
+                 ls='', color='blue', label='NuSTAR/Suzaku-PIN (nthcomp)')
+
+    # computing the linear regression
+
+    lum_bat_regress = np.array(lum_bat_match_int.tolist() + \
+                               lum_BAT_single[0][flux_high_list_single_mask & mask_match_BAT_main].tolist())
+    lum_bat_regress_err = np.array(lum_bat_err_match_int.tolist() + \
+                                   lum_BAT_single[1][flux_high_list_single_mask & mask_match_BAT_main].tolist())
+
+    lum_15_50_regress = np.array(lum_int_15_50[mask_int_withBAT].tolist() + lum_high_list_single_withBAT[0].tolist())
+
+    # here we resize the 90% errors of our dataset assuming a gaussian distribution
+    lum_15_50_regress_err = np.array([lum_int_15_50_err[i_incert].T[mask_int_withBAT].T.tolist() + \
+                                      (lum_high_list_single_withBAT[1:][i_incert] \
+                                       * 1 / norm.ppf((1 + 90 / 100) / 2)).tolist() for i_incert in range(2)])
+
+    bat_corr_slope_arr, bat_corr_intercept_arr, bat_corr_sigma_arr, bat_corr_x_intercept = \
+        lmplot_uncert_a(ax_rate_BAT_native, lum_bat_regress*bat_lum_rate_convert, lum_15_50_regress,
+                        lum_bat_regress_err*bat_lum_rate_convert, lum_15_50_regress_err,
+                        xlim=None, ylim=None, percent=68.26, nsim=1000,
+                        intercept_pos='auto',
+                        return_linreg=True, infer_log_scale=True, log_sampling=True, nanzero_err=True,
+                        xbounds=None, ybounds=None,
+                        line_color='brown', lw=1.3, inter_color='lightgrey')
+
+    corr_str_rate = r'$L_{Obs}=(\frac{R_{BAT}}{10^{%.1e' % (bat_corr_x_intercept) + '}})^{%.2f' \
+               % bat_corr_slope_arr[0] + '_{-%.2f' % bat_corr_slope_arr[1] + '}^{+%.2f' % bat_corr_slope_arr[2] + '}}' \
+               + '\\times 10^{' + ('+' if bat_corr_intercept_arr[0] > 0 else '') + '%.2f' % bat_corr_intercept_arr[0] \
+               + '_{-%.2f' % bat_corr_intercept_arr[1] + '}^{+%.2f' % bat_corr_intercept_arr[2] + '}' \
+               + '}$'
+
+    plt.suptitle(corr_str_rate)
+
+    # fig_rate_BAT_native.suptitle('BAT projected vs observed high energy luminosity')
+    plt.legend(fontsize=10, )
+
+
+
     #fourth figure to look at the flux vs gamma evolution internally
-    fig_native_flux_gamma,ax_native_flux_gamma=plt.subplots(figsize=(6,6))
+    fig_native_flux_gamma,ax_native_flux_gamma=plt.subplots(figsize=(6,6),layout='constrained')
     ax_native_flux_gamma.set_xlim(1.,3.5)
     ax_native_flux_gamma.set_ylim(1e-4, 1e-1)
     ax_native_flux_gamma.set_yscale('log')
-    ax_native_flux_gamma.set_xlabel(r'nthcomp $\Gamma$')
+    ax_native_flux_gamma.set_xlabel(r'slope of the high-energy component ($\Gamma$)')
     ax_native_flux_gamma.set_ylabel('15-50 keV luminosity ($L/L_{Edd}$)')
     
     plt.errorbar(gamma_nthcomp_single[flux_high_list_single_mask].T[0],lum_high_list_single[0],
                  xerr=gamma_nthcomp_single[flux_high_list_single_mask].T[1:],yerr=lum_high_list_single[1:],ls='',
-                 color='blue',label='NuSTAR/Suzaku-PIN',marker='d')
+                 color='blue',label='NuSTAR/Suzaku-PIN (nthcomp)',marker='d')
+
+
+    plt.errorbar(int_fit_gamma,lum_int_15_50,
+                 xerr=int_fit_gamma_err,yerr=lum_int_15_50_err,ls='',
+                 color='grey',label='INTEGRAL (powerlaw)',marker='d',alpha=0.5)
+
+    #note: the 2 2024 orbits
+    # 0.00025141484646483593 converted to 5.730E-04 in 15-50 with webpimms
+    plt.errorbar(1.93173,5.730E-04,
+                               xerr=0.1,yerr=0.000573/10,
+                               color='grey',marker='d',alpha=0.5)
+    #march 0.0004436682181837173 to 1.066e-3,
+    plt.errorbar(2.07,1.066e-3,
+                               xerr=0.1,yerr=0.0001066e-3/10,
+                               color='grey',marker='d',alpha=0.5)
+
+    #adding a shading for the low luminosity region
+    #plt.axhspan(1e-4,4e-3,color='red',alpha=0.15)
+
+    plt.axhline(4e-3,color='red',alpha=1,ls='--',label=r'$\Gamma$ saturation threshold')
+
 
     # fig_native_flux_gamma.suptitle(r'Observed nthcomp $\Gamma$ vs high energy luminosity')
     plt.legend(fontsize=10,)
+
+    plt.savefig('fig.pdf')
+
 
     fig_high_soft, ax_high_soft = plt.subplots()
 
@@ -4333,6 +4738,7 @@ if display_single and choice_source[0]=='4U1630-47' and plot_gamma_correl:
             with he_cols[0]:
                 st.pyplot(fig_gamma_bat_rate)
                 st.pyplot(fig_flux_BAT_native)
+                st.pyplot(fig_rate_BAT_native)
                 st.pyplot(fig_rate_flux_15_50_int)
                 st.pyplot(fig_gamma_rate_int)
 

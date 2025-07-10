@@ -2206,9 +2206,9 @@ def hid_graph(ax_hid, dict_linevis,
     # manual custom subplot adjust to get the same scale for the 3 sources with ULs and for the zoomed 5 sources with detection
     # to be put in the 5 sources
 
-    #for EAS-Vasto 2025 talks
-    plt.xlim(0.023977074704136403, 1.4722486529279757)
-    plt.ylim(5.713386220172999e-05, 0.6740380679468638)
+    # #for EAS-Vasto 2025 talks
+    # plt.xlim(0.023977074704136403, 1.4722486529279757)
+    # plt.ylim(5.713386220172999e-05, 0.6740380679468638)
 
     if custom:
         plt.subplots_adjust(top=0.863)

@@ -46,8 +46,6 @@ def narrow_line_cycle(low_e,high_e,e_step=2e-2,plot_suffix='',baseload=None,
 
     baseload should be an XCM file with both the file and model
 
-    e_sat_low_indiv here assumes that a RESOLVE and EXTEND spectra are loaded
-
     '''
 
     prev_chatter=Xset.chatter

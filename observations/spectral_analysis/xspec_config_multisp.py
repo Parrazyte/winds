@@ -6357,42 +6357,54 @@ class plot_save:
 
             list_models=list(AllModels.sources.values())
             #adding default model component names if there is a default model
-            if '' in list_models:
+            for mod in list_models:
 
-                mod_expression,mod_tables_dict=numbered_expression()
+                if mod=='':
 
-                #there are addcomps for the default models only if it has more than one additive components
-                #we thus need to compare the total number of addcomps with the other model addcomps
-                if len(self.addcomps[0])>(2 if 'nxb' in list_models else 0) + (2 if 'sky' in list_models else 0):
+                    mod_expression,mod_tables_dict=numbered_expression()
 
-                    for elemcomp in AllModels(1).componentNames:
+                    #there are addcomps for the default models only if it has more than one additive components
+                    #we thus need to compare the total number of addcomps with the other model addcomps
+                    #this is only for nicer and can break if there are addcomps in other nxb type models
 
-                        #restricting to additive tables for table models
-                        if elemcomp in list(mod_tables_dict.keys()):
-                            if 'atable{' in mod_tables_dict[elemcomp]:
-                                self.addcompnames += [elemcomp]
-                        else:
-                            #restricting to additive components
-                            if elemcomp.split('_')[0] not in xspec_multmods:
-                                self.addcompnames+=[elemcomp]
+                    if len(self.addcomps[0])>(2 if 'nxb' in list_models else 0) + (2 if 'sky' in list_models else 0):
 
-            #adding NICER background component Names
-            if 'nxb' in list_models:
-                for i in range(1,AllData.nGroups+1):
-                    try:
-                        self.addcompnames+=AllModels(i,'sky').componentNames
-                        break
-                    except:
-                        pass
+                        for elemcomp in AllModels(1).componentNames:
 
-            if 'sky' in list_models:
-                for i in range(1,AllData.nGroups+1):
-                    try:
-                        self.addcompnames += AllModels(i, 'nxb').componentNames
-                        break
-                    except:
-                        pass
+                            #restricting to additive tables for table models
+                            if elemcomp in list(mod_tables_dict.keys()):
+                                if 'atable{' in mod_tables_dict[elemcomp]:
+                                    self.addcompnames += [elemcomp]
+                            else:
+                                #restricting to additive components
+                                if elemcomp.split('_')[0] not in xspec_multmods:
+                                    self.addcompnames+=[elemcomp]
 
+                #adding NICER background component Names
+                elif mod=='nxb':
+                    for i in range(1,AllData.nGroups+1):
+                        try:
+                            self.addcompnames+=AllModels(i,'sky').componentNames
+                            break
+                        except:
+                            pass
+
+                elif mod=='sky':
+                    for i in range(1,AllData.nGroups+1):
+                        try:
+                            self.addcompnames += AllModels(i, 'nxb').componentNames
+                            break
+                        except:
+                            pass
+                else:
+                    for i in range(1,AllData.nGroups+1):
+                        try:
+                            mod_compnames = AllModels(i, mod).componentNames
+                            mod_addcompnames = [mod + '_' + elem_comp for elem_comp in mod_compnames
+                                                if elem_comp.split('_')[0] not in xspec_multmods]
+                            self.addcompnames += mod_addcompnames
+                        except:
+                            pass
         else:
             self.addcomps=None
             self.addcompnames=[]

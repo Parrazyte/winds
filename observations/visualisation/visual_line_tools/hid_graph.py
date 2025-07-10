@@ -118,6 +118,8 @@ def hid_graph(ax_hid, dict_linevis,
     additional_HLD_points_flux = dict_linevis['additional_HLD_points_flux']
     additional_line_points = dict_linevis['additional_line_points']
 
+    marker_ul_circle=dict_linevis['marker_ul_circle']
+
     base_sample_points_bool=dict_linevis['base_sample_points_bool']
 
     # weird setup but due to the variable being either a bool or a str
@@ -1140,7 +1142,7 @@ def hid_graph(ax_hid, dict_linevis,
                     # obj_order_sign_ul=obj_size_ul[mask_nondet_ul].argsort()[::-1]
 
                     # there is no need to use different markers unless we display source per color, so we limit the different triangle to this case
-                    marker_ul_curr = marker_abs if display_single else marker_ul_top if \
+                    marker_ul_curr = marker_abs if (display_single or marker_ul_circle) else marker_ul_top if \
                         ((id_obj_nondet if source_nondet else id_obj_det) if split_cmap_source else i_obj_base) % 2 != 0 and \
                         radio_info_cmap == 'Source' else marker_ul
 
@@ -1641,17 +1643,21 @@ def hid_graph(ax_hid, dict_linevis,
                     point_row_size_UL = np.max(point_row_line[['EW_FeKa25_UL', 'EW_FeKa26_UL']])
 
 
-            id_obj_obs_arr= np.argwhere([point_row['Source'] == obj_list[mask_obj]])
+            mask_id_obj_obs_arr= point_row['Source'] == obj_list[mask_obj]
 
-            if len(id_obj_obs_arr) != 0:
-                edd_factor_point = Edd_factor_restrict[id_obj_obs_arr[0][0]]
+            assert sum(mask_id_obj_obs_arr)<=1,'Error: '+point_row['Source']+' has several name matches in obj_list'
+
+            if sum(mask_id_obj_obs_arr) != 0:
+                edd_factor_point = Edd_factor_restrict[mask_id_obj_obs_arr][0]
             else:
 
-                #here the names should match the dictionnaries
-                d_obj_point,m_obj_point=dist_mass_indiv(dict_linevis,point_row['Source'],use_unsure_mass_dist=True)
+                try:
+                    #here the names should match the dictionnaries
+                    d_obj_point,m_obj_point=dist_mass_indiv(dict_linevis,point_row['Source'],use_unsure_mass_dist=True)
+                except:
+                    breakpoint()
 
                 edd_factor_point = 4 * np.pi * (d_obj_point * 1e3 * 3.086e18) ** 2 / (1.26e38 * m_obj_point)
-
 
             point_LEdd_3_10 = np.sum([point_row[column] for column in column_3_10_df]) * edd_factor_point
             point_list_LEdd_3_10 += [point_LEdd_3_10]
@@ -1663,7 +1669,7 @@ def hid_graph(ax_hid, dict_linevis,
             point_marker=mpl_cut_star if point_row['obscured'] else "P" if not line_match_row else marker_abs
 
             # for AO2
-            point_marker=marker_ul
+            # point_marker=marker_ul
 
             point_color=point_row['color'] if point_row['color'] not in ['', None] else 'black'
             point_edge_color=None if point_row['obscured'] else \
@@ -1787,7 +1793,7 @@ def hid_graph(ax_hid, dict_linevis,
                 ylims = [min(ylims[0], min(point_list_LEdd_3_10)),
                      max(ylims[1], max(point_list_LEdd_3_10))]
         
-        if xlims[0]<plt.xlim()[0] or xlims[1]<plt.xlim()[1]:
+        if xlims is not None and(xlims[0]<plt.xlim()[0] or xlims[1]<plt.xlim()[1]):
             perform_unzoom=True
             
         #aside from automode, we rescale only if it's necessary to not miss points
@@ -2036,7 +2042,7 @@ def hid_graph(ax_hid, dict_linevis,
     # paper_look=True
 
 
-    if display_single:
+    if display_single or marker_ul_circle:
         hid_det_examples = [
             (Line2D([0], [0], marker=marker_abs, color='white',
                     markersize=50 ** (1 / 2), alpha=1., linestyle='None',
@@ -2199,6 +2205,10 @@ def hid_graph(ax_hid, dict_linevis,
 
     # manual custom subplot adjust to get the same scale for the 3 sources with ULs and for the zoomed 5 sources with detection
     # to be put in the 5 sources
+
+    #for EAS-Vasto 2025 talks
+    plt.xlim(0.023977074704136403, 1.4722486529279757)
+    plt.ylim(5.713386220172999e-05, 0.6740380679468638)
 
     if custom:
         plt.subplots_adjust(top=0.863)

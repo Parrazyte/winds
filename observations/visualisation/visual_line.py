@@ -1405,9 +1405,10 @@ if not online:
         '''
         # Saves the current graph in a svg (i.e. with clickable points) format.
         '''
-    
-        fig_hid.savefig(save_dir+'/'+save_str_prefix+'HID_cam_'+args.cameras+'_'+\
-                    line_search_e_str.replace(' ','_')+'_'+args.line_search_norm.replace(' ','_')+'curr_'+str(round(time.time()))+'.'+save_format,bbox_inches='tight')
+        save_path=(save_dir+'/'+save_str_prefix+'HID_cam_'+args.cameras+'_'+\
+                    line_search_e_str.replace(' ','_')+'_'+args.line_search_norm.replace(' ','_')+
+                   'curr_'+str(round(time.time()))+'.'+save_format)
+        fig_hid.savefig(save_path,bbox_inches='tight',dpi=300)
             
     st.sidebar.button('Save current HID view',on_click=save_HID)
 
@@ -1426,13 +1427,15 @@ with st.sidebar.expander('Visualisation'):
 
     else:
 
-        display_dicho=st.toggle('Display favourable zone',value=not display_single)
+        display_dicho=st.toggle('Display favourable zone',value=False)
 
         color_nondet=st.toggle('Color non-detections',value=True)
 
         display_central_abs=st.toggle('Display centers for absorption detections',value=False)
 
         split_cmap_source=st.toggle('Use different colormaps for detections and non-detections',value=True)
+
+    marker_ul_circle=st.toggle('Force circular UL markers',value=False)
 
     alpha_abs=st.toggle('Plot with transparency',value=False)
 
@@ -2730,6 +2733,7 @@ dict_linevis['additional_HLD_points_LEdd']=additional_HLD_points_LEdd
 dict_linevis['additional_HLD_points_flux']=additional_HLD_points_flux
 dict_linevis['additional_line_points']=additional_line_points
 
+dict_linevis['marker_ul_circle']=marker_ul_circle
 #testing which type of points remains
 base_sample_points_bool=True
 

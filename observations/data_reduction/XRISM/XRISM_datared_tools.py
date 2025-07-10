@@ -633,6 +633,136 @@ def compute_avg_BR_pixlist(branch_file='auto',pixel_str='branch_filter',branch_t
 
     return branch_avg_list
 
+def plot_BR_band_compar(branch_file_num,branch_file_denom,excl_pixel=[],count_rate='sum',
+                        save_path=None,mode='full'):
+
+    '''
+    computes the ratio between the BR of different files or bands. For now made for bands.
+    count_rate (for the X axis positions):
+        -sum: sums the total band count rates of both branch_files
+        -num: uses only the numerator count rate
+        -denom: uses only the denominator count rate
+    '''
+
+    with fits.open(branch_file_num) as branch_fits:
+        branch_num_data_lsreal_efull = branch_fits[1].data
+        branch_num_simu_lsreal_efull = branch_fits[3].data
+        branch_num_data_lsreal_eband = branch_fits[4].data
+        e_band_num=[elem for elem in branch_fits[1].header['HISTORY'] if 'eband' in elem][0].split(' ')[-1]
+
+    # removing pixel 12 to avoid problems later with ordering
+    branch_num_data_lsreal_efull = branch_num_data_lsreal_efull[[elem for elem in range(36) if elem != 12]]
+    branch_num_simu_lsreal_efull = branch_num_simu_lsreal_efull[[elem for elem in range(36) if elem != 12]]
+    branch_num_data_lsreal_eband= branch_num_data_lsreal_eband[[elem for elem in range(36) if elem != 12]]
+
+    with fits.open(branch_file_denom) as branch_fits:
+        branch_denom_data_lsreal_efull = branch_fits[1].data
+        branch_denom_simu_lsreal_efull = branch_fits[3].data
+        branch_denom_data_lsreal_eband = branch_fits[4].data
+        e_band_denom=[elem for elem in branch_fits[1].header['HISTORY'] if 'eband' in elem][0].split(' ')[-1]
+
+    # removing pixel 12 to avoid problems later with ordering
+    branch_denom_data_lsreal_efull = branch_denom_data_lsreal_efull[[elem for elem in range(36) if elem != 12]]
+    branch_denom_simu_lsreal_efull = branch_denom_simu_lsreal_efull[[elem for elem in range(36) if elem != 12]]
+    branch_denom_data_lsreal_eband= branch_denom_data_lsreal_eband[[elem for elem in range(36) if elem != 12]]
+
+
+    # making a plot with the information for the eband
+    fig_branch_band_eband, ax_brand_band_eband = plt.subplots(figsize=(16, 10))
+
+
+    ax_brand_band_eband.set_yscale('log' if mode=='full' else 'linear')
+    ax_brand_band_eband.set_xscale('log')
+    x_axis_str='[' + e_band_num + '] '+'+ ['+e_band_denom+']' if count_rate=='sum' \
+                else '[' + e_band_num + ']' if count_rate=='num' else'['+e_band_denom+']' if count_rate=='denom' else ''
+
+    ax_brand_band_eband.set_xlabel(r'Pixel count rate in the '+x_axis_str+' keV band (s$^{-1}$)')
+    ax_brand_band_eband.set_ylabel('Ratio of observed branching ratios between the [ '
+                                        +e_band_num+'] and ['+e_band_denom+'] keV bands')
+    ax_brand_band_eband.set_title('Ratio of observed branching ratios between the  '
+                                  +e_band_num+' and '+e_band_denom+' keV bands')
+
+    if count_rate=='sum':
+        branch_x_band_sum=branch_num_data_lsreal_eband['RATETOT']+branch_denom_data_lsreal_eband['RATETOT']
+    elif count_rate=='num':
+        branch_x_band_sum=branch_num_data_lsreal_eband['RATETOT']
+    elif count_rate=='denom':
+        branch_x_band_sum=branch_denom_data_lsreal_eband['RATETOT']
+
+    plt.axhline(1,0,1,color='black')
+    # showcasing the branch_band ratios
+
+    if mode=='full':
+        plt.plot(branch_x_band_sum,
+                 branch_num_data_lsreal_eband['BRANCHHP']/branch_denom_data_lsreal_eband['BRANCHHP'],
+                 ls='', marker='d',
+                 color='green', label='Hp')
+
+        plt.plot(branch_x_band_sum,
+                 branch_num_data_lsreal_eband['BRANCHMP']/branch_denom_data_lsreal_eband['BRANCHMP'],
+                 ls='', marker='d',
+                 color='blue', label='Mp')
+        plt.plot(branch_x_band_sum,
+                 branch_num_data_lsreal_eband['BRANCHMS']/branch_denom_data_lsreal_eband['BRANCHMS'],
+                 ls='', marker='d',
+                 color='cyan', label='Ms')
+        plt.plot(branch_x_band_sum,
+                 branch_num_data_lsreal_eband['BRANCHLP']/branch_denom_data_lsreal_eband['BRANCHLP'],
+                 ls='', marker='d',
+                 color='orange', label='Lp')
+        plt.plot(branch_x_band_sum,
+                 branch_num_data_lsreal_eband['BRANCHLS']/branch_denom_data_lsreal_eband['BRANCHLS'],
+                 ls='', marker='d',
+                 color='red', label='Ls')
+    elif mode=='Hp+Mp':
+
+        plt.plot(branch_x_band_sum,
+                 (branch_num_data_lsreal_eband['BRANCHHP']+branch_num_data_lsreal_eband['BRANCHMP'])/
+                 (branch_denom_data_lsreal_eband['BRANCHHP']+branch_denom_data_lsreal_eband['BRANCHMP']),
+                 ls='', marker='d',
+                 color='teal', label='Hp+Mp')
+
+
+    # creating a secondary axis to show the pixel positions
+    ax_up = ax_brand_band_eband.secondary_xaxis('top')
+
+    # removing the ticks
+    ax_up.set_xticks([], minor=True)
+    ax_up.set_xticks([], minor=True)
+
+    # replacing them with the pixel ids
+    pixel_order = branch_x_band_sum.argsort()
+
+    # the random addition is here to avoid ticks overlapping if the count rate is the same
+    # (which makes the labels disappear
+    ax_up.set_xticks(branch_x_band_sum[pixel_order] + np.random.rand(35) * 1e-5)
+
+    # and putting labels on differnet lines to avoid cluttering
+    arr_pxl_names = branch_num_data_lsreal_eband['PIXEL'][pixel_order].astype(str)
+    arr_pxl_shifted = [elem + ('\n' * (i % 5)) for i, elem in enumerate(arr_pxl_names)]
+
+    ax_up.set_xticklabels(arr_pxl_shifted)
+    # adjusting the color of the excluded pixel labels
+    color_arr_label = np.where([int(elem) in excl_pixel for elem in arr_pxl_names], 'red', 'black')
+    for xtick, color in zip(ax_up.get_xticklabels(), color_arr_label):
+        xtick.set_color(color)
+
+    ax_up.set_xlabel('Pixel number' + ('(excluded in red)' if len(excl_pixel) > 0 else ''))
+
+    # adding vertical lines
+    for pix_number, pix_rate in zip(branch_num_data_lsreal_eband['PIXEL'], branch_x_band_sum):
+        plt.axvline(pix_rate, ls=':', color='red' if pix_number in excl_pixel else 'grey',
+                    zorder=-1)
+
+    plt.legend(loc='lower right')
+    plt.tight_layout()
+
+    if save_path is not None:
+        if save_path=='auto':
+            plt.savefig('branch_ratio_save.pdf')
+        else:
+            plt.savefig(save_path)
+        plt.close()
 
 def plot_BR(branch_file, save_paths=None, excl_pixel=[],task='rslbratios',plot_hp_sim_curve_band=True):
     '''
@@ -666,8 +796,8 @@ def plot_BR(branch_file, save_paths=None, excl_pixel=[],task='rslbratios',plot_h
         ax_branch.set_yscale('log')
         ax_branch.set_xscale('log')
         ax_branch.set_ylim(1e-3, 1.1)
-        ax_branch.set_xlabel(r'Pixel count rate (s$^{-1}$)')
-        ax_branch.set_ylabel('Pixel branching ratios')
+        ax_branch.set_xlabel(r'Pixel count rate in the full (0-30 keV) band (s$^{-1}$)')
+        ax_branch.set_ylabel('Pixel branching ratios in the full (0-30 keV) band (s$^{-1}$)')
 
         # showcasing the branching ratios
         plt.plot(branch_data['RATETOT'],
@@ -747,9 +877,9 @@ def plot_BR(branch_file, save_paths=None, excl_pixel=[],task='rslbratios',plot_h
         fig_branch_band_eband, ax_brand_band_eband = plt.subplots(figsize=(16, 10))
         ax_brand_band_eband.set_yscale('log')
         ax_brand_band_eband.set_xscale('log')
-        ax_brand_band_eband.set_xlabel(r'Pixel count rate (s$^{-1}$)')
-        ax_brand_band_eband.set_ylabel('Pixel branching ratios')
-        ax_brand_band_eband.set_title('Observed branching ratios in the '+branch_band+' keV band')
+        ax_brand_band_eband.set_xlabel(r'Pixel count rate in the '+branch_band+' keV band (s$^{-1}$)')
+        ax_brand_band_eband.set_ylabel('Pixel branching ratios in the '+branch_band+' keV band (s$^{-1}$)')
+        ax_brand_band_eband.set_title('Observed and theoretical branching ratios in the '+branch_band+' keV band')
 
         # showcasing the branch_band ratios
         plt.plot(branch_data_lsreal_eband['RATETOT'],
@@ -810,37 +940,36 @@ def plot_BR(branch_file, save_paths=None, excl_pixel=[],task='rslbratios',plot_h
         rate_pred_order=branch_simu_lsreal_efull['RATETOT'].argsort()
 
         if plot_hp_sim_curve_band:
-            plt.plot(branch_simu_lsreal_efull['RATETOT'][rate_pred_order],
+            plt.plot(branch_data_lsreal_eband['RATETOT'][rate_pred_order],
                      branch_simu_lsreal_efull['BRANCHHP'][rate_pred_order],
                      ls='-', marker='',
                      color='green', label='')
+            plt.plot([],[],
+                 ls='-', marker='',
+                 color='black', label='theoretical values '+('\n w.r.t. 0-30 keV \n pixel count rate'))
 
         # plt.axhline(1,0,1,ls='-', marker='',
         #              color='green', label='')
 
-        plt.plot(branch_simu_lsreal_efull['RATETOT'][rate_pred_order],
+        plt.plot(branch_data_lsreal_eband['RATETOT'][rate_pred_order],
                  branch_simu_lsreal_efull['BRANCHMP'][rate_pred_order],
                  ls='-', marker='',
                  color='blue', label='')
 
-        plt.plot(branch_simu_lsreal_efull['RATETOT'][rate_pred_order],
+        plt.plot(branch_data_lsreal_eband['RATETOT'][rate_pred_order],
                  branch_simu_lsreal_efull['BRANCHMS'][rate_pred_order],
                  ls='-', marker='',
                  color='cyan', label='')
 
-        plt.plot(branch_simu_lsreal_efull['RATETOT'][rate_pred_order],
+        plt.plot(branch_data_lsreal_eband['RATETOT'][rate_pred_order],
                  branch_simu_lsreal_efull['BRANCHLP'][rate_pred_order],
                  ls='-', marker='',
                  color='orange', label='')
 
-        plt.plot(branch_simu_lsreal_efull['RATETOT'][rate_pred_order],
+        plt.plot(branch_data_lsreal_eband['RATETOT'][rate_pred_order],
                  branch_simu_lsreal_efull['BRANCHLS'][rate_pred_order],
                  ls='-', marker='',
                  color='red', label='')
-
-        plt.plot([],[],
-                 ls='-', marker='',
-                 color='black', label='theoretical values')
 
         #ax_brand_band_eband.set_ylim(ax_brand_band_eband.get_ylim()[0], 1.1)
         ax_brand_band_eband.set_ylim(5e-4, 1.1)
@@ -857,9 +986,9 @@ def plot_BR(branch_file, save_paths=None, excl_pixel=[],task='rslbratios',plot_h
         fig_branch_band_full, ax_branch_band_full = plt.subplots(figsize=(16, 10))
         ax_branch_band_full.set_yscale('log')
         ax_branch_band_full.set_xscale('log')
-        ax_branch_band_full.set_xlabel(r'Pixel count rate (s$^{-1}$)')
-        ax_branch_band_full.set_ylabel('Pixel branching ratios')
-        ax_branch_band_full.set_title('Observed and theoretical branching ratios in the full XRISM band')
+        ax_branch_band_full.set_xlabel(r'Pixel count rate in the full (0-30 keV) band (s$^{-1}$)')
+        ax_branch_band_full.set_ylabel('Pixel branching ratios in the full (0-30 keV) band (s$^{-1}$)')
+        ax_branch_band_full.set_title('Observed and theoretical branching ratios in the full (0-30 keV) XRISM band')
 
         # showcasing the branch_banding ratios
         plt.plot(branch_data_lsreal_efull['RATETOT'],
@@ -914,27 +1043,30 @@ def plot_BR(branch_file, save_paths=None, excl_pixel=[],task='rslbratios',plot_h
                  color='red', label='')
 
         # creating a secondary axis to show the pixel positions
-        ax_up = ax_branch_band_full.secondary_xaxis('top')
+        ax_up_band_full = ax_branch_band_full.secondary_xaxis('top')
+
+        ax_up_band_full.set_xlabel('Pixel number' +('(excluded in red)' if len(excl_pixel)>0 else ''))
+
 
         # removing the ticks
-        ax_up.set_xticks([], minor=True)
-        ax_up.set_xticks([], minor=True)
+        ax_up_band_full.set_xticks([], minor=True)
+        ax_up_band_full.set_xticks([], minor=True)
 
         # replacing them with the pixel ids
         pixel_order = branch_data_lsreal_efull['RATETOT'].argsort()
 
         # the random addition is here to avoid ticks overlapping if the count rate is the same
         # (which makes the labels disappear
-        ax_up.set_xticks(branch_data_lsreal_efull['RATETOT'][pixel_order] + np.random.rand(35) * 1e-5)
+        ax_up_band_full.set_xticks(branch_data_lsreal_efull['RATETOT'][pixel_order] + np.random.rand(35) * 1e-5)
 
         # and putting labels on differnet lines to avoid cluttering
         arr_pxl_names = branch_data_lsreal_efull['PIXEL'][pixel_order].astype(str)
         arr_pxl_shifted = [elem + ('\n' * (i % 5)) for i, elem in enumerate(arr_pxl_names)]
 
-        ax_up.set_xticklabels(arr_pxl_shifted)
+        ax_up_band_full.set_xticklabels(arr_pxl_shifted)
         # adjusting the color of the excluded pixel labels
         color_arr_label = np.where([int(elem) in excl_pixel for elem in arr_pxl_names], 'red', 'black')
-        for xtick, color in zip(ax_up.get_xticklabels(), color_arr_label):
+        for xtick, color in zip(ax_up_band_full.get_xticklabels(), color_arr_label):
             xtick.set_color(color)
 
 
@@ -955,13 +1087,15 @@ def plot_BR(branch_file, save_paths=None, excl_pixel=[],task='rslbratios',plot_h
             plt.close()
 
         # making a plot with the data to prediction ratio for the full band
-        fig_branch_band_ratio, ax_branch_band_ratio = plt.subplots(figsize=(16, 10))
-        ax_branch_band_ratio.set_yscale('log')
-        ax_branch_band_ratio.set_xscale('log')
-        ax_branch_band_ratio.set_xlabel(r'Pixel count rate (s$^{-1}$)')
-        ax_branch_band_ratio.set_ylabel('Pixel branching observed/theoretical ratio')
-        ax_branch_band_full.set_title('Ratio between Observed and theoretical branching ratios '
-                                      'in the full XRISM band')
+        fig_branch_full_ratio, ax_branch_full_ratio = plt.subplots(figsize=(16, 10))
+        ax_branch_full_ratio.set_yscale('log')
+        ax_branch_full_ratio.set_xscale('log')
+        ax_branch_full_ratio.set_xlabel(r'Pixel count rate in the full (0-30 keV) band (s$^{-1}$)')
+        ax_branch_full_ratio.set_ylabel('Ratio between observed and theoretical pixel branching ratios'
+                                        ' in the full (0-30 keV) XRISM band')
+
+        ax_branch_full_ratio.set_title('Ratio between observed and theoretical branching ratios '
+                                      ' in the full (0-30 keV) XRISM band')
 
         # showcasing the branch_banding ratios
         plt.plot(branch_data_lsreal_efull['RATETOT'],
@@ -986,27 +1120,28 @@ def plot_BR(branch_file, save_paths=None, excl_pixel=[],task='rslbratios',plot_h
                  color='red', label='Ls')
 
         # creating a secondary axis to show the pixel positions
-        ax_up = ax_branch_band_ratio.secondary_xaxis('top')
+        ax_up_full_ratio = ax_branch_full_ratio.secondary_xaxis('top')
+        ax_up_full_ratio.set_xlabel('Pixel number' +('(excluded in red)' if len(excl_pixel)>0 else ''))
 
         # removing the ticks
-        ax_up.set_xticks([], minor=True)
-        ax_up.set_xticks([], minor=True)
+        ax_up_full_ratio.set_xticks([], minor=True)
+        ax_up_full_ratio.set_xticks([], minor=True)
 
         # replacing them with the pixel ids
         pixel_order = branch_data_lsreal_efull['RATETOT'].argsort()
 
         # the random addition is here to avoid ticks overlapping if the count rate is the same
         # (which makes the labels disappear
-        ax_up.set_xticks(branch_data_lsreal_efull['RATETOT'][pixel_order] + np.random.rand(35) * 1e-5)
+        ax_up_full_ratio.set_xticks(branch_data_lsreal_efull['RATETOT'][pixel_order] + np.random.rand(35) * 1e-5)
 
         # and putting labels on differnet lines to avoid cluttering
         arr_pxl_names = branch_data_lsreal_efull['PIXEL'][pixel_order].astype(str)
         arr_pxl_shifted = [elem + ('\n' * (i % 5)) for i, elem in enumerate(arr_pxl_names)]
 
-        ax_up.set_xticklabels(arr_pxl_shifted)
+        ax_up_full_ratio.set_xticklabels(arr_pxl_shifted)
         # adjusting the color of the excluded pixel labels
         color_arr_label = np.where([int(elem) in excl_pixel for elem in arr_pxl_names], 'red', 'black')
-        for xtick, color in zip(ax_up.get_xticklabels(), color_arr_label):
+        for xtick, color in zip(ax_up_full_ratio.get_xticklabels(), color_arr_label):
             xtick.set_color(color)
 
 
@@ -1021,6 +1156,78 @@ def plot_BR(branch_file, save_paths=None, excl_pixel=[],task='rslbratios',plot_h
 
         if save_paths is not None:
             plt.savefig(save_paths[2])
+            plt.close()
+
+        # making a plot with the data to prediction ratio for the restricted band
+        fig_branch_band_ratio, ax_branch_band_ratio = plt.subplots(figsize=(16, 10))
+        ax_branch_band_ratio.set_yscale('log')
+        ax_branch_band_ratio.set_xscale('log')
+
+        ax_branch_band_ratio.set_xlabel(r'Pixel count rate in the '+branch_band+' keV band (s$^{-1}$)')
+        ax_branch_band_ratio.set_ylabel('Ratio between observed and theoretical pixel branching ratios in the '
+                                        +branch_band+' keV band (s$^{-1}$)')
+        ax_branch_band_ratio.set_title('Ratio between Observed and theoretical branching ratios in the '
+                                        +branch_band+' keV band')
+
+        # showcasing the branch_banding ratios
+        plt.plot(branch_data_lsreal_eband['RATETOT'],
+                 branch_data_lsreal_eband['BRANCHHP']/branch_simu_lsreal_efull['BRANCHHP'],
+                 ls='', marker='d',
+                 color='green', label='Hp')
+        plt.plot(branch_data_lsreal_eband['RATETOT'],
+                 branch_data_lsreal_eband['BRANCHMP']/branch_simu_lsreal_efull['BRANCHMP'],
+                 ls='', marker='d',
+                 color='blue', label='Mp')
+        plt.plot(branch_data_lsreal_eband['RATETOT'],
+                 branch_data_lsreal_eband['BRANCHMS']/branch_simu_lsreal_efull['BRANCHMS'],
+                 ls='', marker='d',
+                 color='cyan', label='Ms')
+        plt.plot(branch_data_lsreal_eband['RATETOT'],
+                 branch_data_lsreal_eband['BRANCHLP']/branch_simu_lsreal_efull['BRANCHLP'],
+                 ls='', marker='d',
+                 color='orange', label='Lp')
+        plt.plot(branch_data_lsreal_eband['RATETOT'],
+                 branch_data_lsreal_eband['BRANCHLS']/branch_simu_lsreal_efull['BRANCHLS'],
+                 ls='', marker='d',
+                 color='red', label='Ls')
+
+        # creating a secondary axis to show the pixel positions
+        ax_up_band_ratio = ax_branch_band_ratio.secondary_xaxis('top')
+        ax_up_band_ratio.set_xlabel('Pixel number' +('(excluded in red)' if len(excl_pixel)>0 else ''))
+
+        # removing the ticks
+        ax_up_band_ratio.set_xticks([], minor=True)
+        ax_up_band_ratio.set_xticks([], minor=True)
+
+        # replacing them with the pixel ids
+        pixel_order = branch_data_lsreal_eband['RATETOT'].argsort()
+
+        # the random addition is here to avoid ticks overlapping if the count rate is the same
+        # (which makes the labels disappear
+        ax_up_band_ratio.set_xticks(branch_data_lsreal_eband['RATETOT'][pixel_order] + np.random.rand(35) * 1e-5)
+
+        # and putting labels on differnet lines to avoid cluttering
+        arr_pxl_names = branch_data_lsreal_eband['PIXEL'][pixel_order].astype(str)
+        arr_pxl_shifted = [elem + ('\n' * (i % 5)) for i, elem in enumerate(arr_pxl_names)]
+
+        ax_up_band_ratio.set_xticklabels(arr_pxl_shifted)
+        # adjusting the color of the excluded pixel labels
+        color_arr_label = np.where([int(elem) in excl_pixel for elem in arr_pxl_names], 'red', 'black')
+        for xtick, color in zip(ax_up_band_ratio.get_xticklabels(), color_arr_label):
+            xtick.set_color(color)
+
+
+        # adding vertical lines
+        for pix_number, pix_rate in zip(branch_data_lsreal_eband['PIXEL'],
+                                        branch_data_lsreal_eband['RATETOT']):
+            plt.axvline(pix_rate, ls=':', color='red' if pix_number in excl_pixel else 'grey',
+                        zorder=-1)
+
+        plt.legend(loc='upper right')
+        plt.tight_layout()
+
+        if save_paths is not None:
+            plt.savefig(save_paths[3])
             plt.close()
             plt.ion()
 
@@ -1037,6 +1244,8 @@ def resolve_BR(directory='auto_repro', anal_dir_suffix='',
                parallel=False,repro_suffix='repro',plot_hp_sim_curve_band=True):
     '''
     Computes a file and plot with the branching ratio information for each resolve event file
+
+    Note that this needs to be update to plot the right branching ratios
 
     Two commands exist:
         -rslbranch (see https://heasarc.gsfc.nasa.gov/lheasoft/help/rslbranch.html)
@@ -1265,16 +1474,23 @@ def resolve_BR(directory='auto_repro', anal_dir_suffix='',
                     excl_pixel=pixel_exclude_list)
 
             elif task=='rslbratios':
+
                 plot_BR('/'.join(indiv_file.split('/')[:-1])+'/branch/branch_'+emin_str+'keVto'+emax_str+'keV_brVpxcnt.fits',
-                    save_paths=[indiv_file.replace('.evt', '_branch_screen_'+emin_str+'-'+emax_str+'.png'),
+                    save_paths=[indiv_file.replace('.evt', '_branch_screen_'+emin_str.replace('.','p')
+                                                   +'-'+emax_str.replace('.','p')+'.png'),
                                 indiv_file.replace('.evt', '_branch_screen_full.png'),
-                                indiv_file.replace('.evt', '_branch_screen_full_ratio.png')],
+                                indiv_file.replace('.evt', '_branch_screen_full_ratio.png'),
+                                indiv_file.replace('.evt', '_branch_screen_'+emin_str.replace('.','p')
+                                                   +'-'+emax_str.replace('.','p')+'_ratio.png')],
                     excl_pixel=pixel_exclude_list,plot_hp_sim_curve_band=plot_hp_sim_curve_band)
 
                 plot_BR('/'.join(indiv_file.split('/')[:-1])+'/branch/branch_'+emin_str+'keVto'+emax_str+'keV_brVpxcnt.fits',
-                    save_paths=[indiv_file.replace('.evt', '_branch_screen_'+emin_str+'-'+emax_str+'.pdf'),
+                    save_paths=[indiv_file.replace('.evt', '_branch_screen_'+ emin_str.replace('.', 'p')
+                                                   + '-' + emax_str.replace('.', 'p')+'.pdf'),
                                 indiv_file.replace('.evt', '_branch_screen_full.pdf'),
-                                indiv_file.replace('.evt', '_branch_screen_full_ratio.pdf')],
+                                indiv_file.replace('.evt', '_branch_screen_full_ratio.pdf'),
+                                indiv_file.replace('.evt', '_branch_screen_' + emin_str.replace('.', 'p')
+                                                   + '-' + emax_str.replace('.', 'p') + '_ratio.pdf')],
                     excl_pixel=pixel_exclude_list,plot_hp_sim_curve_band=plot_hp_sim_curve_band)
 
             bashproc.sendline('exit')
@@ -3505,6 +3721,7 @@ def extract_rmf(directory='auto_repro',instru='all',rmf_subdir='sp',
                             '_pixel_'+reg_str.replace(':','to').replace(',','-').replace('-(','no').replace(')','')  +
                             ('_withcal' if not remove_cal_pxl_resolve else '')+
                         '_grade_'+rsl_rmf_grade.replace(',','and')+ '_rmf' +
+                        ('_evtbase_'+e_band_evt_rsl_rmf.replace('-','_').replace('.','p') if e_band_evt_rsl_rmf is not None else '')+
                         ('_' + str(eminin_rsl).replace('.','')+ '_' + str(dein_rsl).replace('.','')+'_'+str(nchanin_rsl))
                                                                    +elem_gti_str))
 
@@ -3634,7 +3851,9 @@ def create_expo(anal_dir,instrument,evt_file,gti_file,directory='auto_repro',out
     return out_file_path
 
 def create_arf(directory,instrument,out_rtfile,source_ra,source_dec,emap_file,out_file,
-               region_file,rmf_file,source_type='POINT',e_low=0.3,e_high=12.0,
+               region_file,rmf_file,
+               source_type='POINT',flatradius="3",
+               e_low=0.3,e_high=12.0,
                 numphoton=300000,minphoton=100,
                 telescope='XRISM',
                 spawn=None,heasoft_init_alias='heainit', caldb_init_alias='caldbinit',
@@ -3674,6 +3893,7 @@ def create_arf(directory,instrument,out_rtfile,source_ra,source_dec,emap_file,ou
                        ' regmode=DET'+
                        ' regionfile='+region_file+
                        ' sourcetype='+source_type+
+                     (' flatradius='+str(flatradius) if source_type=='FLATCIRCLE' else '')+
                        ' rmffile='+rmf_file+
                        ' erange="'+("NONE" if e_low is None else str(e_low))+' '+("NONE" if e_high is None else str(e_high))+' '+str(e_low_image)+' '+str(e_high_image)+'"'+
                        ' numphoton='+str(numphoton)+
@@ -3713,6 +3933,7 @@ def extract_arf(directory='auto_repro',anal_dir_suffix='',on_axis_check=None,arf
                 source_name='auto',
                 target_only=False,use_file_target=True,
                 source_type='POINT',
+                flatradius=3,
                 instru='all',use_comb_rmf_rsl=True,
                 use_raw_evt_xtd=False, use_raw_evt_rsl=False,
                 region_src_xtd='auto', region_bg_xtd='auto',
@@ -3723,7 +3944,6 @@ def extract_arf(directory='auto_repro',anal_dir_suffix='',on_axis_check=None,arf
                 e_low_rsl=0.3, e_high_rsl=12.0,
                 #default values in hte pipeline
                 e_low_xtd=0.3, e_high_xtd=15.0,
-
                 numphoton=300000,
                 minphoton=100,
                 heasoft_init_alias='heainit', caldb_init_alias='caldbinit',
@@ -3812,7 +4032,7 @@ def extract_arf(directory='auto_repro',anal_dir_suffix='',on_axis_check=None,arf
         return 0
     else:
 
-        if type(source_coords)=='str' and source_coords=='on-axis':
+        if type(source_coords)==str and source_coords=='on-axis':
             any_event=(resolve_files+xtend_files)[0]
             if source_name == 'auto':
 
@@ -3830,6 +4050,7 @@ def extract_arf(directory='auto_repro',anal_dir_suffix='',on_axis_check=None,arf
 
         else:
             if type(source_coords[0])==str:
+
                 obj_deg=sexa2deg([source_coords[1].replace(' ',':'),source_coords[0].replace(' ',':')])[::-1]
             else:
                 obj_deg=source_coords
@@ -3929,7 +4150,7 @@ def extract_arf(directory='auto_repro',anal_dir_suffix='',on_axis_check=None,arf
                         rmf_list = \
                         [elem for elem in glob.glob(os.path.join(anal_dir,'**'), recursive=True) if elem.endswith('.rmf')
                          and ('xtd_') in elem and elem_evt.split('/')[-1].split('_')[1] in elem
-                         and reg_str in elem]
+                         and reg_str in elem and '/'+arf_subdir+'/' in elem]
 
                         if len(rmf_list)==0:
                             print('No rmf found for xtend event '+elem_evt)
@@ -3940,17 +4161,33 @@ def extract_arf(directory='auto_repro',anal_dir_suffix='',on_axis_check=None,arf
                         if os.path.isfile(elem_evt.replace('.evt','_raytracing.evt')):
                             os.remove(elem_evt.replace('.evt','_raytracing.evt'))
 
-                        rmf_path=rmf_list[0]
+                        if gti is not None:
+                            print('should think about whether this is done properly')
+                            breakpoint()
+
+                        if len(rmf_list)>1:
+                            print(rmf_list)
+                            rmf_id=input('Give index of rmf to use')
+                        else:
+                            rmf_id=0
+                        rmf_path=rmf_list[rmf_id]
+
+                        out_name = rmf_path.replace('.rmf',
+                                                    '_' + source_type + ('_fr' + str(flatradius).replace('.', 'p')
+                                                                                     if source_type == 'FLATCIRCLE' else '') + '.arf').replace(
+                                                        anal_dir, '.').replace(',','and')
+
                         create_arf(directory_use,instrument='xtend',
                                    out_rtfile=elem_evt.replace(anal_dir,'.').replace('.evt','_raytracing.evt'),
                                    #need to replace the ',' with '_' because it splits the file otherwise
-                                   out_file=rmf_path.replace('.rmf','.arf').replace(anal_dir,'.').replace(',','and'),
+                                   out_file=out_name,
                                    source_ra=source_ra,
                                    source_dec=source_dec,
                                    emap_file=os.path.join(os.getcwd(),anal_dir,expo_path.split('/')[-1]),
                                    region_file=elem_region,
                                    rmf_file=rmf_path.replace(anal_dir,'.'),
                                    source_type=source_type,
+                                   flatradius=flatradius,
                                    e_low=e_low_xtd,e_high=e_high_xtd,
                                    numphoton=numphoton,
                                    minphoton=minphoton,
@@ -3977,9 +4214,10 @@ def extract_arf(directory='auto_repro',anal_dir_suffix='',on_axis_check=None,arf
                                 '_pixel_'+reg_str.replace(':','to').replace(',','-').replace('-(','no').replace(')','')  +
                                 ('_withcal' if not remove_cal_pxl_resolve else ''))
 
-                        rmf_path=[elem for elem in glob.glob(os.path.join(anal_dir,'**'), recursive=True) if
+                        rmf_list=[elem for elem in glob.glob(os.path.join(anal_dir,'**'), recursive=True) if
                                   product_root in elem and elem.endswith('.rmf') and \
-                                  ('_comb' in elem if use_comb_rmf_rsl else '_comb' not in elem and '_elc' not in elem)][0]
+                                  ('_comb' in elem if use_comb_rmf_rsl else '_comb' not in elem and '_elc' not in elem)
+                                  and '/'+arf_subdir+'/' in elem]
                         #for now we consider a single Resolve RMF no matter the GTI,
 
                         #gettingthe name
@@ -3995,15 +4233,33 @@ def extract_arf(directory='auto_repro',anal_dir_suffix='',on_axis_check=None,arf
                         if os.path.isfile(elem_evt.replace('.evt','_raytracing.evt')):
                             os.remove(elem_evt.replace('.evt','_raytracing.evt'))
 
+                        if len(rmf_list)>1:
+                            for id_elem,elem in enumerate(rmf_list):
+                                print('\n')
+                                print(id_elem,elem)
+
+                            rmf_id=input('Give index of rmf to use')
+                        else:
+                            rmf_id=0
+                        rmf_path=rmf_list[int(rmf_id)]
+
+
+                        out_name= rmf_path.replace('.rmf',
+                                                    '_' + source_type + ('_fr' + str(flatradius).replace('.', 'p')
+                                                                                     if source_type == 'FLATCIRCLE' else '') + '.arf').replace(
+                                                        anal_dir, '.').replace(',','and')
+
+
                         create_arf(directory_use, instrument='resolve',
                                    out_rtfile=elem_evt.replace(anal_dir,'.').replace('.evt','_raytracing.evt'),
-                                   out_file=rmf_path.replace('.rmf', '.arf').replace(anal_dir,'.'),
+                                   out_file=out_name,
                                    source_ra=source_ra,
                                    source_dec=source_dec,
                                    emap_file=os.path.join(os.getcwd(),anal_dir,expo_path),
                                    region_file=region_path.replace(anal_dir,'.'),
                                    rmf_file=rmf_path.replace(anal_dir,'.'),
                                    source_type=source_type,
+                                   flatradius=flatradius,
                                    e_low=e_low_rsl, e_high=e_high_rsl,
                                    numphoton=numphoton,
                                    minphoton=minphoton,

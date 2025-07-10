@@ -28,19 +28,27 @@ The energy scale is usually calibrated using the gain history file during the st
 '''
 
 file_ghf_init=input('name of old calibration file (e.g. xa901002010rsl_000_fe55.ghf)')
-file_ghf_up=input('name of output of the new run of rslgain (e.g. Fe55.ghf')
+file_ghf_up=input('name of output of the new run of rslgain (e.g. Fe55.ghf)')
 file_ghf_out=input('final output gain file name')
 
 # Open source FITS files
 with fits.open(file_ghf_init) as a_hdul, fits.open(file_ghf_up) as b_hdul:
+
+    '''
+    Here we tak the new gain fit for pixel 17 in file_ghf_up and insert it in the right index in file_ghf_init
+    (where it was failed and thus doesn't appear)
+    '''
+
     # Convert first extensions to Table objects
     a_table = Table(a_hdul[1].data)
     b_table = Table(b_hdul[1].data)
 
     # Extract the 122nd row from B (index 121)
+    #new gainfit in the newer table
     row_to_insert = b_table[121:122]  # slicing keeps it as Table
 
     # Split A into two parts and insert the row between 103rd and 104th (index 103)
+    #index of the missing gainfit position in the initial data
     upper = a_table[:103]
     lower = a_table[103:]
     updated_table = vstack([upper, row_to_insert, lower])

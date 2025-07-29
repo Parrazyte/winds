@@ -11,10 +11,12 @@ username=getpass.getuser()
 Loads a 3D plot saved with dill 
 and gives an interactive view of the camera layout 
 largely taken from https://community.plotly.com/t/how-to-obtain-camera-variables-after-manually-changing-them/86297
+
+cannot be run from pycharm
 '''
 
 
-plot_path='/home/'+username+'/Documents/Work/PhD/docs/papers/wind_4U/global/ion_visu/save_figs/fig_3D.pkl'
+plot_path='/home/'+username+'/Documents/Work/PhD/docs/papers/wind_4U/global/ion_visu/save_figs/fig_3D_1752684573.pkl'
 
 with open(plot_path,'rb') as f:
     fig=dill.load(f)
@@ -140,4 +142,4 @@ def update(relayoutData, current_figure):
 
 
 if __name__ == "__main__":
-    app.run_server(debug=True)
+    app.run(debug=True)

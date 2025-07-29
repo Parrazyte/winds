@@ -227,6 +227,10 @@ def correl_graph(data_perinfo, infos, data_ener, dict_linevis, mode='intrinsic',
 
     mask_added_regr_sign = dict_linevis['mask_added_regr_sign']
 
+    correl_internal_mode=dict_linevis['correl_internal_mode']
+    npert_rank=dict_linevis['npert_rank']
+    paper_look_correl=dict_linevis['paper_look_correl']
+
     mask_lum_high_valid = ~np.isnan(ravel_ragged(lum_high_sign_plot_restrict[0]))
 
     # This considers all the lines
@@ -360,9 +364,14 @@ def correl_graph(data_perinfo, infos, data_ener, dict_linevis, mode='intrinsic',
 
     for i in graph_range:
 
-        figsize_val = (8. + (-0.5 if mode != 'observation' else 0), 5.5) if color_scatter in ['Time', 'HR', 'width',
-                                                                                              'nH', 'L_3-10'] else (
-        6, 6)
+        figsize_val = [8. + (-0.5 if mode != 'observation' else 0), 5.5] if color_scatter in ['Time', 'HR', 'width',
+                                                                                              'nH', 'L_3-10'] else [
+        6, 6]
+
+        if paper_look_correl:
+            figsize_val[0]-=1
+            figsize_val[1]-=1
+
 
         # if color_scatter in ['Time','HR','width','nH']:
         #
@@ -2083,7 +2092,7 @@ def correl_graph(data_perinfo, infos, data_ener, dict_linevis, mode='intrinsic',
                     pymccorrelation(x_data_trend.astype(float), y_data_trend.astype(float),
                                     dx_init=x_error_sign_T / 1.65, dy_init=y_error_sign_T / 1.65,
                                     ylim_init=uplims_mask,
-                                    Nperturb=1000, coeff='pearsonr', percentiles=(50, 5, 95)))
+                                    Nperturb=npert_rank, coeff='pearsonr', percentiles=(50, 5, 95)))
 
                 # switching back to uncertainties from quantile values
                 r_pearson = np.array([[r_pearson[ind_c][0], r_pearson[ind_c][0] - r_pearson[ind_c][1],
@@ -2104,7 +2113,7 @@ def correl_graph(data_perinfo, infos, data_ener, dict_linevis, mode='intrinsic',
                 pymccorrelation(x_data_trend.astype(float), y_data_trend.astype(float),
                                 dx_init=x_error_sign_T / 1.65, dy_init=y_error_sign_T / 1.65,
                                 ylim_init=uplims_mask,
-                                Nperturb=1000, coeff='spearmanr', percentiles=(50, 5, 95)))
+                                Nperturb=npert_rank, coeff='spearmanr', percentiles=(50, 5, 95)))
 
             # switching back to uncertainties from quantile values
             r_spearman = np.array([[r_spearman[ind_c][0], r_spearman[ind_c][0] - r_spearman[ind_c][1],
@@ -2176,6 +2185,20 @@ def correl_graph(data_perinfo, infos, data_ener, dict_linevis, mode='intrinsic',
 
         # #specific limits for the width graphs
         # ax_scat.set_xlim(0,90)
+
+        if correl_internal_mode:
+            ax_scat.tick_params(
+                axis='y',  # changes apply to the x-axis
+                which='both',  # both major and minor ticks are affected
+                left=True,  # ticks along the bottom edge are off
+                right=True,  # ticks along the top edge are off
+                labelleft=False,
+                labelright=False,
+                direction='in')
+            ax_scat.set_ylabel('')
+
+        #for constant scaling on HR hard correls for the 4U paper
+        # plt.ylim(7e-3,7e-1)
 
         if save:
             if indiv:

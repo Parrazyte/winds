@@ -57,7 +57,7 @@ def hid_graph(ax_hid, dict_linevis,
               display_hid_error=False, display_edgesource=False, split_cmap_source=True,
               display_evol_single=False, display_dicho=False,
               global_colors=True, alpha_abs=1,
-              paper_look=False, bigger_text=True, square_mode=True, zoom=False,
+              paper_look_hld=False, bigger_text=True, square_mode=True, zoom=False,
               broad_mode=False,
               restrict_match_INT=False, broad_binning='day', orbit_bin_lim=1):
     '''
@@ -92,13 +92,14 @@ def hid_graph(ax_hid, dict_linevis,
     cmap_color_det = dict_linevis['cmap_color_det']
     cmap_color_nondet = dict_linevis['cmap_color_nondet']
     exptime_list = dict_linevis['exptime_list']
-    display_minorticks = dict_linevis['display_minorticks']
+    display_HR_minorticks = dict_linevis['display_HR_minorticks']
 
     diago_color = dict_linevis['diago_color']
     custom_states_color = dict_linevis['custom_states_color']
     custom_outburst_color = dict_linevis['custom_outburst_color']
     custom_outburst_number = dict_linevis['custom_outburst_number']
     custom_ionization_color = dict_linevis['custom_ionization_color']
+    custom_gamma_satur_color = dict_linevis['custom_gamma_satur_color']
 
     hatch_unstable = dict_linevis['hatch_unstable']
     change_legend_position = dict_linevis['change_legend_position']
@@ -155,7 +156,7 @@ def hid_graph(ax_hid, dict_linevis,
 
     # parameters without actual colorbars
     type_1_colorcode = ['Source', 'Instrument', 'custom_line_struct', 'custom_acc_states', 'custom_outburst',
-                        'custom_ionization']
+                        'custom_ionization','custom_gamma_satur']
 
     fig_hid = ax_hid.get_figure()
 
@@ -321,7 +322,7 @@ def hid_graph(ax_hid, dict_linevis,
         if hid_log_HR:
             ax_hid.set_xscale('log')
 
-            if display_minorticks:
+            if display_HR_minorticks:
                 if ax_hid.get_xlim()[0] > 0.1:
                     ax_hid.xaxis.set_major_formatter(mpl.ticker.StrMethodFormatter("{x:.1f}"))
                     ax_hid.xaxis.set_minor_formatter(mpl.ticker.StrMethodFormatter("{x:.1f}"))
@@ -631,7 +632,17 @@ def hid_graph(ax_hid, dict_linevis,
                     obj_order_sign = np.concatenate([len_arr[colors_data_restrict == states_zorder[i_state]] \
                                                          [obj_order_sign_states[i_state]] \
                                                      for i_state in range(len(states_zorder))])
+                elif radio_info_cmap=='custom_gamma_satur':
+                    colors_data_restrict = custom_gamma_satur_color[mask_obj][i_obj][obj_val_mask_sign]
 
+                    states_zorder = ['grey', 'red']
+                    obj_order_sign_states = [obj_size_sign[obj_val_mask_sign][colors_data_restrict == elem_state_zorder] \
+                                                 .argsort()[::-1] for elem_state_zorder in states_zorder]
+
+                    len_arr = np.arange(len(obj_order_sign))
+                    obj_order_sign = np.concatenate([len_arr[colors_data_restrict == states_zorder[i_state]] \
+                                                         [obj_order_sign_states[i_state]] \
+                                                     for i_state in range(len(states_zorder))])
             # same thing for all detections
             obj_val_cmap = np.array(
                 [np.nan if len(abslines_obj[0][radio_cmap_i][mask_lines].T[i_obs][mask_det.T[i_obs]]) == 0 else \
@@ -715,7 +726,10 @@ def hid_graph(ax_hid, dict_linevis,
                                                 if radio_info_cmap == 'custom_ionization' else \
                                                 custom_outburst_color[mask_obj][i_obj][obj_val_mask_sign][obj_order_sign] \
                                                     if radio_info_cmap == 'custom_outburst' else \
-                                                    obj_val_cmap_sign[obj_val_mask_sign][obj_order_sign]
+                                                    custom_gamma_satur_color[mask_obj][i_obj][obj_val_mask_sign][
+                                                        obj_order_sign] \
+                                                        if radio_info_cmap == 'custom_gamma_satur' else \
+                                                        obj_val_cmap_sign[obj_val_mask_sign][obj_order_sign]
 
             #### TODO : test the dates here with just IGRJ17451 to solve color problem
 
@@ -807,7 +821,9 @@ def hid_graph(ax_hid, dict_linevis,
                                                 if radio_info_cmap == 'custom_ionization' else \
                                                 custom_outburst_color[mask_obj][i_obj][obj_val_mask_nonsign] \
                                                     if radio_info_cmap == 'custom_outburst' else \
-                                                    obj_val_cmap[obj_val_mask_nonsign]
+                                                    custom_gamma_satur_color[mask_obj][i_obj][obj_val_mask_nonsign] \
+                                                        if radio_info_cmap == 'custom_gamma_satur' else \
+                                                        obj_val_cmap[obj_val_mask_nonsign]
 
                 # adding a failsafe to avoid problems when nothing is displayed
                 if c_scat is not None and len(c_scat) == 0:
@@ -1175,6 +1191,8 @@ def hid_graph(ax_hid, dict_linevis,
                                                         if radio_info_cmap == 'custom_ionization' else \
                                                         custom_outburst_color[mask_obj][i_obj_base][mask_nondet_ul] \
                                                             if radio_info_cmap == 'custom_outburst' else \
+                                                        custom_gamma_satur_color[mask_obj][i_obj_base][mask_nondet_ul] \
+                                                            if radio_info_cmap == 'custom_gamma_satur' else \
                                                             'grey'
 
                     # adding a failsafe to avoid problems when nothing is displayed
@@ -1913,12 +1931,12 @@ def hid_graph(ax_hid, dict_linevis,
     ''''''''''''''''''
 
     #for XRISM AO2
-    # paper_look=False
+    # paper_look_hld=False
 
     if radio_info_cmap == 'Source' or display_edgesource:
 
         # looks good considering the size of the graph
-        n_col_leg_source = 4 if paper_look else (5 if sum(mask_obj) < 30 else 6)
+        n_col_leg_source = 4 if paper_look_hld else (5 if sum(mask_obj) < 30 else 6)
 
         # #for AO2
         # n_col_leg_source = 2
@@ -1927,7 +1945,7 @@ def hid_graph(ax_hid, dict_linevis,
         old_legend_size = mpl.rcParams['legend.fontsize']
 
         mpl.rcParams['legend.fontsize'] = (5.5 if sum(mask_obj) > 30 and radio_info_cmap == 'Source' else 7) + (
-            3 if paper_look else 0)
+            3 if paper_look_hld else 0)
 
         hid_legend = fig_hid.legend(loc='lower center', ncol=n_col_leg_source, bbox_to_anchor=(0.475, -0.11))
 
@@ -1982,11 +2000,11 @@ def hid_graph(ax_hid, dict_linevis,
             hid_legend = fig_hid.legend(elem_leg_source, labels_leg_source, loc='lower center',
                                         ncol=n_col_leg_source,
                                         bbox_to_anchor=(0.475, -0.02 * n_lines() - (
-                                            0.02 * (6 - n_lines()) if paper_look else 0) - (0.1 if paper_look else 0)),
+                                            0.02 * (6 - n_lines()) if paper_look_hld else 0) - (0.1 if paper_look_hld else 0)),
                                         handler_map={tuple: HandlerTuple(ndivide=None,
                                                                          pad=max_markers_legend**1.2-1.4)},
                                         handletextpad=0.1+max_markers_legend-1.3,
-                                        columnspacing=(0.5 if paper_look else 1),
+                                        columnspacing=(0.5 if paper_look_hld else 1),
                                         frameon=max_markers_legend<=2)
 
             # #for AO2 plot
@@ -1996,7 +2014,7 @@ def hid_graph(ax_hid, dict_linevis,
             #                             handler_map={tuple: HandlerTuple(ndivide=None,
             #                                                              pad=max_markers_legend**1.2-1.4)},
             #                             handletextpad=0.1+max_markers_legend-1.3,
-            #                             columnspacing=(0.5 if paper_look else 1),
+            #                             columnspacing=(0.5 if paper_look_hld else 1),
             #                             frameon=max_markers_legend<=2)
 
             #mid-i
@@ -2006,7 +2024,7 @@ def hid_graph(ax_hid, dict_linevis,
             #                             handler_map={tuple: HandlerTuple(ndivide=None,
             #                                                              pad=max_markers_legend**1.2-1.4)},
             #                             handletextpad=0.1+max_markers_legend-1.3,
-            #                             columnspacing=(0.5 if paper_look else 1),
+            #                             columnspacing=(0.5 if paper_look_hld else 1),
             #                             frameon=max_markers_legend<=2)
 
         '''
@@ -2021,11 +2039,11 @@ def hid_graph(ax_hid, dict_linevis,
             if type(elem_legend) == mpl.collections.PathCollection:
                 if len(elem_legend._sizes) != 0:
                     for i in range(len(elem_legend._sizes)):
-                        elem_legend._sizes[i] = 50 + (80 if paper_look else 0) + (
-                            30 if n_lines() < 6 else 0) if display_upper else 30 + (40 if paper_look else 0) + (
+                        elem_legend._sizes[i] = 50 + (80 if paper_look_hld else 0) + (
+                            30 if n_lines() < 6 else 0) if display_upper else 30 + (40 if paper_look_hld else 0) + (
                             10 if n_lines() < 6 else 0)
 
-                    if paper_look and display_upper:
+                    if paper_look_hld and display_upper:
                         elem_legend.set_linewidth(2)
 
                     # changing the dash type of dashed element for better visualisation:
@@ -2039,33 +2057,40 @@ def hid_graph(ax_hid, dict_linevis,
         mpl.rcParams['legend.fontsize'] = old_legend_size
 
     #for XRISM AO2
-    # paper_look=True
+    # paper_look_hld=True
 
 
     if display_single or marker_ul_circle:
         hid_det_examples = [
             (Line2D([0], [0], marker=marker_abs, color='white',
-                    markersize=50 ** (1 / 2), alpha=1., linestyle='None',
+                    markersize=50 ** (1 / 2)*(1.5 if paper_look_hld else 1), alpha=1., linestyle='None',
                     markeredgecolor='black', markeredgewidth=2)) \
                 if display_upper else
-            (Line2D([0], [0], marker=marker_nondet, color='white', markersize=50 ** (1 / 2), linestyle='None',
+            (Line2D([0], [0], marker=marker_nondet, color='white',
+                    markersize=50 ** (1 / 2)*(1.5 if paper_look_hld else 1), linestyle='None',
                     markeredgecolor='black', markeredgewidth=2)),
-            (Line2D([0], [0], marker=marker_abs, color='grey', markersize=50 ** (1 / 2), linestyle='None',
+            (Line2D([0], [0], marker=marker_abs, color='grey',
+                    markersize=50 ** (1 / 2)*(1.5 if paper_look_hld else 1), linestyle='None',
                     markeredgecolor='black', markeredgewidth=2))]
     else:
         hid_det_examples = [
-            ((Line2D([0], [0], marker=marker_ul, color='white', markersize=50 ** (1 / 2), alpha=alpha_ul,
+            ((Line2D([0], [0], marker=marker_ul, color='white',
+                     markersize=50 ** (1 / 2)*(1.5 if paper_look_hld else 1), alpha=alpha_ul,
                      linestyle='None',
                      markeredgecolor='black', markeredgewidth=2),
-              Line2D([0], [0], marker=marker_ul_top, color='white', markersize=50 ** (1 / 2), alpha=alpha_ul,
+              Line2D([0], [0], marker=marker_ul_top, color='white',
+                     markersize=50 ** (1 / 2)*(1.5 if paper_look_hld else 1), alpha=alpha_ul,
                      linestyle='None', markeredgecolor='black', markeredgewidth=2)) \
                  if radio_info_cmap == 'Source' else Line2D([0], [0], marker=marker_ul, color='white',
-                                                            markersize=50 ** (1 / 2), alpha=alpha_ul, linestyle='None',
+                                                            markersize=50 ** (1 / 2)*(1.5 if paper_look_hld else 1),
+                                                            alpha=alpha_ul, linestyle='None',
                                                             markeredgecolor='black', markeredgewidth=2)) \
                 if display_upper else
-            (Line2D([0], [0], marker=marker_nondet, color='white', markersize=50 ** (1 / 2), linestyle='None',
+            (Line2D([0], [0], marker=marker_nondet, color='white',
+                    markersize=50 ** (1 / 2)*(1.5 if paper_look_hld else 1), linestyle='None',
                     markeredgecolor='black', markeredgewidth=2)),
-            (Line2D([0], [0], marker=marker_abs, color='white', markersize=50 ** (1 / 2), linestyle='None',
+            (Line2D([0], [0], marker=marker_abs, color='white',
+                    markersize=50 ** (1 / 2)*(1.5 if paper_look_hld else 1), linestyle='None',
                     markeredgecolor='black', markeredgewidth=2))]
 
     if display_nonsign:
@@ -2074,10 +2099,17 @@ def hid_graph(ax_hid, dict_linevis,
                     markeredgecolor='grey', markeredgewidth=2))]
 
     if hatch_unstable:
-        hid_det_examples += [
-            (mpl.patches.Patch(facecolor='white', hatch='///'))]
+        unstable_patch=mpl.patches.Patch(facecolor='white', hatch='/////')
+        hid_det_examples+=[unstable_patch]
 
-    mpl.rcParams['legend.fontsize'] = 7 + (2 if paper_look and not zoom else 0)
+        scatter_cjet=plt.scatter([], [], s=15000 ** (1 / 2)*(1.5 if paper_look_hld else 1), color="None", ls="--",
+                       edgecolor="black", lw=2)
+        scatter_tjet=plt.scatter([], [], s=15000 ** (1 / 2)*(1.5 if paper_look_hld else 1), color="None", ls=":",
+                       edgecolor="black", lw=2)
+
+        hid_det_examples+=[scatter_cjet,scatter_tjet]
+
+    mpl.rcParams['legend.fontsize'] = 7 + (2 if paper_look_hld and not zoom else 0)
 
     # marker legend
 
@@ -2085,19 +2117,26 @@ def hid_graph(ax_hid, dict_linevis,
     # to be put in the 5 sources
     custom = False
 
+
     fig_hid.legend(handles=hid_det_examples, loc='center left',
                    labels=['upper limit' if display_upper else 'non detection ',
                            'absorption line detection\n above ' + (r'3$\sigma$' if slider_sign == 0.997 else str(
                                slider_sign * 100) + '%') + ' significance'] +
                           (['absorption line detection below ' + str(slider_sign * 100) + ' significance.'] \
                                if display_nonsign else []) +
-                          (['Unstable SED'] if hatch_unstable else []),
+                          (['Unstable SED'] if hatch_unstable else [])+
+                           (['Compact jet detection'] if hatch_unstable else [])+
+                           (['Transient jet detection'] if hatch_unstable else []),
                    title='',
-                   bbox_to_anchor=(0.69 if change_legend_position else 0.125, 0.829 - (
-                       0.012 if paper_look and not zoom else 0) - (
-                                       0.018 if hatch_unstable else 0)) if bigger_text and square_mode else (
+                   bbox_to_anchor=(0.69+(-0.0665 if paper_look_hld else 0) if change_legend_position else
+                                   (0.125-(4e-3 if paper_look_hld else 1e-3)), 0.829 - (
+                       0.012 if paper_look_hld and not zoom else 0.011 if paper_look_hld else 0.005) - (
+                                       0.070 if hatch_unstable else 0)) if bigger_text and square_mode else (
                        0.125, 0.82), handler_map={tuple: mpl.legend_handler.HandlerTuple(None)},
-                   handlelength=2, handleheight=2., columnspacing=1.)
+                   handlelength=1 if paper_look_hld else 2.,
+                   handleheight=(1.5 if paper_look_hld else 2.),
+                   labelspacing=0.5+(0.2 if hatch_unstable else 0),
+                   columnspacing=1.,fontsize=10 if paper_look_hld else 8)
 
     if radio_info_cmap == 'custom_acc_states':
         # making a legend for the accretion state colors
@@ -2111,11 +2150,25 @@ def hid_graph(ax_hid, dict_linevis,
         fig_hid.legend(handles=custom_acc_states_example, loc='center left',
                        labels=['Soft', 'Intermediate', 'SPL', 'QRM', 'Hard', 'Unknown'],
                        title='Spectral state',
-                       bbox_to_anchor=(0.125 if change_legend_position else 0.756, 0.754 - (
-                           0.012 if paper_look and not zoom else 0) - (
-                                           0.018 if hatch_unstable else 0)) if bigger_text and square_mode else (
+                       bbox_to_anchor=(0.125 if change_legend_position else 0.756 -(0.0365 if paper_look_hld else 0),
+                                       0.754 - (0.012 if paper_look_hld and not zoom else 0.015 if paper_look_hld else 0)\
+                                       - (0.018 if hatch_unstable else 0)) if bigger_text and square_mode else (
                            0.125, 0.82), handler_map={tuple: mpl.legend_handler.HandlerTuple(None)},
-                       handlelength=2, handleheight=2., columnspacing=1.)
+                       handlelength=2, handleheight=2., columnspacing=1.,fontsize=8 if paper_look_hld else 7)
+
+    if radio_info_cmap=='custom_gamma_satur':
+        # making a legend for the Gamma saturation colors
+        custom_acc_states_example = [(mpl.patches.Patch(color='red'))]
+
+        fig_hid.legend(handles=custom_acc_states_example, loc='center left',
+                       labels=[r'    L$_{15-50}$ below $\Gamma$' '\n saturation threshold'],
+                       title='',
+                       bbox_to_anchor=(0.125 if change_legend_position else 0.729 -(0.074 if paper_look_hld else 0.036),
+                                       0.86 - (0.012 if paper_look_hld and not zoom else 0.019 if paper_look_hld else 0.016)\
+                                       - (0.018 if hatch_unstable else 0)) if bigger_text and square_mode else (
+                           0.125, 0.82), handler_map={tuple: mpl.legend_handler.HandlerTuple(None)},
+                       handlelength=2, handleheight=2., columnspacing=1.,fontsize=9.5 if paper_look_hld else 8)
+
 
     # note: upper left anchor (0.125,0.815)
     # note : upper right anchor (0.690,0.815)
@@ -2175,10 +2228,10 @@ def hid_graph(ax_hid, dict_linevis,
                                      markersize=(norm_s_lin * 50 ** norm_s_pow) ** (1 / 2), linestyle='None'))]
 
     ew_legend = fig_hid.legend(handles=hid_size_examples, loc='center left', labels=['5 eV', '20 eV', '50 eV'],
-                               title='Equivalent widths',
+                               title='Equivalent widths',fontsize=9.5 if paper_look_hld else 7,
                                bbox_to_anchor=(0.125, 0.218 + (
-                                   0.028 if paper_look and not zoom else 0)) if bigger_text and square_mode else (
-                                   0.125, 0.218), handleheight=4, handlelength=4, facecolor='None')
+                                   0.028 if paper_look_hld and not zoom else 0.005 if paper_look_hld else 0)) if bigger_text and square_mode else (
+                                   0.125, 0.218), handleheight=2.5 if paper_look_hld else 4, handlelength=4, facecolor='None')
 
     if radio_info_cmap == 'Instrument':
         instru_examples = np.array([Line2D([0], [0], marker=marker_abs, color=list(telescope_colors.values())[i],
@@ -2194,8 +2247,8 @@ def hid_graph(ax_hid, dict_linevis,
         instru_legend = fig_hid.legend(handles=instru_examples[instru_ind].tolist(), loc='upper right',
                                        labels=telescope_choice_sort.tolist(),
                                        title=radio_info_cmap,
-                                       bbox_to_anchor=(0.900, 0.21),
-                                       # bbox_to_anchor=(0.900, 0.88) if bigger_text and square_mode else (0.825, 0.918),
+                                       # bbox_to_anchor=(0.900, 0.21),
+                                       bbox_to_anchor=(0.900, 0.88) if bigger_text and square_mode else (0.825, 0.918),
                                        handleheight=1, handlelength=4, facecolor='None')
 
     # manual custom subplot adjust to get the same scale for the 3 visible sources plot and for the zoomed 5 sources with detection
@@ -2207,8 +2260,27 @@ def hid_graph(ax_hid, dict_linevis,
     # to be put in the 5 sources
 
     # #for EAS-Vasto 2025 talks
-    # plt.xlim(0.023977074704136403, 1.4722486529279757)
-    # plt.ylim(5.713386220172999e-05, 0.6740380679468638)
+    # ax_hid.set_xlim(0.023977074704136403, 1.4722486529279757)
+    # ax_hid.set_ylim(5.713386220172999e-05, 0.6740380679468638)
+
+    #Fig. 9 of global 4U paper
+    # if broad_mode==False:
+    #     ax_hid.set_xlim(0.4, 1.1)
+    #     ax_hid.set_ylim(1e-2, 4e-1)
+    # else:
+    #     ax_hid.set_xlim(0.3, 4)
+    #     ax_hid.set_ylim(1e-2, 4e-1)
+
+    #finding if there is an element to plot for the jet and transient ejecta
+    if hatch_unstable:
+        if len(obj_list[mask_obj])==1 and obj_list[mask_obj][0]=='4U1630-47':
+            mask_match_cjet_date=[elem.split('T')[0]=="2021-09-20" for elem in date_list[mask_obj][0]]
+            mask_match_tjet_date=[elem.split('T')[0]=="2021-09-27" for elem in date_list[mask_obj][0]]
+
+            ax_hid.scatter(x_hid_base[mask_match_cjet_date],y_hid_base[mask_match_cjet_date],s=300,color="None",ls="--",
+                           edgecolor="black",lw=1.5)
+            ax_hid.scatter(x_hid_base[mask_match_tjet_date],y_hid_base[mask_match_tjet_date],s=200,color="None",ls=":",
+                           edgecolor="black",lw=1.5)
 
     if custom:
         plt.subplots_adjust(top=0.863)

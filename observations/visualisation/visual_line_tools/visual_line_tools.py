@@ -102,7 +102,7 @@ telescope_colors={'Chandra':colors_func_instru.to_rgba(0),
 
 mpl_base_colors=mpl.colors.TABLEAU_COLORS
 mpl_base_colors_list=list(mpl_base_colors.keys())
-telescope_colors_inter={'Chandra':mpl_base_colors[mpl_base_colors_list[0]],
+telescope_colors_monit={'Chandra':mpl_base_colors[mpl_base_colors_list[0]],
                   'NICER':mpl_base_colors[mpl_base_colors_list[1]],
                   'NuSTAR':mpl_base_colors[mpl_base_colors_list[2]],
                   'Suzaku':mpl_base_colors[mpl_base_colors_list[3]],
@@ -110,6 +110,7 @@ telescope_colors_inter={'Chandra':mpl_base_colors[mpl_base_colors_list[0]],
                   'SWIFT':mpl_base_colors[mpl_base_colors_list[5]],
                   'INTEGRAL':mpl_base_colors[mpl_base_colors_list[6]]}
 
+telescope_colors_monit=telescope_colors
 #previous non colorblind-friendly mode
 # telescope_colors={'XMM':'red',
 #                   'Chandra':'blue',
@@ -521,8 +522,8 @@ info_hid_str=['6-10/3-6 Hardness Ratio','3-10 Luminosity','Time',
 
 axis_str=['Line EW (eV)','Line velocity shift (km/s)','Line energy (keV)',r'line flux (erg/s/cm$^{-2}$)',None,r'Line FWHM (km/s)']
 
-axis_hid_str=['Hardness Ratio ([6-10]/[3-6] keV bands)',r'Luminosity in the [3-10] keV band in (L/L$_{Edd}$) units',None,
-              r'nthcomp $\Gamma$',r'Luminosity in the [15-50] keV band in (L/L$_{Edd}$) units',
+axis_hid_str=['Hardness Ratio ([6-10]/[3-6] keV bands)',r'Luminosity in the [3-10] keV band (L/L$_{Edd}$)',None,
+              r'nthcomp $\Gamma$',r'Luminosity in the [15-50] keV band (L/L$_{Edd}$)',
               'Hardness Ratio ([15-50]/[3-6] keV bands)']
 
 #indexes for ratio choices in lines between specific ions/complexes
@@ -780,6 +781,9 @@ def fetch_bat_lightcurve(ctl_bat_df,_ctl_bat_simbad,name,binning='day'):
     Note: it could be possible to go further using the 8 band snapshot lightcurves of
     https://swift.gsfc.nasa.gov/results/bs157mon/
     '''
+
+    #fix for 4U
+    # simbad_query={'main_id':['X Nor X-1']}
 
     simbad_query = silent_Simbad_query([name[0].split('_')[0]])
 
@@ -1280,9 +1284,9 @@ def plot_lightcurve(dict_linevis,ctl_maxi_df,ctl_maxi_simbad,name,ctl_bat_df,ctl
         x_data_ul=mdates.date2num(ravel_ragged(date_list_repeat))[bool_nondetsign]
         y_data_ul=ravel_ragged(abslines_plot_restrict[5][0])[bool_nondetsign]
                     
-        color_det=[telescope_colors[elem] for elem in ravel_ragged(instru_list_repeat)[bool_detsign]]
+        color_det=[telescope_colors_monit[elem] for elem in ravel_ragged(instru_list_repeat)[bool_detsign]]
         
-        color_ul=[telescope_colors[elem] for elem in ravel_ragged(instru_list_repeat)[bool_nondetsign]]
+        color_ul=[telescope_colors_monit[elem] for elem in ravel_ragged(instru_list_repeat)[bool_nondetsign]]
 
         ax_lc_ew.set_ylim(min(4,min(min(ravel_ragged(abslines_plot_restrict[0][0])[bool_detsign]),
                                     min(ravel_ragged(abslines_plot_restrict[5][0])[bool_nondetsign]))),
@@ -1312,9 +1316,9 @@ def plot_lightcurve(dict_linevis,ctl_maxi_df,ctl_maxi_simbad,name,ctl_bat_df,ctl
         num_date_obs=mdates.date2num(Time(date_obs).datetime)
         
         #we add a condition for the label to only plot each instrument once
-        ax_lc.axvline(x=num_date_obs,ymin=0,ymax=1,color=telescope_colors[instru_list[i_obs]],
+        ax_lc.axvline(x=num_date_obs,ymin=0,ymax=1,color=telescope_colors_monit[instru_list[i_obs]],
                         label=instru_list[i_obs]+' exposure' if instru_list[i_obs] not in label_tel_list else '',
-                      ls=':',lw=1.)
+                      ls='dashdot' if instru_list[i_obs]=='Suzaku' else ':' if instru_list[i_obs] not in ['Chandra','NuSTAR'] else '--',lw=1.)
 
         if instru_list[i_obs] not in label_tel_list:
             label_tel_list+=[instru_list[i_obs]]
@@ -1438,7 +1442,7 @@ def plot_lightcurve(dict_linevis,ctl_maxi_df,ctl_maxi_simbad,name,ctl_bat_df,ctl
 
     # #hypersoft state for GROJ1655-40
     try:
-        ax_lc.legend(loc='upper right' if name[0]=="GROJ1655-40" else 'upper left',ncols=2)
+        ax_lc.legend(loc='upper right' if name[0]=="GROJ1655-40" else 'upper left',ncols=4,fontsize=9,columnspacing=0.6)
     except:
         #to avoid an issue with a different python version online
         ax_lc.legend(loc='upper right' if name[0]=="GROJ1655-40" else 'upper left')

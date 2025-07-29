@@ -65,15 +65,15 @@ def plot_scurve(x,y,ax=None,ion_range=None,ion_range_stable=True,color=None,
     if return_plot:
         return curve_plot
 def plot_4U_2021_curves(save_path_curves=None,save_path_SEDs=None,label=False,colormap='plasma',restrict_range=None,
-                        plot_hmxt=True,plot_inset=True):
+                        plot_hxmt=True,plot_inset=True,zoomed_fig=True):
 
     os.chdir('/home/'+username+'/Documents/Work/PhD/docs/papers/wind_4U/global/SEDs/stability/2021/curves/scurves')
 
 
     scurves_path=[elem for elem in glob.glob('**_scurve.dat') if not "insight_SED" in elem]
 
-    scurve_hmxt_path=[elem for elem in glob.glob('**_scurve.dat') if "insight_SED" in elem][0]
-    scurve_hmxt=np.loadtxt(scurve_hmxt_path).T
+    scurve_hxmt_path=[elem for elem in glob.glob('**_scurve.dat') if "insight_SED" in elem][0]
+    scurve_hxmt=np.loadtxt(scurve_hxmt_path).T
 
     scurves_path.sort()
     s_curves=np.array([np.loadtxt(elem).T for elem in scurves_path])
@@ -90,7 +90,7 @@ def plot_4U_2021_curves(save_path_curves=None,save_path_SEDs=None,label=False,co
 
     colors_func = mpl.cm.ScalarMappable(norm=c_norm, cmap=color_cmap)
 
-    fig_use = plt.figure(figsize=(6, 4.5))
+    fig_use = plt.figure(figsize=(6-(1 if zoomed_fig else 0),4.5-(0.75 if zoomed_fig else 0)))
     ax_use=fig_use.add_subplot(111)
     ax_use.set_xlabel(r'log($\xi$/T)')
     ax_use.set_ylabel(r'log(T)')
@@ -128,20 +128,20 @@ def plot_4U_2021_curves(save_path_curves=None,save_path_SEDs=None,label=False,co
                         ion_range_stable=not ion_ranges[0][i] in unstable,
                         color='black',ls_main='--')
 
-    if plot_hmxt:
-        #adding the HMXT SED
-        plot_scurve(scurve_hmxt[0], scurve_hmxt[1], ax=ax_use,
+    if plot_hxmt:
+        #adding the hxmt SED
+        plot_scurve(scurve_hxmt[0], scurve_hxmt[1], ax=ax_use,
                     ion_range=None,
                     ion_range_stable=True,
-                    color='dodgerblue', return_plot=True, label_main='HMXT \n2021-09-25')
+                    color='dodgerblue', return_plot=True, label_main=('HXMT 2021-09-25' if zoomed_fig else 'HXMT \n2021-09-25'))
 
-    if label or plot_hmxt:
-        plt.legend(loc='lower right',bbox_to_anchor=(1.45, -0.15))
+    if label or plot_hxmt:
+        plt.legend(loc='lower right',bbox_to_anchor=(1.45, -0.2) if zoomed_fig else (1.45, -0.15))
 
     sm = plt.cm.ScalarMappable(cmap=color_cmap, norm=c_norm)
 
     date_format=mpl.dates.DateFormatter('%Y-%m-%d')
-    plt.colorbar(sm,ticks=mpl.dates.AutoDateLocator(),
+    plt.colorbar(sm,ax=ax_use,ticks=mpl.dates.AutoDateLocator(),
                                format=date_format)
 
     if plot_inset:
@@ -186,8 +186,8 @@ def plot_4U_2021_curves(save_path_curves=None,save_path_SEDs=None,label=False,co
 
         # axins.legend(loc='lower left',bbox_to_anchor=(-1.85,0.2),title='radio')
 
-        #adding the HMXT SED
-        plot_scurve(scurve_hmxt[0], scurve_hmxt[1], ax=axins,
+        #adding the hxmt SED
+        plot_scurve(scurve_hxmt[0], scurve_hxmt[1], ax=axins,
                     ion_range=None,
                     ion_range_stable=True,
                     color='dodgerblue', return_plot=True)
@@ -210,9 +210,9 @@ def plot_4U_2021_curves(save_path_curves=None,save_path_SEDs=None,label=False,co
 
     SEDs=np.array([np.loadtxt(elem).T for elem in SEDs_path])
 
-    SED_hmxt=np.loadtxt('insight_SED_epoch1.xcm').T
+    SED_hxmt=np.loadtxt('insight_SED_epoch1.xcm').T
 
-    fig_sed = plt.figure(figsize=(6,4.5))
+    fig_sed = plt.figure(figsize=(6-(1 if zoomed_fig else 0),4.5-(0.75 if zoomed_fig else 0)))
     ax_sed=fig_sed.add_subplot(111)
     ax_sed.set_xlabel(r'E (keV)')
     ax_sed.set_ylabel(r'$\nu$F$_{\nu}$ (erg/s/Hz)')
@@ -242,7 +242,7 @@ def plot_4U_2021_curves(save_path_curves=None,save_path_SEDs=None,label=False,co
             plt.plot(x_axis_bins[1:], SEDs[i][2][1:]*x_axis_bins[1:], color='black',ls='--',zorder=10)
 
 
-    plt.plot(x_axis_bins[1:],SED_hmxt[2][1:]*x_axis_bins[1:],color='dodgerblue')
+    plt.plot(x_axis_bins[1:],SED_hxmt[2][1:]*x_axis_bins[1:],color='dodgerblue')
     plt.tight_layout()
 
     if save_path_SEDs is not None:
@@ -252,7 +252,7 @@ def plot_4U_2021_curves(save_path_curves=None,save_path_SEDs=None,label=False,co
 def plot_4U_state_curves(
         indir_curves='/home/'+username+'/Documents/Work/PhD/docs/papers/wind_4U/global/SEDs/stability/states',
                          save_path_curves=None,save_path_SEDs=None,label=False,colormap='plasma',restrict_range=None,
-                        plot_hmxt=True,plot_zoom=False,mode='paper'):
+                        plot_hxmt=True,plot_zoom=False,mode='paper',zoomed_fig=False):
 
     '''
 
@@ -292,7 +292,7 @@ def plot_4U_state_curves(
     s_curves=np.array([np.loadtxt(elem).T for elem in scurves_path])
 
 
-    fig_use = plt.figure(figsize=(6, 4.5))
+    fig_use = plt.figure(figsize=(6-(1 if zoomed_fig else 0),4.5-(0.75 if zoomed_fig else 0)))
     ax_use=fig_use.add_subplot(111)
     ax_use.set_xlabel(r'log($\xi$/T)')
     ax_use.set_ylabel(r'log(T)')
@@ -352,12 +352,13 @@ def plot_4U_state_curves(
 
     fmt_clabels = {}
 
-    label_names = [ r'log($\xi$)=1', r'log($\xi$)=2'] if mode=='paper' else [] +[r'log($\xi$)=3',r'log($\xi$)=4',]
+    label_names = ([r'log($\xi$)=1', r'log($\xi$)=2'] if mode=='paper' else []) +[r'log($\xi$)=3',r'log($\xi$)=4',]
+
     for i,(l, s) in enumerate(zip(contours.levels, label_names)):
 
         fmt_clabels[l] = s
 
-    manual_locs=[(-4.15,5.15),(-2.8,4.8)] if mode=='paper' else [] + [(-4.,7.),(-2.45,6.45)]
+    manual_locs=([(-4.15,5.15),(-2.8,4.8)] if mode=='paper' else []) + [(-4.,7.),(-2.45,6.45)]
 
     contour_labels=ax_use.clabel(contours, inline=True, fontsize=10,fmt=fmt_clabels,manual=manual_locs)
 
@@ -375,7 +376,7 @@ def plot_4U_state_curves(
     for i_path,path in enumerate(SEDs_path):
         SEDs[i_path]=np.loadtxt(path).T
 
-    fig_sed = plt.figure(figsize=(6,4.5))
+    fig_sed = plt.figure(figsize=(6-(1 if zoomed_fig else 0),4.5-(0.75 if zoomed_fig else 0)))
     ax_sed=fig_sed.add_subplot(111)
     ax_sed.set_xlabel(r'E (keV)')
     ax_sed.set_ylabel(r'$\nu$F$_{\nu}$ (erg/s/Hz)')

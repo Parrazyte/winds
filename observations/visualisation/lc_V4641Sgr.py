@@ -280,7 +280,7 @@ def vrot_earth(source='V4641sgr',date='2024-09-30'):
     return heliocorr.to(u.km/u.s)
 
 
-def lc_paper_monit(spec_mode='Eddington'):
+def lc_paper_monit(spec_mode='Eddington',shade_obscur=True):
     lc_dir = '/home/parrazyte/Documents/Work/PostDoc/docs/docs_XRISM/V4641Sgr_docs/'
 
     MAXI_psf_csv = pd.read_csv(os.path.join(lc_dir, 'MAXI_megumi/v4640_241111/gsc_final', 'V4641_Sgr_1d.qdp'),
@@ -379,7 +379,15 @@ def lc_paper_monit(spec_mode='Eddington'):
     date_format = mdates.DateFormatter('%Y-%m-%d')
     #     date_format=mdates.AutoDateFormatter(mdates.AutoDateLocator())
     # fig_lc,ax_lc=plt.subplots(4,1,sharex=True,figsize=(10,6))
-    fig_lc, ax_lc = plt.subplots(4, 1, sharex=True, figsize=(6, 10))
+
+    if shade_obscur:
+        fig_lc_temp, ax_lc_1 = plt.subplots(2, 1, sharex=True, figsize=(6, 5))
+
+        fig_lc, ax_lc_2 = plt.subplots(2, 1, sharex=True, figsize=(6, 5))
+
+        ax_lc=ax_lc_1.tolist()+ax_lc_2.tolist()
+    else:
+        fig_lc, ax_lc = plt.subplots(4, 1, sharex=True, figsize=(6, 10))
 
     def numtomjd(x):
         '''
@@ -496,6 +504,9 @@ def lc_paper_monit(spec_mode='Eddington'):
         # ax_lc[2].set_ylim(6e-5, 5e-3)
 
     ax_lc[0].xaxis.set_major_formatter(date_format)
+    if shade_obscur:
+        ax_lc[-1].xaxis.set_major_formatter(mdates.DateFormatter('%m-%d'))
+
 
     ax_lc[0].set_ylabel('MAXI [2-10]keV flux\n($10^{-9}$ ergs/s/cm²)')
     ax_lc[3].set_ylabel('unabsorbed HR \n [6-10]/[3-10]keV')
@@ -536,45 +547,105 @@ def lc_paper_monit(spec_mode='Eddington'):
     radio_obs_firstdet = Time('2024-09-16 15:05:00')
 
     for i_ax, ax in enumerate([ax_lc_02, ax_lc_12, ax_lc_22, ax_lc_32]):
+
+        if i_ax==2 and shade_obscur:
+            ax.scatter([],[],marker='d',color='black',alpha=1.,label="Steady absorber")
+            ax.scatter([],[],marker='d',color='black',alpha=0.2,label="Variable absorber")
+            ax.legend(loc='lower center', bbox_to_anchor=(0.51, 0.02))
+
         ax.axvspan(mdates.date2num(xrism_interval[0].datetime), mdates.date2num(xrism_interval[1].datetime),
                    color='green', alpha=0.2, label='XRISM observation')
 
-        ax.axvline(mdates.date2num(radio_obs_firstdet.datetime), color='red', ls='-', alpha=0.5, label='')
-        ax.axvline(mdates.date2num(radio_obs_ul.datetime), color='blue', ls='-', alpha=0.5, label='Radio non-detection')
-        ax.axvline(mdates.date2num(radio_obs_jet.datetime), color='red', ls='-', alpha=0.5, label='Radio detection')
+        ax.axvline(mdates.date2num(radio_obs_firstdet.datetime), color='red', ls=':' if shade_obscur else '-',
+                                                                alpha=0.5, label='')
+        ax.axvline(mdates.date2num(radio_obs_ul.datetime), color='blue',  ls=':' if shade_obscur else '-',
+                   alpha=0.5, label='Radio non-detection')
+        ax.axvline(mdates.date2num(radio_obs_jet.datetime), color='red',  ls=':' if shade_obscur else '-',
+                   alpha=0.5, label='Radio detection')
 
         ax.yaxis.set_visible(False)
         if i_ax==3:
             ax.xaxis.set_visible(True)
             ax.legend(loc='upper left')
 
+
     ax_lc[0].legend(loc='upper right')
 
 
     #NICER points
-    NICER_y=(NICER_f_1_10 * flux_convert)
-    ax_lc[2].errorbar(NICER_dates,y=NICER_y,xerr=0,yerr=0,marker='d',markersize=5,
-                      linewidth=0.5,
-                      elinewidth=1., ls=':', color='black',label="NICER")
+    NICER_y=(NICER_f_1_10 * flux_convert.value)
+    swift_y = (swift_f_1_10 * flux_convert.value)[swift_dates > 19500]
 
-    ax_lc[3].errorbar(NICER_dates,y=NICER_HR,xerr=0,yerr=0,marker='d',markersize=5,
-                      linewidth=0.5,
-                      elinewidth=1., ls=':', color='black')
+    if shade_obscur:
+        #putting the line
+        ax_lc[2].errorbar(NICER_dates,y=NICER_y,xerr=0,yerr=0,marker='None',markersize=5,
+                          linewidth=0.5,
+                          elinewidth=1., ls=':', color='black',label="NICER")
 
-    #Swift points
-    swift_y=(swift_f_1_10 * flux_convert)[swift_dates>19500]
-    ax_lc[2].errorbar(swift_dates[swift_dates>19500],y=swift_y,
-                      xerr=0,yerr=0,
-                      marker='d',markersize=5,
-                      linewidth=0.5,
-                      elinewidth=1., ls=':', color='brown',label=r"Swift")
-    ax_lc[3].errorbar(swift_dates[swift_dates>19500],y=swift_HR[swift_dates>19500],
-                      xerr=0,yerr=0,
-                      marker='d',markersize=5,
-                      linewidth=0.5,
-                      elinewidth=1., ls=':', color='brown')
+        ax_lc[3].errorbar(NICER_dates,y=NICER_HR,xerr=0,yerr=0,marker='None',markersize=5,
+                          linewidth=0.5,
+                          elinewidth=1., ls=':', color='black')
 
+        for elem_date,elem_y,elem_HR in zip(NICER_dates,NICER_y,NICER_HR):
+            ax_lc[2].errorbar(elem_date, y=elem_y, xerr=0, yerr=0, marker='d', markersize=5,
+                              linewidth=0.5,
+                              elinewidth=1., ls=':', color='black', alpha=1 if elem_y>4.8e-4 else 0.2, label="")
+            ax_lc[3].errorbar(elem_date, y=elem_HR, xerr=0, yerr=0, marker='d', markersize=5,
+                              linewidth=0.5,
+                              elinewidth=1., ls=':', color='black', alpha=1 if elem_y>4.8e-4 else 0.2, label="")
 
+        #Swift points
+        ax_lc[2].errorbar(swift_dates[swift_dates>19500],y=swift_y,
+                          xerr=0,yerr=0,
+                          marker='None',markersize=5,
+                          linewidth=0.5,
+                          elinewidth=1., ls=':', color='brown',label=r"Swift")
+        ax_lc[3].errorbar(swift_dates[swift_dates>19500],y=swift_HR[swift_dates>19500],
+                          xerr=0,yerr=0,
+                          marker='None',markersize=5,
+                          linewidth=0.5,
+                          elinewidth=1., ls=':', color='brown')
+
+        for elem_date,elem_y,elem_HR in zip(swift_dates[swift_dates>19500],swift_y,swift_HR[swift_dates>19500]):
+            ax_lc[2].errorbar(elem_date, y=elem_y, xerr=0, yerr=0, marker='d', markersize=5,
+                              linewidth=0.5,
+                              elinewidth=1., ls=':', color='brown', alpha=1 if elem_y>4.8e-4 else 0.2, label="")
+            ax_lc[3].errorbar(elem_date, y=elem_HR, xerr=0, yerr=0, marker='d', markersize=5,
+                              linewidth=0.5,
+                              elinewidth=1., ls=':', color='brown', alpha=1 if elem_y>4.8e-4 else 0.2, label="")
+
+        ax_lc[2].errorbar((mdates.date2num((xrism_interval[0] + TimeDelta(3.5 * 3600, format='sec')).datetime)),
+                          2.5823e-11 * edd_factor_source, marker='X', color='green', markersize=10,alpha=0.2, label="XRISM")
+
+        ax_lc[3].errorbar((mdates.date2num((xrism_interval[0] + TimeDelta(3.5 * 3600, format='sec')).datetime)),
+                          5.4538e-12 / 1.0085e-11, marker='X', color='green', alpha=0.2, markersize=10)
+
+    else:
+        ax_lc[2].errorbar(NICER_dates,y=NICER_y,xerr=0,yerr=0,marker='d',markersize=5,
+                          linewidth=0.5,
+                          elinewidth=1., ls=':', color='black',label="NICER")
+
+        ax_lc[3].errorbar(NICER_dates,y=NICER_HR,xerr=0,yerr=0,marker='d',markersize=5,
+                          linewidth=0.5,
+                          elinewidth=1., ls=':', color='black')
+
+        #Swift points
+        ax_lc[2].errorbar(swift_dates[swift_dates>19500],y=swift_y,
+                          xerr=0,yerr=0,
+                          marker='d',markersize=5,
+                          linewidth=0.5,
+                          elinewidth=1., ls=':', color='brown',label=r"Swift")
+        ax_lc[3].errorbar(swift_dates[swift_dates>19500],y=swift_HR[swift_dates>19500],
+                          xerr=0,yerr=0,
+                          marker='d',markersize=5,
+                          linewidth=0.5,
+                          elinewidth=1., ls=':', color='brown')
+
+        ax_lc[2].errorbar((mdates.date2num((xrism_interval[0]+TimeDelta(3.5*3600,format='sec')).datetime)),
+                          2.5823e-11*edd_factor_source,marker='X',color='green',markersize=10,label="XRISM")
+
+        ax_lc[3].errorbar((mdates.date2num((xrism_interval[0]+TimeDelta(3.5*3600,format='sec')).datetime)),
+                          5.4538e-12/1.0085e-11,marker='X',color='green',markersize=10)
 
     #for adding the XRISM point
     #from the full_lines model
@@ -582,11 +653,7 @@ def lc_paper_monit(spec_mode='Eddington'):
     # Model Flux 0.0015144 photons (1.0085e-11 ergs/cm^2/s) range (3.0000 - 6.0000 keV)
     # Model Flux 0.00046412 photons (5.4538e-12 ergs/cm^2/s) range (6.0000 - 10.000 keV)
 
-    ax_lc[2].errorbar((mdates.date2num((xrism_interval[0]+TimeDelta(3.5*3600,format='sec')).datetime)),
-                      2.5823e-11*edd_factor_source,marker='X',color='green',markersize=10,label="XRISM")
 
-    ax_lc[3].errorbar((mdates.date2num((xrism_interval[0]+TimeDelta(3.5*3600,format='sec')).datetime)),
-                      5.4538e-12/1.0085e-11,marker='X',color='green',markersize=10)
 
     ax_lc[2].legend(loc='lower left')
 
@@ -597,8 +664,13 @@ def lc_paper_monit(spec_mode='Eddington'):
     plt.show()
 
     ax_lc[0].set_xlim(NICER_dates[0] - 15.5, NICER_dates[-1] + 7.5)
+    if shade_obscur:
+        ax_lc[-1].set_xlim(NICER_dates[0] - 1.5, NICER_dates[-1] + 1.5)
 
-    plt.subplots_adjust(left=0.15, right=0.96, top=0.97, bottom=0.03)
+    if shade_obscur:
+        plt.subplots_adjust(left=0.15,right=0.96,top=0.98,bottom=0.06)
+    else:
+        plt.subplots_adjust(left=0.15, right=0.96, top=0.97, bottom=0.03)
 
     plt.show()
 

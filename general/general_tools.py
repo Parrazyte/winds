@@ -45,6 +45,8 @@ def ang2kev(x):
 
     return 12.398 / x
 
+def absorb_to_L(logxi,NH_cm,R_rg,M_BH):
+    return 10**(logxi)*NH_cm*R_rg*R_g(M_BH)*1e5
 
 def make_zip(filebites_arr,filename_arr):
     zip_buffer = io.BytesIO()

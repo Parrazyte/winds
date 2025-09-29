@@ -101,7 +101,7 @@ ap.add_argument('-catch', '--catch_errors', help='Catch errors while running the
 
 # global choices
 ap.add_argument("-a", "--action", nargs='?', help='Give which action(s) to proceed,separated by comas.',
-                default='build,reg,lc,sp,g,m', type=str)
+                default='reg,lc,sp,g,m', type=str)
 # default: build,reg,lc,sp,g,m
 
 ap.add_argument("-over", nargs=1, help='overwrite computed tasks (i.e. with products in the batch, or merge directory\
@@ -116,7 +116,7 @@ ap.add_argument('-bright_check',nargs=1,help='recompute the entire set of action
 ap.add_argument('-force_bright',help="Force bright mode for the tasks from the get go",default=False)
 
 # directory level overwrite (not active in local)
-ap.add_argument('-folder_over', nargs=1, help='relaunch action through folders with completed analysis', default=True,
+ap.add_argument('-folder_over', nargs=1, help='relaunch action through folders with completed analysis', default=False,
                 type=bool)
 ap.add_argument('-folder_cont', nargs=1, help='skip all but the last 2 directories in the summary folder file',
                 default=False, type=bool)
@@ -2112,6 +2112,7 @@ def extract_sp(directory,cams='all',e_low=None,e_high=None,bright=False,gti_mode
 
             if src_reg_indiv=='/':
                 print('Source region file missing')
+                breakpoint()
                 return 'Source region file missing'
 
             # creating a path without the main directory for the spawn

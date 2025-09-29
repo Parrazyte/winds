@@ -157,7 +157,7 @@ ap.add_argument("-evtname",nargs='?',help='substring present in previously proce
 
 #global choices
 ap.add_argument("-a","--action",nargs='?',help='Give which action(s) to proceed,separated by comas.'+
-                '\n1.evt_build\n2.filter_evt\n3.extract_reg...',default='2n,3,l,s,m',type=str)
+                '\n1.evt_build\n2.filter_evt\n3.extract_reg...',default='1',type=str)
 
 #,2n,3,l,s,m
 #std : '1' puis '2n,3,l,s,m'

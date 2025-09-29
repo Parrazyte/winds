@@ -145,15 +145,16 @@ def source_catal(spawn, dirpath, file, target_only=True, use_file_target=False):
 
     # Simbad.query_object gives a warning for a lot of folder names so we just skip them
     obj_list = None
-    for elem_dir in dir_list:
+    for elem_dir in dir_list[::-1]:
         try:
             with warnings.catch_warnings():
                 # warnings.filterwarnings('ignore','.*No known catalog could be found.*',)
                 # warnings.filterwarnings('ignore','.*Identifier not found.*',)
                 warnings.filterwarnings('ignore', category=UserWarning)
                 elem_obj = Simbad.query_object(elem_dir)
-                if type(elem_obj) != type(None):
+                if type(elem_obj) != type(None) and len(elem_obj):
                     obj_list = elem_obj
+                    break
         except:
             breakpoint()
             print('\nProblem during the Simbad query. This is the current directory list:')
@@ -183,7 +184,7 @@ def source_catal(spawn, dirpath, file, target_only=True, use_file_target=False):
               " Using the target of the observation instead...")
         obj_list = file_query
 
-    if type(file_query) == type(None):
+    if type(file_query) == type(None) or len(file_query)==0:
         print("\nSimbad didn't recognize the object name from the file header." +
               " Using the name of the directory...")
         target_query = ''

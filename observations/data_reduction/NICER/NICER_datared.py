@@ -2473,6 +2473,8 @@ def extract_lc(directory,binning_list=[1],bands='3-12',HR='6-10/3-6',overwrite=T
                     # start_obs_s=fits_mkf[1].header['TSTART']+fits_mkf[1].header['TIMEZERO']-fits_mkf[1].header['LEAPINIT']
 
                     start_obs_s = fits_mkf[1].header['TSTART'] + fits_mkf[1].header['TIMEZERO']
+                    mkf_tstart=fits_mkf[1].header['TSTART']
+                    mkf_timezero=fits_mkf[1].header['TIMEZERO']
 
                 file_lc=[elem for elem in glob.glob(os.path.join(directory,'xti/**/*'),recursive=True) if elem.endswith('.lc') and elem.split('/')[-1].startswith('ni')][0]
 
@@ -2492,6 +2494,9 @@ def extract_lc(directory,binning_list=[1],bands='3-12',HR='6-10/3-6',overwrite=T
                     #and offsetting the data array to match this
                     delta_mkf_lc=fits_lc[1].header['TIMEZERO']-start_obs_s
                     fits_lc[1].data['TIME']+=delta_mkf_lc
+
+                    fits_lc[1].header['TSTART']=mkf_tstart
+                    fits_lc[1].header['TIMEZERO']=mkf_timezero
 
                     #storing the shifted lightcurve
                     data_lc_arr[i_lc]=fits_lc[1].data

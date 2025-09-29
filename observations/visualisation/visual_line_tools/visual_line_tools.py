@@ -21,6 +21,9 @@ from decimal import Decimal
 import streamlit as st
 #matplotlib imports
 
+import getpass
+username=getpass.getuser()
+
 import matplotlib as mpl
 import matplotlib.pyplot as plt
 from mpl_toolkits.axes_grid1 import make_axes_locatable
@@ -69,18 +72,10 @@ sys.path.append(os.path.join(project_dir,'observations/spectral_analysis/'))
 sys.path.append(os.path.join(project_dir,'general/'))
 sys.path.append(os.path.join(project_dir,'observations/visualisation/visual_line_tools'))
 
-# #local
-# sys.path.append('/home/parrama/Documents/Work/PhD/Scripts/Python/general/')
-# sys.path.append('/home/parrama/Documents/Work/PhD/Scripts/Python/observations/spectral_analysis/')
-#
-# #online
-# sys.path.append('/mount/src/winds/observations/spectral_analysis/')
-# sys.path.append('/mount/src/winds/general/')
-
 #custom script with some lines and fit utilities and variables
-from fitting_tools import lines_std,c_light,lines_std_names,lines_e_dict,ang2kev
+from fitting_tools import lines_std,c_light,lines_std_names,lines_e_dict
 
-from general_tools import ravel_ragged,MinorSymLogLocator,rescale_flex,expand_epoch
+from general_tools import ravel_ragged,MinorSymLogLocator,rescale_flex,expand_epoch,ang2kev
 
 #Catalogs and manipulation
 from astroquery.vizier import Vizier
@@ -107,7 +102,7 @@ telescope_colors={'Chandra':colors_func_instru.to_rgba(0),
 
 mpl_base_colors=mpl.colors.TABLEAU_COLORS
 mpl_base_colors_list=list(mpl_base_colors.keys())
-telescope_colors_inter={'Chandra':mpl_base_colors[mpl_base_colors_list[0]],
+telescope_colors_monit={'Chandra':mpl_base_colors[mpl_base_colors_list[0]],
                   'NICER':mpl_base_colors[mpl_base_colors_list[1]],
                   'NuSTAR':mpl_base_colors[mpl_base_colors_list[2]],
                   'Suzaku':mpl_base_colors[mpl_base_colors_list[3]],
@@ -115,6 +110,7 @@ telescope_colors_inter={'Chandra':mpl_base_colors[mpl_base_colors_list[0]],
                   'SWIFT':mpl_base_colors[mpl_base_colors_list[5]],
                   'INTEGRAL':mpl_base_colors[mpl_base_colors_list[6]]}
 
+telescope_colors_monit=telescope_colors
 #previous non colorblind-friendly mode
 # telescope_colors={'XMM':'red',
 #                   'Chandra':'blue',
@@ -285,74 +281,6 @@ Porb_dict={'1E1740.7-2942':[303,2,1,1],
            'XTEJ1752-223':[7,7,0,0],
            'XTEJ1859+226':[6.6,0,0,1]}
 
-dist_dict={
-    '4U1543-475':[7.5,0.5,0.5,1],
-    '4U1630-47':[11.5,3.4,3.4,1],
-    '4U1755-388':[6.5,2.5,2.5,1],
-    'A0620-00':[1.06,1,1,1],
-    'A1524-61':[8,0.9,0.9,1],
-    'EXO1846-031':[7,0,0,0],
-    'GROJ0422+32':[2.5,0.3,0.3,1],
-    'GROJ1655-40':[3.2,0.2,0.2,1],
-    'GRS1009-45':[3.8,0.3,0.3,1],
-    'GRS1716-249':[6.9,1.1,1.1,1],
-    'GRS1739-278':[7.3,1.3,1.3,1],
-    'GRS1915+105':[9.4,1.6,1.6,1],
-    'GS1354-64':[25,0,0,0],
-    'GS2000+251':[2.7,0.7,0.7,1],
-    'H1705-250':[8.6,2.1,2.1,1],
-    'H1743-322':[8.5,0.8,0.8,1],
-    'IGRJ17098-3628':[10.5,0,0,0],
-    'MAXIJ1305-704':[7.5,1.4,1.8,1],
-    'MAXIJ1348-630':[3.4,0.4,0.4,1],
-    'MAXIJ1535-571':[4.1,0.5,0.6,1],
-    'MAXIJ1659-152':[8.6,3.7,3.7,1],
-    'MAXIJ1820+070':[2.96,0.33,0.33,1],
-    'MAXIJ1836-194':[7,3,3,1],
-    'MAXIJ1848-015':[3.4,0.3,0.3,1],
-    'NovaMuscae1991':[5,0.7,0.7,1],
-    'SwiftJ1727.8-1613':[3.4,0.3,0.3,1],
-    'SwiftJ1728.9-3613':[8.4,0.8,0.8,1],
-    'SwiftJ174510.8-262411':[3.7,1.1,1.1,0],
-    'SwiftJ1753.5-0127':[3.9,0.7,0.7,1],
-    'V404Cyg':[2.4,0.2,0.2,1],
-    'V4641Sgr':[6.2,0.7,0.7,1],
-    'XTEJ1118+480':[1.7,0.1,0.1,1],
-    'XTEJ1550-564':[4.4,0.4,0.6,1],
-    'XTEJ1650-500':[2.6,0.7,0.7,1],
-    'XTEJ1720-318':[6.5,3.5,3.5,1],
-    'XTEJ1752-223':[6,2,2,1],
-
-    #here there is no estimate (the one quoted in BlackCAT is utter garbage) so we keep this at 8kpc
-    'XTEJ1817-330':[8,8,8,1],
-
-    'XTEJ1818-245':[3.6,0.8,0.8],
-    'XTEJ1859+226':[12.5,1.5,1.5],
-    'XTEJ1908+094':[6.5,3.5,3.5]
-}
-
-mass_dict={
-    '4U1543-475':[8.4,1,1,1],
-    '4U1957+115':[3,1,2.5,1],
-    'A0620-00':[6.6,0.3,0.3,1],
-    'A1524-61':[5.8,2.4,3,1],
-    'GROJ0422+32':[2.7,0.5,0.7,1],
-    'GROJ1655-40':[5.4,0.3,0.3,1],
-    'GRS1716-249':[6.4,2,3.2,1],
-    'GRS1915+105':[11.2,1.8,2,1],
-    'GS2000+251':[7.2,1.7,1.7,1],
-    'GX339-4':[5.9,3.6,3.6,1],
-    'H1705-250':[5.4,1.5,1.5,1],
-    'MAXIJ1305-704':[8.9,1.,1.6,1],
-    'MAXIJ1820+070':[6.9,1.2,1.2,1],
-    'NovaMuscae1991':[11,1.4,2.1,1],
-    'SwiftJ1753.5-0127':[8.8,1.3,1.3,1],
-    'SwiftJ1357.2-0933':[11.6,1.9,2.5,1],
-    'V404Cyg':[9,0.6,0.2,1],
-    'V4641Sgr':[6.4,0.6,0.6,1],
-    'XTEJ1118+480':[7.1,0.1,0.1,1],
-    'XTEJ1550-564':[11.7,3.9,3.9,1],
-    'XTEJ1859+226':[8,2,2,1]}
 
 dippers_list=['4U1543-475',
               '4U1630-47',
@@ -576,7 +504,7 @@ convert_BAT_count_flux={
 sources_det_dic=['GRS1915+105','GRS 1915+105','GROJ1655-40','H1743-322','4U1630-47','IGRJ17451-3022']
 
 #should be moved somewhere for online
-rxte_lc_path='/media/parrama/crucial_SSD/Observ/BHLMXB/RXTE/RXTE_lc_dict.pickle'
+rxte_lc_path='/media/'+username+'/crucial_SSD/Observ/BHLMXB/RXTE/RXTE_lc_dict.pickle'
 
 if os.path.exists(rxte_lc_path):
     with open(rxte_lc_path,'rb') as rxte_lc_file:
@@ -594,8 +522,8 @@ info_hid_str=['6-10/3-6 Hardness Ratio','3-10 Luminosity','Time',
 
 axis_str=['Line EW (eV)','Line velocity shift (km/s)','Line energy (keV)',r'line flux (erg/s/cm$^{-2}$)',None,r'Line FWHM (km/s)']
 
-axis_hid_str=['Hardness Ratio ([6-10]/[3-6] keV bands)',r'Luminosity in the [3-10] keV band in (L/L$_{Edd}$) units',None,
-              r'nthcomp $\Gamma$',r'Luminosity in the [15-50] keV band in (L/L$_{Edd}$) units',
+axis_hid_str=['Hardness Ratio ([6-10]/[3-6] keV bands)',r'Luminosity in the [3-10] keV band (L/L$_{Edd}$)',None,
+              r'nthcomp $\Gamma$',r'Luminosity in the [15-50] keV band (L/L$_{Edd}$)',
               'Hardness Ratio ([15-50]/[3-6] keV bands)']
 
 #indexes for ratio choices in lines between specific ions/complexes
@@ -853,6 +781,9 @@ def fetch_bat_lightcurve(ctl_bat_df,_ctl_bat_simbad,name,binning='day'):
     Note: it could be possible to go further using the 8 band snapshot lightcurves of
     https://swift.gsfc.nasa.gov/results/bs157mon/
     '''
+
+    #fix for 4U
+    # simbad_query={'main_id':['X Nor X-1']}
 
     simbad_query = silent_Simbad_query([name[0].split('_')[0]])
 
@@ -1353,9 +1284,9 @@ def plot_lightcurve(dict_linevis,ctl_maxi_df,ctl_maxi_simbad,name,ctl_bat_df,ctl
         x_data_ul=mdates.date2num(ravel_ragged(date_list_repeat))[bool_nondetsign]
         y_data_ul=ravel_ragged(abslines_plot_restrict[5][0])[bool_nondetsign]
                     
-        color_det=[telescope_colors[elem] for elem in ravel_ragged(instru_list_repeat)[bool_detsign]]
+        color_det=[telescope_colors_monit[elem] for elem in ravel_ragged(instru_list_repeat)[bool_detsign]]
         
-        color_ul=[telescope_colors[elem] for elem in ravel_ragged(instru_list_repeat)[bool_nondetsign]]
+        color_ul=[telescope_colors_monit[elem] for elem in ravel_ragged(instru_list_repeat)[bool_nondetsign]]
 
         ax_lc_ew.set_ylim(min(4,min(min(ravel_ragged(abslines_plot_restrict[0][0])[bool_detsign]),
                                     min(ravel_ragged(abslines_plot_restrict[5][0])[bool_nondetsign]))),
@@ -1385,9 +1316,9 @@ def plot_lightcurve(dict_linevis,ctl_maxi_df,ctl_maxi_simbad,name,ctl_bat_df,ctl
         num_date_obs=mdates.date2num(Time(date_obs).datetime)
         
         #we add a condition for the label to only plot each instrument once
-        ax_lc.axvline(x=num_date_obs,ymin=0,ymax=1,color=telescope_colors[instru_list[i_obs]],
+        ax_lc.axvline(x=num_date_obs,ymin=0,ymax=1,color=telescope_colors_monit[instru_list[i_obs]],
                         label=instru_list[i_obs]+' exposure' if instru_list[i_obs] not in label_tel_list else '',
-                      ls=':',lw=1.)
+                      ls='dashdot' if instru_list[i_obs]=='Suzaku' else ':' if instru_list[i_obs] not in ['Chandra','NuSTAR'] else '--',lw=1.)
 
         if instru_list[i_obs] not in label_tel_list:
             label_tel_list+=[instru_list[i_obs]]
@@ -1511,7 +1442,7 @@ def plot_lightcurve(dict_linevis,ctl_maxi_df,ctl_maxi_simbad,name,ctl_bat_df,ctl
 
     # #hypersoft state for GROJ1655-40
     try:
-        ax_lc.legend(loc='upper right' if name[0]=="GROJ1655-40" else 'upper left',ncols=2)
+        ax_lc.legend(loc='upper right' if name[0]=="GROJ1655-40" else 'upper left',ncols=4,fontsize=9,columnspacing=0.6)
     except:
         #to avoid an issue with a different python version online
         ax_lc.legend(loc='upper right' if name[0]=="GROJ1655-40" else 'upper left')
@@ -1527,117 +1458,6 @@ def plot_lightcurve(dict_linevis,ctl_maxi_df,ctl_maxi_simbad,name,ctl_bat_df,ctl
     
     return fig_lc
 
-# @st.cache_data
-
-def dist_mass_indiv(dict_linevis,obj_name,use_unsure_mass_dist=True):
-
-    ####TODO: add Simbad matching for the names
-
-    ctl_blackcat=dict_linevis['ctl_blackcat']
-    ctl_blackcat_obj=dict_linevis['ctl_blackcat_obj']
-    ctl_watchdog=dict_linevis['ctl_watchdog']
-    ctl_watchdog_obj=dict_linevis['ctl_watchdog_obj']
-
-    d_obj_indiv= 'nan'
-
-    if obj_name in dist_dict:
-        try:
-            if dist_dict[obj_name][3] == 1 or use_unsure_mass_dist:
-                # putting manual/updated distance values first
-                d_obj_indiv = dist_dict[obj_name][0]
-        except:
-            breakpoint()
-            pass
-    else:
-
-        obj_row = None
-        # searching for the distances corresponding to the object namess in the first (most recently updated) catalog
-        for elem in ctl_blackcat_obj:
-            if obj_name in elem:
-                obj_row = np.argwhere(ctl_blackcat_obj == elem)[0][0]
-                break
-
-        if obj_row is not None:
-
-            obj_d_key = ctl_blackcat.iloc[obj_row]['d [kpc]']
-
-            if not (type(obj_d_key) == str or np.isnan(obj_d_key)) and \
-                    ('≥' not in obj_d_key and '>' not in obj_d_key):
-
-                print('New measurement found in BlackCAT, not found in the biblio. Please check.')
-                breakpoint()
-                d_obj_indiv = ctl_blackcat.iloc[obj_row]['d [kpc]']
-
-                # formatting : using only the main values + we do not want to use this catalog's results if they are simply upper/lower limits
-                d_obj_indiv = str(d_obj_indiv)
-                d_obj_indiv = d_obj_indiv.split('/')[-1].split('±')[0].split('~')[-1].split('∼')[-1]
-
-                if '≥' in d_obj_indiv or '>' in d_obj_indiv or '<' in d_obj_indiv or '≤' in d_obj_indiv:
-                    d_obj_indiv = 'nan'
-
-                if '-' in d_obj_indiv:
-                    if '+' in d_obj_indiv:
-                        # taking the mean value if it's an uncertainty
-                        d_obj_indiv = float(d_obj_indiv.split('+')[0].split('-')[0])
-                    else:
-                        # taking the mean if it's an interval
-                        d_obj_indiv = (float(d_obj_indiv.split('-')[0]) + float(d_obj_indiv.split('-')[-1])) / 2
-
-        # searching in the second catalog if nothing was found in the first one
-        if d_obj_indiv == 'nan':
-            if len(np.argwhere(ctl_watchdog_obj == obj_name)) != 0:
-
-                # watchdog assigns by default 5+-3 kpc to sources with no distance estimate so we need to check for that
-                # (there is no source with an actual 5kpc distance)
-                watchdog_d_val = float(ctl_watchdog[np.argwhere(ctl_watchdog_obj == obj_name)[0][0]]['Dist1'])
-
-                # these ones are false/outdated
-                # here same, the lower limit quoted in WATCHDOG has been disproved in Charles19
-                watchdog_d_exclu = ['SwiftJ1357.2-0933']
-
-                if obj_name not in watchdog_d_exclu and watchdog_d_val not in [5., 8.]:
-                    print('New measurement found in WATCHDOG, not found in the biblio. Please check.')
-                    breakpoint()
-                    d_obj_indiv = watchdog_d_val
-
-    if d_obj_indiv == 'nan':
-        # giving a default value of 8kpc to the objects for which we do not have good distance measurements
-        d_obj_indiv = 8
-
-    else:
-        d_obj_indiv = float(d_obj_indiv)
-
-    # fixing the source mass at 8 solar Masses if not in the local list since we have very few reliable estimates
-    # of the BH masses anyway except for NS whose masses are in a dictionnary
-    if obj_name in mass_dict and (mass_dict[obj_name][3] == 1 or use_unsure_mass_dist):
-        m_obj_indiv = mass_dict[obj_name][0]
-    else:
-        m_obj_indiv = 8
-
-    return d_obj_indiv,m_obj_indiv
-
-def dist_mass(dict_linevis,use_unsure_mass_dist=True):
-
-    '''
-    Fetches local data and blackcat/watchdog to retrieve the mass and distances of sources.
-    Local is > BC/WD because it is (currently) more up to date.
-
-    -use_unsure_mass_dist: use mass and distance measurements set as unsure in the local dictionnary
-        (with 0 for the last element of their measurement array)
-    '''
-    
-
-    names=dict_linevis['obj_list']
-    
-    d_obj=np.array([None]*len(names))
-    m_obj=np.array([None]*len(names))
-
-
-    for i in range(len(names)):
-
-        d_obj[i],m_obj[i]=dist_mass_indiv(dict_linevis,names[i],use_unsure_mass_dist)
-
-    return d_obj,m_obj
 
 #@st.cache_data
 def obj_values(file_paths,dict_linevis,local_paths=False):

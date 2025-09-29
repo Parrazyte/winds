@@ -24,6 +24,9 @@ from fitting_tools import lines_std,lines_e_dict, lines_std_names
 from bipolar import hotcold
 
 '''peak detection'''
+
+#2.6.6 version doesn't work, and 2.5 is out of date with newer scipy structure so have to modify
+#findpeaks to put from scipy.fft import fft, ifft instead of from from scipy import fft, ifft
 from findpeaks import findpeaks
 #mask to polygon conversion
 from imantics import Mask
@@ -32,22 +35,34 @@ from shapely.geometry import Polygon,Point
 from scipy.ndimage import binary_dilation
 import dill
 import time
+from xspec_config_multisp import set_ener
 
 def narrow_line_cycle(low_e,high_e,e_step=2e-2,plot_suffix='',baseload=None,
                       e_sat_low_indiv='auto',force_ylog_ratio=False,
-                      ratio_bounds=None,title=True):
+                      ratio_bounds=None,title=True,set_ener_str=None,set_ener_xrism=False):
 
     '''
-    Simple wrapper to compute a line search and make an associated plot
+    Simplified wrapper to compute a line search and make an associated plot with few options
 
     baseload should be an XCM file with both the file and model
 
-    e_sat_low_indiv here assumes that a RESOLVE and EXTEND spectra are loaded
-
+    low_e and high_e: bounds of the line search in keV
+    e_step: enerby step in keV
+    plot_suffix: additional str for the plot file name
+    baseload: xcm file if necessary to load before running the line search
+    e_sat_low_indiv: minimum non-ignored energy of the datagroups. if 'auto', computed automatically from the loaded data
+    force_ylog_ratio: use logarithmic yscale ratio in both panels
+    ratio_bounds (None or [float, float]): force bounds for the ratio plots
+    title: plot a title or not
+    set_ener_str: remap the energy scale with xspec's energies command if need be (important for e.g. thcomp continuums)
+    set_ener_xrism: match the xrism energy binning on top of extending the grid
     '''
 
     prev_chatter=Xset.chatter
     Xset.chatter=1
+
+    if baseload is not None:
+        Xset.restore(baseload)
 
     if type(e_sat_low_indiv)==str and e_sat_low_indiv=='auto':
         ngroups=AllData.nGroups
@@ -56,6 +71,9 @@ def narrow_line_cycle(low_e,high_e,e_step=2e-2,plot_suffix='',baseload=None,
 
     else:
         e_sat_low_indiv_use=e_sat_low_indiv
+
+    if set_ener_str is not None:
+        set_ener(set_ener_str,xrism=set_ener_xrism)
 
 
     mod_ls=allmodel_data()
@@ -80,10 +98,10 @@ def narrow_line_search(data_cont, suffix,e_sat_low_indiv,line_search_e=[4,10,0.0
                        scorpeon_save=None,data_fluxcont=None,scorpeon=True):
 
     '''
-    Wrapper for all the line search code and associated visualisation
+    Wrapper for all the line search code
 
     Explores the current model in a given range by adding a line of varying normalisation and energy and mapping the associated
-    2D delchi map
+    2D delta-stat map
 
     can use datafluxcont to compute the normalisation from the continuum of another spectrum
     useful when negative gaussians at 0 width that go below zero in flux (which you don't care about normally
@@ -407,6 +425,40 @@ def narrow_line_search(data_cont, suffix,e_sat_low_indiv,line_search_e=[4,10,0.0
     else:
         return chi_dict_plot
 
+def rebinv_xrism(grp_number=1,sigma=2,max_bins=5000):
+    Plot.setRebin(sigma, max_bins, grp_number)
+
+def swap_ratio_dump_path(dump_path,plot_ratio_baseload,
+                         out_suffix='',set_ener_str=None,set_ener_xrism=False,rebinv=[],
+                         invert_dg=False):
+
+    with open(dump_path,'rb') as f:
+        narrow_out_val=dill.load(f)
+
+    if plot_ratio_baseload!=':':
+        Xset.restore(plot_ratio_baseload)
+
+        if rebinv is not None:
+            if type(rebinv) not in [list, np.ndarray]:
+                rebinv_use = [rebinv]
+            else:
+                rebinv_use = rebinv
+            for i_dg, elem_rebinv in enumerate(rebinv_use):
+                rebinv_xrism(i_dg + 1, sigma=elem_rebinv)
+
+        if set_ener_str is not None:
+            set_ener(set_ener_str, xrism=set_ener_xrism)
+
+        narrow_out_val['plot_ratio_values']=store_plot('ratio')
+        if invert_dg:
+            narrow_out_val['plot_ratio_values']=narrow_out_val['plot_ratio_values'][::-1]
+        AllData.clear()
+        AllModels.clear()
+
+    with open(dump_path[:dump_path.rfind('.')]+'_ratio_update_'+out_suffix+dump_path[dump_path.rfind('.'):],'wb+') as f:
+        dill.dump(narrow_out_val,f)
+
+
 def plot_line_search(chi_dict_plot,outdir,sat,save=True,suffix=None,epoch_observ=None,format='png',
                      force_ylog_ratio=False,ratio_bounds=None,ener_show_range=None,show_indiv_transi=False,
                      title=True,squished_mode=False,local_chi_bounds=False,force_side_lines='none',
@@ -584,10 +636,15 @@ def plot_std_ener(ax_ratio, ax_contour=None, plot_em=False, mode='ratio',exclude
 
     -force_side: shows all lines either in emission if 'em' or in absorption if 'abs'
     '''
-    # since for the first plot the 1. ratio is not necessarily centered, we need to fetch the absolute position of the y=1.0 line
-    # in graph height fraction
-    pos_ctr_ratio = 0.5 if mode=='chimap' else\
-                    (1 - ax_ratio.get_ylim()[0]) / (ax_ratio.get_ylim()[1] - ax_ratio.get_ylim()[0])
+    # since for the first plot the 1. ratio is not necessarily centered,
+    # we need to fetch the absolute position of the y=1.0 line in graph height fraction
+    # pos_ctr_ratio = 0.5 if mode=='chimap' else\
+    #                 (1 - ax_ratio.get_ylim()[0]) / (ax_ratio.get_ylim()[1] - ax_ratio.get_ylim()[0])
+
+    if ax_ratio.get_yscale() == 'log':
+        pos_ctr_ratio = np.log10(1 / ax_ratio.get_ylim()[0]) / (np.log10(ax_ratio.get_ylim()[1]/ax_ratio.get_ylim()[0]))
+    elif ax_ratio.get_yscale() == 'linear':
+        pos_ctr_ratio = (1 - ax_ratio.get_ylim()[0]) / (ax_ratio.get_ylim()[1] - ax_ratio.get_ylim()[0])
 
     lines_names = np.array(lines_std_names)
 
@@ -619,7 +676,7 @@ def plot_std_ener(ax_ratio, ax_contour=None, plot_em=False, mode='ratio',exclude
             continue
 
         # skipping redundant indexes
-        if line in ['FeKa25em','FeKa26em','FeKa0em','FeKb0em','calNICERSiem','FeDiazem']:
+        if line in ['FeKa25em','FeKa26em','FeKa1em','FeKb1em','calNICERSiem','FeDiazem']:
             continue
 
         # skipping Nika27, FeKa25em, FeKa26em:
@@ -833,6 +890,9 @@ def contour_chi2map(fig, axe, chi_dict, title='', combined=False):
     contours_var_labels = [r'99% conf. with 2 d.o.f.', r'90% conf. with 2 d.o.f.',
                            r'68% conf. with 2 d.o.f.']
 
+    contours_var_labels = [r'99% conf.', r'90% conf.',
+                           r'68% conf.']
+
     # avoiding error if there are no contours to plot
     for l in range(len(contours_var_labels)):
         try:
@@ -844,8 +904,14 @@ def contour_chi2map(fig, axe, chi_dict, title='', combined=False):
                                 linewidths=0.5, linestyles='dashed')
     contours_base_labels = [r'base level ($\Delta C=0.5$)']
 
-    for l in range(len(contours_base_labels)):
-        contours_base.collections[l].set_label(contours_base_labels[l])
+    # avoiding error if there are no contours to plot
+    if float(mpl.__version__.split('.')[0])>=3 and float(mpl.__version__.split('.')[1])>=8:
+        contour_looper_base=contours_base.legend_elements()[0]
+    else:
+        contour_looper_base=contours_base.collections
+
+    for l in range(len(contour_looper_base)):
+        plt.plot([],[],label=contours_base_labels[l], colors='black',linewidths=0.5, linestyles='dashed')
 
     # for each peak and width, the coordinates need to be translated in real energy and norm coordinates
     try:
@@ -886,10 +952,10 @@ def contour_chi2map(fig, axe, chi_dict, title='', combined=False):
 
 
 def coltour_chi2map(fig, axe, chi_dict, title='', combined=False, ax_bar=None, norm=None,
-                    squished_mode=False,local_chi_bounds=False,ener_show_range=None,
-                    show_peak_pos=True,show_peak_width=True):
+                    local_chi_bounds=False,ener_show_range=None,
+                    show_peak_pos=True,show_peak_width=True,squished_mode=False):
     '''
-        squished_mode: adds a bunch of line separators in th colormap label to avoid display issues
+        TBD: squished_mode: adds a bunch of line separators in the colormap label to avoid display issues
 
     '''
     chi_arr = chi_dict['chi_arr']
@@ -1003,7 +1069,7 @@ def coltour_chi2map(fig, axe, chi_dict, title='', combined=False, ax_bar=None, n
             colorbar = plt.colorbar(img, ax=axe, spacing='proportional', ticks=cm_ticks)
             colorbar.ax.set_yticklabels(cm_ticklabels)
         else:
-            colorbar = plt.colorbar(img, cax=ax_bar, spacing='proportional', ticks=cm_ticks)
+            colorbar = plt.colorbar(img, cax=ax_bar, ticks=cm_ticks,spacing='proportional')
             colorbar.ax.set_yticklabels(cm_ticklabels)
 
         if bigline_flag == 1:
@@ -1012,33 +1078,46 @@ def coltour_chi2map(fig, axe, chi_dict, title='', combined=False, ax_bar=None, n
         else:
             colorbar.set_label(r'$\Delta C$'+('\n' if squished_mode else ' ')+
                                'with separated scales'+('\n' if squished_mode else '')+'for absorption and emission')
-
     '''CONTOUR PLOT'''
 
     chi_contours = [chi_base - 9.21, chi_base - 4.61, chi_base - 2.3]
 
-    contours_var_labels = [r'99% conf. with 2 d.o.f.', r'90% conf. with 2 d.o.f.',
-                           r'68% conf. with 2 d.o.f.']
+    # contours_var_labels = [r'99% conf. with 2 d.o.f.', r'90% conf. with 2 d.o.f.',
+    #                        r'68% conf. with 2 d.o.f.']
+
+    contours_var_labels = [r'99% conf.', r'90% conf.',
+                           r'68% conf.']
+
     contours_var_ls = ['solid', 'dashed', 'dotted']
 
     contours_var = axe.contour(line_search_e_space, norm_par_space, chi_arr.T, levels=chi_contours, colors='black',
                                linestyles=contours_var_ls, label=contours_var_labels)
 
     # avoiding error if there are no contours to plot
-    for l in range(len(contours_var.collections)):
-        # there is an issue in the current matplotlib version with contour labels crashing the legend so we use proxies instead
+    if float(mpl.__version__.split('.')[0])>=3 and float(mpl.__version__.split('.')[1])>=8:
+        contour_looper=contours_var.legend_elements()[0]
+    else:
+        contour_looper=contours_var.collections
+
+    for l in range(len(contour_looper)):
+    # there is an issue in the current matplotlib version with contour labels crashing the legend so we use proxies instead
         axe.plot([], [], ls=contours_var_ls[l], label=contours_var_labels[l], color='black')
 
         # not using this
         # contours_var.collections[l].set_label(contours_var_labels[l])
 
-    contours_base_labels = [r'base level ($\Delta C=0.5$)']
+    contours_base_labels = [r'base level' "\n" r'($\Delta C=0.5$)']
     contours_base_ls = ['dashed']
 
     contours_base = axe.contour(line_search_e_space, norm_par_space, chi_arr.T, levels=[chi_base + 0.5], colors='grey',
                                 linewidths=0.5, linestyles=contours_base_ls)
 
-    for l in range(len(contours_base.collections)):
+    if float(mpl.__version__.split('.')[0])>=3 and float(mpl.__version__.split('.')[1])>=8:
+        contour_looper_base=contours_base.legend_elements()[0]
+    else:
+        contour_looper_base=contours_base.collections
+
+    for l in range(len( contour_looper_base)):
         # same workaround here
         axe.plot([], [], ls=contours_base_ls[l], lw=0.5, label=contours_base_labels[l], color='black')
 
@@ -1082,7 +1161,8 @@ def coltour_chi2map(fig, axe, chi_dict, title='', combined=False, ax_bar=None, n
         elif combined == 'nolegend':
             pass
         else:
-            axe.legend(title='Bottom panel labels', loc='right', bbox_to_anchor=(1.25, 1.5))
+            axe.legend(title='Bottom panel \n  labels (2 d.o.f.)', loc='right',
+                       bbox_to_anchor=(1.12, 1.5))
 
 
 def comb_chi2map(fig_comb, chi_dict, title='', comb_label='',
@@ -1109,7 +1189,10 @@ def comb_chi2map(fig_comb, chi_dict, title='', comb_label='',
 
     # gridspec creates a grid of spaces for subplots. We use 2 rows for the 2 plots
     # Second column is there to keep space for the colorbar. Hspace=0. sticks the plots together
-    gs_comb = GridSpec(2, 2, figure=fig_comb, width_ratios=[98, 2], hspace=0.)
+    gs_comb = GridSpec(2, 2, figure=fig_comb,
+                       width_ratios=[98,2],hspace=0.,wspace=0.02)
+
+    plt.subplots_adjust(left=0.065, right=0.925,bottom=0.05,top=0.92)
 
     # first subplot is the ratio
     ax_comb[0] = plt.subplot(gs_comb[0, 0])
@@ -1161,8 +1244,8 @@ def comb_chi2map(fig_comb, chi_dict, title='', comb_label='',
     ax_comb[1] = plt.subplot(gs_comb[1, 0], sharex=ax_comb[0])
     ax_colorbar = plt.subplot(gs_comb[1, 1])
     coltour_chi2map(fig_comb, ax_comb[1], chi_dict, combined=True, ax_bar=ax_colorbar,
-                    squished_mode=squished_mode,local_chi_bounds=local_chi_bounds,ener_show_range=ener_show_range,
-                    show_peak_pos=show_peak_pos,show_peak_width=show_peak_width)
+                    local_chi_bounds=local_chi_bounds,ener_show_range=ener_show_range,
+                    show_peak_pos=show_peak_pos,show_peak_width=show_peak_width,squished_mode=squished_mode)
 
     ax_comb[1].set_xlim(line_cont_range)
     # #third plot (color), with a separate colorbar plot on the second column of the gridspec

@@ -6,13 +6,7 @@ Created on Tue Apr  4 16:11:18 2023
 @author: parrama
 """
 
-def ang2kev(x):
-
-    '''note : same thing on the other side due to the inverse
-    
-    also same thing for mAngtoeV'''
-
-    return 12.398/x
+from general_tools import ang2kev
 
 import numpy as np
 import streamlit as st

@@ -191,7 +191,7 @@ ap.add_argument("-prefix",nargs=1,help='restrict analysis to a specific prefix',
 
 ####output directory
 ap.add_argument("-outdir",nargs=1,help="name of output directory for line plots",
-                default="lineplots_opt_NHfix",type=str)
+                default="lineplots_opt_NHfix_v2",type=str)
 
 #give object name directly, otherwise it will be taken from the second last directory (above the bigbatch)
 #as usual, "False" to remove this
@@ -243,7 +243,7 @@ ap.add_argument('-fix_compt_gamma',nargs=1,help='fix the gamma of the comptoniza
 #useful to gain time when the abs components can be constrained for sure
 #can be either True to ensure the component, or a value to ensure a component and fix the NH at that value
 ap.add_argument('-mandatory_abs',nargs=1,help='Consider absorption component as mandatory',
-                default=0.12,type=bool)
+                default=0.15,type=bool)
 
 ap.add_argument('-autofit_model',nargs=1,help='model list to use for the autofit computation',
                 default='lines_narrow',type=str)
@@ -479,6 +479,10 @@ ap.add_argument("-line_search_norm",nargs=1,
 ap.add_argument('-restrict_fakes',nargs=1,
                 help='restrict range of fake computation to 8keV max',default=False,type=bool)
 
+ap.add_argument('-freeze_nH_all',nargs=1,help='Freeze main absorption to a fiducial value',default=True,type=bool)
+ap.add_argument('-freeze_nH_all_val',nargs=1,help='Frozen main absorption value (10^22 cm^-2)',default=0.15,type=bool)
+
+
 '''MULTI'''
 
 
@@ -561,8 +565,10 @@ ap.add_argument('-fit_SAA_norm',nargs=1,help='unfreeze the nxb_saa_norm paramete
 
 '''NuSTAR'''
 
-ap.add_argument('-freeze_nH',nargs=1,help='Freeze main absorption to a fiducial value',default=False,type=bool)
-ap.add_argument('-freeze_nH_val',nargs=1,help='Frozen main absorption value (10^22 cm^-2)',default=14,type=bool)
+ap.add_argument('-freeze_nH_NuSTAR',nargs=1,
+                help='In NuSTAR datagroups only, freeze main absorption to a fiducial value',default=False,type=bool)
+ap.add_argument('-freeze_nH_NuSTAR_val',nargs=1,
+                help='In NuSTAR data groups only, frozen main absorption value (10^22 cm^-2)',default=14,type=bool)
 
 #A value of 0 disables the SNR testing. Done for each 1keV band, independantly for each NuSTAR spectrum
 ap.add_argument('-filter_NuSTAR_SNR',nargs=1,help='restrict the NuSTAR band to where the SNR is above a given value',
@@ -708,8 +714,11 @@ hid_sort_method=args.hid_sort_method
 reverse_epoch=args.reverse_epoch
 reload_fakes=args.reload_fakes
 broad_HID_mode=args.broad_HID_mode
-freeze_nH=args.freeze_nH
-freeze_nH_val=args.freeze_nH_val
+freeze_nH_NuSTAR=args.freeze_nH_NuSTAR
+freeze_nH_NuSTAR_val=args.freeze_nH_NuSTAR_val
+
+freeze_nH_all=args.freeze_nH_all
+freeze_nH_all_val=args.freeze_nH_all_val
 
 fix_compt_gamma=args.fix_compt_gamma
 
@@ -1581,8 +1590,10 @@ arg_dict['fit_lowSNR']=fit_lowSNR
 arg_dict['fitstat']=fitstat
 arg_dict['force_autofit']=force_autofit
 arg_dict['force_ener_bounds']=force_ener_bounds
-arg_dict['freeze_nh']=freeze_nH
-arg_dict['freeze_nH_val']=freeze_nH_val
+arg_dict['freeze_nH_NuSTAR']=freeze_nH_NuSTAR
+arg_dict['freeze_nH_NuSTAR_val']=freeze_nH_NuSTAR_val
+arg_dict['freeze_nH_all']=freeze_nH_all
+arg_dict['freeze_nH_all_val']=freeze_nH_all_val
 arg_dict['glob_summary_reg']=glob_summary_reg
 arg_dict['glob_summary_sp']=glob_summary_sp
 arg_dict['h_update']=h_update

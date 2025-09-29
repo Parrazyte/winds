@@ -17,12 +17,17 @@ import matplotlib.pyplot as plt
 import matplotlib.colors as colors
 import plotly.graph_objects as go
 
-online='parrama' not in os.getcwd()
+import getpass
+username=getpass.getuser()
+
+online=''+username+'' not in os.getcwd()
 if online:
     project_dir='/mount/src/winds/'
 else:
-    project_dir='/home/parrama/Documents/Work/PhD/Scripts/Python/'
-
+    if username=="parrama":
+        project_dir='/home/'+username+'/Documents/Work/PhD/Scripts/Python/'
+    elif username=="parrazyte":
+        project_dir='/home/parrazyte/Documents/Work/Scripts/Python/winds/'
 sys.path.append(project_dir+'/general/')
 
 from general_tools import interval_extract,get_overlap,make_zip
@@ -59,6 +64,7 @@ range_nh=np.arange(21.5,25.01,step_nh).round(3)
 
 step_v_turb=0.05
 range_v_turb=np.arange(0.5,4.01,step_v_turb).round(3)
+
 interp_x = np.arange(33, 38, 0.01)
 
 update_dump=False
@@ -70,7 +76,7 @@ if online:
         print(dump_path)
         st.error('Dump file not found for this configuration')
 else:
-    dump_path = '/home/parrama/Documents/Work/PhD/docs/Observations/4U/photo_Stefano/dump_ions.pkl'
+    dump_path = '/home/'+username+'/Documents/Work/PhD/docs/Observations/4U/photo_Stefano/dump_ions.pkl'
 
     update_dump = st.sidebar.button('Update dump')
 
@@ -91,9 +97,9 @@ if update_online:
 
 if update_dump or not os.path.isfile(dump_path):
 
-    base_photo_dir = '/home/parrama/Documents/Work/PhD/docs/Observations/4U/photo_Stefano'
+    base_photo_dir = '/home/'+username+'/Documents/Work/PhD/docs/Observations/4U/photo_Stefano'
 
-    explore_photo_dir = '/home/parrama/Documents/Work/PhD/docs/Observations/4U/photo_Stefano/better_sampling/4U'
+    explore_photo_dir = '/home/'+username+'/Documents/Work/PhD/docs/Observations/4U/photo_Stefano/better_sampling/4U'
 
     flux_3_10_csv = pd.read_csv(base_photo_dir + '/ionization_observ.txt')
 
@@ -159,7 +165,7 @@ if update_dump or not os.path.isfile(dump_path):
 
     loading_bar.empty()
 
-    #interpolating makes both the sampling and our lives easier, which also means we don' need to store the nR² range
+    #interpolating makes both the sampling and our lives easier, which also means we don't need to store the nR² range
     COG_invert_interp = {}
 
     for elem_SED in list(COG_invert.keys()):
@@ -396,6 +402,11 @@ fig_2D.subplots_adjust(wspace=0)
 plt.suptitle(r'Curve of Growths for log(nH/cm²)='+str(slider_nH)+' and $v_{turb}$='+str(slider_v_turb)+' km/s',
              position=[0.5,0.05])
 
+dist_choice=st.sidebar.number_input('4U distance in kpc',11.5)
+dist_factor_renorm=(dist_choice/8)**2
+dist_factor_log_renorm=np.log10(dist_factor_renorm)
+
+
 cmap_choice=st.sidebar.radio('Color map choice',['Trying to match Stefano', 'matplotlib default'])
 
 init_cmap_vals={'outlier_diagonal_middle':'red',
@@ -508,6 +519,7 @@ with st.sidebar.expander('2D projections'):
     plot_distance_names = st.toggle('Write SED names in the distance plot titles', value=False)
 
     interpolate_nr2=st.toggle('Interpolate NR² values on a coarser grid when it is not the projected axe',value=True)
+    paper_mode=st.toggle('paper mode',value=False)
 
 if not plot_distance_SEDs:
     with tab_delta:
@@ -531,15 +543,15 @@ for i_SED,elem_SED in enumerate(list(SEDs.keys())):
 
     #plotting the COGs
 
-    #restricting the display to the part between 34 and 37 to avoid issues due to interpolation
-    mask_noissue=(interp_x>=34.) & (interp_x<=37.)
+    #restricting the ratio display to the part between 34 and 37 to avoid issues due to interpolation
+    mask_noissue=(interp_x>=34.) & (interp_x<=37.2)
 
     ax_2D[0].plot((COG_invert_indiv[0]/COG_invert_indiv[1])[mask_noissue],
-                  interp_x[mask_noissue],
+                  interp_x[mask_noissue]+dist_factor_log_renorm,
                   label=elem_SED,color=base_cmap[i_SED])
 
-    ax_2D[1].plot(COG_invert_indiv[1],interp_x,color=base_cmap[i_SED])
-    ax_2D[2].plot(COG_invert_indiv[0],interp_x,color=base_cmap[i_SED])
+    ax_2D[1].plot(COG_invert_indiv[1],interp_x+dist_factor_log_renorm,color=base_cmap[i_SED])
+    ax_2D[2].plot(COG_invert_indiv[0],interp_x+dist_factor_log_renorm,color=base_cmap[i_SED])
 
     ew_25_vals=ew_25_csv[flux_3_10_csv['SED'] == elem_SED]
     ew_25_vals_arr=np.array(ew_25_vals)[0][1:]
@@ -605,7 +617,7 @@ for i_SED,elem_SED in enumerate(list(SEDs.keys())):
 
         #25 outline plot
         temp=[ax_2D[1].plot(COG_invert_indiv[1][ew_25_intervals[i_inter][0]:ew_25_intervals[i_inter][1]+1],
-                  interp_x[ew_25_intervals[i_inter][0]:ew_25_intervals[i_inter][1]+1],
+                  interp_x[ew_25_intervals[i_inter][0]:ew_25_intervals[i_inter][1]+1]+dist_factor_log_renorm,
                   color=base_cmap[i_SED],lw=5,alpha=0.7,zorder=100)\
          for i_inter in range(len(ew_25_intervals))]
 
@@ -615,7 +627,7 @@ for i_SED,elem_SED in enumerate(list(SEDs.keys())):
 
         #25 outline plot
         temp=[ax_2D[1].plot(COG_invert_indiv[1][ew_25_intervals_ul[i_inter][0]:ew_25_intervals_ul[i_inter][1]+1],
-                  interp_x[ew_25_intervals_ul[i_inter][0]:ew_25_intervals_ul[i_inter][1]+1],
+                  interp_x[ew_25_intervals_ul[i_inter][0]:ew_25_intervals_ul[i_inter][1]+1]+dist_factor_log_renorm,
                   color=base_cmap[i_SED],lw=5,alpha=0.7,zorder=100,ls=':')\
          for i_inter in range(len(ew_25_intervals_ul))]
 
@@ -628,7 +640,7 @@ for i_SED,elem_SED in enumerate(list(SEDs.keys())):
 
         #26 outline plot
         temp=[ax_2D[2].plot(COG_invert_indiv[0][ew_26_intervals[i_inter][0]:ew_26_intervals[i_inter][1]+1],
-                  interp_x[ew_26_intervals[i_inter][0]:ew_26_intervals[i_inter][1]+1],
+                  interp_x[ew_26_intervals[i_inter][0]:ew_26_intervals[i_inter][1]+1]+dist_factor_log_renorm,
                   color=base_cmap[i_SED],lw=5,alpha=0.7,zorder=100)\
          for i_inter in range(len(ew_26_intervals))]
 
@@ -638,7 +650,7 @@ for i_SED,elem_SED in enumerate(list(SEDs.keys())):
 
         #25 outline plot
         temp=[ax_2D[1].plot(COG_invert_indiv[0][ew_26_intervals_ul[i_inter][0]:ew_26_intervals_ul[i_inter][1]+1],
-                  interp_x[ew_26_intervals_ul[i_inter][0]:ew_26_intervals_ul[i_inter][1]+1],
+                  interp_x[ew_26_intervals_ul[i_inter][0]:ew_26_intervals_ul[i_inter][1]+1]+dist_factor_log_renorm,
                   color=base_cmap[i_SED],lw=5,alpha=0.7,zorder=100,ls=':')\
          for i_inter in range(len(ew_26_intervals_ul))]
 
@@ -652,14 +664,14 @@ for i_SED,elem_SED in enumerate(list(SEDs.keys())):
         #preventing showing the ratios that are due to interpolation issues
         for i_inter in range(len(ew_ratio_intervals)):
 
-            if (interp_x[ew_ratio_intervals[i_inter][0]:ew_ratio_intervals[i_inter][1]+1] >=37.).all() or \
+            if (interp_x[ew_ratio_intervals[i_inter][0]:ew_ratio_intervals[i_inter][1]+1] >=37.2).all() or \
                 (interp_x[ew_ratio_intervals[i_inter][0]:ew_ratio_intervals[i_inter][1] + 1] <= 34.).all():
                 continue
 
             #ratio outline plot
             temp=ax_2D[0].plot((COG_invert_indiv[0]/COG_invert_indiv[1])\
                 [ew_ratio_intervals[i_inter][0]:ew_ratio_intervals[i_inter][1]+1],
-                      interp_x[ew_ratio_intervals[i_inter][0]:ew_ratio_intervals[i_inter][1]+1],
+                      interp_x[ew_ratio_intervals[i_inter][0]:ew_ratio_intervals[i_inter][1]+1]+dist_factor_log_renorm,
                       color=base_cmap[i_SED],lw=5,alpha=0.7,zorder=100)
 
     if len(ew_ratio_mask_l)!=0:
@@ -669,19 +681,20 @@ for i_SED,elem_SED in enumerate(list(SEDs.keys())):
         # preventing showing the ratios that are due to interpolation issues
         for i_inter in range(len(ew_ratio_intervals_l)):
 
-            if (interp_x[ew_ratio_intervals_l[i_inter][0]:ew_ratio_intervals_l[i_inter][1] + 1] >= 37.).all() or \
+            if (interp_x[ew_ratio_intervals_l[i_inter][0]:ew_ratio_intervals_l[i_inter][1] + 1] >= 37.2).all() or \
                     (interp_x[
                      ew_ratio_intervals_l[i_inter][0]:ew_ratio_intervals_l[i_inter][1] + 1] <= 34.).all():
                 continue
 
-            mask_bounds=(interp_x[ew_ratio_intervals_l[i_inter][0]:ew_ratio_intervals_l[i_inter][1] + 1] <= 37.)\
+            mask_bounds=(interp_x[ew_ratio_intervals_l[i_inter][0]:ew_ratio_intervals_l[i_inter][1] + 1] <= 37.2)\
                         & (interp_x[
                      ew_ratio_intervals_l[i_inter][0]:ew_ratio_intervals_l[i_inter][1] + 1] >= 34.)
 
             # ratio outline plot
             temp=ax_2D[0].plot((COG_invert_indiv[0] / COG_invert_indiv[1]) \
                               [ew_ratio_intervals_l[i_inter][0]:ew_ratio_intervals_l[i_inter][1] + 1][mask_bounds],
-                          interp_x[ew_ratio_intervals_l[i_inter][0]:ew_ratio_intervals_l[i_inter][1] + 1][mask_bounds],
+                          interp_x[ew_ratio_intervals_l[i_inter][0]:ew_ratio_intervals_l[i_inter][1] + 1][mask_bounds]\
+                               +dist_factor_log_renorm,
                           color=base_cmap[i_SED], lw=5, alpha=0.7, zorder=100,ls=':')
 
     #displaying the valid range of parameters by combining all the restrictions on EW and EW ratio
@@ -695,14 +708,14 @@ for i_SED,elem_SED in enumerate(list(SEDs.keys())):
         if len(valid_range_par)!=0:
             valid_range_intervals = list(interval_extract(valid_range_par))
             for i_inter in range(len(valid_range_intervals)):
-                ax_2D[0].axhspan(interp_x[valid_range_intervals[i_inter][0]],
-                                 interp_x[valid_range_intervals[i_inter][1]],
+                ax_2D[0].axhspan(interp_x[valid_range_intervals[i_inter][0]]+dist_factor_log_renorm,
+                                 interp_x[valid_range_intervals[i_inter][1]]+dist_factor_log_renorm,
                              color=base_cmap[i_SED], alpha=0.3)
-                ax_2D[1].axhspan(interp_x[valid_range_intervals[i_inter][0]],
-                                 interp_x[valid_range_intervals[i_inter][1]],
+                ax_2D[1].axhspan(interp_x[valid_range_intervals[i_inter][0]]+dist_factor_log_renorm,
+                                 interp_x[valid_range_intervals[i_inter][1]]+dist_factor_log_renorm,
                              color=base_cmap[i_SED], alpha=0.3)
-                ax_2D[2].axhspan(interp_x[valid_range_intervals[i_inter][0]],
-                                 interp_x[valid_range_intervals[i_inter][1]],
+                ax_2D[2].axhspan(interp_x[valid_range_intervals[i_inter][0]]+dist_factor_log_renorm,
+                                 interp_x[valid_range_intervals[i_inter][1]]+dist_factor_log_renorm,
                              color=base_cmap[i_SED], alpha=0.3)
     ax_2D[0].set_xscale('log')
     ax_2D[0].set_xlim(0.1,10.)
@@ -727,7 +740,7 @@ with tab_2D:
 
 # @st.cache_data
 def plot_distance(_ax,SED_1,SED_2,mode='nR²',write_names=True,interpolate_nr2=False,
-                  corner=False):
+                  corner=False,paper_mode=False):
 
     '''
     2D projections of the 3D graphs for couples of 2 SEDs.
@@ -775,7 +788,7 @@ def plot_distance(_ax,SED_1,SED_2,mode='nR²',write_names=True,interpolate_nr2=F
 
     #creating the plot
     if _ax is None:
-        fig_dist,ax_dist= plt.subplots(1,1, figsize=(6,6),)
+        fig_dist,ax_dist= plt.subplots(1,1, figsize=(6-int(paper_mode),6-int(paper_mode)),)
     else:
         ax_dist=_ax
 
@@ -1009,7 +1022,7 @@ def plot_distance(_ax,SED_1,SED_2,mode='nR²',write_names=True,interpolate_nr2=F
     hash_y = np.repeat(range_y - delta_hash_y, len(range_x)).reshape(len(range_y), len(range_x)).T
 
     # breakpoint()
-    hash_1=ax_dist.pcolor(hash_x,
+    hash_1=ax_dist.pcolor(hash_x+(dist_factor_log_renorm.round(2) if mode in ['v_turb','NH'] else 0),
            hash_y,
            surface_SED_1[:-1, :-1],
            cmap='viridis',alpha=1.,hatch='///',lw=0,vmin=0,vmax=1,zorder=10)
@@ -1022,7 +1035,7 @@ def plot_distance(_ax,SED_1,SED_2,mode='nR²',write_names=True,interpolate_nr2=F
     hash_1.set_facecolor('none')
     hash_1.set_edgecolor('lightgrey')
 
-    hash_2=ax_dist.pcolor(hash_x,
+    hash_2=ax_dist.pcolor(hash_x+(dist_factor_log_renorm.round(2) if mode in ['v_turb','NH'] else 0),
            hash_y,
            surface_SED_2[:-1, :-1],
            cmap='viridis',alpha=1.,hatch='\\\\\\',lw=0,vmin=0,vmax=1,zorder=10)
@@ -1044,11 +1057,13 @@ def plot_distance(_ax,SED_1,SED_2,mode='nR²',write_names=True,interpolate_nr2=F
                                   vmax=np.nanmax(distance_arr) if np.nanmax(distance_arr)>0 else
                                   (0.0001 if np.nanmin(distance_arr)<0 else 1))
 
-    img=ax_dist.pcolormesh(range_x,range_y,distance_arr.T,cmap=cmap_bipolar,norm=cm_norm,zorder=100)
+    img=ax_dist.pcolormesh(range_x+(dist_factor_log_renorm.round(2) if mode in ['v_turb','NH'] else 0),
+                           range_y,
+                           distance_arr.T,cmap=cmap_bipolar,norm=cm_norm,zorder=100)
 
     if _ax is None:
         cb=fig_dist.colorbar(img,location='bottom', orientation='horizontal',spacing='proportional',
-                         pad=0.16 if write_names else 0.16,
+                         pad=0.16 if write_names else 0.16+(0.03 if paper_mode else 0),
                          ticks=cm_ticks)
         #important to rescale the colorbar properly, otherwise both sides will always be 50/50
         # ('proportional' in the cb settings isn't really working for twoslopenorm)
@@ -1084,18 +1099,30 @@ def plot_distance(_ax,SED_1,SED_2,mode='nR²',write_names=True,interpolate_nr2=F
             #automatic text spacing
             n_delta=(len(color_SED_1)+len(color_SED_2)+3)/100*1.2
 
-            plt.figtext(0.59, 0.24, '(', fontdict={'color':  'black','weight': 'normal','size': 10 })
-            plt.figtext(0.6+len(color_SED_1)*0.1/100, 0.24,
-                        color_SED_1.replace('powderblue','blue').replace('maroon','brown').replace('forestgreen','green'),
+            color_replace_1= color_SED_1.replace('powderblue','blue').replace('maroon','brown').replace('forestgreen','green')
+            color_replace_2= color_SED_2.replace('powderblue','blue').replace('maroon','brown').replace('forestgreen','green')
+
+            plt.figtext(0.59+(0.01 if paper_mode else 0), 0.24, '(',
+                        fontdict={'color':  'black','weight': 'normal','size': 10 })
+
+            plt.figtext(0.6+(0.01 if paper_mode else 0)+len(color_replace_1)*0.1/100*(1.08 if paper_mode else 1.), 0.24,
+                        color_replace_1,
                         fontdict={'color':  color_SED_1,'weight': 'normal','size': 10,})
-            plt.figtext(0.6+len(color_SED_1)*1.5/100, 0.24, '-', fontdict={'color':  'black','weight': 'normal','size': 10,})
-            plt.figtext(0.6++len(color_SED_2)*0.1/100+len(color_SED_1)*1.5/100+0.015, 0.24,
-                        color_SED_2.replace('powderblue','blue').replace('maroon','brown').replace('forestgreen','green'),
-                        fontdict={'color':  color_SED_2,'weight': 'normal','size': 10,})
-            plt.figtext(0.6+(len(color_SED_1)+len(color_SED_2))*1.5/100+0.02, 0.24, ')',
+
+            plt.figtext(0.6+(0.01 if paper_mode else 0)+len(color_replace_1)*1.5/100*(1.08 if paper_mode else 1.)+0.01, 0.24, '-',
                         fontdict={'color':  'black','weight': 'normal','size': 10,})
 
-    plt.xlim(range_x[0],range_x[-1])
+            plt.figtext(0.6+(0.01 if paper_mode else 0)+len(color_replace_1)*1.5/100*(1.08 if paper_mode else 1.)
+                           +len(color_replace_2)*0.1/100*(1.1 if paper_mode else 1.)+0.02, 0.24,
+                        color_replace_2.replace('powderblue','blue').replace('maroon','brown').replace('forestgreen','green'),
+                        fontdict={'color':  color_SED_2,'weight': 'normal','size': 10,})
+
+            plt.figtext(0.6+(0.01 if paper_mode else 0)+(len(color_replace_1)+len(color_replace_2))*1.5/100\
+                        *(1.08 if paper_mode else 1.)+0.025, 0.24, ')',
+                        fontdict={'color':  'black','weight': 'normal','size': 10,})
+
+    plt.xlim(range_x[0]+(dist_factor_log_renorm.round(2) if mode in ['v_turb','NH'] else 0),
+                   range_x[-1]+(dist_factor_log_renorm.round(2) if mode in ['v_turb','NH'] else 0))
     plt.ylim(range_y[0],range_y[-1])
 
     if corner:
@@ -1104,11 +1131,11 @@ def plot_distance(_ax,SED_1,SED_2,mode='nR²',write_names=True,interpolate_nr2=F
             _ax.set_xticks(np.arange(1.,4.1,0.5))
             _ax.set_yticks(np.arange(22.,25.1,0.5))
         elif mode=='v_turb':
-            _ax.set_xticks(np.arange(33.5,36.6,0.5))
+            _ax.set_xticks(np.arange(33.+dist_factor_log_renorm.round(2),36.6+dist_factor_log_renorm.round(2),0.5))
             _ax.set_yticks(np.arange(22.,25.1,0.5))
 
         elif mode=='NH':
-            _ax.set_xticks(np.arange(33.5, 36.6, 0.5))
+            _ax.set_xticks(np.arange(33.+dist_factor_log_renorm.round(2),36.6+dist_factor_log_renorm.round(2),0.5))
             _ax.set_yticks(np.arange(1.,4.1, 0.5))
 
     time.sleep(1)
@@ -1295,7 +1322,7 @@ if plot_distance_SEDs:
             if not online:
                 with tab_delta:
 
-                    savedir='/home/parrama/Documents/Work/PhD/docs/papers/wind_4U/global/ion_visu/save_figs'
+                    savedir='/home/'+username+'/Documents/Work/PhD/docs/papers/wind_4U/global/ion_visu/save_figs'
                     def save_cornerfig_local():
 
                         '''
@@ -1320,7 +1347,7 @@ if plot_distance_SEDs:
 
             #note: the none is here for the ax argument that must be first to avoid hashing issues with caching
             plot_couple=plot_distance(None,couple[0],couple[1],mode=plot_distance_dim,write_names=plot_distance_names,
-                                      interpolate_nr2=interpolate_nr2)
+                                      interpolate_nr2=interpolate_nr2,paper_mode=paper_mode)
 
             with column_list[np.argwhere(np.array(list_SEDs_disp)==couple[0])[0][0]]:
                 st.pyplot(plot_couple)
@@ -1749,6 +1776,10 @@ def make_3D_figure(SEDs_disp, SEDs_surface, cmap, plot_points=False, under_sampl
         valid_volumes = valid_volumes_dict[elem_SED]
 
         for i_vol in range(len(valid_volumes)):
+
+            #renormalizing the distance
+            valid_volumes[i_vol].T[2]+=dist_factor_log_renorm.round(2)
+
             pos_v_turb_lower = np.array([np.argwhere(np.log10(elem) == range_v_turb)[0][0]
                                          for elem in valid_volumes[i_vol][0].T[1]])
             pos_v_turb_higher = np.array([np.argwhere(np.log10(elem) == range_v_turb)[0][0]
@@ -1792,13 +1823,18 @@ def make_3D_figure(SEDs_disp, SEDs_surface, cmap, plot_points=False, under_sampl
     fig = go.Figure(data=mult_d_surfaces)
 
     # Layout settings with custom axis names
+    label_font_s=25
+    tick_font_s=15
+
     fig.update_layout(
         scene=dict(
-            xaxis_title='NH',  # Custom X-axis label
-            yaxis_title='v_turb',  # Custom Y-axis label
-            zaxis_title='log10(nR²)',  # Custom Z-axis label
+            xaxis_title=dict(text='log₁₀(NH)',font=dict(size=label_font_s)),  # Custom X-axis label
+            yaxis_title=dict(text='v_turb (km/s)',font=dict(size=label_font_s)),  # Custom Y-axis label
+            zaxis_title=dict(text='log₁₀(nR²)',font=dict(size=label_font_s)),  # Custom Z-axis label
             aspectmode="cube",
-            yaxis=dict(type='log'),
+            xaxis=dict(gridwidth=2,gridcolor='grey',tickfont=dict(size=tick_font_s)),
+            yaxis=dict(type='log', gridwidth=2, gridcolor='grey',tickfont=dict(size=tick_font_s)),
+            zaxis=dict(gridwidth=2, gridcolor='grey',tickfont=dict(size=tick_font_s)),
             # camera=camera,
 
         ),
@@ -1809,9 +1845,88 @@ def make_3D_figure(SEDs_disp, SEDs_surface, cmap, plot_points=False, under_sampl
         fig.update_layout(scene_camera=camera,scene_dragmode=dragmode)
     else:
         fig.update_layout(scene_camera=camera)
+    #
+    # fig.update_xaxes(showgrid=True, gridwidth=10, gridcolor='LightPink')
+    # fig.update_yaxes(showgrid=True, gridwidth=10, gridcolor='LightPink')
+
 
     '''
+    MAIN PLOTS
+    Scene1
+        {
+       "scene.camera": {
+          "up": {
+             "x": 0,
+             "y": 0,
+             "z": 1
+          },
+          "center": {
+             "x": 0.1542057904195767,
+             "y": 0.002892563720326623,
+             "z": -0.17467658385002643
+          },
+          "eye": {
+             "x": 1.8468392568633851,
+             "y": 1.6473334023135455,
+             "z": 0.2694396443133198
+          },
+          "projection": {
+             "type": "perspective"
+          }
+       }
+    }
     
+    Scene2
+    
+        {
+       "scene.camera": {
+          "up": {
+             "x": 0,
+             "y": 0,
+             "z": 1
+          },
+          "center": {
+             "x": 0.02850327823155802,
+             "y": -0.004103643188417703,
+             "z": -0.13311943162771234
+          },
+          "eye": {
+             "x": 0.5434854264894874,
+             "y": 1.6562932719345749,
+             "z": 1.5654590387519232
+          },
+          "projection": {
+             "type": "perspective"
+          }
+       }
+    }
+    
+    Scene 3
+    {
+   "scene.camera": {
+      "up": {
+         "x": 0,
+         "y": 0,
+         "z": 1
+      },
+      "center": {
+         "x": 0.024429381187530762,
+         "y": -0.02461869090795321,
+         "z": -0.14147669066118007
+      },
+      "eye": {
+         "x": 2.2267225906735906,
+         "y": -0.010886520626406859,
+         "z": -1.1695863131054374
+      },
+      "projection": {
+         "type": "perspective"
+      }
+   }
+}
+    '''
+
+    '''
     HR_diff
     Scene1
         {
@@ -1968,20 +2083,27 @@ def make_3D_figure(SEDs_disp, SEDs_surface, cmap, plot_points=False, under_sampl
     return fig
 
 if plot_3D:
-    fig_3D=make_3D_figure(list_SEDs_disp, list_SEDs_surface, cmap=base_cmap, plot_points=plot_points, camera=camera)
+    with tab_3D:
+        fig_3D=make_3D_figure(list_SEDs_disp, list_SEDs_surface, cmap=base_cmap, plot_points=plot_points, camera=camera)
 
     if not online:
         with tab_3D:
 
-            savedir='/home/parrama/Documents/Work/PhD/docs/papers/wind_4U/global/ion_visu/save_figs'
+            savedir='/home/'+username+'/Documents/Work/PhD/docs/papers/wind_4U/global/ion_visu/save_figs'
             def save_3dfig_local():
 
                 '''
                 # Saves the current maxi_graphs in a svg (i.e. with clickable points) format.
+
+                note that kaleido requires google chrome, which can be installed for that purpose only
+                by running plotly_get_chrome
                 '''
 
                 if fig_3D is not None:
-                    fig_3D.write_image(savedir+'/'+'fig3D_'+str(round(time.time()))+'.pdf',engine="kaleido",
+                    # fig_3D.write_image(savedir+'/'+'fig3D_'+str(round(time.time()))+'.pdf',engine="kaleido",
+                    #                    width=2000, height=1000)
+                    fig_3D.update_layout(showlegend=False)
+                    fig_3D.write_image(savedir + '/' + 'fig3D_' + str(round(time.time())) + '.pdf',
                                        width=1000, height=1000)
 
             st.button('Save current 3D figure',on_click=save_3dfig_local,key='save_3dfig_local')

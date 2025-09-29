@@ -23,7 +23,8 @@ from astropy.time import Time,TimeDelta
 from fitting_tools import range_absline
 
 #visualisation functions
-from visual_line_tools import n_infos, obj_values,abslines_values,values_manip,load_catalogs,dist_mass
+from visual_line_tools import n_infos, obj_values,abslines_values,values_manip,load_catalogs
+from dist_mass_tools import dist_mass
 
 from general_tools import ravel_ragged
 
@@ -178,7 +179,9 @@ telescope_list=('XMM','Chandra','NICER','Suzaku','Swift','NuSTAR')
 choice_telescope=('XMM','Chandra','NICER','Suzaku','Swift','NuSTAR')
 
 #### current directory set to BHLMXB
-os.chdir('/media/parrama/SSD/Observ/BHLMXB/')
+tbdir=input('directory to search ?')
+
+os.chdir(tbdir)
 
 all_files=glob.glob('**',recursive=True)
 lineval_id='line_values_'+args.line_search_e.replace(' ','_')+'_'+args.line_search_norm.replace(' ','_')+'.txt'

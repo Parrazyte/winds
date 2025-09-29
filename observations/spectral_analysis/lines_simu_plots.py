@@ -7,6 +7,10 @@ import matplotlib.gridspec as gridspec
 import glob
 import pandas as pd
 from general_tools import ravel_ragged
+
+import getpass
+username=getpass.getuser()
+
 ap = argparse.ArgumentParser(description='Script to plot line detectability from various instruments.\n)')
 
 '''GENERAL OPTIONS'''
@@ -16,7 +20,7 @@ mpl.rcParams.update({'font.size': 18})
 ap.add_argument('-vert',nargs=1,help='plot vertical figure',default=False)
 
 ap.add_argument('-dir',nargs=1,help='simulations and plotting directory',
-                default='/media/parrama/crucial_SSD/Observ/highres/linedet_compa/AO2/4U1957',type=str)
+                default='/media/'+username+'/crucial_SSD/Observ/highres/linedet_compa/AO2/4U1957',type=str)
 
 ap.add_argument('-all_subdirs',nargs=1,help='make the plots from all simulations in the subdirectories',
                 default=True,type=bool)
@@ -120,7 +124,7 @@ id_sigmas=np.array(args.sigmas)-1
 
 
 def plot_indiv_panel(ax_use,panel_mode,show_yaxis=True,legend=True,
-                     base_dir='/media/parrama/crucial_SSD/Observ/highres/linedet_compa/AO2/',
+                     base_dir='/media/'+username+'/crucial_SSD/Observ/highres/linedet_compa/AO2/',
                      subdir='auto',secax=None,
                      display_lims=True,line_csv='line_table_AO2.csv',obs_csv='observ_table_AO2.csv',
                      #custom commands for non-auto subdir
@@ -299,7 +303,7 @@ if mode in ['ew','bshift']:
         # necessary to have the constrained layout saved
         plt.show()
 
-        plt.savefig('/media/parrama/crucial_SSD/Observ/highres/linedet_compa/AO1/EW_detec_compa'+
+        plt.savefig('/media/'+username+'/crucial_SSD/Observ/highres/linedet_compa/AO1/EW_detec_compa'+
                 ('_nostat' if not fakestats else '')+
                 '_'+str(expos_ew)+
                 '_' + str(n_iter) + '_iter' +
@@ -314,7 +318,7 @@ if mode in ['ew','bshift']:
         # necessary to have the constrained layout saved
         plt.show()
 
-        plt.savefig('/media/parrama/crucial_SSD/Observ/highres/linedet_compa/AO1/bshift_err_compa'+
+        plt.savefig('/media/'+username+'/crucial_SSD/Observ/highres/linedet_compa/AO1/bshift_err_compa'+
                 ('_nostat' if not fakestats else '')+
                 '_' + str(expos_bshift) +
                 '_' + str(n_iter) + '_iter' +

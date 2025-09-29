@@ -157,12 +157,12 @@ ap.add_argument("-evtname",nargs='?',help='substring present in previously proce
 
 #global choices
 ap.add_argument("-a","--action",nargs='?',help='Give which action(s) to proceed,separated by comas.'+
-                '\n1.evt_build\n2.filter_evt\n3.extract_reg...',default='1',type=str)
+                '\n1.evt_build\n2.filter_evt\n3.extract_reg...',default='l,s,m',type=str)
 
 #,2n,3,l,s,m
 #std : '1' puis '2n,3,l,s,m'
 
-ap.add_argument("-c","--cameras",nargs='?',help='Cameras to reduce',default='all',type=str)
+ap.add_argument("-c","--cameras",nargs='?',help='Cameras to reduce',default='pn',type=str)
 ap.add_argument("-e","--expmode",nargs=1,help='restrict the analysis to a single type of exposure (in caps)',default='all',type=str)
 ap.add_argument("-l","--local",nargs=1,help='Launch actions directly in the current directory instead',
                 default=False,type=bool)
@@ -178,13 +178,25 @@ ap.add_argument("-over",nargs=1,help='overwrite computed tasks (i.e. with produc
 
 #action specifics : 
 '''event cleaning'''
-ap.add_argument('-pnflare',nargs=1,help='pn flaring limit standard value',default=0.40,type=float)
+ap.add_argument('-pnflare',nargs=1,help='pn flaring limit standard value',default=0.38,type=float)
 ap.add_argument('-mosflare',nargs=1,help='mos flaring limit standard value',default=0.35,type=float)
 
-ap.add_argument('-flareband',nargs=1,help='flare computation band',default='6.-10.',type=str)
+ap.add_argument('-flareband',nargs=1,help='flare computation band',default='0.3-10.',type=str)
 #Should correspond to the most important energy band for subsequent science analysis. also used in the region computation
 
+#otherwise use [10-12]keV for PN and <10keV for MOS
+ap.add_argument('-replace_std_flare_band',nargs=1,help='replace the standard flare band by flareband in 2std mode',
+                default=True,type=bool)
+
+
+ap.add_argument('-man_lc_flare',nargs=1,
+                help='manual flare lightcurve input for std mode if need be. Warning: hacky',
+                default='pn_S003_Imaging_MAXIJ1744_v2_lc_src_broad.ds',type=str)
+
+
 '''region computation'''
+
+ap.add_argument('-extract_reg_mode',nargs=1,help='region extraction mode',default='manual')
 
 ap.add_argument('-use_file_target',nargs=1,
                 help='Allows to extract regions when Simbad doesnt recognize the name of the source from'
@@ -193,9 +205,13 @@ ap.add_argument('-use_file_target',nargs=1,
 ap.add_argument("-mainfocus",nargs=1,help='only extracts spectra when the source is the main focus of the observation',
                 default=False,type=bool)
 
+test_pileup=ap.add_argument('-pileup_test',nargs=1,
+                help='test the presence of pileup and potential run pileup excision',
+                default=False,type=bool)
+
 ap.add_argument("-p", "--pileup_ctrl",nargs=1,
                 help='mitigates pile-up (if there is any) with a progressive excision of the central region',
-                default=True,type=str)
+                default=True,type=bool)
 ap.add_argument('-p_tresh','--pileup_threshold',nargs=1,
                 help='maximum acceptable pile-up value to stop the excision. Replaces other pile_up controls.'+
                 ' "None" shuts off this method',default=0.05)
@@ -259,6 +275,11 @@ pnflare_lim=args.pnflare
 mosflare_lim=args.mosflare
 lc_bins=args.bin
 flare_band=np.array(args.flareband.split('-')).astype(float)
+replace_std_flare_band=args.replace_std_flare_band
+man_lc_flare=args.man_lc_flare
+
+pileup_test=args.pileup_test
+
 bigger_fit=args.bigger_fit
 rad_crop_arg=args.rad_crop
 folder_over=args.folder_over
@@ -270,7 +291,7 @@ maxrad_source=args.maxrad_source
 pileup_max_ex=args.pileup_max_ex
 pileup_threshold=args.pileup_threshold
 use_file_target_glob=args.use_file_target
-
+extract_reg_mode=args.extract_reg_mode
 '''''''''''''''''
 ''''FUNCTIONS''''
 '''''''''''''''''
@@ -575,7 +596,7 @@ def file_selector(directory,filetype,camera='all'):
 
     return result_list
 
-def filter_evt(directory,mode='std',cams='all',expos_mode='all',overwrite=True):
+def filter_evt(directory,mode='std',cams='all',expos_mode='all',man_lc_flare='',overwrite=True):
     
     '''
     Filters existing event files following the standard procedure, with some small modifications for better visibility in 
@@ -640,13 +661,24 @@ def filter_evt(directory,mode='std',cams='all',expos_mode='all',overwrite=True):
         camera=fits.open(fulldir+'/'+file)[0].header['INSTRUME'][1:].swapcase()
         
         #expressions for the plot and filtering commands for later
-        if camera=='pn':
-            expression_plot='"#XMMEA_EP&&(PI>10000&&PI<12000)&&(PATTERN==0)"'
-            expression_filter='"#XMMEA_EP && gti('+camera+'gti_'+suffix_evt+'.ds,TIME) && (PI>200&&PI<12000)"'
-        elif camera in {'mos1','mos2'}:
-            expression_plot='"#XMMEA_EM&&(PI>10000)&&(PATTERN==0)"'
-            expression_filter='"#XMMEA_EM && gti('+camera+'gti_'+suffix_evt+'.ds,TIME) && (PI>200&&PI<12000)"'
-         
+
+        if replace_std_flare_band:
+            if camera == 'pn':
+                expression_plot = '"#XMMEA_EP && (PI in [' + str(int(1000 * flare_band[0])) + ':' + str(
+                    int(1000 * flare_band[1])) + '])&&(PATTERN==0)"'
+                expression_filter = '"#XMMEA_EP && gti(' + camera + 'gti_' + suffix_evt + '.ds,TIME) && (PI>200&&PI<12000)"'
+            elif camera in {'mos1', 'mos2'}:
+                expression_plot = '"#XMMEA_EM && (PI in [' + str(int(1000 * flare_band[0])) + ':' + str(
+                    int(1000 * flare_band[1])) + '])&&(PATTERN==0)"'
+                expression_filter = '"#XMMEA_EM && gti(' + camera + 'gti_' + suffix_evt + '.ds,TIME) && (PI>200&&PI<12000)"'
+        else:
+            if camera=='pn':
+                expression_plot='"#XMMEA_EP&&(PI>10000&&PI<12000)&&(PATTERN==0)"'
+                expression_filter='"#XMMEA_EP && gti('+camera+'gti_'+suffix_evt+'.ds,TIME) && (PI>200&&PI<12000)"'
+            elif camera in {'mos1','mos2'}:
+                expression_plot='"#XMMEA_EM&&(PI>10000)&&(PATTERN==0)"'
+                expression_filter='"#XMMEA_EM && gti('+camera+'gti_'+suffix_evt+'.ds,TIME) && (PI>200&&PI<12000)"'
+
         #creation of the high-energy rate table
         spawn.sendline('\nevselect table='+file+' withrateset=Y rateset=rate'+camera+'_'+suffix_evt+'.ds '+
                        ' maketimecolumn=Y timebinsize=100 makeratecolumn=Y  expression='+expression_plot)
@@ -824,7 +856,11 @@ def filter_evt(directory,mode='std',cams='all',expos_mode='all',overwrite=True):
             spawn.sendline('\ntabgtigen table='+lc_src_flare_path.replace('lc_src_flare','gti_flare')+' expression="IS_GTI==1"'+
                            ' gtiset='+camera+'gti_'+suffix_evt+'.ds')
         else:
-            spawn.sendline('\ntabgtigen table=rate'+camera+'_'+suffix_evt+'.ds expression="RATE<='+str(ratelim)
+            if man_lc_flare!='':
+                spawn.sendline('\ntabgtigen table=' + man_lc_flare + ' expression="RATE<=' + str(ratelim)
+                               + '" gtiset=' + camera + 'gti_' + suffix_evt + '.ds')
+            else:
+                spawn.sendline('\ntabgtigen table=rate'+camera+'_'+suffix_evt+'.ds expression="RATE<='+str(ratelim)
                            +'" gtiset='+camera+'gti_'+suffix_evt+'.ds')
             
         spawn.expect([pexpect.TIMEOUT,'ended'],timeout=None)
@@ -1212,6 +1248,7 @@ def pileup_bool(pileup_line):
         return abs(pattern_s_val-1)>pattern_s_err or d_pileup
 
 def extract_reg(directory,mode='manual',cams='all',expos_mode='all',use_file_target=False,
+                manual_coord_type='fk5',pileup_test=True,
                 overwrite=True):
     
     '''
@@ -1278,7 +1315,9 @@ def extract_reg(directory,mode='manual',cams='all',expos_mode='all',use_file_tar
             spawn.sendline('\ncd $currdir')
             return "Could not load the image file with ds9. There must be a problem with the exposure."
 
-        def spatial_expression(coords,type='XMM',mode=expos_mode_single,excision_radius=None,rawx_off=0.,timing_ds9type='src',timing_fits=None):
+        def spatial_expression(coords,type='XMM',
+                               mode=expos_mode_single,excision_radius=None,
+                               rawx_off=0.,timing_ds9type='src',timing_fits=None):
             
             '''
             In Timing:
@@ -1340,14 +1379,16 @@ def extract_reg(directory,mode='manual',cams='all',expos_mode='all',use_file_tar
                     
             if mode=='IMAGING':
                 if type=='XMM':
-                    if excision_radius==None:
+                    if excision_radius is None:
                         return '((RA,DEC) in CIRCLE('+coords[0][0]+','+coords[0][1]+','+coords[1]+'))'
                     else:
                         return '((RA,DEC) in ANNULUS('+coords[0][0]+','+coords[0][1]+','+excision_radius+','+coords[1]+'))'
                 if type=='ds9':
-                    if excision_radius==None:
+                    if excision_radius is None:
                         return 'circle('+coords[0][0]+','+coords[0][1]+','+coords[1]+'")'
-                        
+                    else:
+                        return 'annulus('+coords[0][0]+','+coords[0][1]+','+excision_radius+'",'+coords[1]+'")'
+
         #lightcurve computation function
         def make_lc_snr(table,suffix_lc,expression_region,binning):
             
@@ -1903,48 +1944,121 @@ def extract_reg(directory,mode='manual',cams='all',expos_mode='all',use_file_tar
         elif expos_mode_single=='IMAGING':
         
             if mode=='manual':
-                print("\nManual mode for Imaging exposure:"+
-                      "\nInput the fk5 coordinates of the source and bg circular regions you've chosen.")
-                prefix=input("\nPrefix to be added in the files ?\n\n")
-                
-                print("\nSource :")
-                src_center1=input("\nFirst coordinate of the center (degrees)?\n\n")
-                src_center2=input("\nSecond coordinate of the center (degrees)?\n\n")
-                src_radius=input("\nRadius of the circle (arcsec)?\n\n")
-    
-                print("\nBackground :")
-                bg_center1=input("\nFirst coordinate of the center (degrees)?\n\n")
-                bg_center2=input("\nSecond coordinate of the center (degrees)?\n\n")
-                bg_radius=input("\nRadius of the circle (arcsec)?\n\n")
-                
-                if prefix!='':
-                    prefix='_'+prefix
-                
-                #summary variables
-                src_coords_man=[[src_center1,src_center2],src_radius]
-                bg_coords_man=[[bg_center1,bg_center2],bg_radius]
-                
-                reg_name=camera+suffix_evt+prefix+'_reg.reg'
-                with open(fulldir+'/'+reg_name,'w+') as regfile:
-        
-                    #standard ds9 format
-                    regfile.write('# Region file format: DS9 version 4.1'+
-                                  '\nglobal color=green dashlist=8 3 width=1 font="helvetica 10 normal roman" select=1'+
-                                  ' highlite=1 dash=0 fixed=0 edit=1 move=1 delete=1 include=1 source=1'+
-                                  '\nfk5'+
-                                  '\n'+spatial_expression(src_coords_man,type='ds9')+' # text={manually selected source}'+
-                                  '\n'+spatial_expression(bg_coords_man,type='ds9')+' # text={manually selected background}')
-                
-                #getting back to actual degree values
-                src_coords_man[1]=str(round(float(src_coords_man[1])/3600,8))
-                bg_coords_man[1]=str(round(float(bg_coords_man[1])/3600,8))  
-                
-                ds9_pid_sp_reg=disp_ds9(spawn,file_img,regfile=reg_name,screenfile=fulldir+'/'+camera+suffix_evt
-                                        +prefix+'_reg_screen.png',give_pid=True,kill_last=ds9_pid_sp_start)
-                   
-                #in the example threads they also add gti selection but it shouldn't matter if we directly use cleaned event files
-                expression_source=spatial_expression(src_coords_man)
-                expression_bg=spatial_expression(bg_coords_man)
+
+                if manual_coord_type=='physical':
+                    #to be implemented, lacks conversion to degrees after parsing
+
+                    print("\nManual mode for Imaging exposure:" +
+                          "\nInput the fk5 coordinates of the source and bg circular regions you've chosen.")
+                    prefix = input("\nPrefix to be added in the files ?\n\n")
+
+                    print("\nSource :")
+                    src_center1 = input("\nFirst coordinate of the center (physical)?\n\n")
+                    src_center2 = input("\nSecond coordinate of the center (physical)?\n\n")
+                    src_radius = input("\nouter radius of the circle/annulus (physical)?\n\n")
+                    src_radius_inner = input("\ninner radius of the circle/annulus (physical,0 to skip)?\n\n")
+                    src_radius_inner=None if src_radius_inner==0. else src_radius_inner
+
+                    print("\nBackground :")
+                    bg_center1 = input("\nFirst coordinate of the center (physical)?\n\n")
+                    bg_center2 = input("\nSecond coordinate of the center (physical)?\n\n")
+                    bg_radius = input("\nRadius of the circle (physical)?\n\n")
+                    bg_radius_inner = input("\ninner radius of the circle/annulus (physical,0 to skip)?\n\n")
+                    bg_radius_inner=None if bg_radius_inner==0. else bg_radius_inner
+
+                    if prefix != '':
+                        prefix = '_' + prefix
+
+                    # summary variables
+                    src_coords_man = [[src_center1, src_center2], src_radius]
+                    bg_coords_man = [[bg_center1, bg_center2], bg_radius]
+
+                    reg_name = camera + suffix_evt + prefix +'_'+manual_coord_type+ '_reg.reg'
+                    with open(fulldir + '/' + reg_name, 'w+') as regfile:
+
+                        # standard ds9 format
+                        regfile.write('# Region file format: DS9 version 4.1' +
+                                      '\nglobal color=green dashlist=8 3 width=1 font="helvetica 10 normal roman" select=1' +
+                                      ' highlite=1 dash=0 fixed=0 edit=1 move=1 delete=1 include=1 source=1' +
+                                      '\nphysical' +
+                                      '\n' + spatial_expression(src_coords_man,
+                                                                type='ds9',
+                                                                excision_radius=src_radius_inner).replace('"','')
+                                      + ' # text={manually selected source}' +
+                                      '\n' + spatial_expression(bg_coords_man,
+                                                                type='ds9',
+                                                                excision_radius=bg_radius_inner).replace('"','')
+                                      + ' # text={manually selected background}')
+
+                    ds9_pid_sp_reg = disp_ds9(spawn, file_img, regfile=reg_name,
+                                              screenfile=fulldir + '/' + camera + suffix_evt
+                                                         + prefix + '_reg_screen.png', give_pid=True,
+                                              kill_last=ds9_pid_sp_start)
+
+                    assert 1==0,'Conversion not implemented yet'
+                    # in the example threads they also add gti selection but it shouldn't matter if we directly use cleaned event files
+                    expression_source = spatial_expression(src_coords_man,excision_radius=src_radius_inner)
+                    expression_bg = spatial_expression(bg_coords_man,excision_radius=bg_radius_inner)
+
+                if manual_coord_type=='fk5':
+                    print("\nManual mode for Imaging exposure:"+
+                          "\nInput the fk5 coordinates of the source and bg circular regions you've chosen.")
+                    prefix=input("\nPrefix to be added in the files ?\n\n")
+
+                    print("\nSource :")
+                    src_center1=input("\nFirst coordinate of the center (degrees)?\n\n")
+                    src_center2=input("\nSecond coordinate of the center (degrees)?\n\n")
+                    src_radius=input("\nRadius of the circle (arcsec)?\n\n")
+                    src_radius_inner = input("\ninner radius of the circle/annulus (arcsec,0 to skip)?\n\n")
+                    src_radius_inner=None if float(src_radius_inner)==0. else src_radius_inner
+
+                    print("\nBackground :")
+                    bg_center1=input("\nFirst coordinate of the center (degrees)?\n\n")
+                    bg_center2=input("\nSecond coordinate of the center (degrees)?\n\n")
+                    bg_radius=input("\nRadius of the circle (arcsec)?\n\n")
+                    bg_radius_inner = input("\ninner radius of the circle/annulus (arcsec,0 to skip)?\n\n")
+                    bg_radius_inner=None if float(bg_radius_inner)==0. else bg_radius_inner
+
+                    if prefix!='':
+                        prefix='_'+prefix
+
+                    #summary variables
+                    src_coords_man=[[src_center1,src_center2],src_radius]
+                    bg_coords_man=[[bg_center1,bg_center2],bg_radius]
+
+                    reg_name=camera+suffix_evt+prefix+'_'+manual_coord_type+'_reg.reg'
+                    with open(fulldir+'/'+reg_name,'w+') as regfile:
+
+                        #standard ds9 format
+                        regfile.write('# Region file format: DS9 version 4.1'+
+                                      '\nglobal color=green dashlist=8 3 width=1 font="helvetica 10 normal roman" select=1'+
+                                      ' highlite=1 dash=0 fixed=0 edit=1 move=1 delete=1 include=1 source=1'+
+                                      '\nfk5'+
+                                      '\n' + spatial_expression(src_coords_man,
+                                                                type='ds9',
+                                                                excision_radius=src_radius_inner)
+                                      + ' # text={manually selected source}' +
+                                      '\n' + spatial_expression(bg_coords_man,
+                                                                type='ds9',
+                                                                excision_radius=bg_radius_inner)
+                                      + ' # text={manually selected background}')
+
+                    #getting back to actual degree values
+
+                    src_coords_man[1]=str(round(float(src_coords_man[1])/3600,8))
+                    if src_radius_inner is not None:
+                        src_radius_inner=str(round(float(src_radius_inner)/3600,8))
+
+                    bg_coords_man[1]=str(round(float(bg_coords_man[1])/3600,8))
+                    if bg_radius_inner is not None:
+                        bg_radius_inner=str(round(float(bg_radius_inner)/3600,8))
+
+                    ds9_pid_sp_reg=disp_ds9(spawn,file_img,regfile=reg_name,screenfile=fulldir+'/'+camera+suffix_evt
+                                            +prefix+'_reg_screen.png',give_pid=True,kill_last=ds9_pid_sp_start)
+
+                    #in the example threads they also add gti selection but it shouldn't matter if we directly use cleaned event files
+                    expression_source = spatial_expression(src_coords_man,excision_radius=src_radius_inner)
+                    expression_bg = spatial_expression(bg_coords_man,excision_radius=bg_radius_inner)
             
             elif mode=='auto':
                 
@@ -2949,19 +3063,24 @@ def extract_reg(directory,mode='manual',cams='all',expos_mode='all',use_file_tar
             return expression_source,np.array(pileup_line_list),best_SNR
             
         #fuck enclosing scope
-        if mode=='manual' or expos_mode_single=='IMAGING':
-            expression_source,pileup_lines,excised_SNR=pileup_util(expression_source,src_coords=src_coords,excise=pileup_ctrl)
-        elif expos_mode_single in ['TIMING','BURST']:
-            expression_source,pileup_lines,excised_SNR=pileup_util(expression_source,distrib_summary=distrib_summary,excise=pileup_ctrl)
-        
-        #overwriting the SNR if there was a new SNR computation
-        if excised_SNR!='':
-            best_SNR=excised_SNR
-        
-        #The cd command has already been done in the pileup_util function or in the opti_snr_timing function
-        if type(pileup_lines)==str:
-            return pileup_lines
-        
+        if pileup_test:
+            if mode=='manual' or expos_mode_single=='IMAGING':
+                expression_source,pileup_lines,excised_SNR=pileup_util(expression_source,src_coords=src_coords,excise=pileup_ctrl)
+            elif expos_mode_single in ['TIMING','BURST']:
+                expression_source,pileup_lines,excised_SNR=pileup_util(expression_source,distrib_summary=distrib_summary,excise=pileup_ctrl)
+
+            #overwriting the SNR if there was a new SNR computation
+            if excised_SNR!='':
+                best_SNR=excised_SNR
+
+            #The cd command has already been done in the pileup_util function or in the opti_snr_timing function
+            if type(pileup_lines)==str:
+                return pileup_lines
+        else:
+            pileup_lines=[]
+            if mode=='manual':
+                best_SNR='manual'
+
         results_name=camera+suffix_evt+prefix+'_regex_results.txt'
         
         #storing the results of the function in a file for future use
@@ -3123,7 +3242,7 @@ def plot_lc(lc_src_path,lc_bg_path=None,area_ratio=1,save=True,close=True,mode='
     
     if 'broad' not in mode:
         if 'rate' in mode:
-            lc_ener_str='[10-12] keV' if lc_cam=='pn' else '>=10 keV'
+            lc_ener_str='['+(args.flareband if replace_std_flare_band else ('10-12'))+'] keV' if lc_cam=='pn' else '>=10 keV'
         else:
             lc_ener_str='['+args.flareband+']'+' keV'
         if lc_cam=='pn':
@@ -3204,7 +3323,7 @@ def plot_lc(lc_src_path,lc_bg_path=None,area_ratio=1,save=True,close=True,mode='
     ax_lc.errorbar(x_src,y_src_ma,yerr=data_lc_src['ERROR'],label=label_source_prefix+'Count rate',color='blue')
         
     if 'flare' in mode and plotcut:
-        ax_lc.axhline(y=lc_autolim_val,color='black',linestyle='dashed',label='standard limit for this camera')
+        ax_lc.axhline(y=float(lc_autolim_val),color='black',linestyle='dashed',label='standard limit for this camera')
     
     #highlighting the parts of the graph where the bg curve is detected as flare-like (see filter-evt)
     if hflare:
@@ -3244,6 +3363,7 @@ def plot_lc(lc_src_path,lc_bg_path=None,area_ratio=1,save=True,close=True,mode='
         
     plt.legend()
     plt.tight_layout()
+
     if save:
         
         screen_path=lc_src_path.replace('.ds','.png')
@@ -3319,12 +3439,12 @@ def extract_lc(directory,mode='manual',cams='all',expos_mode='all',overwrite=Tru
         
         
         if mode=='auto':
-            prefix='_auto'
+            prefix='auto'
         else:
             prefix=input("\nPrefix with region already saved?\n\n")
             
         #checking if the region extraction file exists
-        regex_name=camera+suffix_evt+prefix+'_regex_results.txt'
+        regex_name=camera+suffix_evt+'_'+prefix+'_regex_results.txt'
         
         if not os.path.isfile(fulldir+'/'+regex_name):
             print('region extraction result file missing. Skipping...')
@@ -3375,13 +3495,13 @@ def extract_lc(directory,mode='manual',cams='all',expos_mode='all',overwrite=Tru
             
             #sas command
             spawn.sendline('\nevselect table='+table+' energycolumn=PI '+
-                            'expression="'+expression+'" withrateset=yes rateset='+camera+suffix_evt+prefix+'_lc_'+suffix_lc+'.ds '+
+                            'expression="'+expression+'" withrateset=yes rateset='+camera+suffix_evt+'_'+prefix+'_lc_'+suffix_lc+'.ds '+
                             'timebinsize='+str(binning)+' maketimecolumn=yes makeratecolumn=yes')
             #there are two occurences of this, one at the beginning and one at the end of the command 
             spawn.expect(['\[xmmsas_'],timeout=None)
             spawn.expect(['\[xmmsas_'],timeout=None)
             
-            lc_path=os.path.join(fulldir,camera+suffix_evt+prefix+'_lc_'+suffix_lc+'.ds')
+            lc_path=os.path.join(fulldir,camera+suffix_evt+'_'+prefix+'_lc_'+suffix_lc+'.ds')
             #waiting for the file to be created to continue
             while not os.path.isfile(lc_path):
                 time.sleep(1)
@@ -3423,8 +3543,9 @@ def extract_lc(directory,mode='manual',cams='all',expos_mode='all',overwrite=Tru
             return'Empty broadband background lightcurve'
         
         #correcting the broad band lightcurve
-        spawn.sendline('\nepiclccorr srctslist='+camera+suffix_evt+prefix+'_lc_src_broad.ds eventlist='+file+
-                       ' outset='+camera+suffix_evt+prefix+'_lc_src_broad_corr.ds bkgtslist='+camera+suffix_evt+prefix+'_lc_bg_broad.ds'+
+        spawn.sendline('\nepiclccorr srctslist='+camera+suffix_evt+'_'+prefix+'_lc_src_broad.ds eventlist='+file+
+                       ' outset='+camera+suffix_evt+'_'+prefix+'_lc_src_broad_corr.ds bkgtslist='+camera+suffix_evt+
+                       '_'+prefix+'_lc_bg_broad.ds'+
                        ' withbkgset=yes applyabsolutecorrections=yes')
         
         #we put several expects to see the progression
@@ -3439,12 +3560,12 @@ def extract_lc(directory,mode='manual',cams='all',expos_mode='all',overwrite=Tru
                 
         #it seems that sometimes the fits are created but are not readable yet when the next command runs, so we add a delay
         try:
-            fits.open(os.path.join(fulldir,camera+suffix_evt+prefix+'_lc_src_broad_corr.ds'))
+            fits.open(os.path.join(fulldir,camera+suffix_evt+'_'+prefix+'_lc_src_broad_corr.ds'))
         except:
             time.sleep(5)
         #if they are still not readable after that, we can stop the run altogether
         try:
-            fits.open(os.path.join(fulldir,camera+suffix_evt+prefix+'_lc_src_broad_corr.ds'))
+            fits.open(os.path.join(fulldir,camera+suffix_evt+'_'+prefix+'_lc_src_broad_corr.ds'))
         except:
             print('\nCould not load the corrected lightcurve fits file. Skipping...')
             
@@ -3452,7 +3573,7 @@ def extract_lc(directory,mode='manual',cams='all',expos_mode='all',overwrite=Tru
             return'Could not load the corrected lightcurve fits file.'
         
         #if everything is ok, we can make the corrected plot
-        plot_lc(os.path.join(fulldir,camera+suffix_evt+prefix+'_lc_src_broad_corr.ds'),mode='lc_src_broad_corr',save=True,close=True)
+        plot_lc(os.path.join(fulldir,camera+suffix_evt+'_'+prefix+'_lc_src_broad_corr.ds'),mode='lc_src_broad_corr',save=True,close=True)
         
         #same check for the source and bg broad lightcurves
         try:
@@ -3471,8 +3592,9 @@ def extract_lc(directory,mode='manual',cams='all',expos_mode='all',overwrite=Tru
             return'Could not load at least one of the broad band lightcurve fits file.'
             
         #if everything is fine, we plot the source and bg raw curves combined
-        src_bg_ratio=fits.open(fulldir+'/'+camera+suffix_evt+prefix+'_lc_src_broad_corr.ds')[1].header['BKGRATIO']
-        plot_lc(path_lc_src_broad,path_lc_bg_broad,area_ratio=src_bg_ratio,mode='lc_src_broad',save=True,close=True)
+        src_bg_ratio=fits.open(fulldir+'/'+camera+suffix_evt+'_'+prefix+'_lc_src_broad_corr.ds')[1].header['BKGRATIO']
+        plot_lc(path_lc_src_broad,path_lc_bg_broad,area_ratio=src_bg_ratio,
+                mode='lc_src_broad',save=True,close=True)
         
         '''
         flaring lightcurves for the source and bg
@@ -3516,7 +3638,7 @@ def extract_lc(directory,mode='manual',cams='all',expos_mode='all',overwrite=Tru
         #cut plot for the summary file
         plot_lc(path_lc_src_flare,path_lc_bg_flare,area_ratio=src_bg_ratio,mode='lc_src_flare_cut',save=True,close=True)
         #copying the products
-        spawn.sendline('\ncp *'+suffix_evt+prefix+'_lc* $currdir/batch')        
+        spawn.sendline('\ncp *'+suffix_evt+'_'+prefix+'_lc* $currdir/batch')
 
         #setting up a wait to ensure we copied everything:
         time.sleep(1)
@@ -3672,7 +3794,7 @@ def extract_sp(directory,mode='manual',cams='all',expos_mode='all',overwrite=Tru
         suffix_evt=file.split('.')[0][file.find('_'):]
         
         if mode=='auto':
-            prefix='_auto'
+            prefix='auto'
         else:
             prefix=input("\nPrefix with region already saved?\n\n")
         
@@ -3686,7 +3808,7 @@ def extract_sp(directory,mode='manual',cams='all',expos_mode='all',overwrite=Tru
             print('\nEmpty exposure.')
             
             #copying the products            
-            spawn.sendline('\ncp *'+suffix_evt+prefix+'* $currdir/batch')        
+            spawn.sendline('\ncp *'+suffix_evt+'_'+prefix+'* $currdir/batch')
     
             #copying the log file        
             spawn.sendline('\ncp *'+suffix_evt+'*.log $currdir/batch')
@@ -3695,13 +3817,13 @@ def extract_sp(directory,mode='manual',cams='all',expos_mode='all',overwrite=Tru
             
             return 'Empty exposure.'
         
-        regex_name=camera+suffix_evt+prefix+'_regex_results.txt'
+        regex_name=camera+suffix_evt+'_'+prefix+'_regex_results.txt'
         
         if not os.path.isfile(fulldir+'/'+regex_name):
             print('region extraction result file missing. Skipping...')
             
             #copying the products            
-            spawn.sendline('\ncp *'+suffix_evt+prefix+'* $currdir/batch')        
+            spawn.sendline('\ncp *'+suffix_evt+'_'+prefix+'* $currdir/batch')
     
             #copying the log file        
             spawn.sendline('\ncp *'+suffix_evt+'*.log $currdir/batch')
@@ -3740,35 +3862,35 @@ def extract_sp(directory,mode='manual',cams='all',expos_mode='all',overwrite=Tru
         pileup_lines=np.array(regex_lines[2].split('\t')[1].replace('\n','').split(','))
         
         #Source spectrum computation
-        spawn.sendline('\nevselect table='+file+' withspectrumset=yes spectrumset='+camera+suffix_evt+prefix+'_sp_src.ds '+
+        spawn.sendline('\nevselect table='+file+' withspectrumset=yes spectrumset='+camera+suffix_evt+'_'+prefix+'_sp_src.ds '+
                         'energycolumn=PI spectralbinsize=5 withspecranges=yes specchannelmin=0 specchannelmax='+specmax+' '+
                         'expression="'+expression_sp+expression_source+'"')
         spawn.expect('selected',timeout=None)
         
         #Background spectrum computation
-        spawn.sendline('\nevselect table='+file+' withspectrumset=yes spectrumset='+camera+suffix_evt+prefix+'_sp_bg.ds '+
+        spawn.sendline('\nevselect table='+file+' withspectrumset=yes spectrumset='+camera+suffix_evt+'_'+prefix+'_sp_bg.ds '+
                         'energycolumn=PI spectralbinsize=5 withspecranges=yes specchannelmin=0 specchannelmax='+specmax+' '+
                         'expression="'+expression_sp+expression_bg+'"')
         spawn.expect('selected',timeout=None)
         
         #Backscale computations for the source and the background
-        spawn.sendline('\nbackscale spectrumset='+camera+suffix_evt+prefix+'_sp_src.ds badpixlocation='+file)
+        spawn.sendline('\nbackscale spectrumset='+camera+suffix_evt+'_'+prefix+'_sp_src.ds badpixlocation='+file)
         spawn.expect('backscale-1.6',timeout=None)
         
-        spawn.sendline('\nbackscale spectrumset='+camera+suffix_evt+prefix+'_sp_bg.ds badpixlocation='+file)
+        spawn.sendline('\nbackscale spectrumset='+camera+suffix_evt+'_'+prefix+'_sp_bg.ds badpixlocation='+file)
         spawn.expect('backscale-1.6',timeout=None)
         
         #rmf computation
-        spawn.sendline('\nrmfgen spectrumset='+camera+suffix_evt+prefix+'_sp_src.ds rmfset='+camera+suffix_evt+prefix+'.rmf')
+        spawn.sendline('\nrmfgen spectrumset='+camera+suffix_evt+'_'+prefix+'_sp_src.ds rmfset='+camera+suffix_evt+'_'+prefix+'.rmf')
         spawn.expect('Cleanup complete.',timeout=None)
         
         #arf computation
-        spawn.sendline('\narfgen spectrumset='+camera+suffix_evt+prefix+'_sp_src.ds arfset='+camera+suffix_evt+prefix+'.arf '+
-                        'withrmfset=yes rmfset='+camera+suffix_evt+prefix+'.rmf  badpixlocation='+file+' detmaptype=psf')
+        spawn.sendline('\narfgen spectrumset='+camera+suffix_evt+'_'+prefix+'_sp_src.ds arfset='+camera+suffix_evt+'_'+prefix+'.arf '+
+                        'withrmfset=yes rmfset='+camera+suffix_evt+'_'+prefix+'.rmf  badpixlocation='+file+' detmaptype=psf')
         spawn.expect('Closing arfset',timeout=None)
         
         #putting the pile-up values in the spectrum header:
-        with fits.open(fulldir+'/'+camera+suffix_evt+prefix+'_sp_src.ds',mode='update') as fits_spectrum:
+        with fits.open(fulldir+'/'+camera+suffix_evt+'_'+prefix+'_sp_src.ds',mode='update') as fits_spectrum:
             fits_spectrum[0].header['PILE-UP']=','.join(pileup_lines)
             for pileup_iter in range(len(pileup_lines)):
                 fits_spectrum[0].header['PILE-UP_'+str(pileup_iter)]=pileup_lines[pileup_iter]
@@ -3780,10 +3902,10 @@ def extract_sp(directory,mode='manual',cams='all',expos_mode='all',overwrite=Tru
             '''
             wrapper for the command
             '''
-            spawn.sendline('\nspecgroup spectrumset='+camera+suffix_evt+prefix+'_sp_src.ds mincounts='+str(value)
-                            +' oversample=3 '+'rmfset='+camera+suffix_evt+prefix+'.rmf  arfset='+camera+suffix_evt
-                            +prefix+'.arf '+'backgndset='+camera+suffix_evt+prefix+'_sp_bg.ds groupedset='+camera+
-                            suffix_evt+prefix+'_sp_src_grp_'+str(value)+'.ds')
+            spawn.sendline('\nspecgroup spectrumset='+camera+suffix_evt+'_'+prefix+'_sp_src.ds mincounts='+str(value)
+                            +' oversample=3 '+'rmfset='+camera+suffix_evt+'_'+prefix+'.rmf  arfset='+camera+suffix_evt
+                            +'_'+prefix+'.arf '+'backgndset='+camera+suffix_evt+'_'+prefix+'_sp_bg.ds groupedset='+camera+
+                            suffix_evt+'_'+prefix+'_sp_src_grp_'+str(value)+'.ds')
             spawn.expect('ended')
             
         #Specgrouping for a few values
@@ -3796,13 +3918,13 @@ def extract_sp(directory,mode='manual',cams='all',expos_mode='all',overwrite=Tru
         # print('\nReminder : pileup values (3 sigma) :\n')
         # print(pileup_lines.T)
         
-        path_heavyfile=os.path.join(directory,'batch',camera+suffix_evt+prefix+'_pileup.ds')
+        path_heavyfile=os.path.join(directory,'batch',camera+suffix_evt+'_'+prefix+'_pileup.ds')
         #removing the heaviest file first
         if os.path.isfile(path_heavyfile):
             os.remove(path_heavyfile)
 
         #copying the products            
-        spawn.sendline('\ncp *'+suffix_evt+prefix+'* $currdir/batch')        
+        spawn.sendline('\ncp *'+suffix_evt+'_'+prefix+'* $currdir/batch')
 
         time.sleep(5)
         
@@ -4160,17 +4282,18 @@ if local==False:
                             filter_mode='auto'
                         elif 'n' in curr_action:
                             filter_mode='nolim'
-                        filter_evt(obsdir,cams=cameras_glob,expos_mode=expos_mode_glob,overwrite=True,mode=filter_mode)
+                        filter_evt(obsdir,cams=cameras_glob,expos_mode=expos_mode_glob,overwrite=True,
+                                   mode=filter_mode,man_lc_flare=man_lc_flare)
                         filter_evt_done.wait()
                     if curr_action=='3':
-                        extract_reg(obsdir,mode='auto',cams=cameras_glob,expos_mode=expos_mode_glob,overwrite=overwrite_glob,
-                                    use_file_target=use_file_target_glob)
+                        extract_reg(obsdir,mode=extract_reg_mode,cams=cameras_glob,expos_mode=expos_mode_glob,overwrite=overwrite_glob,
+                                    use_file_target=use_file_target_glob,pileup_test=pileup_test)
                         extract_reg_done.wait()
                     if curr_action=='l':
-                        extract_lc(obsdir,mode='auto',cams=cameras_glob,expos_mode=expos_mode_glob,overwrite=overwrite_glob)
+                        extract_lc(obsdir,mode=extract_reg_mode,cams=cameras_glob,expos_mode=expos_mode_glob,overwrite=overwrite_glob)
                         extract_lc_done.wait()
                     if curr_action=='s':
-                        extract_sp(obsdir,mode='auto',cams=cameras_glob,expos_mode=expos_mode_glob,overwrite=overwrite_glob)
+                        extract_sp(obsdir,mode=extract_reg_mode,cams=cameras_glob,expos_mode=expos_mode_glob,overwrite=overwrite_glob)
                         extract_sp_done.wait()
                     if curr_action=='m':
                         batch_mover(os.path.join(startdir,mergedir))
@@ -4215,10 +4338,12 @@ else:
                     filter_mode='auto'
                 elif 'n' in curr_action:
                     filter_mode='nolim'
-                filter_evt(absdir,cams=cameras_glob,expos_mode=expos_mode_glob,overwrite=True,mode=filter_mode)
+                filter_evt(absdir,cams=cameras_glob,expos_mode=expos_mode_glob,overwrite=True,mode=filter_mode,
+                           man_lc_flare=man_lc_flare)
                 filter_evt_done.wait()
             if curr_action=='3':
-                extract_reg(absdir,mode='auto',cams=cameras_glob,expos_mode=expos_mode_glob,overwrite=overwrite_glob,
+                extract_reg(absdir, mode=extract_reg_mode, cams=cameras_glob, expos_mode=expos_mode_glob,
+                            overwrite=overwrite_glob,pileup_test=pileup_test,
                             use_file_target=use_file_target_glob)
                 extract_reg_done.wait()
             if curr_action=='l':

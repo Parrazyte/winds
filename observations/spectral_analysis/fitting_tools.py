@@ -42,8 +42,8 @@ lines_std={         #don't change the first 8, there are explicit calls in the c
                   'FeKa26em':r'FeXXVI K$\alpha$',
                   #this are the narrow equivalent to FeKa and FeKb, but they are used as much more "physical" lines and as such 
                   #have restrained energy ranges compared to their broad counterparts
-                  'FeKa0em':r'Fe K$\alpha$',
-                  'FeKb0em':r'Fe K$\beta$',
+                  'FeKa1em':r'FeI K$\alpha$',
+                  'FeKb1em':r'FeI K$\beta$',
                   'calNICERSiem':r'Nicer Cal',
 
                     'NeKa10abs': r'NeX K$\alpha$',
@@ -53,6 +53,10 @@ lines_std={         #don't change the first 8, there are explicit calls in the c
                   'CaKa20abs':r'CaXX K$\alpha$',
                   # 'CrKa23abs':r'CrXXIII K$\alpha$',
                   #resolved lines
+
+                'FeKa1p1em': r'FeI K$\alpha$ (P$^{1/2}$)',
+                'FeKa1p3em': r'FeI K$\alpha$ (P$^{3/2}$)',
+
                 'FeKa25Zabs':r'FeXXV K$\alpha$ (z)',
                 'FeKa25Yabs': r'FeXXV K$\alpha$ (y)',
                 'FeKa25Xabs': r'FeXXV K$\alpha$ (x)',
@@ -96,6 +100,7 @@ n_absline=6
 
 range_absline=range(n_absline)
 
+#no "A" (in caps) in the line names ! Used for recognition of line sets
 lines_e_dict={
                     'FeKaem':[6.404],
                     'FeKbem':[7.06],
@@ -104,7 +109,7 @@ lines_e_dict={
                   'FeKa26abs':[6.97,-5000,10000],
                   #uncertainty of 5eV
                   'NiKa27abs':[7.793,-5000,3000],
-                  'FeKb25abs':[7.88,-5000,10000],
+                  'FeKb25abs':[7.878,-5000,10000],
                   'FeKb26abs':[8.25,-5000,10000],
                   'FeKg26abs':[8.7,-5000,10000],
                   #these 4 are put at the end so they are not used in fakes computation etc since the computation will stop 
@@ -116,9 +121,10 @@ lines_e_dict={
 
                     #see https://iopscience.iop.org/article/10.3847/0004-637X/818/2/164/pdf for precise edge
                     #and neutral K energies if needed
-                    #this one is the average of the 6.391 (1/3) and 6.404 (2/3)
-                   'FeKa0em':[6.400,-10000,10000],
-                   'FeKb0em':[7.06,-10000,10000],
+                    #this one is the average of the 6,390.84  (1/3) and 6,403.84 (2/3)
+                    # (see e.g. https://xdb.lbl.gov/Section1/Table_1-2.pdf)
+                   'FeKa1em':[6.400,-10000,10000],
+                   'FeKb1em':[7.06,-10000,10000],
                    'calNICERSiem':[1.74],
 
                   'NeKa10abs':[1.02180,-3000,3000],
@@ -131,6 +137,10 @@ lines_e_dict={
                   #'CaKb20abs': [around 4.85, -3000, 3000],
 
     # resolved lines (from NIST 2023)
+    #a better model should use a 7 lorentzian components (https://heasarc.gsfc.nasa.gov/xanadu/xspec/manual/node179.html)
+                'FeKa1p1em': [6.39084, -30000, 1000],
+                'FeKa1p3em': [6.40384, -30000, 1000],
+
                 #these have uncertainties of 1.4 meV
 
                 #Z is the forbidden line F
@@ -147,6 +157,8 @@ lines_e_dict={
                 'FeKb25p1abs':  [7.872,-3000,3000],
                 'FeKb25p3abs':  [7.881,-3000,3000],
 
+                #for high densities another line blends with the first transition and increases the norm ratio
+                #see https://www.aanda.org/articles/aa/abs/2025/02/aa53133-24/aa53133-24.html
                 'FeKa26p1abs':  [6.9520,-3000,3000],
                 'FeKa26p3abs':  [6.9732,-3000,3000],
 
@@ -219,8 +231,8 @@ lines_w_dict={
                   'FeKb26abs':[1e-2,0.,0.05],
                   'FeKg26abs':[1e-2,0.,0.05],
                   #these are emission lines and thus we let some have bigger widths even without being broad
-                  'FeKa0em':[1e-2,0.,0.05],
-                  'FeKb0em':[1e-2,0.,0.05],
+                  'FeKa1em':[1e-2,0.,0.05],
+                  'FeKb1em':[1e-2,0.,0.05],
                   'FeKa25em':[1e-2,0.,0.05],
                   'FeKa26em':[1e-2,0.,0.05],
                   'calNICERSiem':[0.1,0.05,0.2],
@@ -232,6 +244,9 @@ lines_w_dict={
                 'CrKa23abs': [1e-2, 0., 0.05],
 
     # resolved lines
+
+            'FeKa1p3em': [1e-3,0.,0.05],
+            'FeKa1p1em': [1e-3,0.,0.05],
 
             'FeKa25Zabs': [1e-3,0.,0.05],
             'FeKa25Yabs': [1e-3,0.,0.05],
@@ -264,37 +279,29 @@ lines_w_dict={
 
 
 lines_broad_w_dict={
-                  'FeKa0em':[0.3,0.2,0.7],
-                  'FeKb0em':[0.3,0.2,0.7],
+                  'FeKa1em':[0.3,0.2,0.7],
+                  'FeKb1em':[0.3,0.2,0.7],
                   'FeKa25em':[0.3,0.2,0.7],
                   'FeKa26em':[0.3,0.2,0.7],
                   }
 
 #for V404/V4641
 # lines_broad_w_dict={
-#                   'FeKa0em':[0.3,0.2,1.],
-#                   'FeKb0em':[0.3,0.2,1.],
+#                   'FeKa1em':[0.3,0.2,1.],
+#                   'FeKb1em':[0.3,0.2,1.],
 #                   'FeKa25em':[0.3,0.2,1.],
 #                   'FeKa26em':[0.3,0.2,1.],
 #                   }
 
 # lines_broad_w_dict={
-#                   'FeKa0em':[0.3,0.2,1.5],
-#                   'FeKb0em':[0.3,0.2,1.5],
+#                   'FeKa1em':[0.3,0.2,1.5],
+#                   'FeKb1em':[0.3,0.2,1.5],
 #                   'FeKa25em':[0.3,0.2,1.5],
 #                   'FeKa26em':[0.3,0.2,1.5],
 #                   }
 
 #link groups to tie line energies together
 link_groups=np.array([['FeKa25abs','FeKb25abs'],['FeKa26abs','FeKb26abs','FeKg26abs'],['NiKa27abs']],dtype=object)
-
-def ang2kev(x):
-
-    '''note : same thing on the other side due to the inverse
-    
-    also same thing for mAngtoeV'''
-
-    return 12.398/x
 
 def model_list(model_id='lines',give_groups=False,sat_list=[]):
     
@@ -336,18 +343,18 @@ def model_list(model_id='lines',give_groups=False,sat_list=[]):
                      'SKa16abs_gaussian','CaKa20abs_gaussian']
 
     if model_id=='lines_resolved':
-        avail_comps=['FeKa0em_bgaussian','FeKb0em_bgaussian','FeKa25em_gaussian','FeKa26em_gaussian',
+        avail_comps=['FeKa1em_bgaussian','FeKb1em_bgaussian','FeKa25em_gaussian','FeKa26em_gaussian',
                       'FeKa25abs_agaussian','FeKa26abs_agaussian','NiKa27abs_agaussian',
                       'FeKb25abs_agaussian','FeKb26abs_agaussian','FeKg26abs_agaussian']
 
     if model_id=='lines_em':
-        avail_comps=['FeKa0em_bgaussian','FeKb0em_bgaussian','FeKa25em_gaussian','FeKa26em_gaussian']
+        avail_comps=['FeKa1em_bgaussian','FeKb1em_bgaussian','FeKa25em_gaussian','FeKa26em_gaussian']
 
     if model_id=='lines_em_V4641Sgr':
-        avail_comps=['FeKa0em_gaussian','FeKa25em_gaussian','FeKa26em_gaussian']
+        avail_comps=['FeKa1em_gaussian','FeKa25em_gaussian','FeKa26em_gaussian']
 
     if model_id=='lines_narrow':
-        avail_comps=['FeKa0em_bgaussian','FeKb0em_bgaussian','FeKa25em_gaussian','FeKa26em_gaussian',
+        avail_comps=['FeKa1em_bgaussian','FeKb1em_bgaussian','FeKa25em_gaussian','FeKa26em_gaussian',
                       'FeKa25abs_nagaussian','FeKa26abs_nagaussian','NiKa27abs_nagaussian',
                       'FeKb25abs_nagaussian','FeKb26abs_nagaussian','FeKg26abs_nagaussian']
 
@@ -378,7 +385,7 @@ def model_list(model_id='lines',give_groups=False,sat_list=[]):
             -6 "narrow-ish" absorption line components (can be disabled with no_abslines in the main script)
         '''
 
-        avail_comps=['FeKa0em_bgaussian','FeKa0em_gaussian','FeKb0em_gaussian','FeKa25em_gaussian','FeKa26em_gaussian',
+        avail_comps=['FeKa1em_bgaussian','FeKa1em_gaussian','FeKb1em_gaussian','FeKa25em_gaussian','FeKa26em_gaussian',
                      'FeKa25abs_nagaussian','FeKa26abs_nagaussian','NiKa27abs_nagaussian',
                                    'FeKb25abs_nagaussian','FeKb26abs_nagaussian','FeKg26abs_nagaussian']
 

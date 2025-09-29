@@ -89,11 +89,12 @@ from general_tools import ravel_ragged,MinorSymLogLocator
 #     sys.path.append('/home/parrama/Documents/Work/PhD/Scripts/Python/observations/spectral_analysis/')
 
 #visualisation functions
-from visual_line_tools import load_catalogs,dist_mass,obj_values,abslines_values,values_manip,\
+from visual_line_tools import load_catalogs,obj_values,abslines_values,values_manip,\
     n_infos, plot_lightcurve,sources_det_dic, dippers_list,telescope_list,load_integral,telescope_colors,\
     convert_BAT_count_flux,flux_erg_pow,err_flux_erg_pow,values_manip_var,corr_factor_lbat,fetch_bat_lightcurve,\
     int_rate_to_flux,incl_dyn_dict,incl_jet_dict,incl_misc_dict,incl_refl_dict,Porb_dict,wind_det_dict,wind_det_sources
 
+from dist_mass_tools import dist_mass
 from distrib_graph import distrib_graph
 from correl_graph import correl_graph
 from hid_graph import hid_graph
@@ -1321,12 +1322,16 @@ HID_options_str=np.array(['Source','Inclination','Instrument','Time',
                           r'$nH$',r'$T_{in}$'] \
                           + (['Custom: Line substructures', 'Custom: accretion states','Custom: ionization'] if \
                                  display_single and obj_list[mask_obj_select][0] == '4U1630-47' else []) \
-                          + (['Custom: Outbursts'] if display_single else []))
+                          + (['Custom: Outbursts'] if display_single else [])\
+                          +(['Custom: Gamma saturation threshold'] if \
+                                 display_single and obj_list[mask_obj_select][0] == '4U1630-47' else []))
 
 radio_info_cmap_options=['Source','Inclination','Instrument','Time','Velocity shift','Del-C','EW ratio','nH','kT'] \
                         + (['custom_line_struct', 'custom_acc_states','custom_ionization'] if \
                                display_single and obj_list[mask_obj_select][0] == '4U1630-47' else []) \
-                        + (['custom_outburst'] if display_single else [])
+                        + (['custom_outburst'] if display_single else [])+\
+                            (['custom_gamma_satur'] if display_single and\
+                                                       obj_list[mask_obj_select][0] == '4U1630-47' else [])
 
 radio_info_cmap_str=st.sidebar.radio('HLD colormap',(HID_options_str[:4].tolist()+HID_options_str[7:].tolist()) if BID_mode else HID_options_str ,
                                      index=0)
@@ -1400,15 +1405,27 @@ else:
 if not online:
     save_format=st.sidebar.radio('Graph format:',('pdf','svg','png'))
     
-    def save_HID():
+    def save_HLD_soft():
         '''
         # Saves the current graph in a svg (i.e. with clickable points) format.
         '''
-    
-        fig_hid.savefig(save_dir+'/'+save_str_prefix+'HID_cam_'+args.cameras+'_'+\
-                    line_search_e_str.replace(' ','_')+'_'+args.line_search_norm.replace(' ','_')+'curr_'+str(round(time.time()))+'.'+save_format,bbox_inches='tight')
-            
-    st.sidebar.button('Save current HID view',on_click=save_HID)
+        save_path=(save_dir+'/'+save_str_prefix+'HLD_soft_cam_'+args.cameras+'_'+\
+                    line_search_e_str.replace(' ','_')+'_'+args.line_search_norm.replace(' ','_')+
+                   'curr_'+str(round(time.time()))+'.'+save_format)
+        fig_hid.savefig(save_path,bbox_inches='tight',dpi=300)
+
+    def save_HLD_hard():
+        '''
+        # Saves the current graph in a svg (i.e. with clickable points) format.
+        '''
+        save_path=(save_dir+'/'+save_str_prefix+'HLD_hard_cam_'+args.cameras+'_'+\
+                    line_search_e_str.replace(' ','_')+'_'+args.line_search_norm.replace(' ','_')+
+                   'curr_'+str(round(time.time()))+'.'+save_format)
+        fig_hid_bat.savefig(save_path,bbox_inches='tight',dpi=300)
+
+    st.sidebar.button('Save current soft HLD view',on_click=save_HLD_soft)
+
+    st.sidebar.button('Save current hard HLD view',on_click=save_HLD_hard)
 
         
 with st.sidebar.expander('Visualisation'):
@@ -1425,7 +1442,7 @@ with st.sidebar.expander('Visualisation'):
 
     else:
 
-        display_dicho=st.toggle('Display favourable zone',value=not display_single)
+        display_dicho=st.toggle('Display favourable zone',value=False)
 
         color_nondet=st.toggle('Color non-detections',value=True)
 
@@ -1433,13 +1450,15 @@ with st.sidebar.expander('Visualisation'):
 
         split_cmap_source=st.toggle('Use different colormaps for detections and non-detections',value=True)
 
+    marker_ul_circle=st.toggle('Force circular UL markers',value=False)
+
     alpha_abs=st.toggle('Plot with transparency',value=False)
 
     global_colors=st.toggle('Normalize colors/colormaps over the entire sample',value=False)
         
     hid_log_HR=st.toggle('Use log scale for the Hardness Ratio',value=True)
 
-    display_minorticks=st.toggle('Display minor ticks for the Hardness Ratio',value=False)
+    display_HR_minorticks=st.toggle('Display HLD soft HR minor ticks labels as floats',value=True)
 
     if display_single and choice_source[0]=='4U1630-47':
 
@@ -1450,7 +1469,7 @@ with st.sidebar.expander('Visualisation'):
     change_legend_position=st.toggle('Change legend position',value=False)
 
     if not online:
-        paper_look=st.toggle('Paper look',value=False)
+        paper_look_hld=st.toggle('Paper look',value=False)
 
         bigger_text=st.toggle('Bigger text size',value=True)
         
@@ -1458,7 +1477,7 @@ with st.sidebar.expander('Visualisation'):
     
         show_linked=st.toggle('Distinguish linked detections',value=False)
     else:
-        paper_look=False
+        paper_look_hld=False
         bigger_text=True
         square_mode=True
         show_linked=False
@@ -1546,7 +1565,7 @@ compute_only_withdet=st.sidebar.toggle('Skip parameter analysis when no detectio
 # else:
 #     stack_det=False
 
-mpl.rcParams.update({'font.size': 10+(3 if paper_look else 0)})
+mpl.rcParams.update({'font.size': 10+(3 if paper_look_hld else 0)})
 
 if not square_mode:
     fig_hid,ax_hid=plt.subplots(1,1,figsize=(8,5) if bigger_text else (12,6))
@@ -2191,7 +2210,8 @@ if display_single and choice_source[0] == '4U1630-47' and sum(ravel_ragged(mask_
         if obj_list[i_obj] == '4U1630-47':
             for i_obs in range(len(custom_gamma_satur_color[i_obj])):
 
-                edd_factor_converter=Edd_factor_restrict[0]/edd_factor_8kpc
+                #new baseline is 1e-2 for 11.5kpc
+                edd_factor_converter=Edd_factor_restrict[0]/(edd_factor_8kpc*(11.5/8)**2)
 
                 # no specific state
 
@@ -2199,19 +2219,20 @@ if display_single and choice_source[0] == '4U1630-47' and sum(ravel_ragged(mask_
 
                 if ~(np.isnan(lum_high_sign_plot_restrict[0][0][i_obs])):
                     #for the significant detections below that value
-                    if lum_high_sign_plot_restrict[0][0][i_obs]<4e-3*edd_factor_converter:
+                    if lum_high_sign_plot_restrict[0][0][i_obs]<1e-2*edd_factor_converter:
                         custom_gamma_satur_color[i_obj][i_obs] = 'red'
                 else:
 
                     #for the 1sig upper limits below that value
                     if not np.isnan(lum_high_1sig_plot_restrict[1][0][i_obs]):
-                        if lum_high_1sig_plot_restrict[1][0][i_obs]+lum_high_1sig_plot_restrict[1][0][i_obs]<4e-3*edd_factor_converter:
+                        if lum_high_1sig_plot_restrict[1][0][i_obs]+lum_high_1sig_plot_restrict[1][0][i_obs]<1e-2*edd_factor_converter:
                             custom_gamma_satur_color[i_obj][i_obs] = 'red'
 
 #unused for now
 dict_linevis['custom_gamma_satur_color'] = custom_gamma_satur_color
 
-# dict_linevis['custom_ionization_color'] = custom_gamma_satur_color
+if radio_info_cmap=='custom_gamma_satur':
+    dict_linevis['custom_gamma_satur_color'] = custom_gamma_satur_color
 
 #outburst coloring
 color_cmap_outburst = mpl.cm.tab10
@@ -2723,12 +2744,13 @@ dict_linevis['lum_plot'] = lum_plot
 dict_linevis['use_obsids'] = use_obsids
 dict_linevis['exptime_list'] = exptime_list
 dict_linevis['hid_log_HR'] = hid_log_HR
-dict_linevis['display_minorticks']=display_minorticks
+dict_linevis['display_HR_minorticks']=display_HR_minorticks
 
 dict_linevis['additional_HLD_points_LEdd']=additional_HLD_points_LEdd
 dict_linevis['additional_HLD_points_flux']=additional_HLD_points_flux
 dict_linevis['additional_line_points']=additional_line_points
 
+dict_linevis['marker_ul_circle']=marker_ul_circle
 #testing which type of points remains
 base_sample_points_bool=True
 
@@ -2765,7 +2787,7 @@ if any_points_bool and not skip_HID:
               split_cmap_source=split_cmap_source,
               display_evol_single=display_evol_single, display_dicho=display_dicho,
               global_colors=global_colors, alpha_abs=alpha_abs,
-              paper_look=paper_look, bigger_text=bigger_text, square_mode=square_mode, zoom=zoom_hid,
+              paper_look_hld=paper_look_hld, bigger_text=bigger_text, square_mode=square_mode, zoom=zoom_hid,
               restrict_match_INT=restrict_match_INT)
 
 # fig_hid_html = mpld3.fig_to_html(fig_hid)
@@ -2832,7 +2854,7 @@ with tab_hid:
                           split_cmap_source=split_cmap_source,
                           display_evol_single=display_evol_single, display_dicho=display_dicho,
                           global_colors=global_colors, alpha_abs=alpha_abs,
-                          paper_look=paper_look, bigger_text=bigger_text, square_mode=square_mode, zoom=zoom_hid,
+                          paper_look_hld=paper_look_hld, bigger_text=bigger_text, square_mode=square_mode, zoom=zoom_hid,
                           broad_mode='BAT',restrict_match_INT=restrict_match_INT)
 
                 try:
@@ -3568,7 +3590,8 @@ with expander_monit:
    #### Parameter analysis
 '''''''''''''''''''''
 
-with st.sidebar.expander('Parameter analysis'):
+paranal_expander=st.sidebar.expander('Parameter analysis')
+with paranal_expander:
     
     display_param_withdet=st.toggle('Restrict parameter analysis to sources with significant detections',value=True)
     
@@ -3630,6 +3653,8 @@ with st.sidebar.expander('Parameter analysis'):
     st.header('Computations')
 
     compute_correl = st.toggle('Compute Pearson/Spearman for the scatter plots', value=False)
+    npert_rank=int(st.number_input('Number of Perturbations for the correlation computations',value=10000))
+    
     compute_regr = st.toggle('Compute linear regression in strongly correlated graphs ', value=False)
     regr_pval_threshold=st.number_input('p-value treshold to compute the regression',
                                         format='%.3e',value=1e-5)
@@ -3672,6 +3697,9 @@ with st.sidebar.expander('Parameter analysis'):
     common_observ_bounds_lines=st.toggle('Use common observation parameter bounds for all lines',value=True)
     display_pearson = st.toggle('Display Pearson rank', value=False)
     display_legend_correl=st.toggle('Display legend',value=True)
+
+    correl_internal_mode=st.toggle('Internal ticks for combined plots',value=False)
+    paper_look_correl=st.toggle('Paper mode for correl (zoomed figures)',value=False)
 
     st.header('Upper limits')
     show_scatter_ul=st.toggle('Display upper limits in EW plots',value=False)
@@ -3752,8 +3780,10 @@ dict_linevis['common_observ_bounds_lines']=common_observ_bounds_lines
 dict_linevis['common_observ_bounds_dates']=common_observ_bounds_dates
 dict_linevis['use_alpha_ul']=use_alpha_ul
 dict_linevis['display_legend_correl']=display_legend_correl
-
+dict_linevis['correl_internal_mode']=correl_internal_mode
 dict_linevis['split_dist_method']=split_dist_method
+dict_linevis['npert_rank']=npert_rank
+dict_linevis['paper_look_correl']=paper_look_correl
 
 os.system('mkdir -p '+save_dir+'/graphs')
 os.system('mkdir -p '+save_dir+'/graphs/distrib')
@@ -3787,7 +3817,9 @@ def streamlit_distrib():
         
     if use_distrib_lines:
         distrib_lines=distrib_graph(abslines_plot_restrict,'lines',dict_linevis,conf_thresh=slider_sign,streamlit=True,bigger_text=bigger_text,split=split_distrib)
-        
+
+    return_fig_list=[]
+
     with tab_param:
         with st.expander('Distribution graphs'):
             
@@ -3811,28 +3843,39 @@ def streamlit_distrib():
                 
             with col_list['ew']:
                 st.pyplot(distrib_ew)
-    
+
+                return_fig_list += [distrib_ew]
+
             with col_list['bshift']:
                 st.pyplot(distrib_bshift)
+                return_fig_list += [distrib_bshift]
+
             with col_list['ener']:
                 st.pyplot(distrib_ener)
-                    
+                return_fig_list += [distrib_ener]
+
             if use_ewratio:
                 with col_list['ewratio']:
                     st.pyplot(distrib_ewratio)
-            
+                return_fig_list += [distrib_ewratio]
+
             if use_lineflux and n_infos>=5:
                 with col_list['lineflux']:
                     st.pyplot(distrib_lineflux)
-            
+                return_fig_list += [distrib_lineflux]
+
             if use_distrib_lines:
                 with col_list['lines']:
                     st.pyplot(distrib_lines)
-                    
+                return_fig_list += [distrib_lines]
+
             if use_width:
                 with col_list['width']:
                     st.pyplot(distrib_width)
-                
+                return_fig_list += [distrib_width]
+
+    return return_fig_list
+
 '''
 #1-1 Correlations
 '''
@@ -4012,7 +4055,9 @@ def streamlit_scat(mode):
             scat_lineflux=[correl_graph(abslines_plot_restrict,'lineflux_inclin',abslines_ener_restrict,dict_linevis,mode_vals=incl_plot_restrict,
                                         mode='source',conf_thresh=slider_sign,streamlit=True,compute_correl=compute_correl,bigger_text=bigger_text,
                                         show_linked=show_linked)]
-    
+
+    return_fig_list=[]
+
     with tab_param:
         with st.expander('Correlation graphs for '+('line' if mode=='intrinsic' else mode)+' parameters'):
     
@@ -4033,27 +4078,37 @@ def streamlit_scat(mode):
             
             with col_list['ew']:
                 pholder_ew=[st.pyplot(elem) for elem in scat_ew]
-                            
+                return_fig_list+=scat_ew
+
             if mode!='ewcomp' or use_time_param:
     
                 with col_list['bshift']:
                     pholder_bshift=[st.pyplot(elem) for elem in scat_bshift]
-    
+                return_fig_list += scat_bshift
+
             if mode!='ewcomp':
                 with col_list['ener']:
                     pholder_ener=[st.pyplot(elem) for elem in scat_ener]
+                    return_fig_list += scat_ener
+
                 if use_ewratio and (mode=='observ' or use_width):
                     with col_list['ewratio']:
                         pholder_ewratio=[st.pyplot(elem) for elem in scat_ewratio]
-                        
+                        return_fig_list += scat_ewratio
+
             if use_lineflux and n_infos>=5:
                 with col_list['lineflux']:
                     pholder_lineflux=[st.pyplot(elem) for elem in scat_lineflux]
-                    
+                    return_fig_list += scat_lineflux
+
             if use_width:
                 with col_list['width']:
                     pholder_width=[st.pyplot(elem) for elem in scat_width]
-            
+                    return_fig_list+=scat_width
+
+        return return_fig_list
+
+
 mpl.rcParams.update({'font.size': 14})
 
 #storing arguments to reduce the number of arguments in the scatter plot functions    
@@ -4087,19 +4142,50 @@ if display_distrib:
         else:
             st.warning('No significant detection left with current source selection. Cannot compute distributions.')
     else:
-        streamlit_distrib()
-    
+        fig_distrib_list=streamlit_distrib()
+
+if not online:
+    def save_fig_distrib():
+        '''
+        # Saves the current graph in a svg (i.e. with clickable points) format.
+        '''
+
+        for i_distrib,elem_fig in enumerate(fig_distrib_list):
+            save_path=(save_dir+'/'+save_str_prefix+'fig_distrib_curr_'+str(round(time.time()))+'_'+str(i_distrib)+
+                       '.'+save_format)
+            elem_fig.savefig(save_path,bbox_inches='tight',dpi=300)
+
+    with paranal_expander:
+        st.button('Save current distrib figures',on_click=save_fig_distrib)
+
+
+fig_correl_list=[]
 if display_scat_intr:
-    streamlit_scat('intrinsic')
+    fig_correl_list+=streamlit_scat('intrinsic')
 
 if display_scat_ewcomp:
-    streamlit_scat('ewcomp')
+    fig_correl_list+=streamlit_scat('ewcomp')
     
 if display_scat_hid:
-    streamlit_scat('observ')
+    fig_correl_list+=streamlit_scat('observ')
 
 if display_scat_inclin:
-    streamlit_scat('source')
+    fig_correl_list+=streamlit_scat('source')
+
+if not online:
+    def save_fig_correl():
+        '''
+        # Saves the current graph in a svg (i.e. with clickable points) format.
+        '''
+
+        for i_correl,elem_fig in enumerate(fig_correl_list):
+            save_path=(save_dir+'/'+save_str_prefix+'fig_correl_curr_'+str(round(time.time()))+'_'+str(i_correl)+
+                       '.'+save_format)
+            elem_fig.savefig(save_path,bbox_inches='tight',dpi=300)
+
+    with paranal_expander:
+        st.button('Save current correl figures',on_click=save_fig_correl)
+
     
 if not (display_scat_intr or display_scat_ewcomp or display_scat_hid or display_scat_inclin):
     with tab_param:
@@ -4254,7 +4340,7 @@ if display_single and choice_source[0]=='4U1630-47' and plot_gamma_correl:
     r_spearman_gamma_bat_rate= np.array(pymccorrelation(int_fit_gamma[mask_int_withBAT], count_bat_match_int,
                                           dx_init=int_fit_gamma_err.T[mask_int_withBAT],
                                           dy_init=count_bat_err_match_int,
-                                          Nperturb=1000, coeff='spearmanr', percentiles=(50, 5, 95)))
+                                          Nperturb=npert_rank, coeff='spearmanr', percentiles=(50, 5, 95)))
 
     # switching back to uncertainties from quantile values
     r_spearman_gamma_bat_rate = np.array([[r_spearman_gamma_bat_rate[ind_c][0],
@@ -4339,7 +4425,7 @@ if display_single and choice_source[0]=='4U1630-47' and plot_gamma_correl:
     r_spearman_gamma_flux_int= np.array(pymccorrelation(int_fit_gamma, int_fit_flux,
                                           dx_init=int_fit_gamma_err.T,
                                           dy_init=int_fit_flux_err,
-                                          Nperturb=1000, coeff='spearmanr', percentiles=(50, 5, 95)))
+                                          Nperturb=npert_rank, coeff='spearmanr', percentiles=(50, 5, 95)))
 
     # switching back to uncertainties from quantile values
     r_spearman_gamma_flux_int = np.array([[r_spearman_gamma_flux_int[ind_c][0],
@@ -4378,7 +4464,7 @@ if display_single and choice_source[0]=='4U1630-47' and plot_gamma_correl:
     r_spearman_gamma_rate_int= np.array(pymccorrelation(int_fit_gamma, int_fit_rate_30_50,
                                           dx_init=int_fit_gamma_err.T,
                                           dy_init=int_fit_rate_30_50_err,
-                                          Nperturb=1000, coeff='spearmanr', percentiles=(50, 5, 95)))
+                                          Nperturb=npert_rank, coeff='spearmanr', percentiles=(50, 5, 95)))
 
     # switching back to uncertainties from quantile values
     r_spearman_gamma_rate_int = np.array([[r_spearman_gamma_rate_int[ind_c][0],
@@ -4418,7 +4504,7 @@ if display_single and choice_source[0]=='4U1630-47' and plot_gamma_correl:
     r_spearman_rate_flux_int= np.array(pymccorrelation(int_fit_rate_30_50,int_fit_flux,
                                           dx_init=int_fit_rate_30_50_err,
                                           dy_init=int_fit_flux_err,
-                                          Nperturb=1000, coeff='spearmanr', percentiles=(50, 5, 95)))
+                                          Nperturb=npert_rank, coeff='spearmanr', percentiles=(50, 5, 95)))
 
     # switching back to uncertainties from quantile values
     r_spearman_rate_flux_int = np.array([[r_spearman_rate_flux_int[ind_c][0],
@@ -4458,7 +4544,7 @@ if display_single and choice_source[0]=='4U1630-47' and plot_gamma_correl:
     r_spearman_rate_flux_15_50_int= np.array(pymccorrelation(int_fit_rate_30_50,int_fit_flux_15_50,
                                           dx_init=int_fit_rate_30_50_err,
                                           dy_init=int_fit_flux_15_50_err.T,
-                                          Nperturb=1000, coeff='spearmanr', percentiles=(50, 5, 95)))
+                                          Nperturb=npert_rank, coeff='spearmanr', percentiles=(50, 5, 95)))
 
     # switching back to uncertainties from quantile values
     r_spearman_rate_flux_15_50_int = np.array([[r_spearman_rate_flux_15_50_int[ind_c][0],
@@ -4644,7 +4730,7 @@ if display_single and choice_source[0]=='4U1630-47' and plot_gamma_correl:
     #fourth figure to look at the flux vs gamma evolution internally
     fig_native_flux_gamma,ax_native_flux_gamma=plt.subplots(figsize=(6,6),layout='constrained')
     ax_native_flux_gamma.set_xlim(1.,3.5)
-    ax_native_flux_gamma.set_ylim(1e-4, 1e-1)
+    ax_native_flux_gamma.set_ylim(3e-4, 3e-1)
     ax_native_flux_gamma.set_yscale('log')
     ax_native_flux_gamma.set_xlabel(r'slope of the high-energy component ($\Gamma$)')
     ax_native_flux_gamma.set_ylabel('15-50 keV luminosity ($L/L_{Edd}$)')
@@ -4671,12 +4757,12 @@ if display_single and choice_source[0]=='4U1630-47' and plot_gamma_correl:
     #adding a shading for the low luminosity region
     #plt.axhspan(1e-4,4e-3,color='red',alpha=0.15)
 
-    plt.axhline(4e-3,color='red',alpha=1,ls='--',label=r'$\Gamma$ saturation threshold')
+    plt.axhline(1e-2,color='red',alpha=1,ls='--',label=r'$\Gamma$ saturation threshold')
 
 
     # fig_native_flux_gamma.suptitle(r'Observed nthcomp $\Gamma$ vs high energy luminosity')
-    plt.legend(fontsize=10,)
-
+    plt.legend(fontsize=12,loc='upper left')
+    plt.show()
     plt.savefig('fig.pdf')
 
 

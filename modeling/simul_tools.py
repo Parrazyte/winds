@@ -21,8 +21,12 @@ import subprocess
 from scipy.integrate import trapezoid
 from scipy.interpolate import griddata
 
+#rough way of testing if online or not
+online=os.getcwd().startswith('/mount/src')
+project_dir='/'.join(__file__.split('/')[:-3])
+sys.path.append(os.path.join(project_dir,'general/'))
+sys.path.append(os.path.join(project_dir,'modeling/PyXstar'))
 
-sys.path.extend(['/home/parrama/Documents/Work/PhD/Scripts/Python/general'])
 from general_tools import file_edit
 
 from tqdm import tqdm
@@ -33,7 +37,6 @@ from solution_tools import func_density_sol,func_nh_sol,func_r_boost_sol,func_de
 
 from grid_tools import upload_mantis,download_mantis
 
-sys.path.extend(['/home/parrama/Documents/Work/PhD/Scripts/Python/modeling/PyXstar'])
 import pyxstar as px
 
 # #adding some libraries 

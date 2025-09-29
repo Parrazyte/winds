@@ -27,9 +27,9 @@ except:
 
 
 from fitting_tools import sign_delchis_table, lines_e_dict,lines_w_dict,lines_broad_w_dict,\
-        link_groups,lines_std_names,def_ftest_threshold,def_ftest_leeway,ang2kev
+        link_groups,lines_std_names,def_ftest_threshold,def_ftest_leeway
 
-from general_tools import ravel_ragged,get_overlap,shorten_epoch
+from general_tools import ravel_ragged,get_overlap,shorten_epoch,ang2kev
 
 
 from contextlib import redirect_stdout
@@ -77,7 +77,7 @@ if not streamlit_mode and model_dir!=None:
     # 6: NuSTAR / FPMB
     pass
 
-# AllModels.mdefine('crabcorr (1./E^dGamma)crabcorrNorm : mul')
+AllModels.mdefine('crabcorr (1./E^dGamma)crabcorrNorm : mul')
 
 #example of model loading
 # AllModels.initpackage('tbnew_mod',"lmodel_tbnew.dat",dirPath=model_dir+'/tbnew')
@@ -372,251 +372,10 @@ def set_ener(mode='thcomp',xrism=False):
     if mode=='thcomp':
 
         if xrism:
-            AllModels.setEnergies('0.01 0.1 1000 log, 10. 19801 lin, 1000. 1000 log')
+            AllModels.setEnergies('0.01 0.1 1000 log, 10. 19800 lin, 1000. 1000 log')
         else:
             AllModels.setEnergies('0.01 1000. 10000 log')
 
-def fit_broader(epoch_id,add_gaussem=True,bat_interp_dir='/home/parrama/Documents/Observ/copy_SSD/Swift/BAT_interp',
-                n_add=1,outdir='fit_broader',bat_emin=15.,bat_emax=50.,avg_BAT_norm=True):
-    '''
-    for quick refitting in broader bands
-
-    bat_interp_dir is the directory where bat interpolation spectra (created with ftflx2xsp from the regression vals)
-     are stored
-
-    n_add is the number of times the spectrum is added (to give it more weight in the fit)
-    '''
-
-    # Plot.xLog=False
-
-    plt.ioff()
-
-    reset()
-    AllModels.clear()
-    AllData.clear()
-    Plot.xLog=True
-    Plot.xAxis='keV'
-
-    Xset.restore('lineplots_opt/'+epoch_id+'_mod_broadband_post_auto.xcm')
-    #adding the swift info
-    groups=AllData.nGroups
-
-    currdir=os.getcwd()
-    os.chdir(bat_interp_dir)
-
-    #loading n_add times the BAT spectrum of the observation if it exists
-    if not os.path.isfile(epoch_id+'_BAT_regr_sp_'+str(bat_emin)+'_'+str(bat_emax)+'.pi'):
-        print('No concurrent daily BAT regression spectrum available. Skipping this step...')
-    else:
-        add_str=' '.join([str(groups+i)+':'+str(groups+i)+' '+epoch_id+'_BAT_regr_sp_'
-                          +str(bat_emin)+'_'+str(bat_emax)+'.pi' for i in range(1,n_add+1)])
-        AllData(add_str)
-
-
-    os.chdir(currdir)
-
-    os.system('mkdir -p '+outdir)
-
-    curr_logfile_write,curr_logfile=xLog_rw(os.path.join(outdir, epoch_id + '_broader.log'))
-
-    AllModels.clear()
-    AllModels.setEnergies('0.01 1000. 10000 log')
-
-    print('Loading base model...')
-
-    Xset.chatter=0
-
-    addcomp('cont_diskbb')
-    addcomp('glob_thcomp')
-    AllModels(1).thcomp.kT_e.values=100
-    AllModels(1).thcomp.kT_e.frozen=True
-    AllModels(1).thcomp.Gamma_tau.values=[2.,0.01,1.5,1.5,3.5,3.5]
-    addcomp('glob_TBabs')
-    addcomp('glob_constant')
-
-    #locking the constant factor(s) of the BAT elements
-    for i in range(groups+1,AllData.nGroups+1):
-        AllModels(i)(1).frozen=True
-
-    AllData.notice('0.3-3.')
-
-    xscorpeon.load('auto',frozen=True)
-
-    Xset.chatter=10
-
-    Fit.perform()
-
-    addcomp('calNICERSiem_gaussian',position='lastin')
-
-    if avg_BAT_norm and not add_gaussem:
-        AllModels(i)(1).link = str(groups) + '.' + ' /(' + '+'.join([str(1 + AllModels(1).nParameters * id_grp) \
-                                                                     for id_grp in range(groups)]) + ')'
-    calc_fit()
-
-    if add_gaussem:
-        addcomp('FeKa0em_bgaussian', position='thcomp')
-
-        #not that here the NICER edge is not removed for the BAT datagroup, but we don't care considering the energy
-        addcomp('calNICER_edge')
-
-        # locking the constant factor(s) of the BAT elements
-        for i in range(groups + 1, AllData.nGroups + 1):
-
-            if avg_BAT_norm:
-                AllModels(i)(1).link = str(groups)+'.'+' /('+'+'.join([str(1+AllModels(1).nParameters*id_grp)\
-                                                                         for id_grp in range(groups)])+')'
-
-        calc_fit()
-
-
-    xscorpeon.load('auto',frozen=False,extend_SAA_norm=True,fit_SAA_norm=True)
-
-    calc_fit()
-    xscorpeon.freeze()
-
-    mod=allmodel_data()
-
-    Plot.xLog=True
-    xPlot('ldata,ratio,delchi')
-
-    if os.path.isfile(os.path.join(outdir,epoch_id+'_mod_broader.xcm')):
-        os.remove(os.path.join(outdir,epoch_id+'_mod_broader.xcm'))
-
-    if os.path.isfile(os.path.join(outdir,epoch_id+'_mod_broader_mod.xcm')):
-        os.remove(os.path.join(outdir,epoch_id+'_mod_broader_mod.xcm'))
-
-    Xset.save(os.path.join(outdir,epoch_id+'_mod_broader.xcm'),info='a')
-
-    Xset.save(os.path.join(outdir,epoch_id+'_mod_broader_mod.xcm'),info='m')
-
-    Plot_screen('ldata,ratio,delchi',os.path.join(outdir,epoch_id+'_mod_broader_screen'))
-
-    Plot.xLog=False
-    Plot_screen('ldata,ratio,delchi',os.path.join(outdir,epoch_id+'_mod_broader_zoom_NICER_screen'),xlims=[0.3,10.0])
-    Plot.xLog=True
-
-    # saving the model str
-    catch_model_str(curr_logfile, savepath=outdir + '/' + epoch_id + '_mod_broader.txt')
-
-    # locking the constant factor(s) of the BAT elements
-    for i in range(groups + 1, AllData.nGroups + 1):
-
-        if avg_BAT_norm:
-            AllModels(i)(1).link = ''
-
-    #creating the SEDs
-    save_broad_SED(path=os.path.join(outdir,epoch_id+'_mod_broader_SED.xcm'),
-                   e_low=0.01,e_high=1000,nbins=2e3,retain_session=False,
-                   remove_abs=True,remove_gaussian=True,remove_cal=True,
-                   remove_scorpeon=True)
-
-    plt.ion()
-
-def fit_broader_BAT(epoch_list,
-                    add_gaussem=True,
-                    outdir='fit_broader'):
-    '''
-
-    for quick refitting in broader bands with BAT
-
-    '''
-
-
-    plt.ioff()
-
-    reset()
-    AllModels.clear()
-    AllData.clear()
-    Plot.xLog=True
-    Plot.xAxis='keV'
-
-    load_list(epoch_list)
-
-    epoch_id='_'.join(shorten_epoch([elem.split('_sp')[0] for elem in epoch_list]))
-
-    #adding the swift info
-    groups=AllData.nGroups
-
-    currdir=os.getcwd()
-
-    os.system('mkdir -p '+outdir)
-
-    curr_logfile_write,curr_logfile=xLog_rw(os.path.join(outdir, epoch_id + '_broader.log'))
-
-    AllModels.clear()
-
-    print('Loading base model...')
-
-    Xset.chatter=0
-
-    try:
-        addcomp('cont_diskbb')
-    except:
-        breakpoint()
-    addcomp('disk_thcomp')
-    addcomp('glob_TBabs')
-    addcomp('glob_constant')
-    for i_grp in range(groups):
-        if AllData(i_grp+1).fileinfo('TELESCOP')=='NICER':
-            AllData(i_grp+1).ignore('**-0.3 10.-**')
-        if i_grp!=0:
-            AllModels(i_grp+1)(1).values=[1.,0.01,0.95,0.95,1.05,1.05]
-
-    xscorpeon.load('auto',frozen=True)
-
-    Xset.chatter=10
-
-    calc_fit()
-
-    addcomp('calNICERSiem_gaussian',position='lastin')
-
-    calc_fit()
-
-    if add_gaussem:
-        addcomp('FeKa0em_bgaussian', position='thcomp')
-
-        #not that here the NICER edge is not removed for the BAT datagroup, but we don't care considering the energy
-        addcomp('calNICER_edge')
-
-        calc_fit()
-
-
-    xscorpeon.load('auto',frozen=False,extend_SAA_norm=True,fit_SAA_norm=True)
-
-    calc_fit()
-    xscorpeon.freeze()
-
-    mod=allmodel_data()
-
-    Plot.xLog=True
-    xPlot('ldata,ratio,delchi')
-
-    if os.path.isfile(os.path.join(outdir,epoch_id+'_mod_broader.xcm')):
-        os.remove(os.path.join(outdir,epoch_id+'_mod_broader.xcm'))
-
-    if os.path.isfile(os.path.join(outdir,epoch_id+'_mod_broader_mod.xcm')):
-        os.remove(os.path.join(outdir,epoch_id+'_mod_broader_mod.xcm'))
-
-    Xset.save(os.path.join(outdir,epoch_id+'_mod_broader.xcm'),info='a')
-
-    Xset.save(os.path.join(outdir,epoch_id+'_mod_broader_mod.xcm'),info='m')
-
-    Plot_screen('ldata,ratio,delchi',os.path.join(outdir,epoch_id+'_mod_broader_screen'))
-
-    Plot.xLog=False
-    Plot_screen('ldata,ratio,delchi',os.path.join(outdir,epoch_id+'_mod_broader_zoom_NICER_screen'),xlims=[0.3,10.0])
-    Plot.xLog=True
-
-    # saving the model str
-    catch_model_str(curr_logfile, savepath=outdir + '/' + epoch_id + '_mod_broader.txt')
-
-    #creating the SEDs
-    save_broad_SED(path=os.path.join(outdir,epoch_id+'_mod_broader_SED.xcm'),
-                   e_low=0.01,e_high=1000,nbins=2e3,retain_session=False,
-                   remove_abs=True,remove_gaussian=True,remove_cal=True,
-                   remove_scorpeon=True)
-
-    plt.ion()
 
 def make_ls(low_e,high_e):
     Xset.restore('xrism_save_stronglines.xcm')
@@ -1141,6 +900,69 @@ def save_broad_SED(path=None,e_low=0.1,e_high=100,nbins=1e3,retain_session=False
                    delimiter=' ')
     else:
         return save_arr
+
+def compute_snr(sp_source,emin,emax,sp_back=None,rmf_source=None,e_step=None,mode='keV'):
+
+    '''
+    Careful, will need to rescale the bakcscale for the Resolve spectra to consider the branching ratios
+
+    mode can be keV or channel
+    In channel mode, emin and emax need to be integers ,and e_step must be big enough so that it doesn't create floats
+
+    6.4-7 is 12600-14000 in XRISM channels
+
+    '''
+
+    AllData.clear()
+    AllModels.clear()
+
+    AllData('1:1 '+sp_source)
+    if rmf_source is not None:
+        AllData(1).response=rmf_source
+
+    if sp_back is not None:
+        AllData(1).background=sp_back
+
+    Plot.xAxis=mode
+
+    if e_step is None:
+        AllData.ignore('**-'+str(emin)+' '+str(emax)+'-**')
+
+        SNR=np.sqrt(AllData(1).rate[0] * AllData(1).exposure)
+        return SNR
+    else:
+        e_range=np.arange(emin,emax+e_step/2,e_step,dtype=int if mode=='channel' else float)
+        SNR_arr=np.repeat(np.nan,len(e_range)-1)
+
+        for i in range(len(e_range)-1):
+            AllData.notice('**')
+            AllData.ignore('**-'+str(e_range[i])+' '+str(e_range[i+1])+'-**')
+            SNR_arr[i]=np.sqrt(AllData(1).rate[0] * AllData(1).exposure)
+
+        return SNR_arr
+
+def compa_SNR(sp_source_list,sp_back_list,
+              emin,emax,e_step,
+              rmf_source_list=None,mode='keV',
+              save_suffix='',):
+    '''
+    Makes a SNR comparison for a list of spectra and/or backgrounds, and stores it in an array that is saved
+    '''
+
+    if rmf_source_list is None:
+        rmf_source_list_use=np.repeat([None,len(sp_source_list)])
+    else:
+        rmf_source_list_use=rmf_source_list
+
+    SNR_arr_list=np.array([None]*len(sp_source_list))
+
+    for i_src,(elem_sp_source,elem_sp_back,elem_rmf_source) in enumerate(zip(sp_source_list,sp_back_list,rmf_source_list_use)):
+        SNR_arr_list[i_src]=compute_snr(elem_sp_source,elem_sp_back,emin=emin,emax=emax,e_step=e_step,
+                                        rmf_source=elem_rmf_source,
+                                        mode=mode)
+
+    with open('compa_SNR_dump'+('_' if save_suffix!='' else '')+save_suffix+'.dill','wb+') as f:
+        dill.dump(SNR_arr_list,f)
 
 class component_data:
 
@@ -1724,8 +1546,8 @@ def addcomp(compname,position='last',endmult=None,return_pos=False,modclass=AllM
         for 'named' lines with the ionisation number, adds a vashift component with [X,Yk] in blueshift and a gaussian with energy frozen at the line
         baseline energy level (see constants at the start of the code for up to date parameter definitions)
 
-        'FeKa0' ->  neutral Fe emission at 6.40
-        'FeKb0' ->  neutral Fe emission at 7.06
+        'FeKa1' ->  neutral Fe emission at 6.40
+        'FeKb1' ->  neutral Fe emission at 7.06
         'FeKa25' -> FeXXV absorption at 6.70keV.
         'FeKa26' -> FeXXVI absorption at 6.97keV
 
@@ -1733,6 +1555,9 @@ def addcomp(compname,position='last',endmult=None,return_pos=False,modclass=AllM
         'FeKb25' -> FeXXV absorption at 7.89keV
         'FeKb26' -> FeXXVI absorption at 8.25keV
         'FeKg26' -> FeXXVI absorption at 8.70 keV
+
+        lineAem/abs_gaussian/lorentz
+        ->adds a linked complex with all the subcomponents of the line linked together in width and velocity
 
             (old models)
         'FeKa'->neutral Fe emission at 6.40
@@ -1771,9 +1596,10 @@ def addcomp(compname,position='last',endmult=None,return_pos=False,modclass=AllM
     start_position=position
     end_multipl=endmult
 
-    gaussian_type=None
-    narrow_gaussian=False
-    abs_gaussian=False
+    line_type=None
+    line_set=False
+    narrow_line=False
+    abs_line=False
     added_link_group=None
 
     #splitting custom parts of the component
@@ -1841,34 +1667,53 @@ def addcomp(compname,position='last',endmult=None,return_pos=False,modclass=AllM
             pass
 
     #testing for lines
-    if 'gaussian' in comp_split:
+    if 'gaussian' in comp_split or 'lorentz' in comp_split:
 
         line=True
 
-        gaussian_type=comp_custom
+        line_type=comp_custom
 
         #restricting to the letter prefix
-        comp_split_prefix=comp_split.replace('gaussian','')
+        comp_split_prefix=comp_split.replace('gaussian','').replace('lorentz','')
 
         #identifying the shape of the line
-        narrow_gaussian='n' in comp_split_prefix
-        broad_gaussian='b' in comp_split_prefix
-        abs_gaussian='a' in comp_split_prefix
+        narrow_line='n' in comp_split_prefix
+        broad_line='b' in comp_split_prefix
+        abs_line='a' in comp_split_prefix
 
         #updating the comp split which will be implemented without the letter keywords
-        comp_split='gaussian'
+        comp_split='gaussian' if 'gaussian' in comp_split else 'lorentz'
 
         #restricting vashift use to named lines
-        if gaussian_type is not None and sum([char.isdigit() for char in gaussian_type])>0:
+        if line_type is not None and sum([char.isdigit() for char in line_type])>0:
 
-            comp_split='vashift*gaussian'
+            #identifying line sets
+            if line_type.replace('em','').replace('abs','').endswith('A'):
+                line_set=True
+                #identifying the number of line candidates
+
+                #e.g. FeKa25
+                line_set_complex=line_type.split('A')[0]
+
+                #e.g. abs
+                line_set_type=line_type.split('A')[-1]
+
+                line_set_comps=[elem for elem in list(lines_e_dict.keys()) if
+                line_set_complex in elem and line_set_type in elem
+                                #here to only use resolved components
+                                 and len(elem.split(line_set_complex)[1].split(line_set_type)[0]) > 0]
+
+                comp_split='vashift*('+'+'.join([comp_split]*len(line_set_comps))+')'
+            else:
+                comp_split='vashift*'+comp_split
+
             named_line=True
 
-            #### link groups off for now
-            # #and link groups to absorption lines (stays None for emission lines)
-            # if gaussian_type.endswith('abs'):
-            #     #(there can only be one since they do not share any element)
-            #     added_link_group=[elem for elem in link_groups if gaussian_type in elem][0]
+                #### link groups off for now
+                # #and link groups to absorption lines (stays None for emission lines)
+                # if line_type.endswith('abs'):
+                #     #(there can only be one since they do not share any element)
+                #     added_link_group=[elem for elem in link_groups if line_type in elem][0]
         else:
             named_line=False
     else:
@@ -2079,23 +1924,24 @@ def addcomp(compname,position='last',endmult=None,return_pos=False,modclass=AllM
     if compname=='c_zxipcf':
         #linking the cabs absorption to the zxipcf absorption
         xspec_model(gap_end-4).link=str(gap_end-3)
-    '''gaussian specifics (additive only)'''
+
+    '''line specifics (additive only)'''
 
     #this only works for non continuum components but we can assume gaussian lines will never be continuum components
 
     #switching the norm values of the gaussian
-    if line:
-        if abs_gaussian:
+    if line and not line_set:
+        if abs_line:
 
             xspec_model(gap_end).values=[-1e-4,1e-7,-5e-2,-5e-2,0,0]
 
             # #### ON: disabling FeKa25
-            # if gaussian_type=='FeKa25abs':
+            # if line_type=='FeKa25abs':
             #     xspec_model(gap_end).values=[-1e-7,1e-7,-5e-2,-5e-2,0,0]
             #     xspec_model(gap_end).frozen=True
 
             #### ON: disabling NiKa27 to avoid degeneracies
-            if gaussian_type=='NiKa27abs':
+            if line_type=='NiKa27abs':
                 xspec_model(gap_end).values=[-1e-7,1e-7,-5e-2,-5e-2,0,0]
                 xspec_model(gap_end).frozen=True
 
@@ -2113,78 +1959,112 @@ def addcomp(compname,position='last',endmult=None,return_pos=False,modclass=AllM
             # xspec_model(gap_end).frozen=True
 
     #switching the width values of the lines
-    if narrow_gaussian:
+    if narrow_line:
         xspec_model(gap_end-1).values=[0]+xspec_model(gap_end-1).values[1:]
         xspec_model(gap_end-1).frozen=True
 
     #changing more infos for specific lines
-    if gaussian_type is not None:
+    if line_type is not None:
 
-        #selecting the corresponding energy
-        ener_line=lines_e_dict[gaussian_type][0]
-
-        #selecting the energy for non broad (named) lines
-        if named_line:
-            xspec_model(gap_end-2).values=[ener_line]+xspec_model(gap_end-2).values[1:]
-
+        if line_set:
+            #selecting the entire set of lines
+            line_comps_use=line_set_comps
         else:
-            #restricting energies for emission lines
-            if gaussian_type in ['FeDiaz']:
-                xspec_model(gap_end-2).values=[ener_line,ener_line/100,6.0,6.0,8.0,8.0]
-            else:
-                if 'cal' in gaussian_type:
-                    xspec_model(gap_end - 2).values = [ener_line, ener_line / 100, ener_line, ener_line,
-                                                       ener_line,
-                                                       ener_line]
+            line_comps_use=[line_type]
+        
+        n_line_comps=len(line_comps_use)
 
-                    #freezing the energy
-                    xspec_model(gap_end - 2).frozen=True
+        #in reverse to add them in forward order
+        for i_line_type,elem_line_type in enumerate(line_comps_use[::-1]):
+
+            #adjusting the norm if in a set since its more practical to do it here
+
+            if line_set:
+
+                if abs_line:
+                    xspec_model(gap_end-3*i_line_type).values = [-1e-4, 1e-7, -5e-2, -5e-2, 0, 0]
                 else:
-                    #outputing the line values (delta of 1/100 of the line ener, no redshift, +0.4keV blueshift max)
-                    xspec_model(gap_end-2).values=[ener_line,ener_line/100,ener_line-0.2,ener_line-0.2,ener_line+0.2,
-                                                   ener_line+0.2]
+                    # stronger normalisations allowed for the emission lines
+                    xspec_model(gap_end-3*i_line_type).values = [1e-3, 1e-6, 0, 0, 1, 1]
+
+                if narrow_line:
+                    xspec_model(gap_end - 1-3*i_line_type).values = [0] + \
+                                                                    xspec_model(gap_end - 1-3*i_line_type).values[1:]
+                    xspec_model(gap_end - 1-3*i_line_type).frozen = True
 
 
-        #resticting the with of broad lines
-        if broad_gaussian:
+            #selecting the corresponding energy
+            ener_line=lines_e_dict[elem_line_type][0]
 
-            #widths changes
-            width_line=lines_broad_w_dict[gaussian_type]
+            #selecting the energy for non broad (named) lines
+            if named_line:
+                xspec_model(gap_end-2-3*i_line_type).values=[ener_line]+\
+                                                            xspec_model(gap_end-2-3*i_line_type).values[1:]
 
-            #restricting widths of absorption lines and narrow emission lines
-            xspec_model(gap_end-1).values=[width_line[0],
-                                           (1e-3),
-                                           width_line[1],width_line[1],
-                                           width_line[2],width_line[2]]
-        #and non-0 width lines
-        elif not narrow_gaussian:
+            else:
+                #restricting energies for emission lines
+                if elem_line_type in ['FeDiaz']:
+                    xspec_model(gap_end-2-3*i_line_type).values=[ener_line,ener_line/100,6.0,6.0,8.0,8.0]
+                else:
+                    if 'cal' in elem_line_type:
+                        xspec_model(gap_end - 2-3*i_line_type).values = [ener_line, ener_line / 100,
+                                                                         ener_line, ener_line,
+                                                           ener_line,
+                                                           ener_line]
 
-            #widths changes
-            width_line=lines_w_dict[gaussian_type]
+                        #freezing the energy
+                        xspec_model(gap_end - 2-3*i_line_type).frozen=True
+                    else:
+                        #outputing the line values (delta of 1/100 of the line ener, no redshift, +0.4keV blueshift max)
+                        xspec_model(gap_end-2-3*i_line_type).values=[ener_line,ener_line/100,
+                                                                     ener_line-0.2,ener_line-0.2,
+                                                                     ener_line+0.2,ener_line+0.2]
 
-            #restricting widths of absorption lines and narrow emission lines
-            xspec_model(gap_end-1).values=[width_line[0],
-                                           (1e-3),
-                                           width_line[1],width_line[1],
-                                           width_line[2],width_line[2]]
 
-        #for named physical lines we freeze the gaussian energy and use the vashift instead
-        if named_line:
+            #resticting the width of broad lines
+            if broad_line:
 
-            #freezing the energy
-            xspec_model(gap_end-2).frozen=1
+                #widths changes
+                width_line=lines_broad_w_dict[elem_line_type]
 
-            #unfreezing the vashift
-            xspec_model(gap_end-3).frozen=0
+                #restricting widths of absorption lines and narrow emission lines
+                xspec_model(gap_end-1-3*i_line_type).values=[width_line[0],
+                                               (1e-3),
+                                               width_line[1],width_line[1],
+                                               width_line[2],width_line[2]]
+            #and non-0 width lines
+            elif not narrow_line:
 
-            #and forcing a specific range of blueshift/redshift depending on the line
+                #widths changes
+                width_line=lines_w_dict[elem_line_type]
 
-            #note : we differenciate absorption an narrow emission through the 'em' in the lines energy dictionnary
-            xspec_model(gap_end-3).values=[0,lines_e_dict[gaussian_type][2]/1e3,
-                                           -lines_e_dict[gaussian_type][2],
-                                           -lines_e_dict[gaussian_type][2],
-                                           -lines_e_dict[gaussian_type][1],
-                                           -lines_e_dict[gaussian_type][1]]
+                #restricting widths of absorption lines and narrow emission lines
+                xspec_model(gap_end-1-3*i_line_type).values=[width_line[0],
+                                               (1e-3),
+                                               width_line[1],width_line[1],
+                                               width_line[2],width_line[2]]
+
+            #linking the widths if in a set
+            if line_set and i_line_type!=n_line_comps-1:
+                xspec_model(gap_end - 1 - 3 * i_line_type).link=str(gap_end - 1 - 3 * (n_line_comps-1))
+            #for named physical lines we freeze the gaussian energy and use the vashift instead
+            if named_line:
+
+                #freezing the energy
+                xspec_model(gap_end-2-3*i_line_type).frozen=1
+
+                #unfreezing the vashift for the very first component in the list
+                if i_line_type==len(line_comps_use)-1:
+                    xspec_model(gap_end-3-3*i_line_type).frozen=0
+
+                    #and forcing a specific range of blueshift/redshift depending on the line
+
+                    #note : we differenciate absorption an narrow emission through the 'em' in the lines energy dictionnary
+                    xspec_model(gap_end-3-3*i_line_type).values=[0,lines_e_dict[elem_line_type][2]/1e3,
+                                                   -lines_e_dict[elem_line_type][2],
+                                                   -lines_e_dict[elem_line_type][2],
+                                                   -lines_e_dict[elem_line_type][1],
+                                                   -lines_e_dict[elem_line_type][1]]
 
     '''laor specifics'''
 
@@ -2238,7 +2118,7 @@ def addcomp(compname,position='last',endmult=None,return_pos=False,modclass=AllM
 
             if comp.compname.split('_')[0] in added_link_group:
                 if np.argwhere(np.array(added_link_group)\
-                ==gaussian_type)[0][0]>np.argwhere(np.array(added_link_group)==comp.compname.split('_')[0])[0][0]:
+                ==line_type)[0][0]>np.argwhere(np.array(added_link_group)==comp.compname.split('_')[0])[0][0]:
                     #if we detect a component from the same group, its first parameter should be its vashift
                     xspec_model(gap_end-3).link='p'+str(comp.parlist[0])
                     break
@@ -2796,10 +2676,13 @@ def delcomp(compname,modclass=AllModels,give_ndel=False):
     else:
         return new_models
 
-def par_error(group,par,n_round=3,latex=False,mult=1):
+
+def par_error(group=1,par=1,n_round=3,latex=False,mult=1,man_val_arr=[]):
 
     '''
     returns an array with the error of the chosen parameter
+
+    still imperfect
 
     n_round chooses the rounding of the returned elements
     if set to auto, uses 1e-3 times the first digit as a rounding reference
@@ -2809,8 +2692,15 @@ def par_error(group,par,n_round=3,latex=False,mult=1):
 
     mult:
         multiplies the quantities by a given amount before truncating and returning them
+
+    if man_val_arr is not an empty array, uses that instead of fetching a parameter error
     '''
-    val_arr=np.array([AllModels(group)(par).values[0],
+
+
+    if len(man_val_arr)!=0:
+        val_arr=[man_val_arr[0],man_val_arr[0]-man_val_arr[1],man_val_arr[2]-man_val_arr[0]]
+    else:
+        val_arr=np.array([AllModels(group)(par).values[0],
               0 if AllModels(group)(par).error[0]==0 else (AllModels(group)(par).values[0] - AllModels(group)(par).error[0]),
                       0 if AllModels(group)(par).error[1] == 0 else
                       AllModels(group)(par).error[1] - AllModels(group)(par).values[0]])
@@ -2823,14 +2713,20 @@ def par_error(group,par,n_round=3,latex=False,mult=1):
         result_val=np.repeat(np.nan,3)
         result_val[0]=('%.'+str(n_round)+'e')%(val_arr[0])
         result_val[1]=('%.'+str(n_round)+'e')%(result_val[0]-float(('%.'+str(n_round)+'e')%(val_arr[0]-val_arr[1])))
-        result_val[2]=('%.'+str(n_round)+'e')%(float(('%.'+str(n_round)+'e')%(val_arr[0]+val_arr[2]))-result_val[0])
+        #result_val[2]=('%.'+str(n_round)+'e')%(float(('%.'+str(n_round)+'e')%(val_arr[0]+val_arr[2]))-result_val[0])
+
+        upper_decade_change=int(np.floor(np.log10(abs(val_arr[0] + val_arr[2]))) - np.floor(np.log10(abs(val_arr[0]))))
+
+        result_val[2]=('%.'+str(n_round+upper_decade_change)+'e')%(float(('%.'+str(n_round+upper_decade_change)+'e')
+                                                     %(val_arr[0]+val_arr[2]))-result_val[0])
 
     else:
         result_val=val_arr
 
     if latex:
-        result_val_latex='$'+str(result_val[0])+('\pm '+str(result_val[1]) if result_val[1]==result_val[2] else
-                                            '_{-'+str(result_val[1])+'}^{+'+str(result_val[2])+'}')+'$'
+
+        result_val_latex='$'+str(result_val[0])+(r"\pm"+' '+str(result_val[1]) if result_val[1]==result_val[2] else
+                                        '_{-'+str(result_val[1])+'}^{+'+str(result_val[2])+'}')+'$'
 
         return result_val_latex
     else:
@@ -3841,6 +3737,8 @@ class fitmod:
                 norm_vals=[AllModels(i_grp+1)(1).values[0] for i_grp in range(AllData.nGroups)]
                 delcomp('constant')
 
+            fixed_vals=None
+
             if component.absorption:
                 fixed_vals=[self.fixed_abs]
             elif "nthcomp" in component.compname or "thcomp" in component.compname:
@@ -3849,9 +3747,6 @@ class fitmod:
             if component.compname=="disk_thcomp" and self.thcomp_frac_frozen:
                 #fixing the gamma and the covering fraction
                 fixed_vals=[3.5,None,0.,None]
-
-            else:
-                fixed_vals=None
 
             self.includedlist = component.addtomod(fixed_vals=fixed_vals,incl_list=self.includedlist)
 
@@ -4006,6 +3901,8 @@ class fitmod:
             if not component.cal_e-1>=ener_bounds[0] and component.cal_e+1<=ener_bounds[1]:
                 continue
 
+            fixed_vals=None
+
             if component.absorption:
                 fixed_vals=[self.fixed_abs]
             elif "nthcomp" in component.compname or "thcomp" in component.compname:
@@ -4014,8 +3911,6 @@ class fitmod:
                 #fixing the gamma and the covering fraction
                 fixed_vals=[3.5,None,0.,None]
 
-            else:
-                fixed_vals=None
             self.includedlist = component.addtomod(fixed_vals=fixed_vals,incl_list=self.includedlist)
             self.update_fitcomps()
 
@@ -4122,6 +4017,8 @@ class fitmod:
             #copy of the includedlist for rollback after testing the component significance
             prev_includedlist=copy(self.includedlist)
 
+            fixed_vals = None
+
             if component.absorption:
                 fixed_vals=[self.fixed_abs]
             elif "nthcomp" in component.compname or "thcomp" in component.compname:
@@ -4129,9 +4026,6 @@ class fitmod:
             if component.compname=="disk_thcomp" and self.thcomp_frac_frozen:
                 #fixing the gamma and the covering fraction
                 fixed_vals=[3.5,None,0.,None]
-
-            else:
-                fixed_vals=None
 
             self.includedlist=component.addtomod(fixed_vals=fixed_vals,incl_list=self.includedlist)
 
@@ -6463,42 +6357,54 @@ class plot_save:
 
             list_models=list(AllModels.sources.values())
             #adding default model component names if there is a default model
-            if '' in list_models:
+            for mod in list_models:
 
-                mod_expression,mod_tables_dict=numbered_expression()
+                if mod=='':
 
-                #there are addcomps for the default models only if it has more than one additive components
-                #we thus need to compare the total number of addcomps with the other model addcomps
-                if len(self.addcomps[0])>(2 if 'nxb' in list_models else 0) + (2 if 'sky' in list_models else 0):
+                    mod_expression,mod_tables_dict=numbered_expression()
 
-                    for elemcomp in AllModels(1).componentNames:
+                    #there are addcomps for the default models only if it has more than one additive components
+                    #we thus need to compare the total number of addcomps with the other model addcomps
+                    #this is only for nicer and can break if there are addcomps in other nxb type models
 
-                        #restricting to additive tables for table models
-                        if elemcomp in list(mod_tables_dict.keys()):
-                            if 'atable{' in mod_tables_dict[elemcomp]:
-                                self.addcompnames += [elemcomp]
-                        else:
-                            #restricting to additive components
-                            if elemcomp.split('_')[0] not in xspec_multmods:
-                                self.addcompnames+=[elemcomp]
+                    if len(self.addcomps[0])>(2 if 'nxb' in list_models else 0) + (2 if 'sky' in list_models else 0):
 
-            #adding NICER background component Names
-            if 'nxb' in list_models:
-                for i in range(1,AllData.nGroups+1):
-                    try:
-                        self.addcompnames+=AllModels(i,'sky').componentNames
-                        break
-                    except:
-                        pass
+                        for elemcomp in AllModels(1).componentNames:
 
-            if 'sky' in list_models:
-                for i in range(1,AllData.nGroups+1):
-                    try:
-                        self.addcompnames += AllModels(i, 'nxb').componentNames
-                        break
-                    except:
-                        pass
+                            #restricting to additive tables for table models
+                            if elemcomp in list(mod_tables_dict.keys()):
+                                if 'atable{' in mod_tables_dict[elemcomp]:
+                                    self.addcompnames += [elemcomp]
+                            else:
+                                #restricting to additive components
+                                if elemcomp.split('_')[0] not in xspec_multmods:
+                                    self.addcompnames+=[elemcomp]
 
+                #adding NICER background component Names
+                elif mod=='nxb':
+                    for i in range(1,AllData.nGroups+1):
+                        try:
+                            self.addcompnames+=AllModels(i,'sky').componentNames
+                            break
+                        except:
+                            pass
+
+                elif mod=='sky':
+                    for i in range(1,AllData.nGroups+1):
+                        try:
+                            self.addcompnames += AllModels(i, 'nxb').componentNames
+                            break
+                        except:
+                            pass
+                else:
+                    for i in range(1,AllData.nGroups+1):
+                        try:
+                            mod_compnames = AllModels(i, mod).componentNames
+                            mod_addcompnames = [mod + '_' + elem_comp for elem_comp in mod_compnames
+                                                if elem_comp.split('_')[0] not in xspec_multmods]
+                            self.addcompnames += mod_addcompnames
+                        except:
+                            pass
         else:
             self.addcomps=None
             self.addcompnames=[]
@@ -6628,7 +6534,7 @@ def xPlot(types,axes_input=None,plot_saves_input=None,plot_arg=None,includedlist
         axes=[plt.subplot(elem) for elem in grid]
 
     else:
-        axes=[axes_input] if type(axes_input) is not list else axes_input
+        axes=[axes_input] if type(axes_input) not in [list,np.ndarray] else axes_input
 
     if plot_saves_input is None:
         plot_saves=plot_saver(','.join([elem if '_' not in elem else elem.split('_')[1] for elem in types.split(',')]))
@@ -6680,10 +6586,10 @@ def xPlot(types,axes_input=None,plot_saves_input=None,plot_arg=None,includedlist
             if axes_input is None:
                 curr_ax.set_title(curr_save.labels[-1])
 
-            if secondary_x:
+            if secondary_x and Plot.xAxis in ['keV','angstrom']:
                 #putting a wavelength copy of the x axis at the top
                 curr_ax_second=curr_ax.secondary_xaxis('top',functions=(ang2kev,ang2kev))
-                curr_ax_second.set_xlabel('Angstrom')
+                curr_ax_second.set_xlabel('Angstrom' if Plot.xAxis=='keV' else 'keV')
                 curr_ax_second.minorticks_on()
 
         #hiding the ticks values for the lower x axis if it's not in the last plot or if we're in a provided subplot

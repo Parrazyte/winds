@@ -102,7 +102,7 @@ ap.add_argument('-catch', '--catch_errors', help='Catch errors while running the
 
 # global choices
 ap.add_argument("-a", "--action", nargs='?', help='Give which action(s) to proceed,separated by comas.',
-                default='sp,lc,g,m', type=str)
+                default='reg', type=str)
 # default: build,reg,lc,sp,g,m
 
 ap.add_argument("-over", nargs=1, help='overwrite computed tasks (i.e. with products in the batch, or merge directory\
@@ -181,7 +181,7 @@ ap.add_argument('-sudo_mode',nargs=1,help='put to true if the ds9 installation n
 '''spectra and lightcurve'''
 
 ap.add_argument('-regions_mode',nargs=1,help='region choosing mode between auto, input and manual',
-                default='manual',type=str)
+                default='auto',type=str)
 
 #only used if regions_mode is set to manual
 ap.add_argument('-man_src_reg_FPMA',nargs=1,
@@ -1075,8 +1075,13 @@ def extract_reg(directory, cams='all', use_file_target=False,
                 obj_deg = [main_source_ra,main_source_dec]
         else:
             # careful the output after the first line is in dec,ra not ra,dec
-            obj_deg = sexa2deg([obj_auto['DEC'].replace(' ', ':'), obj_auto['RA'].replace(' ', ':')])
-            obj_deg = [str(obj_deg[1]), str(obj_deg[0])]
+            #newer versions of the library have lowercase dec and ra attribute names
+            #converting sexadecimal to degrees if needed
+            if type(obj_auto['ra'])!=np.float64:
+                obj_deg = sexa2deg([obj_auto['dec'].replace(' ', ':'), obj_auto['ra'].replace(' ', ':')])
+                obj_deg = [str(obj_deg[1]), str(obj_deg[0])]
+            else:
+                obj_deg=[str(obj_auto['ra']),str(obj_auto['dec'])]
 
         img_obj_whole=Image(data=img_data,wcs=src_mpdaf_WCS)
 

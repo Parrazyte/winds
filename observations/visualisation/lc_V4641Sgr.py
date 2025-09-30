@@ -280,7 +280,13 @@ def vrot_earth(source='V4641sgr',date='2024-09-30'):
     return heliocorr.to(u.km/u.s)
 
 
-def lc_paper_monit(spec_mode='Eddington',shade_obscur=True):
+def lc_paper_monit(spec_mode='Eddington',shade_obscur=True,MAXI_counts=True):
+
+    '''
+
+    MAXI_counts: use a count rate panel for the MAXI plots
+    '''
+
     lc_dir = '/home/parrazyte/Documents/Work/PostDoc/docs/docs_XRISM/V4641Sgr_docs/'
 
     MAXI_psf_csv = pd.read_csv(os.path.join(lc_dir, 'MAXI_megumi/v4640_241111/gsc_final', 'V4641_Sgr_1d.qdp'),
@@ -331,10 +337,10 @@ def lc_paper_monit(spec_mode='Eddington',shade_obscur=True):
     edd_factor_source=edd_factor(6.2,6.4)
 
     # assuming an HR of 0.5 here
-    MAXI_od_210_f = MAXI_od_csv['counts'] * 1 / (1.065 + 1.172) * 2 * 2.4e-8
+    MAXI_od_210_f = MAXI_od_csv['counts'] *(1 if MAXI_counts else  1 / (1.065 + 1.172) * 2 * 2.4e-8)
 
     # errors, adding an average systematics
-    MAXI_od_210_err = MAXI_od_csv['counts_err'] * 1 / (1.065 + 1.172) * (1.1 + 1.03) / 2 * 2 * 2.4e-8
+    MAXI_od_210_err = MAXI_od_csv['counts_err'] *( (1.1 + 1.03) / 2 if MAXI_counts else  1 / (1.065 + 1.172) * (1.1 + 1.03) / 2 * 2 * 2.4e-8)
 
     # dates
     MAXI_od_ds = Time(MAXI_od_csv.MJD_start, format='mjd')
@@ -349,8 +355,8 @@ def lc_paper_monit(spec_mode='Eddington',shade_obscur=True):
     MAXI_od_daterr = MAXI_od_mjd_err.to_value('jd')
 
     # values for psf
-    crab_conv_24 = 1 / 1.065 * (2.4e-8)
-    crab_conv_410 = 1 / 1.172 * (2.4e-8)
+    crab_conv_24 = 1 if MAXI_counts else (1 / 1.065 * (2.4e-8))
+    crab_conv_410 = 1 if MAXI_counts else (1 / 1.172 * (2.4e-8))
 
     MAXI_psf_210_f = MAXI_psf_csv['f24'] * crab_conv_24 + MAXI_psf_csv['f410'] * crab_conv_410
 
@@ -500,32 +506,38 @@ def lc_paper_monit(spec_mode='Eddington',shade_obscur=True):
     elif spec_mode=='Eddington':
         flux_convert=edd_factor_source
         ax_lc[2].set_yscale('log')
-        ax_lc[2].set_ylabel('unabsorbed luminosity \n in [1-10]keV (L/L$_{Edd}$)')
+        ax_lc[2].set_ylabel('unabsorbed luminosity \n in [1-10] keV (L/L$_{Edd}$)')
         # ax_lc[2].set_ylim(6e-5, 5e-3)
 
     ax_lc[0].xaxis.set_major_formatter(date_format)
     if shade_obscur:
         ax_lc[-1].xaxis.set_major_formatter(mdates.DateFormatter('%m-%d'))
 
+    if MAXI_counts:
+        ax_lc[0].set_ylabel('MAXI \n [2-10]keV count rate \n(photons/s/cm²)')
 
-    ax_lc[0].set_ylabel('MAXI [2-10]keV flux\n($10^{-9}$ ergs/s/cm²)')
-    ax_lc[3].set_ylabel('unabsorbed HR \n [6-10]/[3-10]keV')
+    else:
+        ax_lc[0].set_ylabel('MAXI [2-10]keV flux\n($10^{-9}$ ergs/s/cm²)')
+    ax_lc[3].set_ylabel('unabsorbed HR \n [6-10]/[3-6] keV')
 
-    ax_lc[1].set_ylabel('Einstein Probe \n[0.5-4] keV count rate ')
+    ax_lc[1].set_ylabel('Einstein Probe \n[0.5-4] keV count rate \n(photons/s)')
 
     ax_lc[1].errorbar(x=mdates.date2num(Time(EP_csv['mjd'],format='mjd').datetime),
                       y=EP_csv['rate_tot'],yerr=EP_csv['rate_tot_err'],
                       marker='s', markersize=5,
                       linewidth=0.5,elinewidth=1.,ls=':',color='black')
 
-    ax_lc[0].errorbar(x=MAXI_psf_dates, xerr=0.5, y=MAXI_psf_210_f * 1e9, yerr=MAXI_psf_210_err * 1e9, linewidth=0.5,
+    ax_lc[0].errorbar(x=MAXI_psf_dates, xerr=0.5, y=MAXI_psf_210_f  * (1 if MAXI_counts else 1e9),
+                                                  yerr=MAXI_psf_210_err  * (1 if MAXI_counts else 1e9),
+                      linewidth=0.5,
                       elinewidth=1., ls=':',
                       color='black', label='PSF fitting')
 
     min_vis_psf = MAXI_psf_dates[MAXI_psf_210_f.values > 0.][0]
     max_vis_psf = MAXI_psf_dates[MAXI_psf_210_f.values > 0.][-1]
 
-    ax_lc[0].errorbar(x=MAXI_od_dates, xerr=MAXI_od_daterr, y=MAXI_od_210_f * 1e9, yerr=MAXI_od_210_err * 1e9,
+    ax_lc[0].errorbar(x=MAXI_od_dates, xerr=MAXI_od_daterr, y=MAXI_od_210_f * (1 if MAXI_counts else 1e9),
+                                                            yerr=MAXI_od_210_err  * (1 if MAXI_counts else 1e9),
                       linewidth=0.5,
                       elinewidth=1., ls=':',
                       color='grey', alpha=0.3, label='On-demand tool')
@@ -536,7 +548,10 @@ def lc_paper_monit(spec_mode='Eddington',shade_obscur=True):
     # ax_lc[0].set_xlim(min(min_vis_psf, min_vis_od) - 10, max(max_vis_psf, max_vis_od) + 1)
 
     # ax_lc[0].set_ylim(0,ax_lc[0].get_ylim()[1])
-    ax_lc[0].set_ylim(0., 2e-9 * 1e9)
+    if MAXI_counts:
+        ax_lc[0].set_ylim(0.,8e-2)
+    else:
+        ax_lc[0].set_ylim(0., 2e-9 * 1e9)
 
     # adding the XRISM obs
     xrism_interval = Time(['2024-09-30 09:42:04', '2024-09-30 17:03:04'])
@@ -670,7 +685,7 @@ def lc_paper_monit(spec_mode='Eddington',shade_obscur=True):
     if shade_obscur:
         plt.subplots_adjust(left=0.15,right=0.96,top=0.98,bottom=0.06)
     else:
-        plt.subplots_adjust(left=0.15, right=0.96, top=0.97, bottom=0.03)
+        plt.subplots_adjust(left=0.16, right=0.96, top=0.97, bottom=0.03)
 
     plt.show()
 

@@ -5,13 +5,22 @@ import plotly.graph_objects as go
 from streamlit_plotly_events import plotly_events
 from plotly.express.colors import sample_colorscale
 
-#local
-sys.path.append('/home/parrama/Documents/Work/PhD/Scripts/Python/general/')
-sys.path.append('/home/parrama/Documents/Work/PhD/Scripts/Python/observations/spectral_analysis/')
-sys.path.append('/home/parrama/Documents/Work/PhD/Scripts/Python/modeling/PyXstar')
-#online
-sys.path.append('/app/winds/observations/spectral_analysis/')
-sys.path.append('/app/winds/modeling/PyXstar')
+#rough way of testing if online or not
+online=os.getcwd().startswith('/mount/src')
+project_dir='/'.join(__file__.split('/')[:-3])
+
+#to be tested online
+sys.path.append(os.path.join(project_dir,'observations/spectral_analysis/'))
+sys.path.append(os.path.join(project_dir,'general/'))
+sys.path.append(os.path.join(project_dir,'modeling/PyXstar'))
+
+# #local
+# sys.path.append('/home/parrama/Documents/Work/PhD/Scripts/Python/general/')
+# sys.path.append('/home/parrama/Documents/Work/PhD/Scripts/Python/observations/spectral_analysis/')
+# sys.path.append('/home/parrama/Documents/Work/PhD/Scripts/Python/modeling/PyXstar')
+# #online
+# sys.path.append('/app/winds/observations/spectral_analysis/')
+# sys.path.append('/app/winds/modeling/PyXstar')
 
 from solution_tools import func_density_sol,func_vel_sol,func_logxi_sol,func_nh_sol,load_solutions,sample_angle,interp_yaxis
 

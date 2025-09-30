@@ -77,6 +77,25 @@ fitlines_strong.add_allcomps(split_fit=False)
 breakpoint()
 
 
+'''
+for Iron band zoom figure
+fig,ax=plt.subplots(figsize=(10,4),layout='constrained')
+xPlot('eeuf',axes_input=ax)
+***Warning: Fit is not current.
+Out[67]: (None, None)
+ax.tick_params(
+    axis='x',  # changes apply to the x-axis
+    which='both',  # both major and minor ticks are affected
+    bottom=True,  # ticks along the bottom edge are off
+    top=False,  # ticks along the top edge are off
+    labelbottom=True,
+    labeltop=False,
+    direction='out')
+
+and remember to manually resize the graph to 7.2
+'''
+
+
 # #after the Chain is loaded
 # nfakes=1000
 # # drawing parameters for the MC significance test later

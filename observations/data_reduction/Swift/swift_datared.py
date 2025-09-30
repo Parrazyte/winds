@@ -891,3 +891,27 @@ def loop_cycle_BAT(object_name,input_days_file=None,interval_start=None,interval
             for elem_start,elem_stop,elem_inter_dir,elem_header_name \
                     in zip(np.array(increment_start_list)[mask_use],np.array(increment_stop_list)[mask_use],
                            np.array(inter_dir_list)[mask_use],np.array(header_name_list)[mask_use]))
+
+
+def DR_XRT_QL():
+    '''
+    Step1: xrtpipeline on the output of the ql (or normal obs) https://www.swift.ac.uk/analysis/xrt/xrtpipeline.php
+    Step2: make region files
+            -careful about pile-up in PC mode above 0.5 cts/s
+            -in WT, take a 40pixel wide region around the source and a background far. Can be annoying with dead columns.
+
+    Step3: extract SP with xselect
+    (Step4:  extract expomap with xrtexpomap. CAN BE BYPASSED BY USING EXPOMAP FROM XRTPIPELINE)
+            Need th event list, the pat.fits file, and the xhd.hk file
+     If MJD-OBS is missing (e.g. from a uf file if no cl files are made in step 1),
+            add it in the header of the hdul[1]
+
+    Step5: extract ARF with xrtmkarf.
+            -take manual rmfs from caldb (see below)
+            -source pointing at -1 uses the coordinates of the source region
+                for WT, use the real position of the source from simbad instead in degrees
+                for PC, use the center of the circular region
+            (If RMF not found in caldb, fetch the appropriate RMF manually in caldb
+            (using reading the most up-to-date document in https://www.swift.ac.uk/analysis/Gain_RMF_releases.html
+            and input it manually in the command with the rmffile argument)
+    '''

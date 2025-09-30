@@ -49,10 +49,13 @@ if 'xspec_models_dir' in os.environ:
     #example '/home/parrama/Soft/Xspec/Models'
     model_dir=os.environ['xspec_models_dir']
 else:
+    model_dir="/home/parrazyte/Soft/Xspec/Models"
     model_dir=None
+
 # custom model loads
 if not streamlit_mode and model_dir!=None:
     AllModels.lmod('relxill',dirPath=model_dir+'/relxill')
+
     # AllModels.lmod('fullkerr',dirPath=model_dir+'/fullkerr')
     # #swiftJ1658 dust scattering halo model from Jin2019
     #
@@ -1041,7 +1044,7 @@ def model_load(model_saves,mod_name='',mod_number=1,gap_par=None,in_add=False,ta
     loads a mod_data class into the active xspec model class or all model_data into all the current data groups
     if model_save is a list, loads all model_saves into the model data groups of the AllModels() data class
 
-    can be used to lad custom models through model_name and mod_number. The default values update the "standard" xspec model
+    can be used to lad custom models through mod_name and mod_number. The default values update the "standard" xspec model
 
 
     gap par:    introduces a gap in the parameter loading. Used for loading with new expressions
@@ -1165,7 +1168,7 @@ def model_load(model_saves,mod_name='',mod_number=1,gap_par=None,in_add=False,ta
                         save_grp_link_par_str=save_grp_link_par_str[0]
 
                         #getting something that can be transformed back to an int
-                        save_grp_link_par=save_grp_link_par_str.replace('=','').replace('p','')
+                        save_grp_link_par=save_grp_link_par_str.replace('=','').replace(mod_name+':','').replace('p','')
 
                         #the shift by one and 0 minimum is here to allow all the last parameters of each groups to stay in the group below
                         link_pointer=str(int(save_grp_link_par)+(gap_end-gap_start+1)*\
@@ -1179,6 +1182,8 @@ def model_load(model_saves,mod_name='',mod_number=1,gap_par=None,in_add=False,ta
 
                         #replacing the pointer by the real expression with the new parameter
                         link_pointer=save_grp.links[i_shifted-1].replace(save_grp_link_par_str,'p'+link_pointer)
+
+                        link_pointer=(mod_name+':' if mod_name!='' else '')+link_pointer
                     else:
                         link_pointer=save_grp.links[i_shifted-1]
 
@@ -1267,7 +1272,7 @@ def split_str_expr(string):
                 xspec_str += [string[comp_str:i + 1]]
 
     return xspec_str
-def numbered_expression(expression=None,mult_conv='auto'):
+def numbered_expression(expression=None,mult_conv='auto',mod_name=''):
 
     '''
     Return an edited model xspec expression with each component's naming in the current xspec model
@@ -1287,7 +1292,7 @@ def numbered_expression(expression=None,mult_conv='auto'):
     '''
 
     if expression is None:
-        string=AllModels(1).expression
+        string=AllModels(1,mod_name).expression
     else:
         string=expression
 
@@ -1346,10 +1351,10 @@ def numbered_expression(expression=None,mult_conv='auto'):
         if '{' in xspec_str[j]:
             if xspec_str[j] not in dict_tables.values():
                 #adding the table
-                dict_tables[AllModels(1).componentNames[i]]=xspec_str[j]
+                dict_tables[AllModels(1,mod_name).componentNames[i]]=xspec_str[j]
 
         #needs a proper call to AllModels(1) here to be able to use it whenever we want
-        xspec_str[j]=AllModels(1).componentNames[i]
+        xspec_str[j]=AllModels(1,mod_name).componentNames[i]
 
         i+=1
         j+=1
@@ -1447,7 +1452,7 @@ def xModel(expression,table_dict=None,modclass=AllModels,mod_name='',mod_number=
     if return_mod:
         return AllModels(1,mod_name)
 
-def addcomp(compname,position='last',endmult=None,return_pos=False,modclass=AllModels,
+def addcomp(compname,position='last',endmult=None,return_pos=False,mod_name='',
             included_list=None,values=None,links=None,frozen=None,mult_conv_rule='auto'):
 
     '''
@@ -1602,6 +1607,12 @@ def addcomp(compname,position='last',endmult=None,return_pos=False,modclass=AllM
     abs_line=False
     added_link_group=None
 
+    #defining the model source number according to its name
+    if len(AllModels.sources.keys())==0:
+        source_n=1
+    else:
+        source_n=int(np.array(list(AllModels.sources.keys()))[(np.array(list(AllModels.sources.values())) == mod_name).tolist()][0])
+
     #splitting custom parts of the component
     if '_' in compname:
         comp_custom=compname.split('_')[0]
@@ -1620,10 +1631,10 @@ def addcomp(compname,position='last',endmult=None,return_pos=False,modclass=AllM
         start_position=1
         end_multipl=-1
         #staying inside the constant factor if there is one
-        if AllModels(1).componentNames[0] in xspec_globcomps:
+        if AllModels(1,mod_name).componentNames[0] in xspec_globcomps:
             start_position+=1
 
-        main_compnames = AllModels(1).componentNames
+        main_compnames = AllModels(1,mod_name).componentNames
 
         #maiting inside the edge components (assumed to be from calibration if there are some
         if comp_split not in xspec_globcomps:
@@ -1638,7 +1649,7 @@ def addcomp(compname,position='last',endmult=None,return_pos=False,modclass=AllM
                 if multipl:
                     end_multipl=-1
                 #staying inside the constant factor if there is one
-                if AllModels(1).componentNames[0] in xspec_globcomps:
+                if AllModels(1,mod_name).componentNames[0] in xspec_globcomps:
                     start_position+=1
 
     if 'thcomp' in comp_split:
@@ -1650,10 +1661,10 @@ def addcomp(compname,position='last',endmult=None,return_pos=False,modclass=AllM
         start_position=1
         try:
 
-            main_compnames = AllModels(1).componentNames
+            main_compnames = AllModels(1,mod_name).componentNames
 
             #staying inside the constant factor if there is one
-            if AllModels(1).componentNames[0] in xspec_globcomps:
+            if AllModels(1,mod_name).componentNames[0] in xspec_globcomps:
                 start_position+=1
 
             #maintaining inside the absorption component if there are some
@@ -1726,7 +1737,7 @@ def addcomp(compname,position='last',endmult=None,return_pos=False,modclass=AllM
 
     #checking if the current model is empty
     try:
-        AllModels(1)
+        AllModels(1,mod_name)
 
         is_model=True
     except:
@@ -1737,14 +1748,14 @@ def addcomp(compname,position='last',endmult=None,return_pos=False,modclass=AllM
 
     if is_model:
         #saving the current models
-        model_saves=allmodel_data().default
+        model_saves=getattr(allmodel_data(),'default' if mod_name=='' else mod_name)
 
         #getting the xspec expression of the current model as well as the list of components
-        num_expr,table_dict=numbered_expression(mult_conv=mult_conv_rule)
+        num_expr,table_dict=numbered_expression(mult_conv=mult_conv_rule,mod_name=mod_name)
 
         #replacing a * by parenthesis for single constant*additive models to have an easier time later
 
-        xcomps=AllModels(1).componentNames
+        xcomps=AllModels(1,mod_name).componentNames
 
         #determining where to place the new component
         if type(start_position)==int:
@@ -1782,9 +1793,9 @@ def addcomp(compname,position='last',endmult=None,return_pos=False,modclass=AllM
         if xcomp_start==-1:
 
             #if we are inserting our component inside of a constant with a single additivecomponent, we must replace the * by parenthesis
-            if len(AllModels(1).componentNames)>1:
-                if num_expr[num_expr.find(AllModels(1).componentNames[1])-1]=='*':
-                    num_expr=num_expr.replace('*'+AllModels(1).componentNames[1],'('+AllModels(1).componentNames[1]+')',1)
+            if len(AllModels(1,mod_name).componentNames)>1:
+                if num_expr[num_expr.find(AllModels(1,mod_name).componentNames[1])-1]=='*':
+                    num_expr=num_expr.replace('*'+AllModels(1,mod_name).componentNames[1],'('+AllModels(1,mod_name).componentNames[1]+')',1)
 
             #at the very end of the model but inside parentheses
             if position in ['lastin','lastinall']:
@@ -1839,7 +1850,7 @@ def addcomp(compname,position='last',endmult=None,return_pos=False,modclass=AllM
                 breakpoint()
 
         #returning the expression to its xspec readable equivalent (without numbering)
-        for elemcomp in AllModels(1).componentNames:
+        for elemcomp in AllModels(1,mod_name).componentNames:
 
             #here the second condition is to avoid supressing custom model names who have no numebering
             if '_' in elemcomp and elemcomp[elemcomp.rfind('_')+1:].isdigit():
@@ -1850,23 +1861,23 @@ def addcomp(compname,position='last',endmult=None,return_pos=False,modclass=AllM
         model_saves[0].expression=new_expr
 
         #computing the gap with the new component(s)
-        old_ncomps=len(AllModels(1).componentNames)
+        old_ncomps=len(AllModels(1,mod_name).componentNames)
 
         if xcomp_start!=-1:
 
             #We compute the start of the gap from the 'old' version of the model
-            gap_start=getattr(getattr(AllModels(1),xcomp_start),getattr(AllModels(1),xcomp_start).parameterNames[0]).index
+            gap_start=getattr(getattr(AllModels(1,mod_name),xcomp_start),getattr(AllModels(1,mod_name),xcomp_start).parameterNames[0]).index
 
-            xcomp_start_n=np.argwhere(np.array(AllModels(1).componentNames)==xcomp_start)[0][0]
+            xcomp_start_n=np.argwhere(np.array(AllModels(1,mod_name).componentNames)==xcomp_start)[0][0]
             #we compute the end gap as the parameter before the first parameter of the starting comp in the newer version of the model
             #We use the component number instead of its name to avoid problems
 
             try:
-                xspec_model=xModel(new_expr,table_dict,return_mod=True)
+                xspec_model=xModel(new_expr,table_dict,return_mod=True,mod_number=source_n,mod_name=mod_name)
             except:
                 print(new_expr)
                 breakpoint()
-                xspec_modelxspec_model = xModel(new_expr, table_dict, return_mod=True)
+                xspec_modelxspec_model = xModel(new_expr, table_dict, return_mod=True,mod_number=source_n,mod_name=mod_name)
                 print(new_expr)
 
             added_ncomps=len(xspec_model.componentNames)-old_ncomps
@@ -1878,10 +1889,10 @@ def addcomp(compname,position='last',endmult=None,return_pos=False,modclass=AllM
             #the actual component is the one after but we're in array indices here so it already corresponds to the xspec indice of the one before
             added_comps_numbers=np.arange(xcomp_start_n+1,xcomp_start_n+added_ncomps+1).astype(int)
         else:
-            gap_start=AllModels(1).nParameters+1
+            gap_start=AllModels(1,mod_name).nParameters+1
 
             try:
-                xspec_model=xModel(new_expr,table_dict,return_mod=True)
+                xspec_model=xModel(new_expr,table_dict,return_mod=True,mod_number=source_n,mod_name=mod_name)
             except:
 
                 '''
@@ -1892,20 +1903,21 @@ def addcomp(compname,position='last',endmult=None,return_pos=False,modclass=AllM
                 print(new_expr)
 
             gap_end=xspec_model.nParameters
-            added_comps_numbers=np.arange(old_ncomps+1,len(AllModels(1).componentNames)+1).astype(int)
+            added_comps_numbers=np.arange(old_ncomps+1,len(AllModels(1,mod_name).componentNames)+1).astype(int)
 
         gap_str=str(gap_start)+'-'+str(gap_end)
 
-        model_load(model_saves,gap_par=gap_str,in_add=True,table_dict=table_dict)
+        model_load(model_saves,mod_name=mod_name,mod_number=source_n,
+                   gap_par=gap_str,in_add=True,table_dict=table_dict)
 
         #we need to recreate the variable name because the model load has overriden it
-        xspec_model=AllModels(1)
+        xspec_model=AllModels(1,mod_name)
 
     else:
-        xspec_model=Model(comp_split)
+        xspec_model=Model(comp_split,sourceNum=source_n,modName=mod_name)
         gap_start=1
-        gap_end=AllModels(1).nParameters
-        added_comps_numbers=np.arange(1,len(AllModels(1).componentNames)+1).astype(int)
+        gap_end=AllModels(1,mod_name).nParameters
+        added_comps_numbers=np.arange(1,len(AllModels(1,mod_name).componentNames)+1).astype(int)
 
     '''continuum specifics'''
 
@@ -2168,13 +2180,13 @@ def addcomp(compname,position='last',endmult=None,return_pos=False,modclass=AllM
     '''
 
     for i_grp in range(2,AllData.nGroups+1):
-        xspec_model_grp=AllModels(i_grp)
+        xspec_model_grp=AllModels(i_grp,modName=mod_name)
         for i_par in range(gap_start,gap_end+1):
 
-            xspec_model_grp(i_par).values=AllModels(1)(i_par).values
+            xspec_model_grp(i_par).values=AllModels(1,mod_name)(i_par).values
 
             #updating the values break the link so we need to relink them afterwards
-            xspec_model_grp(i_par).link=str(i_par)
+            xspec_model_grp(i_par).link=(mod_name+':' if mod_name!='' else '')+str(i_par)
 
 
     #creating the variable corresponding to the list of parameters
@@ -2187,45 +2199,45 @@ def addcomp(compname,position='last',endmult=None,return_pos=False,modclass=AllM
         for i_grp in range(1,AllData.nGroups+1):
             #setting the first data group to a fixed 1 value
             if i_grp==1:
-                AllModels(i_grp)(gap_start).values=[1]+ AllModels(i_grp)(gap_start).values[1:]
-                AllModels(i_grp)(gap_start).frozen=True
+                AllModels(i_grp,modName=mod_name)(gap_start).values=[1]+ AllModels(i_grp,modName=mod_name)(gap_start).values[1:]
+                AllModels(i_grp,modName=mod_name)(gap_start).frozen=True
             #unlinking the rest
             else:
-                AllModels(i_grp)(gap_start).link=''
-                AllModels(i_grp)(gap_start).frozen=False
-                AllModels(i_grp)(gap_start).values=[1]+ [0.01, 0.7,0.7,1.3,1.3]
+                AllModels(i_grp,modName=mod_name)(gap_start).link=''
+                AllModels(i_grp,modName=mod_name)(gap_start).frozen=False
+                AllModels(i_grp,modName=mod_name)(gap_start).values=[1]+ [0.01, 0.7,0.7,1.3,1.3]
 
 
-        return_pars+=[gap_start+AllModels(1).nParameters*i_grp for i_grp in range(1,AllData.nGroups)]
+        return_pars+=[gap_start+AllModels(1,mod_name).nParameters*i_grp for i_grp in range(1,AllData.nGroups)]
 
     if comp_split=='crabcorr' and comp_custom is not None:
         for i_grp in range(1,AllData.nGroups+1):
             #setting the first data group to a fixed 1 value
             if i_grp==1:
-                AllModels(i_grp)(gap_start).values=[0]+ [0.01, -0.15,-0.15,0.15,0.15]
-                AllModels(i_grp)(gap_start).frozen=True
+                AllModels(i_grp,modName=mod_name)(gap_start).values=[0]+ [0.01, -0.15,-0.15,0.15,0.15]
+                AllModels(i_grp,modName=mod_name)(gap_start).frozen=True
 
                 #note that we edit the values range to avoid negatives values that would make the fit go wild
-                AllModels(i_grp)(gap_start+1).values=[1]+ [0.01, 0.85,0.85,1.15,1.15]
-                AllModels(i_grp)(gap_start+1).frozen=True
+                AllModels(i_grp,modName=mod_name)(gap_start+1).values=[1]+ [0.01, 0.85,0.85,1.15,1.15]
+                AllModels(i_grp,modName=mod_name)(gap_start+1).frozen=True
             #unlinking the rest
             else:
-                AllModels(i_grp)(gap_start).link=''
-                AllModels(i_grp)(gap_start).frozen=False
-                AllModels(i_grp)(gap_start).values=[0]+ [0.01, -0.15,-0.15,0.15,0.15]
+                AllModels(i_grp,modName=mod_name)(gap_start).link=''
+                AllModels(i_grp,modName=mod_name)(gap_start).frozen=False
+                AllModels(i_grp,modName=mod_name)(gap_start).values=[0]+ [0.01, -0.15,-0.15,0.15,0.15]
 
-                AllModels(i_grp)(gap_start+1).link=''
-                AllModels(i_grp)(gap_start+1).frozen=False
-                AllModels(i_grp)(gap_start + 1).values = [1] + [0.01, 0.7,0.7,1.3,1.3]
+                AllModels(i_grp,modName=mod_name)(gap_start+1).link=''
+                AllModels(i_grp,modName=mod_name)(gap_start+1).frozen=False
+                AllModels(i_grp,modName=mod_name)(gap_start + 1).values = [1] + [0.01, 0.7,0.7,1.3,1.3]
             if i_grp!=AllData.nGroups:
-                return_pars+=[gap_start+AllModels(1).nParameters*i_grp,gap_start+1+AllModels(gap_start).nParameters*i_grp]
+                return_pars+=[gap_start+AllModels(1,mod_name).nParameters*i_grp,gap_start+1+AllModels(gap_start).nParameters*i_grp]
 
         if comp_custom=='Suzaku':
             #freezing the gamma of every parameter except for the front illuminated one
             for i_grp in range(1, AllData.nGroups + 1):
                 if 'xis_0' not in AllData(i_grp).fileName and 'xis_2' not in AllData(i_grp).fileName and\
                         'xis3' not in AllData(i_grp).fileName:
-                    AllModels(i_grp)(gap_start).frozen=True
+                    AllModels(i_grp,modName=mod_name)(gap_start).frozen=True
 
     '''
     From here onwards we need to test the telescopes of the datagroups
@@ -2263,24 +2275,24 @@ def addcomp(compname,position='last',endmult=None,return_pos=False,modclass=AllM
                         continue
                     with fits.open(group_sp[i_grp-1]) as hdul:
                         if 'TELESCOP' not in hdul[1].header or hdul[1].header['TELESCOP']!='NICER':
-                            AllModels(i_grp)(gap_end).link=''
-                            AllModels(i_grp)(gap_end).values=0
-                            AllModels(i_grp)(gap_end).frozen=True
+                            AllModels(i_grp,modName=mod_name)(gap_end).link=''
+                            AllModels(i_grp,modName=mod_name)(gap_end).values=0
+                            AllModels(i_grp,modName=mod_name)(gap_end).frozen=True
 
                         else:
                             if first_group_use:
                                 #allowing the normalization to vary freely
-                                AllModels(i_grp)(gap_end).values = 1
-                                AllModels(i_grp)(gap_end).link=''
-                                AllModels(i_grp)(gap_end).frozen = False
-                                par_tolink=(i_grp-1)*AllModels(1).nParameters+gap_end
+                                AllModels(i_grp,modName=mod_name)(gap_end).values = 1
+                                AllModels(i_grp,modName=mod_name)(gap_end).link=''
+                                AllModels(i_grp,modName=mod_name)(gap_end).frozen = False
+                                par_tolink=(i_grp-1)*AllModels(1,mod_name).nParameters+gap_end
                                 first_group_use=False
 
                                 #adding to the list of variable parameters
                                 return_pars += [par_tolink]
 
                             else:
-                                AllModels(i_grp)(gap_end).link=str(par_tolink)
+                                AllModels(i_grp,modName=mod_name)(gap_end).link=str(par_tolink)
 
             if comp_custom=='calNuSTAR':
                 xspec_model(gap_end-1).values=9.51
@@ -2291,40 +2303,40 @@ def addcomp(compname,position='last',endmult=None,return_pos=False,modclass=AllM
                 for i_grp in range(1,AllData.nGroups+1):
                     with fits.open(group_sp[i_grp-1]) as hdul:
                         if 'TELESCOP' not in hdul[1].header or hdul[1].header['TELESCOP']!='NuSTAR':
-                            AllModels(i_grp)(gap_end).values=0
-                            AllModels(i_grp)(gap_end).frozen=True
+                            AllModels(i_grp,modName=mod_name)(gap_end).values=0
+                            AllModels(i_grp,modName=mod_name)(gap_end).frozen=True
                         else:
                             if first_group_use:
                                 #allowing the normalization to vary freely
-                                AllModels(i_grp)(gap_end).values=1
-                                AllModels(i_grp)(gap_end).link=''
-                                AllModels(i_grp)(gap_end).frozen = False
-                                par_tolink=(i_grp-1)*AllModels(1).nParameters+gap_end
+                                AllModels(i_grp,modName=mod_name)(gap_end).values=1
+                                AllModels(i_grp,modName=mod_name)(gap_end).link=''
+                                AllModels(i_grp,modName=mod_name)(gap_end).frozen = False
+                                par_tolink=(i_grp-1)*AllModels(1,mod_name).nParameters+gap_end
                                 first_group_use=False
 
                                 #adding to the list of variable parameters
                                 return_pars += [par_tolink]
 
                             else:
-                                AllModels(i_grp)(gap_end).link=str(par_tolink)
+                                AllModels(i_grp,modName=mod_name)(gap_end).link=str(par_tolink)
 
     '''Dust Scattering Halo model (xscat) specifics'''
 
     if comp_split == 'xscat':
 
         #linking the nH to the first absorption component found in the model
-        for comp in AllModels(1).componentNames:
+        for comp in AllModels(1,mod_name).componentNames:
             if is_abs(comp.split('_')[0]):
-                abs_comp=getattr(AllModels(1),comp)
+                abs_comp=getattr(AllModels(1,mod_name),comp)
                 abs_comp_firstpar=getattr(abs_comp,abs_comp.parameterNames[0])
-                AllModels(1)(gap_end-3).link=str(abs_comp_firstpar.index)
+                AllModels(1,mod_name)(gap_end-3).link=str(abs_comp_firstpar.index)
 
         # only doing presets if added with a prefix
         if comp_custom is not None:
             for i_grp in range(1, AllData.nGroups + 1):
                 with fits.open(group_sp[i_grp-1]) as hdul:
                     if 'TELESCOP' in hdul[1].header and hdul[1].header['TELESCOP'] == 'NICER':
-                        AllModels(i_grp)(gap_end-1).values=180
+                        AllModels(i_grp,modName=mod_name)(gap_end-1).values=180
 
                     #testing if the spectrum has an extraction region part in its fits
                     if len(hdul)>=4 and 'REG' in hdul[3].name:
@@ -2337,12 +2349,12 @@ def addcomp(compname,position='last',endmult=None,return_pos=False,modclass=AllM
 
                         print('freezing Rext of group '+str(i_grp)+' at')
                         print(str(round(first_reg_lastrad*pix_to_arcsec)))
-                        AllModels(i_grp)(gap_end-1).values=round(first_reg_lastrad*pix_to_arcsec)
+                        AllModels(i_grp,modName=mod_name)(gap_end-1).values=round(first_reg_lastrad*pix_to_arcsec)
 
             #fixing the position if an object is specified
             if comp_custom.replace('glob','') in list(xscat_pos_dict.keys()):
-                AllModels(1)(gap_end-2).values=xscat_pos_dict[comp_custom.replace('glob','')]
-                AllModels(1)(gap_end-2).frozen=True
+                AllModels(1,mod_name)(gap_end-2).values=xscat_pos_dict[comp_custom.replace('glob','')]
+                AllModels(1,mod_name)(gap_end-2).frozen=True
 
 
     '''ISM model specifics'''
@@ -2351,8 +2363,8 @@ def addcomp(compname,position='last',endmult=None,return_pos=False,modclass=AllM
         if comp_custom is not None and 'link' in comp_custom:
 
             #removing the redshift
-            AllModels(1)(gap_end).values=0.
-            AllModels(1)(gap_end).frozen=True
+            AllModels(1,mod_name)(gap_end).values=0.
+            AllModels(1,mod_name)(gap_end).frozen=True
 
             '''
             The default neutral column densities in ISMABS are all from the equivalent of the TBabs values 
@@ -2363,7 +2375,7 @@ def addcomp(compname,position='last',endmult=None,return_pos=False,modclass=AllM
 
             for id_par in np.arange(3,31,3)-1:
 
-                AllModels(1)(int(gap_start+id_par)).link=str(AllModels(1)(int(gap_start+id_par)).values[0])+'*p1/0.1'
+                AllModels(1,mod_name)(int(gap_start+id_par)).link=str(AllModels(1,mod_name)(int(gap_start+id_par)).values[0])+'*p1/0.1'
 
 
     '''Physical model specifics'''
@@ -2375,78 +2387,78 @@ def addcomp(compname,position='last',endmult=None,return_pos=False,modclass=AllM
 
             #fixing the inclination, preferentially to dynamical values, else to jet, else to misc
             if comp_custom in list(incl_dyn_dict.keys()):
-                AllModels(1)(gap_end-14).values=incl_dyn_dict[comp_custom][0]
-                AllModels(1)(gap_end-14).frozen = True
+                AllModels(1,mod_name)(gap_end-14).values=incl_dyn_dict[comp_custom][0]
+                AllModels(1,mod_name)(gap_end-14).frozen = True
 
             elif comp_custom in list(incl_jet_dict.keys()):
-                AllModels(1)(gap_end-14).values = incl_jet_dict[comp_custom][0]
-                AllModels(1)(gap_end-14).frozen = True
+                AllModels(1,mod_name)(gap_end-14).values = incl_jet_dict[comp_custom][0]
+                AllModels(1,mod_name)(gap_end-14).frozen = True
 
             elif comp_custom in list(incl_misc_dict.keys()):
-                AllModels(1)(gap_end-14).values = incl_misc_dict[comp_custom][0]
-                AllModels(1)(gap_end-14).frozen = True
+                AllModels(1,mod_name)(gap_end-14).values = incl_misc_dict[comp_custom][0]
+                AllModels(1,mod_name)(gap_end-14).frozen = True
 
             #freezing the reflection fraction to -1 to only get the reflection component
-            AllModels(1)(gap_end-1).values=-1
-            AllModels(1)(gap_end - 1).frozen=True
+            AllModels(1,mod_name)(gap_end-1).values=-1
+            AllModels(1,mod_name)(gap_end - 1).frozen=True
 
             #free indexes but with restrained values
-            AllModels(1)(gap_end-8).values=[3.,0.1,1.,1.,5.,5.]
-            AllModels(1)(gap_end-9).values=[3.,0.1,1.,1.,5.,5.]
+            AllModels(1,mod_name)(gap_end-8).values=[3.,0.1,1.,1.,5.,5.]
+            AllModels(1,mod_name)(gap_end-9).values=[3.,0.1,1.,1.,5.,5.]
 
 
             #fixing Rin=R_ISCO, Rout=1000, Rbr=18Rg
-            AllModels(1)(gap_end-10).values=18
-            AllModels(1)(gap_end-11).values=1e3
-            AllModels(1)(gap_end-12).values=-1
+            AllModels(1,mod_name)(gap_end-10).values=18
+            AllModels(1,mod_name)(gap_end-11).values=1e3
+            AllModels(1,mod_name)(gap_end-12).values=-1
 
     if comp_split == 'kerrbb':
         if comp_custom is not None:
 
             # allowing some wiggle room for the spectral hardening
-            AllModels(1)(gap_end - 3).values = [1.7, 0.1, 1.4, 1.4, 1.9, 1.9]
+            AllModels(1,mod_name)(gap_end - 3).values = [1.7, 0.1, 1.4, 1.4, 1.9, 1.9]
 
             #fixing the max spin to 0.998 on both sides to avoid issues when linking with relxill
-            AllModels(1)(gap_end-8).values=[0.0, 0.01, -0.998, -0.998, 0.998, 0.998]
+            AllModels(1,mod_name)(gap_end-8).values=[0.0, 0.01, -0.998, -0.998, 0.998, 0.998]
 
             from visual_line_tools import incl_dyn_dict, incl_jet_dict, incl_misc_dict, dist_dict, mass_dict
 
             #fixing the inclination, preferentially to dynamical values, else to jet, else to misc
             if comp_custom in list(incl_dyn_dict.keys()):
-                AllModels(1)(gap_end-7).values=incl_dyn_dict[comp_custom][0]
-                AllModels(1)(gap_end - 7).frozen = True
+                AllModels(1,mod_name)(gap_end-7).values=incl_dyn_dict[comp_custom][0]
+                AllModels(1,mod_name)(gap_end - 7).frozen = True
 
             elif comp_custom in list(incl_jet_dict.keys()):
-                AllModels(1)(gap_end - 7).values = incl_jet_dict[comp_custom][0]
-                AllModels(1)(gap_end - 7).frozen = True
+                AllModels(1,mod_name)(gap_end - 7).values = incl_jet_dict[comp_custom][0]
+                AllModels(1,mod_name)(gap_end - 7).frozen = True
 
             elif comp_custom in list(incl_misc_dict.keys()):
-                AllModels(1)(gap_end - 7).values = incl_misc_dict[comp_custom][0]
-                AllModels(1)(gap_end - 7).frozen = True
+                AllModels(1,mod_name)(gap_end - 7).values = incl_misc_dict[comp_custom][0]
+                AllModels(1,mod_name)(gap_end - 7).frozen = True
 
             #mass
             if comp_custom in list(mass_dict.keys()):
-                AllModels(1)(gap_end - 6).values = mass_dict[comp_custom][0]
-                AllModels(1)(gap_end - 6).frozen = True
+                AllModels(1,mod_name)(gap_end - 6).values = mass_dict[comp_custom][0]
+                AllModels(1,mod_name)(gap_end - 6).frozen = True
 
 
             #distance
             if comp_custom in list(dist_dict.keys()):
-                AllModels(1)(gap_end - 4).values = dist_dict[comp_custom][0]
-                AllModels(1)(gap_end - 4).frozen = True
+                AllModels(1,mod_name)(gap_end - 4).values = dist_dict[comp_custom][0]
+                AllModels(1,mod_name)(gap_end - 4).frozen = True
 
             #freezing the norm if all 3 physical parameters are frozen
-            if AllModels(1)(gap_end-7).frozen and AllModels(1)(gap_end-6).frozen and AllModels(1)(gap_end-4).frozen:
-                AllModels(1)(gap_end).frozen=True
+            if AllModels(1,mod_name)(gap_end-7).frozen and AllModels(1,mod_name)(gap_end-6).frozen and AllModels(1,mod_name)(gap_end-4).frozen:
+                AllModels(1,mod_name)(gap_end).frozen=True
 
     AllModels.show()
 
     if return_pos:
         return return_pars,added_comps_numbers
     else:
-        return AllModels(1)
+        return AllModels(1,mod_name)
 
-def delcomp(compname,modclass=AllModels,give_ndel=False):
+def delcomp(compname,mod_name='',give_ndel=False):
 
     '''
     changes the model to delete a component by saving the old model parameters and replacing it with the new one
@@ -2459,9 +2471,9 @@ def delcomp(compname,modclass=AllModels,give_ndel=False):
     Note: Deleting atable and mult_table requires using the component names instead of mtable{*.fits}
     '''
 
-    first_mod=modclass(1)
+    first_mod=AllModels(1,mod_name)
 
-    model_saves=allmodel_data().default
+    model_saves = getattr(allmodel_data(), 'default' if mod_name == '' else mod_name)
 
     #deleting the space to avoid problems
     old_exp=model_saves[0].expression.replace(' ','')
@@ -2473,7 +2485,7 @@ def delcomp(compname,modclass=AllModels,give_ndel=False):
 
     #the easiest way to fetch the position of the component to delete is to transform the model expression according to xspec namings
     #note: no need to replace the * when deleting
-    xspec_expr,table_dict=numbered_expression(old_exp,mult_conv=False)
+    xspec_expr,table_dict=numbered_expression(old_exp,mult_conv=False,mod_name=mod_name)
 
     new_exp_bef=xspec_expr[:xspec_expr.find(compname)].replace(' ','')
     new_exp_aft=xspec_expr[xspec_expr.find(compname)+len(compname):].replace(' ','')
@@ -2633,11 +2645,11 @@ def delcomp(compname,modclass=AllModels,give_ndel=False):
 
             #computing the deleted parameter ids in the first datagroup
             deleted_par_ids_single=np.concatenate((np.arange(skippar_start+1,skippar_start+skippar_n+1),
-                                                    np.array([0]) if skippar_start+skippar_n==AllModels(1).nParameters\
+                                                    np.array([0]) if skippar_start+skippar_n==AllModels(1,mod_name).nParameters\
                                                     else np.array([]))).astype(int)
 
-            if int(link_par)%AllModels(1).nParameters in deleted_par_ids_single:
-                print('\nParameter '+str(grp_id*AllModels(1).nParameters+par_id+1)+
+            if int(link_par)%AllModels(1,mod_name).nParameters in deleted_par_ids_single:
+                print('\nParameter '+str(grp_id*AllModels(1,mod_name).nParameters+par_id+1)+
                       ' was linked to one of the deleted components parameters. Deleting link.')
 
                 #Deleting links resets the values boundaries so we save and replace the values to make non-default bounds remain saved
@@ -2649,10 +2661,10 @@ def delcomp(compname,modclass=AllModels,give_ndel=False):
 
             #shifting the link value if it points to a parameter originally after the deleted components
             #the 0 test accounts for the very last parameter, which will always need to be shifted if it wasn't in the deleted comps
-            elif int(link_par)>=skippar_start+skippar_n or int(link_par)%AllModels(1).nParameters==0:
+            elif int(link_par)>=skippar_start+skippar_n or int(link_par)%AllModels(1,mod_name).nParameters==0:
 
                 #this value is the numer of times skippar_n parameters are deleted before the link_par parameter
-                link_shift_factor=1+(int(link_par)-(skippar_start+skippar_n))//AllModels(1).nParameters
+                link_shift_factor=1+(int(link_par)-(skippar_start+skippar_n))//AllModels(1,mod_name).nParameters
 
                 #new link position, correctly accounting for additional skips in subsequent datagroups
                 new_link_par=str(int(link_par)-skippar_n*(link_shift_factor))
@@ -2669,7 +2681,7 @@ def delcomp(compname,modclass=AllModels,give_ndel=False):
     #now we can finally recreate the model
     model_saves[0].expression=new_exp_full
 
-    new_models=model_load(model_saves,table_dict=table_dict)
+    new_models=model_load(model_saves,mod_name=mod_name,table_dict=table_dict)
 
     if give_ndel:
         return len(id_delcomp_list)
@@ -3051,9 +3063,9 @@ def parse_xlog(log_lines,goal='lastmodel',no_display=False,replace_frozen=False,
 
         #identifying the model name to call it properly later
         if ':' not in model_lines[0].split('<1>')[0]:
-            model_name=''
+            mod_name=''
         else:
-            model_name=model_lines[0].split(':')[0].split('Model ')[1]
+            mod_name=model_lines[0].split(':')[0].split('Model ')[1]
 
         #splitting the lines for each group, by first identifying the starts
         if sum(['Data group' in elem for elem in model_lines])>0:
@@ -3122,7 +3134,7 @@ def parse_xlog(log_lines,goal='lastmodel',no_display=False,replace_frozen=False,
                 #so we adapt these bounds if necessary
 
                 try:
-                    par_values=AllModels(i_grp,modName=model_name)(i_par).values
+                    par_values=AllModels(i_grp,modName=mod_name)(i_par).values
                 except:
                     breakpoint()
 
@@ -3131,18 +3143,18 @@ def parse_xlog(log_lines,goal='lastmodel',no_display=False,replace_frozen=False,
                 if float(line.split()[-3])>par_values[5]:
                     par_values[5]=float(line.split()[-3])
 
-                AllModels(i_grp,modName=model_name)(i_par).values=[float(line.split()[-3])]+par_values[1:]
+                AllModels(i_grp,modName=mod_name)(i_par).values=[float(line.split()[-3])]+par_values[1:]
 
                 #freezing lines frozen during the fitting operation if the option is selected
                 if freeze_pegged and line.endswith('+/-  -1.00000     \n'):
-                    AllModels(i_grp,modName=model_name)(i_par).frozen=True
+                    AllModels(i_grp,modName=mod_name)(i_par).frozen=True
 
             #also replacing frozen values if it is asked
             if replace_frozen:
                 frozen_lines=[line for line in group_lines if line.endswith('frozen\n')]
                 for line in frozen_lines:
                     i_par=int(line.split()[0])%npars if int(line.split()[0])%npars!=0 else npars
-                    AllModels(i_grp,modName=model_name)(i_par).values=float(line.split()[-2])
+                    AllModels(i_grp,modName=mod_name)(i_par).values=float(line.split()[-2])
 
         models_par_list+=[curr_mod_parlist]
 
@@ -6467,7 +6479,7 @@ def EW_ang2keV(x,e_line):
 def xPlot(types,axes_input=None,plot_saves_input=None,plot_arg=None,includedlist=None,group_names='auto',
           hide_ticks=True,
           secondary_x=True,legend_position=None,xlims=None,ylims=None,label_bg=False,
-          mult_factors=None,
+          mult_factors=None,label_indivcomps=True,
           no_name_data='auto',force_ylog_ratio=False,legend_ncols=None,
           data_colors=None,model_colors=None,addcomp_colors=None,data_alpha=1):
 
@@ -6801,12 +6813,12 @@ def xPlot(types,axes_input=None,plot_saves_input=None,plot_arg=None,includedlist
                     try:
                         curr_ax.plot(curr_save.x[id_grp],curr_save.addcomps[id_grp][i_comp]*mult_factor_grp,
                                      color=colors_addcomp.to_rgba(i_comp) if  addcomp_colors not in [None,'data'] else  addcomp_color_grp,
-                                 label=label_comps[i_comp] if id_grp==0 else '',linestyle=ls_types[i_comp%len(ls_types)],linewidth=1)
+                                 label='' if not label_indivcomps else label_comps[i_comp] if id_grp==0 else '',linestyle=ls_types[i_comp%len(ls_types)],linewidth=1)
                     except:
                         try:
                             curr_ax.plot(curr_save.x[0],curr_save.addcomps[id_grp][i_comp]*mult_factor_grp,
                                          color=colors_addcomp.to_rgba(i_comp)  if  addcomp_colors not in [None,'data']  else  addcomp_color_grp,
-                                     label=label_comps[i_comp] if id_grp==0 else '',linestyle=ls_types[i_comp%len(ls_types)],linewidth=1)
+                                     label='' if not label_indivcomps else label_comps[i_comp] if id_grp==0 else '',linestyle=ls_types[i_comp%len(ls_types)],linewidth=1)
                         except:
                             breakpoint()
                             print("check if other x work")
@@ -6902,12 +6914,16 @@ def store_plot(datatype='data',comps=False):
     Plot(datatype)
 
     #storing the main plot values
-    plot_values=np.array([[[None,None]]*2]*AllData.nGroups)
-    for i_grp in range(1,AllData.nGroups+1):
+    plot_values=np.array([[[None,None]]*2]*max(AllData.nGroups,1))
+    for i_grp in range(1,max(2,AllData.nGroups+1)):
         plot_values[i_grp-1][0][0]=np.array(Plot.x(i_grp))
         plot_values[i_grp-1][0][1]=np.array(Plot.xErr(i_grp))
-        plot_values[i_grp-1][1][0]=np.array(Plot.y(i_grp))
-        plot_values[i_grp-1][1][1]=np.array(Plot.yErr(i_grp))
+
+        if 'mo' in datatype:
+            plot_values[i_grp-1][1][0]=np.array(Plot.model(i_grp))
+        else:
+            plot_values[i_grp-1][1][0]=np.array(Plot.y(i_grp))
+            plot_values[i_grp-1][1][1]=np.array(Plot.yErr(i_grp))
 
     if comps:
 
@@ -6922,7 +6938,7 @@ def store_plot(datatype='data',comps=False):
                 break
 
 
-        mod_values=np.array([[None]*(n_addcomps+2)]*AllData.nGroups)
+        mod_values=np.array([[None]*(n_addcomps+2)]*max(AllData.nGroups,1))
         '''
         for each data group, plot_values contains:
             -the x value for the model with the current datatype
@@ -6930,7 +6946,7 @@ def store_plot(datatype='data',comps=False):
             -the y values for all the model components
         '''
 
-        for i_grp in range(1,AllData.nGroups+1):
+        for i_grp in range(1,max(2,AllData.nGroups+1)):
 
             mod_values[i_grp-1][0]=np.array(Plot.x(i_grp))
             mod_values[i_grp-1][1]=np.array(Plot.model(i_grp))

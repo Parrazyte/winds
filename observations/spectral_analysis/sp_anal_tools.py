@@ -6,7 +6,7 @@ import glob
 from astropy.time import Time,TimeDelta
 from general_tools import file_edit
 
-def sp_anal(obs_path,mod='powerlaw',baseload=False,model_load=False,obj='',scorpeon=True,overwrite=False,
+def sp_anal(obs_path,mod='powerlaw',baseload=True,model_load=False,obj='',scorpeon=True,overwrite=False,
             addcomp_list=[],freeze_nH_postfit=False,remove_edge_postfit=True,remove_calgaussian_postfit=True,
 
             outdir='s_a',absval=None,set_ener_str=None,set_ener_xrism=False,
@@ -589,3 +589,4 @@ def fit_broader_BAT(epoch_list,
                    remove_scorpeon=True)
 
     plt.ion()
+

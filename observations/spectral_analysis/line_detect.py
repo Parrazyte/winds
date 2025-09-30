@@ -2667,6 +2667,9 @@ def line_detect(epoch_id,arg_dict):
 
                         # energy modifications reset when using fakeit, so we update
                         # them in case there is a component requires it in the model
+                        if 'XRISM' in sat_indiv_init:
+                            breakpoint()
+
                         AllModels.setEnergies('0.01 1000.0 5000 log')
 
                         # limiting to the line search energy range

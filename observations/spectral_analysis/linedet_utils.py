@@ -37,7 +37,7 @@ import dill
 import time
 from xspec_config_multisp import set_ener
 
-def narrow_line_cycle(low_e,high_e,e_step=2e-2,plot_suffix='',baseload=None,
+def narrow_line_cycle(low_e,high_e,e_step=2e-2,lw=0.,plot_suffix='',baseload=None,
                       e_sat_low_indiv='auto',force_ylog_ratio=False,
                       ratio_bounds=None,title=True,set_ener_str=None,set_ener_xrism=False):
 
@@ -78,7 +78,7 @@ def narrow_line_cycle(low_e,high_e,e_step=2e-2,plot_suffix='',baseload=None,
 
     mod_ls=allmodel_data()
     narrow_out_val=narrow_line_search(mod_ls,'mod_ls',e_sat_low_indiv_use,[low_e,high_e,e_step],
-                                      line_cont_range=[low_e,high_e],scorpeon=False)
+                                      line_cont_range=[low_e,high_e],lw=lw,scorpeon=False)
 
     if baseload is not None:
         baseload_str=baseload[:baseload.rfind('.')]
@@ -198,7 +198,7 @@ def narrow_line_search(data_cont, suffix,e_sat_low_indiv,line_search_e=[4,10,0.0
 
     # adjusting the cflux to be sure we cover the entire flux of the gaussian component
     comp_gauss_cflux.Emin = str(min(e_sat_low_indiv))
-    comp_gauss_cflux.Emax = 12.
+    comp_gauss_cflux.Emax = max(12.,line_search_e[-1]+5*lw)
 
     # narrow line locked
     comp_gauss.Sigma = lw
@@ -623,7 +623,8 @@ def plot_line_ratio(axe,data_autofit,data_autofit_noabs,n_addcomps_cont,mode=Non
 
 
 def plot_std_ener(ax_ratio, ax_contour=None, plot_em=False, mode='ratio',exclude_last=False,plot_indiv_transi=False,
-                  squished_mode=False,force_side='none'):
+                  squished_mode=False,force_side='none',alpha_line=1.,
+                  noname=False,noline=False):
     '''
     Plots the current absorption (and emission if asked) standard lines in the current axis
     also used in the autofit plots further down
@@ -704,22 +705,23 @@ def plot_std_ener(ax_ratio, ax_contour=None, plot_em=False, mode='ratio',exclude
         abs_bool = 'abs' in line and 'abs' in force_side
         em_bool = not abs_bool or 'em' in force_side
 
-        # plotting the lines on the two parts of the graphs
-        ax_ratio.axvline(x=lines_e_dict[line][0],
-                         ymin=0 if mode not in ['ratio','chimap'] else pos_ctr_ratio if not abs_bool else 0.,
-                         ymax=1 if mode not in ['ratio','chimap'] else pos_ctr_ratio if not em_bool else 1.,
-                         color='blue' if em_bool else 'brown',
-                         linestyle='dashed', linewidth=1.5,zorder=-1)
-        if ax_contour is not None:
-            ax_contour.axvline(x=lines_e_dict[line][0], ymin=0.5 if em_bool else 0, ymax=1 if em_bool else 0.5,
-                               color='blue' if em_bool else 'brown', linestyle='dashed', linewidth=0.5)
+        if not noline:
+            # plotting the lines on the two parts of the graphs
+            ax_ratio.axvline(x=lines_e_dict[line][0],
+                             ymin=ax_ratio.get_ylim()[0] if mode=='misc' else (0 if mode not in ['ratio','chimap'] else pos_ctr_ratio if not abs_bool else 0.),
+                             ymax=ax_ratio.get_ylim()[1] if mode=='misc' else (1 if mode not in ['ratio','chimap'] else pos_ctr_ratio if not em_bool else 1.),
+                             color='blue' if em_bool else 'brown',
+                             linestyle='dashed', linewidth=1.5,zorder=-1,alpha=alpha_line)
+            if ax_contour is not None:
+                ax_contour.axvline(x=lines_e_dict[line][0], ymin=0.5 if em_bool else 0, ymax=1 if em_bool else 0.5,
+                                   color='blue' if em_bool else 'brown', linestyle='dashed', linewidth=0.5)
 
         # small left horizontal shift to help the Nika27 display
         txt_hshift = 0.1 if 'Ni' in line else 0.006 if 'Si' in line else 0
         txt_line=lines_std[line]
 
         line_x_text=lines_e_dict[line][0] - txt_hshift
-        if mode != 'noname':
+        if not noname:
 
             add_height_squished=0
             if plot_indiv_transi:

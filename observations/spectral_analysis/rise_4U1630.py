@@ -310,6 +310,7 @@ def NICER_run_all_lc(sort=True,reverse=False,band='0.3-10'):
 
     for elem_sp in sp_list:
         lc_anal(elem_sp)
+
 def compute_RMS(lc_path):
     from stingray import Lightcurve, excess_variance
 

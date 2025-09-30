@@ -191,6 +191,8 @@ def repro_dir(directory='auto',repro_suffix='repro',overwrite=True,
 
     Important to do if the data was downloaded before a new heasoft/CALDB version got released
 
+    requires CALDB environent variable to be set
+
     '''
 
     def copy_checker(spawn,init_path_spawn,end_path_spawn,init_path,path_spawn,logfile_prefix):
@@ -198,7 +200,7 @@ def repro_dir(directory='auto',repro_suffix='repro',overwrite=True,
         # number of files to copy
         n_files_copy = len(glob.glob(os.path.join(init_path, "**"),recursive=True))
 
-        logfile_name=logfile_prefix+'_cp_list.log'
+        logfile_name=logfile_prefix+'_cp_list'+str(time.time()).replace('.','p')+'.log'
 
         # copying the individual xrism obs subdirs
         spawn.sendline('cp -rv '+init_path_spawn+' '+end_path_spawn+' >'+logfile_name)
@@ -230,12 +232,13 @@ def repro_dir(directory='auto',repro_suffix='repro',overwrite=True,
 
     bashproc.sendline('cd '+os.getcwd())
 
-    if os.path.isfile(directory_use + '/repro_dir.log'):
-        os.system('rm ' + directory_use + '/repro_dir.log')
+    time_str=str(time.time()).replace('.','p')
+    if os.path.isfile(directory_use + '/repro_dir'+time_str+'.log'):
+        os.system('rm ' + directory_use + '/repro_dir'+time_str+'.log')
 
-    with (no_op_context() if parallel else StdoutTee(directory_use + '/repro_dir.log', mode="a", buff=1,
+    with (no_op_context() if parallel else StdoutTee(directory_use + '/repro_dir'+time_str+'.log', mode="a", buff=1,
                                                      file_filters=[_remove_control_chars]), \
-          StderrTee(directory_use + '/repro_dir.log', buff=1, file_filters=[_remove_control_chars])):
+          StderrTee(directory_use + '/repro_dir'+time_str+'.log', buff=1, file_filters=[_remove_control_chars])):
 
         if not parallel:
             bashproc.logfile_read = sys.stdout
@@ -246,20 +249,26 @@ def repro_dir(directory='auto',repro_suffix='repro',overwrite=True,
         repro_version_match=False
         # getting the version of heasoft and the calibration used for the reprocessing
         bashproc.sendline('fversion >'+os.path.join(directory_use,'heasoft_version.txt'))
+
+        bashproc.sendline('echo $CALDB >'+os.path.join(directory_use,'caldb_path.txt'))
+
+
         time.sleep(1.)
         with open(os.path.join(directory_use,'heasoft_version.txt')) as f:
             heasoft_ver=f.readlines()[0].replace('\n','').split('_')[1]
 
+        with open(os.path.join(directory_use,'caldb_path.txt')) as f:
+            caldb_path=f.readlines()[0].replace('\n','')
 
         os.system('rm '+os.path.join(directory_use,'heasoft_version.txt'))
 
         # heasoft_ver = os.environ['HEADAS']
 
-        caldb_ver = 'gen' + os.path.realpath(os.path.join(os.environ['CALDB'],
+        caldb_ver = 'gen' + os.path.realpath(os.path.join(caldb_path,
                                                           'data/xrism/gen/caldb.indx')).split('indx')[-1]
-        caldb_ver += '_xtd' + os.path.realpath(os.path.join(os.environ['CALDB'],
+        caldb_ver += '_xtd' + os.path.realpath(os.path.join(caldb_path,
                                                             'data/xrism/xtend/caldb.indx')).split('indx')[-1]
-        caldb_ver += '_res' + os.path.realpath(os.path.join(os.environ['CALDB'],
+        caldb_ver += '_res' + os.path.realpath(os.path.join(caldb_path,
                                                             'data/xrism/resolve/caldb.indx')).split('indx')[-1]
 
         if os.path.isdir(repro_dir):
@@ -392,11 +401,11 @@ def repro_dir(directory='auto',repro_suffix='repro',overwrite=True,
             #logging the version of heasoft and the calibration used for the reprocessing
             heasoft_ver=os.environ['HEADAS']
 
-            caldb_ver='gen_'+os.path.realpath(os.path.join(os.environ['CALDB'],
+            caldb_ver='gen_'+os.path.realpath(os.path.join(caldb_path,
                                                            'data/xrism/gen/caldb.indx')).split('indx')[-1]
-            caldb_ver+='_res_'+os.path.realpath(os.path.join(os.environ['CALDB'],
+            caldb_ver+='_res_'+os.path.realpath(os.path.join(caldb_path,
                                                            'data/xrism/resolve/caldb.indx')).split('indx')[-1]
-            caldb_ver+='_xtd_'+os.path.realpath(os.path.join(os.environ['CALDB'],
+            caldb_ver+='_xtd_'+os.path.realpath(os.path.join(caldb_path,
                                                            'data/xrism/xtend/caldb.indx')).split('indx')[-1]
 
             with open(os.path.join(repro_dir,'repro_ver.txt'),'w+') as f:
@@ -529,8 +538,9 @@ def resolve_RTS(directory='auto_repro',anal_dir_suffix='',heasoft_init_alias='he
     log_dir=os.path.join(os.getcwd(),anal_dir,'log')
     os.system('mkdir -p '+os.path.join(os.getcwd(),anal_dir,'log'))
 
-    log_path=os.path.join(log_dir,'resolve_RTS'+('_'+anal_dir_suffix if anal_dir_suffix!='' else '')+'.log')
+    time_str=str(time.time()).replace('.','p')
 
+    log_path=os.path.join(log_dir,'resolve_RTS'+('_'+anal_dir_suffix if anal_dir_suffix!='' else '')+time_str+'.log')
 
     if os.path.isfile(log_path):
         os.system('rm ' + log_path)
@@ -1237,7 +1247,6 @@ def resolve_BR(directory='auto_repro', anal_dir_suffix='',
                task='rslbratios',
                lightcurves=False,
                emin=2,emax=12,
-               pixel_str_rsl='all',
                remove_cal_pxl_resolve=False,
                pixel_filter_rule='ratio_LS_6+remove_27',
                heasoft_init_alias='heainit', caldb_init_alias='caldbinit',
@@ -1292,8 +1301,9 @@ def resolve_BR(directory='auto_repro', anal_dir_suffix='',
     log_dir=os.path.join(os.getcwd(),anal_dir,'log')
     os.system('mkdir -p '+os.path.join(os.getcwd(),anal_dir,'log'))
 
-    log_path=os.path.join(log_dir,'resolve_BR'+('_'+anal_dir_suffix if anal_dir_suffix!='' else '')+'.log')
+    time_str=str(time.time()).replace('.','p')
 
+    log_path=os.path.join(log_dir,'resolve_BR'+('_'+anal_dir_suffix if anal_dir_suffix!='' else '')+time_str+'.log')
 
     if os.path.isfile(log_path):
         os.system('rm ' + log_path)
@@ -1358,8 +1368,6 @@ def resolve_BR(directory='auto_repro', anal_dir_suffix='',
                                 mask_subexclude = (mask_subexclude) &  (submask_only)
 
                         mask_exclude = (mask_exclude) | mask_subexclude
-
-
 
             elif task=='rslbratios':
                 bashproc.sendline('mkdir -p branch')
@@ -1713,6 +1721,8 @@ def xtend_SFP(directory='auto_repro',filtering='flat_top',
               heasoft_init_alias='heainit',caldb_init_alias='caldbinit',repro_suffix='repro'):
     '''
 
+    #COULD BE IMPROVED BY USING A SPECIFIC ENERGY BAND
+
     MAXIJ1744 approximate coords: ['17:45:40.45','-29:00:46.6']
     MAXIJ1744 Chandra Atel Coords ['17:45:40.476', '-29:00:46.10']
 
@@ -1778,8 +1788,9 @@ def xtend_SFP(directory='auto_repro',filtering='flat_top',
     log_dir=os.path.join(os.getcwd(),anal_dir,'log')
     os.system('mkdir -p '+os.path.join(os.getcwd(),anal_dir,'log'))
 
-    log_path=os.path.join(log_dir,'xtend_SFP'+('_'+anal_dir_suffix if anal_dir_suffix!='' else '')+'.log')
+    time_str=str(time.time()).replace('.','p')
 
+    log_path=os.path.join(log_dir,'xtend_SFP'+('_'+anal_dir_suffix if anal_dir_suffix!='' else '')+time_str+'.log')
 
     if os.path.isfile(log_path):
         os.system('rm ' + log_path)
@@ -2524,13 +2535,14 @@ def extract_img(directory='auto_repro',anal_dir_suffix='',
                    use_raw_evt_xtd=False,use_raw_evt_rsl=False,
                    heasoft_init_alias='heainit',caldb_init_alias='caldbinit',
                    sudo_screen=False,
-                   parallel=False,repro_suffix='repro'):
+                   parallel=False,repro_suffix='repro',e_band=None):
 
     '''
     Extract images from event files in the analysis subdirectory of a directory
 
     use_raw_evt_xtd/use_raw_evt_rsl determine if the images are created from raw or filtered evts
 
+    e_band: None or 'float_float'
     '''
     bashproc = pexpect.spawn("/bin/bash", encoding='utf-8')
 
@@ -2568,7 +2580,10 @@ def extract_img(directory='auto_repro',anal_dir_suffix='',
     log_dir=os.path.join(os.getcwd(),anal_dir,'log')
     os.system('mkdir -p '+os.path.join(os.getcwd(),anal_dir,'log'))
 
-    log_path=os.path.join(log_dir,'extract_img'+('_'+anal_dir_suffix if anal_dir_suffix!='' else '')+'.log')
+
+    time_str=str(time.time()).replace('.','p')
+
+    log_path=os.path.join(log_dir,'extract_img'+('_'+anal_dir_suffix if anal_dir_suffix!='' else '')+time_str+'.log')
 
     if os.path.isfile(log_path):
         os.system('rm ' + log_path)
@@ -2589,9 +2604,12 @@ def extract_img(directory='auto_repro',anal_dir_suffix='',
 
         for elem_evt in resolve_files+xtend_files:
 
-            xsel_util(elem_evt.split('/')[-1],elem_evt.split('/')[-1].replace('.evt','_img.ds'),
+            xsel_util(elem_evt.split('/')[-1],elem_evt.split('/')[-1].replace('.evt','_img'+
+                                                                        ('' if e_band is None else str(e_band))+'.ds'),
                      mode='image',directory=anal_dir,sudo_screen=sudo_screen,sudo_mdp=sudo_mdp_use,
-                      spawn=bashproc)
+                      spawn=bashproc,
+                      e_low=(None if e_band is None else float(e_band.split('_')[0])),
+                      e_high=(None if e_band is None else float(e_band.split('_')[1])))
 
 
 def create_gtis(directory='auto_repro',anal_dir_suffix='',
@@ -2744,7 +2762,9 @@ def create_gtis(directory='auto_repro',anal_dir_suffix='',
     else:
         directory_use=directory
 
-    io_log = open(directory_use + '/create_gtis'+('_'+anal_dir_suffix if anal_dir_suffix!='' else '')+'.log', 'w+')
+    time_str=str(time.time()).replace('.','p')
+
+    io_log = open(directory_use + '/create_gtis'+('_'+anal_dir_suffix if anal_dir_suffix!='' else '')+time_str+'.log', 'w+')
 
     # ensuring a good obsid name even in local
     if directory_use == './':
@@ -2770,8 +2790,9 @@ def create_gtis(directory='auto_repro',anal_dir_suffix='',
     log_dir=os.path.join(os.getcwd(),anal_dir,'log')
     os.system('mkdir -p '+os.path.join(os.getcwd(),anal_dir,'log'))
 
+
     log_path=os.path.join(log_dir,'extract_gtis'+('_'+anal_dir_suffix if anal_dir_suffix!='' else '')
-                                        +'_'+gti_subdir+'.log')
+                                        +'_'+gti_subdir+time_str+'.log')
 
     if os.path.isfile(log_path):
         os.system('rm ' + log_path)
@@ -3045,8 +3066,11 @@ def extract_lc(directory='auto_repro', anal_dir_suffix='',lc_subdir='lc',
     log_dir=os.path.join(os.getcwd(),anal_dir,'log')
     os.system('mkdir -p '+os.path.join(os.getcwd(),anal_dir,'log'))
 
+
+    time_str=str(time.time()).replace('.','p')
+
     log_path=os.path.join(log_dir,'extract_lc'+('_'+anal_dir_suffix if anal_dir_suffix!='' else '')
-                                   +'_'+lc_subdir+'_'+gti_subdir+'.log')
+                                   +'_'+lc_subdir+'_'+gti_subdir+time_str+'.log')
 
     if os.path.isfile(log_path):
         os.system('rm ' + log_path)
@@ -3274,8 +3298,10 @@ def extract_sp(directory='auto_repro', anal_dir_suffix='',sp_subdir='sp',
     log_dir=os.path.join(os.getcwd(),anal_dir,'log')
     os.system('mkdir -p '+os.path.join(os.getcwd(),anal_dir,'log'))
 
+    time_str = str(time.time()).replace('.', 'p')
+
     log_path=os.path.join(log_dir,'extract_sp'+('_'+anal_dir_suffix if anal_dir_suffix!='' else '')
-                      +'_'+sp_subdir+'_'+gti_subdir+'.log')
+                      +'_'+sp_subdir+'_'+gti_subdir+ time_str + '.log')
 
     if os.path.isfile(log_path):
         os.system('rm ' + log_path)
@@ -3652,8 +3678,10 @@ def extract_rmf(directory='auto_repro',instru='all',rmf_subdir='sp',
     log_dir=os.path.join(os.getcwd(),anal_dir,'log')
     os.system('mkdir -p '+os.path.join(os.getcwd(),anal_dir,'log'))
 
+    time_str = str(time.time()).replace('.', 'p')
+
     log_path=os.path.join(log_dir,'extract_rmf'+('_'+anal_dir_suffix if anal_dir_suffix!='' else '')
-                      +'_'+rmf_subdir+'_'+gti_subdir+'.log')
+                      +'_'+rmf_subdir+'_'+gti_subdir+time_str + '.log')
 
     if os.path.isfile(log_path):
         os.system('rm ' + log_path)
@@ -3937,7 +3965,7 @@ def extract_arf(directory='auto_repro',anal_dir_suffix='',on_axis_check=None,arf
                 instru='all',use_comb_rmf_rsl=True,
                 use_raw_evt_xtd=False, use_raw_evt_rsl=False,
                 region_src_xtd='auto', region_bg_xtd='auto',
-                pixel_str_rsl='branch_filter', grade_str_rsl='0:0',
+                pixel_str_rsl='branch_filter', grade_str_rsl='0:1',
                 remove_cal_pxl_resolve=True,
                 gti=None, gti_subdir='gti',skip_gti_emap=True,
                 # e_low_rsl=None, e_high_rsl=None,
@@ -3965,21 +3993,26 @@ def extract_arf(directory='auto_repro',anal_dir_suffix='',on_axis_check=None,arf
 
     on_axis_check checks whether the region centroids match the source center (to be implemented)
 
-    source_coord:
-        -on-axis:
-            assumes the coordinates of the source (aka the pointing is close enough to being on-axis)
-        -an array:
-            takes the values provided manually.
-            Converts string values (assumed as sexadecimal), take float values directly
+    source_type: POINT or FLATCIRCLE
+    for source_type=POINT
+        source_coord:
+            -on-axis:
+                assumes the coordinates of the source (aka the pointing is close enough to being on-axis)
+            -an array:
+                takes the values provided manually.
+                Converts string values (assumed as sexadecimal), take float values directly
 
-    source_name:
-        -auto: fetches on Simbad the source matching the name of the directory directly above the
-                obsid directory
-        -anything else is given to simbad directly
+        source_name (used if source_coord is set to on-axis):
+            -auto: fetches on Simbad the source matching the name of the directory directly above the
+                    obsid directory
+            -anything else is given to simbad directly
+    for source_type=FLARTCIRCLE
+        flaradius: the flat radius
 
     use_raw_evt_xtd/use_raw_evt_rsl determine if the images are created from raw or filtered evts
 
-    on axis check performs a chekc to compare the position of the image center to that of the source
+
+    on axis check performs a check to compare the position of the image center to that of the source
     pixel_str_rsl:
         pixel filtering list for xrism
             if set to branch_filter, excludes the pixels listed in the branch_filter.txt file of
@@ -4071,8 +4104,10 @@ def extract_arf(directory='auto_repro',anal_dir_suffix='',on_axis_check=None,arf
     log_dir=os.path.join(os.getcwd(),anal_dir,'log')
     os.system('mkdir -p '+os.path.join(os.getcwd(),anal_dir,'log'))
 
+    time_str = str(time.time()).replace('.', 'p')
+
     log_path=os.path.join(log_dir,'extract_arf'+('_'+anal_dir_suffix if anal_dir_suffix!='' else '')
-                      +'_'+arf_subdir+'_'+gti_subdir+'.log')
+                      +'_'+arf_subdir+'_'+gti_subdir+time_str + '.log')
 
     if os.path.isfile(log_path):
         os.system('rm ' + log_path)
@@ -4220,7 +4255,7 @@ def extract_arf(directory='auto_repro',anal_dir_suffix='',on_axis_check=None,arf
                                   and '/'+arf_subdir+'/' in elem]
                         #for now we consider a single Resolve RMF no matter the GTI,
 
-                        #gettingthe name
+                        #getting the name
                         region_name=rsl_pixel_manip(elem_pixel_str,remove_cal_pxl_resolve=remove_cal_pxl_resolve,
                                                     mode='rmf')
 

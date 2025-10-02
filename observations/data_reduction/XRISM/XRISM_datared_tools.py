@@ -1388,7 +1388,7 @@ def resolve_BR(directory='auto_repro', anal_dir_suffix='',
                 mask_exclude = np.repeat(False, 36)
 
                 with fits.open('/'.join(indiv_file.split('/')[:-1]) +
-                               '/branch/branch_' + emin_str + 'keVto' + emax_str + 'keV_brVpxcnt.fits') as branch_fits:
+                               '/branch/branch_' + emin_str + 'to' + emax_str + 'keV_brVpxcnt.fits') as branch_fits:
                     branch_data_real_full = branch_fits[1].data
                     branch_simu_real_full = branch_fits[3].data
                     branch_data_real_band = branch_fits[4].data
@@ -1459,7 +1459,7 @@ def resolve_BR(directory='auto_repro', anal_dir_suffix='',
             pixel_filter_file = indiv_file.replace('.evt', '_branch_filter.txt')
 
             pixel_avg_branch=compute_avg_BR_pixlist(
-                branch_file='/'.join(indiv_file.split('/')[:-1])+'/branch/branch_'+emin_str+'keVto'+emax_str+'keV_brVpxcnt.fits',
+                branch_file='/'.join(indiv_file.split('/')[:-1])+'/branch/branch_'+emin_str+'to'+emax_str+'keV_brVpxcnt.fits',
                 pixel_str=None if pixel_filter_rule is None else '-(' + str(pixel_exclude_list.tolist())[1:-2] + ')')
 
             with open(pixel_filter_file, 'w+') as f:
@@ -1483,7 +1483,7 @@ def resolve_BR(directory='auto_repro', anal_dir_suffix='',
 
             elif task=='rslbratios':
 
-                plot_BR('/'.join(indiv_file.split('/')[:-1])+'/branch/branch_'+emin_str+'keVto'+emax_str+'keV_brVpxcnt.fits',
+                plot_BR('/'.join(indiv_file.split('/')[:-1])+'/branch/branch_'+emin_str+'to'+emax_str+'keV_brVpxcnt.fits',
                     save_paths=[indiv_file.replace('.evt', '_branch_screen_'+emin_str.replace('.','p')
                                                    +'-'+emax_str.replace('.','p')+'.png'),
                                 indiv_file.replace('.evt', '_branch_screen_full.png'),
@@ -1492,7 +1492,7 @@ def resolve_BR(directory='auto_repro', anal_dir_suffix='',
                                                    +'-'+emax_str.replace('.','p')+'_ratio.png')],
                     excl_pixel=pixel_exclude_list,plot_hp_sim_curve_band=plot_hp_sim_curve_band)
 
-                plot_BR('/'.join(indiv_file.split('/')[:-1])+'/branch/branch_'+emin_str+'keVto'+emax_str+'keV_brVpxcnt.fits',
+                plot_BR('/'.join(indiv_file.split('/')[:-1])+'/branch/branch_'+emin_str+'to'+emax_str+'keV_brVpxcnt.fits',
                     save_paths=[indiv_file.replace('.evt', '_branch_screen_'+ emin_str.replace('.', 'p')
                                                    + '-' + emax_str.replace('.', 'p')+'.pdf'),
                                 indiv_file.replace('.evt', '_branch_screen_full.pdf'),
@@ -3878,9 +3878,9 @@ def create_expo(anal_dir,instrument,evt_file,gti_file,directory='auto_repro',out
 
     return out_file_path
 
-def create_arf(directory,instrument,out_rtfile,source_ra,source_dec,emap_file,out_file,
+def create_arf(instrument,out_rtfile,source_ra,source_dec,emap_file,out_file,
                region_file,rmf_file,
-               source_type='POINT',flatradius="3",
+               source_type='POINT',flatradius="3",image=None,
                e_low=0.3,e_high=12.0,
                 numphoton=300000,minphoton=100,
                 telescope='XRISM',
@@ -3922,6 +3922,7 @@ def create_arf(directory,instrument,out_rtfile,source_ra,source_dec,emap_file,ou
                        ' regionfile='+region_file+
                        ' sourcetype='+source_type+
                      (' flatradius='+str(flatradius) if source_type=='FLATCIRCLE' else '')+
+                      ' imgfile='+ (image if source_type == 'IMAGE' else 'NONE') +
                        ' rmffile='+rmf_file+
                        ' erange="'+("NONE" if e_low is None else str(e_low))+' '+("NONE" if e_high is None else str(e_high))+' '+str(e_low_image)+' '+str(e_high_image)+'"'+
                        ' numphoton='+str(numphoton)+
@@ -3939,8 +3940,7 @@ def create_arf(directory,instrument,out_rtfile,source_ra,source_dec,emap_file,ou
                        ' frontreffile=CALDB'+
                        ' backreffile=CALDB'+
                        ' pcolreffile=CALDB'+
-                       ' scatterfile=CALDB'+
-                       ' imgfile=NONE')
+                       ' scatterfile=CALDB')
 
     out_code=spawn_use.expect(['Error during subroutine finalize','xaxmaarfgen: Fraction of PSF inside Region'],
                      timeout=None)
@@ -3962,6 +3962,7 @@ def extract_arf(directory='auto_repro',anal_dir_suffix='',on_axis_check=None,arf
                 target_only=False,use_file_target=True,
                 source_type='POINT',
                 flatradius=3,
+                arf_image=None,
                 instru='all',use_comb_rmf_rsl=True,
                 use_raw_evt_xtd=False, use_raw_evt_rsl=False,
                 region_src_xtd='auto', region_bg_xtd='auto',
@@ -3972,6 +3973,7 @@ def extract_arf(directory='auto_repro',anal_dir_suffix='',on_axis_check=None,arf
                 e_low_rsl=0.3, e_high_rsl=12.0,
                 #default values in hte pipeline
                 e_low_xtd=0.3, e_high_xtd=15.0,
+                e_low_image=0.0, e_high_image=0.0,
                 numphoton=300000,
                 minphoton=100,
                 heasoft_init_alias='heainit', caldb_init_alias='caldbinit',
@@ -3979,6 +3981,8 @@ def extract_arf(directory='auto_repro',anal_dir_suffix='',on_axis_check=None,arf
 
     '''
 
+    center of cropped Sgr A east image (important for computations on Sag A east arf
+    ('17:45:43.1813', '-29:00:22.924')
     MAXI J1744-294:
     ('17:45:40.476', '-29:00:46.10')
 
@@ -4007,7 +4011,10 @@ def extract_arf(directory='auto_repro',anal_dir_suffix='',on_axis_check=None,arf
                     obsid directory
             -anything else is given to simbad directly
     for source_type=FLARTCIRCLE
-        flaradius: the flat radius
+        flaradius: the flat radius of the circle in arcminutes
+    for source_type=IMAGE
+        arf_image: the image to be used to make the arf.
+        e_low_image/e_high_image: lower and upper energy bounds of the image
 
     use_raw_evt_xtd/use_raw_evt_rsl determine if the images are created from raw or filtered evts
 
@@ -4052,6 +4059,8 @@ def extract_arf(directory='auto_repro',anal_dir_suffix='',on_axis_check=None,arf
 
     os.system('mkdir -p '+os.path.join(anal_dir,arf_subdir))
 
+    if arf_image is not None:
+        os.system('cp '+arf_image+' '+anal_dir)
 
     resolve_files = [elem for elem in glob.glob(os.path.join(anal_dir, '**')) if 'rsl_' in elem.split('/')[-1] and
                      elem.endswith('_cl' + ('' if use_raw_evt_rsl else '_RTS') + '.evt')]
@@ -4208,11 +4217,15 @@ def extract_arf(directory='auto_repro',anal_dir_suffix='',on_axis_check=None,arf
                         rmf_path=rmf_list[rmf_id]
 
                         out_name = rmf_path.replace('.rmf',
-                                                    '_' + source_type + ('_fr' + str(flatradius).replace('.', 'p')
-                                                                                     if source_type == 'FLATCIRCLE' else '') + '.arf').replace(
+                                                    '_' + source_type
+                                                    + ('_fr' + str(flatradius).replace('.', 'p')
+                                                          if source_type == 'FLATCIRCLE' else '')
+                                                    + ('_img_' + arf_image[:arf_image.rfind('.')]
+                                                          if source_type == 'IMAGE' else '')
+                                                                        + '.arf').replace(
                                                         anal_dir, '.').replace(',','and')
 
-                        create_arf(directory_use,instrument='xtend',
+                        create_arf(instrument='xtend',
                                    out_rtfile=elem_evt.replace(anal_dir,'.').replace('.evt','_raytracing.evt'),
                                    #need to replace the ',' with '_' because it splits the file otherwise
                                    out_file=out_name,
@@ -4226,7 +4239,10 @@ def extract_arf(directory='auto_repro',anal_dir_suffix='',on_axis_check=None,arf
                                    e_low=e_low_xtd,e_high=e_high_xtd,
                                    numphoton=numphoton,
                                    minphoton=minphoton,
-                                   spawn=bashproc)
+                                   spawn=bashproc,
+                                   image=arf_image,
+                                   e_low_image=e_low_image,
+                                   e_high_image=e_high_image)
 
                 else:
 
@@ -4280,8 +4296,12 @@ def extract_arf(directory='auto_repro',anal_dir_suffix='',on_axis_check=None,arf
 
 
                         out_name= rmf_path.replace('.rmf',
-                                                    '_' + source_type + ('_fr' + str(flatradius).replace('.', 'p')
-                                                                                     if source_type == 'FLATCIRCLE' else '') + '.arf').replace(
+                                                    '_' + source_type
+                                                   + ('_fr' + str(flatradius).replace('.', 'p')
+                                                               if source_type == 'FLATCIRCLE' else '')
+                                                   + ('_img_' + arf_image[:arf_image.rfind('.')]
+                                                      if source_type == 'IMAGE' else '')
+                                                   + '.arf').replace(
                                                         anal_dir, '.').replace(',','and')
 
 
@@ -4298,5 +4318,405 @@ def extract_arf(directory='auto_repro',anal_dir_suffix='',on_axis_check=None,arf
                                    e_low=e_low_rsl, e_high=e_high_rsl,
                                    numphoton=numphoton,
                                    minphoton=minphoton,
-                                   spawn=bashproc)
+                                   spawn=bashproc,
+                                   image=arf_image,
+                                   e_low_image=e_low_image,
+                                   e_high_image=e_high_image)
+
+
+def rsl_mkrsp(
+
+              #specific arguments
+              inevtfile,
+              outfileroot,
+              pixlist,
+              includels=True,
+              gfelo=2.0,
+              gfehi=12.0,
+
+              #arf arguments
+              out_rtfile='', source_ra='', source_dec='', emap_file='',
+              source_type='POINT', flatradius="3", image=None,
+              e_low=0.3, e_high=12.0,
+              numphoton=300000, minphoton=100,
+              e_low_image=0.0, e_high_image=0.0,
+              spawn=None, heasoft_init_alias='heainit', caldb_init_alias='caldbinit',
+
+              #rmf arguments
+              whichrmf='XL',
+              resolist='0:1',
+              eminin=0., dein=0.5, nchanin=60000,
+              useingrd=True,
+              regionfile='NONE',
+              overwrite=True,
+              splitrmf=True,
+              splitcomb=True,
+              ):
+
+    '''
+    Wrapper around the heasoft xaarfgen to compute an arf for a given instrument, available staring in Heasoft 6.36
+
+    for details see file $HEADAS/hitomixrism/x86_64-pc-linux-gnu-libc2.41/help/rslmkrsp.html (not available online yet)
+
+    '''
+
+    '''
+    simple wrapper around rsl_mkrmf to have arguments
+
+    see https://heasarc.gsfc.nasa.gov/lheasoft/help/rslmkrmf.html
+
+    The chatter=2 is fixed at two to be able to get a line with a fixed information for pexpect
+
+    '''
+
+    if spawn is None:
+
+        spawn_use = pexpect.spawn("/bin/bash", encoding='utf-8')
+
+        set_var(spawn_use, heasoft_init_alias, caldb_init_alias)
+
+        spawn_use.logfile_read = sys.stdout
+
+        spawn_use.sendline('cd ' + os.getcwd())
+    else:
+        spawn_use=spawn
+
+    spawn_use.sendline('punlearn rslmkrsp')
+
+    plop='rslmkrsp ' +\
+                      ' inevtfile=' + inevtfile +\
+    ' outfileroot=' + outfileroot +\
+    ' includels=' +('yes' if includels else 'no')+\
+    ' gfelo=' +str(gfelo)+\
+    ' gfehi=' +str(gfehi)+\
+    ' splitrmf='+("yes" if splitcomb else "no")+\
+    ' splitcomb='+("yes" if splitcomb else "no")+\
+    ' resolist=' + resolist +\
+    ' pixlist="' + pixlist+ '"' +\
+    ' whichrmf=' + whichrmf +\
+    ' eminin=' + str(eminin) +\
+    ' dein=' + str(dein) +\
+    ' nchanin=' + str(nchanin)+\
+    ' useingrd='+str(useingrd)+\
+                       ' xrtevtfile='+out_rtfile+\
+                       ' source_ra='+str(source_ra)+''\
+                       ' source_dec='+str(source_dec)+''+\
+                       ' emapfile='+emap_file+\
+                       ' sourcetype='+source_type+\
+                     (' flatradius='+str(flatradius) if source_type=='FLATCIRCLE' else '')+\
+                      ' imgfile='+ (image if source_type == 'IMAGE' else 'NONE') +\
+                       ' erange="'+("NONE" if e_low is None else str(e_low))+' '+\
+                                    ("NONE" if e_high is None else str(e_high))+\
+                                    ' '+str(e_low_image)+' '+str(e_high_image)+'"'+\
+                       ' numphoton='+str(numphoton)+\
+                       ' minphoton='+str(minphoton)+\
+                       ' regionfile=NONE'+\
+    ' chatter=2 '+\
+    ' qefile=CALDB'+\
+    ' contamifile=CALDB'+\
+    ' gatevalvefile=CALDB'+ \
+     ' onaxisffile=CALDB' + \
+    ' onaxiscfile=CALDB' +\
+    ' mirrorfile=CALDB' +\
+    ' obstructfile=CALDB' +\
+    ' frontreffile=CALDB' +\
+    ' backreffile=CALDB' +\
+    ' pcolreffile=CALDB' +\
+    ' scatterfile=CALDB'+\
+    (' clobber=YES' if overwrite else '')
+
+    spawn_use.sendline('rslmkrsp' +\
+                      ' inevtfile=' + inevtfile +\
+    ' outfileroot=' + outfileroot +
+    ' includels=' +('yes' if includels else 'no')+
+    ' gfelo=' +str(gfelo)+
+    ' gfehi=' +str(gfehi)+
+    #rmf
+    ' splitrmf='+("yes" if splitcomb else "no")+
+    ' splitcomb='+("yes" if splitcomb else "no")+
+    ' resolist="' + resolist +'"'+
+    ' pixlist="' + pixlist+ '"' +
+    ' whichrmf=' + whichrmf +
+    ' eminin=' + str(eminin) +
+    ' dein=' + str(dein) +
+    ' nchanin=' + str(nchanin)+
+    ' useingrd='+str(useingrd)+
+
+                        #arf
+                       ' xrtevtfile='+out_rtfile+
+                       ' source_ra='+str(source_ra)+''
+                       ' source_dec='+str(source_dec)+''+
+                       ' emapfile='+emap_file+
+                       ' sourcetype='+source_type+
+                     (' flatradius='+str(flatradius) if source_type=='FLATCIRCLE' else '')+
+                      ' imgfile='+ (image if source_type == 'IMAGE' else 'NONE') +
+                       ' erange="'+("NONE" if e_low is None else str(e_low))+' '+
+                                    ("NONE" if e_high is None else str(e_high))+
+                                    ' '+str(e_low_image)+' '+str(e_high_image)+'"'+
+                       ' numphoton='+str(numphoton)+
+                       ' minphoton='+str(minphoton)+
+
+                       ' regionfile=NONE'+\
+    ' qefile=CALDB'+\
+    ' contamifile=CALDB'+\
+    ' gatevalvefile=CALDB'+ \
+     ' onaxisffile=CALDB' + \
+    ' onaxiscfile=CALDB' +\
+    ' mirrorfile=CALDB' +\
+    ' obstructfile=CALDB' +\
+    ' frontreffile=CALDB' +\
+    ' backreffile=CALDB' +\
+    ' pcolreffile=CALDB' +\
+    ' scatterfile=CALDB'+\
+
+    ' chatter=3 '+
+                       (' clobber=YES' if overwrite else ''))
+
+    spawn_use.expect('Finished',timeout=None)
+
+    time.sleep(1)
+
+    spawn_use.sendline('echo valid')
+
+    #this is normally fast so their should be no need for a long time-out
+    spawn_use.expect('valid')
+
+def extract_rsp(directory='auto_repro',rsp_subdir='sp', anal_dir_suffix='',
+                #rsp-specific arguments
+                     grade_elow=2.0,
+                     grade_ehigh=10.0,
+                     include_ls=True,
+
+                #resolve options
+                rmf_type_rsl='X',pixel_str_rsl='branch_filter',grade='0,1',
+                split_rmf_rsl=True,
+                comb_rmf_rsl=True,
+                remove_cal_pxl_resolve=True,
+                # resolve grid
+                # eminin_rsl=300,dein_rsl=0.5,nchanin_rsl=23400,
+                eminin_rsl=0, dein_rsl=0.5, nchanin_rsl=60000,
+                useingrd_rsl=True,
+
+                #for now only works with this
+                e_band_evt_rsl_rmf=None,
+
+
+                #arf arguments
+                     on_axis_check=None,source_coords='on-axis',
+                     source_name='auto',
+                     target_only=False, use_file_target=True,
+                     source_type='POINT',
+                     flatradius=3,
+                     arf_image=None,
+                    e_low_arf=0.3, e_high_arf=12.0,
+                    e_low_image=0.0, e_high_image=0.0,
+                     numphoton=300000,
+                     minphoton=100,
+                     skip_gti_emap=True,
+                suffix='',
+                 # general event options and gti selection
+                 use_raw_evt_rsl=False, use_raw_evt_xtd=False,
+                 gti=None, gti_subdir='gti',
+                #common arguments
+                heasoft_init_alias='heainit', caldb_init_alias='caldbinit',
+                parallel=False,repro_suffix='repro',
+                ):
+
+    '''
+    Combined task that produces both RMFs and ARFs for resolve with a better consideration for spatially variable
+    grade fractions accross the FoV
+
+    note that this task does not require creating regions for the arf, the pixel list is used directly
+
+    gti consideration not yet implemented
+    '''
+
+    bashproc = pexpect.spawn("/bin/bash", encoding='utf-8')
+
+    set_var(bashproc, heasoft_init_alias, caldb_init_alias)
+
+
+    if os.path.isfile('~/pfiles/xaarfgen.par'):
+        os.system('rm ~/pfiles/xaarfgen.par')
+    if os.path.isfile('~/pfiles/xaxmaarfgen.par'):
+        os.system('rm ~/pfiles/xaxmaarfgen.par')
+
+    if directory=='auto_repro':
+        #fetching the first obsid-like directory in the cwd
+        directory_use=[elem[:-1] for elem in glob.glob('**/') if len(elem[:-1])==9 and elem[:-1].isdigit()][0]+'_'+\
+                      repro_suffix
+    elif directory=='auto':
+        #fetching the first obsid-like directory in the cwd
+        directory_use=[elem[:-1] for elem in glob.glob('**/') if len(elem[:-1])==9 and elem[:-1].isdigit()][0]
+    else:
+        directory_use=directory
+
+    anal_dir = os.path.join(directory_use, 'analysis' + ('_' + anal_dir_suffix if anal_dir_suffix != '' else ''))
+
+    resolve_files = [elem for elem in glob.glob(os.path.join(anal_dir, '**')) if 'rsl_' in elem.split('/')[-1] and
+                     elem.endswith('_cl' + ('' if use_raw_evt_rsl else '_RTS') + '.evt')]
+
+    #here using any event file should work
+    if len(resolve_files)==0:
+        print('No event file satisfy the requirements. Skipping...')
+        return 0
+    else:
+
+        if type(source_coords)==str and source_coords=='on-axis':
+            any_event=(resolve_files)[0]
+            if source_name == 'auto':
+
+                obj_auto = source_catal(bashproc, './', any_event,
+                                        target_only=target_only,
+                                        use_file_target=use_file_target)
+
+            else:
+                obj_auto = Simbad.query_object(source_name)[0]
+
+            try:
+                source_ra, source_dec = sexa2deg([obj_auto['DEC'], obj_auto['RA']])[::-1]
+            except:
+                source_ra, source_dec = obj_auto['ra'],obj_auto['dec']
+
+        else:
+            if type(source_coords[0])==str:
+
+                obj_deg=sexa2deg([source_coords[1].replace(' ',':'),source_coords[0].replace(' ',':')])[::-1]
+            else:
+                obj_deg=source_coords
+            source_ra,source_dec=obj_deg
+
+    log_dir=os.path.join(os.getcwd(),anal_dir,'log')
+    os.system('mkdir -p '+os.path.join(os.getcwd(),anal_dir,'log'))
+
+    time_str = str(time.time()).replace('.', 'p')
+
+    log_path=os.path.join(log_dir,'extract_rsp'+('_'+anal_dir_suffix if anal_dir_suffix!='' else '')
+                      +'_'+rsp_subdir+'_'+gti_subdir+'_'+time_str + '.log')
+
+    if os.path.isfile(log_path):
+        os.system('rm ' + log_path)
+
+    with (no_op_context() if parallel else StdoutTee(log_path, mode="a", buff=1,
+                                                     file_filters=[_remove_control_chars]), \
+          StderrTee(log_path, buff=1, file_filters=[_remove_control_chars])):
+
+        if len(resolve_files) != 0:
+            # for removing the calibration sources
+            os.system('cp $HEADAS/refdata/region_RSL_det.reg ' + anal_dir)
+
+        if not parallel:
+            bashproc.logfile_read = sys.stdout
+
+        bashproc.sendline('cd ' + os.path.join(os.getcwd(), anal_dir))
+
+        rsp_dir='rsp_'+str(int(time.time()))
+        os.mkdir(rsp_dir)
+        os.chdir(rsp_dir)
+
+        if gti==None:
+            gti_str_arr=['']
+            gti_files_arr=[None]
+        else:
+            if gti=='all':
+                gti_files_arr=[elem.replace(anal_dir,'.')
+                               for elem in glob.glob(os.path.join(anal_dir,gti_subdir)+'/**')
+                               if elem.endswith('.gti')]
+                gti_str_arr=[elem[elem.rfind('_gti_'):].split('.')[0] for elem in gti_files_arr]
+            else:
+                gti_files_arr=gti
+                gti_str_arr='_'+gti.split('/')[-1]
+
+        for elem_gti_str,elem_gti_file in zip(gti_str_arr,gti_files_arr):
+
+            for elem_evt in resolve_files:
+
+                gti_path_forexpo=os.path.join('..',elem_evt.replace(anal_dir,'.'))\
+                                    if elem_gti_file is None or skip_gti_emap else \
+                                     os.path.join('..',elem_gti_file.replace(anal_dir,'.'))
+                #building the exposure map
+                expo_path=create_expo(anal_dir,
+                                      instrument='resolve',
+                            evt_file=os.path.join('..',elem_evt.replace(anal_dir,'.')),
+                            gti_file=gti_path_forexpo,
+                            outfile=gti_path_forexpo.replace('../',''))
+
+                if pixel_str_rsl.startswith('branch_filter'):
+                    # reading the branch filter file
+                    with open(os.path.join('..',elem_evt.replace('.evt','_'+pixel_str_rsl+'.txt'))) as branch_f:
+                        branch_lines = branch_f.readlines()
+                    branch_filter_line = [elem for elem in branch_lines if not elem.startswith('#')][0]
+                    # reformatting the string
+                    pixel_str_rsl_use = '-(' + branch_filter_line[1:-2] + ')'
+                else:
+                    pixel_str_rsl_use = pixel_str_rsl
+
+                for elem_pixel_str in pixel_str_rsl_use.split('+'):
+
+                    reg_str = pixel_str_rsl if pixel_str_rsl.startswith('branch_filter') else elem_pixel_str
+
+                    product_root = elem_evt.replace(anal_dir,'.').replace('.evt',
+                            '_pixel_'+reg_str.replace(':','to').replace(',','-').replace('-(','no').replace(')','')  +
+                            ('_withcal' if not remove_cal_pxl_resolve else '')+
+                        '_grade_'+grade.replace(',','and')+ '_rmf' +
+                        ('_evtbase_'+e_band_evt_rsl_rmf.replace('-','_').replace('.','p') if e_band_evt_rsl_rmf is not None else '')+
+                        ('_' + str(eminin_rsl).replace('.','')+ '_' + str(dein_rsl).replace('.','')+'_'+str(nchanin_rsl)
+                                                                   +elem_gti_str)+'_' + source_type
+                                                    + ('_fr' + str(flatradius).replace('.', 'p')
+                                                          if source_type == 'FLATCIRCLE' else '')
+                                                    + ('_img_' + arf_image[:arf_image.rfind('.')]
+                                                          if source_type == 'IMAGE' else '')
+                                                    +('_'+suffix if suffix!='' else ''))
+
+                    infile_use=os.path.join('..',elem_evt.replace(anal_dir,'.'))
+
+                    if e_band_evt_rsl_rmf is not None:
+
+                        #creating an event file for a restricted energy band as the rmf input
+                        infile_use=elem_evt.replace(anal_dir,'.').replace('.evt',
+                                                                            '_'+e_band_evt_rsl_rmf+'.evt')
+
+                        xsel_util(elem_evt.split('/')[-1],
+                                  save_path=infile_use.split('/')[-1],
+                                    directory=anal_dir,region_str=elem_pixel_str,
+                                              mode='event',
+                                              e_low=float(e_band_evt_rsl_rmf.split('-')[0]),
+                                              e_high=float(e_band_evt_rsl_rmf.split('-')[1]),
+                                              spawn=bashproc)
+
+                    #no need now that we do things in separate folders
+                    # #removing the rtfile to ensure we recreate it
+                    # if os.path.isfile(elem_evt.replace('.evt','_raytracing.evt')):
+                    #     os.remove(elem_evt.replace('.evt','_raytracing.evt'))
+
+                    rsl_mkrsp(inevtfile=infile_use,
+                              outfileroot=product_root,
+                              pixlist=rsl_pixel_manip(elem_pixel_str,remove_cal_pxl_resolve=remove_cal_pxl_resolve,
+                                                      mode='rmf'),
+                              includels=include_ls,
+                              gfelo=grade_elow,
+                              gfehi=grade_ehigh,
+                              whichrmf=rmf_type_rsl,
+                              resolist=grade,
+                              eminin=eminin_rsl,
+                              dein=dein_rsl,
+                              splitrmf=split_rmf_rsl,
+                              splitcomb=comb_rmf_rsl,
+                              nchanin=nchanin_rsl,
+                              useingrd=useingrd_rsl,
+
+                              spawn=bashproc,heasoft_init_alias=heasoft_init_alias,caldb_init_alias=caldb_init_alias,
+
+                                   out_rtfile=elem_evt.replace(anal_dir,'.').replace('.evt','_raytracing.evt'),
+                                   source_ra=source_ra,
+                                   source_dec=source_dec,
+                                   emap_file=expo_path,
+                                   source_type=source_type,
+                                   flatradius=flatradius,
+                                   e_low=e_low_arf, e_high=e_high_arf,
+                                   numphoton=numphoton,
+                                   minphoton=minphoton,
+                                   image=arf_image,
+                                   e_low_image=e_low_image,
+                                   e_high_image=e_high_image)
 

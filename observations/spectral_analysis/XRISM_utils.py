@@ -13,11 +13,12 @@ c_0 = 299792.458
 
 
 def xrism_ls(baseload,low_e,high_e,plot_suffix="",bound_around=0.1,e_step=5e-3,lw=5e-3,
-             e_sat_low_indiv=[1.5,1.5],resolve_dg=1,rebinv=[20],line_search_norm=[0.01,50,700],
-             force_ylog_ratio=True,ratio_bounds=[0.5,2],title=True,set_ener_str=None,set_ener_xrism=False):
+             e_sat_low_indiv=[1.5,1.5],resolve_dg=1,rebinv=[20],line_search_norm=[0.01,30,500],
+             force_ylog_ratio=True,ratio_bounds=[0.5,2],title=True,set_ener_str=None,set_ener_xrism=True):
 
     '''
 
+    #other line_search_norm option: line_search_norm=[0.01,50,700],
     Simple wrapper to compute a line search and make an associated plot with XRISM
 
     baseload should be an XCM file with both the file and model

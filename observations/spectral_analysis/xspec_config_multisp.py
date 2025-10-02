@@ -2826,8 +2826,12 @@ def allfreeze():
     '''
     freeze all models of all datagroups
     '''
-    for i_grp in range(AllData.nGroups):
-        freeze(AllModels(i_grp+1))
+
+    for mod_name in list(AllModels.sources.values()):
+        for i_grp in range(AllData.nGroups):
+            freeze(AllModels(i_grp+1,mod_name))
+
+
 
 def unfreeze(model=None,modclass=AllModels,parlist=None):
 
@@ -6479,7 +6483,7 @@ def EW_ang2keV(x,e_line):
 def xPlot(types,axes_input=None,plot_saves_input=None,plot_arg=None,includedlist=None,group_names='auto',
           hide_ticks=True,
           secondary_x=True,legend_position=None,xlims=None,ylims=None,label_bg=False,
-          mult_factors=None,label_indivcomps=True,
+          mult_factors=None,label_indivcomps=False,
           no_name_data='auto',force_ylog_ratio=False,legend_ncols=None,
           data_colors=None,model_colors=None,addcomp_colors=None,data_alpha=1):
 

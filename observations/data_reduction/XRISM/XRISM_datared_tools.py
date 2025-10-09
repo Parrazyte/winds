@@ -35,7 +35,7 @@ from matplotlib.collections import LineCollection
 from astropy.time import Time,TimeDelta
 from astropy.io import fits
 from astroquery.simbad import Simbad
-from mpdaf.obj import sexa2deg,deg2sexa, Image
+from mpdaf.obj import sexa2deg,deg2sexa,Image
 from mpdaf.obj import WCS as mpdaf_WCS
 from astropy.wcs import WCS as astroWCS
 # from mpdaf.obj import deg2sexa
@@ -3298,7 +3298,7 @@ def extract_sp(directory='auto_repro', anal_dir_suffix='',sp_subdir='sp',
     log_dir=os.path.join(os.getcwd(),anal_dir,'log')
     os.system('mkdir -p '+os.path.join(os.getcwd(),anal_dir,'log'))
 
-    time_str = str(time.time()).replace('.', 'p')
+    time_str = str(int(time.time()))
 
     log_path=os.path.join(log_dir,'extract_sp'+('_'+anal_dir_suffix if anal_dir_suffix!='' else '')
                       +'_'+sp_subdir+'_'+gti_subdir+ time_str + '.log')
@@ -3678,7 +3678,7 @@ def extract_rmf(directory='auto_repro',instru='all',rmf_subdir='sp',
     log_dir=os.path.join(os.getcwd(),anal_dir,'log')
     os.system('mkdir -p '+os.path.join(os.getcwd(),anal_dir,'log'))
 
-    time_str = str(time.time()).replace('.', 'p')
+    time_str = str(int(time.time()))
 
     log_path=os.path.join(log_dir,'extract_rmf'+('_'+anal_dir_suffix if anal_dir_suffix!='' else '')
                       +'_'+rmf_subdir+'_'+gti_subdir+time_str + '.log')
@@ -3983,6 +3983,7 @@ def extract_arf(directory='auto_repro',anal_dir_suffix='',on_axis_check=None,arf
 
     center of cropped Sgr A east image (important for computations on Sag A east arf
     ('17:45:43.1813', '-29:00:22.924')
+
     MAXI J1744-294:
     ('17:45:40.476', '-29:00:46.10')
 
@@ -4113,7 +4114,7 @@ def extract_arf(directory='auto_repro',anal_dir_suffix='',on_axis_check=None,arf
     log_dir=os.path.join(os.getcwd(),anal_dir,'log')
     os.system('mkdir -p '+os.path.join(os.getcwd(),anal_dir,'log'))
 
-    time_str = str(time.time()).replace('.', 'p')
+    time_str = str(int(time.time()))
 
     log_path=os.path.join(log_dir,'extract_arf'+('_'+anal_dir_suffix if anal_dir_suffix!='' else '')
                       +'_'+arf_subdir+'_'+gti_subdir+time_str + '.log')
@@ -4305,7 +4306,7 @@ def extract_arf(directory='auto_repro',anal_dir_suffix='',on_axis_check=None,arf
                                                         anal_dir, '.').replace(',','and')
 
 
-                        create_arf(directory_use, instrument='resolve',
+                        create_arf(instrument='resolve',
                                    out_rtfile=elem_evt.replace(anal_dir,'.').replace('.evt','_raytracing.evt'),
                                    out_file=out_name,
                                    source_ra=source_ra,
@@ -4383,14 +4384,14 @@ def rsl_mkrsp(
 
     spawn_use.sendline('punlearn rslmkrsp')
 
-    plop='rslmkrsp ' +\
+    plop='rslmkrsp' +\
                       ' inevtfile=' + inevtfile +\
     ' outfileroot=' + outfileroot +\
     ' includels=' +('yes' if includels else 'no')+\
     ' gfelo=' +str(gfelo)+\
     ' gfehi=' +str(gfehi)+\
-    ' splitrmf='+("yes" if splitcomb else "no")+\
-    ' splitcomb='+("yes" if splitcomb else "no")+\
+                       ((' splitrmf='+("yes" if splitcomb else "no")+\
+    ' splitcomb='+("yes" if splitcomb else "no")) if whichrmf=='X' else '')+\
     ' resolist=' + resolist +\
     ' pixlist="' + pixlist+ '"' +\
     ' whichrmf=' + whichrmf +\
@@ -4432,8 +4433,8 @@ def rsl_mkrsp(
     ' gfelo=' +str(gfelo)+
     ' gfehi=' +str(gfehi)+
     #rmf
-    ' splitrmf='+("yes" if splitcomb else "no")+
-    ' splitcomb='+("yes" if splitcomb else "no")+
+                       ((' splitrmf='+("yes" if splitcomb else "no")+\
+    ' splitcomb='+("yes" if splitcomb else "no")) if whichrmf=='X' else '')+
     ' resolist="' + resolist +'"'+
     ' pixlist="' + pixlist+ '"' +
     ' whichrmf=' + whichrmf +
@@ -4472,7 +4473,11 @@ def rsl_mkrsp(
     ' chatter=3 '+
                        (' clobber=YES' if overwrite else ''))
 
+    #note: the first one is at the start of the task, the second is at the end
+    spawn_use.expect('Running rslmkrsp',timeout=None)
+    spawn_use.expect('Running rslmkrsp',timeout=None)
     spawn_use.expect('Finished',timeout=None)
+
 
     time.sleep(1)
 
@@ -4589,7 +4594,7 @@ def extract_rsp(directory='auto_repro',rsp_subdir='sp', anal_dir_suffix='',
     log_dir=os.path.join(os.getcwd(),anal_dir,'log')
     os.system('mkdir -p '+os.path.join(os.getcwd(),anal_dir,'log'))
 
-    time_str = str(time.time()).replace('.', 'p')
+    time_str = str(int(time.time()))
 
     log_path=os.path.join(log_dir,'extract_rsp'+('_'+anal_dir_suffix if anal_dir_suffix!='' else '')
                       +'_'+rsp_subdir+'_'+gti_subdir+'_'+time_str + '.log')
@@ -4610,9 +4615,8 @@ def extract_rsp(directory='auto_repro',rsp_subdir='sp', anal_dir_suffix='',
 
         bashproc.sendline('cd ' + os.path.join(os.getcwd(), anal_dir))
 
-        rsp_dir='rsp_'+str(int(time.time()))
-        os.mkdir(rsp_dir)
-        os.chdir(rsp_dir)
+        rsp_dir='rsp_'+time_str
+        os.mkdir(os.path.join(anal_dir,rsp_dir))
 
         if gti==None:
             gti_str_arr=['']
@@ -4631,19 +4635,21 @@ def extract_rsp(directory='auto_repro',rsp_subdir='sp', anal_dir_suffix='',
 
             for elem_evt in resolve_files:
 
-                gti_path_forexpo=os.path.join('..',elem_evt.replace(anal_dir,'.'))\
+                gti_path_forexpo=elem_evt.replace(anal_dir,'.')\
                                     if elem_gti_file is None or skip_gti_emap else \
-                                     os.path.join('..',elem_gti_file.replace(anal_dir,'.'))
+                                     elem_gti_file.replace(anal_dir,'.')
+
                 #building the exposure map
-                expo_path=create_expo(anal_dir,
+                expo_path=create_expo(os.path.join(anal_dir,rsp_dir),
                                       instrument='resolve',
                             evt_file=os.path.join('..',elem_evt.replace(anal_dir,'.')),
-                            gti_file=gti_path_forexpo,
-                            outfile=gti_path_forexpo.replace('../',''))
+                            gti_file=os.path.join('..',gti_path_forexpo),
+                            out_file=gti_path_forexpo.replace('../','').\
+                                    replace('.evt','.expo').replace('.gti','.expo'))
 
                 if pixel_str_rsl.startswith('branch_filter'):
                     # reading the branch filter file
-                    with open(os.path.join('..',elem_evt.replace('.evt','_'+pixel_str_rsl+'.txt'))) as branch_f:
+                    with open(elem_evt.replace('.evt','_'+pixel_str_rsl+'.txt')) as branch_f:
                         branch_lines = branch_f.readlines()
                     branch_filter_line = [elem for elem in branch_lines if not elem.startswith('#')][0]
                     # reformatting the string
@@ -4689,6 +4695,8 @@ def extract_rsp(directory='auto_repro',rsp_subdir='sp', anal_dir_suffix='',
                     # if os.path.isfile(elem_evt.replace('.evt','_raytracing.evt')):
                     #     os.remove(elem_evt.replace('.evt','_raytracing.evt'))
 
+                    bashproc.sendline('cd ' + rsp_dir)
+
                     rsl_mkrsp(inevtfile=infile_use,
                               outfileroot=product_root,
                               pixlist=rsl_pixel_manip(elem_pixel_str,remove_cal_pxl_resolve=remove_cal_pxl_resolve,
@@ -4716,7 +4724,29 @@ def extract_rsp(directory='auto_repro',rsp_subdir='sp', anal_dir_suffix='',
                                    e_low=e_low_arf, e_high=e_high_arf,
                                    numphoton=numphoton,
                                    minphoton=minphoton,
-                                   image=arf_image,
+                                   image=(None if arf_image is None else os.path.join('..',arf_image)),
                                    e_low_image=e_low_image,
                                    e_high_image=e_high_image)
 
+
+def cut_xrism_rmf(xrism_rmf_path,e_low_new,e_high_new):
+
+    #I think this doesn't work because of the internal links between different energies, should investigate
+
+    pass
+
+def cut_xrism_arf(xrism_arf_path,e_low_new,e_high_new):
+
+    '''This should work'''
+
+    cut_arf_path =xrism_arf_path.replace('.arf','_cut_'\
+                                                        +str(e_low_new).replace('.','p')+'_'
+                                                        +str(e_high_new).replace('.','p')+'.arf')
+    cut_arf_path=shutil.copyfile(xrism_arf_path,cut_arf_path)
+    with fits.open(cut_arf_path,mode='update') as cut_arf:
+        cut_arf[1].data=cut_arf[1].data[(cut_arf[1].data['ENERG_LO'] >= e_low_new)\
+                                        & (cut_arf[1].data['ENERG_HI'] <= e_high_new)]
+
+        cut_arf[1].header['NAXIS2']=len(cut_arf[1].data)
+
+        cut_arf.flush()

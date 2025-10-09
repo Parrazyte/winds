@@ -25,7 +25,11 @@ rmf_abv = {'XRISM_Hp_AO2': '/media/'+username+'/crucial_SSD/Observ/BHLMXB/XRISM/
            'XRISM_Lp': '/media/'+username+'/crucial_SSD/Observ/highres/XRISM_responses/rsl_Lp_18eV.rmf',
         'PN_Timing': '/media/'+username+'/crucial_SSD/Observ/highres/linedet_compa/AO2/resp_XMM/Timing/0670672901_pn_S003_Timing_auto.rmf',
         'heg_graded_-1':'/media/'+username+'/crucial_SSD/Observ/highres/linedet_compa/AO2/resp_Chandra/graded/13716_heg_-1.rmf',
-         'heg_graded_1':'/media/'+username+'/crucial_SSD/Observ/highres/linedet_compa/AO2/resp_Chandra/graded/13716_heg_1.rmf'}
+         'heg_graded_1':'/media/'+username+'/crucial_SSD/Observ/highres/linedet_compa/AO2/resp_Chandra/graded/13716_heg_1.rmf',
+           'RGS_r1o1':'/media/'+username+'/crucial_SSD/Observ/highres/linedet_compa/RGS_AO25/R1o1.rmf',
+            'RGS_r2o1':'/media/'+username+'/crucial_SSD/Observ/highres/linedet_compa/RGS_AO25/R2o1.rmf',
+           'RGS_r1o2':'/media/'+username+'/crucial_SSD/Observ/highres/linedet_compa/RGS_AO25/R1o2.rmf',
+           'RGS_r2o2':'/media/'+username+'/crucial_SSD/Observ/highres/linedet_compa/RGS_AO25/R2o2.rmf',}
 
 rmf_abv_list = list(rmf_abv.keys())
 
@@ -39,7 +43,7 @@ arf_abv = {'XRISM_pointsource_GVclosed_AO2':'/media/'+username+'/crucial_SSD/Obs
 
 arf_abv_list = list(arf_abv.keys())
 
-
+mod_dict={'pion_abs_NS':['mtable','/media/'+username+'/crucial_SSD/Observ/highres/linedet_compa/mods/pionabsAXJ1745.fits']}
 #line_simu('test_SED.xcm',mode='ew_lim',rmf_path='XRISM_Hp_AO2',
 #                          arf_path='XRISM_pointsource_GVclosed_AO2',expos=50,
 #                           line='FeKa26abs',
@@ -52,9 +56,16 @@ arf_abv_list = list(arf_abv.keys())
 # ,n_iter=100)
 
 
-def line_simu(outdir='./',mod_path=None,mode='ew_lim',rmf_path='XRISM_Hp_AO2',arf_path='XRISM_pointsource_GVclosed_AO2',
-              expos=50,flux_range='1_100_10',chatter=1,
+def line_simu(outdir='./',mod_path=None,mode='ew_lim',
+              rmf_path='XRISM_Hp_AO2',arf_path='XRISM_pointsource_GVclosed_AO2',
+              expos=50,flux_range='1_100_10',flux_band='2.0 10.0',to_error=30,
+              analysis_lowe=0.3,
+              analysis_highe=10.,
+
+              chatter=1,
               regroup=False,fakestats=True,n_iter=10,set_ener_data=False,
+              photo_mod='',photo_comp_pos=3,photo_range='warm',
+
               line='FeKa26abs',line_v=[-3000,3000],line_w=[0.005,0.005],
               width_test_val=0.005,width_EW_resol=0.05,width_EW_inter=[0.1,100],
               EW_bshift_lim=20,width_bshift_val=0.005,sampl_gabs_string='-3_2_500'):
@@ -69,6 +80,9 @@ def line_simu(outdir='./',mod_path=None,mode='ew_lim',rmf_path='XRISM_Hp_AO2',ar
     arguments:
 
         mode:
+            -NH_lim_photo: computes 1/2/3 sigma NH upper limits for a photoionization model added to the source model
+            -vshift_err_photo: computes 1/2/3 sigma velocity errors for a photoinization model added to the source model
+
             -ew_lim: computes the ew limits at 1, 2, 3 sigma by fitting an additional absorption line in the spectrum
             -bshift_err: computes the bshift errors with the given response files for a series of luminosity
                         for a given line, with a given EW and width
@@ -101,7 +115,7 @@ def line_simu(outdir='./',mod_path=None,mode='ew_lim',rmf_path='XRISM_Hp_AO2',ar
 
         -flux_range:
             flux value interval to be parsed. The spectrum will be renormalized to have its values in the
-            3-10keV band
+            flux_band band
             the interval is low_lim_high_lim_nsteps in log space, low and highlim in units of 1e-10 erg/cm²/s
 
         -regroup: Regroup or not the spectra with ftgrouppha before analysis
@@ -150,10 +164,14 @@ def line_simu(outdir='./',mod_path=None,mode='ew_lim',rmf_path='XRISM_Hp_AO2',ar
 
     if outdir is not None:
         os.system('mkdir -p '+outdir)
+
+        if mode in ['NH_lim_photo','vshift_err_photo']:
+            os.system('cp '+mod_dict[photo_mod][1]+' '+outdir)
+
+
     if mod_path is not None:
         os.system('cp '+mod_path+' '+outdir)
 
-    os.chdir(outdir)
 
     #here we assume that the elements are the same size
 
@@ -174,11 +192,21 @@ def line_simu(outdir='./',mod_path=None,mode='ew_lim',rmf_path='XRISM_Hp_AO2',ar
             rmf_path_use+=[elem_rmf]
 
         if elem_arf in arf_abv_list:
-            arf_path_use+=[arf_abv[elem_arf]]
-        else:
-            arf_path_use+=[elem_arf]
 
-    logfile_write=Xset.openLog('line_simu'+mode+'.log')
+            # we copy them because the paths names are too long for fakeit to handle
+            os.system('cp ' + arf_abv[elem_arf] + ' ' + outdir)
+
+            arf_path_use+=[arf_abv[elem_arf].split('/')[-1]]
+        else:
+
+            # we copy them because the paths names are too long for fakeit to handle
+            os.system('cp ' + elem_arf + ' ' + outdir)
+
+            arf_path_use+=[elem_arf.split('/')[-1]]
+
+    os.chdir(outdir)
+
+    logfile_write=Xset.openLog('line_simu_'+mode+'.log')
     #ensuring the log information gets in the correct place in the log file by forcing line to line buffering
     logfile_write.reconfigure(line_buffering=True)
 
@@ -186,13 +214,14 @@ def line_simu(outdir='./',mod_path=None,mode='ew_lim',rmf_path='XRISM_Hp_AO2',ar
 
     if mod_path is not None:
         AllModels.clear()
+        time.sleep(1)
         Xset.restore(mod_path)
 
     Plot.xLog=False
     Fit.statMethod = 'cstat'
 
-    #computing the 3-10 flux
-    AllModels.calcFlux('3. 10.')
+    #computing the flux
+    AllModels.calcFlux(flux_band)
     flux_base=AllModels(1).flux[0]
 
     flux_range_vals=np.array(flux_range.split('_')).astype(float)
@@ -218,6 +247,470 @@ def line_simu(outdir='./',mod_path=None,mode='ew_lim',rmf_path='XRISM_Hp_AO2',ar
     bashproc.sendline('heainit')
 
     line_E = lines_e_dict[line][0]
+
+    if mode=='NH_lim_photo':
+
+        print('Computing NH limits for photoionization within the given flux range...')
+        nh_lim_arr=np.zeros((n_flux,3))
+
+        with tqdm(total=n_flux*n_iter) as pbar:
+            for i_flux,elem_flux in enumerate(flux_inter):
+
+                nh_lim_distrib=np.repeat(None,3*n_iter).reshape(3,n_iter)
+
+                for i_iter in range(n_iter):
+                    mod_cont.load()
+
+                    #freezing the parameters before faking
+                    freeze()
+
+                    AllModels(1)(1).values=elem_flux/flux_base
+
+                    #remove previously computed spectra
+                    for elem_set in fakeset:
+                        if os.path.isfile(elem_set.fileName):
+                            os.remove(elem_set.fileName)
+
+                    #faking the spectrum with the right parameters
+                    AllData.fakeit(nSpectra=len(fakeset), settings=fakeset, applyStats=fakestats)
+
+                    #rebinning the spectrum before loading it
+                    if regroup:
+                        # using optsnmin puts some bins at weird wiggling ratios
+                        # bashproc.sendline('ftgrouppha infile=temp_sp.pi'+' outfile=temp_sp_grp_opt.pi '+
+                        #                   ' grouptype=optsnmin groupscale=3.0'+
+                        #                   ' respfile='+rmf_path_use+' clobber=True')
+
+                        # using opt puts some bins at 0 for some reason maybe bc the rmf has issues
+                        group_str='ftgrouppha infile=temp_sp.pi outfile=temp_sp_grp_opt.pi '+\
+                                          'grouptype=opt'+\
+                                          'respfile='+rmf_path_use+' clobber=True'
+                        bashproc.sendline(group_str)
+
+                        #waiting for the spectrum to be created:
+                        while not os.path.isfile('temp_sp_grp_opt.pi'):
+                            time.sleep(1)
+
+                        AllData.clear()
+                        AllData('1:1 temp_sp_grp_opt.pi')
+
+                    AllData.ignore('**-'+str(analysis_lowe)+' '+str(analysis_highe)+'-**')
+
+                    if set_ener_data:
+                        set_ener('thcomp', xrism=True)
+
+                    for i_grp in range(1,AllData.nGroups+1):
+                        AllData(i_grp).response.arf=arf_path_use[i_grp-1]
+
+
+                    #loading the continuum model and fitting
+                    mod_cont.load()
+                    AllModels(1)(1).values=elem_flux/flux_base
+
+                    calc_fit()
+
+                    if Fit.statistic/Fit.dof>2:
+                        print('Issue with fake continuum fitting.')
+                        breakpoint()
+                        pass
+
+                    XRISM_sp=AllData(1).fileinfo('TELESCOP')=='XRISM'
+
+
+                    #adding the photoionization component
+                    comp_par,comp_num=addcomp(mod_dict[photo_mod][0]+'{'+mod_dict[photo_mod][1].split('/')[-1]+'}',
+                                              position=photo_comp_pos,return_pos=True)
+
+                    #with appropriate parameter range
+                    if photo_mod=='pion_abs_NS':
+                        addcomp('vashift',position=int(comp_num[0]))
+
+                        if photo_range=='warm':
+                            AllModels(1)(comp_par[0]+1).values=[2.,0.02,1.,1.,3.,3.]
+                        elif photo_range=='hot':
+                            AllModels(1)(comp_par[0]+1).values=[4.,0.02,3.,3.,4.5,4.5]
+
+                        AllModels(1)(comp_par[1]+1).values= [1.0, 0.1, 1e-2,1e-2, 10.0, 10.0]
+                        AllModels(1)(comp_par[2] + 1).values =[200.0, 2.0, 100,100,500,500]
+                        AllModels(1)(comp_par[0]).values=[0.0, 10.0, -1000.0, -1000.0,1000.0, 1000.0]
+
+                    #fitting
+                    calc_fit()
+
+                    Fit.query='yes'
+                    #computing the error on the velocity shift parameter of the line to ensure we are not stuck
+                    calc_error(logfile,param=str(comp_par[0]),timeout=15,freeze_pegged=True)
+                    calc_fit()
+                    Fit.query='on'
+
+                    print('Computing NH error at 1 sigma')
+
+                    #computing the blueshift error of the line
+                    err_1sig = calc_error(param=str(comp_par[1]+1), logfile=logfile,
+                                          delchi_err=1., give_errors='bounds',
+                                          timeout=to_error,indiv=False)
+
+                    err_1sig_bounds=err_1sig[0][comp_par[1]]
+                    err_1sig_full=np.repeat(0.,2)
+                    if err_1sig_bounds[0]==0.:
+                        err_1sig_full[0]=AllModels(1)(comp_par[1] + 1).values[2]
+                    else:
+                        err_1sig_full[0] =err_1sig_bounds[0]
+                    if err_1sig_bounds[1]==0.:
+                        err_1sig_full[1]=AllModels(1)(comp_par[1] + 1).values[5]
+                    else:
+                        err_1sig_full[1] =err_1sig_bounds[1]
+
+                    #DOESNT WORK VERY WELL
+                    # err_1sig_rel = err_1sig[0][comp_par[1]]
+                    #
+                    # #storing no error if the value is unconstrained
+                    # # (for that we're testing if it's close to the main value)
+                    # err_1sig_full = np.array([-err_1sig_rel[0],err_1sig_rel[1]]) + AllModels(1)(comp_par[1]+1).values[0]
+
+                    # #safeguards to correctly put the info for pegged values
+                    # if (err_1sig_rel/AllModels(1)(comp_par[1]+1).values[0])[0]>0.9999 and \
+                    #         (err_1sig_rel / AllModels(1)(comp_par[1] + 1).values[0])[0]<1.0001:
+                    #     err_1sig_full[0]=AllModels(1)(comp_par[1] + 1).values[2]
+                    #
+                    # if (err_1sig_rel/AllModels(1)(comp_par[1]+1).values[0])[1]>0.9999 and \
+                    #         (err_1sig_rel / AllModels(1)(comp_par[1] + 1).values[0])[1]<1.0001:
+                    #     err_1sig_full[1]=AllModels(1)(comp_par[1] + 1).values[5]
+
+                    nh_lim_distrib[0][i_iter] = err_1sig_full[1]
+
+                    print('Computing NH error at 2 sigma')
+                    #computing the blueshift error of the line
+                    err_2sig = calc_error(param=str(comp_par[1]+1), logfile=logfile,
+                                          delchi_err=4., give_errors='bounds',
+                                          timeout=to_error,indiv=False)
+
+                    err_2sig_bounds=err_2sig[0][comp_par[1]]
+                    err_2sig_full=np.repeat(0.,2)
+                    if err_2sig_bounds[0]==0.:
+                        err_2sig_full[0]=AllModels(1)(comp_par[1] + 1).values[2]
+                    else:
+                        err_2sig_full[0] =err_2sig_bounds[0]
+                    if err_2sig_bounds[1]==0.:
+                        err_2sig_full[1]=AllModels(1)(comp_par[1] + 1).values[5]
+                    else:
+                        err_2sig_full[1] =err_2sig_bounds[1]
+
+                    # err_2sig_rel = err_2sig[0][comp_par[1]]
+                    #
+                    # #storing no error if the value is unconstrained
+                    # # (for that we're testing if it's close to the main value)
+                    # err_2sig_full =np.array([-err_2sig_rel[0],err_2sig_rel[1]]) + AllModels(1)(comp_par[1]+1).values[0]
+                    #
+                    # #safeguards to correctly put the info for pegged values
+                    # if (err_2sig_rel/AllModels(1)(comp_par[1]+1).values[0])[0]>0.99 and \
+                    #         (err_2sig_rel / AllModels(1)(comp_par[1] + 1).values[0])[0]<1.01:
+                    #     err_2sig_full[0]=AllModels(1)(comp_par[1] + 1).values[2]
+                    #
+                    # if (err_2sig_rel/AllModels(1)(comp_par[1]+1).values[0])[1]>0.99 and \
+                    #         (err_2sig_rel / AllModels(1)(comp_par[1] + 1).values[0])[1]<1.01:
+                    #     err_2sig_full[1]=AllModels(1)(comp_par[1] + 1).values[5]
+
+                    nh_lim_distrib[1][i_iter] = err_2sig_full[1]
+
+                    print('Computing NH error at 3 sigma')
+                    #computing the blueshift error of the line
+                    err_3sig = calc_error(param=str(comp_par[1]+1), logfile=logfile,
+                                          delchi_err=9., give_errors='bounds',
+                                          timeout=to_error,indiv=False)
+
+                    err_3sig_bounds=err_3sig[0][comp_par[1]]
+                    err_3sig_full=np.repeat(0.,2)
+                    if err_3sig_bounds[0]==0.:
+                        err_3sig_full[0]=AllModels(1)(comp_par[1] + 1).values[2]
+                    else:
+                        err_3sig_full[0] =err_3sig_bounds[0]
+                    if err_3sig_bounds[1]==0.:
+                        err_3sig_full[1]=AllModels(1)(comp_par[1] + 1).values[5]
+                    else:
+                        err_3sig_full[1] =err_3sig_bounds[1]
+                    # err_3sig_rel = err_3sig[0][comp_par[1]]
+                    #
+                    # #storing no error if the value is unconstrained
+                    # # (for that we're testing if it's close to the main value)
+                    # err_3sig_full = np.array([-err_3sig_rel[0],err_3sig_rel[1]]) + AllModels(1)(comp_par[1]+1).values[0]
+                    #
+                    # #safeguards to correctly put the info for pegged values
+                    # if (err_3sig_rel/AllModels(1)(comp_par[1]+1).values[0])[0]>0.9999 and \
+                    #         (err_3sig_rel / AllModels(1)(comp_par[1] + 1).values[0])[0]<1.0001:
+                    #     err_3sig_full[0]=AllModels(1)(comp_par[1] + 1).values[2]
+                    #
+                    # if (err_3sig_rel/AllModels(1)(comp_par[1]+1).values[0])[1]>0.9999 and \
+                    #         (err_3sig_rel / AllModels(1)(comp_par[1] + 1).values[0])[1]<1.0001:
+                    #     err_3sig_full[1]=AllModels(1)(comp_par[1] + 1).values[5]
+
+                    nh_lim_distrib[2][i_iter] = err_3sig_full[1]
+
+                    pbar.update()
+
+                nh_lim_distrib=np.array(nh_lim_distrib,dtype=float)
+
+                nh_lim_distrib.sort()
+
+                #storing the median of the distribution of the limits for this flux value
+                nh_lim_arr[i_flux]=nh_lim_distrib.T[n_iter//2]
+
+        save_arr=np.concatenate((np.array([flux_inter]),nh_lim_arr.T)).T
+
+        header_elems=['mod_path '+str(mod_path),
+                      'rmf_path '+str(rmf_path_use),'arf_path '+str(arf_path_use),
+                      'expos '+str(expos)+' ks',
+                      'Fake stats '+str(fakestats),
+                      'n_iter '+str(n_iter),
+                      'flux_range logspace('+flux_range+') (e-10 erg/s/cm²) in '+str(flux_band.replace('.','p').replace(' ','_'))+'_keV'+
+                      'photo mod'+photo_mod,
+                      'columns: flux | ew_limit at 1/2/3 sigma (eV)']
+
+        np.savetxt('photo_nh_lim_mod_'+mod_path[:mod_path.rfind('.')]+
+                   ('_regroup' if regroup else '')+
+                   ('_nostat' if not fakestats else '')+
+                    '_'+str(expos)+'ks'+
+                   '_'+str(n_iter)+'_iter'+
+                   '_line_' + str(line) +
+                   '_flux_' + flux_range +
+                    '_in_'+str(flux_band.replace('.','p').replace(' ','_'))+'_keV'+
+                   '_mod_'+str(photo_mod)+
+                   '_'+str(line_w[1])+'.txt',save_arr,header='\n'.join(header_elems))
+
+        Xset.chatter=old_chatter
+
+        return save_arr
+
+    if mode=='vshift_err_photo':
+
+        print('Computing velocity shift errors for a photoionization model within the given flux range...')
+        vshift_err_arr=np.zeros((n_flux,3))
+
+        Xset.chatter=10
+
+        with tqdm(total=n_flux*n_iter) as pbar:
+            for i_flux,elem_flux in enumerate(flux_inter):
+
+                vshift_err_distrib=np.repeat(None,3*n_iter).reshape(3,n_iter)
+
+                for i_iter in range(n_iter):
+                    mod_cont.load()
+
+                    AllModels(1)(1).values=elem_flux/flux_base
+
+                    #adding the photionization model
+                    #adding the photoionization component
+                    comp_par,comp_num=addcomp(mod_dict[photo_mod][0]+'{'+mod_dict[photo_mod][1].split('/')[-1]+'}',
+                                              position=photo_comp_pos,return_pos=True)
+
+                    #with appropriate parameter range
+                    if photo_mod=='pion_abs_NS':
+                        addcomp('vashift',position=int(comp_num[0]))
+
+                        if photo_range=='warm':
+                            AllModels(1)(comp_par[0]+1).values=[2.,0.02,1.,1.,3.,3.]
+                        elif photo_range=='hot':
+                            AllModels(1)(comp_par[0]+1).values=[4.,0.02,3.,3.,4.5,4.5]
+
+                        AllModels(1)(comp_par[1]+1).values= [1.0, 0.1, 1e-2,1e-2, 10.0, 10.0]
+                        AllModels(1)(comp_par[2] + 1).values =[200.0, 2.0, 100,100,500,500]
+                        AllModels(1)(comp_par[0]).values=[0.0, 10.0, -1000.0, -1000.0,1000.0, 1000.0]
+
+                    #remove previously computed spectra
+                    for elem_set in fakeset:
+                        if os.path.isfile(elem_set.fileName):
+                            os.remove(elem_set.fileName)
+
+                    AllModels(1).show()
+
+                    #faking the spectrum with the right parameters
+                    AllData.fakeit(nSpectra=len(fakeset), settings=fakeset, applyStats=fakestats)
+
+                    #rebinning the spectrum before loading it
+                    if regroup:
+                        # using optsnmin puts some bins at weird wiggling ratios
+                        # bashproc.sendline('ftgrouppha infile=temp_sp.pi'+' outfile=temp_sp_grp_opt.pi '+
+                        #                   ' grouptype=optsnmin groupscale=3.0'+
+                        #                   ' respfile='+rmf_path_use+' clobber=True')
+
+                        # using opt puts some bins at 0 for some reason maybe bc the rmf has issues
+                        group_str='ftgrouppha infile=temp_sp.pi outfile=temp_sp_grp_opt.pi '+\
+                                          'grouptype=opt'+\
+                                          'respfile='+rmf_path_use+' clobber=True'
+                        bashproc.sendline(group_str)
+
+                        #waiting for the spectrum to be created:
+                        while not os.path.isfile('temp_sp_grp_opt.pi'):
+                            time.sleep(1)
+
+                        AllData.clear()
+                        AllData('1:1 temp_sp_grp_opt.pi')
+
+                    AllData.ignore('**-'+str(analysis_lowe)+' '+str(analysis_highe)+'-**')
+
+                    if set_ener_data:
+                        set_ener('thcomp', xrism=True)
+
+                    for i_grp in range(1,AllData.nGroups+1):
+                        AllData(i_grp).response.arf=arf_path_use[i_grp-1]
+
+
+                    #loading the continuum model and fitting
+                    calc_fit()
+
+                    if Fit.statistic/Fit.dof>2:
+                        print('Issue with fake continuum fitting.')
+                        breakpoint()
+                        pass
+
+                    XRISM_sp=AllData(1).fileinfo('TELESCOP')=='XRISM'
+
+
+                    Fit.query='yes'
+                    #computing the error on the velocity shift parameter of the line to ensure we are not stuck
+                    calc_error(logfile,param=str(comp_par[0]),timeout=15,freeze_pegged=True)
+                    calc_fit()
+                    Fit.query='on'
+
+                    print('Computing bshift error at 1 sigma')
+
+                    #computing the blueshift error of the line
+                    err_1sig = calc_error(param=str(comp_par[0]), logfile=logfile,
+                                          delchi_err=1., give_errors='bounds',
+                                          timeout=to_error,indiv=False)
+
+                    err_1sig_bounds=err_1sig[0][comp_par[0]-1]
+                    err_1sig_full=np.repeat(0.,2)
+                    if err_1sig_bounds[0]==0.:
+                        err_1sig_full[0]=AllModels(1)(comp_par[0]).values[2]
+                    else:
+                        err_1sig_full[0] =err_1sig_bounds[0]
+                    if err_1sig_bounds[1]==0.:
+                        err_1sig_full[1]=AllModels(1)(comp_par[0]).values[5]
+                    else:
+                        err_1sig_full[1] =err_1sig_bounds[1]
+
+                    #DOESNT WORK VERY WELL
+                    # err_1sig_rel = err_1sig[0][comp_par[1]]
+                    #
+                    # #storing no error if the value is unconstrained
+                    # # (for that we're testing if it's close to the main value)
+                    # err_1sig_full = np.array([-err_1sig_rel[0],err_1sig_rel[1]]) + AllModels(1)(comp_par[1]+1).values[0]
+
+                    # #safeguards to correctly put the info for pegged values
+                    # if (err_1sig_rel/AllModels(1)(comp_par[1]+1).values[0])[0]>0.9999 and \
+                    #         (err_1sig_rel / AllModels(1)(comp_par[1] + 1).values[0])[0]<1.0001:
+                    #     err_1sig_full[0]=AllModels(1)(comp_par[1] + 1).values[2]
+                    #
+                    # if (err_1sig_rel/AllModels(1)(comp_par[1]+1).values[0])[1]>0.9999 and \
+                    #         (err_1sig_rel / AllModels(1)(comp_par[1] + 1).values[0])[1]<1.0001:
+                    #     err_1sig_full[1]=AllModels(1)(comp_par[1] + 1).values[5]
+
+                    vshift_err_distrib[0][i_iter] = err_1sig_full[1]-err_1sig_full[0]
+
+                    print('Computing bshift error at 2 sigma')
+                    #computing the blueshift error of the line
+                    err_2sig = calc_error(param=str(comp_par[0]), logfile=logfile,
+                                          delchi_err=4., give_errors='bounds',
+                                          timeout=to_error,indiv=False)
+
+                    err_2sig_bounds=err_2sig[0][comp_par[0]-1]
+                    err_2sig_full=np.repeat(0.,2)
+                    if err_2sig_bounds[0]==0.:
+                        err_2sig_full[0]=AllModels(1)(comp_par[0]).values[2]
+                    else:
+                        err_2sig_full[0] =err_2sig_bounds[0]
+                    if err_2sig_bounds[1]==0.:
+                        err_2sig_full[1]=AllModels(1)(comp_par[0]).values[5]
+                    else:
+                        err_2sig_full[1] =err_2sig_bounds[1]
+
+                    # err_2sig_rel = err_2sig[0][comp_par[1]]
+                    #
+                    # #storing no error if the value is unconstrained
+                    # # (for that we're testing if it's close to the main value)
+                    # err_2sig_full =np.array([-err_2sig_rel[0],err_2sig_rel[1]]) + AllModels(1)(comp_par[1]+1).values[0]
+                    #
+                    # #safeguards to correctly put the info for pegged values
+                    # if (err_2sig_rel/AllModels(1)(comp_par[1]+1).values[0])[0]>0.99 and \
+                    #         (err_2sig_rel / AllModels(1)(comp_par[1] + 1).values[0])[0]<1.01:
+                    #     err_2sig_full[0]=AllModels(1)(comp_par[1] + 1).values[2]
+                    #
+                    # if (err_2sig_rel/AllModels(1)(comp_par[1]+1).values[0])[1]>0.99 and \
+                    #         (err_2sig_rel / AllModels(1)(comp_par[1] + 1).values[0])[1]<1.01:
+                    #     err_2sig_full[1]=AllModels(1)(comp_par[1] + 1).values[5]
+
+                    vshift_err_distrib[0][i_iter] = err_2sig_full[1]-err_2sig_full[0]
+
+                    print('Computing bshift error at 3 sigma')
+                    #computing the blueshift error of the line
+                    err_3sig = calc_error(param=str(comp_par[0]), logfile=logfile,
+                                          delchi_err=9., give_errors='bounds',
+                                          timeout=to_error,indiv=False)
+
+                    err_3sig_bounds=err_3sig[0][comp_par[0]-1]
+                    err_3sig_full=np.repeat(0.,2)
+                    if err_3sig_bounds[0]==0.:
+                        err_3sig_full[0]=AllModels(1)(comp_par[0]).values[2]
+                    else:
+                        err_3sig_full[0] =err_3sig_bounds[0]
+                    if err_3sig_bounds[1]==0.:
+                        err_3sig_full[1]=AllModels(1)(comp_par[0]).values[5]
+                    else:
+                        err_3sig_full[1] =err_3sig_bounds[1]
+                    # err_3sig_rel = err_3sig[0][comp_par[1]]
+                    #
+                    # #storing no error if the value is unconstrained
+                    # # (for that we're testing if it's close to the main value)
+                    # err_3sig_full = np.array([-err_3sig_rel[0],err_3sig_rel[1]]) + AllModels(1)(comp_par[1]+1).values[0]
+                    #
+                    # #safeguards to correctly put the info for pegged values
+                    # if (err_3sig_rel/AllModels(1)(comp_par[1]+1).values[0])[0]>0.9999 and \
+                    #         (err_3sig_rel / AllModels(1)(comp_par[1] + 1).values[0])[0]<1.0001:
+                    #     err_3sig_full[0]=AllModels(1)(comp_par[1] + 1).values[2]
+                    #
+                    # if (err_3sig_rel/AllModels(1)(comp_par[1]+1).values[0])[1]>0.9999 and \
+                    #         (err_3sig_rel / AllModels(1)(comp_par[1] + 1).values[0])[1]<1.0001:
+                    #     err_3sig_full[1]=AllModels(1)(comp_par[1] + 1).values[5]
+
+                    vshift_err_distrib[0][i_iter] = err_3sig_full[1]-err_3sig_full[0]
+
+                    breakpoint()
+
+                    pbar.update()
+
+                vshift_err_distrib=np.array(vshift_err_distrib,dtype=float)
+
+                vshift_err_distrib.sort()
+
+                #storing the median of the distribution of the limits for this flux value
+                vshift_err_arr[i_flux]=vshift_err_distrib.T[n_iter//2]
+
+        save_arr=np.concatenate((np.array([flux_inter]),vshift_err_arr.T)).T
+
+        header_elems=['mod_path '+str(mod_path),
+                      'rmf_path '+str(rmf_path_use),'arf_path '+str(arf_path_use),
+                      'expos '+str(expos)+' ks',
+                      'Fake stats '+str(fakestats),
+                      'n_iter '+str(n_iter),
+                      'flux_range logspace('+flux_range+') (e-10 erg/s/cm²) in '+str(flux_band.replace('.','p').replace(' ','_'))+'_keV'+
+                      'photo mod'+photo_mod,
+                      'columns: flux | ew_limit at 1/2/3 sigma (eV)']
+
+        np.savetxt('photo_vshift_err_mod_'+mod_path[:mod_path.rfind('.')]+
+                   ('_regroup' if regroup else '')+
+                   ('_nostat' if not fakestats else '')+
+                    '_'+str(expos)+'ks'+
+                   '_'+str(n_iter)+'_iter'+
+                   '_line_' + str(line) +
+                   '_flux_' + flux_range +
+                    '_in_'+str(flux_band.replace('.','p').replace(' ','_'))+'_keV'+
+                   '_mod_'+str(photo_mod)+
+                   '_'+str(line_w[1])+'.txt',save_arr,header='\n'.join(header_elems))
+
+        Xset.chatter=old_chatter
+
+        return save_arr
 
     if mode=='ew_lim':
 
@@ -313,7 +806,7 @@ def line_simu(outdir='./',mod_path=None,mode='ew_lim',rmf_path='XRISM_Hp_AO2',ar
                     #computing the error on the velocity shift parameter of the line to ensure we are not stuck
                     calc_error(logfile,param=str(comp_par[0]),timeout=15,freeze_pegged=True)
                     calc_fit()
-                    Fit.query='on'
+                    Fit.query='yes'
 
                     #to be implemented if need be for parameter variations
                     # (we change the critical delta to avoid pyxspec getting stuck if the steppar finds a better fit)

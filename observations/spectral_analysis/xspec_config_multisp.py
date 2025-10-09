@@ -2859,7 +2859,7 @@ def unlink(parlist=None,model=None,modclass=AllModels):
         xspec_mod(elem_par).link=''
 
 def parse_xlog(log_lines,goal='lastmodel',no_display=False,replace_frozen=False,
-               freeze_pegged=False,return_pars=False):
+               freeze_pegged=False,return_pars=False,error_bounds=False):
 
     '''
     Parses the Xspec log file to search for a specific information.
@@ -2887,6 +2887,8 @@ def parse_xlog(log_lines,goal='lastmodel',no_display=False,replace_frozen=False,
         -crop the lines and split by model and group
         -select only the lines with variation (i.e. '+/-' at the end of the line) to avoid frozen and linked parameters
         -parse them for the value and replace the corresponding parameter number with the new values
+
+    error_bounds: for lasterrors, if True, retrieve parameter bounds within errors instead of relative error values
 
     Note: it is assumed that the current models start with a default (no name) model
 
@@ -2988,11 +2990,15 @@ def parse_xlog(log_lines,goal='lastmodel',no_display=False,replace_frozen=False,
                                                                float(line.split()[2])-AllModels(i_grp)(parnum_ingrp).values[0]]))
 
                         elif len(line.split())==4:
-                            #storing the errors
-                            error_pars[parnum-1]=np.array(line.split('(')[1].split(')')[0].split(',')).astype(float)
 
-                            #keeping the negative error positive for consistency
-                            error_pars[parnum-1][0]=abs(error_pars[parnum-1][0])
+                            if error_bounds:
+                                error_pars[parnum-1]=np.array(line.split()[1:3],dtype=float)
+                            else:
+                                #storing the errors
+                                error_pars[parnum-1]=np.array(line.split('(')[1].split(')')[0].split(',')).astype(float)
+
+                                #keeping the negative error positive for consistency
+                                error_pars[parnum-1][0]=abs(error_pars[parnum-1][0])
 
         if freeze_pegged:
 
@@ -3271,10 +3277,16 @@ def calc_fit(timeout=30,logfile=None,iterations=None,delchi_tresh=0.1,nonew=Fals
         Fit.nIterations=old_iterations
 
 
-def calc_error(logfile,maxredchi=1e6,param='all',delchi_err='',timeout=60,delchi_thresh=0.1,indiv=True,give_errors=False,
+def calc_error(logfile,maxredchi=1e6,param='all',delchi_err='',timeout=60,delchi_thresh=0.1,indiv=True,
+               give_errors=False,
                freeze_pegged=False):
 
     '''
+
+    give_errors:
+        False or True or "bounds"
+        if set to bounds, retrieve the parameter ranges instead of errors(much more useful to identify pegged values)
+
     Computes the fit errors in a multiprocessing environment to enable stopping the process after a specific time
     param can either be an error parameters string or 'all' to compute the errors for all the parameters
 
@@ -3401,8 +3413,10 @@ def calc_error(logfile,maxredchi=1e6,param='all',delchi_err='',timeout=60,delchi
                 #which needs to be loaded to save this peg
                 log_lines[-1]+=logfile.readlines()
 
-            elif give_errors:
-                new_errors=parse_xlog(log_lines[-1],goal='lasterrors')
+            elif give_errors!=False:
+
+
+                new_errors=parse_xlog(log_lines[-1],goal='lasterrors',error_bounds=give_errors=='bounds')
 
                 #in indiv mode we only update the value of the parameter for which the error was just computed
                 if indiv:

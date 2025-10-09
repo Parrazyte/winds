@@ -124,7 +124,7 @@ lines_e_dict={
                     #this one is the average of the 6,390.84  (1/3) and 6,403.84 (2/3)
                     # (see e.g. https://xdb.lbl.gov/Section1/Table_1-2.pdf)
                    'FeKa1em':[6.400,-10000,10000],
-                   'FeKb1em':[7.06,-10000,10000],
+                   'FeKb1em':[7.05798,-10000,10000],
                    'calNICERSiem':[1.74],
 
                   'NeKa10abs':[1.02180,-3000,3000],

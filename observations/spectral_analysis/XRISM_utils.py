@@ -1,6 +1,6 @@
 
 from xspec import Xset, Plot, Fit,AllData, AllModels
-from xspec_config_multisp import freeze, allmodel_data,set_ener,store_plot
+from xspec_config_multisp import freeze, allmodel_data,set_ener,store_plot,allfreeze
 from linedet_utils import narrow_line_search,plot_line_search,rebinv_xrism
 from general_tools import ang2kev
 import matplotlib.pyplot as plt
@@ -14,7 +14,8 @@ c_0 = 299792.458
 
 def xrism_ls(baseload,low_e,high_e,plot_suffix="",bound_around=0.1,e_step=5e-3,lw=5e-3,
              e_sat_low_indiv=[1.5,1.5],resolve_dg=1,rebinv=[20],line_search_norm=[0.01,30,500],
-             force_ylog_ratio=True,ratio_bounds=[0.5,2],title=True,set_ener_str=None,set_ener_xrism=True):
+             force_ylog_ratio=True,ratio_bounds=[0.5,2],title=True,set_ener_str=None,
+             sources_forflux='all'):
 
     '''
 
@@ -26,6 +27,10 @@ def xrism_ls(baseload,low_e,high_e,plot_suffix="",bound_around=0.1,e_step=5e-3,l
     e_sat_low_indiv here assumes that a RESOLVE and EXTEND spectra are loaded
 
     rebinv should be an iterable of len the amount of DGs that should be rebinned
+
+        sources_forflux:
+            -which source will be considered for the flux base computation for the line search
+
     '''
     Plot.xLog = False
     Fit.statMethod = 'cstat'
@@ -46,18 +51,19 @@ def xrism_ls(baseload,low_e,high_e,plot_suffix="",bound_around=0.1,e_step=5e-3,l
             rebinv_xrism(i_dg+1,sigma=elem_rebinv)
 
     if set_ener_str is not None:
-        set_ener(set_ener_str,xrism=set_ener_xrism)
-    freeze()
+        set_ener(set_ener_str,xrism=True)
 
+    allfreeze()
 
     if bound_around is not None:
         AllData.ignore('**-'+str(low_e-bound_around)+' '+str(high_e+bound_around)+'-**')
 
+    sources_forflux_suffix='all' if sources_forflux=='all' else '_'.join(sources_forflux)
 
     mod_ls=allmodel_data()
-    narrow_out_val=narrow_line_search(mod_ls,'mod_ls',
+    narrow_out_val=narrow_line_search(mod_ls,'mod_ls'+'_normcont_'+sources_forflux_suffix,
                                       e_sat_low_indiv,[low_e,high_e,e_step],line_search_norm=line_search_norm,
-                                      line_cont_range=[low_e,high_e],lw=lw,scorpeon=False)
+                                      line_cont_range=[low_e,high_e],lw=lw,scorpeon=False,sources_forflux=sources_forflux)
 
     lw_str='_lw_'+str(round(lw*1e3))
 
@@ -65,8 +71,11 @@ def xrism_ls(baseload,low_e,high_e,plot_suffix="",bound_around=0.1,e_step=5e-3,l
               'wb+') as f:
         dill.dump(narrow_out_val,f)
 
+
     plt.ioff()
-    plot_line_search(narrow_out_val, './', 'XRISM', suffix=baseload[:baseload.rfind('.')]+'_'+lw_str, save=True,
+    plot_line_search(narrow_out_val, './', 'XRISM',
+                     suffix=baseload[:baseload.rfind('.')]+'_'+lw_str+'_normcont_'+sources_forflux_suffix,
+                     save=True,
                      epoch_observ=[plot_suffix], format='pdf',
                      force_ylog_ratio=force_ylog_ratio,ratio_bounds=ratio_bounds,title=title)
     plt.ion()

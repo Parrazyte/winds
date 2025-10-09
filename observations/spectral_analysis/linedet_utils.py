@@ -95,10 +95,13 @@ def narrow_line_cycle(low_e,high_e,e_step=2e-2,lw=0.,plot_suffix='',baseload=Non
 
 def narrow_line_search(data_cont, suffix,e_sat_low_indiv,line_search_e=[4,10,0.05],line_search_norm=[0.01,10,500],
                        lw=0.,peak_thresh=9.21,peak_clean=False,line_cont_range=[4,10],trig_interval=[6.5,9.1],
-                       scorpeon_save=None,data_fluxcont=None,scorpeon=True):
+                       scorpeon_save=None,data_fluxcont=None,scorpeon=True,sources_forflux=[1]):
 
     '''
     Wrapper for all the line search code
+
+    sources_forflux:
+        -which source will be considered for the flux base computation for the line search
 
     Explores the current model in a given range by adding a line of varying normalisation and energy and mapping the associated
     2D delta-stat map
@@ -112,6 +115,8 @@ def narrow_line_search(data_cont, suffix,e_sat_low_indiv,line_search_e=[4,10,0.0
     arg:
         -scorpeon. Tries to load the scorpeon background, checks all fits files and
          will fail if there was a change in folder after loading. Setting it to False desactivates the load.
+
+
     '''
 
     line_search_e_space = np.arange(line_search_e[0], line_search_e[1] + line_search_e[2] / 2, line_search_e[2])
@@ -151,7 +156,24 @@ def narrow_line_search(data_cont, suffix,e_sat_low_indiv,line_search_e=[4,10,0.0
         #NOTE: doesn't work because the models are adapted to serve as background
         #flux_cont[ind_e] = sum([AllData(1).flux[6*i] for i in range(n_models)])
 
-        flux_cont[ind_e] = AllData(1).flux[0]
+        #considering the fluxes of the requested models for the normalization
+        full_flux=np.array(AllData(1).flux).reshape(len(AllModels.sources),6)
+        mod_keys = np.array(list(AllModels.sources.keys()))
+
+        if sources_forflux=='all':
+            mod_keys_mask=np.repeat(True,len(mod_keys))
+        else:
+            mod_keys_mask=np.array([elem in sources_forflux for elem in mod_keys])
+
+
+        flux_cont[ind_e] = full_flux.T[0][mod_keys_mask].sum()
+
+        if flux_cont[ind_e]<0:
+            print('local flux value below zero, this should not happen')
+            breakpoint()
+            pass
+
+        # flux_cont[ind_e] = AllData(1).flux[0]
 
         # this is required because the buffer is different when redirected
         sys.stdout.flush()
@@ -224,7 +246,11 @@ def narrow_line_search(data_cont, suffix,e_sat_low_indiv,line_search_e=[4,10,0.0
             for that we set the gaussian cflux to the continuum flux at this energy 
             since norm_par_space is directly in units of local continuum flux it will make it much easier to get all the eqwidths afterwards)
             '''
-            comp_gauss_cflux.lg10Flux = np.log10(flux_cont[j])
+            try:
+                comp_gauss_cflux.lg10Flux = np.log10(flux_cont[j])
+            except:
+                breakpoint()
+                pass
 
             # Computing the eqwidth of a component works even with the cflux dependance.
             AllModels.eqwidth(len(AllModels(1).componentNames))
@@ -1076,10 +1102,10 @@ def coltour_chi2map(fig, axe, chi_dict, title='', combined=False, ax_bar=None, n
 
         if bigline_flag == 1:
             colorbar.set_label(r'$\sqrt{\Delta C}$'+('\n' if squished_mode else ' ')
-                               +'with separated scales'+('\n' if squished_mode else ' ')+'for absorption and emission')
+                               +'with separated scales '+('\n' if squished_mode else ' ')+'for absorption and emission')
         else:
             colorbar.set_label(r'$\Delta C$'+('\n' if squished_mode else ' ')+
-                               'with separated scales'+('\n' if squished_mode else '')+'for absorption and emission')
+                               'with separated scales '+('\n' if squished_mode else '')+'for absorption and emission')
     '''CONTOUR PLOT'''
 
     chi_contours = [chi_base - 9.21, chi_base - 4.61, chi_base - 2.3]

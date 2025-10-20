@@ -7,6 +7,7 @@ import matplotlib.gridspec as gridspec
 import glob
 import pandas as pd
 from general_tools import ravel_ragged
+from line_simus_tools import loglog_regressor
 
 import getpass
 username=getpass.getuser()
@@ -123,6 +124,18 @@ width_str='_'.join([str(elem) for elem in width_inter])
 id_sigmas=np.array(args.sigmas)-1
 
 
+
+
+    # plt.xscale('log')
+    # plt.yscale('log')
+    # plt.xlabel('X (log scale)')
+    # plt.ylabel('Y (log scale)')
+    # plt.title('Linear Regression in Log-Log Space')
+    # plt.legend()
+    # plt.grid(True, which='both', linestyle='--', linewidth=0.5)
+    # plt.tight_layout()
+    # plt.show()
+
 def plot_indiv_panel(ax_use,panel_mode,show_yaxis=True,legend=True,
                      base_dir='/media/'+username+'/crucial_SSD/Observ/highres/linedet_compa/AO2/',
                      subdir='auto',secax=None,
@@ -131,46 +144,7 @@ def plot_indiv_panel(ax_use,panel_mode,show_yaxis=True,legend=True,
                      man_label=None,man_label_plot=None,man_marker=None,man_ls=None,man_lw=1,man_color=None,
                      label_constraints=True,lock_lims=False):
 
-    def loglog_regressor(X,Y,ax,color,label='',marker='',ls='',lw=1,label_plot=True,secax=None):
 
-        import numpy as np
-        import matplotlib.pyplot as plt
-        from scipy.stats import linregress
-
-        # Transform to log-log space
-        log_X = np.log10(X)
-        log_Y = np.log10(Y)
-
-        # Perform linear regression in log-log space
-        slope, intercept, r_value, p_value, std_err = linregress(log_X, log_Y)
-
-        # Regression line in log-log space
-        log_Y_pred = slope * log_X + intercept
-
-        log_X_pred= (log_Y - intercept)/slope
-
-        # Plot
-        # ax.plot(X, 10 ** log_Y_pred, color=color)
-        if secax is not None:
-            ax_scatter=secax
-        else:
-            ax_scatter=ax
-
-
-        ax_scatter.scatter(10**log_X_pred, Y,label=(label.split(' ')[-1]) if 'XRISM' in label
-                else '',marker=marker,color=color,s=100)
-
-        ax.plot(10**log_X_pred, Y,ls=ls,color=color,lw=lw,alpha=1.,label=label_plot)
-
-        # plt.xscale('log')
-        # plt.yscale('log')
-        # plt.xlabel('X (log scale)')
-        # plt.ylabel('Y (log scale)')
-        # plt.title('Linear Regression in Log-Log Space')
-        # plt.legend()
-        # plt.grid(True, which='both', linestyle='--', linewidth=0.5)
-        # plt.tight_layout()
-        # plt.show()
 
     # ax_use.set_xscale('linear')
     ax_use.set_yscale('log')
@@ -457,3 +431,71 @@ elif mode=='combi':
                 '_width_' + str(bshift_width_val) +
                 ('_vert' if vert else '')+'.pdf'))
 
+
+if 0:
+    #handmade version for XMM AO25
+
+    mpl.rcParams.update({'font.size': 14})
+
+
+    os.chdir('/home/parrazyte/Documents/Work/PostDoc/docs/Propal/XMM/AO25/mid-i/simu/plot_NH')
+
+    plt.figure(figsize=(4.5,4),layout='constrained')
+
+    ax=plt.gca()
+
+    load_NH_RGS=np.loadtxt('photo_nh_lim_mod_fit_hard_2e21_50ks_20_iter_line_FeKa26abs_flux_1_100_5_in_2p0_10p0_keV_mod_pion_abs_NS_0.005.txt')
+
+    load_NH_XRISM=np.loadtxt('photo_nh_lim_mod_mod_bs_50ks_20_iter_line_FeKa26abs_flux_1_100_5_in_2p0_10p0_keV_mod_pion_abs_NS_0.005.txt')
+
+    plt.xscale('log')
+    plt.yscale('log')
+    plt.xlabel(r'NH threshold for 3$\sigma$ detection (cm$^{-2}$)')
+    plt.ylabel(r'Observed Flux (erg s$^{-1}$ cm$^{-2}$)')
+
+    loglog_regressor(load_NH_XRISM.T[-1]*1e22, load_NH_XRISM.T[0], ax=plt.gca(), color='orange', marker='+',ls='--',label_plot='XRISM hot wind')
+
+    interp_vals=loglog_regressor(load_NH_RGS.T[-1][:-1]*1e22, load_NH_RGS.T[0][:-1], ax=plt.gca(), color='blue', marker='+',ls='--',label_plot='RGS warm wind',return_vals=True)
+
+    #final scatter for the systematics dominated zone
+    stat_y=load_NH_RGS.T[0][-2:]
+    stat_x = [interp_vals[0][-1],interp_vals[0][-1]]
+
+    ax.scatter(stat_x[-1],stat_y[-1],marker='+', color='blue', s=100)
+
+
+    ax.plot(stat_x,stat_y,ls='--', color='blue', lw=1, alpha=1., label='')
+
+    mpl.rcParams.update({'font.size': 10})
+
+    plt.legend()
+    plt.savefig('fig_linedet_NH.pdf')
+    plt.close()
+
+
+
+    ##VSHIFT ERROR
+    os.chdir('/home/parrazyte/Documents/Work/PostDoc/docs/Propal/XMM/AO25/mid-i/simu/plot_verr')
+
+    mpl.rcParams.update({'font.size': 14})
+    plt.figure(figsize=(4.5,4),layout='constrained')
+
+    ax=plt.gca()
+
+    load_verr_RGS=np.loadtxt('photo_vshift_err_mod_fit_hard_2e21_50ks_20_iter_line_FeKa26abs_flux_1_100_5_in_2p0_10p0_keV_mod_pion_abs_NS_0.005.txt')
+
+    load_verr_XRISM=np.loadtxt('photo_vshift_err_mod_mod_bs_50ks_20_iter_line_FeKa26abs_flux_1_100_5_in_2p0_10p0_keV_mod_pion_abs_NS_0.005.txt')
+
+    plt.xscale('log')
+    plt.yscale('log')
+    plt.xlabel(r'3$\sigma$ velocity shift error (km s$^{-1}$)')
+    plt.ylabel(r'Observed Flux (erg s$^{-1}$ cm$^{-2}$)')
+
+    loglog_regressor(load_verr_XRISM.T[-1], load_verr_RGS.T[0], ax=plt.gca(), color='orange', marker='+',ls='--',label_plot='XRISM hot wind')
+
+    loglog_regressor(load_verr_RGS.T[-1], load_verr_RGS.T[0], ax=plt.gca(), color='blue', marker='+',ls='--',label_plot='RGS warm wind')
+    mpl.rcParams.update({'font.size': 10})
+
+    plt.legend()
+    plt.savefig('fig_linedet_verr.pdf')
+    plt.close()

@@ -82,6 +82,7 @@ def line_simu(outdir='./',mod_path=None,mode='ew_lim',
         mode:
             -NH_lim_photo: computes 1/2/3 sigma NH upper limits for a photoionization model added to the source model
             -vshift_err_photo: computes 1/2/3 sigma velocity errors for a photoinization model added to the source model
+                -for this, we always return the maximum between the + and - error compared to the base 0 value
 
             -ew_lim: computes the ew limits at 1, 2, 3 sigma by fitting an additional absorption line in the spectrum
             -bshift_err: computes the bshift errors with the given response files for a series of luminosity
@@ -199,10 +200,11 @@ def line_simu(outdir='./',mod_path=None,mode='ew_lim',
             arf_path_use+=[arf_abv[elem_arf].split('/')[-1]]
         else:
 
-            # we copy them because the paths names are too long for fakeit to handle
-            os.system('cp ' + elem_arf + ' ' + outdir)
-
             arf_path_use+=[elem_arf.split('/')[-1]]
+
+            if elem_arf!='':
+                # we copy them because the paths names are too long for fakeit to handle
+                os.system('cp ' + elem_arf + ' ' + outdir)
 
     os.chdir(outdir)
 
@@ -514,7 +516,7 @@ def line_simu(outdir='./',mod_path=None,mode='ew_lim',
 
                         AllModels(1)(comp_par[1]+1).values= [1.0, 0.1, 1e-2,1e-2, 10.0, 10.0]
                         AllModels(1)(comp_par[2] + 1).values =[200.0, 2.0, 100,100,500,500]
-                        AllModels(1)(comp_par[0]).values=[0.0, 10.0, -1000.0, -1000.0,1000.0, 1000.0]
+                        AllModels(1)(comp_par[0]).values=[0.0, 10.0, -2000.0, -2000.0,2000.0, 2000.0]
 
                     #remove previously computed spectra
                     for elem_set in fakeset:
@@ -606,7 +608,7 @@ def line_simu(outdir='./',mod_path=None,mode='ew_lim',
                     #         (err_1sig_rel / AllModels(1)(comp_par[1] + 1).values[0])[1]<1.0001:
                     #     err_1sig_full[1]=AllModels(1)(comp_par[1] + 1).values[5]
 
-                    vshift_err_distrib[0][i_iter] = err_1sig_full[1]-err_1sig_full[0]
+                    vshift_err_distrib[0][i_iter] = max(abs(err_1sig_full))
 
                     print('Computing bshift error at 2 sigma')
                     #computing the blueshift error of the line
@@ -640,7 +642,7 @@ def line_simu(outdir='./',mod_path=None,mode='ew_lim',
                     #         (err_2sig_rel / AllModels(1)(comp_par[1] + 1).values[0])[1]<1.01:
                     #     err_2sig_full[1]=AllModels(1)(comp_par[1] + 1).values[5]
 
-                    vshift_err_distrib[0][i_iter] = err_2sig_full[1]-err_2sig_full[0]
+                    vshift_err_distrib[1][i_iter] =  max(abs(err_2sig_full))
 
                     print('Computing bshift error at 3 sigma')
                     #computing the blueshift error of the line
@@ -673,9 +675,7 @@ def line_simu(outdir='./',mod_path=None,mode='ew_lim',
                     #         (err_3sig_rel / AllModels(1)(comp_par[1] + 1).values[0])[1]<1.0001:
                     #     err_3sig_full[1]=AllModels(1)(comp_par[1] + 1).values[5]
 
-                    vshift_err_distrib[0][i_iter] = err_3sig_full[1]-err_3sig_full[0]
-
-                    breakpoint()
+                    vshift_err_distrib[2][i_iter] =  max(abs(err_3sig_full))
 
                     pbar.update()
 
@@ -1517,3 +1517,36 @@ def line_simu(outdir='./',mod_path=None,mode='ew_lim',
         np.savetxt('ew_lim_widthdet_mod'+('_regroup' if regroup else '')+('_nostat' if not fakestats else '')+
                    '_width_'+str(line_w[0])+'_'+str(line_w[1])+'.txt',save_arr,header='\n'.join(header_elems))
         return flux_inter,width_lim_arr
+
+def loglog_regressor(X, Y, ax, color, label='', marker='', ls='', lw=1, label_plot=True, secax=None,
+                     return_vals=False):
+    import numpy as np
+    import matplotlib.pyplot as plt
+    from scipy.stats import linregress
+
+    # Transform to log-log space
+    log_X = np.log10(X)
+    log_Y = np.log10(Y)
+
+    # Perform linear regression in log-log space
+    slope, intercept, r_value, p_value, std_err = linregress(log_X, log_Y)
+
+    # Regression line in log-log space
+    log_Y_pred = slope * log_X + intercept
+
+    log_X_pred = (log_Y - intercept) / slope
+
+    # Plot
+    # ax.plot(X, 10 ** log_Y_pred, color=color)
+    if secax is not None:
+        ax_scatter = secax
+    else:
+        ax_scatter = ax
+
+    ax_scatter.scatter(10 ** log_X_pred, Y, label=(label.split(' ')[-1]) if 'XRISM' in label
+    else '', marker=marker, color=color, s=100)
+
+    ax.plot(10 ** log_X_pred, Y, ls=ls, color=color, lw=lw, alpha=1., label=label_plot)
+
+    if return_vals:
+        return 10 ** log_X_pred, Y

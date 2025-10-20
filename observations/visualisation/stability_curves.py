@@ -248,7 +248,6 @@ def plot_4U_2021_curves(save_path_curves=None,save_path_SEDs=None,label=False,co
     if save_path_SEDs is not None:
         plt.savefig(save_path_SEDs)
 
-
 def plot_4U_state_curves(
         indir_curves='/home/'+username+'/Documents/Work/PhD/docs/papers/wind_4U/global/SEDs/stability/states',
                          save_path_curves=None,save_path_SEDs=None,label=False,colormap='plasma',restrict_range=None,
@@ -282,7 +281,6 @@ def plot_4U_state_curves(
             'orange','orange','orange','orange',
             'green',
             'red','red']
-
     ls_list=['-','--',':',
              '--','-',
              '-',':','--','-.',

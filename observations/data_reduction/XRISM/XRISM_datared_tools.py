@@ -19,7 +19,7 @@ import contextlib
 import numpy as np
 import matplotlib as mpl
 import matplotlib.pyplot as plt
-
+import pandas as pd
 from shapely.geometry import Polygon
 
 # note: might need to install opencv-python-headless to avoid dependencies issues with mpl
@@ -764,7 +764,7 @@ def plot_BR_band_compar(branch_file_num,branch_file_denom,excl_pixel=[],count_ra
         plt.axvline(pix_rate, ls=':', color='red' if pix_number in excl_pixel else 'grey',
                     zorder=-1)
 
-    plt.legend(loc='lower right')
+    plt.legend(loc='best')
     plt.tight_layout()
 
     if save_path is not None:
@@ -1503,6 +1503,114 @@ def resolve_BR(directory='auto_repro', anal_dir_suffix='',
 
             bashproc.sendline('exit')
 
+def resolve_counts_BR_Eevol(file,pixels='all',ebin=10,emin=0.,emax=12.):
+    '''
+    Largely adapted from Kai Matsunaga's code
+
+        ebin in eV
+
+        emin and emax in keV
+    '''
+
+    grade_colors={'Hp':'green','Mp':'blue','Ms':'cyan','Lp':'orange', 'Ls':'red'}
+
+    fits_evt= fits.open(file)
+
+    raw_energy=fits_evt[1].data['UPI']
+    raw_energy_mask=(fits_evt[1].data['UPI'] >=emin*1000) & (fits_evt[1].data['UPI'] <emax*1000)
+
+    if pixels!='all':
+        raw_pixels_mask=fits_evt[1].data['PIXEL'] in rsl_pixel_manip(pixels,mode='pi_list')
+    else:
+        raw_pixels_mask=True
+
+    raw_mask=raw_energy_mask & raw_pixels_mask
+
+    evt_energy_bin = np.round(fits_evt[1].data['UPI'][raw_energy_mask] / ebin) * ebin
+    evt_grade = fits_evt[1].data['TYPE'][raw_energy_mask]
+
+    # pandas の DataFrame に変換
+    df = pd.DataFrame({
+        'energy': evt_energy_bin,
+        'grade_type': evt_grade
+    })
+
+    # energyごとに grade_type の出現数を集計
+    pivot = df.groupby(['energy', 'grade_type']).size().unstack(fill_value=0)
+
+    fig_counts,ax_counts = plt.subplots(figsize=(12,6))
+
+    # ax1 = fig.add_axes([0.05, 0.1, 0.42, 0.8])
+
+    # 各 grade_type ごとに scatter プロット
+    for grade in pivot.columns:
+        ax_counts.scatter(pivot.index/1000, pivot[grade], label=grade, s=1 if grade=='Hp' else 2,color=grade_colors[grade])
+        ax_counts.plot(pivot.index/1000, pivot[grade], label='', zorder=2,color=grade_colors[grade],lw=1,
+                       alpha=0.3)
+
+    # ax1.tick_params(axis="x", which='major', direction='in', length=5, width=1)
+    # ax1.tick_params(axis="y", which='major', direction='in', length=5, width=1)
+    # ax1.tick_params(axis="x", which='minor', direction='in', length=2, width=1)
+    # ax1.tick_params(axis="y", which='minor', direction='in', length=2, width=1)
+
+    # ax1.xaxis.set_ticks_position('both')
+    # ax1.yaxis.set_ticks_position('both')
+
+    ax_counts.set_xlabel('Energy (keV)')
+    ax_counts.set_ylabel(str(ebin)+' eV binned Count rate')
+    # ax1.set_xlim(1000, 12000)
+    ax_counts.set_yscale('log')
+    ax_counts.set_ylim(1, 1e4)
+    ax_counts.set_xlim(emin,emax)
+
+    ax_counts.set_xticks(np.arange(0, 12,0.2), minor=True)
+
+    ax_counts.legend()
+    ax_counts.legend(markerscale=5)
+
+    # ax1.grid(True)
+    # ax1.set_title('Spectra')
+
+    ratio = pivot.div(pivot.sum(axis=1), axis=0)
+
+    fig_branch,ax_branch = plt.subplots(figsize=(12,6))
+
+    for grade in ratio.columns:
+        ax_branch.scatter(ratio.index/1000, ratio[grade], label=grade, s=1 if grade=='Hp' else 2, zorder=2,color=grade_colors[grade])
+        ax_branch.plot(ratio.index/1000, ratio[grade], label='', zorder=2,color=grade_colors[grade],lw=1,
+                       alpha=0.3)
+
+    ax_branch.set_xlabel('Energy (keV)')
+    ax_branch.set_ylabel(str(ebin)+' eV binned Event Grade Ratio')
+    # ax1.set_xlim(1000, 12000)
+    ax_branch.set_yscale('log')
+    ax_branch.set_xlim(emin,emax)
+    ax_branch.set_xticks(np.arange(0, 12,0.2), minor=True)
+
+    ax_branch.set_ylim(ax_branch.get_ylim()[0],1.1)
+    ax_branch.axhline(1,color='grey',lw=1)
+    ax_branch.legend()
+    ax_branch.legend(markerscale=5)
+
+    fig_counts.tight_layout()
+    fig_branch.tight_layout()
+
+    file_extension=file.split('/')[-1][file.split('/')[-1].rfind('.'):]
+    fig_counts.savefig(file.replace(file_extension,'_grade_evol_'+
+                                                  '_emin_'+str(emin).replace('.','p')+
+                                                  '_emax_' + str(emax).replace('.', 'p') +
+                                                  '_ebin_' + str(ebin).replace('.', 'p') +
+                                                    '.pdf'))
+
+    fig_branch.savefig(file.replace(file_extension,'_grade_ratio_evol'+
+                                                  '_emin_'+str(emin).replace('.','p')+
+                                                  '_emax_' + str(emax).replace('.', 'p') +
+                                                  '_ebin_' + str(ebin).replace('.', 'p') +
+                                                    '.pdf'))
+
+    breakpoint()
+
+
 def mpdaf_load_img(sky_img_path):
     # loading the IMG file with mpdaf
     with fits.open(sky_img_path) as hdul:
@@ -1541,7 +1649,7 @@ def target_deg(source_name,target_coords=None):
         if type(obj_auto['dec']) == np.float64 and type(obj_auto['ra']) == np.float64:
             obj_deg = [str(obj_auto['ra']), str(obj_auto['dec'])]
         else:
-            # careful the output after the first line is in dec,ra not ra,dec
+            # careful the output after the first grade is in dec,ra not ra,dec
             obj_deg = sexa2deg([float(obj_auto['dec']).replace(' ', ':'), float(obj_auto['ra']).replace(' ', ':')])[
                       ::-1]
             obj_deg = [str(obj_deg[0]), str(obj_deg[1])]
@@ -1675,8 +1783,6 @@ def mpdaf_plot_img(sky_img_path,rad_crop=[200,200],crop_coords=None,
             ax_catal_crop.text(circle_rad_pos[-1][0],circle_rad_pos[-1][1]+target_sizes[i_target]*target_names_offset[i_target],
                                curr_target_name,
                      color=target_colors[i_target],horizontalalignment='center')
-
-    breakpoint()
 
     # testing if the resulting image is empty
     if len(imgcrop_src.data.nonzero()[0]) == 0:
@@ -2049,8 +2155,9 @@ def rsl_pixel_manip(pixel_str,remove_cal_pxl_resolve=True,mode='default',region_
         pixel_ok_list = [elem for elem in pixel_ok_list if elem not in [12]]
 
     if mode=='pix_list':
-        return pixel_ok_list
-    pixel_ok_inter = interval_extract(pixel_ok_list)
+        return np.array(pixel_ok_list)
+
+    pixel_ok_inter = list(interval_extract(pixel_ok_list))
 
 
     #preventing the bug for xselect
@@ -3940,7 +4047,8 @@ def create_arf(instrument,out_rtfile,source_ra,source_dec,emap_file,out_file,
                        ' frontreffile=CALDB'+
                        ' backreffile=CALDB'+
                        ' pcolreffile=CALDB'+
-                       ' scatterfile=CALDB')
+                       ' scatterfile=CALDB'+
+                       ' chatter=3')
 
     out_code=spawn_use.expect(['Error during subroutine finalize','xaxmaarfgen: Fraction of PSF inside Region'],
                      timeout=None)
@@ -3961,6 +4069,7 @@ def extract_arf(directory='auto_repro',anal_dir_suffix='',on_axis_check=None,arf
                 source_name='auto',
                 target_only=False,use_file_target=True,
                 source_type='POINT',
+                suffix='',
                 flatradius=3,
                 arf_image=None,
                 instru='all',use_comb_rmf_rsl=True,
@@ -4221,8 +4330,9 @@ def extract_arf(directory='auto_repro',anal_dir_suffix='',on_axis_check=None,arf
                                                     '_' + source_type
                                                     + ('_fr' + str(flatradius).replace('.', 'p')
                                                           if source_type == 'FLATCIRCLE' else '')
-                                                    + ('_img_' + arf_image[:arf_image.rfind('.')]
+                                                    + ('_img_' + arf_image[:arf_image.rfind('.')].split('/')[-1]
                                                           if source_type == 'IMAGE' else '')
+                                                    + ('_' + suffix if suffix != '' else '')
                                                                         + '.arf').replace(
                                                         anal_dir, '.').replace(',','and')
 
@@ -4300,8 +4410,9 @@ def extract_arf(directory='auto_repro',anal_dir_suffix='',on_axis_check=None,arf
                                                     '_' + source_type
                                                    + ('_fr' + str(flatradius).replace('.', 'p')
                                                                if source_type == 'FLATCIRCLE' else '')
-                                                   + ('_img_' + arf_image[:arf_image.rfind('.')]
+                                                   + ('_img_' + arf_image[:arf_image.rfind('.')].split('/')[-1]
                                                       if source_type == 'IMAGE' else '')
+                                                   + ('_' + suffix if suffix != '' else '')
                                                    + '.arf').replace(
                                                         anal_dir, '.').replace(',','and')
 
@@ -4750,3 +4861,148 @@ def cut_xrism_arf(xrism_arf_path,e_low_new,e_high_new):
         cut_arf[1].header['NAXIS2']=len(cut_arf[1].data)
 
         cut_arf.flush()
+
+
+def loop_anal_pix(pixlist='all',rmf_type='L',repro_suffix = 'reprocorr',
+                  grades='0:1'):
+    '''
+    grades:
+        directly translated with a , for the rmf so will be wrong if using intervals and not one or two
+    '''
+
+    if pixlist=='all':
+        pixlist_use=range(36)
+
+
+
+    for i in pixlist_use:
+        if i==12:
+            pass
+
+        anal_suffix='pixindiv_'+str(i)
+
+        init_anal(directory='auto_repro', anal_dir_suffix=anal_suffix,
+                  resolve_filters='open', xtd_config='all', gz=False,
+                  repro_suffix=repro_suffix)
+
+        resolve_RTS(directory='auto_repro', anal_dir_suffix=anal_suffix,
+                    heasoft_init_alias='heainit', caldb_init_alias='caldbinit',
+                    parallel=False, repro_suffix=repro_suffix)
+
+        resolve_BR(directory='auto_repro', anal_dir_suffix=anal_suffix,
+                   use_raw_evt_rsl=False,
+                   task='rslbratios',
+                   lightcurves=False,
+                   emin=2, emax=12,
+                   remove_cal_pxl_resolve=False,
+                   pixel_filter_rule='only_'+str(i),
+                   heasoft_init_alias='heainit', caldb_init_alias='caldbinit',
+                   parallel=False, repro_suffix=repro_suffix, plot_hp_sim_curve_band=True)
+
+        extract_sp(directory='auto_repro', anal_dir_suffix=anal_suffix, sp_subdir='sp',
+                   use_raw_evt_xtd=False, use_raw_evt_rsl=False,
+                   instru='resolve',
+                   region_src_xtd='auto', region_bg_xtd='auto',
+                   pixel_str_rsl='branch_filter', grade_str_rsl=grades,
+                   remove_cal_pxl_resolve=True,
+                   gti=None, gti_subdir='gti',
+                   e_low_rsl=None, e_high_rsl=None,
+                   e_low_xtd=None, e_high_xtd=None,
+                   screen_reg=True, sudo_screen=False,
+                   heasoft_init_alias='heainit', caldb_init_alias='caldbinit',
+                   parallel=False, repro_suffix=repro_suffix)
+
+
+        extract_rmf(directory='auto_repro', instru='resolve', rmf_subdir='sp',
+                        # resolve options
+                        rmf_type_rsl=rmf_type, pixel_str_rsl='branch_filter',
+                    rsl_rmf_grade=grades.replace(':',','),
+                        split_rmf_rsl=True,
+                        comb_rmf_rsl=True,
+                        remove_cal_pxl_resolve=True,
+                        # resolve grid
+                        # eminin_rsl=300,dein_rsl=0.5,nchanin_rsl=23400,
+                        eminin_rsl=0, dein_rsl=0.5, nchanin_rsl=60000,
+                        useingrd_rsl=True,
+                        e_band_evt_rsl_rmf='2-12',
+                        # xtend grid
+                        eminin_xtd=200., dein_xtd='"2,24"', nchanin_xtd='"5900,500"',
+                        eminout_xtd=0., deout_xtd=6, nchanout_xtd=4096,
+                        # general event options and gti selection
+                        use_raw_evt_rsl=False, use_raw_evt_xtd=False,
+                        gti=None, gti_subdir='gti',
+                        # common arguments
+                        anal_dir_suffix=anal_suffix, heasoft_init_alias='heainit', caldb_init_alias='caldbinit',
+                        parallel=False, repro_suffix=repro_suffix)
+
+        extract_arf(directory='auto_repro',anal_dir_suffix=anal_suffix,on_axis_check=None,arf_subdir='sp',
+                    source_coords=('17:45:40.476', '-29:00:46.10'),
+                    source_name='MAXIJ1744-294',
+                    target_only=False,use_file_target=True,
+                    suffix='MAXIJ1744-294',
+                    source_type='POINT',
+                    flatradius=3,
+                    arf_image=None,
+                    instru='resolve',use_comb_rmf_rsl=rmf_type=='X',
+                    use_raw_evt_xtd=False, use_raw_evt_rsl=False,
+                    region_src_xtd='auto', region_bg_xtd='auto',
+                    pixel_str_rsl='branch_filter', grade_str_rsl=grades,
+                    remove_cal_pxl_resolve=True,
+                    gti=None, gti_subdir='gti',skip_gti_emap=True,
+                    # e_low_rsl=None, e_high_rsl=None,
+                    e_low_rsl=0.3, e_high_rsl=12.0,
+                    #default values in hte pipeline
+                    e_low_xtd=0.3, e_high_xtd=15.0,
+                    e_low_image=0.0, e_high_image=0.0,
+                    numphoton=100000,
+                    minphoton=100,
+                    heasoft_init_alias='heainit', caldb_init_alias='caldbinit',
+                    parallel=False,repro_suffix=repro_suffix)
+
+        extract_arf(directory='auto_repro',anal_dir_suffix=anal_suffix,on_axis_check=None,arf_subdir='sp',
+                    source_coords=('17:45:43.1813', '-29:00:22.924'),
+                    source_name='SgrAEast',
+                    target_only=False,use_file_target=True,
+                    suffix='SgrAEast',
+                    source_type='IMAGE',
+                    flatradius=3,
+                    arf_image='/media/parrazyte/crucial_SSD/Observ/BHLMXB/XRISM/MAXIJ1744-294/Hideki/chandra_SgrAeast_FeKa25.img',
+                    instru='resolve',use_comb_rmf_rsl=rmf_type=='X',
+                    use_raw_evt_xtd=False, use_raw_evt_rsl=False,
+                    region_src_xtd='auto', region_bg_xtd='auto',
+                    pixel_str_rsl='branch_filter', grade_str_rsl=grades,
+                    remove_cal_pxl_resolve=True,
+                    gti=None, gti_subdir='gti',skip_gti_emap=True,
+                    # e_low_rsl=None, e_high_rsl=None,
+                    e_low_rsl=0.3, e_high_rsl=12.0,
+                    #default values in hte pipeline
+                    e_low_xtd=0.3, e_high_xtd=15.0,
+                    e_low_image=6.6, e_high_image=6.8,
+                    numphoton=100000,
+                    minphoton=100,
+                    heasoft_init_alias='heainit', caldb_init_alias='caldbinit',
+                    parallel=False,repro_suffix=repro_suffix)
+
+        extract_arf(directory='auto_repro',anal_dir_suffix=anal_suffix,on_axis_check=None,arf_subdir='sp',
+                    source_coords=['17 45 35.6400', '-29 01 33.888'],
+                    source_name='AXJ1745.6-2901',
+                    target_only=False,use_file_target=True,
+                    suffix='AXJ1745.6-2901',
+                    source_type='POINT',
+                    flatradius=3,
+                    arf_image=None,
+                    instru='resolve',use_comb_rmf_rsl=rmf_type=='X',
+                    use_raw_evt_xtd=False, use_raw_evt_rsl=False,
+                    region_src_xtd='auto', region_bg_xtd='auto',
+                    pixel_str_rsl='branch_filter', grade_str_rsl=grades,
+                    remove_cal_pxl_resolve=True,
+                    gti=None, gti_subdir='gti',skip_gti_emap=True,
+                    # e_low_rsl=None, e_high_rsl=None,
+                    e_low_rsl=0.3, e_high_rsl=12.0,
+                    #default values in hte pipeline
+                    e_low_xtd=0.3, e_high_xtd=15.0,
+                    e_low_image=0.0, e_high_image=0.0,
+                    numphoton=100000,
+                    minphoton=100,
+                    heasoft_init_alias='heainit', caldb_init_alias='caldbinit',
+                    parallel=False,repro_suffix=repro_suffix)

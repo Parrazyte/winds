@@ -54,7 +54,7 @@ else:
 
 # custom model loads
 if not streamlit_mode and model_dir!=None:
-    AllModels.lmod('relxill',dirPath=model_dir+'/relxill')
+    # AllModels.lmod('relxill',dirPath=model_dir+'/relxill')
 
     # AllModels.lmod('fullkerr',dirPath=model_dir+'/fullkerr')
     # #swiftJ1658 dust scattering halo model from Jin2019

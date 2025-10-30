@@ -321,21 +321,21 @@ if online:
     include_untested= st.sidebar.toggle('Include untested and preliminary NICER sources',value=False if line_search_e_str=='4 10 0.05' else True)
 
     st.info('''
-    The current version is experimental as I'm currently implementing many new fonctionalities, for a new study on 4U 1630-47.
+    The current version is significantly expanded compare to [Parra et al. 2024](https://doi.org/10.1051/0004-6361/202346920), and can be used to reproduce most plots of [Parra et al. 2025](https://doi.org/10.1051/0004-6361/202554976)
+     among other things (dynamic point additions and Eddington fractions,...)
+        
+    The "about" part will be updated in time.
     
-    See https://theses.fr/s296242 (manuscript soon up).
-    
-    The "about" part will be updated once the first paper on 4U 1630-47 will be accepted.
-    
-    Feel free to contact me at maxime.parrastro@gmail.com if you find bugs.
+    Feel free to contact me at maxime.parrastro@gmail.com if you find bugs or have questions.
     #''', icon="ℹ️")
 
     st.info('''
-    The BAT Transient Monitoring lighcurves are in the process of being reprocessed and thus some chunks of data may be missing and/or incorrect.
+    Many of the BAT Transient Monitoring lighcurves were reprocessed in 2024 and thus some chunks of data may be missing and/or incorrect.
     #''', icon="ℹ️")
 
 
 else:
+
     with st.sidebar:
         if not BID_mode:
             include_full=st.toggle('Include problematic data (_full) folders')

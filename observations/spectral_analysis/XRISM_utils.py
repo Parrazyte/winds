@@ -31,6 +31,7 @@ def xrism_ls(baseload,low_e,high_e,plot_suffix="",bound_around=0.1,e_step=5e-3,l
         sources_forflux:
             -which source will be considered for the flux base computation for the line search
 
+    Notes: needs a default model without a name in the first datagroup. Preferentially the main source, for things to make sense
     '''
     Plot.xLog = False
     Fit.statMethod = 'cstat'
@@ -133,7 +134,8 @@ def xrism_ls_loader(dump_path,ener_show_range,force_ylog_ratio=True,ratio_bounds
                      force_side_lines=force_side_lines,minor_locator=minor_locator,
                      show_peak_pos=show_peak_pos,show_peak_width=show_peak_width)
 
-    plot_line_search(narrow_out_val, './', 'XRISM', suffix=dump_path[:dump_path.rfind('.')], save=save,
+    if save:
+        plot_line_search(narrow_out_val, './', 'XRISM', suffix=dump_path[:dump_path.rfind('.')], save=save,
                      epoch_observ=[suffix], format='png',
                      force_ylog_ratio=force_ylog_ratio,ratio_bounds=ratio_bounds,ener_show_range=ener_show_range,
                      show_indiv_transi=show_indiv_transi,title=False,squished_mode=squished_mode,

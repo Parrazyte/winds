@@ -317,22 +317,8 @@ def hid_graph(ax_hid, dict_linevis,
                                                 (lum_broad_single[1]) ** 2) ** (1 / 2)
 
     else:
-
-        # log x scale for an easier comparison with Ponti diagrams
-        if hid_log_HR:
-            ax_hid.set_xscale('log')
-
-            if display_HR_minorticks:
-                if ax_hid.get_xlim()[0] > 0.1:
-                    ax_hid.xaxis.set_major_formatter(mpl.ticker.StrMethodFormatter("{x:.1f}"))
-                    ax_hid.xaxis.set_minor_formatter(mpl.ticker.StrMethodFormatter("{x:.1f}"))
-                else:
-                    ax_hid.xaxis.set_major_formatter(mpl.ticker.StrMethodFormatter("{x:.2f}"))
-                    ax_hid.xaxis.set_minor_formatter(mpl.ticker.StrMethodFormatter("{x:.2f}"))
-
-        ax_hid.set_xlabel('Hardness Ratio ([6-10]/[3-6] keV bands)')
-        ax_hid.set_ylabel(r'Luminosity in the [3-10] keV band in (L/L$_{Edd}$) units')
-        ax_hid.set_yscale('log')
+        pass
+        #put at the end for the abbreviation to correctly depend on the axis limits
 
     # recreating some variables
 
@@ -1925,6 +1911,24 @@ def hid_graph(ax_hid, dict_linevis,
         ax_hid.fill_between([restrict_HR_high, ax_hid.get_xlim()[1]], [ax_hid.get_ylim()[0], ax_hid.get_ylim()[0]],
                             [ax_hid.get_ylim()[1], ax_hid.get_ylim()[1]],
                             color='grey', alpha=0.2)
+
+
+    if not broad_mode:
+        # log x scale for an easier comparison with Ponti diagrams
+        if hid_log_HR:
+            ax_hid.set_xscale('log')
+
+            if display_HR_minorticks:
+                if ax_hid.get_xlim()[0] > 0.1:
+                    ax_hid.xaxis.set_major_formatter(mpl.ticker.StrMethodFormatter("{x:.1f}"))
+                    ax_hid.xaxis.set_minor_formatter(mpl.ticker.StrMethodFormatter("{x:.1f}"))
+                else:
+                    ax_hid.xaxis.set_major_formatter(mpl.ticker.StrMethodFormatter("{x:.2f}"))
+                    ax_hid.xaxis.set_minor_formatter(mpl.ticker.StrMethodFormatter("{x:.2f}"))
+
+        ax_hid.set_xlabel('Hardness Ratio ([6-10]/[3-6] keV bands)')
+        ax_hid.set_ylabel(r'Luminosity in the [3-10] keV band in (L/L$_{Edd}$) units')
+        ax_hid.set_yscale('log')
 
     ''''''''''''''''''
     #### legends

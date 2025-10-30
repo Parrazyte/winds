@@ -321,7 +321,7 @@ if online:
     include_untested= st.sidebar.toggle('Include untested and preliminary NICER sources',value=False if line_search_e_str=='4 10 0.05' else True)
 
     st.info('''
-    The current version is significantly expanded compare to [Parra et al. 2024](https://doi.org/10.1051/0004-6361/202346920), and can be used to reproduce most plots of [Parra et al. 2025](https://doi.org/10.1051/0004-6361/202554976)
+    The current version is significantly expanded compared to [Parra et al. 2024](https://doi.org/10.1051/0004-6361/202346920), and can be used to reproduce most plots of [Parra et al. 2025](https://doi.org/10.1051/0004-6361/202554976)
      among other things (dynamic point additions and Eddington fractions,...)
         
     The "about" part will be updated in time.

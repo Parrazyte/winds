@@ -38,6 +38,13 @@ from astroquery.simbad import Simbad
 from mpdaf.obj import sexa2deg,deg2sexa,Image
 from mpdaf.obj import WCS as mpdaf_WCS
 from astropy.wcs import WCS as astroWCS
+
+import matplotlib.pyplot as plt
+import numpy as np
+import matplotlib.colors as colors
+from matplotlib.patches import Polygon
+
+
 # from mpdaf.obj import deg2sexa
 
 # image processing imports:
@@ -1663,7 +1670,7 @@ def target_deg(source_name,target_coords=None):
 
 def mpdaf_plot_img(sky_img_path,rad_crop=[200,200],crop_coords=None,
                    target_name_list=[None],target_coords_list='target',
-                   target_sizes=[10],target_colors=['red'],
+                   target_sizes_pix=[10],target_colors=['red'],
                    target_names=['auto'],target_names_offset=[1.1],
                    title='',save=False):
 
@@ -1673,14 +1680,21 @@ def mpdaf_plot_img(sky_img_path,rad_crop=[200,200],crop_coords=None,
         The crop is made centered on the position of the first source if crop_coords is None, otherwise to
         the coordinates given
 
-        source_names/target_coords/target_sizes: iterables of the same len
+        source_names/target_coords/target_sizes_pix: iterables of the same len
         source_names/target_coords are used in target_deg to get the position of the sources
-        target_sizes gives the source region
+        target_sizes_pix gives the source region
+
+        target_cords_list:
+
+            'target' to follow the targets
+
+            note: by default target_sizes_pix is in pixlels, so will have to be converted accordingly
+            reminder: xtend r_arsec=1.768*r_pixel
     '''
 
     img_obj_whole,src_mpdaf_WCS,src_astro_WCS=mpdaf_load_img(sky_img_path)
 
-    if target_name_list[0] is None and target_coords_list[0] is None:
+    if target_name_list[0] is None and (target_coords_list[0] is None or target_coords_list=='target'):
         obj_deg_list=[]
     else:
         obj_deg_list=np.array([target_deg(elem_source_name,elem_target_coords) for
@@ -1692,8 +1706,8 @@ def mpdaf_plot_img(sky_img_path,rad_crop=[200,200],crop_coords=None,
         with fits.open(sky_img_path) as hdul:
             crop_center=[hdul[0].header['RA_PNT'],hdul[0].header['DEC_PNT']]
     else:
-        crop_center=crop_coords
-    if len(obj_deg_list)!=0:
+        crop_center=sexa2deg(crop_coords[::-1])[::-1]
+    if len(obj_deg_list)!=0 or crop_coords!=None:
         try:
             imgcrop_src = img_obj_whole.copy().subimage(center=crop_center[::-1], size=rad_crop)
         except:
@@ -1772,7 +1786,7 @@ def mpdaf_plot_img(sky_img_path,rad_crop=[200,200],crop_coords=None,
         #
         # breakpoint()
 
-        target_circles+= [plt.Circle([circle_rad_pos[-1][0], circle_rad_pos[-1][1]], target_sizes[i_target],
+        target_circles+= [plt.Circle([circle_rad_pos[-1][0], circle_rad_pos[-1][1]], target_sizes_pix[i_target],
                             color=target_colors[i_target], zorder=1000, fill=False)]
         if target_names[i_target]!='':
             if target_names[i_target]=='auto':
@@ -1780,7 +1794,7 @@ def mpdaf_plot_img(sky_img_path,rad_crop=[200,200],crop_coords=None,
             else:
                 curr_target_name=target_names[i_target]
 
-            ax_catal_crop.text(circle_rad_pos[-1][0],circle_rad_pos[-1][1]+target_sizes[i_target]*target_names_offset[i_target],
+            ax_catal_crop.text(circle_rad_pos[-1][0],circle_rad_pos[-1][1]+target_sizes_pix[i_target]*target_names_offset[i_target],
                                curr_target_name,
                      color=target_colors[i_target],horizontalalignment='center')
 
@@ -2207,7 +2221,7 @@ def xsel_util(evt_path,save_path,mode,directory='./',
     xtend arcsec to pix conversion:
     n_acsec=1.767984120108072*n_pix
 
-    mode='img','lc' or 'spectrum'
+    mode='image','lc' or 'spectrum'
 
     products only arguments:
         region_str
@@ -2311,6 +2325,8 @@ A1: For Heasoft ver. 6.34, you need to execute the save command between "pixel s
     if line_code==0:
         spawn_use.sendline('yes')
         spawn_use.expect(['Observation Catalogue'])
+
+    time.sleep(1)
     spawn_use.sendline('set image '+image_mode)
 
     temp_evt_name=None
@@ -3309,7 +3325,8 @@ def extract_sp(directory='auto_repro', anal_dir_suffix='',sp_subdir='sp',
                    e_low_xtd=None,e_high_xtd=None,
                    screen_reg=True,sudo_screen=False,
                    heasoft_init_alias='heainit', caldb_init_alias='caldbinit',
-                   parallel=False,repro_suffix='repro'):
+                   parallel=False,repro_suffix='repro',
+                   image_mode='DET'):
 
     '''
 
@@ -3494,7 +3511,7 @@ def extract_sp(directory='auto_repro', anal_dir_suffix='',sp_subdir='sp',
                                   e_low=e_low_xtd,
                                   e_high=e_high_xtd,
                                   spawn=bashproc,
-                                  gti_file=elem_gti_file)
+                                  gti_file=elem_gti_file,image_mode=image_mode)
 
 
                 else:
@@ -3537,7 +3554,7 @@ def extract_sp(directory='auto_repro', anal_dir_suffix='',sp_subdir='sp',
                                   e_low=e_low_rsl,
                                   e_high=e_high_rsl,
                                   spawn=bashproc,
-                                  gti_file=elem_gti_file)
+                                  gti_file=elem_gti_file,image_mode=image_mode)
 
                     if e_low_rsl is not None and e_high_rsl is not None:
                         #creating a copy of the spectrum with only the right bins to be compatible with the cut rmf and arf
@@ -3937,8 +3954,10 @@ def create_expo(anal_dir,instrument,evt_file,gti_file,directory='auto_repro',out
         # to the xtend configuration of the evt
         badimg_file=[os.path.join(anal_dir_out_prefix,elem) for elem in files_dir if '.bimg' in elem
                      and not elem.endswith('.gpg') and evt_file.split('/')[-1].split('_')[1] in elem][0]
+
         pixgti_file=[os.path.join(anal_dir_out_prefix,elem) for elem in files_dir if '.fpix' in elem
-                     and not elem.endswith('.gpg') and evt_file.split('/')[-1].split('_')[1] in elem][0]
+                     and not elem.endswith('.gpg') and evt_file.split('/')[-1].split('_')[1].replace('p','')
+                     and 'event_uf' in elem][0]
 
     if gti_file is None:
         gti_file_use=evt_file
@@ -3992,7 +4011,8 @@ def create_arf(instrument,out_rtfile,source_ra,source_dec,emap_file,out_file,
                 numphoton=300000,minphoton=100,
                 telescope='XRISM',
                 spawn=None,heasoft_init_alias='heainit', caldb_init_alias='caldbinit',
-               e_low_image=0.0, e_high_image=0.0):
+               e_low_image=0.0, e_high_image=0.0,
+               reg_mode='DET'):
 
     '''
     Wrapper around the heasoft xaarfgen to compute an arf for a given instrument
@@ -4025,7 +4045,7 @@ def create_arf(instrument,out_rtfile,source_ra,source_dec,emap_file,out_file,
                        ' source_dec='+str(source_dec)+''+
                        ' instrume='+instrument+
                        ' emapfile='+emap_file+
-                       ' regmode=DET'+
+                       ' regmode='+reg_mode+
                        ' regionfile='+region_file+
                        ' sourcetype='+source_type+
                      (' flatradius='+str(flatradius) if source_type=='FLATCIRCLE' else '')+
@@ -4075,6 +4095,7 @@ def extract_arf(directory='auto_repro',anal_dir_suffix='',on_axis_check=None,arf
                 instru='all',use_comb_rmf_rsl=True,
                 use_raw_evt_xtd=False, use_raw_evt_rsl=False,
                 region_src_xtd='auto', region_bg_xtd='auto',
+                reg_mode='DET',
                 pixel_str_rsl='branch_filter', grade_str_rsl='0:1',
                 remove_cal_pxl_resolve=True,
                 gti=None, gti_subdir='gti',skip_gti_emap=True,
@@ -4090,14 +4111,14 @@ def extract_arf(directory='auto_repro',anal_dir_suffix='',on_axis_check=None,arf
 
     '''
 
-    center of cropped Sgr A east image (important for computations on Sag A east arf
+    center of cropped Sgr A east image (can be important for computations on Sag A east arf)
     ('17:45:43.1813', '-29:00:22.924')
 
     MAXI J1744-294:
     ('17:45:40.476', '-29:00:46.10')
 
     AXJ1745.6-2901:
-    ['17 45 35.6400', '-29 01 33.888']
+    ['17:45:35.6400', '-29:01:33.888']
 
     Extract arf from event files in the analysis/arf_subdir of an observation directory
 
@@ -4126,6 +4147,8 @@ def extract_arf(directory='auto_repro',anal_dir_suffix='',on_axis_check=None,arf
         arf_image: the image to be used to make the arf.
         e_low_image/e_high_image: lower and upper energy bounds of the image
 
+    -reg_mode:
+        DET for detector (standard) or RADEC for sky
     use_raw_evt_xtd/use_raw_evt_rsl determine if the images are created from raw or filtered evts
 
 
@@ -4353,7 +4376,8 @@ def extract_arf(directory='auto_repro',anal_dir_suffix='',on_axis_check=None,arf
                                    spawn=bashproc,
                                    image=arf_image,
                                    e_low_image=e_low_image,
-                                   e_high_image=e_high_image)
+                                   e_high_image=e_high_image,
+                                   reg_mode=reg_mode)
 
                 else:
 
@@ -4433,7 +4457,9 @@ def extract_arf(directory='auto_repro',anal_dir_suffix='',on_axis_check=None,arf
                                    spawn=bashproc,
                                    image=arf_image,
                                    e_low_image=e_low_image,
-                                   e_high_image=e_high_image)
+                                   e_high_image=e_high_image,
+                                   reg_mode=reg_mode)
+
 
 
 def rsl_mkrsp(
@@ -4501,8 +4527,8 @@ def rsl_mkrsp(
     ' includels=' +('yes' if includels else 'no')+\
     ' gfelo=' +str(gfelo)+\
     ' gfehi=' +str(gfehi)+\
-                       ((' splitrmf='+("yes" if splitcomb else "no")+\
-    ' splitcomb='+("yes" if splitcomb else "no")) if whichrmf=='X' else '')+\
+                       ' splitrmf='+("yes" if splitrmf and whichrmf=='X' else "no")+\
+    ' splitcomb='+("yes" if splitcomb and whichrmf=='X' else "no")+\
     ' resolist=' + resolist +\
     ' pixlist="' + pixlist+ '"' +\
     ' whichrmf=' + whichrmf +\
@@ -4544,9 +4570,9 @@ def rsl_mkrsp(
     ' gfelo=' +str(gfelo)+
     ' gfehi=' +str(gfehi)+
     #rmf
-                       ((' splitrmf='+("yes" if splitcomb else "no")+\
-    ' splitcomb='+("yes" if splitcomb else "no")) if whichrmf=='X' else '')+
-    ' resolist="' + resolist +'"'+
+                       ' splitrmf=' + ("yes" if splitrmf and whichrmf == 'X' else "no") + \
+                       ' splitcomb=' + ("yes" if splitcomb and whichrmf == 'X' else "no") + \
+                       ' resolist="' + resolist +'"'+
     ' pixlist="' + pixlist+ '"' +
     ' whichrmf=' + whichrmf +
     ' eminin=' + str(eminin) +
@@ -4636,6 +4662,7 @@ def extract_rsp(directory='auto_repro',rsp_subdir='sp', anal_dir_suffix='',
                 #common arguments
                 heasoft_init_alias='heainit', caldb_init_alias='caldbinit',
                 parallel=False,repro_suffix='repro',
+                premade_expmap='',
                 ):
 
     '''
@@ -4645,6 +4672,11 @@ def extract_rsp(directory='auto_repro',rsp_subdir='sp', anal_dir_suffix='',
     note that this task does not require creating regions for the arf, the pixel list is used directly
 
     gti consideration not yet implemented
+
+    for now the arf file should be put as a direct file name and is assumed to be in the analysis directory
+
+    premade_expmap:
+        uses already computed expomap instead of remaking it. the path should be from the analysis directory
     '''
 
     bashproc = pexpect.spawn("/bin/bash", encoding='utf-8')
@@ -4751,7 +4783,11 @@ def extract_rsp(directory='auto_repro',rsp_subdir='sp', anal_dir_suffix='',
                                      elem_gti_file.replace(anal_dir,'.')
 
                 #building the exposure map
-                expo_path=create_expo(os.path.join(anal_dir,rsp_dir),
+
+                if premade_expmap!='':
+                    expo_path=os.path.join('..',premade_expmap)
+                else:
+                    expo_path=create_expo(os.path.join(anal_dir,rsp_dir),
                                       instrument='resolve',
                             evt_file=os.path.join('..',elem_evt.replace(anal_dir,'.')),
                             gti_file=os.path.join('..',gti_path_forexpo),
@@ -4935,11 +4971,35 @@ def loop_anal_pix(pixlist='all',rmf_type='L',repro_suffix = 'reprocorr',
                         anal_dir_suffix=anal_suffix, heasoft_init_alias='heainit', caldb_init_alias='caldbinit',
                         parallel=False, repro_suffix=repro_suffix)
 
+        # extract_arf(directory='auto_repro',anal_dir_suffix=anal_suffix,on_axis_check=None,arf_subdir='sp',
+        #             source_coords=('17:45:40.476', '-29:00:46.10'),
+        #             source_name='MAXIJ1744-294',
+        #             target_only=False,use_file_target=True,
+        #             suffix='MAXIJ1744',
+        #             source_type='POINT',
+        #             flatradius=3,
+        #             arf_image=None,
+        #             instru='resolve',use_comb_rmf_rsl=rmf_type=='X',
+        #             use_raw_evt_xtd=False, use_raw_evt_rsl=False,
+        #             region_src_xtd='auto', region_bg_xtd='auto',
+        #             pixel_str_rsl='branch_filter', grade_str_rsl=grades,
+        #             remove_cal_pxl_resolve=True,
+        #             gti=None, gti_subdir='gti',skip_gti_emap=True,
+        #             # e_low_rsl=None, e_high_rsl=None,
+        #             e_low_rsl=0.3, e_high_rsl=12.0,
+        #             #default values in hte pipeline
+        #             e_low_xtd=0.3, e_high_xtd=15.0,
+        #             e_low_image=0.0, e_high_image=0.0,
+        #             numphoton=300000,
+        #             minphoton=100,
+        #             heasoft_init_alias='heainit', caldb_init_alias='caldbinit',
+        #             parallel=False,repro_suffix=repro_suffix)
+
         extract_arf(directory='auto_repro',anal_dir_suffix=anal_suffix,on_axis_check=None,arf_subdir='sp',
-                    source_coords=('17:45:40.476', '-29:00:46.10'),
-                    source_name='MAXIJ1744-294',
+                    source_coords=['17 45 35.6400', '-29 01 33.888'],
+                    source_name='AXJ1745.6-2901',
                     target_only=False,use_file_target=True,
-                    suffix='MAXIJ1744-294',
+                    suffix='AXJ1745',
                     source_type='POINT',
                     flatradius=3,
                     arf_image=None,
@@ -4954,7 +5014,30 @@ def loop_anal_pix(pixlist='all',rmf_type='L',repro_suffix = 'reprocorr',
                     #default values in hte pipeline
                     e_low_xtd=0.3, e_high_xtd=15.0,
                     e_low_image=0.0, e_high_image=0.0,
-                    numphoton=100000,
+                    numphoton=300000,
+                    minphoton=100,
+                    heasoft_init_alias='heainit', caldb_init_alias='caldbinit',
+                    parallel=False,repro_suffix=repro_suffix)
+
+        extract_arf(directory='auto_repro',anal_dir_suffix=anal_suffix,on_axis_check=None,arf_subdir='sp',
+                    source_coords=('17:45:43.1813', '-29:00:22.924'),
+                    source_name='diffuse',
+                    target_only=False,use_file_target=True,
+                    suffix='diffuse',
+                    source_type='FLATCIRCLE',
+                    flatradius=3,
+                    instru='resolve',use_comb_rmf_rsl=rmf_type=='X',
+                    use_raw_evt_xtd=False, use_raw_evt_rsl=False,
+                    region_src_xtd='auto', region_bg_xtd='auto',
+                    pixel_str_rsl='branch_filter', grade_str_rsl=grades,
+                    remove_cal_pxl_resolve=True,
+                    gti=None, gti_subdir='gti',skip_gti_emap=True,
+                    # e_low_rsl=None, e_high_rsl=None,
+                    e_low_rsl=0.3, e_high_rsl=12.0,
+                    #default values in hte pipeline
+                    e_low_xtd=0.3, e_high_xtd=15.0,
+                    e_low_image=0., e_high_image=0.,
+                    numphoton=300000,
                     minphoton=100,
                     heasoft_init_alias='heainit', caldb_init_alias='caldbinit',
                     parallel=False,repro_suffix=repro_suffix)
@@ -4978,31 +5061,316 @@ def loop_anal_pix(pixlist='all',rmf_type='L',repro_suffix = 'reprocorr',
                     #default values in hte pipeline
                     e_low_xtd=0.3, e_high_xtd=15.0,
                     e_low_image=6.6, e_high_image=6.8,
-                    numphoton=100000,
+                    numphoton=300000,
                     minphoton=100,
                     heasoft_init_alias='heainit', caldb_init_alias='caldbinit',
                     parallel=False,repro_suffix=repro_suffix)
 
-        extract_arf(directory='auto_repro',anal_dir_suffix=anal_suffix,on_axis_check=None,arf_subdir='sp',
-                    source_coords=['17 45 35.6400', '-29 01 33.888'],
-                    source_name='AXJ1745.6-2901',
-                    target_only=False,use_file_target=True,
-                    suffix='AXJ1745.6-2901',
-                    source_type='POINT',
-                    flatradius=3,
-                    arf_image=None,
-                    instru='resolve',use_comb_rmf_rsl=rmf_type=='X',
-                    use_raw_evt_xtd=False, use_raw_evt_rsl=False,
-                    region_src_xtd='auto', region_bg_xtd='auto',
-                    pixel_str_rsl='branch_filter', grade_str_rsl=grades,
-                    remove_cal_pxl_resolve=True,
-                    gti=None, gti_subdir='gti',skip_gti_emap=True,
-                    # e_low_rsl=None, e_high_rsl=None,
-                    e_low_rsl=0.3, e_high_rsl=12.0,
-                    #default values in hte pipeline
-                    e_low_xtd=0.3, e_high_xtd=15.0,
-                    e_low_image=0.0, e_high_image=0.0,
-                    numphoton=100000,
-                    minphoton=100,
-                    heasoft_init_alias='heainit', caldb_init_alias='caldbinit',
-                    parallel=False,repro_suffix=repro_suffix)
+
+
+
+def xaxmaarfgen_looper(rtfile,rmf,expmap,weight_dir_suffix='',pixels='all',heasoft_init_alias='heainit', caldb_init_alias='caldbinit'):
+
+    '''
+    looper for psf weights
+
+    files should be relative paths from the analysis directory
+    '''
+
+    pixel_reg_string = {
+        0: "box(4,3,1,1,0)",
+        1: "box(6,3,1,1,0)",
+        2: "box(5,3,1,1,0)",
+        3: "box(6,2,1,1,0)",
+        4: "box(5,2,1,1,0)",
+        5: "box(6,1,1,1,0)",
+        6: "box(5,1,1,1,0)",
+        7: "box(4,2,1,1,0)",
+        8: "box(4,1,1,1,0)",
+        9: "box(1,3,1,1,0)",
+        10: "box(2,3,1,1,0)",
+        11: "box(1,2,1,1,0)",
+        13: "box(2,2,1,1,0)",
+        14: "box(2,1,1,1,0)",
+        15: "box(3,2,1,1,0)",
+        16: "box(3,1,1,1,0)",
+        17: "box(3,3,1,1,0)",
+        18: "box(3,4,1,1,0)",
+        19: "box(1,4,1,1,0)",
+        20: "box(2,4,1,1,0)",
+        21: "box(1,5,1,1,0)",
+        22: "box(2,5,1,1,0)",
+        23: "box(1,6,1,1,0)",
+        24: "box(2,6,1,1,0)",
+        25: "box(3,5,1,1,0)",
+        26: "box(3,6,1,1,0)",
+        27: "box(6,4,1,1,0)",
+        28: "box(5,4,1,1,0)",
+        29: "box(6,5,1,1,0)",
+        30: "box(6,6,1,1,0)",
+        31: "box(5,5,1,1,0)",
+        32: "box(5,6,1,1,0)",
+        33: "box(4,5,1,1,0)",
+        34: "box(4,6,1,1,0)",
+        35: "box(4,4,1,1,0)"
+    }
+
+    currdir=os.getcwd()
+
+    if pixels=='all':
+        pix_list=[elem for elem in np.arange(36) if elem!=12]
+
+    for elem_pix in pix_list:
+
+        pixdir='arf_weights_'+str(weight_dir_suffix)+'/pixel_'+str(elem_pix)
+        os.system('mkdir -p '+pixdir)
+
+        #creating the region file
+        reg_pix_name='region_pix_'+str(elem_pix)+'_DET.reg'
+        with open(os.path.join(pixdir,reg_pix_name),'w+') as f:
+            f.write(pixel_reg_string[elem_pix])
+
+        bashproc = pexpect.spawn("/bin/bash", encoding='utf-8')
+
+        set_var(bashproc, heasoft_init_alias, caldb_init_alias)
+
+        bashproc.sendline('cd '+os.path.join(currdir,pixdir))
+
+        bashproc.logfile_read = sys.stdout
+
+        logfile='xaxmaarfgen_arf_forweights_'+str(elem_pix)+'.log'
+        if os.path.isfile(os.path.join(pixdir,logfile)):
+            os.path.join(pixdir,logfile)
+
+        outfile='arf_forweights_pix'+str(elem_pix)+'.arf'
+        bashproc.sendline('xaxmaarfgen '+
+         ' xrtevtfile=../../' + rtfile +
+         ' instrume=resolve'+
+         ' emapfile=../../' + expmap +
+         ' rmffile=../../' + rmf +
+         ' regionfile=' + reg_pix_name +
+         ' outfile='+outfile+
+         ' clobber=YES' +
+         ' telescop=XRISM' +
+         ' qefile=CALDB' +
+         ' contamifile=CALDB' +
+         ' gatevalvefile=CALDB' +
+         ' onaxisffile=CALDB' +
+         ' onaxiscfile=CALDB' +
+        #the ! allows to remake the file at every instance
+         ' logfile=xaxmaarfgen_arf_forweights_'+str(elem_pix)+'.log'+
+         ' chatter=3')
+
+        insufficient_str='Insufficient number of raytrace photons in detector region: check coordinates and region files for errors before increasing'
+        out_code=bashproc.expect(['Buffering '+outfile,insufficient_str])
+
+        if out_code==1:
+            #note: this will become inappropriate if the energy range is changed
+            bashproc.expect('xaxmaarfgen: INFO:     12')
+
+        time.sleep(1)
+        bashproc.sendline('exit')
+        time.sleep(1)
+
+
+def PSF_frac_plot(raytrace_files=[],weight_dirs=[],e_min=2,e_max=10):
+
+    '''
+    plot the psf fractions of different sources for each pixel in the array, following one or several runs of
+    xaxmaarfgen_looper
+
+    raytrace files:
+        the list of base raytrace files used for xaxmaarfgen_looper runs,
+    weight_dirs:
+        the directories where each run was performed
+
+    e_min/e_max:
+        energy band in which to compute the PSF fractions
+        Note:
+            heavily quantized in the arfs, available values are:
+            0.3 0.4 0.5 1 2 3 4 5 6 7 8 9 10 11 12
+
+    example:
+    PSF_frac_plot(raytrace_files=['rsp_MAXIJ1744/xa901002010rsl_p0px1000_cl_RTS_raytracing.evt',
+'rsp_AXJ1745/xa901002010rsl_p0px1000_cl_RTS_raytracing.evt',
+'rsp_diffuse/xa901002010rsl_p0px1000_cl_RTS_raytracing.evt',
+'rsp_SgrAEast/xa901002010rsl_p0px1000_cl_RTS_raytracing.evt'],
+weight_dirs=['arf_weights_MAXIJ1744','arf_weights_AXJ1745','arf_weights_diffuse','arf_weights_SgrAEast'])
+
+    '''
+
+    #storing the PSF fraction normalization
+
+    raytrace_tots=np.zeros(len(raytrace_files))
+    for i_file,elem_rt in enumerate(raytrace_files):
+        with fits.open(elem_rt) as rt_fits:
+            raytrace_tots[i_file]=len(rt_fits[1].data[(rt_fits[1].data['energy']>=e_min) \
+                                                    & (rt_fits[1].data['energy']<=e_max)])
+
+
+    #storing the Pixel photon numbers per energy
+
+    raytrace_pix_full=np.repeat(None,len(weight_dirs))
+    for i_weights in range(len(weight_dirs)):
+        pix_matr={}
+        arf_weight_logs = np.array(glob.glob(os.path.join(weight_dirs[i_weights],'**/xaxmaarfgen_arf_forweights**.log'), recursive=True))
+        arf_weight_logs.sort()
+
+        for elem_log in arf_weight_logs:
+
+            pix_number=int(elem_log.split('/')[-1].split('_')[-1].replace('.log',''))
+
+            with open(elem_log,'r') as log_f:
+                log_lines_inv=log_f.readlines()[::-1]
+
+                last_weight_disp_line=np.argwhere(np.array(log_lines_inv)==\
+                                                  'xaxmaarfgen: INFO: ENERGY      PHOTONS PER ENERGY\n').T[0][0]
+                lines_clean = log_lines_inv[last_weight_disp_line - 15:last_weight_disp_line]
+
+                weights_arr_pix=np.array([elem.split()[2:]for elem in lines_clean[::-1]],dtype=float).T
+                pix_matr[pix_number]=(weights_arr_pix[1][(weights_arr_pix[0]>=e_min)& (weights_arr_pix[0]<=e_max)].sum())/raytrace_tots[i_file]
+
+        raytrace_pix_full[i_weights]=pix_matr
+    '''
+    This is adapted from chatGPT
+    '''
+
+    if len(raytrace_pix_full)==3:
+        triangle_mode=True
+        B,C,D=raytrace_pix_full
+    else:
+        triangle_mode=False
+        A,B,C,D=raytrace_pix_full
+
+    rows, cols = 6, 6
+
+    fig, ax = plt.subplots(figsize=(10, 10), layout='constrained')
+    ax.set_xlim(0, cols)
+    ax.set_ylim(0, rows)
+    ax.set_aspect('equal')
+    ax.axis('off')
+
+    # Define colormaps
+    # cmaps = {
+    #     'A': plt.cm.Blues,
+    #     'B': plt.cm.Reds,
+    #     'C': plt.cm.Purples,
+    #     'D': plt.cm.Oranges
+    # }
+
+    cmaps = {
+        'A': plt.cm.YlGn,
+        'B': plt.cm.YlOrRd,
+        'C': plt.cm.PuBu,
+        'D': plt.cm.RdPu,
+    }
+
+    # Normalize each matrix separately
+    # norms = {
+    #     'A': colors.Normalize(vmin=0., vmax=max(A.values())),
+    #     'B': colors.Normalize(vmin=0., vmax=max(B.values())),
+    #     'C': colors.Normalize(vmin=0., vmax=max(C.values())),
+    #     'D': colors.Normalize(vmin=0., vmax=max(D.values()))
+    # }
+
+    norms = {
+        'A': None if triangle_mode else colors.LogNorm(vmin=1e-3, vmax=sum(A.values())),
+        'B': colors.LogNorm(vmin=1e-3, vmax=sum(B.values())),
+        'C': colors.LogNorm(vmin=1e-3, vmax=sum(C.values())),
+        'D': colors.LogNorm(vmin=1e-3, vmax=sum(D.values()))
+    }
+
+    for i in range(rows):
+        for j in range(cols):
+
+            x, y = j, rows - i - 1
+
+            pix_number_xrism=int(coord_pixel_conv_arr.T[::-1][i][j])
+
+            if pix_number_xrism==12:
+                continue
+
+            center = (x + 0.5, y + 0.5)
+
+            # Define triangles for each matrix
+
+            if triangle_mode:
+                equa_rad_val=1/(3+4*np.sqrt(3)/3)
+                triangles = {
+                    'B': [(x,y),(x, y+equa_rad_val), (x + 0.5, y + 0.5),(x + 1, y+equa_rad_val),(x+1,y)],  # Bottom
+                    'C': [(x, y+equa_rad_val), (x + 0.5, y + 0.5), (x+0.5, y + 1),(x,y+1)],  # Left
+                    'D': [(x + 1, y+equa_rad_val), (x + 0.5, y + 0.5), (x + 0.5, y + 1),(x+1,y+1)]  # Right
+                }
+            else:
+
+                triangles = {
+                    'A': [(x, y + 1), (x + 1, y + 1), center],  # Top
+                    'B': [(x, y), (x + 1, y), center],  # Bottom
+                    'C': [(x, y), (x, y + 1), center],  # Left
+                    'D': [(x + 1, y), (x + 1, y + 1), center]  # Right
+                }
+
+            values = {'A': None if triangle_mode else A[pix_number_xrism], 'B': B[pix_number_xrism],
+                      'C': C[pix_number_xrism], 'D': D[pix_number_xrism]}
+
+            # Draw and label triangles
+            for key in triangles:
+                poly = Polygon(triangles[key], closed=True,
+                               facecolor=cmaps[key](norms[key](values[key])),
+                               edgecolor='black', linewidth=0.5)
+                ax.add_patch(poly)
+
+                # Text position - average of triangle points
+                tx = np.mean([p[0] for p in triangles[key]])
+                ty = np.mean([p[1] for p in triangles[key]])
+                ax.text(tx, ty, f"{values[key]:.3f}", fontsize=8, ha='center', va='center', color='black', alpha=0.8)
+
+            # Draw main cell border
+            ax.add_patch(plt.Rectangle((x, y), 1, 1,
+                                       fill=False, edgecolor='black', linewidth=2))
+
+            # Add cell number
+            ax.text(x + 0.5, y + 0.5, str(pix_number_xrism),
+                    ha='center', va='center', fontsize=14, fontweight='bold', color='black', alpha=1.)
+
+    fig.subplots_adjust(left=0.1,right=0.9,bottom=0.1,top=0.9)
+
+    # Add colorbars around the plot
+    #note: here we force specific values of the ticks to show the total value contained in the array
+    #(to which the colorbars are normalized
+
+    if not triangle_mode:
+        cb_A=fig.colorbar(plt.cm.ScalarMappable(norm=norms['A'], cmap=cmaps['A']),
+                     ax=ax, orientation='horizontal', location='top', fraction=0.046, pad=-0.105,extend='min',
+                          ticks=[1e-3, 1e-2, 1e-1, sum(A.values())],
+                     label='MAXI J1744-294 ['+str(e_min)+'-'+str(e_max)+'] keV PSF fraction (top)')
+
+        cb_A.set_ticklabels([r'10$^{-3}$',r'10$^{-2}$',r'10$^{-1}$','%.3f'%sum(A.values())])
+
+    cb_C=fig.colorbar(plt.cm.ScalarMappable(norm=norms['C'], cmap=cmaps['C']),
+                 ax=ax, orientation='vertical', location='left',fraction=0.0495, pad=0.015,extend='min',
+                      ticks=[1e-3, 1e-2, 1e-1, sum(C.values())],anchor=(1.0,0.48),
+                 label="GCXE "+'['+str(e_min)+'-'+str(e_max)+'] keV PSF fraction (left)')
+
+    cb_C.set_ticklabels([r'10$^{-3}$',r'10$^{-2}$',r'10$^{-1}$','%.3f'%sum(C.values())])
+
+    cb_B=fig.colorbar(plt.cm.ScalarMappable(norm=norms['B'], cmap=cmaps['B']),
+                 ax=ax, orientation='horizontal', fraction=0.046, pad=-0.102 if triangle_mode else -0.097,extend='min',
+                      ticks=[1e-3, 1e-2, 1e-1, sum(B.values())],
+                 label='AX J1745.6-2901 ['+str(e_min)+'-'+str(e_max)+'] keV PSF fraction (bottom)')  # placed below
+
+    cb_B.set_ticklabels([r'10$^{-3}$',r'10$^{-2}$',r'10$^{-1}$','%.3f'%sum(B.values())])
+
+    cb_D=fig.colorbar(plt.cm.ScalarMappable(norm=norms['D'], cmap=cmaps['D']),
+                 ax=ax, orientation='vertical',  fraction=0.0495, pad=-0.01 if triangle_mode else -0.038,extend='min',
+                      ticks=[1e-3, 1e-2, 1e-1, sum(D.values())],anchor=(1.0,0.48),
+                 label='Sgr A East ['+str(e_min)+'-'+str(e_max)+'] keV PSF fraction (right)')
+
+    cb_D.set_ticklabels([r'10$^{-3}$',r'10$^{-2}$',r'10$^{-1}$','%.3f'%sum(D.values())])
+
+    plt.show()
+
+    plt.savefig('PSF_weights_compa_'+('tri_' if triangle_mode else '')
+                +str(e_min).replace('.','p')+'_'+str(e_max).replace('.','p')+'.pdf')
+
+

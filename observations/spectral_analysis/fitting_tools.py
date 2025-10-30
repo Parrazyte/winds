@@ -57,6 +57,8 @@ lines_std={         #don't change the first 8, there are explicit calls in the c
                 'FeKa1p1em': r'FeI K$\alpha$ (P$^{1/2}$)',
                 'FeKa1p3em': r'FeI K$\alpha$ (P$^{3/2}$)',
 
+                'FeKb1p1em': r'FeI K$\beta$ (P$^{1/2}$)',
+
                 'FeKa25Zabs':r'FeXXV K$\alpha$ (z)',
                 'FeKa25Yabs': r'FeXXV K$\alpha$ (y)',
                 'FeKa25Xabs': r'FeXXV K$\alpha$ (x)',
@@ -141,6 +143,9 @@ lines_e_dict={
                 'FeKa1p1em': [6.39084, -30000, 1000],
                 'FeKa1p3em': [6.40384, -30000, 1000],
 
+                # a better model should use a 4 lorentzian components (https://heasarc.gsfc.nasa.gov/xanadu/xspec/manual/node179.html)
+                'FeKb1p1em': [7.0579, -30000, 1000],
+
                 #these have uncertainties of 1.4 meV
 
                 #Z is the forbidden line F
@@ -179,6 +184,7 @@ lines_e_dict={
                 'CrKa23Yabs': [5.6548, -3000, 3000],
                 'CrKa23Xabs': [5.6651, -3000, 3000],
                 'CrKa23Wabs': [5.6821, -3000, 3000],
+
 
 }
 

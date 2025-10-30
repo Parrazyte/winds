@@ -150,8 +150,10 @@ def narrow_line_search(data_cont, suffix,e_sat_low_indiv,line_search_e=[4,10,0.0
     # with redirect_stdout(open(os.devnull, 'w')):
 
     for ind_e, energy in enumerate(line_search_e_space):
-        AllModels.calcFlux(str(energy - line_search_e[2] / 2) + " " + str(energy + line_search_e[2] / 2))
-
+        try:
+            AllModels.calcFlux(str(energy - line_search_e[2] / 2) + " " + str(energy + line_search_e[2] / 2))
+        except:
+            breakpoint()
         #summing on all the models including the background because here this normalization will be added to the whole continuum (also with the BG models)
         #NOTE: doesn't work because the models are adapted to serve as background
         #flux_cont[ind_e] = sum([AllData(1).flux[6*i] for i in range(n_models)])
@@ -703,7 +705,7 @@ def plot_std_ener(ax_ratio, ax_contour=None, plot_em=False, mode='ratio',exclude
             continue
 
         # skipping redundant indexes
-        if line in ['FeKa25em','FeKa26em','FeKa1em','FeKb1em','calNICERSiem','FeDiazem']:
+        if line in ['FeKa25em','FeKa26em','FeKaem','FeKbem','FeKa1em','FeKb1em','calNICERSiem','FeDiazem']:
             continue
 
         # skipping Nika27, FeKa25em, FeKa26em:
@@ -762,8 +764,10 @@ def plot_std_ener(ax_ratio, ax_contour=None, plot_em=False, mode='ratio',exclude
                     #shifting it to the left if is the first one of a complex
                     if i_line<len(lines_names)-1 and lines_std[lines_names[i_line+1]].split('(')[0]\
                                                    ==lines_std[lines_names[i_line]].split('(')[0]:
-                        line_x_text=lines_e_dict[line][0]-0.05-\
-                                    (0.01 if 'P' in lines_std[lines_names[i_line]].split('(')[1] else 0)
+
+                        #line_x_text=lines_e_dict[line][0]-0.01*len(lines_std[line])/12 is good for 6.3-7.1
+                        line_x_text=lines_e_dict[line][0]-0.01*len(lines_std[line])/12-\
+                                    (0.015 if 'P' in lines_std[lines_names[i_line]].split('(')[1] else 0)
 
                         #avoiding overlap with the NiKa27 complex display
                         if line=='FeKb25p1abs':
@@ -773,7 +777,7 @@ def plot_std_ener(ax_ratio, ax_contour=None, plot_em=False, mode='ratio',exclude
                     #removing everything except the complex name otherwise
                     if i_line>0 and lines_std[lines_names[i_line]].split('(')[0]==\
                                     lines_std[lines_names[i_line-1]].split('(')[0]:
-                        line_x_text=lines_e_dict[line][0]+0.01+\
+                        line_x_text=lines_e_dict[line][0]+0.008+\
                         (0.01 if 'P' in lines_std[lines_names[i_line]].split('(')[1] else 0)
 
                         if line!='FeKb25p3abs':

@@ -6499,7 +6499,7 @@ def xPlot(types,axes_input=None,plot_saves_input=None,plot_arg=None,includedlist
           secondary_x=True,legend_position=None,xlims=None,ylims=None,label_bg=False,
           mult_factors=None,label_indivcomps=False,
           no_name_data='auto',force_ylog_ratio=False,legend_ncols=None,
-          data_colors=None,model_colors=None,addcomp_colors=None,data_alpha=1):
+          data_colors=None,model_colors=None,addcomp_colors=None,data_alpha=1,auto_figsize=(10,8)):
 
     '''
     Replot xspec plots using matplotib. Accepts custom types:
@@ -6559,7 +6559,7 @@ def xPlot(types,axes_input=None,plot_saves_input=None,plot_arg=None,includedlist
     '''
 
     if axes_input is None:
-        fig=plt.figure(figsize=(10,8))
+        fig=plt.figure(figsize=auto_figsize)
         grid=GridSpec(len(types.split(',')),1,figure=fig,hspace=0.)
         axes=[plt.subplot(elem) for elem in grid]
 

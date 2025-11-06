@@ -38,6 +38,7 @@ from astroquery.simbad import Simbad
 from mpdaf.obj import sexa2deg,deg2sexa,Image
 from mpdaf.obj import WCS as mpdaf_WCS
 from astropy.wcs import WCS as astroWCS
+import astropy.units as u
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -1618,20 +1619,28 @@ def resolve_counts_BR_Eevol(file,pixels='all',ebin=10,emin=0.,emax=12.):
     breakpoint()
 
 
-def mpdaf_load_img(sky_img_path):
+def mpdaf_load_img(sky_img_path,rotate=False):
     # loading the IMG file with mpdaf
+
+    #NOTE: OUTDATED: normal astro WCS can be accessed as the wcs method within the mpdaf wcs. Should be updated
     with fits.open(sky_img_path) as hdul:
         try:
 
-            img_data = hdul[0].data
+            if rotate:
+                img_data=hdul[0].data[::-1].T
+            else:
+                img_data = hdul[0].data
             src_mpdaf_WCS = mpdaf_WCS(hdul[0].header)
             src_astro_WCS = astroWCS(hdul[0].header)
 
             img_obj_whole = Image(data=img_data, wcs=src_mpdaf_WCS)
         except:
 
-            img_data = hdul[1].data
-            src_mpdaf_WCS = mpdaf_WCS(hdul[1].header)
+            if rotate:
+                img_data=hdul[1].data.T
+            else:
+                img_data = hdul[1].data
+                src_mpdaf_WCS = mpdaf_WCS(hdul[1].header)
             src_astro_WCS = astroWCS(hdul[1].header)
 
             img_obj_whole = Image(data=img_data, wcs=src_mpdaf_WCS)
@@ -1668,18 +1677,19 @@ def target_deg(source_name,target_coords=None):
 
     return obj_deg
 
-def mpdaf_plot_img(sky_img_path,rad_crop=[200,200],crop_coords=None,
+def mpdaf_plot_img(sky_img_path,rad_crop=[200,200],rad_crop_u='pixels',center_crop_u=None,crop_coords=None,
                    target_name_list=[None],target_coords_list='target',
-                   target_sizes_pix=[10],target_colors=['red'],
+                   target_sizes_pix=[10],target_colors=['red'],target_ls='auto',
                    target_names=['auto'],target_names_offset=[1.1],
-                   title='',save=False):
+                   title='',save=False,rotate=False,img_scale='log'):
 
     '''
     Plot an mpdaf image in sky coordinates, with a given cropping if requested,
         and additional regions highlighting sources if requested.
+
         The crop is made centered on the position of the first source if crop_coords is None, otherwise to
         the coordinates given
-
+        Note that the crop
         source_names/target_coords/target_sizes_pix: iterables of the same len
         source_names/target_coords are used in target_deg to get the position of the sources
         target_sizes_pix gives the source region
@@ -1688,11 +1698,16 @@ def mpdaf_plot_img(sky_img_path,rad_crop=[200,200],crop_coords=None,
 
             'target' to follow the targets
 
-            note: by default target_sizes_pix is in pixlels, so will have to be converted accordingly
+            note: by default target_sizes_pix is in pixels, so will have to be converted accordingly
             reminder: xtend r_arsec=1.768*r_pixel
+
+
+        as of now target_coords_list should be in explicit radec decimal coordinates if not set to target
+
+    #note: there is a small offset sometimes due to the approximation of the coordinates when cropping
     '''
 
-    img_obj_whole,src_mpdaf_WCS,src_astro_WCS=mpdaf_load_img(sky_img_path)
+    img_obj_whole,src_mpdaf_WCS,src_astro_WCS=mpdaf_load_img(sky_img_path,rotate=rotate)
 
     if target_name_list[0] is None and (target_coords_list[0] is None or target_coords_list=='target'):
         obj_deg_list=[]
@@ -1706,10 +1721,16 @@ def mpdaf_plot_img(sky_img_path,rad_crop=[200,200],crop_coords=None,
         with fits.open(sky_img_path) as hdul:
             crop_center=[hdul[0].header['RA_PNT'],hdul[0].header['DEC_PNT']]
     else:
-        crop_center=sexa2deg(crop_coords[::-1])[::-1]
+        if type(crop_coords[0])==str:
+            crop_center=sexa2deg(crop_coords[::-1])[::-1]
+        else:
+            crop_center=crop_coords
+
     if len(obj_deg_list)!=0 or crop_coords!=None:
         try:
-            imgcrop_src = img_obj_whole.copy().subimage(center=crop_center[::-1], size=rad_crop)
+            imgcrop_src = img_obj_whole.copy().subimage(center=crop_center[::-1], size=rad_crop,
+                                                        unit_center=None if center_crop_u=='pixels' else u.deg,
+                                                        unit_size=None if rad_crop_u=='pixels' else u.arcsec)
         except:
             print('\nCropping region entirely out of the image. Field of view issue....')
             return '\nCropping region entirely out of the image. Field of view issue....'
@@ -1727,7 +1748,8 @@ def mpdaf_plot_img(sky_img_path,rad_crop=[200,200],crop_coords=None,
     if save:
         plt.ioff()
     # plotting and saving imgcrop
-    fig_catal_crop, ax_catal_crop = plt.subplots(1, 1, subplot_kw={'projection': src_astro_WCS},
+
+    fig_catal_crop, ax_catal_crop = plt.subplots(1, 1, subplot_kw={'projection': imgcrop_src.wcs.wcs},
                                                  figsize=(12, 10))
 
     circle_rad_pos=[]
@@ -1736,9 +1758,8 @@ def mpdaf_plot_img(sky_img_path,rad_crop=[200,200],crop_coords=None,
     coord_crop_eff=[imgcrop_src.wcs.naxis1,imgcrop_src.wcs.naxis2][::-1]
     coord_start_eff=imgcrop_src.wcs.get_start()[::-1]
 
-    #the axis increment is actually modified afte resizing and doesnt' match the intiial values, so
-    #we update it aswell
-    axis_increment_eff=imgcrop_src.get_axis_increments()*(np.array(coord_crop_eff))/np.array(rad_crop)*2
+    axis_increment_eff=[(imgcrop_src.wcs.get_end()[i]-imgcrop_src.wcs.get_start()[i])/(2*rad_crop[i]) for i in range(2)][::-1]
+
     for i_target,(elem_ra_deg,elem_dec_deg) in enumerate(obj_deg_list):
 
         #kinda fucked up but I think it works and my brain can't figure out the simple formula
@@ -1761,10 +1782,13 @@ def mpdaf_plot_img(sky_img_path,rad_crop=[200,200],crop_coords=None,
         #                                                     (-imgcrop_src.get_axis_increments()[1] * 3600)\
         #     %(rad_crop[1]/(-imgcrop_src.get_axis_increments()[1] * 3600))-0.5]]
 
-        circle_rad_pos+= [[(coord_start_eff[0]-elem_ra_deg)/axis_increment_eff[0]-0.5,
-            (rad_crop[1] / 2 + (elem_dec_deg - crop_center[1])*3600) / \
-                                                            (-imgcrop_src.get_axis_increments()[1] * 3600)\
-            %(rad_crop[1]/(-imgcrop_src.get_axis_increments()[1] * 3600))-0.5]]
+        # circle_rad_pos+= [[(coord_start_eff[0]-elem_ra_deg)/axis_increment_eff[0]-0.5,
+        #     (rad_crop[1] / 2 + (elem_dec_deg - crop_center[1])*3600) / \
+        #                                                     (-imgcrop_src.get_axis_increments()[1] * 3600)\
+        #     %(rad_crop[1]/(-imgcrop_src.get_axis_increments()[1] * 3600))-0.5]]
+
+        circle_rad_pos+= [[(elem_ra_deg-coord_start_eff[0])/axis_increment_eff[0]/2,
+ ((elem_dec_deg-coord_start_eff[1])/axis_increment_eff[1]/2)+0.5]]
 
         # circle_rad_pos+= [[ \
         #     rad_crop_eff[0]/2+((crop_center[0]-elem_ra_deg)*3600)/ \
@@ -1787,7 +1811,8 @@ def mpdaf_plot_img(sky_img_path,rad_crop=[200,200],crop_coords=None,
         # breakpoint()
 
         target_circles+= [plt.Circle([circle_rad_pos[-1][0], circle_rad_pos[-1][1]], target_sizes_pix[i_target],
-                            color=target_colors[i_target], zorder=1000, fill=False)]
+                            color=target_colors[i_target],ls='-' if type(target_ls)==str else target_ls[i_target],
+                                     zorder=1000, fill=False)]
         if target_names[i_target]!='':
             if target_names[i_target]=='auto':
                 curr_target_name=target_name_list[i_target]
@@ -1805,7 +1830,7 @@ def mpdaf_plot_img(sky_img_path,rad_crop=[200,200],crop_coords=None,
 
     if title!='':
         ax_catal_crop.set_title(title)
-    catal_plot = imgcrop_src.plot(cmap='plasma', scale='log')
+    catal_plot = imgcrop_src.plot(cmap='plasma', scale=img_scale)
     plt.colorbar(catal_plot, location='bottom', fraction=0.046, pad=0.04)
     for elem_circle in target_circles:
         ax_catal_crop.add_patch(elem_circle)
@@ -3104,7 +3129,8 @@ def extract_lc(directory='auto_repro', anal_dir_suffix='',lc_subdir='lc',
                    binning='128+1',exposure_rsl=0.6,
                    exposure_xtd=0.0,
                    heasoft_init_alias='heainit', caldb_init_alias='caldbinit',
-                   parallel=False,repro_suffix='repro'):
+                   parallel=False,repro_suffix='repro',
+                   image_mode='DET'):
 
     '''
 
@@ -3152,6 +3178,9 @@ def extract_lc(directory='auto_repro', anal_dir_suffix='',lc_subdir='lc',
 
     binning:
         string for a set of binnings in 'A+B+...' style
+
+    image_mode:
+        use to define the coordinates mode for the region file selection
     '''
 
     bashproc = pexpect.spawn("/bin/bash", encoding='utf-8')
@@ -3247,12 +3276,14 @@ def extract_lc(directory='auto_repro', anal_dir_suffix='',lc_subdir='lc',
                             continue
 
                         if not os.path.isfile(elem_region):
-                            print('No matching region found. Skipping '+('source' if i_reg==0 else 'bg')+
+                            print('No matching region found. Skipping '+(' source' if i_reg==0 else ' bg')+
                                   'event file '+elem_evt)
                             continue
 
-                        reg_str=('_auto_src' if region_src_xtd=='auto' else region_src_xtd.split('.')[0]) if i_reg==0 else \
-                                ('_auto_bg' if region_bg_xtd == 'auto' else region_bg_xtd.split('.')[0])
+                        reg_str=('_auto_src' if region_src_xtd=='auto' else \
+                                     '_'+region_src_xtd.split('/')[-1].split('.')[0]) if i_reg==0 else \
+                                ('_auto_bg' if region_bg_xtd == 'auto' else \
+                                     '_'+region_bg_xtd.split('/')[-1].split('.')[0])
 
                         for elem_band in band.split('+'):
                             for elem_binning in binning.split('+'):
@@ -3272,7 +3303,8 @@ def extract_lc(directory='auto_repro', anal_dir_suffix='',lc_subdir='lc',
                                           binning=elem_binning,
                                           exposure=exposure_xtd,
                                           spawn=bashproc,
-                                          gti_file=elem_gti_file)
+                                          gti_file=elem_gti_file,
+                                          image_mode=image_mode)
 
                 else:
 
@@ -3312,7 +3344,8 @@ def extract_lc(directory='auto_repro', anal_dir_suffix='',lc_subdir='lc',
                                           binning=elem_binning,
                                           exposure=exposure_rsl,
                                           spawn=bashproc,
-                                          gti_file=elem_gti_file)
+                                          gti_file=elem_gti_file,
+                                          image_mode=image_mode)
 
 def extract_sp(directory='auto_repro', anal_dir_suffix='',sp_subdir='sp',
                    use_raw_evt_xtd=False, use_raw_evt_rsl=False,

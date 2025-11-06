@@ -334,11 +334,12 @@ def str_orbit(i_orbit):
 
 def plot_lc(lc_paths,binning='auto',directory='./',e_low='',e_high='',
                   lc_paths_HR_num=None,
-                  interact=False,
+                  interact=False,colors=[],labels='auto',
                   interact_tstart=None,
                   instru='xrism',
                   show_date_evol=True,
-                  save=False,suffix='',outdir=''):
+                  save=False,suffix='',outdir='',var_alpha=True,figsize=(16,8),
+                  title=True,show_seconds=False):
 
     '''
 
@@ -369,7 +370,7 @@ def plot_lc(lc_paths,binning='auto',directory='./',e_low='',e_high='',
     if save:
         plt.ioff()
 
-    fig_lc, ax_lc = plt.subplots(1, figsize=(16, 8))
+    fig_lc, ax_lc = plt.subplots(1, figsize=figsize)
 
     time_zero_base=0
 
@@ -406,43 +407,46 @@ def plot_lc(lc_paths,binning='auto',directory='./',e_low='',e_high='',
             plt.errorbar(data_lc_arr['TIME']+(time_zero-time_zero_base).value*86400,
                          HR,xerr=float(binning_use) / 2,yerr=HR_err,
                          ls='-', lw=1, color=(0.5, 0.5, 0.5,1/len(lc_path_list)),
-                         ecolor='blue' if len(lc_path_list)==1 else default_mpl_cycle[i_lc],
-                         label=elem_lc_HR_num+'/'+elem_lc if len(lc_path_list)>1 else '')
+                         ecolor=colors[i_lc] if len(colors)>0 else ('blue' if len(lc_path_list)==1 else default_mpl_cycle[i_lc]),
+                         label=labels[i_lc] if labels!='auto' else (elem_lc_HR_num+'/'+elem_lc if len(lc_path_list)>1 else ''))
 
         else:
 
-            plt.errorbar(data_lc_arr['TIME']+(time_zero-time_zero_base).value*86400, data_lc_arr['RATE'], xerr=float(binning_use) / 2,
+            plt.errorbar(data_lc_arr['TIME']+(time_zero-time_zero_base).value*86400, data_lc_arr['RATE'],
+                         xerr=float(binning_use) / 2,
                      yerr=data_lc_arr['ERROR'], ls='-', lw=1, color=(0.5, 0.5, 0.5, 1/len(lc_path_list)),
-                         ecolor='blue' if len(lc_path_list)==1 else default_mpl_cycle[i_lc],
-                         label=elem_lc if len(lc_path_list)>1 else '' )
+                         ecolor=colors[i_lc] if len(colors)>0 else ('blue' if len(lc_path_list)==1 else default_mpl_cycle[i_lc]),
+                         label=labels[i_lc] if labels!='auto' else (elem_lc_HR_num+'/'+elem_lc if len(lc_path_list)>1 else ''))
+
 
     plt.legend()
 
     binning_str=str(binning_use)
 
-    if instru=='xrism':
-        if lc_paths_HR_num is not None:
-            plt.suptitle(
-            telescope + ' ' + instru + ' Hardness Ratio for observation ' + lc_path_list[0].split('_lc')[0].split('_pixel')[0] +
-            (' with pixel ' + lc_path_list[0].split('_pixel_')[-1].split('_')[0] if instru == 'RESOLVE' else
-             ' with region ' + lc_path_list[0].split('_cl_')[-1].split('_lc')[0]) +
-            ' in [' + str(e_high) +']/[' + str(e_low) + '] keV with ' + binning_str + ' s binning')
+    if title:
+        if instru=='xrism':
+            if lc_paths_HR_num is not None:
+                plt.suptitle(
+                telescope + ' ' + instru + ' Hardness Ratio for observation ' + lc_path_list[0].split('_lc')[0].split('_pixel')[0] +
+                (' with pixel ' + lc_path_list[0].split('_pixel_')[-1].split('_')[0] if instru == 'RESOLVE' else
+                 ' with region ' + lc_path_list[0].split('_cl_')[-1].split('_lc')[0]) +
+                ' in [' + str(e_high) +']/[' + str(e_low) + '] keV with ' + binning_str + ' s binning')
+            else:
+                plt.suptitle(
+                telescope + ' ' + instru + ' lightcurve for observation ' + lc_path_list[0].split('_lc')[0].split('_pixel')[0] +
+                (' with pixel ' + lc_path_list[0].split('_pixel_')[-1].split('_')[0] if instru == 'RESOLVE' else
+                 ' with region ' + lc_path_list[0].split('_cl_')[-1].split('_lc')[0]) +
+                ' in [' + str(e_low) + '-' + str(e_high) + '] keV with ' + binning_str + ' s binning')
         else:
-            plt.suptitle(
-            telescope + ' ' + instru + ' lightcurve for observation ' + lc_path_list[0].split('_lc')[0].split('_pixel')[0] +
-            (' with pixel ' + lc_path_list[0].split('_pixel_')[-1].split('_')[0] if instru == 'RESOLVE' else
-             ' with region ' + lc_path_list[0].split('_cl_')[-1].split('_lc')[0]) +
-            ' in [' + str(e_low) + '-' + str(e_high) + '] keV with ' + binning_str + ' s binning')
-    else:
 
-        if lc_paths_HR_num is not None:
-            plt.suptitle(
-            telescope + ' ' + instru + ' Hardness Ratio for observation(s) ' + lc_path_list[0].split('_lc')[0].split('_pixel')[0] +
-        ' in [' + str(e_high) +']/[' + str(e_low) + '] keV with ' + binning_str + ' s binning')
-        else:
-            plt.suptitle(
-            telescope + ' ' + instru + ' lightcurve for observation(s) ' + lc_path_list[0].split('_lc')[0].split('_pixel')[0] +
-            ' in [' + str(e_low) + '-' + str(e_high) + '] keV with ' + binning_str + ' s binning')
+            if lc_paths_HR_num is not None:
+                plt.suptitle(
+                telescope + ' ' + instru + ' Hardness Ratio for observation(s) ' + lc_path_list[0].split('_lc')[0].split('_pixel')[0] +
+            ' in [' + str(e_high) +']/[' + str(e_low) + '] keV with ' + binning_str + ' s binning')
+            else:
+                plt.suptitle(
+                telescope + ' ' + instru + ' lightcurve for observation(s) ' + lc_path_list[0].split('_lc')[0].split('_pixel')[0] +
+                ' in [' + str(e_low) + '-' + str(e_high) + '] keV with ' + binning_str + ' s binning')
 
     plt.xlabel('Time (s) after ' + time_zero.isot)
 
@@ -472,12 +476,13 @@ def plot_lc(lc_paths,binning='auto',directory='./',e_low='',e_high='',
             return val_out
 
         secax_lc = ax_lc.secondary_xaxis('top',functions=(func_time_to_date,func_date_to_time))
+        secax_lc.tick_params(axis='x', which='both', labelrotation=3*max(0,16-figsize[0]))
 
         #adding the formatter
         x_bounds_sec=ax_lc.get_xlim()[1]-ax_lc.get_xlim()[0]
 
         if x_bounds_sec< 10*86400:
-            date_format = mdates.DateFormatter('%Y-%m-%d %H:%M:%S')
+            date_format = mdates.DateFormatter('%Y-%m-%d %H:%M:%S') if show_seconds else mdates.DateFormatter('%Y-%m-%d %H:%M')
         elif x_bounds_sec < 365*86400:
             date_format = mdates.DateFormatter('%Y-%m-%d')
         else:

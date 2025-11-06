@@ -2,35 +2,36 @@
 from XRISM.XRISM_datared_tools import *
 #
 # mpdaf_plot_img('xa901002010xtd_p031300010_cl_SFP_img_sky_0.3_10.ds',
-#                rad_crop=[200,200],target_name_list=[None,'AXJ1745.6-2901'],crop_coords='auto',
-#                target_coords_list=[('17:45:40.476', '-29:00:46.10'),None],
-#                target_sizes=[1,1],target_colors=['black','black'],
-#                target_names=['MAXI J1744-294','auto'],target_names_offset=[10,5],save=True)
+#                rad_crop=[124,124],target_name_list=[None,None],crop_coords=[266.424,-29.0094],
+#                target_coords_list=[('17:45:40.50', '-29:00:48.10'),['17:45:35.6500', '-29:01:34.888']],
+#                target_sizes_pix=[1,1],target_colors=['black','white'],
+#                target_names=['MAXI J1744-294','AX J1745.6-2901'],target_names_offset=[5,5],save=False)
 #
 # mpdaf_plot_img('xa901002010xtd_p031300010_cl_SFP_img_sky_7_10.ds',
-#                rad_crop=[200,200],target_name_list=[None,'AXJ1745.6-2901'],crop_coords='auto',
-#                target_coords_list=[('17:45:40.476', '-29:00:46.10'),None],
-#                target_sizes=[1,1],target_colors=['white','white'],
-#                target_names=['MAXI J1744-294','auto'],target_names_offset=[10,5],save=True)
+#                rad_crop=[124,124],target_name_list=[None,None],crop_coords=[266.424,-29.0094],
+#                target_coords_list=[('17:45:40.50', '-29:00:48.10'),['17:45:35.6500', '-29:01:34.888']],
+#                target_sizes_pix=[1,1],target_colors=['black','white'],
+#                target_names=['MAXI J1744-294','AX J1745.6-2901'],target_names_offset=[5,5],save=False)
 #
 # mpdaf_plot_img('xa901002010rsl_p0px1000_cl_RTS_img_sky_2_10.ds',
-#                rad_crop=[220,220],target_name_list=[None,'AXJ1745.6-2901'],crop_coords=[266.425,-29.0099],
+#                rad_crop=[124,124],target_name_list=[None,'AXJ1745.6-2901'],crop_coords=[266.424,-29.0094],
 #                target_coords_list=[('17:45:40.476', '-29:00:46.10'),None],
-#                target_sizes=[1,1],target_colors=['black','black'],
-#                target_names=['MAXI J1744-294','auto'],target_names_offset=[10,5],save=True)
-#
+#                target_sizes_pix=[1,1],target_colors=['black','white'],
+#                target_names=['MAXI J1744-294','auto'],target_names_offset=[5,5],save=True)
 #
 # mpdaf_plot_img('xa300044010rsl_p0px1000_cl_RTS_img_sky_2_10.ds',
-#                rad_crop=[220,220],target_name_list=[None,'AXJ1745.6-2901'],crop_coords=[266.425,-29.],
+#                rad_crop=[124,124],target_name_list=[None,'AXJ1745.6-2901'],crop_coords=[266.422,-28.9977],
 #                target_coords_list=[('17:45:40.476', '-29:00:46.10'),None],
-#                target_sizes=[1,1],target_colors=['black','white'],
-#                target_names=['MAXI J1744-294','auto'],target_names_offset=[10,5],save=True)
+#                target_sizes_pix=[1,1],target_colors=['black','white'],
+#                target_names=['MAXI J1744-294','auto'],target_names_offset=[5,5],save=True)
 #
 # mpdaf_plot_img('xa901002010rsl_p0px1000_cl_RTS_img_sky_7_10.ds',
-#                rad_crop=[200,200],target_name_list=[None,'AXJ1745.6-2901'],crop_coords=[266.425,-29.0099],
+#                rad_crop=[124,124],target_name_list=[None,'AXJ1745.6-2901'],crop_coords=[266.422,-28.9977],
 #                target_coords_list=[('17:45:40.476', '-29:00:46.10'),None],
-#                target_sizes=[1,1],target_colors=['white','white'],
-#                target_names=['MAXI J1744-294','auto'],target_names_offset=[10,5],save=True)
+#                target_sizes_pix=[1,1],target_colors=['black','white'],
+#                target_names=['MAXI J1744-294','auto'],target_names_offset=[5,5],save=True)
+#
+# #slight offet to avoid pixel offset in xtend
 #
 #
 # # cd /media/parrazyte/crucial_SSD/Observ/BHLMXB/XRISM/MAXIJ1744-294/new_anal/fit_duo
@@ -206,7 +207,29 @@ def arf_compa_plots(dir='./',arf_num_list=[],arf_denom_list=[],label_list=[],lab
 
 ######################
 #region plot XTEND PV PHASE
-#mpdaf_plot_img('xa300044010xtd_p030000010_cl_SFP_img_sky_2_10.ds',crop_coords=['17 45 35.6400', '-29 01 33.888'],target_name_list=[None,'AXJ1745.6-2901'],rad_crop=[400,400],
-               # target_coords_list=[('17:45:40.476', '-29:00:46.10'),None],
-               # target_sizes=[1,60],target_colors=['black','white'],
-               # target_names=['MAXI J1744-294','auto'],target_names_offset=[10,5],save=True)
+# mpdaf_plot_img('xa300044010xtd_p030000010_cl_SFP_img_sky_2_10.ds',
+#                crop_coords=['17:45:35.6400', '-29:01:33.888'],
+#                target_name_list=[None,None,None],
+# rad_crop=[400,400],
+#                target_coords_list=[(266.4182250,-29.0133942),(266.3979339,-29.0264812),(266.4384636,-29.0264833)],
+#                target_sizes_pix=[8,8,8],target_colors=['green','red','pink'],
+#                target_names=['Diffuse emission background for MAXI J1744','AX J1745 source','AXJ1745 background'],
+#                target_names_offset=[1.2,1.2,1.2],save=False)
+
+#lc plot
+#plot_lc(['xa901002010rsl_p0px1000_cl_RTS_pixel_branch_filter_lc_2-10_256s.lc',
+# 'xa901002010xtd_p031300010_cl_SFPreg_8pix_arcsec_lc_0.3-10_256s.lc'],
+# binning=256,colors=['black','red'],labels=['Resolve MAXI J1744-294 "small pixel"','Xtend MAXI J1744-294'],
+# figsize=(10,5),title=False)
+
+# #colormapping for MAXI J1744 DDT in Xtend
+# xPlot('ldata,delchi',addcomp_colors='source',addcomp_ls='group',
+#       addcomp_source_cmaps=['Greens','RdPu'],group_names=['MAXI J1744-294'],auto_figsize=(7,5))
+# plt.gca().get_figure().get_children()[1].set_title(None)
+# plt.tight_layout()
+
+
+#Xtend complementary SFP plots
+# mpdaf_plot_img('xa901002010xtd_p031300010_cl_img_DET_2p35_2p5.ds',
+#                rad_crop=[120,120],target_name_list=[None,None],crop_coords=[1087,728.5],center_crop_u='pixels',rotate=True,img_scale='log',target_coords_list=[[728.5,1087]],target_sizes_pix=[8],target_names='MAXI J1744',target_colors=['red'])
+

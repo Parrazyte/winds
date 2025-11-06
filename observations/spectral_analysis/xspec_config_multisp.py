@@ -1983,7 +1983,7 @@ def addcomp(compname,position='last',endmult=None,return_pos=False,mod_name='',
             line_comps_use=line_set_comps
         else:
             line_comps_use=[line_type]
-        
+
         n_line_comps=len(line_comps_use)
 
         #in reverse to add them in forward order
@@ -6389,29 +6389,30 @@ class plot_save:
             #adding default model component names if there is a default model
             for mod in list_models:
 
-                if mod=='':
+                # if mod=='':
+                #
+                #     mod_expression,mod_tables_dict=numbered_expression(mod_name=mod)
+                #
+                #     #there are addcomps for each  models only if it has more than one additive components
+                #     #we thus need to compare the total number of addcomps with the other model addcomps
+                #     #this is only for nicer and can break if there are addcomps in other nxb type models
+                #
+                #     if len(self.addcomps[0])>(2 if 'nxb' in list_models else 0) + (2 if 'sky' in list_models else 0):
+                #
+                #         for elemcomp in AllModels(1).componentNames:
+                #
+                #             #restricting to additive tables for table models
+                #             if elemcomp in list(mod_tables_dict.keys()):
+                #                 if 'atable{' in mod_tables_dict[elemcomp]:
+                #                     self.addcompnames += [elemcomp]
+                #             else:
+                #                 #restricting to additive components
+                #                 if elemcomp.split('_')[0] not in xspec_multmods:
+                #                     self.addcompnames+=[elemcomp]
 
-                    mod_expression,mod_tables_dict=numbered_expression()
-
-                    #there are addcomps for the default models only if it has more than one additive components
-                    #we thus need to compare the total number of addcomps with the other model addcomps
-                    #this is only for nicer and can break if there are addcomps in other nxb type models
-
-                    if len(self.addcomps[0])>(2 if 'nxb' in list_models else 0) + (2 if 'sky' in list_models else 0):
-
-                        for elemcomp in AllModels(1).componentNames:
-
-                            #restricting to additive tables for table models
-                            if elemcomp in list(mod_tables_dict.keys()):
-                                if 'atable{' in mod_tables_dict[elemcomp]:
-                                    self.addcompnames += [elemcomp]
-                            else:
-                                #restricting to additive components
-                                if elemcomp.split('_')[0] not in xspec_multmods:
-                                    self.addcompnames+=[elemcomp]
 
                 #adding NICER background component Names
-                elif mod=='nxb':
+                if mod=='nxb':
                     for i in range(1,AllData.nGroups+1):
                         try:
                             self.addcompnames+=AllModels(i,'sky').componentNames
@@ -6427,14 +6428,32 @@ class plot_save:
                         except:
                             pass
                 else:
+
+                    indiv_mod_addcompnames=[]
+
                     for i in range(1,AllData.nGroups+1):
-                        try:
-                            mod_compnames = AllModels(i, mod).componentNames
-                            mod_addcompnames = [mod + '_' + elem_comp for elem_comp in mod_compnames
-                                                if elem_comp.split('_')[0] not in xspec_multmods]
-                            self.addcompnames += mod_addcompnames
-                        except:
-                            pass
+
+                            # mod_compnames = AllModels(i, mod).componentNames
+                            mod_expression, mod_tables_dict = numbered_expression(mod_name=mod)
+
+                            for elemcomp in AllModels(i,mod).componentNames:
+
+                                try:
+
+                                    # restricting to additive tables for table models
+                                    if elemcomp in list(mod_tables_dict.keys()):
+                                        if 'atable{' in mod_tables_dict[elemcomp]:
+                                            indiv_mod_addcompnames += [mod + '_' + elemcomp]
+                                    else:
+                                        # restricting to additive components
+                                        if elemcomp.split('_')[0] not in xspec_multmods:
+                                            indiv_mod_addcompnames += [mod + '_' + elemcomp]
+                                except:
+                                    pass
+                    #only keeping the component if there is only one addcomp in the model
+                    if len(indiv_mod_addcompnames)>1:
+                        self.addcompnames+=indiv_mod_addcompnames
+
         else:
             self.addcomps=None
             self.addcompnames=[]
@@ -6499,7 +6518,8 @@ def xPlot(types,axes_input=None,plot_saves_input=None,plot_arg=None,includedlist
           secondary_x=True,legend_position=None,xlims=None,ylims=None,label_bg=False,
           mult_factors=None,label_indivcomps=False,
           no_name_data='auto',force_ylog_ratio=False,legend_ncols=None,
-          data_colors=None,model_colors=None,addcomp_colors=None,data_alpha=1,auto_figsize=(10,8)):
+          data_colors=None,model_colors=None,addcomp_colors=None,addcomp_ls=None,data_alpha=1,auto_figsize=(10,8),
+          addcomp_source_cmaps=['YlGn','YlOrRd','PuBu','RdPu'],):
 
     '''
     Replot xspec plots using matplotib. Accepts custom types:
@@ -6554,6 +6574,10 @@ def xPlot(types,axes_input=None,plot_saves_input=None,plot_arg=None,includedlist
     addcomp_colors: if not None or 'data', should be an AllData.nGroups size iterable.
                     overwrite the default xspec colors for the models.
                     if set to 'data', copies the data_colors
+                    if set to 'source', uses a different series of colormaps for each source using
+                        addcomp_source_cmaps, following the source number
+    addcomp_ls: if not None:
+                if 'data', cycles through different ls for each datagroups
 
     data_alpha: alpha value for the ratio/delchi plot errorbars
     '''
@@ -6596,7 +6620,7 @@ def xPlot(types,axes_input=None,plot_saves_input=None,plot_arg=None,includedlist
             xlims_use=xlims
     else:
         xlims_use=None
-        
+
     if ylims is not None:
         if np.ndim(ylims)==1:
             ylims_use=np.array([ylims for i in range(len(types_split))])
@@ -6604,7 +6628,7 @@ def xPlot(types,axes_input=None,plot_saves_input=None,plot_arg=None,includedlist
             ylims_use=ylims
     else:
         ylims_use=None
-        
+
     for i_ax,plot_type in enumerate(types_split):
 
         curr_ax=axes[i_ax]
@@ -6728,7 +6752,7 @@ def xPlot(types,axes_input=None,plot_saves_input=None,plot_arg=None,includedlist
                         model_color_grp=model_colors[id_grp]
                 else:
                     model_color_grp=None
-                    
+
                 curr_ax.plot(curr_save.x[id_grp],curr_save.model[id_grp]*mult_factor_grp,
                              color=xcolors_grp[id_grp] if model_color_grp is None else model_color_grp,alpha=0.5,
                              label='' if group_names=='nolabel' else '')
@@ -6793,6 +6817,7 @@ def xPlot(types,axes_input=None,plot_saves_input=None,plot_arg=None,includedlist
 
             ls_types =[(0, (3, 1, 1, 1)),(0, (5, 1)),(5, (10, 3)),(0, (1, 1)),\
                        (0, (3, 10, 1, 10)),(0, (5, 10)),(0, (1, 10))]
+            ls_types_group=['-']+ls_types[::-1]
 
             list_models=list(AllModels.sources.values())
 
@@ -6810,6 +6835,13 @@ def xPlot(types,axes_input=None,plot_saves_input=None,plot_arg=None,includedlist
             else:
                 label_comps=curr_save.addcompnames
 
+
+            if addcomp_colors=='source':
+                comp_source_list=[elem.split('_')[0] for elem in curr_save.addcompnames]
+                source_names=np.unique(comp_source_list)
+                source_ncomps=np.array([sum(np.array(comp_source_list)==elem) for elem in source_names])
+                source_cmaps=[getattr(plt.cm,addcomp_source_cmaps[i]) for i in range(len(addcomp_source_cmaps))]
+
             for id_grp in range(curr_save.nGroups):
 
                 if mult_factors is not None:
@@ -6817,26 +6849,47 @@ def xPlot(types,axes_input=None,plot_saves_input=None,plot_arg=None,includedlist
                 else:
                     mult_factor_grp = 1
 
+                #common attribution for each non-source type of colors
                 if addcomp_colors is not None:
                     if addcomp_colors == 'data':
                         addcomp_color_grp=data_colors[id_grp]
+                    elif type(addcomp_colors)==str and addcomp_colors!='source':
+                        addcomp_color_grp=addcomp_colors
                     else:
                         addcomp_color_grp=addcomp_colors[id_grp]
                 else:
                     addcomp_color_grp=None
 
-                # breakpoint()
+                #loop through addcomps
                 for i_comp in range(len(curr_save.addcomps[id_grp])):
+
+                    if addcomp_colors=='source':
+
+                        i_source=np.argwhere(curr_save.addcompnames[i_comp].split('_')[0]==source_names)[0][0]
+
+                        #value cycling through the colormap
+                        color_val=(0.8-0.7*(i_comp-sum(source_ncomps[:i_source]))/\
+                                                               source_ncomps[i_source])
+                        comp_color=source_cmaps[i_source](color_val)
+                    else:
+                        comp_color=colors_addcomp.to_rgba(i_comp) if  addcomp_colors not in [None,'data']\
+                                         else  addcomp_color_grp
 
                     try:
                         curr_ax.plot(curr_save.x[id_grp],curr_save.addcomps[id_grp][i_comp]*mult_factor_grp,
-                                     color=colors_addcomp.to_rgba(i_comp) if  addcomp_colors not in [None,'data'] else  addcomp_color_grp,
-                                 label='' if not label_indivcomps else label_comps[i_comp] if id_grp==0 else '',linestyle=ls_types[i_comp%len(ls_types)],linewidth=1)
+                                     color=comp_color,
+                                 label='' if not label_indivcomps else label_comps[i_comp] if id_grp==0 else '',
+                                     linestyle=ls_types_group[id_grp-1] if addcomp_ls=='group'\
+                                         else ls_types[(i_comp)%len(ls_types)],
+                                     linewidth=1)
                     except:
                         try:
                             curr_ax.plot(curr_save.x[0],curr_save.addcomps[id_grp][i_comp]*mult_factor_grp,
-                                         color=colors_addcomp.to_rgba(i_comp)  if  addcomp_colors not in [None,'data']  else  addcomp_color_grp,
-                                     label='' if not label_indivcomps else label_comps[i_comp] if id_grp==0 else '',linestyle=ls_types[i_comp%len(ls_types)],linewidth=1)
+                                         color=comp_color,
+                                     label='' if not label_indivcomps else label_comps[i_comp] if id_grp==0 else '',
+                                         linestyle=ls_types_group[id_grp - 1] if addcomp_ls == 'group' \
+                                             else ls_types[(i_comp) % len(ls_types)],
+                                         linewidth=1)
                         except:
                             breakpoint()
                             print("check if other x work")

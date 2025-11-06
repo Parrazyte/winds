@@ -51,7 +51,12 @@ lines_std={         #don't change the first 8, there are explicit calls in the c
                     'SiKa14abs': r'SiXIV K$\alpha$',
                   'SKa16abs':r'SXVI K$\alpha$',
                   'CaKa20abs':r'CaXX K$\alpha$',
-                  # 'CrKa23abs':r'CrXXIII K$\alpha$',
+                  'AlKa1em':r'AlI K$\alpha$',
+                  'SiKa1em': r'SiI K$\alpha$',
+                  'MgKa12abs':r'MgXII K$\alpha$',
+                  'AlKa13abs': r'AlXIII K$\alpha$',
+
+    # 'CrKa23abs':r'CrXXIII K$\alpha$',
                   #resolved lines
 
                 'FeKa1p1em': r'FeI K$\alpha$ (P$^{1/2}$)',
@@ -134,6 +139,10 @@ lines_e_dict={
                   'SiKa14abs':[2.005494,-3000,3000],
                   'SKa16abs':[2.6215,-3000,3000],
                   'CaKa20abs':[4.10505,-3000,3000],
+                    'AlKa1em': [1.4865,-3000,3000],
+                    'SiKa1em': [1.7397,-3000,3000],
+                    'MgKa12abs': [1.4723,-3000,3000],
+                    'AlKa13abs': [1.7285,-3000,3000],
 
                   #
                   #'CaKb20abs': [around 4.85, -3000, 3000],

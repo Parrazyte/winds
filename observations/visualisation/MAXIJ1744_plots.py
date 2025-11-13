@@ -228,8 +228,135 @@ def arf_compa_plots(dir='./',arf_num_list=[],arf_denom_list=[],label_list=[],lab
 # plt.gca().get_figure().get_children()[1].set_title(None)
 # plt.tight_layout()
 
-
 #Xtend complementary SFP plots
 # mpdaf_plot_img('xa901002010xtd_p031300010_cl_img_DET_2p35_2p5.ds',
 #                rad_crop=[120,120],target_name_list=[None,None],crop_coords=[1087,728.5],center_crop_u='pixels',rotate=True,img_scale='log',target_coords_list=[[728.5,1087]],target_sizes_pix=[8],target_names='MAXI J1744',target_colors=['red'])
 
+
+#bigpix pre_lines empirical plot
+# rebinv_xrism(1,20)
+# rebinv_xrism(2,20)
+# xPlot('ldata,delchi',auto_figsize=[10,5],addcomp_colors='source',
+# addcomp_source_cmaps=['YlGn','YlOrRd_r','PuBu'],addcomp_ls='group',
+# model_ls='group',group_names=['MAXI J1744-294 "big" pixel region','AX J1745.6-2901'],
+# legend_sources=True,label_sources=['MAXI J1744-294','AX J1745.6-2901','diffuse'],
+# label_sources_cval=[0.8,0.2,0.8],legend_addcomp_groups=True)
+# plt.gca().get_figure().get_children()[1].set_title(None)
+# plt.tight_layout()
+
+#bigpix pre_lines 2keV zoom
+#AllData.ignore('**-2.4 2.54-**')
+# rebinv_xrism(1,7)
+# rebinv_xrism(2,5)
+# xPlot('ldata,ratio,delchi',auto_figsize=[4,5],addcomp_colors='source',addcomp_source_cmaps=['YlGn','YlOrRd_r','PuBu'],
+# addcomp_ls='group',model_ls='group',group_names=['MAXI J1744-294 "big" pixel region','AX J1745.6-2901'],
+# legend_sources=False,legend_sources_loc='upper left',skip_main_legend=True)
+# plt.gca().get_figure().get_children()[1].set_title(None)
+# plt.tight_layout()
+
+#zoomed plots for the BH only
+# rebinv_xrism(1,10)
+# plt.rcParams.update({'legend.labelspacing':0.2})
+# xPlot('ldata,ratio,delchi',auto_figsize=[10,5],addcomp_colors='source',addcomp_source_cmaps=['YlGn','YlOrRd_r','PuBu'],addcomp_ls='group',model_ls='group',group_names=['MAXI J1744-294 "big" pixel region'],legend_sources_loc='lower left',legend_sources=True,label_sources=['MAXI J1744-294','AX J1745.6-2901','diffuse'],
+#  label_sources_cval=[0.8,0.2,0.8],legend_addcomp_groups=True)
+# plt.gca().get_figure().get_children()[1].set_title(None)
+# plt.tight_layout()
+
+#blindsearches
+#xrism_ls_loader('post_edgeconti_readj_Ka_emi_norm_onlyBH_narrow_out_6.3_7.1_lw_5.dill',ener_show_range=[6.3,7.1],ratio_bounds=[0.5,2.],squished_mode=True)
+
+#after all lines empi bigpix
+#rebinv_xrism(1,20)
+# rebinv_xrism(2,20)
+# xPlot('ldata,delchi',auto_figsize=[10,5],addcomp_colors='source',
+# addcomp_source_cmaps=['color_limegreen','YlOrRd_r','PuBu'],addcomp_ls='group',
+# model_ls='group',group_names=['MAXI J1744-294 "big" pixel region','AX J1745.6-2901'],
+# legend_sources=True,label_sources=['MAXI J1744-294','AX J1745.6-2901','diffuse'],
+# label_sources_cval=[0.8,0.2,0.8],legend_addcomp_groups=True)
+# plt.gca().get_figure().get_children()[1].set_title(None)
+# plt.tight_layout()
+
+#for appendix
+# rebinv_xrism(1,10)
+# plt.rcParams.update({'legend.labelspacing':0.2})
+# xPlot('ldata,ratio,delchi',auto_figsize=[10,5],addcomp_colors='source',
+#       addcomp_source_cmaps=['color_limegreen','YlOrRd_r','PuBu'],
+#       addcomp_ls='group',model_ls='group',group_names=['MAXI J1744-294 "big" pixel region'],
+#       legend_sources_loc='lower left',legend_sources=True,
+#       label_sources=['MAXI J1744-294','AX J1745.6-2901','diffuse'],
+#  label_sources_cval=[0.8,0.2,0.8],legend_addcomp_groups=True)
+# plt.gca().get_figure().get_children()[1].set_title(None)
+# plt.tight_layout()
+
+
+#smallpix
+
+#full preline resid
+# rebinv_xrism(1,20)
+# rebinv_xrism(2,20)
+# xPlot('ldata,delchi',auto_figsize=[10,5],addcomp_colors='source',
+# addcomp_source_cmaps=['YlGn','YlOrRd','PuBu','RdPu'],addcomp_ls='group',
+# model_ls='group',group_names=['MAXI J1744-294 "small" pixel region','AX J1745.6-2901'],
+# legend_sources=True,label_sources=['MAXI J1744-294','AX J1745.6-2901','GCXE','Sgr A East'],
+# label_sources_cval=[0.8,0.8,0.8,0.8],legend_addcomp_groups=True)
+# plt.gca().get_figure().get_children()[1].set_title(None)
+# plt.tight_layout()
+
+#zoom 2p4
+# rebinv_xrism(1,5)
+# rebinv_xrism(2,5)
+# xPlot('ldata,ratio,delchi',auto_figsize=[4,5],addcomp_colors='source',mult_factors=[1,1],
+# addcomp_source_cmaps=['YlGn','YlOrRd','PuBu','RdPu'],addcomp_ls='group',
+# model_ls='group',group_names=['MAXI J1744-294 "small" pixel region','AX J1745.6-2901'],
+# legend_sources=False,label_sources=['MAXI J1744-294','AX J1745.6-2901','GCXE','Sgr A East'],
+# label_sources_cval=[0.8,0.8,0.8,0.8],skip_main_legend=True)
+# plt.gca().get_figure().get_children()[1].set_title(None)
+# plt.tight_layout()
+
+#zoom 6p3 with readj
+# rebinv_xrism(1,10)
+# rebinv_xrism(2,10)
+#Plot.add=False
+# xPlot('ldata,ratio,delchi',auto_figsize=[6,5],addcomp_colors='source',mult_factors=[1,4.1],
+# addcomp_source_cmaps=['YlGn','YlOrRd','PuBu','RdPu'],addcomp_ls='group',
+# model_ls='group',group_names=['MAXI J1744-294 "small" pixel region','AX J1745.6-2901'],
+# legend_sources=False,label_sources=['MAXI J1744-294','AX J1745.6-2901','GCXE','Sgr A East'],
+# label_sources_cval=[0.8,0.8,0.8,0.8],skip_main_legend=True)
+# plt.gca().get_figure().get_children()[1].set_title(None)
+# plt.tight_layout()
+
+
+#zoom 6p3 no mult factor
+# rebinv_xrism(1,10)
+# rebinv_xrism(2,10)
+# xPlot('ldata,ratio,delchi',auto_figsize=[6,5],addcomp_colors='source',mult_factors=[1,1],
+# addcomp_source_cmaps=['YlGn','YlOrRd','PuBu','RdPu'],addcomp_ls='group',
+# model_ls='group',group_names=['MAXI J1744-294 "small" pixel region','AX J1745.6-2901'],
+# legend_sources=False,label_sources=['MAXI J1744-294','AX J1745.6-2901','GCXE','Sgr A East'],
+# label_sources_cval=[0.8,0.8,0.8,0.8],skip_main_legend=True)
+# plt.gca().get_figure().get_children()[1].set_title(None)
+# plt.tight_layout()
+
+#zoom 7p5-9 (different size to match the size of the bigpix one after cutting the x axis labels)
+# rebinv_xrism(1,10)
+# rebinv_xrism(2,10)
+# xPlot('ldata,ratio,delchi',auto_figsize=[3.8,5],addcomp_colors='source',mult_factors=[1,1],
+# addcomp_source_cmaps=['YlGn','YlOrRd','PuBu','RdPu'],addcomp_ls='group',
+# model_ls='group',group_names=['MAXI J1744-294 "small" pixel region','AX J1745.6-2901'],
+# legend_sources=False,label_sources=['MAXI J1744-294','AX J1745.6-2901','GCXE','Sgr A East'],
+# label_sources_cval=[0.8,0.8,0.8,0.8],skip_main_legend=True)
+# plt.gca().get_figure().get_children()[1].set_title(None)
+# plt.tight_layout()
+
+#appendix prelines
+# rebinv_xrism(1,10)
+# plt.rcParams.update({'legend.labelspacing':0.2})
+# xPlot('ldata,ratio,delchi',auto_figsize=[10,5],addcomp_colors='source',
+# addcomp_source_cmaps=['YlGn','YlOrRd','PuBu','RdPu'],addcomp_ls='group',
+# model_ls='group',group_names=['MAXI J1744-294 "small" pixel region','AX J1745.6-2901'],
+# legend_sources=True,label_sources=['MAXI J1744-294','AX J1745.6-2901','GCXE','Sgr A East'],
+#       addcomp_rebin=[3,3],legend_sources_loc='lower left',
+# label_sources_cval=[0.8,0.8,0.8,0.8],legend_addcomp_groups=True)
+# plt.gca().get_figure().get_children()[1].set_title(None)
+# plt.tight_layout()
+#then manually resize first panel y axis to 0.01-0.5

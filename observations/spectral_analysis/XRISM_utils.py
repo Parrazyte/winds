@@ -1,7 +1,7 @@
 
 from xspec import Xset, Plot, Fit,AllData, AllModels
-from xspec_config_multisp import freeze, allmodel_data,set_ener,store_plot,allfreeze
-from linedet_utils import narrow_line_search,plot_line_search,rebinv_xrism
+from xspec_config_multisp import freeze, allmodel_data,set_ener,store_plot,allfreeze,rebinv_xrism
+from linedet_utils import narrow_line_search,plot_line_search
 from general_tools import ang2kev
 import matplotlib.pyplot as plt
 import dill

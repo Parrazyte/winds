@@ -117,9 +117,10 @@ lines_e_dict={
                   #uncertainty of 5eV
                   'NiKa27abs':[7.793,-5000,3000],
                   'FeKb25abs':[7.878,-5000,10000],
-                  'FeKb26abs':[8.25,-5000,10000],
+                  'FeKb26abs':[8.2505,-5000,10000],
                   'FeKg26abs':[8.7,-5000,10000],
-                  #these 4 are put at the end so they are not used in fakes computation etc since the computation will stop 
+                    'NiKa28abs': [8.09217, -5000, 3000],
+                   #these 4 are put at the end so they are not used in fakes computation etc since the computation will stop
                   #at 3+the number of abslines
                   'FeKa25em':[6.7,-5000,10000],
                   'FeKa26em':[6.97,-5000,10000],
@@ -187,6 +188,9 @@ lines_e_dict={
                 'NiKa27Yabs': [7.7657, -3000, 3000],
                 'NiKa27Xabs': [7.7864, -3000, 3000],
                 'NiKa27Wabs': [7.8056, -3000, 3000],
+
+                'NiKa28p1abs': [8.0731, -3000, 3000],
+                'NiKa28p3abs': [8.1017, -3000, 3000],
 
                 # precision 1.2meV
                 'CrKa23Zabs': [5.6269, -3000, 3000],

@@ -16,7 +16,7 @@ from general_tools import ravel_ragged,MinorSymLogLocator
 from xspec import AllData,Plot,AllModels,Fit,Xset
 
 from xspec_config_multisp import xcolors_grp,addcomp,store_plot,allfreeze,xscorpeon,\
-                                model_load,xspec_globcomps,allmodel_data
+                                model_load,xspec_globcomps,allmodel_data,rebinv_xrism
 from fitting_tools import lines_std,lines_e_dict, lines_std_names
 
 #bipolar colormap from a custom library (https://github.com/endolith/bipolar-colormap)
@@ -452,9 +452,6 @@ def narrow_line_search(data_cont, suffix,e_sat_low_indiv,line_search_e=[4,10,0.0
         return is_abspeak, peak_points, peak_widths, peak_delchis, peak_eqws, chi_dict_plot
     else:
         return chi_dict_plot
-
-def rebinv_xrism(grp_number=1,sigma=2,max_bins=5000):
-    Plot.setRebin(sigma, max_bins, grp_number)
 
 def swap_ratio_dump_path(dump_path,plot_ratio_baseload,
                          out_suffix='',set_ener_str=None,set_ener_xrism=False,rebinv=[],

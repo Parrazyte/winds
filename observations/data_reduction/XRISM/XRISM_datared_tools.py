@@ -477,7 +477,7 @@ def init_anal(directory='auto_repro',anal_dir_suffix='',resolve_filters='open',x
     dirfiles=glob.glob(os.path.join(directory_use,'**'),recursive=True)
 
     resolve_evts=[elem for elem in dirfiles if elem.endswith('cl.evt'+('.gz' if gz else '')) and len(elem.split('/'))>2 and
-                  elem.split('/')[-3]=='resolve']
+                  elem.split('/')[-3]=='resolve' and 'nonghf' not in elem]
     print('Found '+str(len(resolve_evts))+' resolve event files')
     print(resolve_evts)
 

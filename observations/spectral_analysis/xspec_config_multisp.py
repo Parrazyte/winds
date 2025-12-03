@@ -134,6 +134,9 @@ xcolors_grp=['black','red','limegreen','blue','cyan','purple','yellow',
 xscat_pos_dict={'4U1630':0.9}
 
 
+def rebinv_xrism(grp_number=1,sigma=2,max_bins=5000):
+    Plot.setRebin(sigma, max_bins, grp_number)
+
 def ignore_data_indiv(e_low_groups,e_high_groups,reset=False,sat_low_groups=None,sat_high_groups=None,
                       glob_ignore_bands=None):
 
@@ -1012,6 +1015,11 @@ def reset():
     #reseting the xscorpeon bg paths
     xscorpeon.bgload_paths=None
 
+    if Xset.version[1]=='12.15.1':
+        print('Xspec 12.15.1 detected. Setting APECROOT and NEIAPECROOT to 3.1.3 for apec and bvvrnei')
+        Xset.addModelString('NEIAPECROOT', '3.1.3')
+        Xset.addModelString('APECROOT', '3.1.3')
+        Xset.addModelString('APECTHERMAL', 'YES')
     Xset.abund='wilm'
     Fit.nIterations=1000
     Plot.xAxis='keV'
@@ -2176,7 +2184,7 @@ def addcomp(compname,position='last',endmult=None,return_pos=False,mod_name='',
     this means that the 'new' parameters end up unlinked, but this is on purpose to avoid linking before having updated the 
     value ranges (which we do here)
     
-    Note that this is still not perfect as no matter what, values are reset to their initial ineterval when being unlinked
+    Note that this is still not perfect as no matter what, values are reset to their initial interval when being unlinked
     '''
 
     for i_grp in range(2,AllData.nGroups+1):
@@ -2626,6 +2634,9 @@ def delcomp(compname,mod_name='',give_ndel=False):
             if link=='':
                 continue
 
+            #separating different elements within the link here
+            #tbd
+
             '''
             deleting all links that points to deleted parameters
             the euclidian division allows the test to work for the deleted parameters of all data groups
@@ -2660,7 +2671,8 @@ def delcomp(compname,mod_name='',give_ndel=False):
                 continue
 
             #shifting the link value if it points to a parameter originally after the deleted components
-            #the 0 test accounts for the very last parameter, which will always need to be shifted if it wasn't in the deleted comps
+            #the 0 test accounts for the very last parameter, which will always need to be shifted
+            # if it wasn't in the deleted comps
             elif int(link_par)>=skippar_start+skippar_n or int(link_par)%AllModels(1,mod_name).nParameters==0:
 
                 #this value is the numer of times skippar_n parameters are deleted before the link_par parameter
@@ -2669,7 +2681,7 @@ def delcomp(compname,mod_name='',give_ndel=False):
                 #new link position, correctly accounting for additional skips in subsequent datagroups
                 new_link_par=str(int(link_par)-skippar_n*(link_shift_factor))
 
-                mod_data_grp.links[par_id]=link_par_str.replace(link_par_str,'p'+new_link_par)
+                mod_data_grp.links[par_id]=link.replace(link_par_str,'p'+new_link_par)
 
 
         mod_data_grp.links[skippar_start:-skippar_n]=mod_data_grp.links[skippar_start+skippar_n:]
@@ -2689,7 +2701,8 @@ def delcomp(compname,mod_name='',give_ndel=False):
         return new_models
 
 
-def par_error(group=1,par=1,n_round=3,latex=False,mult=1,man_val_arr=[]):
+def par_error(group=1,par=1,n_round=3,latex=False,mult=1,man_val_arr=[],
+              model_name=''):
 
     '''
     returns an array with the error of the chosen parameter
@@ -2712,10 +2725,10 @@ def par_error(group=1,par=1,n_round=3,latex=False,mult=1,man_val_arr=[]):
     if len(man_val_arr)!=0:
         val_arr=[man_val_arr[0],man_val_arr[0]-man_val_arr[1],man_val_arr[2]-man_val_arr[0]]
     else:
-        val_arr=np.array([AllModels(group)(par).values[0],
-              0 if AllModels(group)(par).error[0]==0 else (AllModels(group)(par).values[0] - AllModels(group)(par).error[0]),
-                      0 if AllModels(group)(par).error[1] == 0 else
-                      AllModels(group)(par).error[1] - AllModels(group)(par).values[0]])
+        val_arr=np.array([AllModels(group,model_name)(par).values[0],
+              0 if AllModels(group,model_name)(par).error[0]==0 else (AllModels(group,model_name)(par).values[0] - AllModels(group,model_name)(par).error[0]),
+                      0 if AllModels(group,model_name)(par).error[1] == 0 else
+                      AllModels(group,model_name)(par).error[1] - AllModels(group,model_name)(par).values[0]])
 
     if mult!=1:
         val_arr*=mult
@@ -6386,74 +6399,78 @@ class plot_save:
             self.addcompnames=[]
 
             list_models=list(AllModels.sources.values())
-            #adding default model component names if there is a default model
-            for mod in list_models:
 
-                # if mod=='':
-                #
-                #     mod_expression,mod_tables_dict=numbered_expression(mod_name=mod)
-                #
-                #     #there are addcomps for each  models only if it has more than one additive components
-                #     #we thus need to compare the total number of addcomps with the other model addcomps
-                #     #this is only for nicer and can break if there are addcomps in other nxb type models
-                #
-                #     if len(self.addcomps[0])>(2 if 'nxb' in list_models else 0) + (2 if 'sky' in list_models else 0):
-                #
-                #         for elemcomp in AllModels(1).componentNames:
-                #
-                #             #restricting to additive tables for table models
-                #             if elemcomp in list(mod_tables_dict.keys()):
-                #                 if 'atable{' in mod_tables_dict[elemcomp]:
-                #                     self.addcompnames += [elemcomp]
-                #             else:
-                #                 #restricting to additive components
-                #                 if elemcomp.split('_')[0] not in xspec_multmods:
-                #                     self.addcompnames+=[elemcomp]
+            for i_grp in range(1,AllData.nGroups+1):
+                addcomp_names_grp=[]
+                #adding default model component names if there is a default model
+                for mod in list_models:
+
+                    # if mod=='':
+                    #
+                    #     mod_expression,mod_tables_dict=numbered_expression(mod_name=mod)
+                    #
+                    #     #there are addcomps for each  models only if it has more than one additive components
+                    #     #we thus need to compare the total number of addcomps with the other model addcomps
+                    #     #this is only for nicer and can break if there are addcomps in other nxb type models
+                    #
+                    #     if len(self.addcomps[0])>(2 if 'nxb' in list_models else 0) + (2 if 'sky' in list_models else 0):
+                    #
+                    #         for elemcomp in AllModels(1).componentNames:
+                    #
+                    #             #restricting to additive tables for table models
+                    #             if elemcomp in list(mod_tables_dict.keys()):
+                    #                 if 'atable{' in mod_tables_dict[elemcomp]:
+                    #                     self.addcompnames += [elemcomp]
+                    #             else:
+                    #                 #restricting to additive components
+                    #                 if elemcomp.split('_')[0] not in xspec_multmods:
+                    #                     self.addcompnames+=[elemcomp]
 
 
-                #adding NICER background component Names
-                if mod=='nxb':
-                    for i in range(1,AllData.nGroups+1):
+                    #adding NICER background component Names
+                    if mod=='nxb':
                         try:
-                            self.addcompnames+=AllModels(i,'sky').componentNames
+                            addcomp_names_grp+=AllModels(i_grp,'sky').componentNames
                             break
                         except:
                             pass
 
-                elif mod=='sky':
-                    for i in range(1,AllData.nGroups+1):
+                    elif mod=='sky':
                         try:
-                            self.addcompnames += AllModels(i, 'nxb').componentNames
+                            addcomp_names_grp += AllModels(i_grp, 'nxb').componentNames
                             break
                         except:
                             pass
-                else:
+                    else:
 
-                    indiv_mod_addcompnames=[]
+                        indiv_mod_addcompnames=[]
 
-                    for i in range(1,AllData.nGroups+1):
+                        # mod_compnames = AllModels(i, mod).componentNames
+                        mod_expression, mod_tables_dict = numbered_expression(mod_name=mod)
 
-                            # mod_compnames = AllModels(i, mod).componentNames
-                            mod_expression, mod_tables_dict = numbered_expression(mod_name=mod)
+                        for elemcomp in AllModels(i_grp,mod).componentNames:
 
-                            for elemcomp in AllModels(i,mod).componentNames:
+                            try:
 
-                                try:
+                                # restricting to additive tables for table models
+                                if elemcomp in list(mod_tables_dict.keys()):
+                                    if 'atable{' in mod_tables_dict[elemcomp]:
+                                        indiv_mod_addcompnames += [mod + '_' + elemcomp]
+                                else:
+                                    # restricting to additive components
+                                    if elemcomp.split('_')[0] not in xspec_multmods:
+                                        indiv_mod_addcompnames += [mod + '_' + elemcomp]
+                            except:
+                                pass
 
-                                    # restricting to additive tables for table models
-                                    if elemcomp in list(mod_tables_dict.keys()):
-                                        if 'atable{' in mod_tables_dict[elemcomp]:
-                                            indiv_mod_addcompnames += [mod + '_' + elemcomp]
-                                    else:
-                                        # restricting to additive components
-                                        if elemcomp.split('_')[0] not in xspec_multmods:
-                                            indiv_mod_addcompnames += [mod + '_' + elemcomp]
-                                except:
-                                    pass
-                    #only keeping the component if there is only one addcomp in the model
-                    if len(indiv_mod_addcompnames)>1:
-                        self.addcompnames+=indiv_mod_addcompnames
+                        #only keeping the component if there is only one addcomp in the model
+                        if len(indiv_mod_addcompnames)>1 or len(AllData.nGroups>1):
+                            addcomp_names_grp+=indiv_mod_addcompnames
+                        else:
+                            #testing if this is
+                            pass
 
+                self.addcompnames+=[addcomp_names_grp]
         else:
             self.addcomps=None
             self.addcompnames=[]
@@ -6518,8 +6535,14 @@ def xPlot(types,axes_input=None,plot_saves_input=None,plot_arg=None,includedlist
           secondary_x=True,legend_position=None,xlims=None,ylims=None,label_bg=False,
           mult_factors=None,label_indivcomps=False,
           no_name_data='auto',force_ylog_ratio=False,legend_ncols=None,
-          data_colors=None,model_colors=None,addcomp_colors=None,addcomp_ls=None,data_alpha=1,auto_figsize=(10,8),
-          addcomp_source_cmaps=['YlGn','YlOrRd','PuBu','RdPu'],):
+          data_colors=None,model_colors=None,model_ls=None,addcomp_colors=None,addcomp_ls=None,
+          data_alpha=1,auto_figsize=(10,8),auto_panel_hratio=None,
+          addcomp_source_cmaps=['YlGn','YlOrRd','PuBu','RdPu'],
+          legend_sources=False,label_sources='auto',label_sources_cval='auto',legend_sources_loc="best",
+          legend_sources_bbox=None,
+          legend_addcomp_groups=False,
+          skip_main_legend=False,
+          addcomp_rebin=None,):
 
     '''
     Replot xspec plots using matplotib. Accepts custom types:
@@ -6570,21 +6593,85 @@ def xPlot(types,axes_input=None,plot_saves_input=None,plot_arg=None,includedlist
     model_colors: if not None or 'data', should be an AllData.nGroups size iterable.
                  overwrite the default xspec colors for the models
                 if set to 'data', copies the data_colors
-
+    model_ls: if not None:
+                if 'group', cycles through different ls for each datagroups
     addcomp_colors: if not None or 'data', should be an AllData.nGroups size iterable.
                     overwrite the default xspec colors for the models.
                     if set to 'data', copies the data_colors
                     if set to 'source', uses a different series of colormaps for each source using
                         addcomp_source_cmaps, following the source number
+
+    addcomp_source_cmaps: colormaps to use for the different sources. if start with color_,
+                            uses the next part of the string as a constant color
+
     addcomp_ls: if not None:
-                if 'data', cycles through different ls for each datagroups
+                if 'group', cycles through different ls for each datagroups. Matches model_ls
 
     data_alpha: alpha value for the ratio/delchi plot errorbars
+
+    legend_sources:
+                add an individual legends for different sources in addcomp.
+                Should be used only with addcomp_colors='source'
+
+    label_sources: 'auto' or string iter of len(AllModels.sources)
+        if no 'auto', replace the default xspec source names by the strings
+
+    label_sources_cval: 'auto' or float iter of len(AllModels.sources) in [0;1]
+        if not 'auto', manual values of the value of the colormap of each source
+
+    legend_sources_loc: the loc of the additional legend
+
+    legend_addcomp_groups:
+        Fuse the datagroup legend with the ls for the different groups used for addcomps.
+        Should be used only with model_ls='group'
+
+    skip_main_legend:
+        does not plot the main legend
+
+    addcomp_rebin: None or [float]*len(AllData.nGroups)
+        if not None, do a separate plotting to get the addcomp components without lowering the resolution
+        useful for cases where the components are visually rebinned with the source
+
     '''
+
+    def combo_legend(ax):
+        #taken from https://andrewpwheeler.com/2022/09/16/legends-in-python/
+        handler, labeler = ax.get_legend_handles_labels()
+        hd = []
+        labli = list(set(labeler))
+
+        for lab in labli:
+            comb = [h for h, l in zip(handler, labeler) if l == lab]
+            hd.append(tuple(comb))
+
+        return hd, labli
+
+    # ls_types=['dotted','dashed','dashdot']
+
+    # linestyle_tuple = [
+    #     ('loosely dotted', (0, (1, 10))),
+    #     ('dotted', (0, (1, 1))),
+    #     ('densely dotted', (0, (1, 1))),
+    #     ('long dash with offset', (5, (10, 3))),
+    #     ('loosely dashed', (0, (5, 10))),
+    #     ('dashed', (0, (5, 5))),
+    #     ('densely dashed', (0, (5, 1))),
+    #
+    #     ('loosely dashdotted', (0, (3, 10, 1, 10))),
+    #     ('dashdotted', (0, (3, 5, 1, 5))),
+    #     ('densely dashdotted', (0, (3, 1, 1, 1))),
+    #
+    #     ('dashdotdotted', (0, (3, 5, 1, 5, 1, 5))),
+    #     ('loosely dashdotdotted', (0, (3, 10, 1, 10, 1, 10))),
+    #     ('densely dashdotdotted', (0, (3, 1, 1, 1, 1, 1)))]
+
+    ls_types = [(0, (3, 1, 1, 1)), (0, (5, 1)), (5, (10, 3)), (0, (1, 1)), \
+                (0, (3, 10, 1, 10)), (0, (5, 10)), (0, (1, 10))]
+    ls_types_group = ls_types
 
     if axes_input is None:
         fig=plt.figure(figsize=auto_figsize)
-        grid=GridSpec(len(types.split(',')),1,figure=fig,hspace=0.)
+        grid=GridSpec(len(types.split(',')),1,figure=fig,hspace=0.,height_ratios=auto_panel_hratio)
         axes=[plt.subplot(elem) for elem in grid]
 
     else:
@@ -6643,7 +6730,7 @@ def xPlot(types,axes_input=None,plot_saves_input=None,plot_arg=None,includedlist
             if secondary_x and Plot.xAxis in ['keV','angstrom']:
                 #putting a wavelength copy of the x axis at the top
                 curr_ax_second=curr_ax.secondary_xaxis('top',functions=(ang2kev,ang2kev))
-                curr_ax_second.set_xlabel('Angstrom' if Plot.xAxis=='keV' else 'keV')
+                curr_ax_second.set_xlabel(r' Wavelength $(\AA)$' if Plot.xAxis=='keV' else 'keV')
                 curr_ax_second.minorticks_on()
 
         #hiding the ticks values for the lower x axis if it's not in the last plot or if we're in a provided subplot
@@ -6734,12 +6821,26 @@ def xPlot(types,axes_input=None,plot_saves_input=None,plot_arg=None,includedlist
             if curr_save.y[id_grp] is not None:
                 #plotting each data group
 
-                curr_ax.errorbar(curr_save.x[id_grp],curr_save.y[id_grp]*mult_factor_grp,
+                curr_ax.errorbar(curr_save.x[id_grp],curr_save.y[id_grp]*(1 if 'data' not in plot_type else mult_factor_grp),
                                  xerr=curr_save.xErr[id_grp],
-                                 yerr=curr_save.yErr[id_grp].clip(0)*mult_factor_grp,
+                                 yerr=curr_save.yErr[id_grp].clip(0)*(1 if 'data' not in plot_type else mult_factor_grp),
                                  color=xcolors_grp[id_grp] if data_colors is None else data_colors[id_grp],
                                  linestyle='None',
                                  elinewidth=0.75,alpha=data_alpha,
+                                 label='' if legend_addcomp_groups else\
+                            ('' if group_names=='nolabel' or (no_name_data=='auto' and i_ax!=len(types_split)-1) else grp_name))
+
+                #adding an additional silent background line to show the datagroup ls if the legend is requested
+                if legend_addcomp_groups:
+
+                    #remakeing the errorbar legend with a bigger lw to make it more distinguishable
+                    curr_ax.errorbar([],[],xerr=0,yerr=0,color=xcolors_grp[id_grp] if data_colors is None else data_colors[id_grp],
+                                     linestyle='None',
+                                     elinewidth=1.5,alpha=1.0,
+                                     label='' if group_names=='nolabel' or (no_name_data=='auto' and i_ax!=len(types_split)-1) else grp_name)
+
+                    #will later be fused by combo_legend
+                    curr_ax.plot([],[],color='gray',ls=ls_types_group[id_grp],lw=1.5,alpha=0.5,
                                  label='' if group_names=='nolabel' or (no_name_data=='auto' and i_ax!=len(types_split)-1) else grp_name)
 
             #plotting models
@@ -6753,8 +6854,15 @@ def xPlot(types,axes_input=None,plot_saves_input=None,plot_arg=None,includedlist
                 else:
                     model_color_grp=None
 
-                curr_ax.plot(curr_save.x[id_grp],curr_save.model[id_grp]*mult_factor_grp,
-                             color=xcolors_grp[id_grp] if model_color_grp is None else model_color_grp,alpha=0.5,
+                if model_ls is not None:
+                    if model_ls == 'group':
+                        model_ls_group=ls_types_group[id_grp]
+                else:
+                    model_ls_group='-'
+
+                curr_ax.plot(curr_save.x[id_grp],curr_save.model[id_grp]*(1 if 'data' not in plot_type else mult_factor_grp),
+                             color=xcolors_grp[id_grp] if model_color_grp is None else model_color_grp,
+                             ls=model_ls_group,alpha=0.5,
                              label='' if group_names=='nolabel' else '')
 
 
@@ -6787,43 +6895,32 @@ def xPlot(types,axes_input=None,plot_saves_input=None,plot_arg=None,includedlist
             curr_ax.set_ylim(min(curr_ax.get_ylim()[0],round(min(ravel_ragged(curr_save.y-curr_save.yErr)),4)),
                           max(curr_ax.get_ylim()[1],round(max(ravel_ragged(curr_save.y+curr_save.yErr)),4)))
 
+        comp_source_list=[]
+        source_names=[]
+        source_ncomps=[]
+        source_cmaps=[]
 
         #plotting the components after locking axis limits to avoid huge rescaling
         if 'data' in plot_type and curr_save.add and curr_save.ismod:
+
+            #storing a non-rebinned version of the components to plot it if asked
+            if addcomp_rebin is not None:
+                for id_grp in range(curr_save.nGroups):
+                    rebinv_xrism(id_grp+1,addcomp_rebin[id_grp])
+
+                curr_save_addcomp=plot_saver(plot_type)[0]
 
             #assigning colors to the components (here we assumen the colormap used is not cyclic)
             norm_colors_addcomp=mpl.colors.Normalize(vmin=0,vmax=len(curr_save.addcomps[id_grp]))
 
             colors_addcomp=mpl.cm.ScalarMappable(norm=norm_colors_addcomp,cmap=mpl.cm.plasma)
 
-            # ls_types=['dotted','dashed','dashdot']
-
-            # linestyle_tuple = [
-            #     ('loosely dotted', (0, (1, 10))),
-            #     ('dotted', (0, (1, 1))),
-            #     ('densely dotted', (0, (1, 1))),
-            #     ('long dash with offset', (5, (10, 3))),
-            #     ('loosely dashed', (0, (5, 10))),
-            #     ('dashed', (0, (5, 5))),
-            #     ('densely dashed', (0, (5, 1))),
-            #
-            #     ('loosely dashdotted', (0, (3, 10, 1, 10))),
-            #     ('dashdotted', (0, (3, 5, 1, 5))),
-            #     ('densely dashdotted', (0, (3, 1, 1, 1))),
-            #
-            #     ('dashdotdotted', (0, (3, 5, 1, 5, 1, 5))),
-            #     ('loosely dashdotdotted', (0, (3, 10, 1, 10, 1, 10))),
-            #     ('densely dashdotdotted', (0, (3, 1, 1, 1, 1, 1)))]
-
-            ls_types =[(0, (3, 1, 1, 1)),(0, (5, 1)),(5, (10, 3)),(0, (1, 1)),\
-                       (0, (3, 10, 1, 10)),(0, (5, 10)),(0, (1, 10))]
-            ls_types_group=['-']+ls_types[::-1]
-
             list_models=list(AllModels.sources.values())
 
             #using fitcomp labels if possible
             if includedlist is not None:
-                label_comps=[comp if type(comp)==str else comp.compname for comp in [elem for elem in includedlist if elem is not None and not elem.multipl]]
+                label_comps=[comp if type(comp)==str else comp.compname for comp in [elem for elem in includedlist\
+                                                                            if elem is not None and not elem.multipl]]
 
                 #adding NICER background component Names
                 if 'nxb' in list_models:
@@ -6833,16 +6930,24 @@ def xPlot(types,axes_input=None,plot_saves_input=None,plot_arg=None,includedlist
                     label_comps+=AllModels(1,'nxb').componentNames
 
             else:
-                label_comps=curr_save.addcompnames
-
-
-            if addcomp_colors=='source':
-                comp_source_list=[elem.split('_')[0] for elem in curr_save.addcompnames]
-                source_names=np.unique(comp_source_list)
-                source_ncomps=np.array([sum(np.array(comp_source_list)==elem) for elem in source_names])
-                source_cmaps=[getattr(plt.cm,addcomp_source_cmaps[i]) for i in range(len(addcomp_source_cmaps))]
+                label_comps=ravel_ragged(curr_save.addcompnames)
 
             for id_grp in range(curr_save.nGroups):
+
+                if addcomp_colors == 'source':
+
+                    comp_source_list_grp=[elem.split('_')[0] for elem in curr_save.addcompnames[id_grp]]
+                    comp_source_list += [comp_source_list_grp]
+
+                    source_names_grp=[]
+                    for elem in comp_source_list_grp:
+                        if elem not in source_names_grp:
+                            source_names_grp+=[elem]
+                    source_names += [np.array(source_names_grp)]
+
+                    source_ncomps += [np.array([sum(np.array(comp_source_list[id_grp]) == elem) for elem in source_names[id_grp]])]
+                    source_cmaps += [[(addcomp_source_cmaps[i].split('_')[-1] if addcomp_source_cmaps[i].startswith('color_')\
+                                      else getattr(plt.cm, addcomp_source_cmaps[i])) for i in range(len(addcomp_source_cmaps))]]
 
                 if mult_factors is not None:
                     mult_factor_grp = mult_factors[id_grp]
@@ -6865,29 +6970,35 @@ def xPlot(types,axes_input=None,plot_saves_input=None,plot_arg=None,includedlist
 
                     if addcomp_colors=='source':
 
-                        i_source=np.argwhere(curr_save.addcompnames[i_comp].split('_')[0]==source_names)[0][0]
+                        i_source=np.argwhere(curr_save.addcompnames[id_grp][i_comp].split('_')[0]==source_names[id_grp])[0][0]
 
                         #value cycling through the colormap
-                        color_val=(0.8-0.7*(i_comp-sum(source_ncomps[:i_source]))/\
-                                                               source_ncomps[i_source])
-                        comp_color=source_cmaps[i_source](color_val)
+                        color_val=(0.8-0.7*(i_comp-sum(source_ncomps[id_grp][:i_source]))/\
+                                                               source_ncomps[id_grp][i_source])
+                        comp_color=source_cmaps[id_grp][i_source] if type(source_cmaps[id_grp][i_source])==str else\
+                                    source_cmaps[id_grp][i_source](color_val)
+
                     else:
                         comp_color=colors_addcomp.to_rgba(i_comp) if  addcomp_colors not in [None,'data']\
                                          else  addcomp_color_grp
 
+                    if addcomp_rebin is not None:
+                        curr_save_use_addcomp=curr_save_addcomp
+                    else:
+                        curr_save_use_addcomp=curr_save
                     try:
-                        curr_ax.plot(curr_save.x[id_grp],curr_save.addcomps[id_grp][i_comp]*mult_factor_grp,
+                        curr_ax.plot(curr_save_use_addcomp.x[id_grp],curr_save_use_addcomp.addcomps[id_grp][i_comp]*mult_factor_grp,
                                      color=comp_color,
                                  label='' if not label_indivcomps else label_comps[i_comp] if id_grp==0 else '',
-                                     linestyle=ls_types_group[id_grp-1] if addcomp_ls=='group'\
+                                     linestyle=ls_types_group[id_grp] if addcomp_ls=='group'\
                                          else ls_types[(i_comp)%len(ls_types)],
                                      linewidth=1)
                     except:
                         try:
-                            curr_ax.plot(curr_save.x[0],curr_save.addcomps[id_grp][i_comp]*mult_factor_grp,
+                            curr_ax.plot(curr_save_use_addcomp.x[0],curr_save_use_addcomp.addcomps[id_grp][i_comp]*mult_factor_grp,
                                          color=comp_color,
                                      label='' if not label_indivcomps else label_comps[i_comp] if id_grp==0 else '',
-                                         linestyle=ls_types_group[id_grp - 1] if addcomp_ls == 'group' \
+                                         linestyle=ls_types_group[id_grp] if addcomp_ls == 'group' \
                                              else ls_types[(i_comp) % len(ls_types)],
                                          linewidth=1)
                         except:
@@ -6901,25 +7012,132 @@ def xPlot(types,axes_input=None,plot_saves_input=None,plot_arg=None,includedlist
             curr_ax.axhline(y=0,xmin=0,xmax=1,color='green')
 
         #plotting the legend in horizontal and below the main result if necessary
-        if AllData.nGroups>=5 and no_name_data=='auto':
-            if i_ax==0:
-                curr_ax.legend(loc=legend_position,
-                               ncols=3+np.ceil(AllData.nGroups/15) if legend_ncols==None else legend_ncols)
 
-            if i_ax==len(types_split)-1:
-                bbox_yval=max(-0.3-0.2*np.ceil(AllData.nGroups/2),-0.5)
-                curr_ax.legend(loc='lower center',
-                               bbox_to_anchor=(0.5,bbox_yval),
-                               ncols=3+np.ceil(AllData.nGroups/15) if legend_ncols==None else legend_ncols)
+        #getting the main legend combo handles and labels
+        main_leg_hd,main_leg_labli=combo_legend(curr_ax)
+        #note: the default handlelength for items is 2, we double it if we're combining items to show the dash pattern
 
-        else:
-            curr_ax.legend(loc=legend_position)
+        if not skip_main_legend:
+            if AllData.nGroups>=5 and no_name_data=='auto':
+                if i_ax==0:
+                    curr_ax.legend(main_leg_hd,main_leg_labli,loc=legend_position,
+                                   ncols=3+np.ceil(AllData.nGroups/15) if legend_ncols==None else legend_ncols,
+                                   handlelength=4 if legend_addcomp_groups else None)
+
+                if i_ax==len(types_split)-1:
+                    bbox_yval=max(-0.3-0.2*np.ceil(AllData.nGroups/2),-0.5)
+                    curr_ax.legend(main_leg_hd,main_leg_labli,loc='lower center',
+                                   bbox_to_anchor=(0.5,bbox_yval),
+                                   ncols=3+np.ceil(AllData.nGroups/15) if legend_ncols==None else legend_ncols,
+                                   handlelength=4 if legend_addcomp_groups else None)
+
+
+            else:
+                curr_ax.legend(main_leg_hd,main_leg_labli,loc=legend_position,
+                               handlelength=4 if legend_addcomp_groups else None)
+
+        #addcomp source legends if requested
+        if 'data' in plot_type and curr_save.add and curr_save.ismod and legend_sources and addcomp_colors=='source':
+
+            ax_legend_sources=curr_ax.twinx()
+            ax_legend_sources.yaxis.set_visible(False)
+
+            #for now we only do this for the first datagroup to avoid too much of a mess
+            for i_source in range(len(source_names[0])):
+
+                ax_legend_sources.plot([],[],
+                             color=source_cmaps[0][i_source] if type(source_cmaps[0][i_source])==str else\
+                                 source_cmaps[0][i_source]\
+                                     (0.8 if type(label_sources_cval)==str and label_sources_cval=='auto'\
+                                    else label_sources_cval[i_source]),
+                             label=(source_names[0][i_source] if type(label_sources)==str and label_sources=='auto'\
+                                    else label_sources[i_source]),
+                             linestyle='-',
+                             linewidth=1)
+
+            ax_legend_sources.legend(loc=legend_sources_loc,title='sources',bbox_to_anchor=legend_sources_bbox)
 
     if axes_input is None:
         fig.tight_layout()
         return axes
     else:
         return None,None
+
+def plot_comp_ratio(cont_addcomps,other_addcomps,ener_low,ener_high,
+                   plot_type='eemo',
+                    ylims=None,
+                   xcm=None,
+                   other_addcomps_labels=None,other_addcomps_colors=None,figsize=(10,5)):
+
+    '''
+    Makes a ratio plot of individual components compared to the sum of others related to a specific weight
+
+    plot_type (eemo or other xspec type where addcomp is expressed)
+        will be used to get the addcomp values
+
+    xcm : path or None
+        will load a model or take the current one
+
+    comp_addcomps: iterable of ints
+        the list of addcomps ids (in xspec, so with indexes starting at 1)
+        to be summed to create the continuum, to which
+        all thethe "other_addcomps" will individually be normalized
+
+    other_addcomps: iterable of either ints or iterables of ints
+        the list of the addcomps ids (in xspec, so with indexes starting at 1)
+        which will appear individually as the ratio on top of comp_addcomps
+        note: can be combined by passing iterables within the list
+        In this case, will sum all the addcomps in that iterbale for a single displayed component
+
+    ener_low/ener_high: x axis limits of the plot
+
+    other_addcomps_names/colors: None or iterable of same len as other_addcomps
+        labels and colors for the additional components
+
+    figsize:
+        python plot figure size
+
+    '''
+
+    if xcm is not None:
+        Xset.restore(xcm)
+
+    Plot(plot_type)
+    cont_addcomps_sum = np.array([Plot.addComp(addCompNum=i_comp, plotGroup=1) for i_comp in cont_addcomps]).sum(0)
+
+    other_addcomps_vals=[]
+    for indiv_cont_id in other_addcomps:
+        if type(indiv_cont_id)==int:
+            indiv_cont_id_list=[indiv_cont_id]
+        else:
+            indiv_cont_id_list=indiv_cont_id
+        other_addcomps_vals+=[np.array([Plot.addComp(addCompNum=i_comp, plotGroup=1) for i_comp in indiv_cont_id_list]).sum(0)]
+
+    other_addcomps_ratio=[np.nan_to_num(elem/cont_addcomps_sum) for elem in other_addcomps_vals]
+
+    plt.figure(figsize=(10,5))
+
+    plt.xlim(ener_low,ener_high)
+    plt.xlabel(Plot.xAxis)
+    plt.ylabel('model ratio to continuum')
+
+    if other_addcomps_labels is None:
+        other_addcomps_labels_use=np.repeat('',len(other_addcomps))
+    else:
+        other_addcomps_labels_use=other_addcomps_labels
+
+    if other_addcomps_colors is None:
+        other_addcomps_colors_use=np.repeat(None,len(other_addcomps))
+    else:
+        other_addcomps_colors_use=other_addcomps_colors
+
+    [plt.plot(Plot.x(1),1+elem_ratio,color=elem_color,label=elem_label) \
+     for elem_ratio,elem_color,elem_label in
+     zip(other_addcomps_ratio,other_addcomps_colors_use,other_addcomps_labels_use)]
+
+    if ylims is not None:
+        plt.ylims(ylims)
+    plt.legend()
 
 def store_fit(mode, epoch_id, outdir, logfile, fitmod=None):
     '''
@@ -7037,4 +7255,3 @@ def store_plot(datatype='data',comps=False):
         return (plot_values,mod_values)
     Plot.add=prev_plot_add_state
     return plot_values
-

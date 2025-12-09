@@ -154,10 +154,12 @@ ap.add_argument("-dir", "--startdir", nargs='?', help="starting directory. Curre
 ap.add_argument("-evtname",nargs='?',help='substring present in previously processed epproc and emproc event lists',
                 default='Evts',type=str)
 
+ap.add_argument('-SAS_version',help='sas version number, for some string catch commands',
+                default='22.1.0',type=str)
 
 #global choices
 ap.add_argument("-a","--action",nargs='?',help='Give which action(s) to proceed,separated by comas.'+
-                '\n1.evt_build\n2.filter_evt\n3.extract_reg...',default='l,s,m',type=str)
+                '\n1.evt_build\n2.filter_evt\n3.extract_reg...',default='m',type=str)
 
 #,2n,3,l,s,m
 #std : '1' puis '2n,3,l,s,m'
@@ -191,12 +193,12 @@ ap.add_argument('-replace_std_flare_band',nargs=1,help='replace the standard fla
 
 ap.add_argument('-man_lc_flare',nargs=1,
                 help='manual flare lightcurve input for std mode if need be. Warning: hacky',
-                default='pn_S003_Imaging_MAXIJ1744_v2_lc_src_broad.ds',type=str)
-
+                default='',type=str)
+#pn_S003_Imaging_MAXIJ1744_v2_lc_src_broad.ds
 
 '''region computation'''
 
-ap.add_argument('-extract_reg_mode',nargs=1,help='region extraction mode',default='manual')
+ap.add_argument('-extract_reg_mode',nargs=1,help='region extraction mode',default='auto')
 
 ap.add_argument('-use_file_target',nargs=1,
                 help='Allows to extract regions when Simbad doesnt recognize the name of the source from'
@@ -215,6 +217,11 @@ ap.add_argument("-p", "--pileup_ctrl",nargs=1,
 ap.add_argument('-p_tresh','--pileup_threshold',nargs=1,
                 help='maximum acceptable pile-up value to stop the excision. Replaces other pile_up controls.'+
                 ' "None" shuts off this method',default=0.05)
+
+#if set to true, wil ask for sudo mdp at script launch
+ap.add_argument('-sudo_mode',nargs=1,help='put to true if the ds9 installation needs to be run in sudo',
+               default=False,type=bool)
+
 '''TIMING'''
 
 ap.add_argument('-timing_check',nargs=1,help="For timing mode exposures, stops the computation if the distance between the identified analysis object and the observation's average is >30 arcsecs",default=True,type=bool)
@@ -261,6 +268,7 @@ later:
 
 args=ap.parse_args()
 
+SAS_version=args.SAS_version
 evtname=args.evtname
 startdir=args.startdir
 action_list=args.action.split(',')
@@ -292,6 +300,14 @@ pileup_max_ex=args.pileup_max_ex
 pileup_threshold=args.pileup_threshold
 use_file_target_glob=args.use_file_target
 extract_reg_mode=args.extract_reg_mode
+
+sudo_mode=args.sudo_mode
+
+if sudo_mode:
+    sudo_mdp=input('Sudo mode activated. Enter sudo password for ds9')
+else:
+    sudo_mdp=''
+
 '''''''''''''''''
 ''''FUNCTIONS''''
 '''''''''''''''''
@@ -987,7 +1003,8 @@ def filter_evt(directory,mode='std',cams='all',expos_mode='all',man_lc_flare='',
     
     filter_evt_done.set()
 
-def disp_ds9(spawn,file,zoom='auto',scale='log',regfile='',screenfile='',give_pid=False,kill_last=''):
+def disp_ds9(spawn,file,zoom='auto',scale='log',regfile='',screenfile='',give_pid=False,kill_last='',kill_current=False,
+             sudo_mode=False,sudo_mdp=''):
     
     '''
     Regfile is an input, screenfile is an output. Both can be paths
@@ -1017,10 +1034,15 @@ def disp_ds9(spawn,file,zoom='auto',scale='log',regfile='',screenfile='',give_pi
     #parsing the open windows before and after the ds9 command to find the pid of the new ds9 window
     if screenfile!='' or give_pid:
         windows_before=subprocess.run(['wmctrl','-l'],stdout=subprocess.PIPE).stdout.decode('utf-8').split('\n')
-        
-    spawn.sendline('echo "Ph0t1n0s" | sudo -S ds9 -view buttons no -cmap Heat -geometry 1080x1080 -scale '+scale+' -mode region '+file+' -zoom '+str(zoom)+
-                   ' '+regfile+' &')
-    
+
+    if sudo_mode:
+
+        spawn.sendline('echo "'+sudo_mdp+'" | sudo -S ds9 -view buttons no -cmap Heat -geometry 1080x1080 -scale '+scale+' -mode region '+file+' -zoom '+str(zoom)+
+                       ' '+regfile+' &')
+    else:
+        spawn.sendline('ds9 -view buttons no -cmap Heat -geometry 1080x1080 -scale ' + scale + ' -mode region '
+                       + file + ' -zoom ' + str(zoom) + ' ' + regfile + ' &')
+
     #the timeout limit could be increased for slower computers or heavy images
     spawn.expect(['password',pexpect.TIMEOUT],timeout=1)
     
@@ -1035,7 +1057,7 @@ def disp_ds9(spawn,file,zoom='auto',scale='log',regfile='',screenfile='',give_pi
         #since sometimes the ds9 window takes time to load, we loop until the window creation to be sure we can take
         #the screenshot
         delay=0
-        while len(windows_after)==len(windows_before) and delay<=10:
+        while len(windows_after)==len(windows_before) and delay<=120:
             time.sleep(1)
             windows_after=subprocess.run(['wmctrl','-l'],stdout=subprocess.PIPE).stdout.decode('utf-8').split('\n')
             delay+=1
@@ -1047,14 +1069,45 @@ def disp_ds9(spawn,file,zoom='auto',scale='log',regfile='',screenfile='',give_pi
                 
                 if screenfile!='':
                     print('\nSaving screenshot...')
+                    # os.system('scrot -u '+ds9_pid+' -o '+screenfile)
                     os.system('import -window '+ds9_pid+' '+screenfile)
     
     #we purposely do this at the very end
     if kill_last!='':
+
         print('\nClosing previous ds9 window...')
 
-        os.system('wmctrl -ic '+kill_last)
-    
+        kill_last_id=kill_last
+
+        os.system('wmctrl -ic '+kill_last_id)
+
+        windows_final = subprocess.run(['wmctrl', '-l'], stdout=subprocess.PIPE).stdout.decode('utf-8').split('\n')
+
+        # since sometimes the ds9 window takes time to load, we loop until the window creation to be sure we can take
+        # the screenshot
+        delay = 0
+        while len(windows_final) == len(windows_after) and delay <= 120:
+            time.sleep(1)
+            windows_final = subprocess.run(['wmctrl', '-l'], stdout=subprocess.PIPE).stdout.decode('utf-8').split('\n')
+            delay += 1
+
+    if kill_current:
+        print('\nClosing current ds9 window...')
+
+        kill_last_id = ds9_pid
+
+        os.system('wmctrl -ic '+kill_last_id)
+
+        windows_final = subprocess.run(['wmctrl', '-l'], stdout=subprocess.PIPE).stdout.decode('utf-8').split('\n')
+
+        # since sometimes the ds9 window takes time to load, we loop until the window creation to be sure we can take
+        # the screenshot
+        delay = 0
+        while len(windows_final) == len(windows_after) and delay <= 120:
+            time.sleep(1)
+            windows_final = subprocess.run(['wmctrl', '-l'], stdout=subprocess.PIPE).stdout.decode('utf-8').split('\n')
+            delay += 1
+
 
     if give_pid:
         return ds9_pid
@@ -1249,7 +1302,7 @@ def pileup_bool(pileup_line):
 
 def extract_reg(directory,mode='manual',cams='all',expos_mode='all',use_file_target=False,
                 manual_coord_type='fk5',pileup_test=True,
-                overwrite=True):
+                overwrite=True,sudo_mode=False,sudo_mdp=''):
     
     '''
     Extracts the optimal source/bg regions for a given exposure
@@ -1274,7 +1327,7 @@ def extract_reg(directory,mode='manual',cams='all',expos_mode='all',use_file_tar
         fulldir=directory+'/'+filedir
 
         #opening the fits file to extract some informations on the exposure
-        fits_evtclean=fits.open(fulldir+'/'+file)
+        fits_evtclean=fits.open(os.path.join(fulldir,file))
         expos_mode_single=fits_evtclean[0].header['DATAMODE']
         submode=fits_evtclean[0].header['SUBMODE']
         print('\nexpos mode:',expos_mode_single)
@@ -1299,7 +1352,8 @@ def extract_reg(directory,mode='manual',cams='all',expos_mode='all',use_file_tar
         file_init=fulldir+'/'+camera+suffix_evt+'_'+mode+'_evt_save.ds'
         
         #opening the image file and saving it for verification purposes
-        ds9_pid_sp_start=disp_ds9(spawn,file_img,screenfile=fulldir+'/'+camera+suffix_evt+'_auto_img_screen.png',give_pid=True)
+        ds9_pid_sp_start=disp_ds9(spawn,file_img,screenfile=fulldir+'/'+camera+suffix_evt+'_auto_img_screen.png',give_pid=True,
+                                  sudo_mode=sudo_mode,sudo_mdp=sudo_mdp)
         
         try:
             fits_img=fits.open(fulldir+'/'+file_img)
@@ -1423,8 +1477,13 @@ def extract_reg(directory,mode='manual',cams='all',expos_mode='all',use_file_tar
                             'expression="'+expression_snr+'" withrateset=yes rateset='+camera+suffix_evt+prefix+'_lc_'+suffix_lc+'.ds '+
                             'timebinsize='+str(binning)+' maketimecolumn=yes makeratecolumn=yes')
             #there are two occurences of this, one at the beginning and one at the end of the command 
-            spawn.expect(['\[xmmsas_'],timeout=None)
-            spawn.expect(['\[xmmsas_'],timeout=None)
+            #deprecated
+            # spawn.expect(['\[xmmsas_'],timeout=None)
+            # spawn.expect(['\[xmmsas_'],timeout=None)
+
+            spawn.expect(['\['+SAS_version+''],timeout=None)
+            spawn.expect(['\['+SAS_version+''],timeout=None)
+
             
             #waiting for the file to be created to continue
             while not os.path.isfile(lc_path):
@@ -1632,7 +1691,7 @@ def extract_reg(directory,mode='manual',cams='all',expos_mode='all',use_file_tar
                                   '\nbox('+bg_ctr1+',90,'+bg_width1+',179) # text={manually selected background}')
                 
                 ds9_pid_sp_reg=disp_ds9(spawn,file_img,regfile=reg_name,screenfile=fulldir+'/'+camera+suffix_evt
-                                        +prefix+'_reg_screen.png',give_pid=True,kill_last=ds9_pid_sp_start)
+                                        +prefix+'_reg_screen.png',give_pid=True,kill_last=ds9_pid_sp_start,kill_current=True,sudo_mode=sudo_mode,sudo_mdp=sudo_mdp)
 
                 
             elif mode=='auto':
@@ -1650,7 +1709,7 @@ def extract_reg(directory,mode='manual',cams='all',expos_mode='all',use_file_tar
                 
                 #But first, we check that the target of the timing observation is not too far from our own object.
                 if timing_check:
-                    obj_auto=source_catal(fulldir,use_file_target=use_file_target)
+                    obj_auto=source_catal(spawn,dirpath=fulldir,file=file,use_file_target=use_file_target)
 
                     #checking if the function returned an error message (folder movement done in the function)
                     if type(obj_auto)==str:
@@ -1662,7 +1721,10 @@ def extract_reg(directory,mode='manual',cams='all',expos_mode='all',use_file_tar
                             obj_deg=fits_evtclean[0].header['RA_OBJ'],fits_evtclean[0].header['DEC_OBJ']
                     else:
                         #if not, we compare the distance to the coordinates given in the file's header
-                        obj_deg=sexa2deg([obj_auto['DEC'].replace(' ',':'),obj_auto['RA'].replace(' ',':')])[::-1]
+                         #deprecated with the newer versions of astroquery
+                        # obj_deg=sexa2deg([obj_auto['DEC'].replace(' ',':'),obj_auto['RA'].replace(' ',':')])[::-1]
+
+                        obj_deg=np.array([obj_auto['ra'],obj_auto['dec']])
 
                         #to the theoretical pointing coordinates
                         target_obj_deg=fits_evtclean[0].header['RA_OBJ'],fits_evtclean[0].header['DEC_OBJ']
@@ -1670,10 +1732,12 @@ def extract_reg(directory,mode='manual',cams='all',expos_mode='all',use_file_tar
                         #to the average coordinates
                         target_avg_deg=fits_evtclean[0].header['RA_PNT'],fits_evtclean[0].header['DEC_PNT']
 
+                        try:
                         #computing the angular distance in arcsecs from both of those
-                        dist_target_obj_catal=(np.sum(((obj_deg-target_obj_deg)*3600))**2)**(1/2)
-                        dist_target_avg_catal=(np.sum(((obj_deg-target_avg_deg)*3600))**2)**(1/2)
-
+                            dist_target_obj_catal=(np.sum(((obj_deg-target_obj_deg)*3600))**2)**(1/2)
+                            dist_target_avg_catal=(np.sum(((obj_deg-target_avg_deg)*3600))**2)**(1/2)
+                        except:
+                            breakpoint()
                         #most objects with correct pointings will have a very small obj to catal distance
                         #if they don't, the rage pointing to catal distance acts as a failsafe
                         if dist_target_obj_catal>30 and dist_target_avg_catal>60:
@@ -1919,7 +1983,7 @@ def extract_reg(directory,mode='manual',cams='all',expos_mode='all',use_file_tar
                     #return a new ds9 pid
                     if excised==False:
                         ds9_pid=disp_ds9(spawn,file_img_cleaned,regfile=reg_name,screenfile=fulldir+'/'+camera+suffix_evt
-                                                +prefix+'_reg'+add_str+'_screen.png',give_pid=True,kill_last=ds9_pid_prev)
+                                                +prefix+'_reg'+add_str+'_screen.png',give_pid=True,kill_last=ds9_pid_prev,kill_current=True,sudo_mode=sudo_mode,sudo_mdp=sudo_mdp)
                         
                         return expression_source,expression_bg,dist_summary,ds9_pid,max(src_snr_arr)
                     else:
@@ -1993,7 +2057,7 @@ def extract_reg(directory,mode='manual',cams='all',expos_mode='all',use_file_tar
                     ds9_pid_sp_reg = disp_ds9(spawn, file_img, regfile=reg_name,
                                               screenfile=fulldir + '/' + camera + suffix_evt
                                                          + prefix + '_reg_screen.png', give_pid=True,
-                                              kill_last=ds9_pid_sp_start)
+                                              kill_last=ds9_pid_sp_start,kill_current=True,sudo_mode=sudo_mode,sudo_mdp=sudo_mdp)
 
                     assert 1==0,'Conversion not implemented yet'
                     # in the example threads they also add gti selection but it shouldn't matter if we directly use cleaned event files
@@ -2054,7 +2118,7 @@ def extract_reg(directory,mode='manual',cams='all',expos_mode='all',use_file_tar
                         bg_radius_inner=str(round(float(bg_radius_inner)/3600,8))
 
                     ds9_pid_sp_reg=disp_ds9(spawn,file_img,regfile=reg_name,screenfile=fulldir+'/'+camera+suffix_evt
-                                            +prefix+'_reg_screen.png',give_pid=True,kill_last=ds9_pid_sp_start)
+                                            +prefix+'_reg_screen.png',give_pid=True,kill_last=ds9_pid_sp_start,kill_current=True,sudo_mode=sudo_mode,sudo_mdp=sudo_mdp)
 
                     #in the example threads they also add gti selection but it shouldn't matter if we directly use cleaned event files
                     expression_source = spatial_expression(src_coords_man,excision_radius=src_radius_inner)
@@ -2066,8 +2130,8 @@ def extract_reg(directory,mode='manual',cams='all',expos_mode='all',use_file_tar
                 print('\nAutomatic search of the directory names in Simbad.')
                 
                 prefix='_auto'
-                
-                obj_auto=source_catal(fulldir,use_file_target=use_file_target)
+
+                obj_auto = source_catal(spawn, dirpath=fulldir, file=file, use_file_target=use_file_target)
 
                 # checking if the function returned an error message (folder movement done in the function)
                 if type(obj_auto) == str:
@@ -2078,8 +2142,10 @@ def extract_reg(directory,mode='manual',cams='all',expos_mode='all',use_file_tar
                         obj_deg =[fits_evtclean[0].header['RA_OBJ'],fits_evtclean[0].header['DEC_OBJ']]
                 else:
                     #careful the output after the first line is in dec,ra not ra,dec
-                    obj_deg=sexa2deg([obj_auto['DEC'].replace(' ',':'),obj_auto['RA'].replace(' ',':')])
-                    obj_deg=[str(obj_deg[1]),str(obj_deg[0])]
+                    # obj_deg=sexa2deg([obj_auto['DEC'].replace(' ',':'),obj_auto['RA'].replace(' ',':')])
+                    # obj_deg=[str(obj_deg[1]),str(obj_deg[0])]
+
+                    obj_deg = np.array([obj_auto['ra'], obj_auto['dec']],dtype=str).tolist()
 
                 #loading the fits file with MPDAF has to be done after a preliminary fits load since the format isn't accepted
                 src_mpdaf_WCS=mpdaf_WCS(fits_img[0].header)
@@ -2101,7 +2167,7 @@ def extract_reg(directory,mode='manual',cams='all',expos_mode='all',use_file_tar
                 
                 ds9_pid_sp_start=disp_ds9(spawn,file_img,regfile=catal_reg_name,zoom=1.2,
                                         screenfile=fulldir+'/'+camera+suffix_evt+prefix+'_catal_reg_screen.png',give_pid=True,
-                                        kill_last=ds9_pid_sp_start)
+                                        kill_last=ds9_pid_sp_start,kill_current=True,sudo_mode=sudo_mode,sudo_mdp=sudo_mdp)
                 
                 #cropping the image to avoid zoom in the future plots
                 #(size is double the radius since we crop at the edges of the previously cropped circle)
@@ -2783,7 +2849,7 @@ def extract_reg(directory,mode='manual',cams='all',expos_mode='all',use_file_tar
                 
                 ds9_pid_sp_reg=disp_ds9(spawn,file_img.replace('.ds','_snr.ds'),regfile=reg_name,
                                         screenfile=fulldir+'/'+camera+suffix_evt+prefix+'_reg_screen.png',give_pid=True,
-                                        kill_last=ds9_pid_sp_start)
+                                        kill_last=ds9_pid_sp_start,kill_current=True,sudo_mode=sudo_mode,sudo_mdp=sudo_mdp)
                     
         def pileup_util(expression_source,distrib_summary=None,src_coords=None,excise=True,max_ex=pileup_max_ex):
             
@@ -3056,7 +3122,7 @@ def extract_reg(directory,mode='manual',cams='all',expos_mode='all',use_file_tar
                     
                 #and replacing the screen, with a log scale to aid visualisation 
                 disp_ds9(spawn,file_img.replace('.ds','_snr_excised.ds'),regfile=reg_name,
-                         screenfile=fulldir+'/'+camera+suffix_evt+prefix+'_reg_excised_screen.png',kill_last=ds9_pid_sp_reg)
+                         screenfile=fulldir+'/'+camera+suffix_evt+prefix+'_reg_excised_screen.png',kill_last=ds9_pid_sp_reg,kill_current=True,sudo_mode=sudo_mode,sudo_mdp=sudo_mdp)
 
             else:
                 best_SNR=''
@@ -3181,8 +3247,10 @@ def extract_reg(directory,mode='manual',cams='all',expos_mode='all',use_file_tar
                 summary_content=obsid+'\t'+clean_evtid+'\t'+summary_line
                 file_edit(os.path.join(directory,'batch','summary_extract_reg.log'),obsid+'\t'+clean_evtid,summary_content+'\n',
                           summary_header)
-            
-    bashproc.sendline('\necho "Ph0t1n0s" |sudo -S pkill sudo')
+
+    if sudo_mode:
+        bashproc.sendline('\necho "'+sudo_mdp+'" |sudo -S pkill sudo')
+
     #this sometimes doesn't proc before the exit for whatever reason so we add a buffer just in case
     # bashproc.expect([pexpect.TIMEOUT],timeout=2)
         
@@ -3498,8 +3566,11 @@ def extract_lc(directory,mode='manual',cams='all',expos_mode='all',overwrite=Tru
                             'expression="'+expression+'" withrateset=yes rateset='+camera+suffix_evt+'_'+prefix+'_lc_'+suffix_lc+'.ds '+
                             'timebinsize='+str(binning)+' maketimecolumn=yes makeratecolumn=yes')
             #there are two occurences of this, one at the beginning and one at the end of the command 
-            spawn.expect(['\[xmmsas_'],timeout=None)
-            spawn.expect(['\[xmmsas_'],timeout=None)
+            # spawn.expect(['\[xmmsas_'],timeout=None)
+            # spawn.expect(['\[xmmsas_'],timeout=None)
+
+            spawn.expect(['\['+SAS_version+''],timeout=None)
+            spawn.expect(['\['+SAS_version+''],timeout=None)
             
             lc_path=os.path.join(fulldir,camera+suffix_evt+'_'+prefix+'_lc_'+suffix_lc+'.ds')
             #waiting for the file to be created to continue
@@ -3551,7 +3622,7 @@ def extract_lc(directory,mode='manual',cams='all',expos_mode='all',overwrite=Tru
         #we put several expects to see the progression
         spawn.expect('closing data set',timeout=None)
 
-        lc_corr_state=spawn.expect(['epiclccorr-1.23.1','epiclccorr: error'],timeout=None)
+        lc_corr_state=spawn.expect(['epiclccorr-1.23.3','epiclccorr: error'],timeout=None)
     
         if lc_corr_state==1:
                 print('\nError during corrected lightucurve computation. Skipping...')
@@ -4056,7 +4127,7 @@ def batch_mover(fin_dir):
             
             #copying and renaming everything besides the lightcurves made to test the snr
 
-            for product_name in [elem for elem in batch_files if elem[-16:-5]!='lc_src_snr_']:
+            for product_name in [elem for elem in batch_files if elem[-16:-5]!='lc_src_snr_' and 'temp' not in elem.split('/')[-1]]:
 
                 if 'summary' not in product_name:
                     #deleting before the copy to avoid potential conflicts with administrator privileges or whatever
@@ -4069,8 +4140,9 @@ def batch_mover(fin_dir):
                 else:
                     #copying the information of each type of summary file
                     with open(os.path.join(batchpath,product_name)) as summary_file:
+
                         summary_lines=summary_file.readlines()
-                        
+
                         if 'filter_evt' in product_name:
                             summary_filt_lines_content+=summary_lines[1:]
                             summary_filt_header=summary_lines[0]
@@ -4262,54 +4334,56 @@ if local==False:
             os.chdir(obsdir)
             obsid=obsdir[-11:-1]
             
-            try:
+            # try:
             #for loop to be able to use different orders if needed
-                for curr_action in action_list:
-                    folder_state='Running '+curr_action
-                    if curr_action=='1':
-                        evt_state=evt_build(obsdir)
-                        evt_build_done.wait()
-                        if evt_state !='event building finished':
-                            folder_state=evt_state
-                            #breaking out of the try
-                            raise NameError
-                    if '2' in curr_action:
-                        if 'std' in curr_action:
-                            filter_mode='std'
-                        if 'snr' in curr_action:
-                            filter_mode='snr'
-                        elif 'a' in curr_action:
-                            filter_mode='auto'
-                        elif 'n' in curr_action:
-                            filter_mode='nolim'
-                        filter_evt(obsdir,cams=cameras_glob,expos_mode=expos_mode_glob,overwrite=True,
-                                   mode=filter_mode,man_lc_flare=man_lc_flare)
-                        filter_evt_done.wait()
-                    if curr_action=='3':
-                        extract_reg(obsdir,mode=extract_reg_mode,cams=cameras_glob,expos_mode=expos_mode_glob,overwrite=overwrite_glob,
-                                    use_file_target=use_file_target_glob,pileup_test=pileup_test)
-                        extract_reg_done.wait()
-                    if curr_action=='l':
-                        extract_lc(obsdir,mode=extract_reg_mode,cams=cameras_glob,expos_mode=expos_mode_glob,overwrite=overwrite_glob)
-                        extract_lc_done.wait()
-                    if curr_action=='s':
-                        extract_sp(obsdir,mode=extract_reg_mode,cams=cameras_glob,expos_mode=expos_mode_glob,overwrite=overwrite_glob)
-                        extract_sp_done.wait()
-                    if curr_action=='m':
+            for curr_action in action_list:
+                folder_state='Running '+curr_action
+                if curr_action=='1':
+                    evt_state=evt_build(obsdir)
+                    evt_build_done.wait()
+                    if evt_state !='event building finished':
+                        folder_state=evt_state
+                        #breaking out of the try
+                        raise NameError
+                if '2' in curr_action:
+                    if 'std' in curr_action:
+                        filter_mode='std'
+                    if 'snr' in curr_action:
+                        filter_mode='snr'
+                    elif 'a' in curr_action:
+                        filter_mode='auto'
+                    elif 'n' in curr_action:
+                        filter_mode='nolim'
+                    filter_evt(obsdir,cams=cameras_glob,expos_mode=expos_mode_glob,overwrite=True,
+                               mode=filter_mode,man_lc_flare=man_lc_flare)
+                    filter_evt_done.wait()
+                if curr_action=='3':
+                    extract_reg(obsdir,mode=extract_reg_mode,cams=cameras_glob,expos_mode=expos_mode_glob,overwrite=overwrite_glob,
+                                use_file_target=use_file_target_glob,pileup_test=pileup_test,sudo_mode=sudo_mode,sudo_mdp=sudo_mdp)
+                    extract_reg_done.wait()
+                if curr_action=='l':
+                    extract_lc(obsdir,mode=extract_reg_mode,cams=cameras_glob,expos_mode=expos_mode_glob,overwrite=overwrite_glob)
+                    extract_lc_done.wait()
+                if curr_action=='s':
+                    extract_sp(obsdir,mode=extract_reg_mode,cams=cameras_glob,expos_mode=expos_mode_glob,overwrite=overwrite_glob)
+                    extract_sp_done.wait()
+                if curr_action=='m':
+                    print(os.path.join(startdir,mergedir))
+                    batch_mover(os.path.join(startdir,mergedir))
+                if curr_action=='gm':
+                    #here we check if the current obsid directory is part of the finished directory for the gm_action actions
+                    if directory in prev_done_folders:
                         batch_mover(os.path.join(startdir,mergedir))
-                    if curr_action=='gm':
-                        #here we check if the current obsid directory is part of the finished directory for the gm_action actions
-                        if directory in prev_done_folders:
-                            batch_mover(os.path.join(startdir,mergedir))
-                        else:
-                            folder_state='Unfishined directory'
-                            raise NameError
-                    folder_state='Done'
-            except:
-                #signaling unknown errors if they happened
-                if 'Running' in folder_state:
-                    print('\nError while '+folder_state)
-                    folder_state=folder_state.replace('Running','Aborted at')
+                    else:
+                        folder_state='Unfishined directory'
+                        raise NameError
+                folder_state='Done'
+
+            # except:
+            #     #signaling unknown errors if they happened
+            #     if 'Running' in folder_state:
+            #         print('\nError while '+folder_state)
+            #         folder_state=folder_state.replace('Running','Aborted at')
                 
             os.chdir(startdir)
             #adding the directory to the list of already computed directories
@@ -4344,7 +4418,7 @@ else:
             if curr_action=='3':
                 extract_reg(absdir, mode=extract_reg_mode, cams=cameras_glob, expos_mode=expos_mode_glob,
                             overwrite=overwrite_glob,pileup_test=pileup_test,
-                            use_file_target=use_file_target_glob)
+                            use_file_target=use_file_target_glob,sudo_mode=sudo_mode,sudo_mdp=sudo_mdp)
                 extract_reg_done.wait()
             if curr_action=='l':
                 extract_lc(absdir,mode='auto',cams=cameras_glob,expos_mode=expos_mode_glob,overwrite=overwrite_glob)

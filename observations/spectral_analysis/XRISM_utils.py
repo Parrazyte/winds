@@ -19,6 +19,8 @@ def xrism_ls(baseload,low_e,high_e,plot_suffix="",bound_around=0.1,e_step=5e-3,l
 
     '''
 
+    NOTE: SHOULD BE PASSED TO A E_step<=lw/2 after MAXIJ1744 for consistency
+
     #other line_search_norm option: line_search_norm=[0.01,50,700],
     Simple wrapper to compute a line search and make an associated plot with XRISM
 
@@ -63,8 +65,10 @@ def xrism_ls(baseload,low_e,high_e,plot_suffix="",bound_around=0.1,e_step=5e-3,l
 
     mod_ls=allmodel_data()
     narrow_out_val=narrow_line_search(mod_ls,'mod_ls'+'_normcont_'+sources_forflux_suffix,
-                                      e_sat_low_indiv,[low_e,high_e,e_step],line_search_norm=line_search_norm,
-                                      line_cont_range=[low_e,high_e],lw=lw,scorpeon=False,sources_forflux=sources_forflux)
+                                      e_sat_low_indiv,[low_e,high_e,e_step],
+                                      line_search_norm=line_search_norm,
+                                      line_cont_range=[low_e,high_e],lw=lw,scorpeon=False,
+                                      sources_forflux=sources_forflux)
 
     lw_str='_lw_'+str(round(lw*1e3))
 

@@ -61,110 +61,6 @@ from XRISM.XRISM_datared_tools import *
 # os.chdir('/media/parrazyte/crucial_SSD/Observ/BHLMXB/XRISM/MAXIJ1744-294/new_anal/901002010_reprocorr/compa_arf/pix_smallpix')
 
 
-def arf_compa_plots(dir='./',arf_num_list=[],arf_denom_list=[],label_list=[],label_num='',label_denom='',save=True,skip_ncols=0):
-
-    os.chdir(dir)
-
-    colors_list=['black','red','purple','orange','green','blue','pink'][skip_ncols:]
-    # pixNS_rsp_arf_caldb11_1745 = fits.open(
-    #     'xa901002010rsl_p0px1000_cl_RTS_pixel_branch_filter_grade_0and1_rmf_0_05_60000_POINT_1745_gfinc_donotuse_CALDB11.arf')[
-    #     1].data
-    # pixNS_rsp_arf_caldb12_1745 = fits.open(
-    #     'xa901002010rsl_p0px1000_cl_RTS_pixel_branch_filter_grade_0and1_rmf_0_05_60000_POINT_1745_gfinc_donotuse_CALDB12.arf')[
-    #     1].data
-    # pixNS_rsp_arf_caldb11_1744 = fits.open(
-    #     'xa901002010rsl_p0px1000_cl_RTS_pixel_branch_filter_grade_0and1_rmf_0_05_60000_POINT_1744_gfinc_donotuse_CALDB11.arf')[
-    #     1].data
-    # pixNS_rsp_arf_caldb12_1744 = fits.open(
-    #     'xa901002010rsl_p0px1000_cl_RTS_pixel_branch_filter_grade_0and1_rmf_0_05_60000_POINT_1744_gfinc_donotuse_CALDB12.arf')[
-    #     1].data
-    # pixNS_rsp_arf_caldb11_diffuse = fits.open(
-    #     'xa901002010rsl_p0px1000_cl_RTS_pixel_branch_filter_grade_0and1_rmf_0_05_60000_FLATCIRCLE_fr3_GCXE_gfinc_donotuse_CALDB11.arf')[
-    #     1].data
-    # pixNS_rsp_arf_caldb12_diffuse = fits.open(
-    #     'xa901002010rsl_p0px1000_cl_RTS_pixel_branch_filter_grade_0and1_rmf_0_05_60000_FLATCIRCLE_fr3_GCXE_gfinc_donotuse_CALDB12.arf')[
-    #     1].data
-    # pixNS_rsp_arf_caldb11_SgrAEast = fits.open(
-    #     'xa901002010rsl_p0px1000_cl_RTS_pixel_branch_filter_grade_0and1_rmf_0_05_60000_IMAGE_img_Chandra_data_6.6-6.8_flux_smoothed_trim_SgrAEast_gfinc_donotuse_CALDB11.arf')[
-    #     1].data
-    # pixNS_rsp_arf_caldb12_SgrAEast = fits.open(
-    #     'xa901002010rsl_p0px1000_cl_RTS_pixel_branch_filter_grade_0and1_rmf_0_05_60000_IMAGE_img_Chandra_data_6.6-6.8_flux_smoothed_trim_SgrAEast_gfinc_donotuse_CALDB12.arf')[
-    #     1].data
-    
-    arf_num_data=[fits.open(elem)[1].data for elem in arf_num_list]
-    arf_denom_data=[fits.open(elem)[1].data for elem in arf_denom_list]
-
-
-    fig_compa, ax_compa = plt.subplots(figsize=(8, 6), layout='constrained')
-    plt.xlabel('Energy (keV)')
-    plt.ylabel('Effective area (cm²)')
-    plt.xlim(2., 10)
-    plt.yscale('log')
-    plt.ylim(2e-1, 2e2)
-    
-    for col,elem_arf_num,elem_label in zip(colors_list,arf_num_data,label_list):
-        plt.plot(elem_arf_num['ENERG_LO'],elem_arf_num['SPECRESP'], color=col,label='',ls='--')
-
-    for col,elem_arf_denom,elem_label in zip(colors_list,arf_denom_data,label_list):
-        plt.plot(elem_arf_denom['ENERG_LO'],elem_arf_denom['SPECRESP'], color=col,label=elem_label)
-        
-    # for elem_arf in enumerate(arf_denom_data):
-    #
-    #     plt.plot(pixNS_rsp_arf_caldb11_1745['ENERG_LO'], pixNS_rsp_arf_caldb11_1745['SPECRESP'], color='red',
-    #              label='AX J1745')
-    #     plt.plot(pixNS_rsp_arf_caldb12_1745['ENERG_LO'], pixNS_rsp_arf_caldb12_1745['SPECRESP'], color='red', ls='--')
-    #     plt.plot(pixNS_rsp_arf_caldb11_1744['ENERG_LO'], pixNS_rsp_arf_caldb11_1744['SPECRESP'], color='black',
-    #              label='MAXI J1744')
-    #     plt.plot(pixNS_rsp_arf_caldb12_1744['ENERG_LO'], pixNS_rsp_arf_caldb12_1744['SPECRESP'], color='black', ls='--')
-    #     plt.plot(pixNS_rsp_arf_caldb11_diffuse['ENERG_LO'], pixNS_rsp_arf_caldb11_diffuse['SPECRESP'], color='purple',
-    #              label='flat arf')
-    #     plt.plot(pixNS_rsp_arf_caldb12_diffuse['ENERG_LO'], pixNS_rsp_arf_caldb12_diffuse['SPECRESP'], color='purple',
-    #              ls='--')
-    #     plt.plot(pixNS_rsp_arf_caldb11_SgrAEast['ENERG_LO'], pixNS_rsp_arf_caldb11_SgrAEast['SPECRESP'], color='orange',
-    #              label='Sgr A East')
-    #     plt.plot(pixNS_rsp_arf_caldb12_SgrAEast['ENERG_LO'], pixNS_rsp_arf_caldb12_SgrAEast['SPECRESP'], color='orange',
-    #              ls='--')
-    plt.legend(loc='lower left')
-    twin_compa = plt.twinx()
-    twin_compa.xaxis.set_visible(False)
-    twin_compa.yaxis.set_visible(False)
-    plt.plot([], [], color='gray', ls='-', label=label_denom)
-    plt.plot([], [], color='gray', ls='--', label=label_num)
-    plt.legend(loc='upper left')
-
-    if save:
-        plt.savefig('arf_compa_CALDB11_12_rsp.pdf')
-    
-    fig_ratio, ax_ratio = plt.subplots(figsize=(8, 6), layout='constrained')
-    plt.xlabel('Energy (keV)')
-    plt.ylabel(label_num+'/'+label_denom+' Effective area ratio')
-    plt.xlim(2., 10)
-    from matplotlib.ticker import AutoMinorLocator
-    plt.ylim(0.5, 1.5)
-    
-    ax_ratio.yaxis.set_minor_locator(AutoMinorLocator())
-
-    for col,elem_arf_num,elem_arf_denom,elem_label in zip(colors_list,arf_num_data,arf_denom_data,label_list):
-        plt.plot(elem_arf_num['ENERG_LO'],elem_arf_num['SPECRESP']/elem_arf_denom['SPECRESP'], color=col,label=elem_label)
-
-    # plt.plot(pixNS_rsp_arf_caldb11_1745['ENERG_LO'],
-    #          pixNS_rsp_arf_caldb12_1745['SPECRESP'] / pixNS_rsp_arf_caldb11_1745['SPECRESP'], color='red',
-    #          label='AX J1745')
-    # plt.plot(pixNS_rsp_arf_caldb11_1744['ENERG_LO'],
-    #          pixNS_rsp_arf_caldb12_1744['SPECRESP'] / pixNS_rsp_arf_caldb11_1744['SPECRESP'], color='black',
-    #          label='MAXI J1744')
-    # plt.plot(pixNS_rsp_arf_caldb11_diffuse['ENERG_LO'],
-    #          pixNS_rsp_arf_caldb12_diffuse['SPECRESP'] / pixNS_rsp_arf_caldb11_diffuse['SPECRESP'], color='purple',
-    #          label='flat arf')
-    # plt.plot(pixNS_rsp_arf_caldb11_SgrAEast['ENERG_LO'],
-    #          pixNS_rsp_arf_caldb12_SgrAEast['SPECRESP'] / pixNS_rsp_arf_caldb11_SgrAEast['SPECRESP'], color='orange',
-    #          label='Sgr A East')
-    plt.legend()
-    for i in np.arange(0.5, 1.5, 0.05):
-        plt.axhline(y=i, color='gray', alpha=0.1)
-
-    if save:
-        plt.savefig('arf_ratio_CALDB11_12_rsp.pdf')
 
 
 #####################
@@ -266,13 +162,25 @@ def arf_compa_plots(dir='./',arf_num_list=[],arf_denom_list=[],label_list=[],lab
 #xrism_ls_loader('post_edgeconti_readj_Ka_emi_norm_onlyBH_narrow_out_6.3_7.1_lw_5.dill',ener_show_range=[6.3,7.1],ratio_bounds=[0.5,2.],squished_mode=True)
 
 #after all lines empi bigpix
-#rebinv_xrism(1,20)
+#note: source order changed, now the actual source order in the model
+# rebinv_xrism(1,20)
 # rebinv_xrism(2,20)
 # xPlot('ldata,delchi',auto_figsize=[10,5],addcomp_colors='source',
-# addcomp_source_cmaps=['color_limegreen','YlOrRd_r','PuBu'],addcomp_ls='group',
+# addcomp_source_cmaps=['color_green','PuBu_r','YlOrRd'],addcomp_ls='group',
 # model_ls='group',group_names=['MAXI J1744-294 "big" pixel region','AX J1745.6-2901'],
-# legend_sources=True,label_sources=['MAXI J1744-294','AX J1745.6-2901','diffuse'],
-# label_sources_cval=[0.8,0.2,0.8],legend_addcomp_groups=True)
+# legend_sources=True,label_sources=['MAXI J1744-294','diffuse','AX J1745.6-2901'],addcomp_rebin=[3,3],
+# label_sources_cval=[0.8,0.8,0.8],legend_addcomp_groups=True)
+# plt.gca().get_figure().get_children()[1].set_title(None)
+# plt.tight_layout()
+
+#zoom iron
+# rebinv_xrism(1,10)
+# rebinv_xrism(2,10)
+# xPlot('ldata,delchi',auto_figsize=[10,5],addcomp_colors='source',
+# addcomp_source_cmaps=['color_green','PuBu_r','YlOrRd'],addcomp_ls='group',
+# model_ls='group',group_names=['MAXI J1744-294 "big" pixel region','AX J1745.6-2901'],
+# legend_sources=True,label_sources=['MAXI J1744-294','diffuse','AX J1745.6-2901'],addcomp_rebin=[3,3],legend_sources_loc='lower left',
+# label_sources_cval=[0.8,0.8,0.8],legend_addcomp_groups=True)
 # plt.gca().get_figure().get_children()[1].set_title(None)
 # plt.tight_layout()
 
@@ -295,7 +203,7 @@ def arf_compa_plots(dir='./',arf_num_list=[],arf_denom_list=[],label_list=[],lab
 # rebinv_xrism(1,20)
 # rebinv_xrism(2,20)
 # xPlot('ldata,delchi',auto_figsize=[10,5],addcomp_colors='source',
-# addcomp_source_cmaps=['YlGn','YlOrRd','PuBu','RdPu'],addcomp_ls='group',
+# addcomp_source_cmaps=['YlGn','YlOrRd','PuBu','RdPu'],addcomp_ls='group',addcomp_rebin=[3,3],
 # model_ls='group',group_names=['MAXI J1744-294 "small" pixel region','AX J1745.6-2901'],
 # legend_sources=True,label_sources=['MAXI J1744-294','AX J1745.6-2901','GCXE','Sgr A East'],
 # label_sources_cval=[0.8,0.8,0.8,0.8],legend_addcomp_groups=True)
@@ -316,7 +224,7 @@ def arf_compa_plots(dir='./',arf_num_list=[],arf_denom_list=[],label_list=[],lab
 #zoom 6p3 with readj
 # rebinv_xrism(1,10)
 # rebinv_xrism(2,10)
-#Plot.add=False
+# Plot.add=False
 # xPlot('ldata,ratio,delchi',auto_figsize=[6,5],addcomp_colors='source',mult_factors=[1,4.1],
 # addcomp_source_cmaps=['YlGn','YlOrRd','PuBu','RdPu'],addcomp_ls='group',
 # model_ls='group',group_names=['MAXI J1744-294 "small" pixel region','AX J1745.6-2901'],
@@ -360,3 +268,145 @@ def arf_compa_plots(dir='./',arf_num_list=[],arf_denom_list=[],label_list=[],lab
 # plt.gca().get_figure().get_children()[1].set_title(None)
 # plt.tight_layout()
 #then manually resize first panel y axis to 0.01-0.5
+
+#appendix postlines
+# rebinv_xrism(1,10)
+# plt.rcParams.update({'legend.labelspacing':0.2})
+# xPlot('ldata,ratio,delchi',auto_figsize=[10,5],addcomp_colors='source',
+# addcomp_source_cmaps=['color_green','YlOrRd','PuBu','RdPu'],addcomp_ls='group',
+# model_ls='group',group_names=['MAXI J1744-294 "small" pixel region','AX J1745.6-2901'],
+# legend_sources=True,label_sources=['MAXI J1744-294','AX J1745.6-2901','GCXE','Sgr A East'],
+#       addcomp_rebin=[3,3],legend_sources_loc='lower left',legend_sources_bbox=[0.15,-0.03],
+# label_sources_cval=[0.8,0.8,0.8,0.8],legend_addcomp_groups=True)
+# plt.gca().get_figure().get_children()[1].set_title(None)
+# plt.tight_layout()
+#then manually resize first panel y axis to 0.01-0.5
+
+
+#photo bigpix
+# rebinv_xrism(1,20)
+# rebinv_xrism(2,20)
+# xPlot('ldata,delchi',auto_figsize=[10,5],addcomp_colors='source',
+# addcomp_source_cmaps=['YlGn','PuBu','YlOrRd'],addcomp_ls='group',
+# model_ls='group',group_names=['MAXI J1744-294 "big" pixel region','AX J1745.6-2901'],
+# legend_sources=True,label_sources=['MAXI J1744-294','diffuse','AX J1745.6-2901'],
+#       addcomp_rebin=[3,3],
+# label_sources_cval=[0.8,0.2,0.8],legend_addcomp_groups=True)
+# plt.gca().get_figure().get_children()[1].set_title(None)
+# plt.tight_layout()
+#
+# #zoom
+# rebinv_xrism(1,10)
+# rebinv_xrism(2,10)
+# xPlot('ldata,delchi',auto_figsize=[10,5],addcomp_colors='source',
+# addcomp_source_cmaps=['YlGn','PuBu','YlOrRd'],addcomp_ls='group',
+# model_ls='group',group_names=['MAXI J1744-294 "big" pixel region','AX J1745.6-2901'],
+# legend_sources=True,label_sources=['MAXI J1744-294','diffuse','AX J1745.6-2901'],
+#       addcomp_rebin=[3,3],legend_sources_loc='lower left',legend_sources_bbox=[0.15,-0.03],
+# label_sources_cval=[0.8,0.2,0.8],legend_addcomp_groups=True)
+# plt.gca().get_figure().get_children()[1].set_title(None)
+# plt.tight_layout()
+
+#smallpix: same as empi works
+
+# rebinv_xrism(1,20)
+# rebinv_xrism(2,20)
+# xPlot('ldata,delchi',auto_figsize=[10,5],addcomp_colors='source',
+# addcomp_source_cmaps=['YlGn','YlOrRd','PuBu','RdPu'],addcomp_ls='group',addcomp_rebin=[3,3],
+# model_ls='group',group_names=['MAXI J1744-294 "small" pixel region','AX J1745.6-2901'],
+# legend_sources=True,label_sources=['MAXI J1744-294','AX J1745.6-2901','GCXE','Sgr A East'],
+# label_sources_cval=[0.8,0.8,0.8,0.8],legend_addcomp_groups=True)
+# plt.gca().get_figure().get_children()[1].set_title(None)
+# plt.tight_layout()
+
+#zoom
+# rebinv_xrism(1,10)
+# plt.rcParams.update({'legend.labelspacing':0.2})
+# xPlot('ldata,ratio,delchi',auto_figsize=[10,5],addcomp_colors='source',
+# addcomp_source_cmaps=['color_green','YlOrRd','PuBu','RdPu'],addcomp_ls='group',
+# model_ls='group',group_names=['MAXI J1744-294 "small" pixel region','AX J1745.6-2901'],
+# legend_sources=True,label_sources=['MAXI J1744-294','AX J1745.6-2901','GCXE','Sgr A East'],
+#       addcomp_rebin=[3,3],legend_sources_loc='lower left',legend_sources_bbox=[0.15,-0.03],
+# label_sources_cval=[0.8,0.8,0.8,0.8],legend_addcomp_groups=True)
+# plt.gca().get_figure().get_children()[1].set_title(None)
+# plt.tight_layout()
+#then manually resize first panel y axis to 0.01-0.5
+
+
+#set_ener('thcomp',xrism=True)
+#plot_comp_ratio([1],[2,3,4,5,[6,7]],6.3,7.2,
+# other_addcomps_labels=["photo zone static","photo zone b1","photo zone b2",
+# "photo zone b3", r'empirical FeXXVI K$\alpha$'],
+# other_addcomps_colors=['green','darkturquoise','blue','cornflowerblue','plum'],
+# ylims=[1.,None],figsize=(10,4))
+
+
+'''
+COMP PLOTS
+'''
+
+
+'''
+EMPIRICAL
+'''
+'''BIGPIX'''
+
+os.chdir('/media/parrazyte/crucial_SSD/Observ/BHLMXB/XRISM/MAXIJ1744-294/new_anal/fit_duo_empirical_bigpix/2025_updated/comp_mod')
+Xset.restore('mod_noabs.xcm')
+set_ener('thcomp',xrism=True)
+plot_comp_ratio([1],[None,[10,11,12,13],[8,9],None,7,5,6,[3,4]],6.38,7.13,
+                other_addcomps_labels=['main',r"FeXXV K$\alpha$",
+                                       r"FeXXVI K$\alpha$",
+                                       'blueshifted',
+r"FeXXV K$\alpha$ 1",
+r"FeXXV K$\alpha$ 2",
+r"FeXXV K$\alpha$ 3",
+r"FeXXVI K$\alpha$"],
+                other_addcomps_colors=[None,'green','rebeccapurple',None,'darkturquoise','blue','cornflowerblue','plum'],
+                ylims=[1.,2.3],figsize=(6,3),minor_locator=10,ylabel_prefix='Big pixel region empirical model \n')
+plt.savefig('mod_empi_bigpix_deabs_nobfekblor_comp_ratio.pdf')
+
+'''SMALLPIX'''
+
+os.chdir('/media/parrazyte/crucial_SSD/Observ/BHLMXB/XRISM/MAXIJ1744-294/new_anal/fit_duo_smallpix/2025/rsp_CALDB11/comp_mod')
+Xset.restore('mod_deabs.xcm')
+set_ener('thcomp',xrism=True)
+plot_comp_ratio([1],[None,[10,11,12,13],[8,9],[2,7],None,6,5,[3,4],],6.38,7.13,
+                other_addcomps_labels=['main',r"FeXXV K$\alpha$",
+                                       r"FeXXVI K$\alpha$",
+                                        'Fe I',
+                                       'blueshifted',
+r"FeXXV K$\alpha$ 1",
+r"FeXXV K$\alpha$ 2",
+r"FeXXVI K$\alpha$",
+                                       ],
+                other_addcomps_colors=[None,'green','rebeccapurple','black',None,'darkturquoise','blue','plum'],
+                ylims=[1,2.3],figsize=(6,3),minor_locator=10,ylabel_prefix='Big pixel region empirical model \n',manual_bbox=(0.045, 1))
+plt.savefig('mod_empi_smallpix_deabs_nobfekblor_comp_ratio.pdf')
+
+
+'''PHOTO'''
+'''BIGPIX'''
+
+os.chdir('/media/parrazyte/crucial_SSD/Observ/BHLMXB/XRISM/MAXIJ1744-294/physical/photo/new/bigpix/comp_mod')
+Xset.restore('mod_1744_deabs_nobfekblor.xcm')
+set_ener('thcomp',xrism=True)
+plot_comp_ratio([1],[2,3,4,5,[6,7]],6.38,7.13,
+                other_addcomps_labels=["static","blue 1","blue 2", "blue 3",
+                                       r'empirical'+'\n'+r'FeXXVI K$\alpha$'],
+                other_addcomps_colors=['green','darkturquoise','blue','cornflowerblue','plum'],
+                ylims=[1.,2.3],figsize=(6,3),minor_locator=10,ylabel_prefix='Big pixel region PIE model \n')
+plt.savefig('mod_photo_bigpix_deabs_nobfekblor_comp_ratio.pdf')
+
+'''SMALLPIX'''
+
+os.chdir('/media/parrazyte/crucial_SSD/Observ/BHLMXB/XRISM/MAXIJ1744-294/physical/photo/new/smallpix/comp_mod')
+Xset.restore('mod_3comp_fit_highxi_noabs_2e-3.xcm')
+set_ener('thcomp',xrism=True)
+plot_comp_ratio([1],[2,3,4,[5,8],[6,7]],6.38,7.13,
+                other_addcomps_labels=["static","blue 1","blue 2",r'empirical'+'\nFe I',
+                                       r'empirical'+'\n'+r'FeXXVI K$\alpha$'],
+                other_addcomps_colors=['green','darkturquoise','blue','black','plum'],
+                ylims=[1.,2.3],figsize=(6,3),minor_locator=10,ylabel_prefix='small pixel region PIE model \n',
+                manual_bbox=(0.045, 1))
+plt.savefig('mod_photo_smallpix_deabs_nobfekblor_comp_ratio.pdf')

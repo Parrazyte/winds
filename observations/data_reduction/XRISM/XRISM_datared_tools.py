@@ -201,6 +201,8 @@ def repro_dir(directory='auto',repro_suffix='repro',overwrite=True,
 
     requires CALDB environent variable to be set
 
+    should unzip the directory before doing this
+
     '''
 
     def copy_checker(spawn,init_path_spawn,end_path_spawn,init_path,path_spawn,logfile_prefix):
@@ -378,7 +380,7 @@ def repro_dir(directory='auto',repro_suffix='repro',overwrite=True,
 
 
             for elem_file_repro in file_move_list:
-                file_arbo_pos=[elem for elem in file_list if elem_file_repro in elem]
+                file_arbo_pos=[elem for elem in file_list if elem_file_repro==elem.split('/')[-1]]
                 if len(file_arbo_pos)>1:
                     breakpoint()
                 elif len(file_arbo_pos)==0:
@@ -2842,6 +2844,8 @@ def create_gtis(directory='auto_repro',anal_dir_suffix='',
 
             mjd_refi_xrism =fits_gti_base[1].header['MJDREFI']
             mjd_reff_xrism=fits_gti_base[1].header['MJDREFF']
+            tstart_obs_xrism=fits_gti_base[1].header['TSTART']
+            tstop_obs_xrism=fits_gti_base[1].header['TSTOP']
 
 
         input_dir=os.path.join(anal_dir,outdir)
@@ -2898,6 +2902,11 @@ def create_gtis(directory='auto_repro',anal_dir_suffix='',
             with fits.open(gti_path,mode='update') as fits_gti:
                 fits_gti[1].header['MJDREFI']=mjd_refi_xrism
                 fits_gti[1].header['MJDREFF']=mjd_reff_xrism
+
+                #need to do the same thing with TSTART and TSTOP for the arf creation
+                fits_gti[1].header['TSTART']=tstart_obs_xrism
+                fits_gti[1].header['TSTOP']=tstop_obs_xrism
+
                 fits_gti.flush()
 
     if directory=='auto_repro':
@@ -3059,6 +3068,8 @@ def create_gtis(directory='auto_repro',anal_dir_suffix='',
                         [plot_lc_output[:2]]
 
                     i_cut+=1
+
+                    plt.close()
 
                     print('Added manual gti split interval at for t in ' + str(cut_times[-1]) + ' s')
 
@@ -3998,7 +4009,8 @@ def create_expo(anal_dir,instrument,evt_file,gti_file,directory='auto_repro',out
         gti_file_use=gti_file
 
     if out_file=='auto':
-        out_file_path=gti_file.replace('.evt','.expo').replace('.gti','.expo')
+        out_file_path=os.path.join('/'.join(out_file.split('/')[:-1]),
+                       gti_file.split('/')[-1].replace('.evt','.expo').replace('.gti','.expo'))
     else:
         out_file_path=out_file
 
@@ -4131,13 +4143,13 @@ def extract_arf(directory='auto_repro',anal_dir_suffix='',on_axis_check=None,arf
                 reg_mode='DET',
                 pixel_str_rsl='branch_filter', grade_str_rsl='0:1',
                 remove_cal_pxl_resolve=True,
-                gti=None, gti_subdir='gti',skip_gti_emap=True,
+                gti=None, gti_subdir='gti',skip_gti_emap=False,
                 # e_low_rsl=None, e_high_rsl=None,
                 e_low_rsl=0.3, e_high_rsl=12.0,
                 #default values in hte pipeline
                 e_low_xtd=0.3, e_high_xtd=15.0,
                 e_low_image=0.0, e_high_image=0.0,
-                numphoton=300000,
+                numphoton=600000,
                 minphoton=100,
                 heasoft_init_alias='heainit', caldb_init_alias='caldbinit',
                 parallel=False,repro_suffix='repro'):
@@ -4371,16 +4383,16 @@ def extract_arf(directory='auto_repro',anal_dir_suffix='',on_axis_check=None,arf
                         if os.path.isfile(elem_evt.replace('.evt','_raytracing.evt')):
                             os.remove(elem_evt.replace('.evt','_raytracing.evt'))
 
-                        if gti is not None:
-                            print('should think about whether this is done properly')
-                            breakpoint()
+                        # if gti is not None:
+                        #     print('should think about whether this is done properly')
+                        #     breakpoint()
 
                         if len(rmf_list)>1:
                             print(rmf_list)
                             rmf_id=input('Give index of rmf to use')
                         else:
                             rmf_id=0
-                        rmf_path=rmf_list[rmf_id]
+                        rmf_path=rmf_list[int(rmf_id)]
 
                         out_name = rmf_path.replace('.rmf',
                                                     '_' + source_type
@@ -4770,13 +4782,7 @@ def extract_rsp(directory='auto_repro',rsp_subdir='sp', anal_dir_suffix='',
     log_dir=os.path.join(os.getcwd(),anal_dir,'log')
     os.system('mkdir -p '+os.path.join(os.getcwd(),anal_dir,'log'))
 
-    time_str = str(int(time.time()))
 
-    log_path=os.path.join(log_dir,'extract_rsp'+('_'+anal_dir_suffix if anal_dir_suffix!='' else '')
-                      +'_'+rsp_subdir+'_'+gti_subdir+'_'+time_str + '.log')
-
-    if os.path.isfile(log_path):
-        os.system('rm ' + log_path)
 
     with (no_op_context() if parallel else StdoutTee(log_path, mode="a", buff=1,
                                                      file_filters=[_remove_control_chars]), \
@@ -4788,11 +4794,6 @@ def extract_rsp(directory='auto_repro',rsp_subdir='sp', anal_dir_suffix='',
 
         if not parallel:
             bashproc.logfile_read = sys.stdout
-
-        bashproc.sendline('cd ' + os.path.join(os.getcwd(), anal_dir))
-
-        rsp_dir='rsp_'+time_str
-        os.mkdir(os.path.join(anal_dir,rsp_dir))
 
         if gti==None:
             gti_str_arr=['']
@@ -4808,6 +4809,19 @@ def extract_rsp(directory='auto_repro',rsp_subdir='sp', anal_dir_suffix='',
                 gti_str_arr='_'+gti.split('/')[-1]
 
         for elem_gti_str,elem_gti_file in zip(gti_str_arr,gti_files_arr):
+
+            time_str = str(int(time.time()))
+
+            log_path = os.path.join(log_dir, 'extract_rsp' + ('_' + anal_dir_suffix if anal_dir_suffix != '' else '')
+                                    + '_' + rsp_subdir + '_' + gti_subdir + '_' + time_str + '.log')
+
+            if os.path.isfile(log_path):
+                os.system('rm ' + log_path)
+
+            bashproc.sendline('cd ' + os.path.join(os.getcwd(), anal_dir))
+
+            rsp_dir = 'rsp_' + time_str
+            os.mkdir(os.path.join(anal_dir, rsp_dir))
 
             for elem_evt in resolve_files:
 
@@ -5407,3 +5421,107 @@ weight_dirs=['arf_weights_MAXIJ1744','arf_weights_AXJ1745','arf_weights_diffuse'
                 +str(e_min).replace('.','p')+'_'+str(e_max).replace('.','p')+'.pdf')
 
 
+def arf_compa_plots(dir='./', arf_num_list=[], arf_denom_list=[], label_list=[], label_num='', label_denom='',
+                    save=True, skip_ncols=0):
+    os.chdir(dir)
+
+    colors_list = ['black', 'red', 'purple', 'orange', 'green', 'blue', 'pink'][skip_ncols:]
+    # pixNS_rsp_arf_caldb11_1745 = fits.open(
+    #     'xa901002010rsl_p0px1000_cl_RTS_pixel_branch_filter_grade_0and1_rmf_0_05_60000_POINT_1745_gfinc_donotuse_CALDB11.arf')[
+    #     1].data
+    # pixNS_rsp_arf_caldb12_1745 = fits.open(
+    #     'xa901002010rsl_p0px1000_cl_RTS_pixel_branch_filter_grade_0and1_rmf_0_05_60000_POINT_1745_gfinc_donotuse_CALDB12.arf')[
+    #     1].data
+    # pixNS_rsp_arf_caldb11_1744 = fits.open(
+    #     'xa901002010rsl_p0px1000_cl_RTS_pixel_branch_filter_grade_0and1_rmf_0_05_60000_POINT_1744_gfinc_donotuse_CALDB11.arf')[
+    #     1].data
+    # pixNS_rsp_arf_caldb12_1744 = fits.open(
+    #     'xa901002010rsl_p0px1000_cl_RTS_pixel_branch_filter_grade_0and1_rmf_0_05_60000_POINT_1744_gfinc_donotuse_CALDB12.arf')[
+    #     1].data
+    # pixNS_rsp_arf_caldb11_diffuse = fits.open(
+    #     'xa901002010rsl_p0px1000_cl_RTS_pixel_branch_filter_grade_0and1_rmf_0_05_60000_FLATCIRCLE_fr3_GCXE_gfinc_donotuse_CALDB11.arf')[
+    #     1].data
+    # pixNS_rsp_arf_caldb12_diffuse = fits.open(
+    #     'xa901002010rsl_p0px1000_cl_RTS_pixel_branch_filter_grade_0and1_rmf_0_05_60000_FLATCIRCLE_fr3_GCXE_gfinc_donotuse_CALDB12.arf')[
+    #     1].data
+    # pixNS_rsp_arf_caldb11_SgrAEast = fits.open(
+    #     'xa901002010rsl_p0px1000_cl_RTS_pixel_branch_filter_grade_0and1_rmf_0_05_60000_IMAGE_img_Chandra_data_6.6-6.8_flux_smoothed_trim_SgrAEast_gfinc_donotuse_CALDB11.arf')[
+    #     1].data
+    # pixNS_rsp_arf_caldb12_SgrAEast = fits.open(
+    #     'xa901002010rsl_p0px1000_cl_RTS_pixel_branch_filter_grade_0and1_rmf_0_05_60000_IMAGE_img_Chandra_data_6.6-6.8_flux_smoothed_trim_SgrAEast_gfinc_donotuse_CALDB12.arf')[
+    #     1].data
+
+    arf_num_data = [fits.open(elem)[1].data for elem in arf_num_list]
+    arf_denom_data = [fits.open(elem)[1].data for elem in arf_denom_list]
+
+    fig_compa, ax_compa = plt.subplots(figsize=(8, 6), layout='constrained')
+    plt.xlabel('Energy (keV)')
+    plt.ylabel('Effective area (cm²)')
+    plt.xlim(2., 10)
+    plt.yscale('log')
+    plt.ylim(2e-1, 2e2)
+
+    for col, elem_arf_num, elem_label in zip(colors_list, arf_num_data, label_list):
+        plt.plot(elem_arf_num['ENERG_LO'], elem_arf_num['SPECRESP'], color=col, label='', ls='--')
+
+    for col, elem_arf_denom, elem_label in zip(colors_list, arf_denom_data, label_list):
+        plt.plot(elem_arf_denom['ENERG_LO'], elem_arf_denom['SPECRESP'], color=col, label=elem_label)
+
+    # for elem_arf in enumerate(arf_denom_data):
+    #
+    #     plt.plot(pixNS_rsp_arf_caldb11_1745['ENERG_LO'], pixNS_rsp_arf_caldb11_1745['SPECRESP'], color='red',
+    #              label='AX J1745')
+    #     plt.plot(pixNS_rsp_arf_caldb12_1745['ENERG_LO'], pixNS_rsp_arf_caldb12_1745['SPECRESP'], color='red', ls='--')
+    #     plt.plot(pixNS_rsp_arf_caldb11_1744['ENERG_LO'], pixNS_rsp_arf_caldb11_1744['SPECRESP'], color='black',
+    #              label='MAXI J1744')
+    #     plt.plot(pixNS_rsp_arf_caldb12_1744['ENERG_LO'], pixNS_rsp_arf_caldb12_1744['SPECRESP'], color='black', ls='--')
+    #     plt.plot(pixNS_rsp_arf_caldb11_diffuse['ENERG_LO'], pixNS_rsp_arf_caldb11_diffuse['SPECRESP'], color='purple',
+    #              label='flat arf')
+    #     plt.plot(pixNS_rsp_arf_caldb12_diffuse['ENERG_LO'], pixNS_rsp_arf_caldb12_diffuse['SPECRESP'], color='purple',
+    #              ls='--')
+    #     plt.plot(pixNS_rsp_arf_caldb11_SgrAEast['ENERG_LO'], pixNS_rsp_arf_caldb11_SgrAEast['SPECRESP'], color='orange',
+    #              label='Sgr A East')
+    #     plt.plot(pixNS_rsp_arf_caldb12_SgrAEast['ENERG_LO'], pixNS_rsp_arf_caldb12_SgrAEast['SPECRESP'], color='orange',
+    #              ls='--')
+    plt.legend(loc='lower left')
+    twin_compa = plt.twinx()
+    twin_compa.xaxis.set_visible(False)
+    twin_compa.yaxis.set_visible(False)
+    plt.plot([], [], color='gray', ls='-', label=label_denom)
+    plt.plot([], [], color='gray', ls='--', label=label_num)
+    plt.legend(loc='upper left')
+
+    if save:
+        plt.savefig('arf_compa_CALDB11_12_rsp.pdf')
+
+    fig_ratio, ax_ratio = plt.subplots(figsize=(8, 6), layout='constrained')
+    plt.xlabel('Energy (keV)')
+    plt.ylabel(label_num + '/' + label_denom + ' Effective area ratio')
+    plt.xlim(2., 10)
+    from matplotlib.ticker import AutoMinorLocator
+    plt.ylim(0.5, 1.5)
+
+    ax_ratio.yaxis.set_minor_locator(AutoMinorLocator())
+
+    for col, elem_arf_num, elem_arf_denom, elem_label in zip(colors_list, arf_num_data, arf_denom_data, label_list):
+        plt.plot(elem_arf_num['ENERG_LO'], elem_arf_num['SPECRESP'] / elem_arf_denom['SPECRESP'], color=col,
+                 label=elem_label)
+
+    # plt.plot(pixNS_rsp_arf_caldb11_1745['ENERG_LO'],
+    #          pixNS_rsp_arf_caldb12_1745['SPECRESP'] / pixNS_rsp_arf_caldb11_1745['SPECRESP'], color='red',
+    #          label='AX J1745')
+    # plt.plot(pixNS_rsp_arf_caldb11_1744['ENERG_LO'],
+    #          pixNS_rsp_arf_caldb12_1744['SPECRESP'] / pixNS_rsp_arf_caldb11_1744['SPECRESP'], color='black',
+    #          label='MAXI J1744')
+    # plt.plot(pixNS_rsp_arf_caldb11_diffuse['ENERG_LO'],
+    #          pixNS_rsp_arf_caldb12_diffuse['SPECRESP'] / pixNS_rsp_arf_caldb11_diffuse['SPECRESP'], color='purple',
+    #          label='flat arf')
+    # plt.plot(pixNS_rsp_arf_caldb11_SgrAEast['ENERG_LO'],
+    #          pixNS_rsp_arf_caldb12_SgrAEast['SPECRESP'] / pixNS_rsp_arf_caldb11_SgrAEast['SPECRESP'], color='orange',
+    #          label='Sgr A East')
+    plt.legend()
+    for i in np.arange(0.5, 1.5, 0.05):
+        plt.axhline(y=i, color='gray', alpha=0.1)
+
+    if save:
+        plt.savefig('arf_ratio_CALDB11_12_rsp.pdf')

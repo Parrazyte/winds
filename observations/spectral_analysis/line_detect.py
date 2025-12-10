@@ -38,12 +38,13 @@ from astropy.io import fits
 from xspec import AllModels,AllData,Fit,Spectrum, Plot,Xset,FakeitSettings,Chain
 
 #custom script with a few shorter xspec commands
-from xspec_config_multisp import allmodel_data, addcomp,Pset, rescale,reset,Plot_screen,store_plot,freeze,allfreeze,unfreeze,\
-                         calc_error, fitmod,calc_fit, xPlot,xscorpeon,catch_model_str,\
-                         load_fitmod, ignore_data_indiv,par_degroup,xspec_globcomps,store_fit,\
-                         ignore_indiv_ig,notice_indiv_ig,xLog_rw
+from xspec_config_multisp import allmodel_data, addcomp, Pset, rescale, reset, Plot_screen, store_plot, freeze, \
+    allfreeze, unfreeze, \
+    calc_error, fitmod, calc_fit, xPlot, xscorpeon, catch_model_str, \
+    load_fitmod, ignore_data_indiv, par_degroup, xspec_globcomps, store_fit, \
+    ignore_indiv_ig, notice_indiv_ig, xLog_rw, plot_std_ener
 
-from linedet_utils import plot_line_comps,plot_line_search,plot_std_ener,coltour_chi2map,narrow_line_search,\
+from linedet_utils import plot_line_comps,plot_line_search, coltour_chi2map,narrow_line_search,\
                             plot_line_ratio
 
 #custom script with a some lines and fit utilities and variables

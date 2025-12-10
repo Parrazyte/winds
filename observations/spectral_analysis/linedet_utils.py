@@ -15,9 +15,10 @@ from general_tools import ravel_ragged,MinorSymLogLocator
 #fitting imports
 from xspec import AllData,Plot,AllModels,Fit,Xset
 
-from xspec_config_multisp import xcolors_grp,addcomp,store_plot,allfreeze,xscorpeon,\
-                                model_load,xspec_globcomps,allmodel_data,rebinv_xrism
-from fitting_tools import lines_std,lines_e_dict, lines_std_names
+from xspec_config_multisp import xcolors_grp, addcomp, store_plot, allfreeze, xscorpeon, \
+    model_load, xspec_globcomps, allmodel_data, rebinv_xrism, plot_std_ener
+
+from fitting_tools import lines_std
 
 #bipolar colormap from a custom library (https://github.com/endolith/bipolar-colormap)
 #in the general tools folder
@@ -647,160 +648,6 @@ def plot_line_ratio(axe,data_autofit,data_autofit_noabs,n_addcomps_cont,mode=Non
         plot_std_ener(axe)
 
 
-def plot_std_ener(ax_ratio, ax_contour=None, plot_em=False, mode='ratio',exclude_last=False,plot_indiv_transi=False,
-                  squished_mode=False,force_side='none',alpha_line=1.,
-                  noname=False,noline=False):
-    '''
-    Plots the current absorption (and emission if asked) standard lines in the current axis
-    also used in the autofit plots further down
-
-    -plot_indiv_transi:
-            -True/False: plots only/none of the individual transitions for instead of the averaged energies
-            -prio_resolved: plots the resolved transitions when available, otherwise the non-resolved
-            -only[X+Y+...]: only plots the resolved lines for X, Y, ...
-    -squished mode: makes the absorption text slightly higher to avoid it going lower than the plot
-
-    -force_side: shows all lines either in emission if 'em' or in absorption if 'abs'
-    '''
-    # since for the first plot the 1. ratio is not necessarily centered,
-    # we need to fetch the absolute position of the y=1.0 line in graph height fraction
-    # pos_ctr_ratio = 0.5 if mode=='chimap' else\
-    #                 (1 - ax_ratio.get_ylim()[0]) / (ax_ratio.get_ylim()[1] - ax_ratio.get_ylim()[0])
-
-    if ax_ratio.get_yscale() == 'log':
-        pos_ctr_ratio = np.log10(1 / ax_ratio.get_ylim()[0]) / (np.log10(ax_ratio.get_ylim()[1]/ax_ratio.get_ylim()[0]))
-    elif ax_ratio.get_yscale() == 'linear':
-        pos_ctr_ratio = (1 - ax_ratio.get_ylim()[0]) / (ax_ratio.get_ylim()[1] - ax_ratio.get_ylim()[0])
-
-    lines_names = np.array(lines_std_names)
-
-
-    lines_abs_pos = ['abs' in elem for elem in lines_names]
-    lines_em_pos = ['em' in elem for elem in lines_names]
-
-    indiv_lines_nonresolved_std=np.unique([' '.join(elem.split(' ')[:2]) if len(elem.split(' '))<=2
-                                    else '' for elem in lines_std.values()])
-    indiv_lines_resolved_std=np.unique([' '.join(elem.split(' ')[:2]) if len(elem.split(' '))>2
-                                    else '' for elem in lines_std.values()])
-
-    indiv_lines_both_std=[elem for elem in indiv_lines_resolved_std if elem in indiv_lines_nonresolved_std]
-
-    indiv_lines_both=[elem for elem in lines_names if lines_std[elem] in indiv_lines_both_std]
-
-    #removing or restricting to resolved lines for the emission
-    lines_resolved_mask=['(' in lines_std[elem] and ')' in lines_std[elem] for elem in lines_names]
-    lines_resolved=lines_names[lines_resolved_mask]
-
-    if type(plot_indiv_transi)==str and 'only' in plot_indiv_transi:
-        plot_indiv_transi_lines=plot_indiv_transi.split('only')[1].split('+')
-        lines_resolved_restrict=[elem for elem in lines_resolved if
-                        sum([elem.startswith(subelem) for subelem in plot_indiv_transi_lines])>0]
-
-    for i_line, line in enumerate(lines_names):
-
-        if lines_e_dict[line][0] < ax_ratio.get_xlim()[0] or lines_e_dict[line][0] > ax_ratio.get_xlim()[1]:
-            continue
-
-        # skipping redundant indexes
-        if line in ['FeKa25em','FeKa26em','FeKaem','FeKbem','FeKa1em','FeKb1em','calNICERSiem','FeDiazem']:
-            continue
-
-        # skipping Nika27, FeKa25em, FeKa26em:
-        if i_line in [5,9,10]:
-            continue
-
-        # skipping display if emission lines are not asked
-        if 'em' in line and not plot_em:
-            continue
-
-        if plot_indiv_transi=='prio_resolved':
-            if  line in indiv_lines_both and not ('(' in lines_std[line] and ')' in lines_std[line]):
-                continue
-        elif type(plot_indiv_transi)==str and plot_indiv_transi.startswith('only'):
-            if line in lines_resolved and line not in lines_resolved_restrict:
-                continue
-        else:
-            if not 'em' in line and (line not in lines_resolved and plot_indiv_transi==True \
-                                 or line in lines_resolved and plot_indiv_transi==False):
-                continue
-
-
-
-        # booleans for dichotomy in the plot arguments
-        abs_bool = 'abs' in line and 'abs' in force_side
-        em_bool = not abs_bool or 'em' in force_side
-
-        if not noline:
-            # plotting the lines on the two parts of the graphs
-            ax_ratio.axvline(x=lines_e_dict[line][0],
-                             ymin=ax_ratio.get_ylim()[0] if mode=='misc' else (0 if mode not in ['ratio','chimap'] else pos_ctr_ratio if not abs_bool else 0.),
-                             ymax=ax_ratio.get_ylim()[1] if mode=='misc' else (1 if mode not in ['ratio','chimap'] else pos_ctr_ratio if not em_bool else 1.),
-                             color='blue' if em_bool else 'brown',
-                             linestyle='dashed', linewidth=1.5,zorder=-1,alpha=alpha_line)
-            if ax_contour is not None:
-                ax_contour.axvline(x=lines_e_dict[line][0], ymin=0.5 if em_bool else 0, ymax=1 if em_bool else 0.5,
-                                   color='blue' if em_bool else 'brown', linestyle='dashed', linewidth=0.5)
-
-        # small left horizontal shift to help the Nika27 display
-        txt_hshift = 0.1 if 'Ni' in line else 0.006 if 'Si' in line else 0
-        txt_line=lines_std[line]
-
-        line_x_text=lines_e_dict[line][0] - txt_hshift
-        if not noname:
-
-            add_height_squished=0
-            if plot_indiv_transi:
-                line_full_name=lines_std[line]
-
-                #ensuring the line is an individual transition
-                if '(' in line_full_name and ')' in line_full_name:
-
-                    #additional tester to move line_x_tex if none of the conditions below are true
-                    bool_shift=True
-
-                    #shifting it to the left if is the first one of a complex
-                    if i_line<len(lines_names)-1 and lines_std[lines_names[i_line+1]].split('(')[0]\
-                                                   ==lines_std[lines_names[i_line]].split('(')[0]:
-
-                        #line_x_text=lines_e_dict[line][0]-0.01*len(lines_std[line])/12 is good for 6.3-7.1
-                        line_x_text=lines_e_dict[line][0]-0.01*len(lines_std[line])/12-\
-                                    (0.015 if 'P' in lines_std[lines_names[i_line]].split('(')[1] else 0)
-
-                        #avoiding overlap with the NiKa27 complex display
-                        if line=='FeKb25p1abs':
-                            txt_line = '(' + lines_std[line].split('(')[1]
-                            line_x_text+=0.04
-                        bool_shift=False
-                    #removing everything except the complex name otherwise
-                    if i_line>0 and lines_std[lines_names[i_line]].split('(')[0]==\
-                                    lines_std[lines_names[i_line-1]].split('(')[0]:
-                        line_x_text=lines_e_dict[line][0]+0.008+\
-                        (0.01 if 'P' in lines_std[lines_names[i_line]].split('(')[1] else 0)
-
-                        if line!='FeKb25p3abs':
-                            txt_line = '(' + lines_std[line].split('(')[1]
-                        else:
-                            line_x_text+=0.03
-                        bool_shift=False
-                        add_height_squished=0.01 if  'P' in lines_std[lines_names[i_line]].split('(')[1] else 0
-
-                    if bool_shift:
-                        line_x_text+=0.04
-                else:
-                    line_x_text+=0.04
-            else:
-                line_x_text += 0.04
-
-            # but the legend on the top part only
-            ax_ratio.text(x=line_x_text,
-                          y=0.96 if not abs_bool else (0.06+(0.02+add_height_squished if squished_mode else 0)
-                                                  if i_line % 2 == 1 else 0.12+(0.01 if squished_mode else 0)),
-                          s=txt_line,
-                          color='blue' if em_bool else 'brown',
-                          transform=ax_ratio.get_xaxis_transform(), ha='center',
-                          va='top')
-
-
 def plot_line_comps(axe, comp_cont, names_cont, comp_lines, names_lines, combined=False):
     '''
     Wrapper for plotting model component contributions
@@ -864,6 +711,7 @@ def plot_line_comps(axe, comp_cont, names_cont, comp_lines, names_lines, combine
                      alpha=1 - 0.1 * i_line, linestyle=l_styles[i_line % 4])
 
         axe.legend()
+
 
 
 def color_chi2map(fig, axe, chi_map, title='', combined=False, ax_bar=None):
@@ -1308,8 +1156,8 @@ def comb_chi2map(fig_comb, chi_dict, title='', comb_label='',
         ax_comb[1].xaxis.set_minor_locator(AutoMinorLocator(minor_locator))
 
 
-    plot_std_ener(ax_comb[0], ax_comb[1], plot_em=True,mode='chimap',plot_indiv_transi=show_indiv_transi,
-                  squished_mode=squished_mode,force_side=force_side_lines)
+    plot_std_ener(ax_comb[0], ax_comb[1], plot_em=True, mode='chimap', plot_indiv_transi=show_indiv_transi,
+                  squished_mode=squished_mode, force_side=force_side_lines)
 
 
 def merge_chi_dict(chi_dict_files,skip_chi_base_equal=False):

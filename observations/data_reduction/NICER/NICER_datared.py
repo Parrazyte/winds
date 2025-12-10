@@ -102,7 +102,7 @@ ap.add_argument("-dir", "--startdir", nargs='?', help="starting directory. Curre
 ap.add_argument("-l","--local",nargs=1,help='Launch actions directly in the current directory instead',
                 default=False,type=bool)
 ap.add_argument('-catch','--catch_errors',help='Catch errors while running the data reduction and continue',
-                default=True,type=bool)
+                default=False,type=bool)
 
 #1 for no parallelization
 ap.add_argument('-parallel',help='number of processors for parallel directories',
@@ -110,7 +110,7 @@ ap.add_argument('-parallel',help='number of processors for parallel directories'
 
 #global choices
 ap.add_argument("-a","--action",nargs=1,help='List which action(s) to run,separated by comas',
-                default ='m,ml', type = str)
+                default ='l,g,m,ml', type = str)
 
 #default: fc,1,gti,fs,l,g,m,ml,c
 
@@ -1432,10 +1432,12 @@ def create_gtis(directory,split_arg='orbit+flare+overdyn+underdyn+HR_flare',band
 
                         #taking off the nans to avoid issues, and offsetting by the index position of the first GTI
                         # in the orbit
+
                         peak_soft,peak_region_soft=peak_search(np.where(np.isnan(counts_035_8[elem_gti_orbit]),0,
                                                                         counts_035_8[elem_gti_orbit]),
                                                                         id_offset=elem_gti_orbit[0],
                                                                         topo_score_thresh=peak_score_thresh)
+
                         peak_hard,peak_region_hard=peak_search(np.where(np.isnan(counts_8_12[elem_gti_orbit]),0,
                                                                         counts_8_12[elem_gti_orbit]),
                                                                         id_offset=elem_gti_orbit[0],
@@ -2166,12 +2168,14 @@ def extract_all_spectral(directory,bkgmodel='scorpeon_script',language='python',
 
             process_state=bashproc.expect(['DONE','ERROR: could not find UFA file','Task aborting due to zero EXPOSURE',
                                            'Task aborting due to zero response',
-                                           'PIL ERROR PIL_UNSPECIFIED_ERROR: non-specific pil error'],timeout=None)
+                                           'PIL ERROR PIL_UNSPECIFIED_ERROR: non-specific pil error',
+                                           'ERROR: SOLAR_PHI/SOLARPHI not found in MKF file'],timeout=None)
 
             if process_state in [2,3]:
 
                 #skipping the computation
                 return 'skip'
+
 
             #raising an error to stop the process if the command has crashed for some reason
             if process_state>0:
@@ -2181,7 +2185,11 @@ def extract_all_spectral(directory,bkgmodel='scorpeon_script',language='python',
                 bashproc.sendline('exit')
                 if thread is not None:
                     thread.set()
-                return lines[-1].replace('\n','')
+                if process_state==4:
+                    # go to https://heasarc.gsfc.nasa.gov/docs/nicer/analysis_threads/common-errors/#nicerl3-solarphi
+                    return 'ERROR: SOLAR_PHI/SOLARPHI not found in MKF file'
+                else:
+                    return lines[-1].replace('\n','')
 
             #creating all types of scorpeon models afterwards if need be we don't expect bugs since the function
             #would have returned already otherwise

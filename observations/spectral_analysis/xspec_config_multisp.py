@@ -2654,7 +2654,7 @@ def delcomp(compname,mod_name='',give_ndel=False):
             link_par_str = link_par_str[0]
 
             # getting something that can be transformed back to an int
-            link_par = link_par_str.replace('=', '').replace('p', '')
+            link_par = link_par_str.split(':')[-1].replace('=', '').replace('p', '')
 
             #computing the deleted parameter ids in the first datagroup
             deleted_par_ids_single=np.concatenate((np.arange(skippar_start+1,skippar_start+skippar_n+1),
@@ -2683,7 +2683,7 @@ def delcomp(compname,mod_name='',give_ndel=False):
                 #new link position, correctly accounting for additional skips in subsequent datagroups
                 new_link_par=str(int(link_par)-skippar_n*(link_shift_factor))
 
-                mod_data_grp.links[par_id]=link.replace(link_par_str,'p'+new_link_par)
+                mod_data_grp.links[par_id]=link.replace(link_par_str,link_par_str.replace(link_par,new_link_par))
 
 
         mod_data_grp.links[skippar_start:-skippar_n]=mod_data_grp.links[skippar_start+skippar_n:]

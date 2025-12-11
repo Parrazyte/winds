@@ -2666,10 +2666,10 @@ def delcomp(compname,mod_name='',give_ndel=False):
                       ' was linked to one of the deleted components parameters. Deleting link.')
 
                 #Deleting links resets the values boundaries so we save and replace the values to make non-default bounds remain saved
-                par_linked_vals=AllModels(grp_id+1)(par_id+1).values
+                par_linked_vals=AllModels(grp_id+1,modName=mod_name)(par_id+1).values
 
                 mod_data_grp.links[par_id]=''
-                AllModels(grp_id+1)(par_id+1).values=par_linked_vals
+                AllModels(grp_id+1,modName=mod_name)(par_id+1).values=par_linked_vals
                 continue
 
             #shifting the link value if it points to a parameter originally after the deleted components
@@ -7435,11 +7435,11 @@ def plot_std_ener(ax_ratio, ax_contour=None, plot_em=False, mode='ratio',exclude
                     if bool_shift:
                         line_x_text+=0.04
 
-                    if line.startswith('FeKa25') and line.endswith('abs'):
+                    if  color=='grey':
+                        if line.startswith('FeKa25') and line.endswith('abs'):
 
-                        y_line_pos=(y_line_pos+1)%2
-                        line_transi_letter=line.replace('FeKa25','').replace('abs','')
-                        if color=='grey':
+                            y_line_pos=(y_line_pos+1)%2
+                            line_transi_letter=line.replace('FeKa25','').replace('abs','')
                             if line_transi_letter=='Z':
                                 line_x_text-=0.03
                             if line_transi_letter=='Y':
@@ -7449,9 +7449,9 @@ def plot_std_ener(ax_ratio, ax_contour=None, plot_em=False, mode='ratio',exclude
                             if line_transi_letter=='W':
                                 line_x_text-=0.002
 
-                    if line=='FeKb1p1em' and color=='grey':
-                        y_line_pos=(y_line_pos+1)%2
-                        line_x_text-=0.02
+                        if line=='FeKb1p1em':
+                            y_line_pos=(y_line_pos+1)%2
+                            line_x_text-=0.02
                 else:
                     line_x_text+=0.04
             else:

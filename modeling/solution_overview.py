@@ -21,7 +21,7 @@ from scipy.ndimage import map_coordinates
 
 #rough way of testing if online or not
 online=os.getcwd().startswith('/mount/src')
-project_dir='/'.join(__file__.split('/')[:-3])
+project_dir='/'.join(__file__.split('/')[:(-3 if online else -2)])
 
 #to be tested online
 sys.path.append(os.path.join(project_dir,'observations/spectral_analysis/'))
@@ -227,12 +227,14 @@ fig_scatter.layout.xaxis.gridcolor='rgba(0.5,0.5,.5,0.2)'
 
 fig_scatter.update_layout(xaxis=dict(showgrid=True),
               yaxis=dict(showgrid=True),xaxis_title='mu', yaxis_title='p (xi)',
-                font=dict(size=16),paper_bgcolor='rgba(0.,0.,0.,0.)',plot_bgcolor='rgba(0.,0.,0.,0.)')
+                font=dict(size=16),paper_bgcolor='rgba(0.,0.,0.,0.)',
+                          plot_bgcolor='rgba(0.,0.,0.,0.)')
 
 
 #plotting the scatter of the whole solution space
 
-non_computed_p_mu=np.array([elem for elem in possible_sol_indiv_p_mu.T if not np.any(np.all(p_mu_space.T==elem,1))]).T
+non_computed_p_mu=np.array([elem for elem in possible_sol_indiv_p_mu.T \
+                            if not np.any(np.all(p_mu_space.T==elem,1))]).T
 
 #mask_non_computed=possible_sol_indiv_p_mu[0][elem not in p_mu_space[0] fro elem in possible_sol_indiv_p_mu[0]]
 scat_possible=go.Scatter(x=non_computed_p_mu[1],y=non_computed_p_mu[0],mode='markers',
@@ -260,7 +262,11 @@ fig_scatter.update_layout(legend=dict(
 tab_p_mu, tab_sol, tab_sol_radial,tab_explo,tab_2D,tab_tstruct= st.tabs(["Solution selection", "Angular distributions", "radial distribution","parameter exploration","full solution vizualisation","thermal structure"])
 
 with tab_p_mu:
-    selected_points = plotly_events(fig_scatter,click_event=True,select_event=True,override_height=800)
+
+    selected_points=st.plotly_chart(fig_scatter,
+                                     use_container_width=False, theme=None,on_select='rerun')['selection']['points']
+
+    # selected_points = plotly_events(fig_scatter,click_event=True,select_event=True,override_height=800)
     st.info('Rerun if this figure disappears.')
 
 if len(selected_points)==0:
@@ -277,8 +283,8 @@ n_sel=0
 
 if len(selected_points)!=0:
 
-    #only selected the points from the second trace with the curvenumber test
-    selected_sol_p_mu=np.array([[selected_points[i]['y'],selected_points[i]['x']] for i in range(len(selected_points)) if selected_points[i]['curveNumber']==1])
+    #only selected the points from the second trace with the curve_number test
+    selected_sol_p_mu=np.array([[selected_points[i]['y'],selected_points[i]['x']] for i in range(len(selected_points)) if selected_points[i]['curve_number']==1])
     n_sel=len(selected_sol_p_mu)
 
     if n_sel==0:
@@ -1001,11 +1007,11 @@ if split_angle and n_sel==1:
 #     return map_coordinates(grid, np.array([new_ir, new_it]),
 #                            order=order).reshape(new_r.shape)
 
-import cv2
 
 #2D plotting function
 def plot_2D(r_sampl_sol,angle_sampl_sol,data,r_j,r_max,n_rad,cmap='plasma',log_sampl=True,figwidth=515):
 
+    import cv2
 
     #interpolating back onto a cartesian grid
     coord_sampl=np.logspace(np.log10(r_j),np.log10(r_max),n_rad*3) if log_sampl else np.linspace(r_j,r_max,n_rad)
@@ -1596,7 +1602,7 @@ if struct_sol_mode=='Manual parameter input':
     struct_alpha_0 = struct_input_alpha_0
     struct_m_BH = struct_input_m_BH
 
-elif struct_sol_mode is 'Selected solution':
+elif struct_sol_mode=='Selected solution':
 
     #will need to be changed
     struct_rj = rj

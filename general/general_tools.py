@@ -48,6 +48,9 @@ def ang2kev(x):
 def absorb_to_L(logxi,NH_cm,R_rg,M_BH):
     return 10**(logxi)*NH_cm*R_rg*R_g(M_BH)*1e5
 
+def gamma_relat(beta):
+    return 1/np.sqrt(1-beta**2)
+
 def make_zip(filebites_arr,filename_arr):
     zip_buffer = io.BytesIO()
 
@@ -202,6 +205,7 @@ def source_catal(spawn, dirpath, file, target_only=True, use_file_target=False):
 
     # if we have at least one detections, it is assumed the "last" find is the name of the object
     obj_catal = obj_list[-1]
+
 
     print('\nValid name(s) detected. Object name assumed to be ' + obj_catal['main_id'])
 

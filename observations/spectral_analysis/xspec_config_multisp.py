@@ -52,11 +52,10 @@ if 'xspec_models_dir' in os.environ:
     model_dir=os.environ['xspec_models_dir']
 else:
     model_dir="/home/parrazyte/Soft/Xspec/Models"
-    model_dir=None
 
 # custom model loads
 if not streamlit_mode and model_dir!=None:
-    # AllModels.lmod('relxill',dirPath=model_dir+'/relxill')
+    AllModels.lmod('relxill',dirPath=model_dir+'/relxill/2.6')
 
     # AllModels.lmod('fullkerr',dirPath=model_dir+'/fullkerr')
     # #swiftJ1658 dust scattering halo model from Jin2019
@@ -6544,7 +6543,8 @@ def xPlot(types,axes_input=None,plot_saves_input=None,plot_arg=None,includedlist
           legend_sources_bbox=None,
           legend_addcomp_groups=False,
           skip_main_legend=False,
-          addcomp_rebin=None,):
+          addcomp_rebin=None,
+          elinewidth_data=0.75):
 
     '''
     Replot xspec plots using matplotib. Accepts custom types:
@@ -6828,7 +6828,7 @@ def xPlot(types,axes_input=None,plot_saves_input=None,plot_arg=None,includedlist
                                  yerr=curr_save.yErr[id_grp].clip(0)*(1 if 'data' not in plot_type else mult_factor_grp),
                                  color=xcolors_grp[id_grp] if data_colors is None else data_colors[id_grp],
                                  linestyle='None',
-                                 elinewidth=0.75,alpha=data_alpha,
+                                 elinewidth=elinewidth_data,alpha=data_alpha,
                                  label='' if legend_addcomp_groups else\
                             ('' if group_names=='nolabel' or (no_name_data=='auto' and i_ax!=len(types_split)-1) else grp_name))
 

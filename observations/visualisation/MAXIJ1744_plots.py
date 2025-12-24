@@ -369,7 +369,7 @@ plt.savefig('mod_empi_bigpix_deabs_nobfekblor_comp_ratio.pdf')
 '''SMALLPIX'''
 
 os.chdir('/media/parrazyte/crucial_SSD/Observ/BHLMXB/XRISM/MAXIJ1744-294/new_anal/fit_duo_smallpix/2025/rsp_CALDB11/comp_mod')
-Xset.restore('mod_deabs.xcm')
+Xset.restore('mod_deabs_adjust_FeKaratio.xcm')
 set_ener('thcomp',xrism=True)
 plot_comp_ratio([1],[None,[10,11,12,13],[8,9],[2,7],None,6,5,[3,4],],6.38,7.13,
                 other_addcomps_labels=['main',r"FeXXV K$\alpha$",
@@ -389,9 +389,9 @@ plt.savefig('mod_empi_smallpix_deabs_nobfekblor_comp_ratio.pdf')
 '''BIGPIX'''
 
 os.chdir('/media/parrazyte/crucial_SSD/Observ/BHLMXB/XRISM/MAXIJ1744-294/physical/photo/new/bigpix/comp_mod')
-Xset.restore('mod_1744_deabs_nobfekblor.xcm')
+Xset.restore('mod_intrinsic_photo_bigpix_max500_2e-3.xcm')
 set_ener('thcomp',xrism=True)
-plot_comp_ratio([1],[2,3,4,5,[6,7]],6.38,7.13,
+plot_comp_ratio([1],[2,3,5,4,[7,8]],6.38,7.13,
                 other_addcomps_labels=["static","blue 1","blue 2", "blue 3",
                                        r'empirical'+'\n'+r'FeXXVI K$\alpha$'],
                 other_addcomps_colors=['green','darkturquoise','blue','cornflowerblue','plum'],
@@ -401,7 +401,7 @@ plt.savefig('mod_photo_bigpix_deabs_nobfekblor_comp_ratio.pdf')
 '''SMALLPIX'''
 
 os.chdir('/media/parrazyte/crucial_SSD/Observ/BHLMXB/XRISM/MAXIJ1744-294/physical/photo/new/smallpix/comp_mod')
-Xset.restore('mod_3comp_fit_highxi_noabs_2e-3.xcm')
+Xset.restore('mod_intrinsic_photo_smallpix_sig_2e-3_adjFeKratio.xcm')
 set_ener('thcomp',xrism=True)
 plot_comp_ratio([1],[2,3,4,[5,8],[6,7]],6.38,7.13,
                 other_addcomps_labels=["static","blue 1","blue 2",r'empirical'+'\nFe I',
@@ -409,4 +409,29 @@ plot_comp_ratio([1],[2,3,4,[5,8],[6,7]],6.38,7.13,
                 other_addcomps_colors=['green','darkturquoise','blue','black','plum'],
                 ylims=[1.,2.3],figsize=(6,3),minor_locator=10,ylabel_prefix='small pixel region PIE model \n',
                 manual_bbox=(0.045, 1))
-plt.savefig('mod_photo_smallpix_deabs_nobfekblor_comp_ratio.pdf')
+plt.savefig('mod_photo_smallpix_deabs_comp_ratio_adjFeKratio.pdf')
+
+'''COLLI'''
+'''BIGPIX'''
+
+os.chdir('/media/parrazyte/crucial_SSD/Observ/BHLMXB/XRISM/MAXIJ1744-294/physical/colli/bigpix/comp_mod')
+Xset.restore('mod_intrinsic_colli_bigpix.xcm')
+set_ener('thcomp',xrism=True)
+plot_comp_ratio([1],[2,3,4,5,[7,8]],6.38,7.13,
+                other_addcomps_labels=["static","blue 1","blue 2", "blue 3",
+                                       r'empirical'+'\n'+r'FeXXVI K$\alpha$'],
+                other_addcomps_colors=['green','darkturquoise','blue','cornflowerblue','plum'],
+                ylims=[1.,2.3],figsize=(6,3),minor_locator=10,ylabel_prefix='Big pixel region CIE model \n')
+plt.savefig('mod_cie_bigpix_deabs_nobfekblor_comp_ratio.pdf')
+
+'''SMALLPIX'''
+os.chdir('/media/parrazyte/crucial_SSD/Observ/BHLMXB/XRISM/MAXIJ1744-294/physical/colli/smallpix/comp_mod')
+Xset.restore('mod_intrinsic_sig2e-3_adjFeKratio.xcm')
+set_ener('thcomp',xrism=True)
+plot_comp_ratio([1],[2,3,4,[5,8],[6,7]],6.38,7.13,
+                other_addcomps_labels=["static","blue 1","blue 2",r'empirical'+'\nFe I',
+                                       r'empirical'+'\n'+r'FeXXVI K$\alpha$'],
+                other_addcomps_colors=['green','darkturquoise','blue','black','plum'],
+                ylims=[1.,2.3],figsize=(6,3),minor_locator=10,ylabel_prefix='small pixel region CIE model \n',
+                manual_bbox=(0.045, 1))
+plt.savefig('mod_cie_smallpix_deabs_comp_ratio_adjFeKratio.pdf')

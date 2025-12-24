@@ -10,8 +10,7 @@ import os
 import numpy as np
 import matplotlib.pyplot as plt
 from xspec import Xset,AllModels,Fit,Plot,AllData
-from xspec_config_multisp import xPlot,reset,Pset,reset,catch_model_str,Plot_screen,calc_error
-from linedet_utils import plot_std_ener
+from xspec_config_multisp import xPlot, reset, Pset, reset, catch_model_str, Plot_screen, calc_error, plot_std_ener
 from matplotlib.gridspec import GridSpec
 
 reset()

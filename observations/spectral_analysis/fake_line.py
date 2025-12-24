@@ -2,8 +2,6 @@ from xspec import *
 from xspec_config_multisp import *
 import time
 
-def faker(nfakes):
-    pass
 
 def mc_sim_line(baseload='mod_final_nogauss.xcm',lines='FeKa26Aabs_gaussian',
                 nfakes=1000,vrange=[-3000,3000,50],parallel=1,bound_around=1):

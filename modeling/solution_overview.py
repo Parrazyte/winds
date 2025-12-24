@@ -264,7 +264,7 @@ tab_p_mu, tab_sol, tab_sol_radial,tab_explo,tab_2D,tab_tstruct= st.tabs(["Soluti
 with tab_p_mu:
 
     selected_points=st.plotly_chart(fig_scatter,
-                                     use_container_width=False, theme=None,on_select='rerun')['selection']['points']
+                                     stretch=False, theme=None,on_select='rerun')['selection']['points']
 
     # selected_points = plotly_events(fig_scatter,click_event=True,select_event=True,override_height=800)
     st.info('Rerun if this figure disappears.')
@@ -624,7 +624,7 @@ def angle_plot(x_arr,y_arr,log_x=False,log_y='auto',xaxis_title='',yaxis_title='
     if latex_title:
         st.components.v1.html(fig_line.to_html(include_mathjax='cdn'), width=500, height=450)
     else:
-        st.plotly_chart(fig_line,use_container_width=False,theme=None)
+        st.plotly_chart(fig_line,stretch=False,theme=None)
 
     if return_fig:
         return fig_line
@@ -816,7 +816,7 @@ def radial_plot(rad,sol_sampl,c_val_sampl,log_x=False,log_y=False,xaxis_title=''
                                     colorbar=dict(thickness=10, tickvals=tickvals_cm,
                                                   tickfont=dict(color='black' if light_mode else 'white'),
                                                   ticks='outside',ticklen=3,tickcolor='black' if light_mode else 'white',
-                                                  title=dict(text=color_label if not latex_title else r"theta", side="top"),titlefont=dict(color='black' if light_mode else 'white'))),hoverinfo='none')
+                                                  title=dict(text=color_label if not latex_title else r"theta", side="top",font=dict(color='black' if light_mode else 'white')))),hoverinfo='none')
     fig_rad.add_trace(colorbar_trace)
 
     if color_type=='angle':
@@ -828,7 +828,7 @@ def radial_plot(rad,sol_sampl,c_val_sampl,log_x=False,log_y=False,xaxis_title=''
     if latex_title:
         st.components.v1.html(fig_rad.to_html(include_mathjax='cdn'), width=500, height=450)
     else:
-        st.plotly_chart(fig_rad, use_container_width=False, theme=None)
+        st.plotly_chart(fig_rad, stretch=False, theme=None)
     
     if return_fig:
         return fig_rad
@@ -1855,8 +1855,8 @@ if compute_tstruct:
         col_1,col_2,col_3=st.columns(3)
 
         with col_1:
-            st.plotly_chart(fig_HR,use_container_width=False,theme=None)
-            st.plotly_chart(fig_P, use_container_width=False, theme=None)
+            st.plotly_chart(fig_HR,stretch=False,theme=None)
+            st.plotly_chart(fig_P, stretch=False, theme=None)
 
             fig_HR_sampl_LEdd = radial_plot(struct_rsph_repeat, struct_HR_sampl_LEdd, np.log10(sampl_L_Edd_thermal),
                                             log_x=True,
@@ -1864,16 +1864,16 @@ if compute_tstruct:
                                             logxi_ids=None, return_fig=True, color_type='var', color_label='log(L/LEdd)')
 
         with col_2:
-            st.plotly_chart(fig_rho_0,use_container_width=False,theme=None)
-            st.plotly_chart(fig_opacity, use_container_width=False, theme=None)
+            st.plotly_chart(fig_rho_0,stretch=False,theme=None)
+            st.plotly_chart(fig_opacity, stretch=False, theme=None)
 
             fig_HR_sampl_p = radial_plot(struct_rsph_repeat, struct_HR_sampl_p, np.log10(sampl_p_thermal),
                                          log_x=True,log_y=True, xaxis_title='radius (Rg)', yaxis_title=r'ε',
                                          logxi_ids=None, return_fig=True, color_type='var', color_label='log(p)')
 
         with col_3:
-            st.plotly_chart(fig_T_0,use_container_width=False,theme=None)
-            st.plotly_chart(fig_Tau, use_container_width=False, theme=None)
+            st.plotly_chart(fig_T_0,stretch=False,theme=None)
+            st.plotly_chart(fig_Tau, stretch=False, theme=None)
 
             fig_HR_sampl_mu = radial_plot(struct_rsph_repeat, struct_HR_sampl_mu, np.log10(sampl_mu_thermal),
                                           log_x=True,

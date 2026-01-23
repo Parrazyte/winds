@@ -90,7 +90,7 @@ lines_std={         #don't change the first 8, there are explicit calls in the c
                 'CrKa23Yabs': r'CrXXIII K$\alpha$ (y)',
                 'CrKa23Xabs': r'CrXXIII K$\alpha$ (x)',
                 'CrKa23Wabs': r'CrXXIII K$\alpha$ (w)',
-
+                'ArKa18abs': r'ArXVIII K$\alpha$',
 }
 
 lines_std_names=list(lines_std.keys())
@@ -144,8 +144,9 @@ lines_e_dict={
                     'SiKa1em': [1.7397,-3000,3000],
                     'MgKa12abs': [1.4723,-3000,3000],
                     'AlKa13abs': [1.7285,-3000,3000],
+                    'ArKa18abs': [3.3213, -3000, 3000],
 
-                  #
+    #
                   #'CaKb20abs': [around 4.85, -3000, 3000],
 
     # resolved lines (from NIST 2023)

@@ -909,7 +909,8 @@ def DR_XRT_QL():
     Step5: extract ARF with xrtmkarf.
             -take manual rmfs from caldb (see below)
             -source pointing at -1 uses the coordinates of the source region
-                for WT, use the real position of the source from simbad instead in degrees
+                for WT, use the real position of the source from simbad instead
+                (in degrees doesn't work so put the physical conversion of the theoretical source position ?)
                 for PC, use the center of the circular region
             (If RMF not found in caldb, fetch the appropriate RMF manually in caldb
             (using reading the most up-to-date document in https://www.swift.ac.uk/analysis/Gain_RMF_releases.html

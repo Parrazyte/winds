@@ -31,7 +31,7 @@ except:
 from fitting_tools import sign_delchis_table, lines_e_dict, lines_w_dict, lines_broad_w_dict, \
     link_groups, lines_std_names, def_ftest_threshold, def_ftest_leeway, lines_std
 
-from general_tools import ravel_ragged,get_overlap,shorten_epoch,ang2kev
+from general_tools import ravel_ragged,get_overlap,shorten_epoch,ang2kev,combo_legend
 
 
 from contextlib import redirect_stdout
@@ -6635,18 +6635,6 @@ def xPlot(types,axes_input=None,plot_saves_input=None,plot_arg=None,includedlist
         useful for cases where the components are visually rebinned with the source
 
     '''
-
-    def combo_legend(ax):
-        #taken from https://andrewpwheeler.com/2022/09/16/legends-in-python/
-        handler, labeler = ax.get_legend_handles_labels()
-        hd = []
-        labli = list(set(labeler))
-
-        for lab in labli:
-            comb = [h for h, l in zip(handler, labeler) if l == lab]
-            hd.append(tuple(comb))
-
-        return hd, labli
 
     # ls_types=['dotted','dashed','dashdot']
 

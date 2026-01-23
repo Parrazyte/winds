@@ -6,11 +6,11 @@ import glob
 from astropy.time import Time,TimeDelta
 from general_tools import file_edit
 
-def sp_anal(obs_path,mod='powerlaw',baseload=True,model_load=False,obj='',scorpeon=True,overwrite=False,
+def sp_anal(obs_path,mod='thcont',baseload=True,model_load=False,obj='',scorpeon=True,overwrite=False,
             addcomp_list=[],freeze_nH_postfit=False,remove_edge_postfit=True,remove_calgaussian_postfit=True,
-
             outdir='s_a',absval=None,set_ener_str=None,set_ener_xrism=False,
-
+            add_arf_auto=True,
+            add_bkg_auto=True,
             line_ul='',
             freeze_cont_ul=True,
             bshift_range_ul=[-3000,3000],
@@ -71,7 +71,10 @@ def sp_anal(obs_path,mod='powerlaw',baseload=True,model_load=False,obj='',scorpe
     else:
         AllData('1:1 '+obs_path)
         obs=obs_path
-
+        if add_arf_auto:
+            AllData(1).response.arf=AllData(1).fileName.replace('_src_grp_opt.pi','_arf.arf')
+        if add_bkg_auto:
+            AllData(1).background=AllData(1).fileName.replace('_src_grp_opt.pi','_bkg.pi')
     if not model_load:
         AllData.ignore('**-0.3 10.-**')
         #file infos
@@ -112,6 +115,8 @@ def sp_anal(obs_path,mod='powerlaw',baseload=True,model_load=False,obj='',scorpe
             mod_list=['cont_diskbb', 'disk_thcomp', 'glob_TBfeo']
         elif mod=="powerlaw":
             mod_list=['powerlaw', 'glob_TBfeo']
+        elif mod=="pow_disk":
+            mod_list=['cont_powerlaw', 'cont_diskbb','glob_TBfeo']
 
 
 
@@ -147,6 +152,10 @@ def sp_anal(obs_path,mod='powerlaw',baseload=True,model_load=False,obj='',scorpe
             AllModels(1)(3).values=2.33
         # AllModels(1)(2).frozen=False
         # AllModels(1)(3).frozen=False
+        if obj=='1543':
+            AllModels(1).powerlaw.PhoIndex.values=2.3
+            AllModels(1).powerlaw.PhoIndex.frozen=True
+
         if mod=='thcont':
             AllModels(1).diskbb.Tin.values=[1.,0.01,0.4,0.4,2.,2.]
 
@@ -164,6 +173,7 @@ def sp_anal(obs_path,mod='powerlaw',baseload=True,model_load=False,obj='',scorpe
         #     calc_error(logfile)
         # except:
         #     pass
+
 
     if freeze_nH_postfit is not False:
         if 'TBabs' in AllModels(1).componentNames:

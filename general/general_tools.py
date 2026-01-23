@@ -871,3 +871,15 @@ class MinorSymLogLocator(Locator):
     def tick_values(self, vmin, vmax):
         raise NotImplementedError('Cannot get tick locations for a '
                           '%s type.' % type(self))
+
+def combo_legend(ax):
+    #taken from https://andrewpwheeler.com/2022/09/16/legends-in-python/
+    handler, labeler = ax.get_legend_handles_labels()
+    hd = []
+    labli = list(set(labeler))
+
+    for lab in labli:
+        comb = [h for h, l in zip(handler, labeler) if l == lab]
+        hd.append(tuple(comb))
+
+    return hd, labli

@@ -188,8 +188,8 @@ def renorm_pix_backscale(file,mult_factor,suffix=''):
     file_cp=shutil.copy(file,file.replace(file[file.rfind('.'):],'_backscale_renorm'+file[file.rfind('.')]))
 
 
-def repro_dir(directory='auto',repro_suffix='repro',overwrite=True,
-               heasoft_init_alias='heainit',caldb_init_alias='caldbinit',parallel=False):
+def repro_dir(directory='auto',repro_suffix='repro',overwrite=True,instru='all',
+               heasoft_init_alias='heainit',caldb_init_alias='caldbinit',parallel=False,override_only=False):
 
     '''
 
@@ -203,6 +203,11 @@ def repro_dir(directory='auto',repro_suffix='repro',overwrite=True,
 
     should unzip the directory before doing this
 
+    instru:
+        all, Xtend or Resolve (case doesn't matter, will be converted to upper case)
+
+    override_only:
+        skips xapipeline and simply attempts to replace the files
     '''
 
     def copy_checker(spawn,init_path_spawn,end_path_spawn,init_path,path_spawn,logfile_prefix):
@@ -217,15 +222,23 @@ def repro_dir(directory='auto',repro_suffix='repro',overwrite=True,
 
         # checking the log file
         copy_ok = False
+        time.sleep(10)
+
         while not copy_ok:
+            n_copy=0
             time.sleep(0.5)
             with open(os.path.join(path_spawn,logfile_name)) as f:
                 n_lines = len(f.readlines())
             if n_lines == n_files_copy:
                 copy_ok = 1
             else:
-                print('waiting for copy...')
-                pass
+                breakpoint()
+                print('waiting for copy of '+logfile_name+'...')
+                n_copy+=1
+                if n_copy>100:
+                    breakpoint()
+                else:
+                    pass
         # reasonable waiting time to make sure files can be copied
         time.sleep(0.5)
 
@@ -313,50 +326,53 @@ def repro_dir(directory='auto',repro_suffix='repro',overwrite=True,
             bashproc.sendline('mkdir -p '+repro_dir)
             bashproc.sendline('cd '+repro_dir)
 
-            bashproc.sendline('echo valid')
-            bashproc.expect('valid')
-            bashproc.sendline('rm -rf resolve repro_logs log  xtend  auxil')
-            time.sleep(5)
+            if not override_only:
+                bashproc.sendline('echo valid')
+                bashproc.expect('valid')
+                bashproc.sendline('rm -rf resolve repro_logs log  xtend  auxil')
+                time.sleep(5)
 
-            bashproc.sendline('xapipeline'+
-                          ' indir= ../'+str(directory_use)+
-                          ' outdir= ./'+
-                          ' steminputs=xa'+str(directory_use)+
-                          ' STEMOUTPUTS=DEFAULT'+
-                          ' instrument=ALL'+
-                          ' verify_input=no'
-                          ' entry_stage=1'+
-                          ' exit_stage=2'+
-                          ' clobber=YES')
+                bashproc.sendline('xapipeline'+
+                              ' indir= ../'+str(directory_use)+
+                              ' outdir= ./'+
+                              ' steminputs=xa'+str(directory_use)+
+                              ' STEMOUTPUTS=DEFAULT'+
+                              ' verify_input=no'
+                              ' entry_stage=1'+
+                              ' exit_stage=2'+
+                              ' clobber=YES'+
+                              ' instrument='+instru.upper())
 
-            #note that the exit code is a bit annoying to parse so we're using sevral lines to isolate it
-            bashproc.expect('Total warnings/errors',timeout=None)
-            bashproc.expect('Running xapipeline')
-            bashproc.expect('Exit with no errors')
-            time.sleep(1)
-            bashproc.sendline('echo valid')
+                #note that the exit code is a bit annoying to parse so we're using sevral lines to isolate it
+                bashproc.expect('Total warnings/errors',timeout=None)
+                bashproc.expect('Running xapipeline')
+                bashproc.expect('Exit with no errors')
+                time.sleep(1)
+                bashproc.sendline('echo valid')
 
-            bashproc.expect('valid')
+                bashproc.expect('valid')
 
-            #moving the logfiles to a log folder
-            bashproc.sendline('mkdir -p repro_logs')
-            bashproc.sendline('mv xapipeline**.log repro_logs')
+                #moving the logfiles to a log folder
+                bashproc.sendline('mkdir -p repro_logs')
+                bashproc.sendline('mv xapipeline**.log repro_logs')
 
-            copy_checker(bashproc,'../'+directory_use+'/resolve','./',
-                         init_path=directory_use+'/resolve',path_spawn=repro_dir,
-                         logfile_prefix='resolve')
+                if instru.upper() in ['RESOLVE','ALL']:
+                    copy_checker(bashproc,'../'+directory_use+'/resolve','./',
+                                 init_path=directory_use+'/resolve',path_spawn=repro_dir,
+                                 logfile_prefix='resolve')
 
-            copy_checker(bashproc,'../'+directory_use+'/xtend','./',
-                         init_path=directory_use+'/xtend',path_spawn=repro_dir,
-                         logfile_prefix='xtend')
+                if instru.upper() in ['XTEND','ALL']:
+                    copy_checker(bashproc,'../'+directory_use+'/xtend','./',
+                                 init_path=directory_use+'/xtend',path_spawn=repro_dir,
+                                 logfile_prefix='xtend')
 
-            copy_checker(bashproc,'../'+directory_use+'/log','./',
-                         init_path=directory_use+'/log',path_spawn=repro_dir,
-                         logfile_prefix='log')
+                copy_checker(bashproc,'../'+directory_use+'/log','./',
+                             init_path=directory_use+'/log',path_spawn=repro_dir,
+                             logfile_prefix='log')
 
-            copy_checker(bashproc,'../'+directory_use+'/auxil','./',
-                         init_path=directory_use+'/auxil',path_spawn=repro_dir,
-                         logfile_prefix='auxil')
+                copy_checker(bashproc,'../'+directory_use+'/auxil','./',
+                             init_path=directory_use+'/auxil',path_spawn=repro_dir,
+                             logfile_prefix='auxil')
 
             #replacing each file for which xaapipeline created a new version
             #listing the files in one of the subdirs. We need 2 / to ensure we're in one
@@ -371,16 +387,14 @@ def repro_dir(directory='auto',repro_suffix='repro',overwrite=True,
 
             #reading all the lines to reset the buffer
             try:
-
                 bashproc.timeout=1
                 bashproc.readlines()
             except:
                 bashproc.timeout=30
 
 
-
             for elem_file_repro in file_move_list:
-                file_arbo_pos=[elem for elem in file_list if elem_file_repro==elem.split('/')[-1]]
+                file_arbo_pos=[elem for elem in file_list if elem_file_repro==elem.split('/')[-1].replace('.gz','')]
                 if len(file_arbo_pos)>1:
                     breakpoint()
                 elif len(file_arbo_pos)==0:
@@ -392,12 +406,15 @@ def repro_dir(directory='auto',repro_suffix='repro',overwrite=True,
                 file_arbo_spawn_path='/'.join(file_arbo_pos[0].split('/')[1:])
 
                 bashproc.sendline('rm '+file_arbo_spawn_path)
+                bashproc.sendline('rm '+file_arbo_spawn_path.replace('.gz',''))
+
+                time.sleep(1)
                 bashproc.sendline('mv '+elem_file_repro+' '+file_arbo_spawn_dir)
                 while not os.path.isfile(os.path.join(file_arbo_dir,elem_file_repro)):
                     time.sleep(0.5)
                     print('Wating for file move...')
                     if not os.path.isfile(os.path.join(file_arbo_dir,elem_file_repro)):
-                        time.sleep(2.5)
+                        time.sleep(5)
                         if not os.path.isfile(os.path.join(file_arbo_dir, elem_file_repro)):
                             breakpoint()
                             pass
@@ -2684,7 +2701,7 @@ def extract_img(directory='auto_repro',anal_dir_suffix='',
                 instru='all',
                    use_raw_evt_xtd=False,use_raw_evt_rsl=False,
                    heasoft_init_alias='heainit',caldb_init_alias='caldbinit',
-                   sudo_screen=False,
+                   sudo_screen=False,image_mode='DET',
                    parallel=False,repro_suffix='repro',e_band=None):
 
     '''
@@ -2755,9 +2772,10 @@ def extract_img(directory='auto_repro',anal_dir_suffix='',
         for elem_evt in resolve_files+xtend_files:
 
             xsel_util(elem_evt.split('/')[-1],elem_evt.split('/')[-1].replace('.evt','_img'+
+                                                                              ('_sky' if image_mode.lower()=='sky' else '')+
                                                                         ('' if e_band is None else str(e_band))+'.ds'),
                      mode='image',directory=anal_dir,sudo_screen=sudo_screen,sudo_mdp=sudo_mdp_use,
-                      spawn=bashproc,
+                      spawn=bashproc,image_mode=image_mode,
                       e_low=(None if e_band is None else float(e_band.split('_')[0])),
                       e_high=(None if e_band is None else float(e_band.split('_')[1])))
 
@@ -3154,8 +3172,11 @@ def extract_lc(directory='auto_repro', anal_dir_suffix='',lc_subdir='lc',
     region_src_xtd/region_bg_xtd:
         if set to auto, fetches source/background regions with the evt file name _src_reg.reg/_bg_reg.reg
         as the base, and only extracts products when corresponding files are found
-        Regions are assumed to be in DET coordinates
+        otherwise should be a relative path inside anal_dir
+        Regions are assumed to be in DET coordinates if image_mode is set to DET
+
         Will make a screenshot of the regions before saving the spectra
+
 
     pixel_str_xrism:
         pixel filtering list for xrism
@@ -3189,6 +3210,7 @@ def extract_lc(directory='auto_repro', anal_dir_suffix='',lc_subdir='lc',
 
     binning:
         string for a set of binnings in 'A+B+...' style
+        note that you can't bin below 0.4s for full window mode in xtend
 
     image_mode:
         use to define the coordinates mode for the region file selection
@@ -3271,24 +3293,24 @@ def extract_lc(directory='auto_repro', anal_dir_suffix='',lc_subdir='lc',
 
                 if xtd_mode:
                     if region_src_xtd=='auto':
-                        region_src_xtd_use = elem_evt.replace('.evt','_src_reg.reg')
+                        region_src_xtd_use = elem_evt.replace('.evt','_src_reg.reg').split('/')[-1]
                     else:
                         region_src_xtd_use=region_src_xtd
 
                     if region_bg_xtd=='auto':
-                        region_bg_xtd_use = elem_evt.replace('.evt','_bg_reg.reg')
+                        region_bg_xtd_use = elem_evt.replace('.evt','_bg_reg.reg').split('/')[-1]
                     else:
                         region_bg_xtd_use=region_bg_xtd
 
                     for i_reg,elem_region in enumerate([region_src_xtd_use,region_bg_xtd_use]):
 
                         if elem_region is None:
-                            print('Skipping '+('source' if i_reg==0 else 'bg')+' region for event file '+elem_evt)
+                            print('Skipping '+(' source' if i_reg==0 else 'bg')+' region for event file '+elem_evt)
                             continue
 
-                        if not os.path.isfile(elem_region):
+                        if not os.path.isfile(os.path.join(anal_dir,elem_region)):
                             print('No matching region found. Skipping '+(' source' if i_reg==0 else ' bg')+
-                                  'event file '+elem_evt)
+                                  ' event file '+elem_evt)
                             continue
 
                         reg_str=('_auto_src' if region_src_xtd=='auto' else \
@@ -3308,7 +3330,7 @@ def extract_lc(directory='auto_repro', anal_dir_suffix='',lc_subdir='lc',
                                           product_name,
                                           mode='lc',
                                           directory=anal_dir,
-                                          region_str=elem_region.split('/')[-1],
+                                          region_str=elem_region,
                                           e_low=float(elem_band.split('-')[0]),
                                           e_high=float(elem_band.split('-')[1]),
                                           binning=elem_binning,
@@ -3386,10 +3408,11 @@ def extract_sp(directory='auto_repro', anal_dir_suffix='',sp_subdir='sp',
     region_src_xtd/region_bg_xtd:
         if set to auto, fetches source/background regions with the evt file name _src_reg.reg/_bg_reg.reg
         as the base, and only extracts products when corresponding files are found
-        manual region names are assumed to be in the anal_dir directory
-        Regions are assumed to be in DET coordinates
+        otherwise should be a relative path inside anal_dir
 
-        ds9 saves should be in physical
+        Regions are assumed to be in DET coordinates if imageèmode is set to DET
+
+        ds9 saves should be in physical or fk5
 
         Will make a screenshot of the regions before saving the spectra
 
@@ -3531,11 +3554,11 @@ def extract_sp(directory='auto_repro', anal_dir_suffix='',sp_subdir='sp',
                     for i_reg,elem_region in enumerate([region_src_xtd_use,region_bg_xtd_use]):
 
                         if elem_region is None:
-                            print('Skipping '+('source' if i_reg==0 else 'bg')+' region for event file '+elem_evt)
+                            print('Skipping '+(' source' if i_reg==0 else 'bg')+' region for event file '+elem_evt)
                             continue
 
                         if not os.path.isfile(elem_region):
-                            print('No matching region found. Skipping '+('source' if i_reg==0 else 'bg')+
+                            print('No matching region found. Skipping '+(' source' if i_reg==0 else 'bg')+
                                   ' region for event file '+elem_evt)
                             continue
 
@@ -3748,6 +3771,7 @@ def extract_rmf(directory='auto_repro',instru='all',rmf_subdir='sp',
                 eminin_rsl=0, dein_rsl=0.5, nchanin_rsl=60000,
                 useingrd_rsl=True,
                 e_band_evt_rsl_rmf='2-12',
+                nols_evt_rsl_rmf=False,
                 #xtend grid
                 eminin_xtd=200.,dein_xtd='"2,24"',nchanin_xtd='"5900,500"',
                 eminout_xtd=0.,deout_xtd=6,nchanout_xtd=4096,
@@ -3918,6 +3942,7 @@ def extract_rmf(directory='auto_repro',instru='all',rmf_subdir='sp',
                             ('_withcal' if not remove_cal_pxl_resolve else '')+
                         '_grade_'+rsl_rmf_grade.replace(',','and')+ '_rmf' +
                         ('_evtbase_'+e_band_evt_rsl_rmf.replace('-','_').replace('.','p') if e_band_evt_rsl_rmf is not None else '')+
+                        ('_nols' if nols_evt_rsl_rmf else '')+
                         ('_' + str(eminin_rsl).replace('.','')+ '_' + str(dein_rsl).replace('.','')+'_'+str(nchanin_rsl))
                                                                    +elem_gti_str))
 
@@ -3926,16 +3951,24 @@ def extract_rmf(directory='auto_repro',instru='all',rmf_subdir='sp',
                     if e_band_evt_rsl_rmf is not None:
 
                         #creating an event file for a restricted energy band as the rmf input
-                        infile_use=elem_evt.replace(anal_dir,'.').replace('.evt',
+                        infile_use_init=elem_evt.replace(anal_dir,'.').replace('.evt',
                                                                             '_'+e_band_evt_rsl_rmf+'.evt')
 
                         xsel_util(elem_evt.split('/')[-1],
-                                  save_path=infile_use.split('/')[-1],
+                                  save_path=infile_use_init.split('/')[-1],
                                     directory=anal_dir,region_str=elem_pixel_str,
                                               mode='event',
                                               e_low=float(e_band_evt_rsl_rmf.split('-')[0]),
                                               e_high=float(e_band_evt_rsl_rmf.split('-')[1]),
                                               spawn=bashproc)
+                        if nols_evt_rsl_rmf:
+                            infile_use=infile_use_init.replace('.evt','_nols.evt')
+                            bashproc.sendline('ftcopy infile="'+infile_use_init.split('/')[-1]+'[EVENTS][(ITYPE<4)]"'
+                                              +' outfile='+infile_use.split('/')[-1]+' copyall=yes')
+                            time.sleep(5)
+                        else:
+                            infile_use=infile_use_init
+
 
                     rsl_mkrmf(infile=infile_use,
                               outfileroot=product_root,
@@ -3953,7 +3986,7 @@ def extract_rmf(directory='auto_repro',instru='all',rmf_subdir='sp',
 
 def create_expo(anal_dir,instrument,evt_file,gti_file,directory='auto_repro',out_file='auto',
                 spawn=None,heasoft_init_alias='heainit', caldb_init_alias='caldbinit',
-                delta=20,numphi=1,repro_suffix='repro'):
+                delta=20,numphi=1,repro_suffix='repro',nopixgti=False):
 
     '''
     Wrapper to compute an exposure map for a given instrument
@@ -3999,7 +4032,10 @@ def create_expo(anal_dir,instrument,evt_file,gti_file,directory='auto_repro',out
         badimg_file=[os.path.join(anal_dir_out_prefix,elem) for elem in files_dir if '.bimg' in elem
                      and not elem.endswith('.gpg') and evt_file.split('/')[-1].split('_')[1] in elem][0]
 
-        pixgti_file=[os.path.join(anal_dir_out_prefix,elem) for elem in files_dir if '.fpix' in elem
+        if nopixgti:
+            pixgti_file='NONE'
+        else:
+            pixgti_file=[os.path.join(anal_dir_out_prefix,elem) for elem in files_dir if '.fpix' in elem
                      and not elem.endswith('.gpg') and evt_file.split('/')[-1].split('_')[1].replace('p','')
                      and 'event_uf' in elem][0]
 
@@ -4115,10 +4151,10 @@ def create_arf(instrument,out_rtfile,source_ra,source_dec,emap_file,out_file,
                        ' scatterfile=CALDB'+
                        ' chatter=3')
 
-    out_code=spawn_use.expect(['Error during subroutine finalize','xaxmaarfgen: Fraction of PSF inside Region'],
+    out_code=spawn_use.expect(['Error during subroutine finalize','Exit ERROR CONDITION','xaxmaarfgen: Fraction of PSF inside Region'],
                      timeout=None)
 
-    if out_code==0:
+    if out_code<=1:
         print('Error during xaarfgen computation')
         raise ValueError
 
@@ -4152,7 +4188,7 @@ def extract_arf(directory='auto_repro',anal_dir_suffix='',on_axis_check=None,arf
                 numphoton=600000,
                 minphoton=100,
                 heasoft_init_alias='heainit', caldb_init_alias='caldbinit',
-                parallel=False,repro_suffix='repro'):
+                parallel=False,repro_suffix='repro',nopixgti=False):
 
     '''
 
@@ -4336,7 +4372,7 @@ def extract_arf(directory='auto_repro',anal_dir_suffix='',on_axis_check=None,arf
                                       instrument='xtend' if xtd_mode else 'resolve',
                             evt_file=elem_evt.replace(anal_dir,'.'),
                             gti_file=elem_evt.replace(anal_dir,'.') if elem_gti_file is None or skip_gti_emap else
-                                     elem_gti_file.replace(anal_dir,'.'))
+                                     elem_gti_file.replace(anal_dir,'.'),nopixgti=nopixgti)
 
                 if xtd_mode:
 
@@ -4357,11 +4393,11 @@ def extract_arf(directory='auto_repro',anal_dir_suffix='',on_axis_check=None,arf
                     for i_reg,elem_region in enumerate([region_src_xtd_use,region_bg_xtd_use]):
 
                         if elem_region is None:
-                            print('Skipping '+('source' if i_reg==0 else 'bg')+' region for event file '+elem_evt)
+                            print('Skipping '+(' source' if i_reg==0 else 'bg')+' region for event file '+elem_evt)
                             continue
 
                         if not os.path.isfile(elem_region):
-                            print('No matching region found. Skipping '+('source' if i_reg==0 else 'bg')+
+                            print('No matching region found. Skipping '+(' source' if i_reg==0 else 'bg')+
                                   ' region for event file '+elem_evt)
                             continue
 
@@ -4697,7 +4733,7 @@ def extract_rsp(directory='auto_repro',rsp_subdir='sp', anal_dir_suffix='',
                      arf_image=None,
                     e_low_arf=0.3, e_high_arf=12.0,
                     e_low_image=0.0, e_high_image=0.0,
-                     numphoton=300000,
+                     numphoton=600000,
                      minphoton=100,
                      skip_gti_emap=True,
                 suffix='',
@@ -4707,8 +4743,7 @@ def extract_rsp(directory='auto_repro',rsp_subdir='sp', anal_dir_suffix='',
                 #common arguments
                 heasoft_init_alias='heainit', caldb_init_alias='caldbinit',
                 parallel=False,repro_suffix='repro',
-                premade_expmap='',
-                ):
+                premade_expmap=''):
 
     '''
     Combined task that produces both RMFs and ARFs for resolve with a better consideration for spatially variable
@@ -4783,40 +4818,41 @@ def extract_rsp(directory='auto_repro',rsp_subdir='sp', anal_dir_suffix='',
     os.system('mkdir -p '+os.path.join(os.getcwd(),anal_dir,'log'))
 
 
+    if len(resolve_files) != 0:
+        # for removing the calibration sources
+        os.system('cp $HEADAS/refdata/region_RSL_det.reg ' + anal_dir)
 
-    with (no_op_context() if parallel else StdoutTee(log_path, mode="a", buff=1,
-                                                     file_filters=[_remove_control_chars]), \
-          StderrTee(log_path, buff=1, file_filters=[_remove_control_chars])):
+    if not parallel:
+        bashproc.logfile_read = sys.stdout
 
-        if len(resolve_files) != 0:
-            # for removing the calibration sources
-            os.system('cp $HEADAS/refdata/region_RSL_det.reg ' + anal_dir)
-
-        if not parallel:
-            bashproc.logfile_read = sys.stdout
-
-        if gti==None:
-            gti_str_arr=['']
-            gti_files_arr=[None]
+    if gti==None:
+        gti_str_arr=['']
+        gti_files_arr=[None]
+    else:
+        if gti=='all':
+            gti_files_arr=[elem.replace(anal_dir,'.')
+                           for elem in glob.glob(os.path.join(anal_dir,gti_subdir)+'/**')
+                           if elem.endswith('.gti')]
+            gti_str_arr=[elem[elem.rfind('_gti_'):].split('.')[0] for elem in gti_files_arr]
         else:
-            if gti=='all':
-                gti_files_arr=[elem.replace(anal_dir,'.')
-                               for elem in glob.glob(os.path.join(anal_dir,gti_subdir)+'/**')
-                               if elem.endswith('.gti')]
-                gti_str_arr=[elem[elem.rfind('_gti_'):].split('.')[0] for elem in gti_files_arr]
-            else:
-                gti_files_arr=gti
-                gti_str_arr='_'+gti.split('/')[-1]
+            gti_files_arr=gti
+            gti_str_arr='_'+gti.split('/')[-1]
 
-        for elem_gti_str,elem_gti_file in zip(gti_str_arr,gti_files_arr):
+    for elem_gti_str,elem_gti_file in zip(gti_str_arr,gti_files_arr):
 
-            time_str = str(int(time.time()))
+        time_str = str(int(time.time()))
 
-            log_path = os.path.join(log_dir, 'extract_rsp' + ('_' + anal_dir_suffix if anal_dir_suffix != '' else '')
-                                    + '_' + rsp_subdir + '_' + gti_subdir + '_' + time_str + '.log')
+        log_path = os.path.join(log_dir, 'extract_rsp' + ('_' + anal_dir_suffix if anal_dir_suffix != '' else '')
+                                + '_' + rsp_subdir + '_' + gti_subdir + '_' + time_str +
+                                ('_' if elem_gti_str!='' else '')+
+                                elem_gti_str.split('/')[-1].split('.')[0]+'.log')
 
-            if os.path.isfile(log_path):
-                os.system('rm ' + log_path)
+        if os.path.isfile(log_path):
+            os.system('rm ' + log_path)
+
+        with (no_op_context() if parallel else StdoutTee(log_path, mode="a", buff=1,
+                                                         file_filters=[_remove_control_chars]), \
+              StderrTee(log_path, buff=1, file_filters=[_remove_control_chars])):
 
             bashproc.sendline('cd ' + os.path.join(os.getcwd(), anal_dir))
 
@@ -4839,7 +4875,8 @@ def extract_rsp(directory='auto_repro',rsp_subdir='sp', anal_dir_suffix='',
                             evt_file=os.path.join('..',elem_evt.replace(anal_dir,'.')),
                             gti_file=os.path.join('..',gti_path_forexpo),
                             out_file=gti_path_forexpo.replace('../','').\
-                                    replace('.evt','.expo').replace('.gti','.expo'))
+                                    replace('.evt','.expo').replace('.gti','.expo'),
+                                          nopixgti=False)
 
                 if pixel_str_rsl.startswith('branch_filter'):
                     # reading the branch filter file

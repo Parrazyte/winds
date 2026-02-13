@@ -341,6 +341,70 @@ from XRISM.XRISM_datared_tools import *
 # ylims=[1.,None],figsize=(10,4))
 
 
+#XMM background
+
+# rebinv_xrism(1,10)
+# xPlot('ldata,delchi',auto_figsize=[8,4],addcomp_colors='source',
+# addcomp_source_cmaps=['RdPu'],addcomp_ls='group',
+# model_ls='group',group_names=['MAXI J1744-294 background '],
+# legend_sources=True,label_sources=['Sgr A East'],addcomp_rebin=[3],legend_sources_loc='upper left',
+# label_sources_cval=[0.8,0.8,0.8],legend_addcomp_groups=True)
+# plt.gca().get_figure().get_children()[1].set_title(None)
+# plt.tight_layout()
+
+#Xtend background with source is the same thing
+
+#updated Resolve bg with colors: smallpix
+rebinv_xrism(1,10)
+rebinv_xrism(2,10)
+xPlot('ldata,delchi',auto_figsize=[8,5.5],addcomp_colors='source',
+addcomp_source_cmaps=['RdPu','PuBu','YlOrRd'],addcomp_ls='group',
+model_ls='group',group_names=['PV phase "small" BH region','PV phase AX J1745.6-2901' ],
+legend_sources=True,label_sources=['Sgr A East','GCXE','AX J1745.6-2901'],
+      addcomp_rebin=[3,3],legend_sources_loc='upper right',
+label_sources_cval=[0.8,0.8,0.8],legend_addcomp_groups=True)
+plt.gca().get_figure().get_children()[1].set_title(None)
+plt.tight_layout()
+plt.savefig('resid_common_2-10_bin_10sigma_adj_smallpix_color.pdf')
+
+#zoom onlyBH
+AllData.ignore('**-6.3 7.1-**')
+rebinv_xrism(1,5)
+xPlot('ldata,delchi',auto_figsize=[8,5.5],addcomp_colors='source',
+addcomp_source_cmaps=['RdPu','PuBu','YlOrRd'],addcomp_ls='group',
+model_ls='group',group_names=['PV phase "small" BH region'],
+legend_sources=True,label_sources=['Sgr A East','GCXE','AX J1745.6-2901'],
+      addcomp_rebin=[3,3,3],legend_sources_loc='upper right',
+label_sources_cval=[0.8,0.8,0.8],legend_addcomp_groups=True)
+plt.gca().get_figure().get_children()[1].set_title(None)
+plt.tight_layout()
+plt.savefig('resid_common_6p3-7p1_bin_5sigma_adj_smallpix_only_color.pdf')
+
+#updated Resolve bg with colors: bigpix
+rebinv_xrism(1,10)
+rebinv_xrism(2,10)
+xPlot('ldata,delchi',auto_figsize=[8,5.5],addcomp_colors='source',
+addcomp_source_cmaps=['PuBu','YlOrRd'],addcomp_ls='group',
+model_ls='group',group_names=['PV phase "big" BH region','PV phase AX J1745.6-2901' ],
+legend_sources=True,label_sources=['diffuse','AX J1745.6-2901'],
+      addcomp_rebin=[3,3],legend_sources_loc='upper right',
+label_sources_cval=[0.8,0.8,0.8],legend_addcomp_groups=True)
+plt.gca().get_figure().get_children()[1].set_title(None)
+plt.tight_layout()
+plt.savefig('resid_common_2-10_bin_10sigma_ajd_color.pdf')
+
+#zoom onlyBH
+AllData.ignore('**-6.3 7.1-**')
+rebinv_xrism(1,5)
+xPlot('ldata,delchi',auto_figsize=[8,5.5],addcomp_colors='source',
+addcomp_source_cmaps=['PuBu','YlOrRd'],addcomp_ls='group',
+model_ls='group',group_names=['PV phase "small" BH region'],
+legend_sources=True,label_sources=['diffuse','AX J1745.6-2901'],
+      addcomp_rebin=[3],legend_sources_loc='upper right',
+label_sources_cval=[0.8,0.8,0.8],legend_addcomp_groups=True)
+plt.gca().get_figure().get_children()[1].set_title(None)
+plt.tight_layout()
+
 '''
 COMP PLOTS
 '''

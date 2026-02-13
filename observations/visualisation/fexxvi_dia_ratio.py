@@ -6,6 +6,17 @@ from general_tools import ang2kev
 
 adapted from the formulae of 10.1093/mnras/195.3.705
 
+
+blabla from Stefano
+Ok, I have to read the papers. However, my general understanding is:
+[12:20 AM]A standard He-like line can be produced either by excitation or recombination
+[12:21 AM]excitation: you start from FeXXVI (1 electron) at ground state (1s), you excite it to 2p (collisionally mostly), then it goes back to 1s producing the Lya (the doublet depends on the total angular momentum)
+[12:22 AM]recombination: you start with FeXXVII (no electrons), you recombine a free electron, the cascade will reach 2p, then 2p-1s, same line as before, different mechanism
+[12:22 AM]Another possibility is indeed dielectronic recombination
+[12:25 AM]In this case, you start with FeXXVI (one electron) in ground state. You recombine a free electron to a higher level and simultaneously excite the 1s electron (through the same process) to 2p. You end up with an excited FeXXV (2 electrons: one in 2p, the other somewhere in a higher level). When the 2p electron comes back to 1s, the energy is almost the same as the FeXXVI resonant line, but with a somewhat different energy (lower) due to the presence of the other electron ('spectator'). Note that it is FeXXV in principle, but the electron levels are basically those of FeXXVI because the other electron is in a higher level
+[12:26 AM]This should be the main process. Details are in the papers...
+[12:26 AM]The important point here is how effective is dielectronic recombination with respect to direct recombination, because this will set how strong are these satellite lines
+
 '''
 
 #in eV/K

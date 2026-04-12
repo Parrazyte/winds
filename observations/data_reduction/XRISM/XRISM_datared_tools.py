@@ -533,11 +533,12 @@ def init_anal(directory='auto_repro',anal_dir_suffix='',resolve_filters='open',x
     #untarring the files that were just copied in anal_dir
     os.system('gunzip '+os.path.join(anal_dir,'**'))
 
-def resolve_RTS(directory='auto_repro',anal_dir_suffix='',heasoft_init_alias='heainit',caldb_init_alias='caldbinit',
-                parallel=False,repro_suffix='repro'):
+def resolve_PS_RTS(directory='auto_repro',anal_dir_suffix='',heasoft_init_alias='heainit',caldb_init_alias='caldbinit',
+                proximity_screenng=True,parallel=False,repro_suffix='repro'):
 
     '''
-    Filters all available resolve event files in the analysis subdirectory of a directory for Rise-Time Screening
+    Filters all available resolve event files in the analysis subdirectory of a directory
+    for Rise-Time screening and (if the option is selected) proximity screening
     Following https://heasarc.gsfc.nasa.gov/docs/xrism/analysis/quickstart/xrism_quick_start_guide_v2p3_240918a.pdf
     '''
 
@@ -589,7 +590,9 @@ def resolve_RTS(directory='auto_repro',anal_dir_suffix='',heasoft_init_alias='he
 
             bashproc.sendline('ftcopy infile="'+indiv_file.split('/')[-1]+'[EVENTS]'+
                             '[(PI>=600) && (((((RISE_TIME+0.00075*DERIV_MAX)>46)&&((RISE_TIME+0.00075*DERIV_MAX)<58))'+
-                            '&&ITYPE<4)||(ITYPE==4))&&STATUS[4]==b0]" outfile='+
+                            '&&ITYPE<4)||(ITYPE==4))'
+                              +('&&STATUS[4]==b0]' if proximity_screeing else '')
+                              +'" outfile='+
                              indiv_file.split('/')[-1].replace('_cl.evt','_cl_RTS.evt')+
                             ' copyall=yes clobber=yes history=yes')
 

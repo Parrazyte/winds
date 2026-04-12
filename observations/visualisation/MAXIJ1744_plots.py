@@ -342,17 +342,27 @@ from XRISM.XRISM_datared_tools import *
 
 
 #XMM background
-
-# rebinv_xrism(1,10)
-# xPlot('ldata,delchi',auto_figsize=[8,4],addcomp_colors='source',
+#from mod in simultaneous_v3/xmm_updated_BKG/archival
+# xPlot('ldata,delchi',auto_figsize=[8,5.5],addcomp_colors='source',
 # addcomp_source_cmaps=['RdPu'],addcomp_ls='group',
-# model_ls='group',group_names=['MAXI J1744-294 background '],
-# legend_sources=True,label_sources=['Sgr A East'],addcomp_rebin=[3],legend_sources_loc='upper left',
+# model_ls='group',group_names=['MAXI J1744-294 background in ObsID 0893811101',
+#                               'MAXI J1744-294 background in ObsID 0893811301'],
+# legend_sources=True,label_sources=['Sgr A East'],addcomp_rebin=[0,0],legend_sources_loc='upper right',
 # label_sources_cval=[0.8,0.8,0.8],legend_addcomp_groups=True)
 # plt.gca().get_figure().get_children()[1].set_title(None)
 # plt.tight_layout()
 
-#Xtend background with source is the same thing
+#Xtend background
+# topxticks=xPlot('ldata,delchi',auto_figsize=[8,5.5],addcomp_colors='source',
+# addcomp_source_cmaps=['RdPu'],addcomp_ls='group',
+# model_ls='group',group_names=['MAXI J1744-294 background'],
+# legend_sources=True,label_sources=['Sgr A East'],addcomp_rebin=[0],
+# legend_sources_loc='upper left',
+# label_sources_cval=[0.8,0.8,0.8],legend_addcomp_groups=True,return_secondary_top=True)
+# plt.gca().get_figure().get_children()[1].set_title(None)
+# plt.tight_layout()
+# topxticks.set_ticks([ 0.,  5., 10., 15., 20., 25., 30., 35., 40.],labels=[ '',  5, 10, 15, '', '', 30, '', ''])
+# plt.savefig('mod_SgrAEast_imgarf_resid_withcolors.pdf')
 
 #updated Resolve bg with colors: smallpix
 rebinv_xrism(1,10)
@@ -380,6 +390,7 @@ plt.gca().get_figure().get_children()[1].set_title(None)
 plt.tight_layout()
 plt.savefig('resid_common_6p3-7p1_bin_5sigma_adj_smallpix_only_color.pdf')
 
+
 #updated Resolve bg with colors: bigpix
 rebinv_xrism(1,10)
 rebinv_xrism(2,10)
@@ -405,6 +416,156 @@ label_sources_cval=[0.8,0.8,0.8],legend_addcomp_groups=True)
 plt.gca().get_figure().get_children()[1].set_title(None)
 plt.tight_layout()
 
+
+'''
+PAPER 2
+'''
+
+#adjusted titles
+#zoom empi bigpix preline (residratio) - should be taken from the post edge fit
+AllData.notice('all')
+AllData.ignore('**-6.3 7.1-**')
+plt.rcParams.update({'legend.labelspacing':0.2})
+set_ener('thcomp',xrism=True)
+rebinv_xrism(1,10)
+rebinv_xrism(2,10)
+xPlot('ldata,ratio,delchi',auto_figsize=[10,5],addcomp_colors='source',
+addcomp_source_cmaps=['YlGn','PuBu','color_red'],addcomp_ls='group',
+model_ls='group',group_names=['"big" MAXI J1744-294 region','AX J1745.6-2901'],
+legend_sources=True,label_sources=['MAXI J1744-294','diffuse','AX J1745.6-2901'],
+      addcomp_rebin=[3,3],legend_sources_bbox=[0.13,-0.04],legend_sources_loc='lower left',data_zorders=[2,1],
+label_sources_cval=[0.8,0.2,0.8],legend_addcomp_groups=True)
+plt.gca().get_figure().get_children()[1].set_title(None)
+plt.tight_layout()
+plt.savefig('residratio_empi_BH_preline_bigpix_6p3_7p1_bin_10sigma_ajd_color.pdf')
+
+#zoom empi bigpix postline (residratio - with color inversion for diffuse and green flat for MAXI)
+AllData.notice('all')
+AllData.ignore('**-6.3 7.1-**')
+set_ener('thcomp',xrism=True)
+rebinv_xrism(1,10)
+rebinv_xrism(2,10)
+plt.rcParams.update({'legend.labelspacing':0.2})
+xPlot('ldata,ratio,delchi',auto_figsize=[10,5],addcomp_colors='source',
+addcomp_source_cmaps=['color_green','PuBu_r','color_red'],addcomp_ls='group',
+model_ls='group',group_names=['"big" MAXI J1744-294 region','AX J1745.6-2901'],
+legend_sources=True,label_sources=['MAXI J1744-294','diffuse','AX J1745.6-2901'],
+      addcomp_rebin=[3,3],legend_sources_bbox=[0.13,-0.04],legend_sources_loc='lower left',data_zorders=[2,1],
+label_sources_cval=[0.8,0.8,0.8],legend_addcomp_groups=True)
+plt.gca().get_figure().get_children()[1].set_title(None)
+plt.tight_layout()
+plt.savefig('residratio_empi_BH_postline_bigpix_6p3_7p1_bin_10sigma_ajd_color.pdf')
+
+#zoom empi smallpix postline (with color inversion for diffuse and green flat for MAXI)
+AllData.notice('all')
+AllData.ignore('**-6.3 7.1-**')
+set_ener('thcomp',xrism=True)
+rebinv_xrism(1,10)
+rebinv_xrism(2,10)
+plt.rcParams.update({'legend.labelspacing':0.2})
+xPlot('ldata,delchi',auto_figsize=[10,5],addcomp_colors='source',
+addcomp_source_cmaps=['color_green','color_red','PuBu','RdPu'],addcomp_ls='group',
+model_ls='group',group_names=['"small" MAXI J1744-294 region','AX J1745.6-2901'],
+legend_sources=True,label_sources=['MAXI J1744-294','AX J1745.6-2901','GCXE','Sgr A East'],
+      addcomp_rebin=[3,3],legend_sources_loc='lower left',legend_sources_bbox=[0.15,-0.03],data_zorders=[2,1],
+label_sources_cval=[0.8,0.8,0.8,0.8],legend_addcomp_groups=True)
+plt.gca().get_figure().get_children()[1].set_title(None)
+plt.tight_layout()
+plt.gca().get_figure().get_children()[1].set_ylim(0.01,0.5)
+#note that resizing the panels manually removes the changes in ls styles
+plt.tight_layout()
+plt.savefig('resid_empi_BH_postline_smallpix_6p3_7p1_bin_10sigma_ajd_color.pdf')
+
+#zoom empi bigpix postline for both dg can be done with the same commands
+#zoom empi smallpix postline for both dg (requires resizing and mult factors)
+AllData.notice('all')
+AllData.ignore('**-6.3 7.1-**')
+set_ener('thcomp',xrism=True)
+rebinv_xrism(1,10)
+rebinv_xrism(2,10)
+plt.rcParams.update({'legend.labelspacing':0.2})
+xPlot('ldata,delchi',auto_figsize=[10,5],addcomp_colors='source',
+addcomp_source_cmaps=['color_green','color_red','PuBu','RdPu'],addcomp_ls='group',
+model_ls='group',group_names=['"small" MAXI J1744-294 region','AX J1745.6-2901'],
+legend_sources=True,label_sources=['MAXI J1744-294','AX J1745.6-2901','GCXE','Sgr A East'],
+      addcomp_rebin=[3,3],legend_sources_loc='lower left',legend_sources_bbox=[0.15,-0.03],data_zorders=[2,1],
+      mult_factors=[2,1],
+label_sources_cval=[0.8,0.8,0.8,0.8],legend_addcomp_groups=True)
+plt.gca().get_figure().get_children()[1].set_title(None)
+plt.tight_layout()
+plt.gca().get_figure().get_children()[1].set_ylim(0.04,0.88)
+plt.savefig('resid_empi_both_postline_smallpix_6p3_7p1_bin_10sigma_ajd_color.pdf')
+
+#physical (photo or colli) big with plain red AXJ
+
+AllData.notice('all')
+AllData.ignore('**-2. 10.-**')
+set_ener('thcomp',xrism=True)
+rebinv_xrism(1,20)
+rebinv_xrism(2,20)
+xPlot('ldata,delchi',auto_figsize=[10,5],addcomp_colors='source',
+addcomp_source_cmaps=['YlGn','PuBu','color_red'],addcomp_ls='group',
+model_ls='group',group_names=['"big" MAXI J1744-294 region','AX J1745.6-2901'],
+legend_sources=True,label_sources=['MAXI J1744-294','diffuse','AX J1745.6-2901'],
+      addcomp_rebin=[3,3],data_zorders=[2,1],
+label_sources_cval=[0.8,0.2,0.8],legend_addcomp_groups=True)
+plt.gca().get_figure().get_children()[1].set_title(None)
+plt.tight_layout()
+plt.savefig('resid_colli_BH_bigpix_2-10_bin_20sigma_ajd_color.pdf')
+
+#zoom
+AllData.notice('all')
+AllData.ignore('**-6.3 7.1-**')
+set_ener('thcomp',xrism=True)
+rebinv_xrism(1,10)
+rebinv_xrism(2,10)
+xPlot('ldata,delchi',auto_figsize=[10,5],addcomp_colors='source',
+addcomp_source_cmaps=['YlGn','PuBu','color_red'],addcomp_ls='group',
+model_ls='group',group_names=['"big" MAXI J1744-294 region','AX J1745.6-2901'],
+legend_sources=True,label_sources=['MAXI J1744-294','diffuse','AX J1745.6-2901'],
+      addcomp_rebin=[3,3],legend_sources_bbox=[0.15,0.04],legend_sources_loc='lower left',data_zorders=[2,1],
+label_sources_cval=[0.8,0.2,0.8],legend_addcomp_groups=True)
+plt.gca().get_figure().get_children()[1].set_title(None)
+plt.tight_layout()
+plt.savefig('resid_colli_BH_bigpix_6p3_7p1_bin_10sigma_ajd_color.pdf')
+
+
+#physical (photo or colli) small with plain red AXJ
+AllData.notice('all')
+AllData.ignore('**-2. 10.-**')
+set_ener('thcomp',xrism=True)
+rebinv_xrism(1,20)
+rebinv_xrism(2,20)
+xPlot('ldata,delchi',auto_figsize=[10,5],addcomp_colors='source',
+addcomp_source_cmaps=['YlGn','color_red','PuBu','RdPu'],addcomp_ls='group',addcomp_rebin=[3,3],data_zorders=[2,1],
+model_ls='group',group_names=['"small" MAXI J1744-294 region','AX J1745.6-2901'],
+legend_sources=True,label_sources=['MAXI J1744-294','AX J1745.6-2901','GCXE','Sgr A East'],
+label_sources_cval=[0.8,0.8,0.8,0.8],legend_addcomp_groups=True)
+plt.gca().get_figure().get_children()[1].set_title(None)
+plt.tight_layout()
+plt.savefig('resid_colli_BH_smallpix_2-10_bin_20sigma_ajd_color.pdf')
+
+#zoom
+AllData.notice('all')
+AllData.ignore('**-6.3 7.1-**')
+set_ener('thcomp',xrism=True)
+rebinv_xrism(1,10)
+rebinv_xrism(2,10)
+plt.rcParams.update({'legend.labelspacing':0.2})
+xPlot('ldata,delchi',auto_figsize=[10,5],addcomp_colors='source',
+addcomp_source_cmaps=['YlGn','color_red','PuBu','RdPu'],addcomp_ls='group',
+model_ls='group',group_names=['"small" MAXI J1744-294 region','AX J1745.6-2901'],
+legend_sources=True,label_sources=['MAXI J1744-294','AX J1745.6-2901','GCXE','Sgr A East'],
+      addcomp_rebin=[3,3],legend_sources_loc='lower left',legend_sources_bbox=[0.15,-0.03],data_zorders=[2,1],
+label_sources_cval=[0.8,0.8,0.8,0.8],legend_addcomp_groups=True)
+plt.gca().get_figure().get_children()[1].set_title(None)
+plt.tight_layout()
+plt.gca().get_figure().get_children()[1].set_ylim(0.01,0.5)
+plt.tight_layout()
+plt.savefig('resid_colli_BH_smallpix_6p3_7p1_bin_10sigma_ajd_color.pdf')
+
+
+
 '''
 COMP PLOTS
 '''
@@ -418,7 +579,7 @@ EMPIRICAL
 os.chdir('/media/parrazyte/crucial_SSD/Observ/BHLMXB/XRISM/MAXIJ1744-294/new_anal/fit_duo_empirical_bigpix/2025_updated/comp_mod')
 Xset.restore('mod_noabs.xcm')
 set_ener('thcomp',xrism=True)
-plot_comp_ratio([1],[None,[10,11,12,13],[8,9],None,7,5,6,[3,4]],6.38,7.13,
+plot_comp_ratio([1],[None,[9,10,11,12],[7,8],None,6,4,5,[2,3]],6.38,7.13,
                 other_addcomps_labels=['main',r"FeXXV K$\alpha$",
                                        r"FeXXVI K$\alpha$",
                                        'blueshifted',
@@ -427,15 +588,15 @@ r"FeXXV K$\alpha$ 2",
 r"FeXXV K$\alpha$ 3",
 r"FeXXVI K$\alpha$"],
                 other_addcomps_colors=[None,'green','rebeccapurple',None,'darkturquoise','blue','cornflowerblue','plum'],
-                ylims=[1.,2.3],figsize=(6,3),minor_locator=10,ylabel_prefix='Big pixel region empirical model \n')
+                ylims=[1.,2.3],figsize=(6,3),minor_locator=10,ylabel_prefix='"big" M1744 region empirical model \n')
 plt.savefig('mod_empi_bigpix_deabs_nobfekblor_comp_ratio.pdf')
 
 '''SMALLPIX'''
 
 os.chdir('/media/parrazyte/crucial_SSD/Observ/BHLMXB/XRISM/MAXIJ1744-294/new_anal/fit_duo_smallpix/2025/rsp_CALDB11/comp_mod')
-Xset.restore('mod_deabs_adjust_FeKaratio.xcm')
+Xset.restore('mod_intrinsic_deabs_adjFeKa_widthmin2e-3.xcm')
 set_ener('thcomp',xrism=True)
-plot_comp_ratio([1],[None,[10,11,12,13],[8,9],[2,7],None,6,5,[3,4],],6.38,7.13,
+plot_comp_ratio([1],[None,[11,12,13,14],[9,10],[2,8],None,7,5,[3,4],],6.38,7.13,
                 other_addcomps_labels=['main',r"FeXXV K$\alpha$",
                                        r"FeXXVI K$\alpha$",
                                         'Fe I',
@@ -445,8 +606,9 @@ r"FeXXV K$\alpha$ 2",
 r"FeXXVI K$\alpha$",
                                        ],
                 other_addcomps_colors=[None,'green','rebeccapurple','black',None,'darkturquoise','blue','plum'],
-                ylims=[1,2.3],figsize=(6,3),minor_locator=10,ylabel_prefix='Big pixel region empirical model \n',manual_bbox=(0.045, 1))
-plt.savefig('mod_empi_smallpix_deabs_nobfekblor_comp_ratio.pdf')
+                ylims=[1,2.3],figsize=(6,3),minor_locator=10,ylabel_prefix='"small" M1744 region empirical model \n',
+                manual_bbox=(0.045, 1))
+plt.savefig('mod_empi_smallpix_deabs_rightfek_comp_ratio.pdf')
 
 
 '''PHOTO'''
@@ -459,7 +621,7 @@ plot_comp_ratio([1],[2,3,5,4,[7,8]],6.38,7.13,
                 other_addcomps_labels=["static","blue 1","blue 2", "blue 3",
                                        r'empirical'+'\n'+r'FeXXVI K$\alpha$'],
                 other_addcomps_colors=['green','darkturquoise','blue','cornflowerblue','plum'],
-                ylims=[1.,2.3],figsize=(6,3),minor_locator=10,ylabel_prefix='Big pixel region PIE model \n')
+                ylims=[1.,2.3],figsize=(6,3),minor_locator=10,ylabel_prefix='"big" M1744 region PIE model \n')
 plt.savefig('mod_photo_bigpix_deabs_nobfekblor_comp_ratio.pdf')
 
 '''SMALLPIX'''
@@ -471,7 +633,7 @@ plot_comp_ratio([1],[2,3,4,[5,8],[6,7]],6.38,7.13,
                 other_addcomps_labels=["static","blue 1","blue 2",r'empirical'+'\nFe I',
                                        r'empirical'+'\n'+r'FeXXVI K$\alpha$'],
                 other_addcomps_colors=['green','darkturquoise','blue','black','plum'],
-                ylims=[1.,2.3],figsize=(6,3),minor_locator=10,ylabel_prefix='small pixel region PIE model \n',
+                ylims=[1.,2.3],figsize=(6,3),minor_locator=10,ylabel_prefix='"small" M1744 region PIE model \n',
                 manual_bbox=(0.045, 1))
 plt.savefig('mod_photo_smallpix_deabs_comp_ratio_adjFeKratio.pdf')
 
@@ -485,7 +647,7 @@ plot_comp_ratio([1],[2,3,4,5,[7,8]],6.38,7.13,
                 other_addcomps_labels=["static","blue 1","blue 2", "blue 3",
                                        r'empirical'+'\n'+r'FeXXVI K$\alpha$'],
                 other_addcomps_colors=['green','darkturquoise','blue','cornflowerblue','plum'],
-                ylims=[1.,2.3],figsize=(6,3),minor_locator=10,ylabel_prefix='Big pixel region CIE model \n')
+                ylims=[1.,2.3],figsize=(6,3),minor_locator=10,ylabel_prefix='"big" M1744 region CIE model \n')
 plt.savefig('mod_cie_bigpix_deabs_nobfekblor_comp_ratio.pdf')
 
 '''SMALLPIX'''
@@ -496,6 +658,6 @@ plot_comp_ratio([1],[2,3,4,[5,8],[6,7]],6.38,7.13,
                 other_addcomps_labels=["static","blue 1","blue 2",r'empirical'+'\nFe I',
                                        r'empirical'+'\n'+r'FeXXVI K$\alpha$'],
                 other_addcomps_colors=['green','darkturquoise','blue','black','plum'],
-                ylims=[1.,2.3],figsize=(6,3),minor_locator=10,ylabel_prefix='small pixel region CIE model \n',
+                ylims=[1.,2.3],figsize=(6,3),minor_locator=10,ylabel_prefix='"small" M1744 region CIE model \n',
                 manual_bbox=(0.045, 1))
 plt.savefig('mod_cie_smallpix_deabs_comp_ratio_adjFeKratio.pdf')

@@ -159,7 +159,7 @@ ap.add_argument('-SAS_version',help='sas version number, for some string catch c
 
 #global choices
 ap.add_argument("-a","--action",nargs='?',help='Give which action(s) to proceed,separated by comas.'+
-                '\n1.evt_build\n2.filter_evt\n3.extract_reg...',default='m',type=str)
+                '\n1.evt_build\n2.filter_evt\n3.extract_reg...',default='l,m',type=str)
 
 #,2n,3,l,s,m
 #std : '1' puis '2n,3,l,s,m'
@@ -171,7 +171,7 @@ ap.add_argument("-l","--local",nargs=1,help='Launch actions directly in the curr
 #note: local mode has no error handling
 
 #directory level overwrite (not active in local)
-ap.add_argument('-folder_over',nargs=1,help='relaunch action through folders with completed analysis',default=True,type=bool)
+ap.add_argument('-folder_over',nargs=1,help='relaunch action through folders with completed analysis',default=False,type=bool)
 ap.add_argument('-folder_cont',nargs=1,help='skip all but the last 2 directories in the summary folder file',default=False,type=bool)
     
 #action specific overwrite
@@ -180,7 +180,9 @@ ap.add_argument("-over",nargs=1,help='overwrite computed tasks (i.e. with produc
 
 #action specifics : 
 '''event cleaning'''
-ap.add_argument('-pnflare',nargs=1,help='pn flaring limit standard value',default=0.38,type=float)
+#note that the defult values of 0.4 and 0.35 are only valid for the 10-12keV band.
+# If using another band, better to fist do a 2n run and then check in the rate_XXX files the flares
+ap.add_argument('-pnflare',nargs=1,help='pn flaring limit standard value',default=20,type=float)
 ap.add_argument('-mosflare',nargs=1,help='mos flaring limit standard value',default=0.35,type=float)
 
 ap.add_argument('-flareband',nargs=1,help='flare computation band',default='0.3-10.',type=str)
@@ -222,6 +224,10 @@ ap.add_argument('-p_tresh','--pileup_threshold',nargs=1,
 ap.add_argument('-sudo_mode',nargs=1,help='put to true if the ds9 installation needs to be run in sudo',
                default=False,type=bool)
 
+#note: can be lowered for longer but more precise computations
+ap.add_argument('-lc_bin_reg_opti',nargs=1,help='optimization algorithm lightcurve binning in s',default=50,type=float)
+
+
 '''TIMING'''
 
 ap.add_argument('-timing_check',nargs=1,help="For timing mode exposures, stops the computation if the distance between the identified analysis object and the observation's average is >30 arcsecs",default=True,type=bool)
@@ -245,8 +251,16 @@ ap.add_argument('-pileup_max_ex',nargs=1,help='pileup maximum excision for imagi
 '''spectrum extraction''' 
 
 
-'''lighctuve extraction'''
-ap.add_argument('-bin',nargs=1,help='lightcurve binning in s',default=100,type=float)
+'''lighcturve extraction'''
+
+#should be split in plusses
+ap.add_argument('-lc_bins_glob',nargs=1,help='lightcurve binnings in s',default='60+0.01',type=str)
+
+ap.add_argument('-lc_emin',nargs=1,help='minimum energy (keV) for lightcurve',default=3.,type=float)
+ap.add_argument('-lc_emax',nargs=1,help='minimum energy (keV) for lightcurve',default=10.,type=float)
+
+#if False, only plots lc with binnings >=1 s
+ap.add_argument('-plot_all_lc_glob',nargs=1,help='plot all lc screenshots regardless of binning',default=False,type=bool)
 
 '''merge'''
 ap.add_argument("-mdir","--mergedir",nargs=1,help='directory name for the merging action',default='bigbatch',type=str)
@@ -281,11 +295,15 @@ pileup_ctrl=args.pileup_ctrl
 mergedir=args.mergedir
 pnflare_lim=args.pnflare
 mosflare_lim=args.mosflare
-lc_bins=args.bin
+lc_bins_glob=args.lc_bins_glob
+lc_bin_reg_opti=args.lc_bin_reg_opti
 flare_band=np.array(args.flareband.split('-')).astype(float)
 replace_std_flare_band=args.replace_std_flare_band
 man_lc_flare=args.man_lc_flare
 
+lc_emin=args.lc_emin
+lc_emax=args.lc_emax
+plot_all_lc_glob=args.plot_all_lc_glob
 pileup_test=args.pileup_test
 
 bigger_fit=args.bigger_fit
@@ -460,7 +478,7 @@ def evt_build(directory):
         bashproc.expect(pexpect.EOF,timeout=None)
     
         evt_build_done.set()
-        
+
         return 'Event building complete.'
     
 def count_evts(directory):
@@ -1482,21 +1500,34 @@ def extract_reg(directory,mode='manual',cams='all',expos_mode='all',use_file_tar
             # spawn.expect(['\[xmmsas_'],timeout=None)
 
             spawn.expect(['\['+SAS_version+''],timeout=None)
+
             spawn.expect(['\['+SAS_version+''],timeout=None)
 
-            
+            try_find_lc=0
             #waiting for the file to be created to continue
             while not os.path.isfile(lc_path):
                 time.sleep(1)
+                print('Waiting for lc to be ceeated...')
+                try_find_lc += 1
+                if try_find_lc > 30:
+                    breakpoint()
+                    pass
 
             #waiting for the file to be readable to continue
             file_readable=False
+
+            try_load_lc=0
             while file_readable==False:
                 try:
                     fits.open(lc_path)
                     file_readable=True
                 except:
                     time.sleep(1)
+                    print('Waiting for lc to be ceeated...')
+                    try_load_lc+=1
+                    if try_load_lc>30:
+                        breakpoint()
+                        pass
                     
             return os.path.join(fulldir,camera+suffix_evt+prefix+'_lc_'+suffix_lc+'.ds')
 
@@ -1709,7 +1740,8 @@ def extract_reg(directory,mode='manual',cams='all',expos_mode='all',use_file_tar
                 
                 #But first, we check that the target of the timing observation is not too far from our own object.
                 if timing_check:
-                    obj_auto=source_catal(spawn,dirpath=fulldir,file=file,use_file_target=use_file_target)
+                    obj_auto=source_catal(spawn,dirpath=fulldir,file=file,use_file_target=use_file_target,
+                                          target_only=target_only)
 
                     #checking if the function returned an error message (folder movement done in the function)
                     if type(obj_auto)==str:
@@ -1813,7 +1845,7 @@ def extract_reg(directory,mode='manual',cams='all',expos_mode='all',use_file_tar
                     #computing the bg expression and the unoptimised lightcurve
                     expression_bg=spatial_expression(distrib_id_bg,rawx_off=rawx_offset)
 
-                    path_lc_bg_snr=make_lc_snr(file_init,'bg_snr',expression_bg,lc_bins)
+                    path_lc_bg_snr=make_lc_snr(file_init,'bg_snr',expression_bg,lc_bin_reg_opti)
                     
                     #and loading it
                     lc_bg_snr=fits.open(path_lc_bg_snr)[1].data
@@ -1869,7 +1901,8 @@ def extract_reg(directory,mode='manual',cams='all',expos_mode='all',use_file_tar
                         curr_expression_src=spatial_expression(curr_distrib,rawx_off=rawx_offset)
                         
                         #creating the lightcurve
-                        paths_lc_src_snr[ind]=make_lc_snr(file_init,'src_snr_'+f"{ind+1:02}",curr_expression_src,lc_bins)
+                        paths_lc_src_snr[ind]=make_lc_snr(file_init,'src_snr_'+f"{ind+1:02}",curr_expression_src,
+                                                          lc_bin_reg_opti)
                         
                         #loading it
                         curr_lc_src_snr=fits.open(paths_lc_src_snr[ind])[1].data
@@ -2131,7 +2164,8 @@ def extract_reg(directory,mode='manual',cams='all',expos_mode='all',use_file_tar
                 
                 prefix='_auto'
 
-                obj_auto = source_catal(spawn, dirpath=fulldir, file=file, use_file_target=use_file_target)
+                obj_auto = source_catal(spawn, dirpath=fulldir, file=file, use_file_target=use_file_target,
+                                        target_only=target_only)
 
                 # checking if the function returned an error message (folder movement done in the function)
                 if type(obj_auto) == str:
@@ -2466,7 +2500,7 @@ def extract_reg(directory,mode='manual',cams='all',expos_mode='all',use_file_tar
                 expression_bg=spatial_expression(bg_coords_im)
                 
                 #creating a bg region cropped event lightcurve to compute the bg counts, from the first evtclean file
-                path_lc_bg_snr=make_lc_snr(file_init,'bg_snr',expression_bg,lc_bins)
+                path_lc_bg_snr=make_lc_snr(file_init,'bg_snr',expression_bg,lc_bin_reg_opti)
 
                 #loading it
                 lc_bg_snr=fits.open(path_lc_bg_snr)[1].data
@@ -2618,7 +2652,7 @@ def extract_reg(directory,mode='manual',cams='all',expos_mode='all',use_file_tar
                                                                    excision_radius=str(round(excis_rad/3600,8)))
                             
                         #creating a source region cropped event lightcurve to compute the counts, from the first evtclean file
-                        paths_lc_src_snr[rad_ind]=make_lc_snr(file_init,'src_snr_'+f"{rad_ind+1:02}",curr_expression_src,lc_bins)
+                        paths_lc_src_snr[rad_ind]=make_lc_snr(file_init,'src_snr_'+f"{rad_ind+1:02}",curr_expression_src,lc_bin_reg_opti)
                         
                         #loading it
                         curr_lc_src_snr=fits.open(paths_lc_src_snr[rad_ind])[1].data
@@ -3455,7 +3489,8 @@ def plot_lc(lc_src_path,lc_bg_path=None,area_ratio=1,save=True,close=True,mode='
         if close:            
             plt.close(fig_lc)
 
-def extract_lc(directory,mode='manual',cams='all',expos_mode='all',overwrite=True):
+def extract_lc(directory,mode='manual',cams='all',expos_mode='all',broad_emin=0.3,broad_emax=10,
+               overwrite=True,lc_binning_str='60+1',plot_all_lc=False):
     
     '''
     Extracts the lightcurve of detected event files for one or several cameras and one of several modes
@@ -3471,9 +3506,12 @@ def extract_lc(directory,mode='manual',cams='all',expos_mode='all',overwrite=Tru
     
     manual mode (beyond just reusing already existing regions with other prefixes) to be added
     
+    arguments:
+        lc_binning_str: list of lightcurve binnings separated by '+'
+    
     '''
     
-    def extract_lc_single(spawn,file,filedir):
+    def extract_lc_single(spawn,file,filedir,lc_bin,plot_all_lc=False):
         
         if file=='':
             print('\nNo evt to extract lightcurve from for this camera in the obsid directory.')
@@ -3553,7 +3591,7 @@ def extract_lc(directory,mode='manual',cams='all',expos_mode='all',overwrite=Tru
         #since there is no energy selection in the arguments of the lightcurve, we need to add it to the expressions
         
         #for the broad band lightcurves
-        elims_broad=' && (PI IN [300:10000])'
+        elims_broad=' && (PI IN ['+str(int(broad_emin*1000))+':'+str(int(broad_emax*1000))+'])'
         
         #and for the flaring lightcurves
         elims_flare=' && (PI in ['+str(int(1000*flare_band[0]))+':'+str(int(1000*flare_band[1]))+'])'
@@ -3563,7 +3601,9 @@ def extract_lc(directory,mode='manual',cams='all',expos_mode='all',overwrite=Tru
             
             #sas command
             spawn.sendline('\nevselect table='+table+' energycolumn=PI '+
-                            'expression="'+expression+'" withrateset=yes rateset='+camera+suffix_evt+'_'+prefix+'_lc_'+suffix_lc+'.ds '+
+                            'expression="'+expression+'" withrateset=yes rateset='+camera+suffix_evt+'_'+prefix+'_lc_'+suffix_lc+
+                           '_band_'+str(broad_emin).replace('.','p')+'_'+str(broad_emax).replace('.','p')+
+                           '_bin_'+str(binning).replace('.','p')+'.ds '+
                             'timebinsize='+str(binning)+' maketimecolumn=yes makeratecolumn=yes')
             #there are two occurences of this, one at the beginning and one at the end of the command 
             # spawn.expect(['\[xmmsas_'],timeout=None)
@@ -3572,7 +3612,9 @@ def extract_lc(directory,mode='manual',cams='all',expos_mode='all',overwrite=Tru
             spawn.expect(['\['+SAS_version+''],timeout=None)
             spawn.expect(['\['+SAS_version+''],timeout=None)
             
-            lc_path=os.path.join(fulldir,camera+suffix_evt+'_'+prefix+'_lc_'+suffix_lc+'.ds')
+            lc_path=os.path.join(fulldir,camera+suffix_evt+'_'+prefix+'_lc_'+suffix_lc+
+                                 '_band_'+str(broad_emin).replace('.','p')+'_'+str(broad_emax).replace('.','p')+
+                                 '_bin_'+str(binning).replace('.','p')+'.ds')
             #waiting for the file to be created to continue
             while not os.path.isfile(lc_path):
                 time.sleep(1)
@@ -3596,9 +3638,9 @@ def extract_lc(directory,mode='manual',cams='all',expos_mode='all',overwrite=Tru
         
         #broad band lightcurves for the source and bg
         #we do not plot them directly to plot both at the same time with the area ratio convinently computed during the correction task
-        path_lc_src_broad=make_lc(file,'src_broad',src_exp_broad+elims_broad,binning=lc_bins,plot=False)
-        path_lc_bg_broad=make_lc(file,'bg_broad',bg_exp_broad+elims_broad,binning=lc_bins,plot=False)
-        
+        path_lc_src_broad=make_lc(file,'src_broad',src_exp_broad+elims_broad,binning=lc_bin,plot=False)
+        path_lc_bg_broad=make_lc(file,'bg_broad',bg_exp_broad+elims_broad,binning=lc_bin,plot=False)
+
         #testing if the src region lightcurve is not empty without having to parse the sas messages
         if len(fits.open(path_lc_src_broad)[1].data['RATE'].nonzero()[0])==0:
             print('\nError: Empty broadband background lightcurve. Region definition/exposure Issue. Skipping...')
@@ -3612,18 +3654,18 @@ def extract_lc(directory,mode='manual',cams='all',expos_mode='all',overwrite=Tru
             
             spawn.sendline('\ncd $currdir')
             return'Empty broadband background lightcurve'
-        
+
+        file_lc_src_broad_corr=path_lc_src_broad.split('/')[-1].replace('.ds','_corr.ds')
         #correcting the broad band lightcurve
-        spawn.sendline('\nepiclccorr srctslist='+camera+suffix_evt+'_'+prefix+'_lc_src_broad.ds eventlist='+file+
-                       ' outset='+camera+suffix_evt+'_'+prefix+'_lc_src_broad_corr.ds bkgtslist='+camera+suffix_evt+
-                       '_'+prefix+'_lc_bg_broad.ds'+
+        spawn.sendline('\nepiclccorr srctslist='+path_lc_src_broad.split('/')[-1]+' eventlist='+file+
+                       ' outset='+file_lc_src_broad_corr+' bkgtslist='+path_lc_bg_broad.split('/')[-1]+
                        ' withbkgset=yes applyabsolutecorrections=yes')
         
         #we put several expects to see the progression
         spawn.expect('closing data set',timeout=None)
 
         lc_corr_state=spawn.expect(['epiclccorr-1.23.3','epiclccorr: error'],timeout=None)
-    
+
         if lc_corr_state==1:
                 print('\nError during corrected lightucurve computation. Skipping...')
                 spawn.sendline('\ncd $currdir')
@@ -3631,12 +3673,12 @@ def extract_lc(directory,mode='manual',cams='all',expos_mode='all',overwrite=Tru
                 
         #it seems that sometimes the fits are created but are not readable yet when the next command runs, so we add a delay
         try:
-            fits.open(os.path.join(fulldir,camera+suffix_evt+'_'+prefix+'_lc_src_broad_corr.ds'))
+            fits.open(os.path.join(fulldir,file_lc_src_broad_corr))
         except:
             time.sleep(5)
         #if they are still not readable after that, we can stop the run altogether
         try:
-            fits.open(os.path.join(fulldir,camera+suffix_evt+'_'+prefix+'_lc_src_broad_corr.ds'))
+            fits.open(os.path.join(fulldir,file_lc_src_broad_corr))
         except:
             print('\nCould not load the corrected lightcurve fits file. Skipping...')
             
@@ -3644,7 +3686,8 @@ def extract_lc(directory,mode='manual',cams='all',expos_mode='all',overwrite=Tru
             return'Could not load the corrected lightcurve fits file.'
         
         #if everything is ok, we can make the corrected plot
-        plot_lc(os.path.join(fulldir,camera+suffix_evt+'_'+prefix+'_lc_src_broad_corr.ds'),mode='lc_src_broad_corr',save=True,close=True)
+        if float(lc_bin)>=1 or plot_all_lc:
+            plot_lc(os.path.join(fulldir,file_lc_src_broad_corr),mode='lc_src_broad_corr',save=True,close=True)
         
         #same check for the source and bg broad lightcurves
         try:
@@ -3663,9 +3706,10 @@ def extract_lc(directory,mode='manual',cams='all',expos_mode='all',overwrite=Tru
             return'Could not load at least one of the broad band lightcurve fits file.'
             
         #if everything is fine, we plot the source and bg raw curves combined
-        src_bg_ratio=fits.open(fulldir+'/'+camera+suffix_evt+'_'+prefix+'_lc_src_broad_corr.ds')[1].header['BKGRATIO']
-        plot_lc(path_lc_src_broad,path_lc_bg_broad,area_ratio=src_bg_ratio,
-                mode='lc_src_broad',save=True,close=True)
+        if float(lc_bin) >= 1 or plot_all_lc:
+            src_bg_ratio=fits.open(os.path.join(fulldir,file_lc_src_broad_corr))[1].header['BKGRATIO']
+            plot_lc(path_lc_src_broad,path_lc_bg_broad,area_ratio=src_bg_ratio,
+                    mode='lc_src_broad',save=True,close=True)
         
         '''
         flaring lightcurves for the source and bg
@@ -3673,41 +3717,43 @@ def extract_lc(directory,mode='manual',cams='all',expos_mode='all',overwrite=Tru
         To get it back, we retrieve the file name from the command copied in the header of the clean event list
         '''
         
-        #it seems there are different syntaxes for the evselect header maybe due to timing or camera differences)
-        #so we format the string a bit to be sure we have what we want
-        raw_file=fits.open(fulldir+'/'+file)[0].header['XPROC0'].split('table=')[1].split(' ')[0].replace('.//','')
-        raw_file=raw_file.replace('.//','').replace(':EVENTS','')
-
-        #computing the lightcurve with this file and the corrected expressions
-        #we don't care about doing a correction here
-        path_lc_src_flare=make_lc(raw_file,'src_flare',src_exp_broad+elims_flare,binning=lc_bins,plot=False)
-        path_lc_bg_flare=make_lc(raw_file,'bg_flare',bg_exp_broad+elims_flare,binning=lc_bins,plot=False)
-        
-        while not (os.path.isfile(path_lc_src_flare) and os.path.isfile(path_lc_bg_flare)):
-            time.sleep(1)
-        
-        #it seems that sometimes the fits are created but are not readable yet when the next command runs, so we add a delay
-        try:
-            fits.open(path_lc_src_flare)
-            fits.open(path_lc_bg_flare)
-        except:
-            time.sleep(5)
-        
-        #if they are still not readable after that, we can stop the run altogether
-        try:
-            fits.open(path_lc_src_flare)
-            fits.open(path_lc_bg_flare)
-        except:
-            print('\nCould not load at least one of the flare lightcurve fits file. Skipping the end...')
+        if float(lc_bin)>=1:
+            #it seems there are different syntaxes for the evselect header maybe due to timing or camera differences)
+            #so we format the string a bit to be sure we have what we want
+            raw_file=fits.open(fulldir+'/'+file)[0].header['XPROC0'].split('table=')[1].split(' ')[0].replace('.//','')
+            raw_file=raw_file.replace('.//','').replace(':EVENTS','')
+    
+            #computing the lightcurve with this file and the corrected expressions
+            #we don't care about doing a correction here
+            path_lc_src_flare=make_lc(raw_file,'src_flare',src_exp_broad+elims_flare,binning=lc_bin,plot=False)
+            path_lc_bg_flare=make_lc(raw_file,'bg_flare',bg_exp_broad+elims_flare,binning=lc_bin,plot=False)
             
-            spawn.sendline('\ncd $currdir')
-            return'Could not load at least one of the flare lightcurve fits file.'
+            while not (os.path.isfile(path_lc_src_flare) and os.path.isfile(path_lc_bg_flare)):
+                time.sleep(1)
             
-        #plotting both without the gti cut for checking purposes
-        plot_lc(path_lc_src_flare,path_lc_bg_flare,area_ratio=src_bg_ratio,mode='lc_src_flare',save=True,close=True)
-
-        #cut plot for the summary file
-        plot_lc(path_lc_src_flare,path_lc_bg_flare,area_ratio=src_bg_ratio,mode='lc_src_flare_cut',save=True,close=True)
+            #it seems that sometimes the fits are created but are not readable yet when the next command runs, so we add a delay
+            try:
+                fits.open(path_lc_src_flare)
+                fits.open(path_lc_bg_flare)
+            except:
+                time.sleep(5)
+            
+            #if they are still not readable after that, we can stop the run altogether
+            try:
+                fits.open(path_lc_src_flare)
+                fits.open(path_lc_bg_flare)
+            except:
+                print('\nCould not load at least one of the flare lightcurve fits file. Skipping the end...')
+                
+                spawn.sendline('\ncd $currdir')
+                return'Could not load at least one of the flare lightcurve fits file.'
+                
+            #plotting both without the gti cut for checking purposes
+            plot_lc(path_lc_src_flare,path_lc_bg_flare,area_ratio=src_bg_ratio,mode='lc_src_flare',save=True,close=True)
+    
+            #cut plot for the summary file
+            plot_lc(path_lc_src_flare,path_lc_bg_flare,area_ratio=src_bg_ratio,mode='lc_src_flare_cut',save=True,close=True)
+        
         #copying the products
         spawn.sendline('\ncp *'+suffix_evt+'_'+prefix+'_lc* $currdir/batch')
 
@@ -3721,7 +3767,7 @@ def extract_lc(directory,mode='manual',cams='all',expos_mode='all',overwrite=Tru
         
         spawn.sendline('\ncd $currdir')
         
-        if lc_corr_state==0:
+        if lc_corr_state==1:
             return 'Lighcturve extraction complete but missing the combined lc'
         else:            
             return 'Lightcurve extraction complete.'
@@ -3768,47 +3814,50 @@ def extract_lc(directory,mode='manual',cams='all',expos_mode='all',overwrite=Tru
         
         for j in range(len(clean_filelist[i][0])):
             
-            clean_evtfile=clean_filelist[i][0][j]
-            clean_evtdir=clean_filelist[i][1][j]
+            for indiv_binning in lc_binning_str.split('+'):
             
-            #testing if the last file of the lightcurve extraction process has been created and moved into the batch or merging directory
-            lastfile_auto=clean_evtfile.split('.')[0][clean_evtfile.find('_'):]
-            lastfile_auto=camlist[i]+lastfile_auto+'_auto_lc_comb_flare_screen.png'
-            
-            if (mode=='manual' or overwrite \
-            or 'm' not in action_list and not os.path.isfile(directory+'/'+clean_evtdir+'/'+lastfile_auto)\
-            or 'm' in action_list and not os.path.isfile(startdir+'/'+mergedir+'/'+obsid+'_'+lastfile_auto))\
-            and clean_evtfile!='':
-                
-                clean_evtid=clean_evtfile.split('.')[0].replace('clean','')
+                clean_evtfile=clean_filelist[i][0][j]
+                clean_evtdir=clean_filelist[i][1][j]
 
-                #setting up a logfile in parallel to terminal display :
-                if os.path.isfile(clean_evtdir+'/'+clean_evtid+'_extract_lc.log'):
-                    os.system('rm '+clean_evtdir+'/'+clean_evtid+'_extract_lc.log')
-                with StdoutTee(clean_evtdir+'/'+clean_evtid+'_extract_lc.log',
-                               mode="a",buff=1,file_filters=[_remove_control_chars]),\
-                    StderrTee(clean_evtdir+'/'+clean_evtid+'_extract_lc.log',buff=1,file_filters=[_remove_control_chars]):
-                
-                    bashproc.logfile_read=sys.stdout
-                    print('\nCreating lightcurve of '+camlist[i]+' exposure '+clean_evtfile)
-                    
-                    #main function
-                    summary_line=extract_lc_single(bashproc, clean_evtfile,clean_evtdir)
+                #testing if the last file of the lightcurve extraction process has been created and moved into the batch or merging directory
+                lastfile_auto=clean_evtfile.split('.')[0][clean_evtfile.find('_'):]
+                lastfile_auto=camlist[i]+lastfile_auto+'_auto_lc_comb_flare_screen.png'
 
-            else:
-                if clean_evtfile=='':
-                    print('\nNo evt to extract lightcurve from for camera '+camlist[i]+ ' in the obsid directory.')
-                    
-                    summary_line='No evt to extract lightcurve from for camera '+camlist[i]+ ' in the obsid directory.'
-                    clean_evtid=camlist[i]
+                if (mode=='manual' or overwrite \
+                or 'm' not in action_list and not os.path.isfile(directory+'/'+clean_evtdir+'/'+lastfile_auto)\
+                or 'm' in action_list and not os.path.isfile(startdir+'/'+mergedir+'/'+obsid+'_'+lastfile_auto))\
+                and clean_evtfile!='':
+
+                    clean_evtid=clean_evtfile.split('.')[0].replace('clean','')
+
+                    #setting up a logfile in parallel to terminal display :
+                    if os.path.isfile(clean_evtdir+'/'+clean_evtid+'_extract_lc.log'):
+                        os.system('rm '+clean_evtdir+'/'+clean_evtid+'_extract_lc.log')
+                    with StdoutTee(clean_evtdir+'/'+clean_evtid+'_extract_lc.log',
+                                   mode="a",buff=1,file_filters=[_remove_control_chars]),\
+                        StderrTee(clean_evtdir+'/'+clean_evtid+'_extract_lc.log',buff=1,file_filters=[_remove_control_chars]):
+
+                        bashproc.logfile_read=sys.stdout
+                        print('\nCreating '+str(indiv_binning)+'s binning lightcurve of '+camlist[i]+' exposure '+clean_evtfile)
+
+                        #main function
+                        summary_line=extract_lc_single(bashproc, clean_evtfile,clean_evtdir,lc_bin=indiv_binning,
+                                                       plot_all_lc=plot_all_lc)
+
                 else:
-                    print('\nAuto mode lightcurve computation for the '+camlist[i]+' exposure '+clean_evtfile+
-                          ' already done. Skipping...')
-                    summary_line=''
-            if summary_line!='':
-                summary_content=obsid+'\t'+clean_evtid+'\t'+summary_line
-                file_edit(os.path.join(directory,'batch','summary_extract_lc.log'),obsid+'\t'+clean_evtid,summary_content+'\n',
-                          summary_header)
+                    if clean_evtfile=='':
+                        print('\nNo evt to extract lightcurve from for camera '+camlist[i]+ ' in the obsid directory.')
+
+                        summary_line='No evt to extract lightcurve from for camera '+camlist[i]+ ' in the obsid directory.'
+                        clean_evtid=camlist[i]
+                    else:
+                        print('\nAuto mode lightcurve computation for the '+camlist[i]+' exposure '+clean_evtfile+
+                              ' already done. Skipping...')
+                        summary_line=''
+                if summary_line!='':
+                    summary_content=obsid+'\t'+clean_evtid+'_bin_'+str(indiv_binning)+'\t'+summary_line
+                    file_edit(os.path.join(directory,'batch','summary_extract_lc.log'),obsid+'\t'+clean_evtid+'_bin_'+str(indiv_binning),summary_content+'\n',
+                              summary_header)
                 
     #closing the spawn
     bashproc.sendline('exit')
@@ -3978,7 +4027,8 @@ def extract_sp(directory,mode='manual',cams='all',expos_mode='all',overwrite=Tru
                             +'_'+prefix+'.arf '+'backgndset='+camera+suffix_evt+'_'+prefix+'_sp_bg.ds groupedset='+camera+
                             suffix_evt+'_'+prefix+'_sp_src_grp_'+str(value)+'.ds')
             spawn.expect('ended')
-            
+
+
         #Specgrouping for a few values
         spec_group(20)
         spec_group(10)
@@ -4341,7 +4391,7 @@ if local==False:
                 if curr_action=='1':
                     evt_state=evt_build(obsdir)
                     evt_build_done.wait()
-                    if evt_state !='event building finished':
+                    if evt_state !='Event building complete.':
                         folder_state=evt_state
                         #breaking out of the try
                         raise NameError
@@ -4362,7 +4412,9 @@ if local==False:
                                 use_file_target=use_file_target_glob,pileup_test=pileup_test,sudo_mode=sudo_mode,sudo_mdp=sudo_mdp)
                     extract_reg_done.wait()
                 if curr_action=='l':
-                    extract_lc(obsdir,mode=extract_reg_mode,cams=cameras_glob,expos_mode=expos_mode_glob,overwrite=overwrite_glob)
+                    extract_lc(obsdir,mode=extract_reg_mode,cams=cameras_glob,expos_mode=expos_mode_glob,
+                               broad_emin=lc_emin,broad_emax=lc_emax,lc_binning_str=lc_bins_glob,overwrite=overwrite_glob,
+                               plot_all_lc=plot_all_lc_glob)
                     extract_lc_done.wait()
                 if curr_action=='s':
                     extract_sp(obsdir,mode=extract_reg_mode,cams=cameras_glob,expos_mode=expos_mode_glob,overwrite=overwrite_glob)
@@ -4421,7 +4473,9 @@ else:
                             use_file_target=use_file_target_glob,sudo_mode=sudo_mode,sudo_mdp=sudo_mdp)
                 extract_reg_done.wait()
             if curr_action=='l':
-                extract_lc(absdir,mode='auto',cams=cameras_glob,expos_mode=expos_mode_glob,overwrite=overwrite_glob)
+                extract_lc(absdir,mode='auto',cams=cameras_glob,expos_mode=expos_mode_glob,
+                           broad_emin=lc_emin,broad_emax=lc_emax,lc_binning_str=lc_bins_glob,overwrite=overwrite_glob,
+                           plot_all_lc=plot_all_lc_glob)
                 extract_lc_done.wait()
             if curr_action=='s':
                 extract_sp(absdir,mode='auto',cams=cameras_glob,expos_mode=expos_mode_glob,overwrite=overwrite_glob)

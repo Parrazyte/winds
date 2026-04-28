@@ -6530,6 +6530,9 @@ def EW_ang2keV(x,e_line):
 
     return x*(h_keV*3*10**18)/l_line**2
 
+def format_ew():
+    return np.array([AllData(1).eqwidth[0],AllData(1).eqwidth[0]-AllData(1).eqwidth[1], AllData(1).eqwidth[2]-AllData(1).eqwidth[1]])*1000
+
 
 def xPlot(types,axes_input=None,plot_saves_input=None,plot_arg=None,includedlist=None,group_names='auto',
           hide_ticks=True,
@@ -6537,6 +6540,7 @@ def xPlot(types,axes_input=None,plot_saves_input=None,plot_arg=None,includedlist
           mult_factors=None,label_indivcomps=False,
           no_name_data='auto',force_ylog_ratio=False,legend_ncols=None,
           data_colors=None,model_colors=None,model_ls=None,addcomp_colors=None,addcomp_ls=None,
+          data_zorders=None,
           data_alpha=1,auto_figsize=(10,8),auto_panel_hratio=None,
           addcomp_source_cmaps=['YlGn','YlOrRd','PuBu','RdPu'],
           legend_sources=False,label_sources='auto',label_sources_cval='auto',legend_sources_loc="best",
@@ -6544,7 +6548,8 @@ def xPlot(types,axes_input=None,plot_saves_input=None,plot_arg=None,includedlist
           legend_addcomp_groups=False,
           skip_main_legend=False,
           addcomp_rebin=None,
-          elinewidth_data=0.75):
+          elinewidth_data=0.75,
+          return_secondary_top=False):
 
     '''
     Replot xspec plots using matplotib. Accepts custom types:
@@ -6592,6 +6597,9 @@ def xPlot(types,axes_input=None,plot_saves_input=None,plot_arg=None,includedlist
 
     data_colors: if not None 'data', should be an AllData.nGroups size iterable.
                  overwrite the default xspec colors for the data
+
+    data_zorder: zorder of the different data groups, if not None, should be an AllData.nGroups size iterable.
+
     model_colors: if not None or 'data', should be an AllData.nGroups size iterable.
                  overwrite the default xspec colors for the models
                 if set to 'data', copies the data_colors
@@ -6815,6 +6823,7 @@ def xPlot(types,axes_input=None,plot_saves_input=None,plot_arg=None,includedlist
                                  xerr=curr_save.xErr[id_grp],
                                  yerr=curr_save.yErr[id_grp].clip(0)*(1 if 'data' not in plot_type else mult_factor_grp),
                                  color=xcolors_grp[id_grp] if data_colors is None else data_colors[id_grp],
+                                 zorder=None if data_zorders is None else data_zorders[id_grp],
                                  linestyle='None',
                                  elinewidth=elinewidth_data,alpha=data_alpha,
                                  label='' if legend_addcomp_groups else\
@@ -6866,6 +6875,7 @@ def xPlot(types,axes_input=None,plot_saves_input=None,plot_arg=None,includedlist
                                      xerr=curr_save.background_xErr[id_grp],
                                      yerr=curr_save.background_yErr[id_grp]*mult_factor_grp,
                                      color=xcolors_grp[id_grp] if data_colors is None else data_colors[id_grp],
+                                     zorder=None if data_zorders is None else data_zorders[id_grp],
                                      linestyle='None',elinewidth=0.5,alpha=data_alpha,
                                      marker='x',mew=0.5,label='' if not label_bg or group_names=='nolabel' else grp_name+' background')
 
@@ -7047,7 +7057,9 @@ def xPlot(types,axes_input=None,plot_saves_input=None,plot_arg=None,includedlist
 
             ax_legend_sources.legend(loc=legend_sources_loc,title='sources',bbox_to_anchor=legend_sources_bbox)
 
-    if axes_input is None:
+    if return_secondary_top:
+        return curr_ax_second
+    elif axes_input is None:
         fig.tight_layout()
         return axes
     else:
@@ -7072,13 +7084,13 @@ def plot_comp_ratio(cont_addcomps,other_addcomps,ener_low,ener_high,
     comp_addcomps: iterable of ints
         the list of addcomps ids (in xspec, so with indexes starting at 1)
         to be summed to create the continuum, to which
-        all thethe "other_addcomps" will individually be normalized
+        all the "other_addcomps" will individually be normalized
 
     other_addcomps: iterable of either ints or iterables of ints
         the list of the addcomps ids (in xspec, so with indexes starting at 1)
         which will appear individually as the ratio on top of comp_addcomps
         note: can be combined by passing iterables within the list
-        In this case, will sum all the addcomps in that iterbale for a single displayed component
+        In this case, will sum all the addcomps in that iterable for a single displayed component
         if some elements are None, will not plot anything but keeps the label spot for additional lines in the legend
 
     ener_low/ener_high: x axis limits of the plot

@@ -4,6 +4,8 @@ import time
 
 
 def mc_sim_line(baseload='mod_final_nogauss.xcm',lines='FeKa26Aabs_gaussian',
+                e_min=6.,e_max=8.,sigma=[5e-3],base_norm_0=True,
+                position=None,mod_name='',set_ener_str='thcomp',set_ener_xrism=True,
                 nfakes=1000,vrange=[-3000,3000,50],parallel=1,bound_around=1):
 
     '''
@@ -19,7 +21,14 @@ def mc_sim_line(baseload='mod_final_nogauss.xcm',lines='FeKa26Aabs_gaussian',
         xcm data/model to load
         
     lines: which line to fake. Manually defined. Can be a list of string or a string
-    
+
+    e_min/e_max (keV): if both set to a value and not None, restricts to this energy range before performing the computations
+                on fake spectra
+    sigma (keV): if not None, iterable of len the number of lines in the component
+                freezes the width of the different lines to their values
+
+    base_norm_0:
+            Start with all line(s) at norm 0 to avoid issues with the fits
     nfakes:
         number of iterations
         
@@ -38,6 +47,10 @@ def mc_sim_line(baseload='mod_final_nogauss.xcm',lines='FeKa26Aabs_gaussian',
     old_chatter=Xset.chatter
 
     Xset.chatter=0
+    Xset.logChatter=10
+
+    AllData.clear()
+    AllModels.clear()
 
     old_parallel=Xset.parallel.steppar
 
@@ -80,6 +93,17 @@ def mc_sim_line(baseload='mod_final_nogauss.xcm',lines='FeKa26Aabs_gaussian',
                 AllData(1).ignore('**-2. 10.-**')
                 AllData(2).ignore('**-0.3 10.-**')
 
+            if baseload in ['mod_baseload_1group.xcm','baseload_nolines.xcm']:
+                fakeset=[FakeitSettings(response=AllData(1).response.rmf,
+                                        exposure=AllData(1).exposure,background='',fileName=AllData(1).fileName),]
+                # Fit.perform()
+                AllData.fakeit(settings=fakeset,applyStats=True,noWrite=True)
+                AllData(1).ignore('**-2. 10.-**')
+
+            if set_ener_str is not None:
+                set_ener(set_ener_str,xrism=set_ener_xrism)
+
+
             Fit.perform()
             freeze()
             npars_base=AllModels(1).nParameters
@@ -98,6 +122,10 @@ def mc_sim_line(baseload='mod_final_nogauss.xcm',lines='FeKa26Aabs_gaussian',
 
                 mod_base.load()
                 AllData.notice('all')
+                if e_min is not None and e_max is not None:
+                    ignore_data_indiv([e_min],[e_max])
+
+
                 if baseload.endswith('mod_final_nogauss.xcm'):
                     AllData(1).ignore('**-2. 10.-**')
 
@@ -105,36 +133,57 @@ def mc_sim_line(baseload='mod_final_nogauss.xcm',lines='FeKa26Aabs_gaussian',
                     AllData(1).ignore('**-2. 10.-**')
 
                 if indiv_line=='FeKa26Aabs_gaussian':
-                    addcomp(indiv_line)
+                    par_info=addcomp(indiv_line)
                     AllModels(1)(npars_base+3).values=2e-3
                     AllModels(1)(npars_base+3).frozen=True
                     AllModels(1)(npars_base+4).values = 0.0
                     AllModels(1)(npars_base+7).link = str(npars_base+4)+'*2.0'
 
                 if indiv_line in ['NiKa27Wabs_gaussian','FeKb25abs_gaussian']:
-                    addcomp(indiv_line)
+                    par_info=addcomp(indiv_line)
                     AllModels(1)(npars_base+3).values=5e-3
                     AllModels(1)(npars_base+3).frozen=True
                     AllModels(1)(npars_base+4).values = 0.0
 
 
                 if indiv_line in ['CrKa23Wabs_gaussian','CaKa20abs_gaussian','SKa16abs_gaussian']:
-                    addcomp(indiv_line)
+                    par_info=addcomp(indiv_line)
                     AllModels(1)(npars_base+3).values=2e-3
                     AllModels(1)(npars_base+3).frozen=True
                     AllModels(1)(npars_base+4).values = 0.0
 
 
                 if indiv_line=='FeKa1Aem_gaussian':
-                    addcomp(indiv_line)
+                    par_info=addcomp(indiv_line)
                     AllModels(1)(npars_base+3).values=5e-3
                     AllModels(1)(npars_base+3).frozen=True
                     AllModels(1)(npars_base+4).values = 0.0
                     AllModels(1)(npars_base+7).link = str(npars_base+4)+'*2.0'
 
+                else:
+                    par_info=addcomp(indiv_line,position=position,mod_name=mod_name,return_pos=True)
+
+                if sigma is not None:
+                    for comp in [getattr(AllModels(1,mod_name),AllModels(1,mod_name).componentNames[id_comp-1]) \
+                                 for id_comp in par_info[1]]:
+                        if comp.name.split('_')[0] not in ['vashift','gaussian','lorentz']:
+                            breakpoint()
+                        if comp.name!='vashift':
+                            comp.Sigma.values=sigma[0]
+                            comp.Sigma.frozen=True
+
+                if base_norm_0:
+                    for comp in [getattr(AllModels(1,mod_name),AllModels(1,mod_name).componentNames[id_comp-1]) \
+                                 for id_comp in par_info[1]]:
+                        if comp.name.split('_')[0] not in ['vashift','gaussian','lorentz']:
+                            breakpoint()
+                        if comp.name!='vashift':
+                            comp.norm.values=0
+
+
                 AllModels.show()
 
-                vashift_par=npars_base+1
+                vashift_par=par_info[0][0]
 
                 if bound_around!=0:
 
@@ -149,6 +198,10 @@ def mc_sim_line(baseload='mod_final_nogauss.xcm',lines='FeKa26Aabs_gaussian',
                     AllData.ignore('**-'+str(min(line_e_list)-bound_around/2)+' '+str(max(line_e_list)+bound_around/2)+'-**')
 
                 Xset.parallel.steppar = parallel
+
+                #ensuring the vashift par allows the bounds of the energy range
+                AllModels(1,mod_name)(vashift_par).values=[0,1,vrange[0]-1,vrange[0]-1,
+                                                             vrange[1]+1,vrange[1]+1]
 
                 Fit.steppar('nolog '+str(vashift_par)+' '+str(vrange[0])+' '+str(vrange[1])+' '+str(int((vrange[1]-vrange[0])/vrange[2])))
 
@@ -166,7 +219,8 @@ def mc_sim_line(baseload='mod_final_nogauss.xcm',lines='FeKa26Aabs_gaussian',
 
     for i_line,indiv_line in enumerate(lines_use):
 
-        np.save('fake_delC_save_'+baseload_str+'_'+indiv_line+'_'+str(nfakes)+'_'+time_log,
+        np.save('fake_delC_save_'+baseload_str+'_'+indiv_line+'_'+str(nfakes)+'_'
+                +'v_'+('_'.join(np.array(vrange,dtype=str)))+time_log,
                 arr_float_list[i_line])
 
         line_max_per_iter=np.copy(arr_float_list[i_line].max(1))
@@ -216,10 +270,11 @@ def mc_arr_fuse(dumps,output_name='auto'):
     checks and returns an error if the dumps do not have the same names
     '''
 
-    dumps_id=['_'.join(elem.split('/')[-1].split('_')[:-2]) for elem in dumps]
+    split_dumps=[elem.split('/')[-1].split('_')[:-1][:-4]+elem.split('/')[-1].split('_')[:-1][-2:] for elem in dumps]
+    dumps_id=['_'.join(elem_split) for elem_split in split_dumps]
     assert len(np.unique(dumps_id))==1,'Error: dump names indicate different origins'
 
-    dumps_number=np.array(['_'.join(elem.split('/')[-1].split('_')[-2]) for elem in dumps],dtype=int)
+    dumps_number=np.array(['_'.join(elem.split('/')[-1].split('_')[-5]) for elem in dumps],dtype=int)
 
     list_arr=np.repeat(None,len(dumps))
     for i_elem,elem in enumerate(dumps):
@@ -227,6 +282,12 @@ def mc_arr_fuse(dumps,output_name='auto'):
 
     dump_concat=np.concatenate(list_arr)
 
+
     if output_name=='auto':
-        dump_concat_name=dumps_id[0]+'_'+str(sum(dumps_number))
+        dump_concat_name='_'.join(elem.split('/')[-1].split('_')[:-1][:-4]+\
+                                  [str(sum(dumps_number))]+\
+                                  elem.split('/')[-1].split('_')[:-1][-2:]+\
+                                  [str(int(time.time()*1000))])
+
+
     np.save(dump_concat_name,dump_concat)

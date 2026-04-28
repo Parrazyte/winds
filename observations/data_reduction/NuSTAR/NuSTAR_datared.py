@@ -56,7 +56,8 @@ from rasterio.features import rasterize
 # shape merging
 from scipy.ndimage import binary_dilation
 
-from general_tools import file_edit, ravel_ragged,MinorSymLogLocator,interval_extract,str_orbit,source_catal
+from general_tools import (file_edit, ravel_ragged,MinorSymLogLocator,interval_extract,str_orbit,source_catal,
+                           mpdaf_load_img,mpdaf_plot_img)
 
 """
 Created on 09-11-2023
@@ -102,11 +103,11 @@ ap.add_argument('-catch', '--catch_errors', help='Catch errors while running the
 
 # global choices
 ap.add_argument("-a", "--action", nargs='?', help='Give which action(s) to proceed,separated by comas.',
-                default='reg', type=str)
+                default='m', type=str)
 # default: build,reg,lc,sp,g,m
 
 ap.add_argument("-over", nargs=1, help='overwrite computed tasks (i.e. with products in the batch, or merge directory\
-                if "m" is in the actions) in a folder', default=True, type=bool)
+                if "m" is in the actions) in a folder', default=False, type=bool)
 
 ap.add_argument('-cameras',nargs=1,help='which cameras to restrict the analysis to. "all" takes both FPMA and FPMB',
                 default='all',type=str)
@@ -162,7 +163,7 @@ ap.add_argument('-bg_rm_src_sigmas',nargs=1,
                 default=10.,type=float)
 
 ap.add_argument('-bg_distrib_cut',nargs=1,help='Distribution portion of the bg camera to remove',
-                default=0.997,type=float)
+                default=0.9995,type=float)
 
 ap.add_argument('-bigger_fit', nargs=1,
                 help='allows to incease the crop window used before the gaussian fit for bright sources',
@@ -172,6 +173,10 @@ ap.add_argument('-point_source', nargs=1,
                 help="assume the source is point-like, I.E. fixes the gaussian's initial center to the brightest pixel",
                 default=True, type=bool)
 # helps to avoid the gaussian center shifting in case of diffuse emission
+
+ap.add_argument('-screen_mode',nargs=1,
+                help="decide which software is used to screen the image regions",
+                default='mpdaf')
 
 #if set to true, wil ask for sudo mdp at script launch
 ap.add_argument('-sudo_mode',nargs=1,help='put to true if the ds9 installation needs to be run in sudo',
@@ -186,22 +191,22 @@ ap.add_argument('-regions_mode',nargs=1,help='region choosing mode between auto,
 #only used if regions_mode is set to manual
 ap.add_argument('-man_src_reg_FPMA',nargs=1,
                help='manual source region relative path inside the osbid directory for FPMA',
-               default='src_SHIFRA_40asec.reg',type=str)
+               default='',type=str)
 ap.add_argument('-man_src_reg_FPMB',nargs=1,
                help='manual source region relative path inside the osbid directory for FPMB',
-               default='src_SHIFRA_40asec.reg',type=str)
+               default='',type=str)
 ap.add_argument('-man_bg_reg_FPMA',nargs=1,
                help='manual background region relative path inside the osbid directory for FPMA',
-               default='bkg_SHIFRA_40asec.reg',type=str)
+               default='',type=str)
 ap.add_argument('-man_bg_reg_FPMB',nargs=1,
                help='manual background region relative path inside the osbid directory for FPMB',
-               default='bkg_SHIFRA_40asec.reg',type=str)
+               default='',type=str)
 
 '''lightcurve'''
 
 #note: this binning will also be used to CREATE the gtis
 ap.add_argument('-lc_bin_std', nargs=1, help='Gives the binning of all standard lightcurces/HR evolutions (in s)',
-                default='1000',type=str)
+                default='64',type=str)
 
 ap.add_argument('-lc_bin_gti', nargs=1, help='Gives the binning of all lightcurves used for gti cutting (in s)',
                 default='1',type=str)
@@ -251,6 +256,7 @@ catch_errors=args.catch_errors
 e_low_img,e_high_img=np.array(args.image_band.split('-'),dtype=float)
 
 sudo_mode=args.sudo_mode
+screen_mode=args.screen_mode
 
 bright_check=args.bright_check
 force_bright=args.force_bright
@@ -509,6 +515,7 @@ def disp_ds9(spawn, file, zoom='auto', scale='log', regfile='', screenfile='', g
 
     # second part of the windows parsing
 
+    time.sleep(60)
     ds9_pid = 0
 
     if screenfile != '' or give_pid:
@@ -807,14 +814,14 @@ def ds9_to_reg(ds9_regfile):
     for line in ds9_lines:
         if line.startswith('circle'):
             indiv_coords=line.split('(')[1].split(')')[0].split(',')
-
             reg_coords+=[[indiv_coords[0],indiv_coords[1]],indiv_coords[2]]
     return reg_coords
 
 def extract_reg(directory, cams='all', use_file_target=False,
                 overwrite=True,e_low_img=3,e_high_img=79,rad_crop=120,bg_area_factor=2.,bg_rm_src_sigmas=10.,
                 bg_distrib_cut=0.99,
-                bright=False,sudo_mode=False,sudo_mdp=''):
+                bright=False,
+                screen_mode='mpdaf',sudo_mode=False,sudo_mdp=''):
     '''
     Extracts the optimal source/bg regions for a given exposure
 
@@ -1026,10 +1033,19 @@ def extract_reg(directory, cams='all', use_file_target=False,
                 time.sleep(15)
 
         #opening the image file and saving it for verification purposes
-        ds9_pid_sp_start=disp_ds9(spawn,os.path.join(spawndir,img_file),
+
+        if screen_mode=='ds9':
+            pid_start=disp_ds9(spawn,os.path.join(spawndir,img_file),
                                   screenfile=os.path.join(filedir,img_file).replace('.ds','_screen.png'),
                                   give_pid=True,sudo_mode=sudo_mode,sudo_mdp=sudo_mdp)
-
+            time.sleep(60)
+        elif screen_mode=='mpdaf':
+            try:
+                mpdaf_plot_img(os.path.join(filedir,img_file),rad_crop=[500,500],crop_coords='auto',
+                   save=os.path.join(filedir,img_file).replace('.ds','_screen.png'),)
+                pid_start=1
+            except:
+                pid_start=0
         try:
             fits_img = fits.open(os.path.join(filedir,img_file))
             fits_img.close()
@@ -1039,13 +1055,11 @@ def extract_reg(directory, cams='all', use_file_target=False,
             spawn.sendline('\ncd $currdir')
             return "Could not load the image fits file. There must be a problem with the exposure."
 
-
-
-        if ds9_pid_sp_start == 0:
-            print("\nCould not load the image file with ds9. There must be a problem with the exposure." +
+        if pid_start == 0:
+            print("\nCould not load the image file. There must be a problem with the exposure." +
                   "\nSkipping spectrum computation...")
             spawn.sendline('\ncd $currdir')
-            return "Could not load the image file with ds9. There must be a problem with the exposure."
+            return "Could not load the image file. There must be a problem with the exposure."
 
         #loading the IMG file with mpdaf
         with fits.open(os.path.join(filedir,img_file)) as hdul:
@@ -1097,11 +1111,21 @@ def extract_reg(directory, cams='all', use_file_target=False,
                           '\n' + spatial_expression((obj_deg, str(rad_crop)))
                           + ' # text={' + obj_auto['main_id'] + ' initial cropping zone}')
 
-        ds9_pid_sp_start = disp_ds9(spawn, os.path.join(spawndir,img_file), regfile=os.path.join(spawndir,reg_catal_name),
+        if screen_mode=='ds9':
+            pid_start = disp_ds9(spawn, os.path.join(spawndir,img_file),
+                                    regfile=os.path.join(spawndir,reg_catal_name),
                                     zoom=1.2,
                                     screenfile=filedir + '/' +file_id + prefix + '_reg_catal_screen.png',
                                     give_pid=True,
                                     kill_last=ds9_pid_sp_start,sudo_mode=sudo_mode,sudo_mdp=sudo_mdp)
+        elif screen_mode=='mpdaf':
+            mpdaf_plot_img(os.path.join(filedir,img_file),
+                           save=os.path.join(filedir,file_id + prefix + '_reg_catal_screen.png'),
+                           rad_crop=[500, 500],
+                           target_name_list=[obj_auto['main_id']],
+                           target_disp_names=[obj_auto['main_id'] + ' initial cropping zone'],
+                           crop_coords='auto', target_coords_list=[np.array(obj_deg,dtype=float)],
+                           target_sizes=[rad_crop], target_size_u=['arcsec'],target_colors=['white'])
 
         rad_crop_use=rad_crop
 
@@ -1226,11 +1250,13 @@ def extract_reg(directory, cams='all', use_file_target=False,
         Also need to convert to tuples or the ee won't accept the center 
         '''
 
-        counts_bg=img_obj_whole.ee(center=tuple(bg_coords_im[0].astype(float))[::-1],radius=float(bg_coords_im[1]))
+        bg_center=(bg_coords_im[0].astype(float))[::-1]
+        counts_bg=img_obj_whole.ee(center=bg_center,radius=float(bg_coords_im[1]))
+
 
         #computing the SNR for a range of radiuses
 
-        rad_test_arr=np.arange(4,min(rad_crop,max(gfit.fwhm)*max_rad_source/2.355),2)
+        rad_test_arr=np.arange(4,min(rad_crop+0.1,max(gfit.fwhm)*max_rad_source/2.355),2)
 
         snr_vals=np.repeat(0,len(rad_test_arr))
 
@@ -1265,10 +1291,24 @@ def extract_reg(directory, cams='all', use_file_target=False,
                           '\n' + spatial_expression(bg_coords_im)
                           + ' # text={automatic background}' )
 
-        ds9_pid_sp_reg = disp_ds9(spawn,os.path.join(spawndir,img_file), regfile=os.path.join(spawndir,reg_name),
+        if screen_mode=='ds9':
+            pid_reg = disp_ds9(spawn,os.path.join(spawndir,img_file), regfile=os.path.join(spawndir,reg_name),
                                     screenfile=filedir + '/' +file_id + prefix + '_reg_screen.png',
                                     give_pid=True,
-                                    kill_last=ds9_pid_sp_start,sudo_mode=sudo_mode,sudo_mdp=sudo_mdp)
+                                    kill_last=pid_start,sudo_mode=sudo_mode,sudo_mdp=sudo_mdp)
+        elif screen_mode=='mpdaf':
+
+            mpdaf_plot_img(os.path.join(filedir, img_file),
+                       save=os.path.join(filedir,file_id + prefix + '_reg_screen.png'),
+                       rad_crop=[500, 500],
+                       target_name_list=[ obj_auto['main_id'],'automatic background'],
+                           target_disp_names=['auto', 'auto'],
+                           crop_coords='auto', target_coords_list=[np.array(src_coords[0],dtype=float),
+                                                               bg_coords_im[0]],
+                       target_sizes=[float(src_coords[1]),float(bg_coords_im[1])],
+                           target_disp_names_offset=[1.1,1.1],
+                        target_size_u=['arcsec','arcsec'], target_colors=['white','white'])
+
 
         '''
         and in individual region files for the extraction
@@ -1297,10 +1337,11 @@ def extract_reg(directory, cams='all', use_file_target=False,
                           '\n' + spatial_expression(bg_coords_im)
                           + ' # text={automatic background}')
 
-        if sudo_mode:
-            bashproc.sendline('\necho "' + sudo_mdp + '" |sudo -S pkill sudo')
-        else:
-            os.system('wmctrl -ic ' + str(ds9_pid_sp_reg))
+        if screen_mode=='ds9':
+            if sudo_mode:
+                bashproc.sendline('\necho "' + sudo_mdp + '" |sudo -S pkill sudo')
+            else:
+                os.system('wmctrl -ic ' + str(pid_reg))
 
         # this sometimes doesn't proc before the exit for whatever reason so we add a buffer just in case
         # bashproc.expect([pexpect.TIMEOUT],timeout=2)
@@ -2489,7 +2530,7 @@ if not local:
                                                    bg_area_factor=bg_area_factor,
                                                    bg_rm_src_sigmas=bg_rm_src_sigmas,
                                                    bg_distrib_cut=bg_distrib_cut,
-                                                   bright=force_bright or bright_flag_dir,
+                                                   bright=force_bright or bright_flag_dir,screen_mode=screen_mode,
                                                    sudo_mode=sudo_mode,sudo_mdp=sudo_mdp)
                             if type(output_err)==str:
                                 raise ValueError
@@ -2580,7 +2621,7 @@ if not local:
                                                  bg_area_factor=bg_area_factor,
                                                  bg_rm_src_sigmas=bg_rm_src_sigmas,
                                                  bg_distrib_cut=bg_distrib_cut,
-                                                 bright=force_bright or bright_flag_dir,
+                                                 bright=force_bright or bright_flag_dir,screen_mode=screen_mode,
                                                  sudo_mode=sudo_mode, sudo_mdp=sudo_mdp)
                         if type(output_err) == str:
                             raise ValueError
@@ -2675,7 +2716,7 @@ else:
                                      bg_area_factor=bg_area_factor,
                                      bg_rm_src_sigmas=bg_rm_src_sigmas,
                                      bg_distrib_cut=bg_distrib_cut,
-                                     bright=force_bright or bright_flag_dir,
+                                     bright=force_bright or bright_flag_dir,screen_mode=screen_mode,
                                      sudo_mode=sudo_mode, sudo_mdp=sudo_mdp)
             if type(output_err) == str:
                 raise ValueError

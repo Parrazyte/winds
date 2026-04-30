@@ -663,3 +663,23 @@ plot_comp_ratio([1],[2,3,4,[5,8],[6,7]],6.38,7.13,
                 ylims=[1.,2.3],figsize=(6,3),minor_locator=10,ylabel_prefix='"small" M1744 region CIE model \n',
                 manual_bbox=(0.045, 1))
 plt.savefig('mod_cie_smallpix_deabs_comp_ratio_adjFeKratio.pdf')
+
+
+#for simu with Kai
+
+os.chdir('/media/parrazyte/crucial_SSD/Observ/BHLMXB/XRISM/MAXIJ1744-294/Kai/for_MC/20260415_bestfit_files_to_Maxime')
+Xset.restore('fullmod_1comp_postrefit_fewunfreeze.xcm')
+Fit.perform()
+# from xspec import AllChains
+#
+#chain started at 18:01
+# AllChains.defLength = 15000
+# AllChains.defBurn = 10000
+# AllChains.defWalkers = 20
+'''
+#test with half the walkers and a constant continuum
+'''
+#
+Chain('full.chain')
+
+AllModels.show()

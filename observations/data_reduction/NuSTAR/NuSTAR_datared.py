@@ -56,9 +56,9 @@ from rasterio.features import rasterize
 # shape merging
 from scipy.ndimage import binary_dilation
 
-from general_tools import (file_edit, ravel_ragged,MinorSymLogLocator,interval_extract,str_orbit,source_catal,
-                           mpdaf_load_img,mpdaf_plot_img)
+from general_tools import file_edit, ravel_ragged,MinorSymLogLocator,interval_extract,str_orbit,source_catal
 
+from mpdaf_tools import mpdaf_load_img,mpdaf_plot_img
 """
 Created on 09-11-2023
 
@@ -103,7 +103,7 @@ ap.add_argument('-catch', '--catch_errors', help='Catch errors while running the
 
 # global choices
 ap.add_argument("-a", "--action", nargs='?', help='Give which action(s) to proceed,separated by comas.',
-                default='m', type=str)
+                default='build,reg,lc,sp,g,m', type=str)
 # default: build,reg,lc,sp,g,m
 
 ap.add_argument("-over", nargs=1, help='overwrite computed tasks (i.e. with products in the batch, or merge directory\

@@ -3,10 +3,11 @@ from xspec_config_multisp import *
 import time
 
 
-def mc_sim_line(baseload='mod_final_nogauss.xcm',lines='FeKa26Aabs_gaussian',
-                e_min=6.,e_max=8.,sigma=[5e-3],base_norm_0=True,
-                position=None,mod_name='',set_ener_str='thcomp',set_ener_xrism=True,
-                nfakes=1000,vrange=[-3000,3000,50],parallel=1,bound_around=1):
+def mc_sim_line(baseload='mod_final_nogauss.xcm',lines='FeKa26Aabs_agaussian',
+                e_min=6.5,e_max=7.5,sigma=[5e-3],base_norm_0=True,chain='',chain_columns='full',
+                unfreeze_line_cont=False,anal_method='steppar',
+                position='last',mod_name='',set_ener_str='',set_ener_xrism=True,
+                nfakes=1000,vrange=[-3000,3000,25],parallel=1,bound_around=1):
 
     '''
     basic script to perform MC simulations of line photon noise
@@ -34,7 +35,21 @@ def mc_sim_line(baseload='mod_final_nogauss.xcm',lines='FeKa26Aabs_gaussian',
         
     vrange: 
         bounds and step of velocity shift steppar
-    
+
+
+    chain:
+        fits file used to load MC posterior parameters before each fake
+
+    chain_columns:
+        ids of the columns used in the chain (different from the parameters themselves) or 'full' to use all of them
+        The code will automatically apply each column to the parameter given in the name of the column in the fits file
+        e.g. ('Velocity__4', '>f8'), ('Sigma__6', '>f8'), ('norm__7', '>f8')
+        chain_columns=[0,2] will load column 0 for parameter 4, and column 2 for parameter 7
+
+
+    anal_method: 'fit' or 'steppar'
+        if fit, performs full fitting of the model instead of steppar (much longer)
+
     parallel:
         number of processors used during the steppar computation
         
@@ -69,11 +84,30 @@ def mc_sim_line(baseload='mod_final_nogauss.xcm',lines='FeKa26Aabs_gaussian',
 
     log=Xset.openLog('mc_sim_line_'+baseload_str+'_'+time_log+'.log')
 
-    with tqdm(total=nfakes) as pbar:
+    # preparing the chain if need be
+    if chain != '':
+        chain_data=fits.open(chain)[1].data
+        assert len(chain_data)>=nfakes,'Error: chain smaller than the amount of simulations required'
+
+        if type(chain_columns)==str and chain_columns=='full':
+            chain_columns_use=np.arange(len(chain_data[0])-1)
+        else:
+            chain_columns_use=chain_columns
+
+    with (tqdm(total=nfakes) as pbar):
         for f_ind in range(nfakes):
+
             Xset.restore(baseload)
 
+            if chain!='':
+                #loadind the chain in reverse to get the best convergence among the chain elements
+                chain_data_fake=chain_data[-f_ind]
+                for column_id in chain_columns_use:
+                    column_par=int(chain_data.columns[column_id].name.split('__')[-1])
+                    AllModels(1)(column_par).values=chain_data_fake[column_id]
+
             time.sleep(0.5)
+
             if baseload.endswith('mod_save_02_noline.xcm'):
                 fakeset=[FakeitSettings(response=AllData(1).response.rmf,arf=AllData(1).response.arf,
                                         exposure=AllData(1).exposure,background='',fileName=AllData(1).fileName),]
@@ -93,7 +127,7 @@ def mc_sim_line(baseload='mod_final_nogauss.xcm',lines='FeKa26Aabs_gaussian',
                 AllData(1).ignore('**-2. 10.-**')
                 AllData(2).ignore('**-0.3 10.-**')
 
-            if baseload in ['mod_baseload_1group.xcm','baseload_nolines.xcm']:
+            if baseload in ['mod_baseload_1group.xcm','baseload_nolines.xcm','mod_simple_oneline_forsim.xcm']:
                 fakeset=[FakeitSettings(response=AllData(1).response.rmf,
                                         exposure=AllData(1).exposure,background='',fileName=AllData(1).fileName),]
                 # Fit.perform()
@@ -104,8 +138,27 @@ def mc_sim_line(baseload='mod_final_nogauss.xcm',lines='FeKa26Aabs_gaussian',
                 set_ener(set_ener_str,xrism=set_ener_xrism)
 
 
+
+            #for Kai in 1745: we refit the continuum first, then ignore an energy range and refit the line
+            if baseload=='mod_simple_oneline_forsim.xcm':
+
+                freeze(parlist=[4,6,7])
+                Fit.perform()
+                freeze()
+                unfreeze(parlist=[4,6,7])
+                AllData.ignore('**-6.8 7.1-**')
+
             Fit.perform()
+
             freeze()
+
+            #version where we unfreeze the line before the steppar
+            if unfreeze_line_cont:
+                if baseload=='mod_simple_oneline_forsim.xcm':
+                    #we keep the velocity frozen to avoid issues with finding minima
+                    # (assuming that the main line is much bigger than the fluctuations, this should be fine at first order)
+                    unfreeze(parlist=[4, 6, 7])
+
             npars_base=AllModels(1).nParameters
             if baseload.endswith('mod_final_nogauss.xcm'):
                 #to avoid problems with high photon noise in the xtend spectrum when actually the delta-c is in resolve
@@ -116,6 +169,11 @@ def mc_sim_line(baseload='mod_final_nogauss.xcm',lines='FeKa26Aabs_gaussian',
 
             mod_base=allmodel_data()
             mod_base_comp=AllModels(1).componentNames
+
+            #re-noticing if need be
+            if baseload=='mod_simple_oneline_forsim.xcm':
+                AllData.notice('2.-10.')
+
             for i_line,indiv_line in enumerate(lines_use):
 
                 print('testing line '+indiv_line)
@@ -125,36 +183,30 @@ def mc_sim_line(baseload='mod_final_nogauss.xcm',lines='FeKa26Aabs_gaussian',
                 if e_min is not None and e_max is not None:
                     ignore_data_indiv([e_min],[e_max])
 
-
                 if baseload.endswith('mod_final_nogauss.xcm'):
                     AllData(1).ignore('**-2. 10.-**')
 
                 if baseload.endswith('mod_save_02_noline.xcm'):
                     AllData(1).ignore('**-2. 10.-**')
 
-                if indiv_line=='FeKa26Aabs_gaussian':
-                    par_info=addcomp(indiv_line)
+                if indiv_line in ['FeKa26Aabs_gaussian','FeKa26Aabs_agaussian']:
+                    par_info=addcomp(indiv_line,return_pos=True)
                     AllModels(1)(npars_base+3).values=2e-3
                     AllModels(1)(npars_base+3).frozen=True
                     AllModels(1)(npars_base+4).values = 0.0
                     AllModels(1)(npars_base+7).link = str(npars_base+4)+'*2.0'
-
-                if indiv_line in ['NiKa27Wabs_gaussian','FeKb25abs_gaussian']:
-                    par_info=addcomp(indiv_line)
+                elif indiv_line in ['NiKa27Wabs_gaussian','FeKb25abs_gaussian']:
+                    par_info=addcomp(indiv_line,return_pos=True)
                     AllModels(1)(npars_base+3).values=5e-3
                     AllModels(1)(npars_base+3).frozen=True
                     AllModels(1)(npars_base+4).values = 0.0
-
-
-                if indiv_line in ['CrKa23Wabs_gaussian','CaKa20abs_gaussian','SKa16abs_gaussian']:
-                    par_info=addcomp(indiv_line)
+                elif indiv_line in ['CrKa23Wabs_gaussian','CaKa20abs_gaussian','SKa16abs_gaussian']:
+                    par_info=addcomp(indiv_line,return_pos=True)
                     AllModels(1)(npars_base+3).values=2e-3
                     AllModels(1)(npars_base+3).frozen=True
                     AllModels(1)(npars_base+4).values = 0.0
-
-
-                if indiv_line=='FeKa1Aem_gaussian':
-                    par_info=addcomp(indiv_line)
+                elif indiv_line=='FeKa1Aem_gaussian':
+                    par_info=addcomp(indiv_line,return_pos=True)
                     AllModels(1)(npars_base+3).values=5e-3
                     AllModels(1)(npars_base+3).frozen=True
                     AllModels(1)(npars_base+4).values = 0.0
@@ -168,7 +220,7 @@ def mc_sim_line(baseload='mod_final_nogauss.xcm',lines='FeKa26Aabs_gaussian',
                                  for id_comp in par_info[1]]:
                         if comp.name.split('_')[0] not in ['vashift','gaussian','lorentz']:
                             breakpoint()
-                        if comp.name!='vashift':
+                        if comp.name.split('_')[0]!='vashift':
                             comp.Sigma.values=sigma[0]
                             comp.Sigma.frozen=True
 
@@ -177,9 +229,10 @@ def mc_sim_line(baseload='mod_final_nogauss.xcm',lines='FeKa26Aabs_gaussian',
                                  for id_comp in par_info[1]]:
                         if comp.name.split('_')[0] not in ['vashift','gaussian','lorentz']:
                             breakpoint()
-                        if comp.name!='vashift':
-                            comp.norm.values=0
 
+                        #also checking the link to ensure we don't remove a link
+                        if comp.name.split('_')[0]!='vashift' and comp.norm.link=='':
+                            comp.norm.values=0
 
                 AllModels.show()
 
@@ -203,11 +256,28 @@ def mc_sim_line(baseload='mod_final_nogauss.xcm',lines='FeKa26Aabs_gaussian',
                 AllModels(1,mod_name)(vashift_par).values=[0,1,vrange[0]-1,vrange[0]-1,
                                                              vrange[1]+1,vrange[1]+1]
 
-                Fit.steppar('nolog '+str(vashift_par)+' '+str(vrange[0])+' '+str(vrange[1])+' '+str(int((vrange[1]-vrange[0])/vrange[2])))
+                if anal_method=='steppar':
+                    Fit.steppar('nolog '+str(vashift_par)+' '+str(vrange[0])+' '+str(vrange[1])+' '+str(int((vrange[1]-vrange[0])/vrange[2])))
 
-                Xset.parallel.steppar = 1
+                    Xset.parallel.steppar = 1
 
-                arr_delc_save[i_line][f_ind]=abs(np.array([min(elem, 0) for elem in Fit.stepparResults('delstat')]))
+                    arr_delc_save[i_line][f_ind]=abs(np.array([min(elem, 0) for elem in Fit.stepparResults('delstat')]))
+                elif anal_method=='fit':
+                    #better for cases where we refit components
+                    modpre_fitline=allmodel_data()
+                    modpre_fitline.load()
+                    fit_improve = 0
+                    base_stat = Fit.statistic
+
+                    for elem in np.arange(vrange[0], vrange[1]+1, vrange[2]):
+                        modpre_fitline.load()
+                        AllModels(1)(13).values = elem
+                        AllModels(1)(13).frozen = True
+                        Fit.perform()
+                        fit_improve = max(fit_improve, base_stat - Fit.statistic)
+
+                    print('max stat improvement:'+str(fit_improve))
+                    arr_delc_save[i_line][f_ind]=fit_improve
 
             pbar.update(1)
 

@@ -265,7 +265,8 @@ def vrot_earth(source='V4641sgr',date='2024-09-30'):
     (by fetching Simbad for coordinates)
     and a given time
 
-    result should be added to an observed velocity measurement
+    result should be ADDED to an observed velocity measurement
+    (c.f. internal doc in sc.radial_velocity_correction)
     '''
 
     north_p = EarthLocation.from_geodetic(lat=0*u.deg, lon=90*u.deg,height=0*u.m)

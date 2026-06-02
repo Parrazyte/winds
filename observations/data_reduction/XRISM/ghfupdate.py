@@ -35,7 +35,7 @@ file_ghf_out=input('final output gain file name')
 with fits.open(file_ghf_init) as a_hdul, fits.open(file_ghf_up) as b_hdul:
 
     '''
-    Here we tak the new gain fit for pixel 17 in file_ghf_up and insert it in the right index in file_ghf_init
+    Here we take the new gain fit for pixel 17 in file_ghf_up and insert it in the right index in file_ghf_init
     (where it was failed and thus doesn't appear)
     '''
 

@@ -69,8 +69,11 @@ lines_std={         #don't change the first 8, there are explicit calls in the c
                 'FeKa25Xabs': r'FeXXV K$\alpha$ (x)',
                 'FeKa25Wabs': r'FeXXV K$\alpha$ (w)',
 
-                'FeKb25p1abs': r'FeXXV K$\beta$ (P$^{1/2}$)',
-                'FeKb25p3abs': r'FeXXV K$\beta$ (P$^{3/2}$)',
+                'FeKb25Yabs': r'FeXXV K$\beta$ (y)',
+                'FeKb25Wabs': r'FeXXV K$\beta$ (w)',
+
+                'FeKg25Yabs': r'FeXXV K$\gamma$ (y)',
+                'FeKg25Wabs': r'FeXXV K$\gamma$ (w)',
 
                 'FeKa26p1abs': r'FeXXVI K$\alpha$ (P$^{1/2}$)',
                 'FeKa26p3abs': r'FeXXVI K$\alpha$ (P$^{3/2}$)',
@@ -91,6 +94,9 @@ lines_std={         #don't change the first 8, there are explicit calls in the c
                 'CrKa23Xabs': r'CrXXIII K$\alpha$ (x)',
                 'CrKa23Wabs': r'CrXXIII K$\alpha$ (w)',
                 'ArKa18abs': r'ArXVIII K$\alpha$',
+
+                'SKa16p1abs': r'SXVI K$\alpha$ (P$^{1/2}$)',
+                'SKa16p3abs': r'SXVI K$\alpha$ (P$^{3/2}$)',
 }
 
 lines_std_names=list(lines_std.keys())
@@ -170,8 +176,13 @@ lines_e_dict={
                 'FeKa25Wabs':  [6.7004,-3000,3000],
 
                 #these have uncertainties of 4-6 meV
-                'FeKb25p1abs':  [7.872,-3000,3000],
-                'FeKb25p3abs':  [7.881,-3000,3000],
+                'FeKb25Yabs':  [7.8719,-3000,3000],
+                'FeKb25Wabs':  [7.8812,-3000,3000],
+
+                # from http://arxiv.org/abs/2506.17106
+                'FeKg25Yabs': [8.2916, -3000, 3000],
+                'FeKg25Wabs': [8.2955, -3000, 3000],
+
 
                 #for high densities another line blends with the first transition and increases the norm ratio
                 #see https://www.aanda.org/articles/aa/abs/2025/02/aa53133-24/aa53133-24.html
@@ -198,6 +209,9 @@ lines_e_dict={
                 'CrKa23Yabs': [5.6548, -3000, 3000],
                 'CrKa23Xabs': [5.6651, -3000, 3000],
                 'CrKa23Wabs': [5.6821, -3000, 3000],
+
+                'SKa16p1abs': [2.6197, -3000, 3000],
+                'SKa16p3abs': [2.6227, -3000, 3000],
 
 
 }
@@ -273,8 +287,11 @@ lines_w_dict={
             'FeKa25Xabs': [1e-3,0.,0.05],
             'FeKa25Wabs': [1e-3,0.,0.05],
 
-            'FeKb25p1abs': [1e-3,0.,0.05],
-            'FeKb25p3abs': [1e-3,0.,0.05],
+            'FeKb25Yabs': [1e-3,0.,0.05],
+            'FeKb25Wabs': [1e-3,0.,0.05],
+
+            'FeKg25Yabs': [1e-3, 0., 0.05],
+            'FeKg25Wabs': [1e-3, 0., 0.05],
 
             'FeKa26p1abs': [1e-3,0.,0.05],
             'FeKa26p3abs': [1e-3,0.,0.05],
@@ -294,6 +311,9 @@ lines_w_dict={
             'CrKa23Yabs': [1e-3, 0., 0.05],
             'CrKa23Xabs': [1e-3, 0., 0.05],
             'CrKa23Wabs': [1e-3, 0., 0.05],
+
+            'SKa16p1abs': [1e-3, 0., 0.05],
+            'SKa16p3abs': [1e-3, 0., 0.05],
 
 }
 

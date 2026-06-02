@@ -933,7 +933,7 @@ def coltour_chi2map(fig, axe, chi_dict, title='', combined=False, ax_bar=None, n
     # right values
     cm_ticklabels = (cm_ticks ** 2).round(1).astype(str)
 
-    # this allows to superpose the image to a log scale (imshow scals with pixels so it doesn't work)
+    # this allows to superpose the image to a log scale (imshow scales with pixels so it doesn't work)
     img = axe.pcolormesh(line_search_e_space, norm_par_space, chi_map.T, norm=cm_norm, cmap=cm_bipolar.reversed())
 
     if ax_bar != None:
@@ -1276,3 +1276,97 @@ def merge_chi_dict(chi_dict_files,skip_chi_base_equal=False):
 
     with open(merge_save_path,'wb+') as f:
         dill.dump(chi_dict_merge,f)
+
+def blind_search_imprint():
+    plt.figure()
+    for i in range(len(line_search_e_space) - 1):
+
+        if abs(chi_map.max(1)[i]) > abs(chi_map.min(1)[i]):
+            color_val = chi_map.max(1)[i]
+        else:
+            color_val = chi_map.min(1)[i]
+
+        plt.plot(plop['line_search_e_space'][i:i + 2], [1, 1], color=test_col.to_rgba(color_val))
+
+    os.chdir(
+        '/media/parrazyte/crucial_SSD/Observ/BHLMXB/XRISM/MAXIJ1744-294/new_anal/fit_duo_empirical_bigpix/2025_updated/blindsearch/prelines/BH')
+    f = open('post_refit_edge_Tbfeo_onlyBH_narrow_out_6.3_7.1_lw_5.dill', 'rb')
+    chi_dict = dill.load(f)
+
+    local_chi_bounds = True
+    ener_show_range = None
+    norm = None
+
+    chi_arr = chi_dict['chi_arr']
+    chi_base = chi_dict['chi_base']
+    line_threshold = chi_dict['line_threshold']
+    line_search_e = chi_dict['line_search_e']
+    line_search_e_space = chi_dict['line_search_e_space']
+    line_search_norm = chi_dict['line_search_norm']
+    norm_par_space = chi_dict['norm_par_space']
+    peak_points = deepcopy(chi_dict['peak_points'])
+    peak_widths = chi_dict['peak_widths']
+
+    chi_map = np.where(chi_arr >= chi_base, 0, chi_base - chi_arr)
+    chi_map_full = chi_map
+    # here we do some more modifications
+    chi_arr_plot = chi_map
+
+    # for the norm
+    chi_arr_plot_full = chi_map_full.copy()
+
+    # swapping the sign of the delchis for the absorption and emission lines in order to display them
+    # with both parts of the cmap + using a square root norm for easier visualisation
+
+    for i in range(len(chi_arr_plot)):
+        chi_arr_plot[i] = np.concatenate((-(chi_arr_plot[i][:int(len(chi_arr_plot[i]) / 2)]) ** (1 / 2),
+                                          (chi_arr_plot[i][int(len(chi_arr_plot[i]) / 2):]) ** (1 / 2)))
+
+    for i in range(len(chi_arr_plot_full)):
+        chi_arr_plot_full[i] = np.concatenate((-(chi_arr_plot_full[i][:int(len(chi_arr_plot_full[i]) / 2)]) ** (1 / 2),
+                                               (chi_arr_plot_full[i][int(len(chi_arr_plot_full[i]) / 2):]) ** (1 / 2)))
+
+    if np.max(chi_arr_plot) >= 1e3 or (np.max(chi_arr_plot_full) >= 1e3 and not local_chi_bounds):
+        chi_arr_plot = chi_arr_plot ** (1 / 2)
+        chi_arr_plot_full = chi_arr_plot_full ** (1 / 2)
+        bigline_flag = 1
+    else:
+        bigline_flag = 0
+        if norm is not None:
+            norm_col = np.array(norm) ** (1 / 2)
+
+    # creating the bipolar cm
+    cm_bipolar = hotcold(neutral=1)
+
+    # and the non symetric normalisation
+    cm_norm = colors.TwoSlopeNorm(vcenter=0,
+                                  vmin=min(-np.sqrt(9.21), chi_arr_plot.min() if local_chi_bounds
+                                  else chi_arr_plot_full.min()) if norm is None else -norm_col[0],
+                                  vmax=max(chi_arr_plot.max() if local_chi_bounds else
+                                           chi_arr_plot_full.max(), np.sqrt(9.21)) if norm is None else norm_col[1])
+
+    test_col = mpl.cm.ScalarMappable(norm=cm_norm, cmap=cm_bipolar.reversed())
+    plt.figure()
+
+
+    for i in range(len(line_search_e_space) - 1):
+
+        if abs(chi_map.max(1)[i]) > abs(chi_map.min(1)[i]):
+            color_val = chi_map.max(1)[i]
+            if color_val!=0:
+                s_val=(norm_par_space[chi_map.argmax(1)[i]])*10
+            else:
+                s_val=0
+        else:
+            color_val = chi_map.min(1)[i]
+            if color_val!=0:
+                s_val=(norm_par_space[chi_map.argmin(1)[i]])*10
+            else:
+                s_val=0
+
+
+        plt.fill_between(plop['line_search_e_space'][i:i + 2], [1+s_val/100, 1+s_val/100],
+                         [1,1],
+                         color=test_col.to_rgba(color_val),lw=1)
+
+        # plt.plot(plop['line_search_e_space'][i:i + 2], [1, 1], color=test_col.to_rgba(color_val),lw=s_val)

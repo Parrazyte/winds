@@ -320,7 +320,8 @@ def NICER_run_all_sp(sort=False,reverse=False,mod='thcont'):
     for elem_sp in sp_list:
         sp_anal(elem_sp,mod=mod)
 
-def swift_OT_run_all_sp(sort=False,reverse=False,mod='thcont',obj='V4641Sgr',outdir='s_a',absval=None,addcomp_list=[],freeze_nH_postfit=False,
+def swift_OT_run_all_sp(sort=False,reverse=False,mod='thcont',obj='V4641Sgr',outdir='s_a',
+                        absval=None,addcomp_list=[],freeze_nH_postfit=False,
                         overwrite_baseload=False):
     sp_list=glob.glob('**_grp_opt.pi')
 
@@ -355,7 +356,9 @@ def swift_OT_run_all_sp(sort=False,reverse=False,mod='thcont',obj='V4641Sgr',out
             Xset.save(elem_epoch+'_baseload.xcm')
             AllData.clear()
 
-        sp_anal(elem_epoch+'_baseload.xcm',mod=mod,baseload=True,obj=obj,outdir=outdir,absval=absval,addcomp_list=addcomp_list,freeze_nH_postfit=freeze_nH_postfit)
+        sp_anal(elem_epoch+'_baseload.xcm',mod=mod,baseload=True,
+                obj=obj,outdir=outdir,absval=absval,addcomp_list=addcomp_list,
+                freeze_nH_postfit=freeze_nH_postfit,set_ener_str='thcomp' if mod=='thcont' else '')
 
 
 def fit_broader(epoch_id,bat_interp_dir,add_gaussem=True,

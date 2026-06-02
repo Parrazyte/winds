@@ -292,3 +292,51 @@ def gridmodel(gridpath, interp='log'):
     param_list[1]=param_list[1].astype(float)
 
     #listing the parameters in a tuple
+
+
+
+def differential_to_binned_energy_spectrum(E_keV, dNdE):
+
+    #from the dark side
+
+    """
+    Convert a differential photon spectrum
+
+        Y = photons / (s keV cm^2)
+
+    into an integrated-per-bin spectrum
+
+        Y2 = photons / (s cm^2)
+
+    Parameters
+    ----------
+    E_keV : array-like
+        Energy bin centers in keV.
+    dNdE : array-like
+        Differential spectrum values in photons/s/keV/cm^2.
+
+    Returns
+    -------
+    E_keV : ndarray
+        Same energy bin centers.
+    Y2 : ndarray
+        Integrated photons/s/cm^2 in each bin.
+    """
+
+    E_keV = np.asarray(E_keV)
+    dNdE = np.asarray(dNdE)
+
+    # Compute bin widths
+    dE = np.zeros_like(E_keV)
+
+    # Interior bins
+    dE[1:-1] = 0.5 * (E_keV[2:] - E_keV[:-2])
+
+    # Edge bins
+    dE[0] = E_keV[1] - E_keV[0]
+    dE[-1] = E_keV[-1] - E_keV[-2]
+
+    # Integrate over each bin
+    Y2 = dNdE * dE
+
+    return E_keV, Y2

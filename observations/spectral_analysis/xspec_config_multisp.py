@@ -381,7 +381,7 @@ def set_ener(mode='thcomp',xrism=False):
         if xrism:
             AllModels.setEnergies('0.01 0.1 1000 log, 10. 19800 lin, 1000. 1000 log')
         else:
-            AllModels.setEnergies('0.01 1000. 10000 log')
+            AllModels.setEnergies('0.01 1000. 3000 log')
 
 
 def make_ls(low_e,high_e):
@@ -907,6 +907,38 @@ def save_broad_SED(path=None,e_low=0.1,e_high=100,nbins=1e3,retain_session=False
                    delimiter=' ')
     else:
         return save_arr
+
+def save_mo_Ryota(outfile,factor=1):
+
+    Plot.xAxis='keV'
+    time.sleep(0.1)
+
+    Plot('mo')
+    time.sleep(0.1)
+
+    y=np.array(Plot.model())*factor
+    x=np.array(Plot.x())
+    save_arr=np.array([x,y]).T
+    np.savetxt(outfile, save_arr,header='E[keV] mo[photons/s/cm^2/keV]')
+
+def save_mo_Stefano(outfile,put_err_col=True,factor=1):
+
+    Plot.xAxis='hz'
+    time.sleep(0.1)
+    Plot('emo')
+    time.sleep(0.1)
+
+    y=np.array(Plot.model())*factor
+    x=np.array(Plot.x())
+    xerr=np.array(Plot.xErr())
+
+    if put_err_col:
+        save_arr=np.array([x,xerr,y]).T
+
+    else:
+        save_arr=np.array([x,y]).T
+    np.savetxt(outfile, save_arr,header='E[keV] '+('E_err[keV] ' if put_err_col else '')+'emo[Jy]')
+
 
 def compute_snr(sp_source,emin,emax,sp_back=None,rmf_source=None,e_step=None,mode='keV'):
 
@@ -7068,8 +7100,9 @@ def xPlot(types,axes_input=None,plot_saves_input=None,plot_arg=None,includedlist
 def plot_comp_ratio(cont_addcomps,other_addcomps,ener_low,ener_high,
                    plot_type='eemo',
                     ylims=None,
-                   xcm=None,
+                   cont_addcomps_xcm='',other_addcomps_xcm=None,
                    other_addcomps_labels=None,other_addcomps_colors=None,figsize=(10,5),
+                    other_addcomps_type=None,other_addcomps_alpha=None,
                     plot_transi=True,minor_locator=10,ylabel_prefix='',manual_bbox=False):
 
     '''
@@ -7078,8 +7111,13 @@ def plot_comp_ratio(cont_addcomps,other_addcomps,ener_low,ener_high,
     plot_type (eemo or other xspec type where addcomp is expressed)
         will be used to get the addcomp values
 
-    xcm : path or None
-        will load a model or take the current one
+    other_addcomps_xcm : path or array of paths or None
+        will load a model or take the current one. If several models are put in an iterable, then will attempt
+        to load one different model for each set of "other_addcomps" and assume a separate continuum model file
+
+    cont_addcomps_xcm: path or ''
+        if not '', will load a model to use for the continuum components only
+        Note: in this case the cont_addcomps numbering must be adapted to the components of that xcm instead
 
     comp_addcomps: iterable of ints
         the list of addcomps ids (in xspec, so with indexes starting at 1)
@@ -7093,10 +7131,18 @@ def plot_comp_ratio(cont_addcomps,other_addcomps,ener_low,ener_high,
         In this case, will sum all the addcomps in that iterable for a single displayed component
         if some elements are None, will not plot anything but keeps the label spot for additional lines in the legend
 
+
     ener_low/ener_high: x axis limits of the plot
 
-    other_addcomps_names/colors: None or iterable of same len as other_addcomps
+    other_addcomps_names/colors/alpha: None or iterable of same len as other_addcomps
         labels and colors for the additional components
+
+    other_addcomps_type: None or iterable of same len as other_addcomps
+        'em' for emission components, 'abs' for absorption components
+        if None, all components are assumed in emission (1 is added to their ratio)
+        Note that when combining absorption and emission it can be useful to use the "abs" type for emission components
+        to see the overlap
+
 
     figsize:
         python plot figure size
@@ -7109,14 +7155,46 @@ def plot_comp_ratio(cont_addcomps,other_addcomps,ener_low,ener_high,
 
     '''
 
-    if xcm is not None:
-        Xset.restore(xcm)
 
-    Plot(plot_type)
-    cont_addcomps_sum = np.array([Plot.addComp(addCompNum=i_comp, plotGroup=1) for i_comp in cont_addcomps]).sum(0)
+    if cont_addcomps_xcm!='':
+        #now doing the same thing with a second model for the continuum if requested
+
+        Xset.restore(cont_addcomps_xcm)
+
+        # generally better
+        set_ener('thcomp', xrism=True)
+
+        Plot(plot_type)
+        cont_addcomps_sum = np.array([Plot.addComp(addCompNum=i_comp, plotGroup=1) for i_comp in cont_addcomps]).sum(0)
+
+
+    if other_addcomps_xcm is not None:
+        single_man_xcm=type(other_addcomps_xcm)==str
+        if single_man_xcm:
+            Xset.restore(other_addcomps_xcm)
+
+            # generally better
+        set_ener('thcomp', xrism=True)
+
 
     other_addcomps_vals=[]
-    for indiv_cont_id in other_addcomps:
+
+    #individual loop for each set of comps to load a model if needed
+    for i_id,indiv_cont_id in enumerate(other_addcomps):
+
+        if not single_man_xcm:
+            Xset.restore(other_addcomps_xcm[i_id])
+
+            #generally better
+            set_ener('thcomp',xrism=True)
+
+        Plot(plot_type)
+
+        if cont_addcomps_xcm=='':
+            cont_addcomps_sum = np.array([Plot.addComp(addCompNum=i_comp, plotGroup=1) for i_comp in cont_addcomps]).sum(0)
+        else:
+            assert cont_addcomps_xcm!='','several xcms without a separate continuum not implemented'
+
         if indiv_cont_id is None:
             other_addcomps_vals+=[None]
             continue
@@ -7125,9 +7203,14 @@ def plot_comp_ratio(cont_addcomps,other_addcomps,ener_low,ener_high,
             indiv_cont_id_list=[indiv_cont_id]
         else:
             indiv_cont_id_list=indiv_cont_id
-        other_addcomps_vals+=[np.array([Plot.addComp(addCompNum=i_comp, plotGroup=1) for i_comp in indiv_cont_id_list]).sum(0)]
+        try:
+            other_addcomps_vals+=[np.array([Plot.addComp(addCompNum=i_comp, plotGroup=1) for i_comp in indiv_cont_id_list]).sum(0)]
+        except:
+            breakpoint()
+            pass
 
     other_addcomps_ratio=[None if elem is None else np.nan_to_num(elem/cont_addcomps_sum) for elem in other_addcomps_vals]
+
 
     plt.figure(figsize=figsize)
     ax_comp=plt.gca()
@@ -7146,17 +7229,29 @@ def plot_comp_ratio(cont_addcomps,other_addcomps,ener_low,ener_high,
     else:
         other_addcomps_colors_use=other_addcomps_colors
 
-    for elem_ratio,elem_color,elem_label in \
-     zip(other_addcomps_ratio,other_addcomps_colors_use,other_addcomps_labels_use):
+    if other_addcomps_alpha is None:
+        other_addcomps_alpha_use=np.repeat(None,len(other_addcomps))
+    else:
+        other_addcomps_alpha_use=other_addcomps_alpha
+
+    if other_addcomps_type is None:
+        other_addcomps_type_use=np.repeat('em',len(other_addcomps))
+    else:
+        other_addcomps_type_use =other_addcomps_type
+
+    for elem_ratio,elem_color,elem_label,elem_type,elem_alpha in \
+     zip(other_addcomps_ratio,other_addcomps_colors_use,other_addcomps_labels_use,other_addcomps_type_use,
+         other_addcomps_alpha_use):
         plt.plot([] if elem_ratio is None else Plot.x(1),
-                  [] if elem_ratio is None else 1+elem_ratio,
-                 color=elem_color,label=elem_label,lw=0 if elem_color==None else None)
+                  [] if elem_ratio is None else ((1 if elem_type=='em' else 0)+elem_ratio),
+                 color=elem_color,label=elem_label,lw=0 if elem_color==None else None,alpha=elem_alpha)
 
     if ylims is not None:
         plt.ylim(ylims)
 
     if plot_transi:
-        plot_std_ener(ax_comp,plot_indiv_transi=True,force_side='none',plot_em=True,squished_mode=False,color='grey')
+        plot_std_ener(ax_comp,plot_indiv_transi=True,force_side='none',
+                      plot_em=True,squished_mode=False,color='grey')
 
     if minor_locator is not False:
         ax_comp.xaxis.set_minor_locator(AutoMinorLocator(minor_locator))

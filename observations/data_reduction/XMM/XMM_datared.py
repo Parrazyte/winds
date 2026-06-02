@@ -211,7 +211,7 @@ ap.add_argument("-mainfocus",nargs=1,help='only extracts spectra when the source
 
 test_pileup=ap.add_argument('-pileup_test',nargs=1,
                 help='test the presence of pileup and potential run pileup excision',
-                default=False,type=bool)
+                default=True,type=bool)
 
 ap.add_argument("-p", "--pileup_ctrl",nargs=1,
                 help='mitigates pile-up (if there is any) with a progressive excision of the central region',

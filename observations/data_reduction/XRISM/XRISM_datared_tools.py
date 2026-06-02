@@ -189,7 +189,9 @@ def renorm_pix_backscale(file,mult_factor,suffix=''):
 
 
 def repro_dir(directory='auto',repro_suffix='repro',overwrite=True,instru='all',
-               heasoft_init_alias='heainit',caldb_init_alias='caldbinit',parallel=False,override_only=False):
+              heasoft_init_alias='heainit',caldb_init_alias='caldbinit',
+              custom_ghf='',
+              parallel=False,override_only=False):
 
     '''
 
@@ -206,6 +208,7 @@ def repro_dir(directory='auto',repro_suffix='repro',overwrite=True,instru='all',
     instru:
         all, Xtend or Resolve (case doesn't matter, will be converted to upper case)
 
+    custom_ghf: '' or relative path inside
     override_only:
         skips xapipeline and simply attempts to replace the files
     '''
@@ -330,31 +333,47 @@ def repro_dir(directory='auto',repro_suffix='repro',overwrite=True,instru='all',
                 bashproc.sendline('echo valid')
                 bashproc.expect('valid')
                 bashproc.sendline('rm -rf resolve repro_logs log  xtend  auxil')
+
+
                 time.sleep(5)
+
+                if custom_ghf!='':
+                    bashproc.sendline('cp ../'+str(directory_use)+'/'+custom_ghf+' ./')
+
+                bashproc.sendline('echo valid1')
+                bashproc.expect('valid1')
 
                 bashproc.sendline('xapipeline'+
                               ' indir= ../'+str(directory_use)+
-                              ' outdir= ./'+
+                              ' outdir= ./repro'+
                               ' steminputs=xa'+str(directory_use)+
                               ' STEMOUTPUTS=DEFAULT'+
                               ' verify_input=no'
                               ' entry_stage=1'+
                               ' exit_stage=2'+
                               ' clobber=YES'+
-                              ' instrument='+instru.upper())
+                              ' instrument='+instru.upper()+
+                              ('' if custom_ghf=='' else ' userghf='+custom_ghf))
 
-                #note that the exit code is a bit annoying to parse so we're using sevral lines to isolate it
+                #note that the exit code is a bit annoying to parse so we're using several lines to isolate it
                 bashproc.expect('Total warnings/errors',timeout=None)
                 bashproc.expect('Running xapipeline')
                 bashproc.expect('Exit with no errors')
                 time.sleep(1)
-                bashproc.sendline('echo valid')
 
-                bashproc.expect('valid')
+                bashproc.sendline('echo valid2')
+                bashproc.expect('valid2')
 
                 #moving the logfiles to a log folder
                 bashproc.sendline('mkdir -p repro_logs')
                 bashproc.sendline('mv xapipeline**.log repro_logs')
+
+                # reading all the lines to reset the buffer
+                try:
+                    bashproc.timeout = 1
+                    bashproc.readlines()
+                except:
+                    bashproc.timeout = 30
 
                 if instru.upper() in ['RESOLVE','ALL']:
                     copy_checker(bashproc,'../'+directory_use+'/resolve','./',
@@ -377,7 +396,7 @@ def repro_dir(directory='auto',repro_suffix='repro',overwrite=True,instru='all',
             #replacing each file for which xaapipeline created a new version
             #listing the files in one of the subdirs. We need 2 / to ensure we're in one
             file_list=\
-                [elem for elem in np.unique(glob.glob(os.path.join(repro_dir,'**'),
+                [elem for elem in np.unique(glob.glob(os.path.join(repro_dir,'repro','**'),
                                                       recursive=True))
                  if 'repro_logs' not in elem and elem.count('/')>1]
 
@@ -391,7 +410,6 @@ def repro_dir(directory='auto',repro_suffix='repro',overwrite=True,instru='all',
                 bashproc.readlines()
             except:
                 bashproc.timeout=30
-
 
             for elem_file_repro in file_move_list:
                 file_arbo_pos=[elem for elem in file_list if elem_file_repro==elem.split('/')[-1].replace('.gz','')]
@@ -415,13 +433,17 @@ def repro_dir(directory='auto',repro_suffix='repro',overwrite=True,instru='all',
                     print('Wating for file move...')
                     if not os.path.isfile(os.path.join(file_arbo_dir,elem_file_repro)):
                         time.sleep(5)
+                        bashproc.sendline('echo validx')
+                        bashproc.expect('validx')
+                        time.sleep(0.5)
                         if not os.path.isfile(os.path.join(file_arbo_dir, elem_file_repro)):
                             breakpoint()
                             pass
+
                 time.sleep(0.5)
 
-                bashproc.sendline('echo valid')
-                bashproc.expect('valid')
+                bashproc.sendline('echo validxx')
+                bashproc.expect('validxx')
 
                 print('Replaced file '+elem_file_repro)
 
@@ -450,6 +472,7 @@ def init_anal(directory='auto_repro',anal_dir_suffix='',resolve_filters='open',x
 
     Copies main event lists and other useful files to an analysis directory
 
+    Does not copy resolve event files with "noghf" in their name (assumed obsolete after manual gain correction)
     resolve_filters:
         all or X+Y+Z
             names:
@@ -495,8 +518,9 @@ def init_anal(directory='auto_repro',anal_dir_suffix='',resolve_filters='open',x
 
     dirfiles=glob.glob(os.path.join(directory_use,'**'),recursive=True)
 
-    resolve_evts=[elem for elem in dirfiles if elem.endswith('cl.evt'+('.gz' if gz else '')) and len(elem.split('/'))>2 and
-                  elem.split('/')[-3]=='resolve' and 'nonghf' not in elem]
+    resolve_evts=[elem for elem in dirfiles if elem.endswith('cl.evt'+('.gz' if gz else ''))\
+                  and len(elem.split('/'))>2 and
+                  elem.split('/')[-3]=='resolve' and 'noghf' not in elem]
     print('Found '+str(len(resolve_evts))+' resolve event files')
     print(resolve_evts)
 
@@ -534,7 +558,7 @@ def init_anal(directory='auto_repro',anal_dir_suffix='',resolve_filters='open',x
     os.system('gunzip '+os.path.join(anal_dir,'**'))
 
 def resolve_PS_RTS(directory='auto_repro',anal_dir_suffix='',heasoft_init_alias='heainit',caldb_init_alias='caldbinit',
-                proximity_screenng=True,parallel=False,repro_suffix='repro'):
+                proximity_screening=True,parallel=False,repro_suffix='repro'):
 
     '''
     Filters all available resolve event files in the analysis subdirectory of a directory
@@ -591,7 +615,7 @@ def resolve_PS_RTS(directory='auto_repro',anal_dir_suffix='',heasoft_init_alias=
             bashproc.sendline('ftcopy infile="'+indiv_file.split('/')[-1]+'[EVENTS]'+
                             '[(PI>=600) && (((((RISE_TIME+0.00075*DERIV_MAX)>46)&&((RISE_TIME+0.00075*DERIV_MAX)<58))'+
                             '&&ITYPE<4)||(ITYPE==4))'
-                              +('&&STATUS[4]==b0]' if proximity_screeing else '')
+                              +('&&STATUS[4]==b0]' if proximity_screening else '')
                               +'" outfile='+
                              indiv_file.split('/')[-1].replace('_cl.evt','_cl_RTS.evt')+
                             ' copyall=yes clobber=yes history=yes')
@@ -1533,31 +1557,58 @@ def resolve_BR(directory='auto_repro', anal_dir_suffix='',
 
             bashproc.sendline('exit')
 
-def resolve_counts_BR_Eevol(file,pixels='all',ebin=10,emin=0.,emax=12.):
+def resolve_counts_BR_Eevol(file,pixels='all',ebin=10,emin=0.,emax=12.,grade_use_str='Hp+Mp+Ms+Lp+Ls',
+                            grade_ratio_indiv='Hp',
+                            offset_E={'Hp':0,
+                                      'Mp':0,
+                                      'Ms':0,
+                                      'Lp':0,
+                                      'Ls':0}):
     '''
     Largely adapted from Kai Matsunaga's code
 
         ebin in eV
 
         emin and emax in keV
+
+        grade_use_str defines the list of grades to be used
+
+        grade_ratio_indiv:grade str or '' to skip
+         defines a grade to normalize the other counts to instead of the sum
+
+
     '''
 
     grade_colors={'Hp':'green','Mp':'blue','Ms':'cyan','Lp':'orange', 'Ls':'red'}
 
+    grade_use=grade_use_str.split('+')
     fits_evt= fits.open(file)
 
-    raw_energy=fits_evt[1].data['UPI']
-    raw_energy_mask=(fits_evt[1].data['UPI'] >=emin*1000) & (fits_evt[1].data['UPI'] <emax*1000)
+    offset_E_str='_'.join(np.array(list(offset_E.values()),dtype='str'))
+
 
     if pixels!='all':
-        raw_pixels_mask=fits_evt[1].data['PIXEL'] in rsl_pixel_manip(pixels,mode='pi_list')
+        in_pixel_list=rsl_pixel_manip(pixels, mode='pix_list')
+        raw_pixels_mask=np.array([fits_evt[1].data['PIXEL']==elem for elem in in_pixel_list]).any(0)
     else:
         raw_pixels_mask=True
 
+
+    evt_energy_bin = np.round(fits_evt[1].data['UPI']/ ebin) * ebin
+    evt_grade = fits_evt[1].data['TYPE']
+
+    for i in range(len(evt_grade)):
+        evt_energy_bin[i]+=offset_E[evt_grade[i]]
+
+    raw_energy=evt_energy_bin
+    raw_energy_mask=(evt_energy_bin >=emin*1000) & (evt_energy_bin <emax*1000)
+
     raw_mask=raw_energy_mask & raw_pixels_mask
 
-    evt_energy_bin = np.round(fits_evt[1].data['UPI'][raw_energy_mask] / ebin) * ebin
-    evt_grade = fits_evt[1].data['TYPE'][raw_energy_mask]
+    #updating with the energy cut now that we've offsetted the energies
+    evt_energy_bin = evt_energy_bin[raw_mask]
+    evt_grade = evt_grade[raw_mask]
+
 
     # pandas の DataFrame に変換
     df = pd.DataFrame({
@@ -1574,9 +1625,12 @@ def resolve_counts_BR_Eevol(file,pixels='all',ebin=10,emin=0.,emax=12.):
 
     # 各 grade_type ごとに scatter プロット
     for grade in pivot.columns:
-        ax_counts.scatter(pivot.index/1000, pivot[grade], label=grade, s=1 if grade=='Hp' else 2,color=grade_colors[grade])
-        ax_counts.plot(pivot.index/1000, pivot[grade], label='', zorder=2,color=grade_colors[grade],lw=1,
-                       alpha=0.3)
+        if grade in grade_use:
+            ax_counts.scatter(pivot.index/1000, pivot[grade],
+                              label=grade, s=1 if grade=='Hp' else 2,color=grade_colors[grade])
+            ax_counts.plot(pivot.index/1000, pivot[grade], label='',
+                           zorder=2,color=grade_colors[grade],lw=1,
+                           alpha=0.3)
 
     # ax1.tick_params(axis="x", which='major', direction='in', length=5, width=1)
     # ax1.tick_params(axis="y", which='major', direction='in', length=5, width=1)
@@ -1587,13 +1641,12 @@ def resolve_counts_BR_Eevol(file,pixels='all',ebin=10,emin=0.,emax=12.):
     # ax1.yaxis.set_ticks_position('both')
 
     ax_counts.set_xlabel('Energy (keV)')
-    ax_counts.set_ylabel(str(ebin)+' eV binned Count rate')
+    ax_counts.set_ylabel(str(ebin)+' eV binned Count rate for sum of pixels in '+pixels+' selection')
     # ax1.set_xlim(1000, 12000)
     ax_counts.set_yscale('log')
     ax_counts.set_ylim(1, 1e4)
     ax_counts.set_xlim(emin,emax)
-
-    ax_counts.set_xticks(np.arange(0, 12,0.2), minor=True)
+    ax_counts.set_xticks(np.arange(emin, emax,0.2), minor=True)
 
     ax_counts.legend()
     ax_counts.legend(markerscale=5)
@@ -1601,7 +1654,7 @@ def resolve_counts_BR_Eevol(file,pixels='all',ebin=10,emin=0.,emax=12.):
     # ax1.grid(True)
     # ax1.set_title('Spectra')
 
-    ratio = pivot.div(pivot.sum(axis=1), axis=0)
+    ratio = pivot[grade_use].div(pivot[grade_use].sum(axis=1), axis=0)
 
     fig_branch,ax_branch = plt.subplots(figsize=(12,6))
 
@@ -1611,11 +1664,11 @@ def resolve_counts_BR_Eevol(file,pixels='all',ebin=10,emin=0.,emax=12.):
                        alpha=0.3)
 
     ax_branch.set_xlabel('Energy (keV)')
-    ax_branch.set_ylabel(str(ebin)+' eV binned Event Grade Ratio')
+    ax_branch.set_ylabel(str(ebin)+' eV binned Event Grade Ratio for sum of pixels in '+pixels+' selection')
     # ax1.set_xlim(1000, 12000)
     ax_branch.set_yscale('log')
     ax_branch.set_xlim(emin,emax)
-    ax_branch.set_xticks(np.arange(0, 12,0.2), minor=True)
+    ax_branch.set_xticks(np.arange(emin, emax,0.2), minor=True)
 
     ax_branch.set_ylim(ax_branch.get_ylim()[0],1.1)
     ax_branch.axhline(1,color='grey',lw=1)
@@ -1625,20 +1678,94 @@ def resolve_counts_BR_Eevol(file,pixels='all',ebin=10,emin=0.,emax=12.):
     fig_counts.tight_layout()
     fig_branch.tight_layout()
 
+
     file_extension=file.split('/')[-1][file.split('/')[-1].rfind('.'):]
-    fig_counts.savefig(file.replace(file_extension,'_grade_evol_'+
+    fig_counts.savefig(file.replace(file_extension,'_grade_evol'+
+                                                  '_grade_' + grade_use_str.replace('+', '-') +
                                                   '_emin_'+str(emin).replace('.','p')+
                                                   '_emax_' + str(emax).replace('.', 'p') +
                                                   '_ebin_' + str(ebin).replace('.', 'p') +
-                                                    '.pdf'))
+                                                  '_pxl_'+pixels+
+                                                '_offset_' + offset_E_str +
+                                                '.pdf'))
 
     fig_branch.savefig(file.replace(file_extension,'_grade_ratio_evol'+
+                                                  '_grade_'+grade_use_str.replace('+','-')+
                                                   '_emin_'+str(emin).replace('.','p')+
                                                   '_emax_' + str(emax).replace('.', 'p') +
                                                   '_ebin_' + str(ebin).replace('.', 'p') +
-                                                    '.pdf'))
+                                                  '_pxl_' + pixels +
+                                                '_eoffset_' + offset_E_str +
+                                                '.pdf'))
 
-    breakpoint()
+
+    fig_ratio_branch,ax_ratio_branch = plt.subplots(figsize=(12,6))
+
+    if grade_ratio_indiv!='':
+        ratio_toindiv=pivot[grade_use].div(pivot[grade_ratio_indiv], axis=0)
+
+        for grade in ratio_toindiv.columns:
+            ax_ratio_branch.scatter(ratio_toindiv.index/1000, ratio_toindiv[grade],
+                                    label=grade, s=1 if grade=='Hp' else 2, zorder=2,color=grade_colors[grade])
+            ax_ratio_branch.plot(ratio_toindiv.index/1000, ratio_toindiv[grade],
+                                 label='', zorder=2,color=grade_colors[grade],lw=1,
+                           alpha=0.3)
+
+        ax_ratio_branch.set_xlabel('Energy (keV)')
+        ax_ratio_branch.set_ylabel(str(ebin)+' eV binned Event Grade Ratio rescaled to '+grade_ratio_indiv+' grade'+
+                                   'for sum of pixels in '+pixels+' selection')
+        # ax1.set_xlim(1000, 12000)
+        ax_ratio_branch.set_yscale('log')
+        ax_ratio_branch.set_xlim(emin,emax)
+        ax_ratio_branch.set_xticks(np.arange(emin, emax,0.2), minor=True)
+        # ax_ratio_branch.set_ylim(ax_ratio_branch.get_ylim()[0],1.1)
+        ax_ratio_branch.axhline(1,color='grey',lw=1)
+        ax_ratio_branch.legend()
+        ax_ratio_branch.legend(markerscale=5)
+        fig_ratio_branch.tight_layout()
+
+        fig_ratio_branch.savefig(file.replace(file_extension,'_grade_ratio_evol'+
+                                                  '_grade_'+grade_use_str.replace('+','-')+
+                                                  '_over_'+grade_ratio_indiv+
+                                                  '_emin_'+str(emin).replace('.','p')+
+                                                  '_emax_' + str(emax).replace('.', 'p') +
+                                                  '_ebin_' + str(ebin).replace('.', 'p') +
+                                                  '_pxl_' + pixels +
+                                                  '_eoffset_'+offset_E_str+
+                                                  '.pdf'))
+
+
+    # from scipy.signal import correlate as sc_correlate
+    #
+    #
+    # breakpoint()
+    #
+    # poly_Hp = np.polyfit(pivot['Hp'].index, np.log10(np.array(pivot['Hp'])), deg=5)
+    # poly_Mp = np.polyfit(pivot['Mp'].index, np.log10(np.array(pivot['Mp'])), deg=5)
+    #
+    def poly_args(values, N):
+        test = sum([values[::-1][i] * N**i for i in range(len(values))])
+        return test
+
+    # pivot_Hp_renorm=pivot['Hp']/10**poly_args(poly_Hp,pivot['Hp'].index)
+    # pivot_Mp_renorm=pivot['Mp']/10**poly_args(poly_Mp,pivot['Mp'].index)
+    #
+    # plt.figure()
+    # plt.plot(pivot['Hp'].index,pivot_Hp_renorm)
+    # plt.plot(pivot['Mp'].index,pivot_Mp_renorm)
+    #
+    # #problem in autocorellation function
+    # autocor_vals=sc_correlate(np.array(pivot_Hp_renorm,np.array(pivot_Mp_renorm)))
+    # #need to fix to find the energy offset
+    # #we can probably (I hope) correct this better with the Mn line fitting or other things so let's give up on
+    # #automatically finding the best shift
+    #
+    # plt.figure()
+    # plt.plot(pivot['Hp'].index, np.array(pivot_Hp_renorm))
+    # plt.plot(pivot['Mp'].index + 8, np.array(pivot_Mp_renorm))
+    # #try to do sth when introducing a variable energy offset and see if it works in the ratios
+    pass
+
 
 def xtend_SFP(directory='auto_repro',filtering='flat_top',
               #for flat_top
@@ -2576,14 +2703,15 @@ def create_gtis(directory='auto_repro',anal_dir_suffix='',
             acts as manual but allows for a set of successive intervals that will be combined in a single GTI
 
     split_lc_file:
-        -lightcurve used as the based for the lc splits and gti computation. Can be either a lightcurve path
-        or an event path if split_lc_method is not set to None
+        -lightcurve used as the based for the lc splits and gti computation (relative path from the analysis folder)
+         Can be either a lightcurve path or an event path if split_lc_method is not set to None
 
     split_lc_method:
         if None, split_lc_file is taken as the path of the base lightcurve for the computation
         if an id:
             resolve_allpixel: computes a resolve lightcurve in 2-10 keV with all pixels except the calibration pixel
-                             from the event file given in split_lc_file (assumed to be in the directory's analysis folder)
+                             from the event file given in split_lc_file
+                              (relative path from the analysis folder)
 
     split_auto_binning:
         if split_lc_method is an id, the binning of the lightcurve that will be used as a base for the gti cut
@@ -2921,7 +3049,7 @@ def extract_lc(directory='auto_repro', anal_dir_suffix='',lc_subdir='lc',
                    pixel_str_rsl='branch_filter',grade_str_rsl=None,
                    remove_cal_pxl_resolve=True,
                    gti=None,gti_subdir='gti',
-                   band='1-3+3-6+6-10+0.3-10',
+                   band='2-3+3-6+6-10+2-10',
                    binning='128+1',exposure_rsl=0.6,
                    exposure_xtd=0.0,
                    heasoft_init_alias='heainit', caldb_init_alias='caldbinit',
@@ -3949,7 +4077,7 @@ def extract_arf(directory='auto_repro',anal_dir_suffix='',on_axis_check=None,arf
                 gti=None, gti_subdir='gti',skip_gti_emap=False,
                 # e_low_rsl=None, e_high_rsl=None,
                 e_low_rsl=0.3, e_high_rsl=12.0,
-                #default values in hte pipeline
+                #default values in the pipeline
                 e_low_xtd=0.3, e_high_xtd=15.0,
                 e_low_image=0.0, e_high_image=0.0,
                 numphoton=600000,
@@ -5024,7 +5152,8 @@ def xaxmaarfgen_looper(rtfile,rmf,expmap,weight_dir_suffix='',pixels='all',heaso
         time.sleep(1)
 
 
-def PSF_frac_plot(raytrace_files=[],weight_dirs=[],e_min=2,e_max=10):
+def PSF_frac_plot(raytrace_files=[],weight_dirs=[],e_min=2,e_max=10,figsize=(10,10),
+                  frac_display_percent=False):
 
     '''
     plot the psf fractions of different sources for each pixel in the array, following one or several runs of
@@ -5041,12 +5170,22 @@ def PSF_frac_plot(raytrace_files=[],weight_dirs=[],e_min=2,e_max=10):
             heavily quantized in the arfs, available values are:
             0.3 0.4 0.5 1 2 3 4 5 6 7 8 9 10 11 12
 
+    historically frac_display_percent is used with fig_size=(7,7), so some colorbar keywords are adapted for it
+
     example:
     PSF_frac_plot(raytrace_files=['rsp_MAXIJ1744/xa901002010rsl_p0px1000_cl_RTS_raytracing.evt',
 'rsp_AXJ1745/xa901002010rsl_p0px1000_cl_RTS_raytracing.evt',
 'rsp_diffuse/xa901002010rsl_p0px1000_cl_RTS_raytracing.evt',
 'rsp_SgrAEast/xa901002010rsl_p0px1000_cl_RTS_raytracing.evt'],
 weight_dirs=['arf_weights_MAXIJ1744','arf_weights_AXJ1745','arf_weights_diffuse','arf_weights_SgrAEast'])
+
+or
+
+PSF_frac_plot(raytrace_files=['rsp_MAXIJ1744/xa901002010rsl_p0px1000_cl_RTS_raytracing.evt',
+'rsp_AXJ1745/xa901002010rsl_p0px1000_cl_RTS_raytracing.evt',
+'rsp_diffuse/xa901002010rsl_p0px1000_cl_RTS_raytracing.evt',
+'rsp_SgrAEast/xa901002010rsl_p0px1000_cl_RTS_raytracing.evt'],
+weight_dirs=['arf_weights_MAXIJ1744','arf_weights_AXJ1745','arf_weights_diffuse','arf_weights_SgrAEast'],figsize=(7,7),frac_display_percent=True)
 
     '''
 
@@ -5095,7 +5234,7 @@ weight_dirs=['arf_weights_MAXIJ1744','arf_weights_AXJ1745','arf_weights_diffuse'
 
     rows, cols = 6, 6
 
-    fig, ax = plt.subplots(figsize=(10, 10), layout='constrained')
+    fig, ax = plt.subplots(figsize=figsize, layout='constrained')
     ax.set_xlim(0, cols)
     ax.set_ylim(0, rows)
     ax.set_aspect('equal')
@@ -5174,7 +5313,8 @@ weight_dirs=['arf_weights_MAXIJ1744','arf_weights_AXJ1745','arf_weights_diffuse'
                 # Text position - average of triangle points
                 tx = np.mean([p[0] for p in triangles[key]])
                 ty = np.mean([p[1] for p in triangles[key]])
-                ax.text(tx, ty, f"{values[key]:.3f}", fontsize=8, ha='center', va='center', color='black', alpha=0.8)
+                ax.text(tx, ty,(f"{(values[key]*100).round(1):.1f}" if frac_display_percent else f"{values[key]:.3f}"),
+                        fontsize=8, ha='center', va='center', color='black', alpha=0.8)
 
             # Draw main cell border
             ax.add_patch(plt.Rectangle((x, y), 1, 1,
@@ -5192,32 +5332,52 @@ weight_dirs=['arf_weights_MAXIJ1744','arf_weights_AXJ1745','arf_weights_diffuse'
 
     if not triangle_mode:
         cb_A=fig.colorbar(plt.cm.ScalarMappable(norm=norms['A'], cmap=cmaps['A']),
-                     ax=ax, orientation='horizontal', location='top', fraction=0.046, pad=-0.105,extend='min',
+                     ax=ax, orientation='horizontal', location='top', fraction=0.046,
+                          pad=-0.105 if frac_display_percent else -0.105,extend='min',
                           ticks=[1e-3, 1e-2, 1e-1, sum(A.values())],
-                     label='MAXI J1744-294 ['+str(e_min)+'-'+str(e_max)+'] keV PSF fraction (top)')
+                     label='MAXI J1744-294 ['+str(e_min)+'-'+str(e_max)+'] keV PSF '+
+                           ('percentage' if frac_display_percent else 'fraction')+' (top)')
 
-        cb_A.set_ticklabels([r'10$^{-3}$',r'10$^{-2}$',r'10$^{-1}$','%.3f'%sum(A.values())])
+        if frac_display_percent:
+            cb_A.set_ticklabels([r'0.1',r'1.0',r'10','%.1f'%(sum(A.values())*100)])
+        else:
+            cb_A.set_ticklabels([r'10$^{-3}$',r'10$^{-2}$',r'10$^{-1}$','%.3f'%sum(A.values())])
 
     cb_C=fig.colorbar(plt.cm.ScalarMappable(norm=norms['C'], cmap=cmaps['C']),
-                 ax=ax, orientation='vertical', location='left',fraction=0.0495, pad=0.015,extend='min',
+                 ax=ax, orientation='vertical', location='left',fraction=0.0495,
+                      pad=(0.02 if triangle_mode else 0.03) if frac_display_percent else 0.015,extend='min',
                       ticks=[1e-3, 1e-2, 1e-1, sum(C.values())],anchor=(1.0,0.48),
-                 label="GCXE "+'['+str(e_min)+'-'+str(e_max)+'] keV PSF fraction (left)')
+                 label="GCXE "+'['+str(e_min)+'-'+str(e_max)+'] keV PSF '+
+                           ('percentage' if frac_display_percent else 'fraction')+' (left)')
 
-    cb_C.set_ticklabels([r'10$^{-3}$',r'10$^{-2}$',r'10$^{-1}$','%.3f'%sum(C.values())])
+    if frac_display_percent:
+        cb_C.set_ticklabels([r'0.1', r'1.0', r'10', '%.1f' %(sum(C.values()) * 100)])
+    else:
+        cb_C.set_ticklabels([r'10$^{-3}$', r'10$^{-2}$', r'10$^{-1}$', '%.3f' % sum(C.values())])
 
     cb_B=fig.colorbar(plt.cm.ScalarMappable(norm=norms['B'], cmap=cmaps['B']),
-                 ax=ax, orientation='horizontal', fraction=0.046, pad=-0.102 if triangle_mode else -0.097,extend='min',
+                 ax=ax, orientation='horizontal', fraction=0.046,
+                      pad=(-0.115 if triangle_mode else -0.097) if frac_display_percent else -0.102 if triangle_mode else -0.097,extend='min',
                       ticks=[1e-3, 1e-2, 1e-1, sum(B.values())],
-                 label='AX J1745.6-2901 ['+str(e_min)+'-'+str(e_max)+'] keV PSF fraction (bottom)')  # placed below
+                 label='AX J1745.6-2901 ['+str(e_min)+'-'+str(e_max)+'] keV PSF '+
+                           ('percentage' if frac_display_percent else 'fraction')+' (bottom)')  # placed below
 
-    cb_B.set_ticklabels([r'10$^{-3}$',r'10$^{-2}$',r'10$^{-1}$','%.3f'%sum(B.values())])
+    if frac_display_percent:
+        cb_B.set_ticklabels([r'0.1', r'1.0', r'10', '%.1f' % (sum(B.values()) * 100)])
+    else:
+        cb_B.set_ticklabels([r'10$^{-3}$', r'10$^{-2}$', r'10$^{-1}$', '%.3f' % sum(B.values())])
 
     cb_D=fig.colorbar(plt.cm.ScalarMappable(norm=norms['D'], cmap=cmaps['D']),
-                 ax=ax, orientation='vertical',  fraction=0.0495, pad=-0.01 if triangle_mode else -0.038,extend='min',
+                 ax=ax, orientation='vertical',  fraction=0.0495,
+                      pad=(-0.005 if triangle_mode else -0.038) if frac_display_percent else -0.01 if triangle_mode else -0.038,extend='min',
                       ticks=[1e-3, 1e-2, 1e-1, sum(D.values())],anchor=(1.0,0.48),
-                 label='Sgr A East ['+str(e_min)+'-'+str(e_max)+'] keV PSF fraction (right)')
+                 label='Sgr A East ['+str(e_min)+'-'+str(e_max)+'] keV PSF '+
+                           ('percentage' if frac_display_percent else 'fraction')+' (right)')
 
-    cb_D.set_ticklabels([r'10$^{-3}$',r'10$^{-2}$',r'10$^{-1}$','%.3f'%sum(D.values())])
+    if frac_display_percent:
+        cb_D.set_ticklabels([r'0.1', r'1.0', r'10', '%.1f' % (sum(D.values()) * 100)])
+    else:
+        cb_D.set_ticklabels([r'10$^{-3}$', r'10$^{-2}$', r'10$^{-1}$', '%.3f' % sum(D.values())])
 
     plt.show()
 

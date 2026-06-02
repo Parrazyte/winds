@@ -1,35 +1,71 @@
 #imgs
 from XRISM.XRISM_datared_tools import *
 #
-# mpdaf_plot_img('xa901002010xtd_p031300010_cl_SFP_img_sky_0.3_10.ds',
-#                rad_crop=[124,124],target_name_list=[None,None],crop_coords=[266.424,-29.0094],
-#                target_coords_list=[('17:45:40.50', '-29:00:48.10'),['17:45:35.6500', '-29:01:34.888']],
-#                target_sizes_pix=[1,1],target_colors=['black','white'],
-#                target_names=['MAXI J1744-294','AX J1745.6-2901'],target_names_offset=[5,5],save='auto')
-#
-# mpdaf_plot_img('xa901002010xtd_p031300010_cl_SFP_img_sky_7_10.ds',
-#                rad_crop=[124,124],target_name_list=[None,None],crop_coords=[266.424,-29.0094],
-#                target_coords_list=[('17:45:40.50', '-29:00:48.10'),['17:45:35.6500', '-29:01:34.888']],
-#                target_sizes_pix=[1,1],target_colors=['black','white'],
-#                target_names=['MAXI J1744-294','AX J1745.6-2901'],target_names_offset=[5,5],save='auto')
-#
-# mpdaf_plot_img('xa901002010rsl_p0px1000_cl_RTS_img_sky_2_10.ds',
-#                rad_crop=[124,124],target_name_list=[None,'AXJ1745.6-2901'],crop_coords=[266.424,-29.0094],
-#                target_coords_list=[('17:45:40.476', '-29:00:46.10'),None],
-#                target_sizes_pix=[1,1],target_colors=['black','white'],
-#                target_names=['MAXI J1744-294','auto'],target_names_offset=[5,5],save='auto')
-#
-# mpdaf_plot_img('xa300044010rsl_p0px1000_cl_RTS_img_sky_2_10.ds',
-#                rad_crop=[124,124],target_name_list=[None,'AXJ1745.6-2901'],crop_coords=[266.422,-28.9977],
-#                target_coords_list=[('17:45:40.476', '-29:00:46.10'),None],
-#                target_sizes_pix=[1,1],target_colors=['black','white'],
-#                target_names=['MAXI J1744-294','auto'],target_names_offset=[5,5],save='auto')
-#
-# mpdaf_plot_img('xa901002010rsl_p0px1000_cl_RTS_img_sky_7_10.ds',
-#                rad_crop=[124,124],target_name_list=[None,'AXJ1745.6-2901'],crop_coords=[266.422,-28.9977],
-#                target_coords_list=[('17:45:40.476', '-29:00:46.10'),None],
-#                target_sizes_pix=[1,1],target_colors=['black','white'],
-#                target_names=['MAXI J1744-294','auto'],target_names_offset=[5,5],save='auto')
+mpdaf_plot_img('xa901002010xtd_p031300010_cl_SFP_img_sky_0.3_10.ds',
+               rad_crop=[124,124],target_name_list=[None,None],crop_coords=[266.424,-29.0094],
+               target_coords_list=[('17:45:40.50', '-29:00:48.10'),['17:45:35.6500', '-29:01:34.888']],
+               target_sizes=[1,1],target_size_u=['pixel','pixel'],target_colors=['black','white'],
+               target_disp_names=['MAXI J1744-294','AX J1745.6-2901'],target_disp_names_offset=[5,5],save='auto',figsize=(8.4,7))
+
+mpdaf_plot_img('xa901002010xtd_p031300010_cl_SFP_img_sky_7_10.ds',
+               rad_crop=[124,124],target_name_list=[None,None],crop_coords=[266.424,-29.0094],
+               target_coords_list=[('17:45:40.50', '-29:00:48.10'),['17:45:35.6500', '-29:01:34.888']],
+               target_sizes=[1,1],target_size_u=['pixel','pixel'],target_colors=['black','white'],
+               target_disp_names=['MAXI J1744-294','AX J1745.6-2901'],target_disp_names_offset=[5,5],save='auto',figsize=(8.4,7))
+
+mpdaf_plot_img('xa901002010rsl_p0px1000_cl_RTS_img_sky_2_10.ds',
+               rad_crop=[124,124],target_name_list=[None,'AXJ1745.6-2901'],crop_coords=[266.424,-29.0094],
+               target_coords_list=[('17:45:40.476', '-29:00:46.10'),None],
+               target_sizes=[1,1],target_size_u=['pixel','pixel'],target_colors=['black','white'],
+               target_disp_names=['MAXI J1744-294','auto'],target_disp_names_offset=[5,5],save='auto',figsize=(8.4,7))
+
+mpdaf_plot_img('xa901002010rsl_p0px1000_cl_RTS_img_sky_7_10.ds',
+               rad_crop=[124,124],target_name_list=[None,'AXJ1745.6-2901'],crop_coords=[266.424,-29.0094],
+               target_coords_list=[('17:45:40.476', '-29:00:46.10'),None],
+               target_sizes=[1,1],target_size_u=['pixel','pixel'],target_colors=['black','white'],
+               target_disp_names=['MAXI J1744-294','auto'],target_disp_names_offset=[5,5],save='auto',figsize=(8.4,7))
+
+
+#PV
+mpdaf_plot_img('xa300044010rsl_p0px1000_cl_RTS_img_sky_2_10.ds',
+               rad_crop=[124,124],target_name_list=[None,'AXJ1745.6-2901'],crop_coords=[266.422,-28.9977],
+               target_coords_list=[('17:45:40.476', '-29:00:46.10'),None],
+               target_sizes=[1,1],target_size_u=['pixel','pixel'],target_colors=['black','white'],
+               target_disp_names=['MAXI J1744-294','auto'],target_disp_names_offset=[5,5],save='auto',figsize=(8.4,7))
+
+
+#XTEND PV
+mpdaf_plot_img('xa300044010xtd_p030000010_cl_SFP_img_sky_2_10.ds',
+               crop_coords=['17:45:35.6400', '-29:01:33.888'],
+               target_name_list=[None,None,None],
+rad_crop=[150,150],
+               target_coords_list=[(266.4182250,-29.0133942),(266.3984484,-29.0261490),(266.3786655,-29.0133943)],
+               target_sizes=[8,63,8],target_size_u=['pixel','arcsec','pixel'],target_colors=['cyan','black','white'],
+               target_disp_names=['MAXI J1744 equivalent','AX J1745','background'],target_ls=['-','--','-'],
+               target_disp_names_offset=[1.2,1.2,1.2],save='auto',figsize=(8.4,7))
+
+#XTEND DDT
+mpdaf_plot_img('xa901002010xtd_p031300010_cl_SFP_img_2_10.ds',
+               crop_coords=['17:45:35.6400', '-29:01:33.888'],
+               target_name_list=[None,None,None],
+rad_crop=[150,150],
+               target_coords_list=[(266.4182250,-29.0133942),(266.3984484,-29.0261490),(266.3786655,-29.0133943)],
+               target_sizes=[8,63,8],target_size_u=['pixel','arcsec','pixel'],target_colors=['cyan','black','white'],
+               target_disp_names=['MAXI J1744 equivalent','AX J1745','background'],target_ls=['-','--','-'],
+               target_disp_names_offset=[1.2,1.2,1.2],save='auto',figsize=(8.4,7))
+
+
+#complementary SFP PLOTS
+mpdaf_plot_img('xa901002010xtd_p031300010_cl_img_DET_2p35_2p5.ds',
+               rad_crop=[120,120],target_name_list=[None,None],crop_coords=[1087,728.5],
+               center_crop_u='pixel',rotate=True,img_scale='log',target_coords_list=[[728.5,1087]],
+               target_sizes=[8],target_disp_names='MAXI J1744',target_colors=['red'],figsize=(8.4,8),save='auto')
+
+mpdaf_plot_img('xa901002010xtd_p031300010_cl_img_DET_1p4_1p55.ds',
+               rad_crop=[120,120],target_name_list=[None,None],crop_coords=[1087,728.5],
+               center_crop_u='pixel',rotate=True,target_coords_list=[[728.5,1087]],img_scale='sqrt',
+               target_sizes=[8],target_disp_names='MAXI J1744',target_colors=['red'],figsize=(8.4,8),save='auto')
+
 #
 # #slight offet to avoid pixel offset in xtend
 #
@@ -103,14 +139,7 @@ from XRISM.XRISM_datared_tools import *
 
 ######################
 #region plot XTEND PV PHASE
-# mpdaf_plot_img('xa300044010xtd_p030000010_cl_SFP_img_sky_2_10.ds',
-#                crop_coords=['17:45:35.6400', '-29:01:33.888'],
-#                target_name_list=[None,None,None],
-# rad_crop=[400,400],
-#                target_coords_list=[(266.4182250,-29.0133942),(266.3979339,-29.0264812),(266.4384636,-29.0264833)],
-#                target_sizes_pix=[8,8,8],target_colors=['green','red','pink'],
-#                target_names=['Diffuse emission background for MAXI J1744','AX J1745 source','AXJ1745 background'],
-#                target_names_offset=[1.2,1.2,1.2],save='auto')
+
 
 #lc plot
 #plot_lc(['xa901002010rsl_p0px1000_cl_RTS_pixel_branch_filter_lc_2-10_256s.lc',
@@ -124,11 +153,6 @@ from XRISM.XRISM_datared_tools import *
 # plt.gca().get_figure().get_children()[1].set_title(None)
 # plt.tight_layout()
 
-#Xtend complementary SFP plots
-# mpdaf_plot_img('xa901002010xtd_p031300010_cl_img_DET_2p35_2p5.ds',
-#                rad_crop=[120,120],target_name_list=[None,None],crop_coords=[1087,728.5],
-#                center_crop_u='pixels',rotate=True,img_scale='log',target_coords_list=[[728.5,1087]],
-#                target_sizes_pix=[8],target_names='MAXI J1744',target_colors=['red'])
 
 
 #bigpix pre_lines empirical plot
@@ -665,21 +689,40 @@ plot_comp_ratio([1],[2,3,4,[5,8],[6,7]],6.38,7.13,
 plt.savefig('mod_cie_smallpix_deabs_comp_ratio_adjFeKratio.pdf')
 
 
-#for simu with Kai
 
-os.chdir('/media/parrazyte/crucial_SSD/Observ/BHLMXB/XRISM/MAXIJ1744-294/Kai/for_MC/20260415_bestfit_files_to_Maxime')
-Xset.restore('fullmod_1comp_postrefit_fewunfreeze.xcm')
-Fit.perform()
-# from xspec import AllChains
-#
-#chain started at 18:01
-# AllChains.defLength = 15000
-# AllChains.defBurn = 10000
-# AllChains.defWalkers = 20
 '''
-#test with half the walkers and a constant continuum
-'''
-#
-Chain('full.chain')
+REVISION PSF FIGURES
 
-AllModels.show()
+'''
+
+os.chdir('/media/parrazyte/crucial_SSD/Observ/BHLMXB/XRISM/MAXIJ1744-294/new_anal/901002010_reprocorr/non_corrected/analysis_rspfull_forpix_test')
+PSF_frac_plot(raytrace_files=['rsp_MAXIJ1744/xa901002010rsl_p0px1000_cl_RTS_raytracing.evt',
+'rsp_AXJ1745/xa901002010rsl_p0px1000_cl_RTS_raytracing.evt',
+'rsp_diffuse/xa901002010rsl_p0px1000_cl_RTS_raytracing.evt',
+'rsp_SgrAEast/xa901002010rsl_p0px1000_cl_RTS_raytracing.evt'],
+weight_dirs=['arf_weights_MAXIJ1744','arf_weights_AXJ1745','arf_weights_diffuse','arf_weights_SgrAEast'],
+              figsize=(7,7),frac_display_percent=True)
+
+os.chdir('/media/parrazyte/crucial_SSD/Observ/BHLMXB/XRISM/MAXIJ1744-294/previous_GC_obs/300044010_repro/analysis_full_forpix_1745')
+
+
+
+
+def for_simu_with_Kai():
+
+    os.chdir('/media/parrazyte/crucial_SSD/Observ/BHLMXB/XRISM/MAXIJ1744-294/Kai/for_MC/20260415_bestfit_files_to_Maxime')
+    Xset.restore('fullmod_1comp_postrefit_fewunfreeze.xcm')
+    Fit.perform()
+    # from xspec import AllChains
+    #
+    #chain started at 18:01
+    # AllChains.defLength = 15000
+    # AllChains.defBurn = 10000
+    # AllChains.defWalkers = 20
+    '''
+    #test with half the walkers and a constant continuum
+    '''
+    #
+    Chain('full.chain')
+
+    AllModels.show()

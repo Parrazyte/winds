@@ -57,7 +57,9 @@ def mpdaf_plot_img(sky_img_path, rad_crop=[200, 200], rad_crop_u='pixel', center
                    target_ls='auto',
                    target_disp_names=['auto'],
                    target_disp_names_offset=[1.1],
-                   title='', save=False, rotate=False, img_scale='log'):
+                   title='', save=False, rotate=False, img_scale='log',
+                   int_ticks_cb=True,
+                   figsize=(12, 10)):
     '''
     Plot an mpdaf image in sky coordinates, with a given cropping if requested,
         and additional regions highlighting sources if requested.
@@ -134,7 +136,7 @@ def mpdaf_plot_img(sky_img_path, rad_crop=[200, 200], rad_crop_u='pixel', center
     # plotting and saving imgcrop
 
     fig_catal_crop, ax_catal_crop = plt.subplots(1, 1, subplot_kw={'projection': imgcrop_src.wcs.wcs},
-                                                 figsize=(12, 10))
+                                                 figsize=figsize)
     circle_rad_pos = []
     target_circles = []
 
@@ -190,13 +192,18 @@ def mpdaf_plot_img(sky_img_path, rad_crop=[200, 200], rad_crop_u='pixel', center
     if title != '':
         ax_catal_crop.set_title(title)
     catal_plot = imgcrop_src.plot(cmap='plasma', scale=img_scale)
-    plt.colorbar(catal_plot, location='bottom', fraction=0.046, pad=0.04)
+    cb=plt.colorbar(catal_plot, location='bottom', fraction=0.046, pad=0.04)
     for elem_circle in target_circles:
         ax_catal_crop.add_patch(elem_circle)
 
     # updating the colorbar
     ax_cb = ax_catal_crop.get_figure().get_children()[-1]
+
+    # if img_scale=='log':
     ax_cb.set_xticks(np.logspace(0, np.log10(imgcrop_src.data.max()), 8))
+
+    if int_ticks_cb:
+        ax_cb.set_xticks(np.unique(ax_cb.get_xticks().round().astype('int')))
 
     # adding a top xaxis label since the cmap is sometimes hiding the bottom one
     ax_catal_crop.tick_params(

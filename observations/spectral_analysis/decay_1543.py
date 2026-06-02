@@ -483,3 +483,43 @@ def fake_faint_softmid_pion2e23():
     settings=FakeitSettings(response='rsl_Hp_L_2025.rmf',arf='rsl_pntsrc_GVC_2025.arf',
                             exposure=1e5,fileName='test_100k_softfmid_pion_2p5e23_adaptedlogxi.pi')
     AllData.fakeit(settings=settings,applyStats=True)
+
+
+def proc_for_lcanal():
+    '''
+    splitting the global WT lightcurve to see if there are dips
+
+    note: I don't know if these are net or raw counts
+    '''
+    os.chdir('/media/parrazyte/crucial_SSD/Observ/BHLMXB/Swift/MAXIJ1543-564/archive/lc/curve')
+    lc_tot = pd.read_csv('WTCURVE.qdp', skiprows=2, sep='\t')
+
+    #separating periods with more than 100 seconds
+    indiv_seps=[i for i in range(len(lc_tot)-1) if lc_tot['Time'][i+1]-lc_tot['Time'][i]>100]
+    indiv_seps=[-1]+indiv_seps+[len(lc_tot)-2]
+
+    plt.ioff()
+
+    #saving and plotting each curve
+    for i_sep in range(len(indiv_seps)-1):
+        inter_infos=lc_tot[['Time','Rate','Rateneg','Ratepos','BGrate','BGerr']][indiv_seps[i_sep]+1:indiv_seps[i_sep+1]+1]
+
+        #saving the curve
+        inter_infos.to_csv('lc_tstart_'+str(inter_infos['Time'].iloc[0]).replace('.','p')+'.lc')
+
+        #plotting the curve
+        plt.figure()
+        plt.xlabel('T-'+str(inter_infos['Time'].iloc[0])+' (s)')
+        plt.ylabel('counts')
+        plt.suptitle('MAXI J1543-564 Swift lightcurve')
+        plt.errorbar(inter_infos['Time']-inter_infos['Time'].iloc[0], inter_infos['Rate'],
+                     xerr=5, yerr=abs(np.array(inter_infos[['Rateneg', 'Rateneg']]).T),color='blue',label='source')
+
+        plt.errorbar(inter_infos['Time']-inter_infos['Time'].iloc[0], inter_infos['BGrate'],
+                     xerr=5, yerr=abs(np.array(inter_infos[['BGerr']]).T),color='grey',label='background')
+
+        plt.legend()
+        plt.savefig('lc_tstart_'+str(inter_infos['Time'].iloc[0]).replace('.','p')+'_screen.pdf')
+        plt.savefig('lc_tstart_'+str(inter_infos['Time'].iloc[0]).replace('.','p')+'_screen.png')
+
+    plt.ion()

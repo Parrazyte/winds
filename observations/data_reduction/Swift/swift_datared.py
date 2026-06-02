@@ -188,7 +188,7 @@ def regroup_swift_spectra_OT(extension='source.pi',group='opt',skip_started=True
             if group=='opt':
 
                 ft_group(specfile,grptype='opt',heas_proc=heas_proc)
-                time.sleep(5)
+                time.sleep(1)
         
         heas_proc.sendline('exit')
 

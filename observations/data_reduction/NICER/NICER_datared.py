@@ -102,7 +102,7 @@ ap.add_argument("-dir", "--startdir", nargs='?', help="starting directory. Curre
 ap.add_argument("-l","--local",nargs=1,help='Launch actions directly in the current directory instead',
                 default=False,type=bool)
 ap.add_argument('-catch','--catch_errors',help='Catch errors while running the data reduction and continue',
-                default=False,type=bool)
+                default=True,type=bool)
 
 #1 for no parallelization
 ap.add_argument('-parallel',help='number of processors for parallel directories',
@@ -110,7 +110,7 @@ ap.add_argument('-parallel',help='number of processors for parallel directories'
 
 #global choices
 ap.add_argument("-a","--action",nargs=1,help='List which action(s) to run,separated by comas',
-                default ='l,g,m,ml', type = str)
+                default ='1', type = str)
 
 #default: fc,1,gti,fs,l,g,m,ml,c
 
@@ -125,7 +125,7 @@ ap.add_argument('-folder_cont',nargs=1,help='skips all but the last 2 directorie
                 default=False,type=bool)
 
 ap.add_argument('-invert_subdirs',nargs=1,help='start the analysis from the subdirectories in reverse order',
-                default=True,type=bool)
+                default=False,type=bool)
 #note : we keep the previous 2 directories because bug or breaks can start actions on a directory following the initially stopped one
 
 #action specific overwrite
@@ -182,7 +182,7 @@ ap.add_argument('-flare_factor',nargs=1,help='minimum flare multiplication facto
 
 #for peak. 10 for bright sources, 2 for small sources
 ap.add_argument('-peak_score_thresh',nargs=1,help='topological peak score treshold for peak exclusion',
-                default=2.,type=float)
+                default=10.,type=float)
 
 #for overdyn, in s since based on the mkf
 ap.add_argument('-erodedilate_overdyn',nargs=1,help='Erodes increasingly more gtis around the overshoot excluded intervals',
@@ -248,7 +248,7 @@ ap.add_argument('-int_split_bin',nargs=1,help='binning of the light curve used f
 
 ap.add_argument('-lc_bin_list',nargs=1,
                 help='A list of binnings with which to generate all lightcurces/HR evolutions (in s)',
-                default=[1.,60.],type=list)
+                default=[0.005,60.],type=list)
 #note: also defines the binning used for the gti definition
 
 # lc_bands_list_det=['1-2','2-3','3-4','4-5','5-6','6-7','7-8','8-9','9-10']
@@ -306,8 +306,9 @@ clean
 '''
 
 #useful for HDDs
-ap.add_argument('-clean_wait_value',help='waiting time after cleaning a folder',default=10,type=float)
+ap.add_argument('-clean_wait_value',help='waiting time after cleaning a folder',default=2,type=float)
 
+ap.add_argument('-clean_cleanevt_file',help='clean clean evt file in normal clean mode',default=True,type=bool)
 args=ap.parse_args()
 
 load_functions=args.load_functions
@@ -380,6 +381,7 @@ caldb_init_alias=args.caldb_init_alias
 sas_init_alias=args.sas_init_alias
 alias_3C50=args.alias_3C50
 clean_wait_value=args.clean_wait_value
+clean_cleanevt_file=args.clean_cleanevt_file
 
 day_mode=args.day_mode
 
@@ -2524,43 +2526,46 @@ def extract_lc(directory,binning_list=[1],bands='3-12',HR='6-10/3-6',overwrite=T
                     if os.path.isfile(elem_file):
                         os.remove(elem_file)
 
-                #and plotting it
-                fig_lc,ax_lc=plt.subplots(1,figsize=(10,8))
+                if binning>=1:
+                    #and plotting it
+                    fig_lc,ax_lc=plt.subplots(1,figsize=(10,8))
 
-                plt.errorbar(data_lc_arr[i_lc]['TIME'],data_lc_arr[i_lc]['RATE'],xerr=float(binning)/2,yerr=data_lc_arr[i_lc]['ERROR'],ls='-',lw=1,color='grey',ecolor='blue')
+                    plt.errorbar(data_lc_arr[i_lc]['TIME'],data_lc_arr[i_lc]['RATE'],xerr=float(binning)/2,yerr=data_lc_arr[i_lc]['ERROR'],ls='-',lw=1,color='grey',ecolor='blue')
 
-                plt.suptitle('NICER lightcurve for observation '+directory+gti_suffix+' in the '+indiv_band+' keV band')
+                    plt.suptitle('NICER lightcurve for observation '+directory+gti_suffix+' in the '+indiv_band+' keV band')
 
-                plt.xlabel('Time (s) after '+time_zero_arr[i_lc])
-                plt.ylabel('RATE (counts/s)')
+                    plt.xlabel('Time (s) after '+time_zero_arr[i_lc])
+                    plt.ylabel('RATE (counts/s)')
 
-                plt.tight_layout()
-                plt.savefig('./'+directory+'/'+directory+gti_suffix+'_lc_'+indiv_band+'_bin_'+str(binning)+'.png')
-                plt.close()
+                    plt.tight_layout()
+                    plt.savefig('./'+directory+'/'+directory+gti_suffix+'_lc_'+indiv_band+'_bin_'+str(binning)+'.png')
+                    plt.close()
 
             if HR is not None:
                 if time_zero_arr[id_band_num_HR]!=time_zero_arr[id_band_den_HR]:
                     print('NICER_datared error: both lightcurve for the HR have different zero values')
                     raise ValueError
 
-                #creating the HR plot
-                fig_hr,ax_hr=plt.subplots(1,figsize=(10,8))
+                if binning>=1:
 
-                hr_vals=data_lc_arr[id_band_num_HR]['RATE']/data_lc_arr[id_band_den_HR]['RATE']
+                    #creating the HR plot
+                    fig_hr,ax_hr=plt.subplots(1,figsize=(10,8))
 
-                hr_err=hr_vals*(((data_lc_arr[id_band_num_HR]['ERROR']/data_lc_arr[id_band_num_HR]['RATE'])**2+
-                                (data_lc_arr[id_band_den_HR]['ERROR']/data_lc_arr[id_band_den_HR]['RATE'])**2)**(1/2))
+                    hr_vals=data_lc_arr[id_band_num_HR]['RATE']/data_lc_arr[id_band_den_HR]['RATE']
 
-                plt.errorbar(data_lc_arr[id_band_num_HR]['TIME'],hr_vals,xerr=float(binning)/2,yerr=hr_err,ls='-',lw=1,color='grey',ecolor='blue')
+                    hr_err=hr_vals*(((data_lc_arr[id_band_num_HR]['ERROR']/data_lc_arr[id_band_num_HR]['RATE'])**2+
+                                    (data_lc_arr[id_band_den_HR]['ERROR']/data_lc_arr[id_band_den_HR]['RATE'])**2)**(1/2))
 
-                plt.suptitle('NICER HR evolution for observation '+directory+gti_suffix+' in the '+HR+' keV band')
+                    plt.errorbar(data_lc_arr[id_band_num_HR]['TIME'],hr_vals,xerr=float(binning)/2,yerr=hr_err,ls='-',lw=1,color='grey',ecolor='blue')
 
-                plt.xlabel('Time (s) after '+time_zero_arr[id_band_num_HR])
-                plt.ylabel('Hardness Ratio ('+HR+' keV)')
+                    plt.suptitle('NICER HR evolution for observation '+directory+gti_suffix+' in the '+HR+' keV band')
 
-                plt.tight_layout()
-                plt.savefig('./'+directory+'/'+directory+gti_suffix+'_hr_'+'_'.join(HR.split('/'))+'_bin_'+str(binning)+'.png')
-                plt.close()
+                    plt.xlabel('Time (s) after '+time_zero_arr[id_band_num_HR])
+                    plt.ylabel('Hardness Ratio ('+HR+' keV)')
+
+                    plt.tight_layout()
+                    plt.savefig('./'+directory+'/'+directory+gti_suffix+'_hr_'+'_'.join(HR.split('/'))+'_bin_'+str(binning)+'.png')
+                    plt.close()
 
         if len(gti_files)==0:
             print('no gti files detected. Computing lightcurve products from the entire obsid...')
@@ -2996,7 +3001,7 @@ def batch_mover_timing(directory,thread=None,parallel=False):
     if thread is not None:
         thread.set()
 
-def clean_products(directory,clean_wait_value=2,thread=None):
+def clean_products(directory,clean_wait_value=2,thread=None,clean_cleanevt_file=False):
 
     '''
 
@@ -3008,8 +3013,9 @@ def clean_products(directory,clean_wait_value=2,thread=None):
     '''
 
     product_files=[elem for elem in glob.glob(os.path.join(directory,'xti/event_cl/**'),recursive=True)\
-                   if not elem.endswith('/') and not elem.endswith('nimaketime.gti') and not elem.endswith('mpu7_cl.evt')\
-                   and not elem.endswith('mpu7_cl_day.evt')]
+                   if not elem.endswith('/') and not elem.endswith('nimaketime.gti')
+                   and (1 if clean_cleanevt_file else not elem.endswith('mpu7_cl.evt'))
+                   and (1 if clean_cleanevt_file else not elem.endswith('mpu7_cl_day.evt'))]
 
     print('Cleaning '+str(len(product_files))+' elements in directory '+os.path.join(directory,'xti/event_cl/'))
 
@@ -3306,7 +3312,7 @@ def run_actions(obs_dir,action_list,parallel=False):
                 batch_mover_timing_thread.wait()
 
             if curr_action == 'c':
-                clean_products(dirname, clean_wait_value=clean_wait_value, thread=clean_products_thread)
+                clean_products(dirname, clean_wait_value=clean_wait_value,clean_cleanevt_file=clean_cleanevt_file, thread=clean_products_thread)
                 clean_products_thread.wait()
 
             if curr_action == 'fc':

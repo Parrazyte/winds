@@ -54,8 +54,8 @@ else:
     model_dir="/home/parrazyte/Soft/Xspec/Models"
 
 # custom model loads
-if not streamlit_mode and model_dir!=None:
-    AllModels.lmod('relxill',dirPath=model_dir+'/relxill/2.6')
+if not streamlit_mode and (1 or model_dir!=None):
+    AllModels.lmod('relxill',dirPath=model_dir+'/relxill/2.9')
 
     # AllModels.lmod('fullkerr',dirPath=model_dir+'/fullkerr')
     # #swiftJ1658 dust scattering halo model from Jin2019
@@ -376,12 +376,18 @@ def obs_loader(grp_str,i_grp=1,mode='swift_mela',save_baseload=True):
         Xset.save('baseload.xcm')
 
 def set_ener(mode='thcomp',xrism=False):
-    if mode=='thcomp':
 
+    if mode=='thcomp':
         if xrism:
             AllModels.setEnergies('0.01 0.1 1000 log, 10. 19800 lin, 1000. 1000 log')
         else:
             AllModels.setEnergies('0.01 1000. 3000 log')
+
+    if mode=='OIR':
+        AllModels.setEnergies('0.0001 0.1 100000 log, 10. 19800 lin, 1000. 1000 log')
+
+    if mode=='log_highres':
+        AllModels.setEnergies('0.01 0.1 1000 log, 10. 100000 log, 1000. 1000 log')
 
 
 def make_ls(low_e,high_e):
@@ -909,6 +915,14 @@ def save_broad_SED(path=None,e_low=0.1,e_high=100,nbins=1e3,retain_session=False
         return save_arr
 
 def save_mo_Ryota(outfile,factor=1):
+    '''
+    renorm for NA paper:
+
+    AllModels.calcFlux("0.0136 13.6")
+    Model Flux  0.056097 photons (1.0948e-10 ergs/cm^2/s) range (0.013600 - 13.600 keV)
+
+     1.26e38*8*0.1/1.0948e-10
+    '''
 
     Plot.xAxis='keV'
     time.sleep(0.1)
@@ -6566,11 +6580,13 @@ def format_ew():
     return np.array([AllData(1).eqwidth[0],AllData(1).eqwidth[0]-AllData(1).eqwidth[1], AllData(1).eqwidth[2]-AllData(1).eqwidth[1]])*1000
 
 
-def xPlot(types,axes_input=None,plot_saves_input=None,plot_arg=None,includedlist=None,group_names='auto',
+def xPlot(types,axes_input=None,plot_saves_input=None,plot_arg=None,includedlist=None,
+          group_names='auto',
           hide_ticks=True,
           secondary_x=True,legend_position=None,xlims=None,ylims=None,label_bg=False,
           mult_factors=None,label_indivcomps=False,
           no_name_data='auto',force_ylog_ratio=False,legend_ncols=None,
+          force_xlin=False,force_ylin=False,
           data_colors=None,model_colors=None,model_ls=None,addcomp_colors=None,addcomp_ls=None,
           data_zorders=None,
           data_alpha=1,auto_figsize=(10,8),auto_panel_hratio=None,
@@ -6581,7 +6597,8 @@ def xPlot(types,axes_input=None,plot_saves_input=None,plot_arg=None,includedlist
           skip_main_legend=False,
           addcomp_rebin=None,
           elinewidth_data=0.75,
-          return_secondary_top=False):
+          return_secondary_top=False,
+          minorticks_secax='auto'):
 
     '''
     Replot xspec plots using matplotib. Accepts custom types:
@@ -6761,7 +6778,12 @@ def xPlot(types,axes_input=None,plot_saves_input=None,plot_arg=None,includedlist
                 #putting a wavelength copy of the x axis at the top
                 curr_ax_second=curr_ax.secondary_xaxis('top',functions=(ang2kev,ang2kev))
                 curr_ax_second.set_xlabel(r' Wavelength $(\AA)$' if Plot.xAxis=='keV' else 'keV')
-                curr_ax_second.minorticks_on()
+
+                if type(minorticks_secax)==bool and minorticks_secax:
+                    curr_ax_second.minorticks_on()
+                elif minorticks_secax=='auto':
+                        if curr_ax.get_xlim()[0]>1:
+                            curr_ax_second.minorticks_on()
 
         #hiding the ticks values for the lower x axis if it's not in the last plot or if we're in a provided subplot
         if hide_ticks and (i_ax!=len(types_split)-1 or axes_input is not None):
@@ -6780,9 +6802,9 @@ def xPlot(types,axes_input=None,plot_saves_input=None,plot_arg=None,includedlist
 
         curr_ax.set_xlabel(curr_save.labels[0])
         curr_ax.set_ylabel(curr_save.labels[1])
-        if curr_save.xLog or plot_type.endswith('mo') :
+        if curr_save.xLog or plot_type.endswith('mo') and not force_xlin :
             curr_ax.set_xscale('log')
-        if curr_save.yLog or (plot_type=='ratio' and force_ylog_ratio) or plot_type.endswith('mo') :
+        if curr_save.yLog or (plot_type=='ratio' and force_ylog_ratio) or plot_type.endswith('mo') and not force_ylin :
             curr_ax.set_yscale('log')
 
         #this needs to be performed independantly of how many groups there are
@@ -6851,9 +6873,9 @@ def xPlot(types,axes_input=None,plot_saves_input=None,plot_arg=None,includedlist
             if curr_save.y[id_grp] is not None:
                 #plotting each data group
 
-                curr_ax.errorbar(curr_save.x[id_grp],curr_save.y[id_grp]*(1 if 'data' not in plot_type else mult_factor_grp),
+                curr_ax.errorbar(curr_save.x[id_grp],curr_save.y[id_grp]*(1 if ('data' not in plot_type and 'uf' not in plot_type and 'ratio' not in plot_type) else mult_factor_grp),
                                  xerr=curr_save.xErr[id_grp],
-                                 yerr=curr_save.yErr[id_grp].clip(0)*(1 if 'data' not in plot_type else mult_factor_grp),
+                                 yerr=curr_save.yErr[id_grp].clip(0)*(1 if ('data' not in plot_type and 'uf' not in plot_type and 'ratio' not in plot_type) else mult_factor_grp),
                                  color=xcolors_grp[id_grp] if data_colors is None else data_colors[id_grp],
                                  zorder=None if data_zorders is None else data_zorders[id_grp],
                                  linestyle='None',
@@ -6891,10 +6913,11 @@ def xPlot(types,axes_input=None,plot_saves_input=None,plot_arg=None,includedlist
                 else:
                     model_ls_group='-'
 
-                curr_ax.plot(curr_save.x[id_grp],curr_save.model[id_grp]*(1 if 'data' not in plot_type else mult_factor_grp),
+                curr_ax.plot(curr_save.x[id_grp],curr_save.model[id_grp]*(1 if ('data' not in plot_type and 'uf' not in plot_type and 'ratio' not in plot_type) else mult_factor_grp),
                              color=xcolors_grp[id_grp] if model_color_grp is None else model_color_grp,
                              ls=model_ls_group,alpha=0.5,
-                             label='' if group_names=='nolabel' else '')
+                             label='' if 'mo' not in plot_type else ('' if group_names=='nolabel' else ('' if legend_addcomp_groups else\
+                            ('' if group_names=='nolabel' or (no_name_data=='auto' and i_ax!=len(types_split)-1) else grp_name))))
 
 
             if 'data' in plot_type:
@@ -7175,7 +7198,8 @@ def plot_comp_ratio(cont_addcomps,other_addcomps,ener_low,ener_high,
 
             # generally better
         set_ener('thcomp', xrism=True)
-
+    else:
+        single_man_xcm=True
 
     other_addcomps_vals=[]
 

@@ -97,6 +97,8 @@ lines_std={         #don't change the first 8, there are explicit calls in the c
 
                 'SKa16p1abs': r'SXVI K$\alpha$ (P$^{1/2}$)',
                 'SKa16p3abs': r'SXVI K$\alpha$ (P$^{3/2}$)',
+                'SiKa14p1abs': r'SiXIV K$\alpha$ (P$^{1/2}$)',
+                'SiKa14p3abs': r'SiXIV K$\alpha$ (P$^{3/2}$)',
 }
 
 lines_std_names=list(lines_std.keys())
@@ -210,6 +212,9 @@ lines_e_dict={
                 'CrKa23Xabs': [5.6651, -3000, 3000],
                 'CrKa23Wabs': [5.6821, -3000, 3000],
 
+                'SiKa14p1abs': [2.004323908 , -3000, 3000],
+                'SiKa14p3abs': [2.006078789, -3000, 3000],
+
                 'SKa16p1abs': [2.6197, -3000, 3000],
                 'SKa16p3abs': [2.6227, -3000, 3000],
 
@@ -314,6 +319,8 @@ lines_w_dict={
 
             'SKa16p1abs': [1e-3, 0., 0.05],
             'SKa16p3abs': [1e-3, 0., 0.05],
+            'SiKa14p1abs': [2e-4, 0., 0.05],
+            'SiKa14p3abs': [2e-4, 0., 0.05],
 
 }
 

@@ -27,7 +27,10 @@ rmf_abv = {'XRISM_Hp_AO2': '/media/'+username+'/crucial_SSD/Observ/BHLMXB/XRISM/
            'XRISM_Mp': '/media/'+username+'/crucial_SSD/Observ/highres/XRISM_responses/rsl_Mp_6eV.rmf',
            'XRISM_Lp': '/media/'+username+'/crucial_SSD/Observ/highres/XRISM_responses/rsl_Lp_18eV.rmf',
         'PN_Timing': '/media/'+username+'/crucial_SSD/Observ/highres/linedet_compa/AO2/resp_XMM/Timing/0670672901_pn_S003_Timing_auto.rmf',
-        'heg_graded_-1':'/media/'+username+'/crucial_SSD/Observ/highres/linedet_compa/AO2/resp_Chandra/graded/13716_heg_-1.rmf',
+        'heg_AO28_1':'/media/'+username+'/crucial_SSD/Observ/highres/XRISM_responses/aciss_heg1_cy28.grmf',
+        'heg_AO28_-1': '/media/' + username + '/crucial_SSD/Observ/highres/XRISM_responses/aciss_heg-1_cy28.grmf',
+
+           'heg_graded_-1':'/media/'+username+'/crucial_SSD/Observ/highres/linedet_compa/AO2/resp_Chandra/graded/13716_heg_-1.rmf',
          'heg_graded_1':'/media/'+username+'/crucial_SSD/Observ/highres/linedet_compa/AO2/resp_Chandra/graded/13716_heg_1.rmf',
            'RGS_r1o1':'/media/'+username+'/crucial_SSD/Observ/highres/linedet_compa/RGS_AO25/R1o1.rmf',
             'RGS_r2o1':'/media/'+username+'/crucial_SSD/Observ/highres/linedet_compa/RGS_AO25/R2o1.rmf',
@@ -44,6 +47,9 @@ arf_abv = {'XRISM_pointsource_GVclosed_AO2':'/media/'+username+'/crucial_SSD/Obs
            'XRISM_pointsource_GVclosed_AO1': '/media/'+username+'/crucial_SSD/Observ/highres/XRISM_responses/rsl_pointsource_GVclosed.arf',
            'XRISM_pointsource_off_GVclosed': '/media/'+username+'/crucial_SSD/Observ/highres/XRISM_responses/rsl_pointsource_off_GVclosed.arf',
            'PN_Timing': '/media/'+username+'/crucial_SSD/Observ/highres/linedet_compa/AO2/resp_XMM/Timing/0670672901_pn_S003_Timing_auto.arf',
+           'heg_AO28_1': '/media/' + username + '/crucial_SSD/Observ/highres/XRISM_responses/aciss_heg1_cy28.garf',
+           'heg_AO28_-1': '/media/' + username + '/crucial_SSD/Observ/highres/XRISM_responses/aciss_heg-1_cy28.garf',
+
            'heg_graded_-1': '/media/'+username+'/crucial_SSD/Observ/highres/linedet_compa/AO2/resp_Chandra/graded/13716_heg_-1.arf',
            'heg_graded_1': '/media/'+username+'/crucial_SSD/Observ/highres/linedet_compa/AO2/resp_Chandra/graded/13716_heg_1.arf',
            'SQUDE_indev':'/media/'+username+'/crucial_SSD/Observ/highres/linedet_compa/SQUDE/SQUDE_rsp_v1.1.1.arf',

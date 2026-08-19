@@ -99,11 +99,11 @@ ap.add_argument("-dir", "--startdir", nargs='?', help="starting directory. Curre
 ap.add_argument("-l", "--local", nargs=1, help='Launch actions directly in the current directory instead',
                 default=False, type=bool)
 ap.add_argument('-catch', '--catch_errors', help='Catch errors while running the data reduction and continue',
-                default=False, type=bool)
+                default=True, type=bool)
 
 # global choices
 ap.add_argument("-a", "--action", nargs='?', help='Give which action(s) to proceed,separated by comas.',
-                default='build,reg,lc,sp,g,m', type=str)
+                default='m', type=str)
 # default: build,reg,lc,sp,g,m
 
 ap.add_argument("-over", nargs=1, help='overwrite computed tasks (i.e. with products in the batch, or merge directory\
@@ -115,7 +115,7 @@ ap.add_argument('-cameras',nargs=1,help='which cameras to restrict the analysis 
 ap.add_argument('-bright_check',nargs=1,help='recompute the entire set of actions in bright mode if the source lightcurve'+
                                              'is above the standard count limits',default=False,type=bool)
 
-ap.add_argument('-force_bright',help="Force bright mode for the tasks from the get go",default=False)
+ap.add_argument('-force_bright',help="Force bright mode for the tasks from the get go",default=True)
 
 # directory level overwrite (not active in local)
 ap.add_argument('-folder_over', nargs=1, help='relaunch action through folders with completed analysis',
@@ -160,10 +160,10 @@ ap.add_argument('-bg_area_factor',nargs=1,
 #note: value of 0 to deactivate
 ap.add_argument('-bg_rm_src_sigmas',nargs=1,
                 help='remove N sigmas of the source PSF sigmas in the background image before treating the bg image',
-                default=10.,type=float)
+                default=12.,type=float)
 
 ap.add_argument('-bg_distrib_cut',nargs=1,help='Distribution portion of the bg camera to remove',
-                default=0.9995,type=float)
+                default=0.95,type=float)
 
 ap.add_argument('-bigger_fit', nargs=1,
                 help='allows to incease the crop window used before the gaussian fit for bright sources',
@@ -206,7 +206,7 @@ ap.add_argument('-man_bg_reg_FPMB',nargs=1,
 
 #note: this binning will also be used to CREATE the gtis
 ap.add_argument('-lc_bin_std', nargs=1, help='Gives the binning of all standard lightcurces/HR evolutions (in s)',
-                default='64',type=str)
+                default='64,0.002',type=str)
 
 ap.add_argument('-lc_bin_gti', nargs=1, help='Gives the binning of all lightcurves used for gti cutting (in s)',
                 default='1',type=str)
@@ -936,7 +936,7 @@ def extract_reg(directory, cams='all', use_file_target=False,
             CCD_data_line = []
             for i in range(np.size(CCD_data_cut, 0)):
                 for j in range(np.size(CCD_data_cut, 1)):
-                    if not CCD_mask[i][j]:
+                    if not CCD_mask[i][j] or CCD_img_obj.mask[i][j]:
                         CCD_data_cut[i][j] = np.nan
                     else:
                         CCD_data_line.append(CCD_data_cut[i][j])
@@ -972,7 +972,7 @@ def extract_reg(directory, cams='all', use_file_target=False,
                     mpdaf_wcs=src_mpdaf_WCS,
                     directory=filedir,
                     title='Source image background mask remaining after %.2f'%(100*bg_distrib_cut)+
-                          '% cts) counts removal', imgtype='ccd_crop_mask')
+                          '% counts removal', imgtype='ccd_crop_mask')
 
             bg_max_pix = reg_optimiser(CCD_bg)
 
@@ -1504,36 +1504,38 @@ def extract_lc_single(spawn, directory, binning, instru, steminput, src_reg, bg_
 
     # plotting the source and bg lightcurves together
 
-    fig_lc, ax_lc = plt.subplots(1, figsize=(10, 8))
+    if float(binning) >= 1:
 
-    if gti is None:
-        ax_lc.set_yscale('symlog', linthresh=0.1, linscale=0.1)
-        ax_lc.yaxis.set_minor_locator(MinorSymLogLocator(linthresh=0.1))
+        fig_lc, ax_lc = plt.subplots(1, figsize=(10, 8))
 
-        #plotting the background
-        ax_lc.errorbar(data_lc_bg['TIME'], data_lc_bg['RATE']*backscale, xerr=float(binning),
-                 yerr=data_lc_bg['ERROR']*backscale, ls='-', lw=1, color='grey', ecolor='brown', label='scaled background')
+        if gti is None:
+            ax_lc.set_yscale('symlog', linthresh=0.1, linscale=0.1)
+            ax_lc.yaxis.set_minor_locator(MinorSymLogLocator(linthresh=0.1))
 
-
-    ax_lc.errorbar(data_lc_src['TIME'], data_lc_src['RATE'], xerr=float(binning),
-                 yerr=data_lc_src['ERROR'], ls='-', lw=1, color='grey', ecolor='blue', label='raw source')
+            #plotting the background
+            ax_lc.errorbar(data_lc_bg['TIME'], data_lc_bg['RATE']*backscale, xerr=float(binning),
+                     yerr=data_lc_bg['ERROR']*backscale, ls='-', lw=1, color='grey', ecolor='brown', label='scaled background')
 
 
-    ax_lc.axhline(100,0,1,color='red',ls='-',lw=1,label='bright obs threshold')
+        ax_lc.errorbar(data_lc_src['TIME'], data_lc_src['RATE'], xerr=float(binning),
+                     yerr=data_lc_src['ERROR'], ls='-', lw=1, color='grey', ecolor='blue', label='raw source')
 
-    plt.suptitle('NuSTAR ' + instru + ' lightcurve for observation ' + steminput + id_orbit_str+
-                 ' in the ' + e_low + '-' + e_high + ' keV band with ' + binning + ' s binning')
 
-    ax_lc.set_xlabel('Time (s) after ' + time_zero_str)
-    ax_lc.set_ylabel('RATE (counts/s)')
+        ax_lc.axhline(100,0,1,color='red',ls='-',lw=1,label='bright obs threshold')
 
-    ax_lc.set_ylim(0,ax_lc.get_ylim()[1])
+        plt.suptitle('NuSTAR ' + instru + ' lightcurve for observation ' + steminput + id_orbit_str+
+                     ' in the ' + e_low + '-' + e_high + ' keV band with ' + binning + ' s binning')
 
-    # finishing the figure
-    plt.legend()
-    plt.tight_layout()
-    plt.savefig(os.path.join(directory, 'products' + ('_bright' if bright else ''),
-                             steminput + id_orbit_str + '_' + instru + '_lc_screen_' + e_low + '_' + e_high + '_bin_' + binning + '.png'))
+        ax_lc.set_xlabel('Time (s) after ' + time_zero_str)
+        ax_lc.set_ylabel('RATE (counts/s)')
+
+        ax_lc.set_ylim(0,ax_lc.get_ylim()[1])
+
+        # finishing the figure
+        plt.legend()
+        plt.tight_layout()
+        plt.savefig(os.path.join(directory, 'products' + ('_bright' if bright else ''),
+                                 steminput + id_orbit_str + '_' + instru + '_lc_screen_' + e_low + '_' + e_high + '_bin_' + binning + '.png'))
 
     if gti_mode:
         #returning the figure to add the gti intervals later, and the lc path
@@ -1561,6 +1563,7 @@ def extract_lc(directory,binning='1',lc_bands_str='3-79',hr_bands='10-50/3-10',c
     We follow the steps highlighted in https://heasarc.gsfc.nasa.gov/docs/nustar/analysis/nustar_swguide.pdf 5.3D
     options:
         -binning: binning(s) of the LC in seconds. Several binnings should be split by ,
+                for binnings below 1s, no lightcurve plot is made
 
         -bands: bands for each lightcurve to be created.
                 The numbers should be in keV, separated by "-", and different lightcurves by ","
@@ -1774,8 +1777,14 @@ def extract_lc(directory,binning='1',lc_bands_str='3-79',hr_bands='10-50/3-10',c
                     if no_HR_flag:
                        continue
 
-                    assert lc_prods[id_binning][id_band_den_HR][0]==lc_prods[id_binning][id_band_num_HR][0],\
-                            'Differing timezero values between HR lightcurves'
+                    if float(elem_binning)<=1:
+                        continue
+
+                    try:
+                        assert lc_prods[id_binning][id_band_den_HR][0]==lc_prods[id_binning][id_band_num_HR][0],\
+                                'Differing timezero values between HR lightcurves'
+                    except:
+                        breakpoint()
 
                     time_zero_HR=lc_prods[id_binning][id_band_num_HR][0]
 

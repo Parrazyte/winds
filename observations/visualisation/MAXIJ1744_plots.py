@@ -97,7 +97,80 @@ mpdaf_plot_img('xa901002010xtd_p031300010_cl_img_DET_1p4_1p55.ds',
 # os.chdir('/media/parrazyte/crucial_SSD/Observ/BHLMXB/XRISM/MAXIJ1744-294/new_anal/901002010_reprocorr/compa_arf/pix_smallpix')
 
 
+#ARF COMPA PLOTS REVISION
+#CALDB PV
+#bigpix
+arf_compa_plots(arf_denom_list=[
+    'xa300044010rsl_p0px1000_cl_RTS_pixel_branch_filter_grade_0and1_rmf_evtbase_2_12_0_05_60000_comb_POINT_AXJ1745.6-2901_CALDB11.arf',
+    'xa300044010rsl_p0px1000_cl_RTS_pixel_branch_filter_grade_0and1_rmf_evtbase_2_12_0_05_60000_comb_FLATCIRCLE_fr3_diffuse_CALDB11.arf',
+    'xa300044010rsl_p0px1000_cl_RTS_pixel_branch_filter_grade_0and1_rmf_evtbase_2_12_0_05_60000_comb_IMAGE_img_chandra_SgrAeast_FeKa25_SgrAEast_CALDB11.arf', ],
+                arf_num_list=[
+                    'xa300044010rsl_p0px1000_cl_RTS_pixel_branch_filter_grade_0and1_rmf_evtbase_2_12_0_05_60000_comb_POINT_AXJ1745.6-2901_CALDB12.arf',
+                    'xa300044010rsl_p0px1000_cl_RTS_pixel_branch_filter_grade_0and1_rmf_evtbase_2_12_0_05_60000_comb_FLATCIRCLE_fr3_diffuse_CALDB12.arf',
+                    'xa300044010rsl_p0px1000_cl_RTS_pixel_branch_filter_grade_0and1_rmf_evtbase_2_12_0_05_60000_comb_IMAGE_img_chandra_SgrAeast_FeKa25_SgrAEast_CALDB12.arf'],
+                label_list=['AX J1745', 'flat arf', 'Sgr A East'], label_num='CALDB 12', label_denom='CALDB 11',figsize=(5,3.75),color_list_init=['red','blue','purple'],legend_loc_col='lower right',legend_loc_ls='lower center',
+                skip_ncols=0)
+#NS
+arf_compa_plots(arf_denom_list=['xa300044010rsl_p0px1000_cl_RTS_pixel_branch_filter_grade_0_rmf_evtbase_2_12_0_05_60000_comb_POINT_1745_AXJp11_CALDB11.arf','xa300044010rsl_p0px1000_cl_RTS_pixel_branch_filter_grade_0_rmf_evtbase_2_12_0_05_60000_comb_FLATCIRCLE_fr3_AXJp11_CALDB11.arf','xa300044010rsl_p0px1000_cl_RTS_pixel_branch_filter_grade_0_rmf_evtbase_2_12_0_05_60000_comb_IMAGE_img_chandra_SgrAeast_FeKa25_AXJp11_CALDB11.arf',],
+                arf_num_list=['xa300044010rsl_p0px1000_cl_RTS_pixel_branch_filter_grade_0_rmf_evtbase_2_12_0_05_60000_comb_AXJp11_POINT_AXJ1745.6-2901_CALDB12.arf','xa300044010rsl_p0px1000_cl_RTS_pixel_branch_filter_grade_0_rmf_evtbase_2_12_0_05_60000_comb_AXJp11_FLATCIRCLE_fr3_diffuse_CALDB12.arf','xa300044010rsl_p0px1000_cl_RTS_pixel_branch_filter_grade_0_rmf_evtbase_2_12_0_05_60000_comb_AXJp11_IMAGE_img_chandra_SgrAeast_FeKa25_SgrAEast_CALDB12.arf'],label_list=['AX J1745', 'flat arf', 'Sgr A East'], label_num='CALDB 12', label_denom='CALDB 11',figsize=(5,3.75),color_list_init=['red','blue','purple'],legend_loc_col='upper right',legend_loc_ls='upper left',
+                skip_ncols=0)
 
+#smallpix
+arf_compa_plots(arf_denom_list=['xa300044010rsl_p0px1000_cl_RTS_pixel_branch_filter_grade_0_rmf_evtbase_2_12_0_05_60000_comb_POINT_1745_CALDB11.arf','xa300044010rsl_p0px1000_cl_RTS_pixel_branch_filter_grade_0_rmf_evtbase_2_12_0_05_60000_comb_FLATCIRCLE_fr3_CALDB11.arf','xa300044010rsl_p0px1000_cl_RTS_pixel_branch_filter_grade_0_rmf_evtbase_2_12_0_05_60000_comb_IMAGE_img_chandra_SgrAeast_FeKa25_CALDB11.arf',],
+                arf_num_list=['xa300044010rsl_p0px1000_cl_RTS_pixel_branch_filter_grade_0_rmf_evtbase_2_12_0_05_60000_comb_POINT_AXJ1745.6-2901_CALDB12.arf','xa300044010rsl_p0px1000_cl_RTS_pixel_branch_filter_grade_0_rmf_evtbase_2_12_0_05_60000_comb_FLATCIRCLE_fr3_diffuse_CALDB12.arf','xa300044010rsl_p0px1000_cl_RTS_pixel_branch_filter_grade_0_rmf_evtbase_2_12_0_05_60000_comb_IMAGE_img_chandra_SgrAeast_FeKa25_SgrAEast_CALDB12.arf'],label_list=['AX J1745','flat arf','Sgr A East'],label_num='CALDB 12',label_denom='CALDB 11',figsize=(5,3.75),color_list_init=['red','blue','purple'],legend_loc_col='upper right',legend_loc_ls='upper left',
+                skip_ncols=0)
+
+#CALDB DDT
+arf_compa_plots(arf_denom_list=[
+    'xa901002010rsl_p0px1000_cl_RTS_pixel_branch_filter_grade_0and1_rmf_0_05_60000_POINT_1744_gfinc_donotuse_CALDB11.arf',
+    'xa901002010rsl_p0px1000_cl_RTS_pixel_branch_filter_grade_0and1_rmf_0_05_60000_POINT_1745_gfinc_donotuse_CALDB11.arf',
+    'xa901002010rsl_p0px1000_cl_RTS_pixel_branch_filter_grade_0and1_rmf_0_05_60000_FLATCIRCLE_fr3_GCXE_gfinc_donotuse_CALDB11.arf',
+    'xa901002010rsl_p0px1000_cl_RTS_pixel_branch_filter_grade_0and1_rmf_0_05_60000_IMAGE_img_Chandra_data_6.6-6.8_flux_smoothed_trim_SgrAEast_gfinc_donotuse_CALDB11.arf'],
+                arf_num_list=[
+    'xa901002010rsl_p0px1000_cl_RTS_pixel_branch_filter_grade_0and1_rmf_0_05_60000_POINT_1744_gfinc_donotuse_CALDB12.arf',
+    'xa901002010rsl_p0px1000_cl_RTS_pixel_branch_filter_grade_0and1_rmf_0_05_60000_POINT_1745_gfinc_donotuse_CALDB12.arf',
+    'xa901002010rsl_p0px1000_cl_RTS_pixel_branch_filter_grade_0and1_rmf_0_05_60000_FLATCIRCLE_fr3_GCXE_gfinc_donotuse_CALDB12.arf',
+    'xa901002010rsl_p0px1000_cl_RTS_pixel_branch_filter_grade_0and1_rmf_0_05_60000_IMAGE_img_Chandra_data_6.6-6.8_flux_smoothed_trim_SgrAEast_gfinc_donotuse_CALDB12.arf'],
+                label_list=['MAXI J1744','AX J1745', 'flat arf', 'Sgr A East'],
+    label_num='CALDB 12', label_denom='CALDB 11',figsize=(5,3.75),
+    color_list_init=['green','red','blue','purple'],legend_loc_col='lower right',legend_loc_ls='lower center',
+                skip_ncols=0)
+
+#smallpix
+arf_compa_plots(arf_denom_list=[
+    'xa901002010rsl_p0px1000_cl_RTS_pixel_branch_filter_grade_0and1_rmf_0_05_60000_POINT_1744_gfinc_donotuse_CALDB11.arf',
+    'xa901002010rsl_p0px1000_cl_RTS_pixel_branch_filter_grade_0and1_rmf_0_05_60000_POINT_1745_gfinc_donotuse_CALDB11.arf',
+    'xa901002010rsl_p0px1000_cl_RTS_pixel_branch_filter_grade_0and1_rmf_0_05_60000_FLATCIRCLE_fr3_GCXE_gfinc_donotuse_CALDB11.arf',
+    'xa901002010rsl_p0px1000_cl_RTS_pixel_branch_filter_grade_0and1_rmf_0_05_60000_IMAGE_img_Chandra_data_6.6-6.8_flux_smoothed_trim_SgrAEast_gfinc_donotuse_CALDB11.arf'],
+                arf_num_list=[
+    'xa901002010rsl_p0px1000_cl_RTS_pixel_branch_filter_grade_0and1_rmf_0_05_60000_POINT_1744_gfinc_donotuse_CALDB12.arf',
+    'xa901002010rsl_p0px1000_cl_RTS_pixel_branch_filter_grade_0and1_rmf_0_05_60000_POINT_1745_gfinc_donotuse_CALDB12.arf',
+    'xa901002010rsl_p0px1000_cl_RTS_pixel_branch_filter_grade_0and1_rmf_0_05_60000_FLATCIRCLE_fr3_GCXE_gfinc_donotuse_CALDB12.arf',
+    'xa901002010rsl_p0px1000_cl_RTS_pixel_branch_filter_grade_0and1_rmf_0_05_60000_IMAGE_img_Chandra_data_6.6-6.8_flux_smoothed_trim_SgrAEast_gfinc_donotuse_CALDB12.arf'],
+                label_list=['MAXI J1744','AX J1745', 'flat arf', 'Sgr A East'],
+    label_num='CALDB 12', label_denom='CALDB 11',figsize=(5,3.75),
+    color_list_init=['green','red','blue','purple'],legend_loc_col='lower center',legend_loc_ls='upper left',
+                skip_ncols=0)
+
+#RSP VS ARF DDT
+#for bigpix 36 35 compa
+arf_compa_plots(arf_denom_list=['xa901002010rsl_p0px1000_ghf_cl_RTS_pixel_branch_filter_grade_0and1_rmf_evtbase_2_12_0_05_60000_comb_POINT_1744.arf','xa901002010rsl_p0px1000_ghf_cl_RTS_pixel_branch_filter_grade_0and1_rmf_evtbase_2_12_0_05_60000_comb_POINT_AXJ1745.arf','xa901002010rsl_p0px1000_ghf_cl_RTS_pixel_branch_filter_grade_0and1_rmf_evtbase_2_12_0_05_60000_comb_FLATCIRCLE_fr3.arf',
+'xa901002010rsl_p0px1000_ghf_cl_RTS_pixel_branch_filter_grade_0and1_rmf_evtbase_2_12_0_05_60000_comb_IMAGE_img_chandra_SgrAeast_FeKa25_SgrAEast.arf'],arf_num_list=['xa901002010rsl_p0px1000_cl_RTS_pixel_branch_filter_grade_0and1_rmf_0_05_60000_POINT_1744_gfinc_donotuse_CALDB11.arf','xa901002010rsl_p0px1000_cl_RTS_pixel_branch_filter_grade_0and1_rmf_0_05_60000_POINT_1745_gfinc_donotuse_CALDB11.arf','xa901002010rsl_p0px1000_cl_RTS_pixel_branch_filter_grade_0and1_rmf_0_05_60000_FLATCIRCLE_fr3_GCXE_gfinc_donotuse_CALDB11.arf',
+'xa901002010rsl_p0px1000_cl_RTS_pixel_branch_filter_grade_0and1_rmf_0_05_60000_IMAGE_img_Chandra_data_6.6-6.8_flux_smoothed_trim_SgrAEast_gfinc_donotuse_CALDB11.arf'],label_list=['MAXI J1744','AX J1745','flat arf','Sgr A East'],label_num='rsp (6.36)',label_denom='arf (6.35)',figsize=(5,3.75),
+    color_list_init=['green','red','blue','purple'],legend_loc_col='lower right',legend_loc_ls='lower left',
+                skip_ncols=0)
+
+#NS
+arf_compa_plots(arf_denom_list=['xa901002010rsl_p0px1000_cl_RTS_pixel_branch_filter_grade_0and1_rmf_0_05_60000_gti_MAN_COMBISTEADY_comb_POINT_MAXIJ1744.arf','xa901002010rsl_p0px1000_cl_RTS_pixel_branch_filter_grade_0and1_rmf_0_05_60000_gti_MAN_COMBISTEADY_comb_POINT_AXJ1745.arf','xa901002010rsl_p0px1000_cl_RTS_pixel_branch_filter_grade_0and1_rmf_0_05_60000_gti_MAN_COMBISTEADY_comb_FLATCIRCLE_fr3.arf',                         'xa901002010rsl_p0px1000_cl_RTS_pixel_branch_filter_grade_0and1_rmf_0_05_60000_gti_MAN_COMBISTEADY_comb_IMAGE_img_chandra_SgrAeast_FeKa25_SgrAEast.arf'],arf_num_list=['xa901002010rsl_p0px1000_cl_RTS_pixel_branch_filter_grade_0and1_rmf_0_05_60000_POINT_1744_gfinc_donotuse_CALDB11.arf','xa901002010rsl_p0px1000_cl_RTS_pixel_branch_filter_grade_0and1_rmf_0_05_60000_POINT_1745_gfinc_donotuse_CALDB11.arf','xa901002010rsl_p0px1000_cl_RTS_pixel_branch_filter_grade_0and1_rmf_0_05_60000_FLATCIRCLE_fr3_GCXE_gfinc_donotuse_CALDB11.arf','xa901002010rsl_p0px1000_cl_RTS_pixel_branch_filter_grade_0and1_rmf_0_05_60000_IMAGE_img_Chandra_data_6.6-6.8_flux_smoothed_trim_SgrAEast_gfinc_donotuse_CALDB11.arf'],label_list=['MAXI J1744','AX J1745','flat arf','Sgr A East'],label_num='rsp (6.36)',label_denom='arf (6.35)',figsize=(5,3.75),
+    color_list_init=['green','red','blue','purple'],legend_loc_col='lower center',legend_loc_ls='upper left',
+                skip_ncols=0)
+
+#smallpix
+arf_compa_plots(arf_denom_list=['xa901002010rsl_p0px1000_cl_RTS_pixel_branch_filter_grade_0and1_rmf_evtbase_2_12_0_05_60000_comb_POINT_1744.arf','xa901002010rsl_p0px1000_cl_RTS_pixel_branch_filter_grade_0and1_rmf_evtbase_2_12_0_05_60000_comb_POINT_AXJ1745.arf','xa901002010rsl_p0px1000_cl_RTS_pixel_branch_filter_grade_0and1_rmf_evtbase_2_12_0_05_60000_comb_FLATCIRCLE_fr3.arf',                         'xa901002010rsl_p0px1000_cl_RTS_pixel_branch_filter_grade_0and1_rmf_evtbase_2_12_0_05_60000_comb_IMAGE_img_chandra_SgrAeast_FeKa25_SgrAEast.arf'],arf_num_list=['xa901002010rsl_p0px1000_cl_RTS_pixel_branch_filter_grade_0and1_rmf_0_05_60000_POINT_1744_gfinc_donotuse_CALDB11.arf','xa901002010rsl_p0px1000_cl_RTS_pixel_branch_filter_grade_0and1_rmf_0_05_60000_POINT_1745_gfinc_donotuse_CALDB11.arf','xa901002010rsl_p0px1000_cl_RTS_pixel_branch_filter_grade_0and1_rmf_0_05_60000_FLATCIRCLE_fr3_GCXE_gfinc_donotuse_CALDB11.arf',
+                'xa901002010rsl_p0px1000_cl_RTS_pixel_branch_filter_grade_0and1_rmf_0_05_60000_IMAGE_img_Chandra_data_6.6-6.8_flux_smoothed_trim_SgrAEast_gfinc_donotuse_CALDB11.arf'],label_list=['MAXI J1744','AX J1745','flat arf','Sgr A East'],
+                label_num='rsp (6.36)',label_denom='arf (6.35)',figsize=(5,3.75),
+    color_list_init=['green','red','blue','purple'],legend_loc_col='lower center',legend_loc_ls='upper left',
+                skip_ncols=0)
 
 #####################
 #IN DDT 36 35 compa

@@ -5386,10 +5386,12 @@ weight_dirs=['arf_weights_MAXIJ1744','arf_weights_AXJ1745','arf_weights_diffuse'
 
 
 def arf_compa_plots(dir='./', arf_num_list=[], arf_denom_list=[], label_list=[], label_num='', label_denom='',
-                    save=True, skip_ncols=0):
+                    save=True, skip_ncols=0,
+                    color_list_init=['black', 'red', 'purple', 'orange', 'green', 'blue', 'pink'],
+                    figsize=(8, 6),legend_loc_ls='upper left',legend_loc_col='lower left'):
     os.chdir(dir)
 
-    colors_list = ['black', 'red', 'purple', 'orange', 'green', 'blue', 'pink'][skip_ncols:]
+    colors_list = color_list_init[skip_ncols:]
     # pixNS_rsp_arf_caldb11_1745 = fits.open(
     #     'xa901002010rsl_p0px1000_cl_RTS_pixel_branch_filter_grade_0and1_rmf_0_05_60000_POINT_1745_gfinc_donotuse_CALDB11.arf')[
     #     1].data
@@ -5418,7 +5420,7 @@ def arf_compa_plots(dir='./', arf_num_list=[], arf_denom_list=[], label_list=[],
     arf_num_data = [fits.open(elem)[1].data for elem in arf_num_list]
     arf_denom_data = [fits.open(elem)[1].data for elem in arf_denom_list]
 
-    fig_compa, ax_compa = plt.subplots(figsize=(8, 6), layout='constrained')
+    fig_compa, ax_compa = plt.subplots(figsize=figsize, layout='constrained')
     plt.xlabel('Energy (keV)')
     plt.ylabel('Effective area (cm²)')
     plt.xlim(2., 10)
@@ -5447,18 +5449,18 @@ def arf_compa_plots(dir='./', arf_num_list=[], arf_denom_list=[], label_list=[],
     #              label='Sgr A East')
     #     plt.plot(pixNS_rsp_arf_caldb12_SgrAEast['ENERG_LO'], pixNS_rsp_arf_caldb12_SgrAEast['SPECRESP'], color='orange',
     #              ls='--')
-    plt.legend(loc='lower left')
+    plt.legend(loc=legend_loc_col)
     twin_compa = plt.twinx()
     twin_compa.xaxis.set_visible(False)
     twin_compa.yaxis.set_visible(False)
     plt.plot([], [], color='gray', ls='-', label=label_denom)
     plt.plot([], [], color='gray', ls='--', label=label_num)
-    plt.legend(loc='upper left')
+    plt.legend(loc=legend_loc_ls)
 
     if save:
         plt.savefig('arf_compa_CALDB11_12_rsp.pdf')
 
-    fig_ratio, ax_ratio = plt.subplots(figsize=(8, 6), layout='constrained')
+    fig_ratio, ax_ratio = plt.subplots(figsize=figsize, layout='constrained')
     plt.xlabel('Energy (keV)')
     plt.ylabel(label_num + '/' + label_denom + ' Effective area ratio')
     plt.xlim(2., 10)

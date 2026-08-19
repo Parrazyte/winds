@@ -110,7 +110,7 @@ ap.add_argument('-parallel',help='number of processors for parallel directories'
 
 #global choices
 ap.add_argument("-a","--action",nargs=1,help='List which action(s) to run,separated by comas',
-                default ='1', type = str)
+                default ='m,ml', type = str)
 
 #default: fc,1,gti,fs,l,g,m,ml,c
 
@@ -248,7 +248,7 @@ ap.add_argument('-int_split_bin',nargs=1,help='binning of the light curve used f
 
 ap.add_argument('-lc_bin_list',nargs=1,
                 help='A list of binnings with which to generate all lightcurces/HR evolutions (in s)',
-                default=[0.005,60.],type=list)
+                default=[0.005,1.,60.],type=list)
 #note: also defines the binning used for the gti definition
 
 # lc_bands_list_det=['1-2','2-3','3-4','4-5','5-6','6-7','7-8','8-9','9-10']
@@ -306,9 +306,9 @@ clean
 '''
 
 #useful for HDDs
-ap.add_argument('-clean_wait_value',help='waiting time after cleaning a folder',default=2,type=float)
+ap.add_argument('-clean_wait_value',help='waiting time after cleaning a folder',default=10,type=float)
 
-ap.add_argument('-clean_cleanevt_file',help='clean clean evt file in normal clean mode',default=True,type=bool)
+ap.add_argument('-clean_cleanevt_file',help='clean clean evt file in normal clean mode',default=False,type=bool)
 args=ap.parse_args()
 
 load_functions=args.load_functions

@@ -1,8 +1,12 @@
+import matplotlib.pyplot as plt
+from stingray import Lightcurve, Powerspectrum
+
 
 def plot_PDS(lc,save=True):
-    plt.ioff()
+    if save:
+        plt.ioff()
+
     data_lc=fits.open(lc)[1].data
-    from stingray import Lightcurve,Powerspectrum
     sting_lc=Lightcurve(data_lc['TIME'],data_lc['RATE'],data_lc['ERROR'])
     sting_pow=Powerspectrum(sting_lc,norm='frac')
 
@@ -14,6 +18,7 @@ def plot_PDS(lc,save=True):
 
     plt.suptitle('PDS (unbinned)')
     plt.plot(sting_pow.freq,sting_pow.power)
+
     if save:
         plt.savefig(lc[:lc.rfind('.')]+'_pds_unbinned.pdf')
         plt.close()
@@ -29,7 +34,6 @@ def plot_PDS(lc,save=True):
     plt.plot(sting_pow_rebin.freq,sting_pow_rebin.power)
 
     if save:
-        if save:
-            plt.savefig(lc[:lc.rfind('.')] + '_pds_binned.pdf')
-            plt.close()
+        plt.savefig(lc[:lc.rfind('.')] + '_pds_binned.pdf')
+        plt.close()
 

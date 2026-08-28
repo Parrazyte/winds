@@ -195,7 +195,7 @@ def source_catal(spawn, dirpath, file, target_only=True, use_file_target=False):
     else:
         target_query = file_query[0]['main_id']
 
-    if type(obj_list) == type(file_query) and type(obj_list) == type(None):
+    if type(obj_list) == type(file_query) and type(obj_list) == type(None) or len(file_query)==0:
 
         print("\nSimbad couldn't detect an object name.")
         if not use_file_target:

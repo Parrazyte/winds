@@ -799,19 +799,20 @@ def main():
     parser = argparse.ArgumentParser(usage=usage)
 
     parser.add_argument('-filename', help='Input FITS file, should be a 0.3-10keV image',
-                        default='xa300044010xtd_p030000010_cl.img')
+                        default='xa300036010xtd_p031100010_cl_SFP_img.ds')
 
 
     parser.add_argument('-o', '--auto_updated_center', type=bool,
                         help='Flag to automatically calculate center', default=False)
-    parser.add_argument('-d', '--debug', action='store_true', help='Flag to show detailed information', default=False)
+    parser.add_argument('-d', '--debug', action='store_true', help='Flag to show detailed information',
+                        default=False)
     parser.add_argument('-m', '--manual', action='store_true', help='Flag to use vmax, vmin', default=False)
-    parser.add_argument('-x', '--x_center', type=int, help='x coordinate of center', default=1255)
-    parser.add_argument('-y', '--y_center', type=int, help='y coordinate of center', default=1156)
+    parser.add_argument('-x', '--x_center', type=int, help='x coordinate of center', default=733)
+    parser.add_argument('-y', '--y_center', type=int, help='y coordinate of center', default=730)
     parser.add_argument('-c', '--cellsize', type=int, help='cell size for a single event',
                         default=1 + 4)  # this value need to be verified
-    parser.add_argument('-r', '--rout', type=int, help='outer redius of the region', default=60)
-    parser.add_argument('-a', '--vmax', type=float, help='VMAX', default=3e3)
+    parser.add_argument('-r', '--rout', type=int, help='outer redius of the region', default=120)
+    parser.add_argument('-a', '--vmax', type=float, help='VMAX', default=6e3)
     parser.add_argument('-i', '--vmin', type=float, help='VMIN', default=1)
     parser.add_argument('-s', '--search_radius', type=int, help='Search radius for data extraction', default=128)
     parser.add_argument('-n', '--numberOfDivision', type=int, help='Number of divisions for annulus', default=32)

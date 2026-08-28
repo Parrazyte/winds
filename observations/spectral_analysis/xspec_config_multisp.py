@@ -389,6 +389,12 @@ def set_ener(mode='thcomp',xrism=False):
     if mode=='log_highres':
         AllModels.setEnergies('0.01 0.1 1000 log, 10. 100000 log, 1000. 1000 log')
 
+    if mode=='large_canon':
+        #reproducing Ryota's binning in pionabsmtablecanonicallarge.fits
+        #normally the final binning to 1000 is 221 bins but we're increasing it a bit in case other instruments are there
+        #normally the first binning is 0.001 but there is a huge numerical error at 1.006eV that causes a bunch of issues
+        AllModels.setEnergies('0.0011 0.0136 26102 log, 0.2 81 log, 12. 40944 log, 1000. 1000 log')
+
 
 def make_ls(low_e,high_e):
     Xset.restore('xrism_save_stronglines.xcm')
@@ -6589,7 +6595,8 @@ def xPlot(types,axes_input=None,plot_saves_input=None,plot_arg=None,includedlist
           force_xlin=False,force_ylin=False,
           data_colors=None,model_colors=None,model_ls=None,addcomp_colors=None,addcomp_ls=None,
           data_zorders=None,
-          data_alpha=1,auto_figsize=(10,8),auto_panel_hratio=None,
+          data_alpha=1,
+          auto_figsize=(10,8),auto_panel_hratio=None,
           addcomp_source_cmaps=['YlGn','YlOrRd','PuBu','RdPu'],
           legend_sources=False,label_sources='auto',label_sources_cval='auto',legend_sources_loc="best",
           legend_sources_bbox=None,
@@ -6666,7 +6673,7 @@ def xPlot(types,axes_input=None,plot_saves_input=None,plot_arg=None,includedlist
     addcomp_ls: if not None:
                 if 'group', cycles through different ls for each datagroups. Matches model_ls
 
-    data_alpha: alpha value for the ratio/delchi plot errorbars
+    data_alpha: alpha value for data errorbars, notably for the ratio/delchi plot
 
     legend_sources:
                 add an individual legends for different sources in addcomp.
@@ -6767,6 +6774,15 @@ def xPlot(types,axes_input=None,plot_saves_input=None,plot_arg=None,includedlist
 
         curr_ax=axes[i_ax]
         curr_save=plot_saves[i_ax]
+
+        if curr_save.nGroups > 0:
+            # getting the alpha values into a list like
+            if type(data_alpha) in (list, tuple, np.ndarray):
+                assert len(data_alpha) == curr_save.nGroups,\
+                    'Error: not enough data_alpha values to match the number of data groups'
+                data_alpha_use = data_alpha
+            else:
+                data_alpha_use = np.repeat(data_alpha, curr_save.nGroups)
 
         #plotting the title for the first axe
         if i_ax==0:
@@ -6879,7 +6895,7 @@ def xPlot(types,axes_input=None,plot_saves_input=None,plot_arg=None,includedlist
                                  color=xcolors_grp[id_grp] if data_colors is None else data_colors[id_grp],
                                  zorder=None if data_zorders is None else data_zorders[id_grp],
                                  linestyle='None',
-                                 elinewidth=elinewidth_data,alpha=data_alpha,
+                                 elinewidth=elinewidth_data,alpha=data_alpha_use[id_grp],
                                  label='' if legend_addcomp_groups else\
                             ('' if group_names=='nolabel' or (no_name_data=='auto' and i_ax!=len(types_split)-1) else grp_name))
 
@@ -6931,7 +6947,7 @@ def xPlot(types,axes_input=None,plot_saves_input=None,plot_arg=None,includedlist
                                      yerr=curr_save.background_yErr[id_grp]*mult_factor_grp,
                                      color=xcolors_grp[id_grp] if data_colors is None else data_colors[id_grp],
                                      zorder=None if data_zorders is None else data_zorders[id_grp],
-                                     linestyle='None',elinewidth=0.5,alpha=data_alpha,
+                                     linestyle='None',elinewidth=0.5,alpha=data_alpha_use[id_grp],
                                      marker='x',mew=0.5,label='' if not label_bg or group_names=='nolabel' else grp_name+' background')
 
         #### locking the axe limits

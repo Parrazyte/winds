@@ -248,16 +248,48 @@ def incl_NH_dep_HerX1():
 
     pass
 
-def compa_ion_par(logxi=[0,1,2,3,4],nh_22=[1,1,1,10,10],np_14=None,v_rms=None,
-                  cmap='plasma',set_ener_str='thcomp',
-                  xlims=[0.3,2.],nh_cold=0.1,ylims=None):
+def compa_ion_par(logxi=[0,1,2,3,4],nh_22=[1,1,1,10,10],
+                  np_14=None,v_rms=None,z=None,
+                  cmap='plasma',set_ener_str='large_canon',
+                  mtable='pionabsmtablecanonicallarge.fits',
+                  xlims=[0.3,2.],
+                  nh_cold=0.1,
+                  ylims=[1e-15,1]):
+
+    '''
+    comparator for different sets of pion_abs solutions
+    '''
+
+    if np_14 is not None and type(np_14) not in (list,tuple,np.ndarray):
+        np_14_use=np.repeat(np_14,len(logxi))
+    else:
+        np_14_use=np_14
+
+    if v_rms is not None and type(v_rms) not in (list,tuple,np.ndarray):
+        v_rms_use=np.repeat(v_rms,len(logxi))
+    else:
+        v_rms_use=v_rms
+
+    if z is not None and type(z) not in (list,tuple,np.ndarray):
+        z_use=np.repeat(z,len(logxi))
+    else:
+        z_use=z
+
+    if type(nh_cold) not in (list,tuple,np.ndarray):
+        nh_cold_use=np.repeat(nh_cold,len(logxi))
+    else:
+        nh_cold_use=nh_cold
+
+
+
     os.chdir('/home/parrazyte/Documents/Work/PostDoc/docs/NewAthena/SpecialIssue/DiskWinds/Obs/ion_soft')
 
     plop=Model('TBabs(diskbb)')
-    AllModels(1)(1).values=nh_cold
 
-    addcomp('glob_mtable{pionabsmtablecanonical.fits}')
-    AllModels(1)(5).values=0.
+    addcomp('glob_mtable{'+mtable+'}')
+
+    getattr(AllModels(1),AllModels(1).componentNames[0]).z.values=0.
+
     fig, ax = plt.subplots(figsize=(10, 8))
 
     color_cmap = getattr(mpl.cm,cmap)
@@ -268,18 +300,28 @@ def compa_ion_par(logxi=[0,1,2,3,4],nh_22=[1,1,1,10,10],np_14=None,v_rms=None,
     colors_func = mpl.cm.ScalarMappable(norm=c_norm, cmap=color_cmap)
 
     AllModels.show()
-    for i_model,(elem_logxi,elem_nh) in enumerate(zip(logxi,nh_22)):
+
+    for i_model,(elem_logxi,elem_nh,elem_nh_cold) in enumerate(zip(logxi,nh_22,nh_cold_use)):
         AllModels(1)(1).values=elem_logxi
         AllModels(1)(2).values=elem_nh
+        AllModels(1)(6).values=elem_nh_cold
+
         if np_14 is not None:
-            AllModels(1)(3).values=np_14[i_model]
+            AllModels(1)(3).values=np_14_use[i_model]
         if v_rms is not None:
-            AllModels(1)(3).values = v_rms[i_model]
+            AllModels(1)(4).values = v_rms_use[i_model]
+        if z is not None:
+            AllModels(1)(5).values = z_use[i_model]
+
+        AllModels.show()
+
         indiv_color = colors_func.to_rgba(i_model)
         xPlot('eemo',axes_input=ax,model_colors=[indiv_color],
               group_names=['logxi_'+str(elem_logxi)+'_nh'+str(elem_nh)+
-                           ('' if np_14 is None else '_np_%.2e'%(np_14[i_model]*1e14))+
-                            ('' if v_rms is None else '_v_rms_'+str(np_14[i_model]))])
+                           ('' if np_14 is None else '_np_%.2e'%(np_14_use[i_model]*1e14))+
+                            ('' if v_rms is None else '_v_rms_'+str(v_rms_use[i_model]))+
+                           ('' if z is None else '_z'+str(v_rms_use[i_model]))+
+                                                 ('_nhcold_'+str(elem_nh_cold))])
         ax.tick_params(labelbottom=True)
 
     plt.xscale('linear')
@@ -292,10 +334,18 @@ def compa_ion_par(logxi=[0,1,2,3,4],nh_22=[1,1,1,10,10],np_14=None,v_rms=None,
 
 
 #for density
-#note that the density floor is slightly above 1e-3 due to rounding errors so we edit manually the lowest value
-#compa_ion_par(logxi=np.repeat(3,7),nh_22=np.repeat(10,7),np_14=[0.0011     , 0.00316228, 0.01      , 0.03162278, 0.1       ,
-         #0.31622777, 1.        ])
-
 #compa_ion_par(logxi=np.repeat(3,7),nh_22=np.repeat(1,7),
-# np_14=[0.0011     , 0.00316228, 0.01      , 0.03162278, 0.1       ,0.31622777, 1.        ],
-# set_ener_str='log_highres',xlims=[1.,1.1],ylims=[8e-4,4e-3])
+# np_14=[0.001001     , 0.00316228, 0.01      , 0.03162278, 0.1       ,0.31622777, 1.        ],
+# xlims=[1.,1.1],ylims=[8e-4,4e-3])
+
+# compa_ion_par(logxi=np.repeat(3.,7),nh_22=np.repeat(0.1,7),
+# np_14=[0.001001     , 0.00316228, 0.01      , 0.03162278, 0.1       ,0.31622777, 1.        ],xlims=[1.,1.1],ylims=[8e-4,4e-3])
+
+#testing intrinsic lines at logxi=0
+#compa_ion_par(logxi=[0,0,5],nh_22=[0.1,0.1,0.1],nh_cold=[0.1,2.,2.])
+
+'''
+for merching chandra spectra
+in CIAO
+combine_spectra src_spectra="fake_highxi_src_50ks*" src_arf="*garf" src_rmf="*grmf" clob+ bkg_spectra=none verbose=5 method=avg
+'''

@@ -99,11 +99,11 @@ ap.add_argument("-dir", "--startdir", nargs='?', help="starting directory. Curre
 ap.add_argument("-l", "--local", nargs=1, help='Launch actions directly in the current directory instead',
                 default=False, type=bool)
 ap.add_argument('-catch', '--catch_errors', help='Catch errors while running the data reduction and continue',
-                default=True, type=bool)
+                default=False, type=bool)
 
 # global choices
 ap.add_argument("-a", "--action", nargs='?', help='Give which action(s) to proceed,separated by comas.',
-                default='m', type=str)
+                default='lc,sp,g,m', type=str)
 # default: build,reg,lc,sp,g,m
 
 ap.add_argument("-over", nargs=1, help='overwrite computed tasks (i.e. with products in the batch, or merge directory\
@@ -206,7 +206,7 @@ ap.add_argument('-man_bg_reg_FPMB',nargs=1,
 
 #note: this binning will also be used to CREATE the gtis
 ap.add_argument('-lc_bin_std', nargs=1, help='Gives the binning of all standard lightcurces/HR evolutions (in s)',
-                default='64,0.002',type=str)
+                default='64,1,0.002',type=str)
 
 ap.add_argument('-lc_bin_gti', nargs=1, help='Gives the binning of all lightcurves used for gti cutting (in s)',
                 default='1',type=str)
@@ -818,7 +818,8 @@ def ds9_to_reg(ds9_regfile):
     return reg_coords
 
 def extract_reg(directory, cams='all', use_file_target=False,
-                overwrite=True,e_low_img=3,e_high_img=79,rad_crop=120,bg_area_factor=2.,bg_rm_src_sigmas=10.,
+                overwrite=True,e_low_img=3,e_high_img=79,rad_crop=120,bg_area_factor=2.,
+                bg_rm_src_sigmas=10.,
                 bg_distrib_cut=0.99,
                 bright=False,
                 screen_mode='mpdaf',sudo_mode=False,sudo_mdp=''):
@@ -1067,8 +1068,8 @@ def extract_reg(directory, cams='all', use_file_target=False,
             src_mpdaf_WCS=mpdaf_WCS(hdul[0].header)
             src_astro_WCS=astroWCS(hdul[0].header)
             main_source_name=hdul[0].header['object']
-            main_source_ra=hdul[0].header['RA_OBJ']
-            main_source_dec=hdul[0].header['DEC_OBJ']
+            main_source_ra=str(hdul[0].header['RA_OBJ'])
+            main_source_dec=str(hdul[0].header['DEC_OBJ'])
 
         print('\nAuto mode.')
         print('\nAutomatic search of the directory names in Simbad.')
@@ -1504,7 +1505,7 @@ def extract_lc_single(spawn, directory, binning, instru, steminput, src_reg, bg_
 
     # plotting the source and bg lightcurves together
 
-    if float(binning) >= 1:
+    if float(binning) > 1:
 
         fig_lc, ax_lc = plt.subplots(1, figsize=(10, 8))
 

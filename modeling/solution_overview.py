@@ -167,7 +167,10 @@ with st.sidebar:
     mdot_obs=st.number_input(r'Observed $\dot m$',value=0.111,min_value=1e-10,format='%.3e')
     m_BH=st.number_input(r'Black Hole Mass ($M_\odot$)',value=8.,min_value=1e-10,format='%.3e')
 
-    #note that this was 1/12 in the PhD plots
+    #note that this was 1/12 (perfect Shakura-Sunyaev) in the PhD plots
+    #see Parra et al. 2024 (PhD) page 162 for a short discussion: 0.057 is Novikhov-Thorne for
+    #a non-rotating BH - note that this is for the full disk, multiplying the luminosity by two
+    #for the 2 sides of the BH occurs later in the code
     eta_mhd=st.number_input(r'$\eta_{mhd}$',value=0.057,min_value=1e-10,max_value=1.,format='%.3e')
 
     rj=st.number_input(r'internal WED radius ',value=6,format='%.2e')

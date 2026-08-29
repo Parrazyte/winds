@@ -2,6 +2,10 @@ import os,sys
 import numpy as np
 
 import time
+
+#for dynamical argument fetching
+import inspect
+
 import pexpect
 import matplotlib.pyplot as plt
 from tqdm import tqdm
@@ -13,8 +17,9 @@ from xspec_config_multisp import allmodel_data,model_load,addcomp,Pset,Pnull,res
                          load_fitmod, ignore_data_indiv,par_degroup,xspec_globcomps,is_abs,lines_e_dict,calc_EW,set_ener
 
 from general_tools import c_Km as c_0
+from general_tools import file_edit
 
-def simu_NH_photo(mode,
+def simu_nh_photo(nh_photo_mode,
                   flux_inter,n_iter,
                   mod_cont,flux_base,
                   fakeset,fakestats,
@@ -24,7 +29,12 @@ def simu_NH_photo(mode,
                   mod_dict,photo_mod,photo_comp_pos,
                   photo_xi_range,photo_turb_range,photo_v_range,
                   logfile,to_error,
-                  mod_path,expos,flux_range,flux_band):
+                  mod_path,expos,flux_range,flux_band,
+                  n_cores,
+                  photo_nsteppar_turb,
+                  photo_nsteppar_v,
+                  par_freeze_steppar
+                  ):
 
     '''
 
@@ -34,7 +44,23 @@ def simu_NH_photo(mode,
         -lim: computes 1/2/3 sigma NH upper limits for a photoionization model convolved to the source model
 
         -noise: computes photon noise 1/2/3 sigma of best fit noise NH for a photoionization model
-            convolved to the source model
+            convolved to the source model. The NH value is taken to be the highest in a 2D steppar fit
+            in v_turb/v space, within photo_turb_range (in log space) and photo_v_range (in lin space)
+
+            photo_nsteppar_vturb/v:
+            the number of steppar steps for each dimension
+            note: to be provided in actual step numbers.
+            The values actually given to steppar (which adds 1) are these -1
+
+            par_freeze_steppar: array-like of integers
+
+                Freeze the list of parameters before the computation is ran
+                these parameters are assumed from the continuum, and as such should be given in the model enumeration
+                before the photoionization model is added
+
+                In noise mode, freezing parameters that tend to be pegged or unconstrained
+                can considerably help improving the speed
+
 
         photo_xi_range:
             hot/warm+('_'+freeze)
@@ -44,22 +70,53 @@ def simu_NH_photo(mode,
         photo_turb_range/photo_v_range:
             the allowed velocity and turbulence parameter spaces for this mode
 
+
     '''
 
-    print('Computing NH '+('limits' if mode=='lim' else 'photon noise' if mode=='noise' else '')+
+    print('Computing NH '+('limits' if nh_photo_mode=='lim' else 'photon noise' if nh_photo_mode=='noise' else '')+
           ' for photoionization within the given flux range...')
     
     n_flux=len(flux_inter)
     
     nh_lim_arr = np.zeros((n_flux, 3))
 
+    instance_id=time.time()
     
-    with tqdm(total=n_flux * n_iter) as pbar:
+    with (tqdm(total=n_flux * n_iter) as pbar):
+
         for i_flux, elem_flux in enumerate(flux_inter):
 
-            nh_lim_distrib = np.repeat(None, 3 * n_iter).reshape(3, n_iter)
+            #may get modified in noise mode
+            n_iter_use=n_iter
 
-            for i_iter in range(n_iter):
+            if nh_photo_mode=='lim':
+                nh_val_distrib = np.repeat(None, 3 * n_iter).reshape(3, n_iter)
+
+            elif nh_photo_mode=='noise':
+                nh_val_distrib = np.repeat(None, n_iter)
+
+                #testing whether a save file exists
+                elem_flux_save_path='save_noise_flux_'+str(elem_flux).replace('.','p')+'.txt'
+
+                #defining a header
+                # fetching dynamicallly all the functio arguments to ensure we are doing the same computation
+                # from https://stackoverflow.com/questions/10724495/getting-all-arguments-and-values-passed-to-a-function
+                sig, simu_locals = inspect.signature(simu_nh_photo), locals()
+                par_list = [[param.name,simu_locals[param.name]] for param in sig.parameters.values()]
+                save_header = str(par_list)
+
+
+                if os.path.isfile(elem_flux_save_path):
+                    with open(elem_flux_save_path) as f_save:
+                        pre_save_lines=f_save.readlines()
+                    assert pre_save_lines[0].replace('\n','')==save_header,\
+                            'Error: previous save file has different arguments'
+
+                    #removing a number of iterations equal to the number of saved results
+                    n_iter_use=n_iter-(len(pre_save_lines)-1)
+                    pbar.update(len(pre_save_lines)-1)
+
+            for i_iter in range(n_iter_use):
                 mod_cont.load()
 
                 # freezing the parameters before faking
@@ -178,117 +235,177 @@ def simu_NH_photo(mode,
                 calc_fit()
                 Fit.query = 'on'
 
-                print('Computing NH error at 1 sigma')
+                if nh_photo_mode=='lim':
+                    print('Computing NH error at 1 sigma')
 
-                # computing the error on the column density of the absorber
-                err_1sig = calc_error(param=str(comp_par[1]), logfile=logfile,
-                                      delchi_err=1., give_errors='bounds',
-                                      timeout=to_error, indiv=False)
+                    # computing the error on the column density of the absorber
+                    err_1sig = calc_error(param=str(comp_par[1]), logfile=logfile,
+                                          delchi_err=1., give_errors='bounds',
+                                          timeout=to_error, indiv=False)
 
-                err_1sig_bounds = err_1sig[0][comp_par[1] - 1]
-                err_1sig_full = np.repeat(0., 2)
-                if err_1sig_bounds[0] == 0.:
-                    err_1sig_full[0] = AllModels(1)(comp_par[1]).values[2]
-                else:
-                    err_1sig_full[0] = err_1sig_bounds[0]
-                if err_1sig_bounds[1] == 0.:
-                    err_1sig_full[1] = AllModels(1)(comp_par[1]).values[5]
-                else:
-                    err_1sig_full[1] = err_1sig_bounds[1]
+                    err_1sig_bounds = err_1sig[0][comp_par[1] - 1]
+                    err_1sig_full = np.repeat(0., 2)
+                    if err_1sig_bounds[0] == 0.:
+                        err_1sig_full[0] = AllModels(1)(comp_par[1]).values[2]
+                    else:
+                        err_1sig_full[0] = err_1sig_bounds[0]
+                    if err_1sig_bounds[1] == 0.:
+                        err_1sig_full[1] = AllModels(1)(comp_par[1]).values[5]
+                    else:
+                        err_1sig_full[1] = err_1sig_bounds[1]
 
-                # DOESNT WORK VERY WELL
-                # err_1sig_rel = err_1sig[0][comp_par[1]]
-                #
-                # #storing no error if the value is unconstrained
-                # # (for that we're testing if it's close to the main value)
-                # err_1sig_full = np.array([-err_1sig_rel[0],err_1sig_rel[1]]) + AllModels(1)(comp_par[1]+1).values[0]
+                    # DOESNT WORK VERY WELL
+                    # err_1sig_rel = err_1sig[0][comp_par[1]]
+                    #
+                    # #storing no error if the value is unconstrained
+                    # # (for that we're testing if it's close to the main value)
+                    # err_1sig_full = np.array([-err_1sig_rel[0],err_1sig_rel[1]]) + AllModels(1)(comp_par[1]+1).values[0]
 
-                # #safeguards to correctly put the info for pegged values
-                # if (err_1sig_rel/AllModels(1)(comp_par[1]+1).values[0])[0]>0.9999 and \
-                #         (err_1sig_rel / AllModels(1)(comp_par[1] + 1).values[0])[0]<1.0001:
-                #     err_1sig_full[0]=AllModels(1)(comp_par[1] + 1).values[2]
-                #
-                # if (err_1sig_rel/AllModels(1)(comp_par[1]+1).values[0])[1]>0.9999 and \
-                #         (err_1sig_rel / AllModels(1)(comp_par[1] + 1).values[0])[1]<1.0001:
-                #     err_1sig_full[1]=AllModels(1)(comp_par[1] + 1).values[5]
+                    # #safeguards to correctly put the info for pegged values
+                    # if (err_1sig_rel/AllModels(1)(comp_par[1]+1).values[0])[0]>0.9999 and \
+                    #         (err_1sig_rel / AllModels(1)(comp_par[1] + 1).values[0])[0]<1.0001:
+                    #     err_1sig_full[0]=AllModels(1)(comp_par[1] + 1).values[2]
+                    #
+                    # if (err_1sig_rel/AllModels(1)(comp_par[1]+1).values[0])[1]>0.9999 and \
+                    #         (err_1sig_rel / AllModels(1)(comp_par[1] + 1).values[0])[1]<1.0001:
+                    #     err_1sig_full[1]=AllModels(1)(comp_par[1] + 1).values[5]
 
-                nh_lim_distrib[0][i_iter] = err_1sig_full[1]
+                    nh_val_distrib[0][i_iter] = err_1sig_full[1]
 
-                print('Computing NH error at 2 sigma')
-                # computing the blueshift error of the line
-                err_2sig = calc_error(param=str(comp_par[1]), logfile=logfile,
-                                      delchi_err=4., give_errors='bounds',
-                                      timeout=to_error, indiv=False)
+                    print('Computing NH error at 2 sigma')
+                    # computing the blueshift error of the line
+                    err_2sig = calc_error(param=str(comp_par[1]), logfile=logfile,
+                                          delchi_err=4., give_errors='bounds',
+                                          timeout=to_error, indiv=False)
 
-                err_2sig_bounds = err_2sig[0][comp_par[1] - 1]
-                err_2sig_full = np.repeat(0., 2)
-                if err_2sig_bounds[0] == 0.:
-                    err_2sig_full[0] = AllModels(1)(comp_par[1]).values[2]
-                else:
-                    err_2sig_full[0] = err_2sig_bounds[0]
-                if err_2sig_bounds[1] == 0.:
-                    err_2sig_full[1] = AllModels(1)(comp_par[1]).values[5]
-                else:
-                    err_2sig_full[1] = err_2sig_bounds[1]
+                    err_2sig_bounds = err_2sig[0][comp_par[1] - 1]
+                    err_2sig_full = np.repeat(0., 2)
+                    if err_2sig_bounds[0] == 0.:
+                        err_2sig_full[0] = AllModels(1)(comp_par[1]).values[2]
+                    else:
+                        err_2sig_full[0] = err_2sig_bounds[0]
+                    if err_2sig_bounds[1] == 0.:
+                        err_2sig_full[1] = AllModels(1)(comp_par[1]).values[5]
+                    else:
+                        err_2sig_full[1] = err_2sig_bounds[1]
 
-                # err_2sig_rel = err_2sig[0][comp_par[1]]
-                #
-                # #storing no error if the value is unconstrained
-                # # (for that we're testing if it's close to the main value)
-                # err_2sig_full =np.array([-err_2sig_rel[0],err_2sig_rel[1]]) + AllModels(1)(comp_par[1]+1).values[0]
-                #
-                # #safeguards to correctly put the info for pegged values
-                # if (err_2sig_rel/AllModels(1)(comp_par[1]+1).values[0])[0]>0.99 and \
-                #         (err_2sig_rel / AllModels(1)(comp_par[1] + 1).values[0])[0]<1.01:
-                #     err_2sig_full[0]=AllModels(1)(comp_par[1] + 1).values[2]
-                #
-                # if (err_2sig_rel/AllModels(1)(comp_par[1]+1).values[0])[1]>0.99 and \
-                #         (err_2sig_rel / AllModels(1)(comp_par[1] + 1).values[0])[1]<1.01:
-                #     err_2sig_full[1]=AllModels(1)(comp_par[1] + 1).values[5]
+                    # err_2sig_rel = err_2sig[0][comp_par[1]]
+                    #
+                    # #storing no error if the value is unconstrained
+                    # # (for that we're testing if it's close to the main value)
+                    # err_2sig_full =np.array([-err_2sig_rel[0],err_2sig_rel[1]]) + AllModels(1)(comp_par[1]+1).values[0]
+                    #
+                    # #safeguards to correctly put the info for pegged values
+                    # if (err_2sig_rel/AllModels(1)(comp_par[1]+1).values[0])[0]>0.99 and \
+                    #         (err_2sig_rel / AllModels(1)(comp_par[1] + 1).values[0])[0]<1.01:
+                    #     err_2sig_full[0]=AllModels(1)(comp_par[1] + 1).values[2]
+                    #
+                    # if (err_2sig_rel/AllModels(1)(comp_par[1]+1).values[0])[1]>0.99 and \
+                    #         (err_2sig_rel / AllModels(1)(comp_par[1] + 1).values[0])[1]<1.01:
+                    #     err_2sig_full[1]=AllModels(1)(comp_par[1] + 1).values[5]
 
-                nh_lim_distrib[1][i_iter] = err_2sig_full[1]
+                    nh_val_distrib[1][i_iter] = err_2sig_full[1]
 
-                print('Computing NH error at 3 sigma')
-                # computing the blueshift error of the line
-                err_3sig = calc_error(param=str(comp_par[1]), logfile=logfile,
-                                      delchi_err=9., give_errors='bounds',
-                                      timeout=to_error, indiv=False)
+                    print('Computing NH error at 3 sigma')
+                    # computing the blueshift error of the line
+                    err_3sig = calc_error(param=str(comp_par[1]), logfile=logfile,
+                                          delchi_err=9., give_errors='bounds',
+                                          timeout=to_error, indiv=False)
 
-                err_3sig_bounds = err_3sig[0][comp_par[1] - 1]
-                err_3sig_full = np.repeat(0., 2)
-                if err_3sig_bounds[0] == 0.:
-                    err_3sig_full[0] = AllModels(1)(comp_par[1]).values[2]
-                else:
-                    err_3sig_full[0] = err_3sig_bounds[0]
-                if err_3sig_bounds[1] == 0.:
-                    err_3sig_full[1] = AllModels(1)(comp_par[1]).values[5]
-                else:
-                    err_3sig_full[1] = err_3sig_bounds[1]
-                # err_3sig_rel = err_3sig[0][comp_par[1]]
-                #
-                # #storing no error if the value is unconstrained
-                # # (for that we're testing if it's close to the main value)
-                # err_3sig_full = np.array([-err_3sig_rel[0],err_3sig_rel[1]]) + AllModels(1)(comp_par[1]+1).values[0]
-                #
-                # #safeguards to correctly put the info for pegged values
-                # if (err_3sig_rel/AllModels(1)(comp_par[1]+1).values[0])[0]>0.9999 and \
-                #         (err_3sig_rel / AllModels(1)(comp_par[1] + 1).values[0])[0]<1.0001:
-                #     err_3sig_full[0]=AllModels(1)(comp_par[1] + 1).values[2]
-                #
-                # if (err_3sig_rel/AllModels(1)(comp_par[1]+1).values[0])[1]>0.9999 and \
-                #         (err_3sig_rel / AllModels(1)(comp_par[1] + 1).values[0])[1]<1.0001:
-                #     err_3sig_full[1]=AllModels(1)(comp_par[1] + 1).values[5]
+                    err_3sig_bounds = err_3sig[0][comp_par[1] - 1]
+                    err_3sig_full = np.repeat(0., 2)
+                    if err_3sig_bounds[0] == 0.:
+                        err_3sig_full[0] = AllModels(1)(comp_par[1]).values[2]
+                    else:
+                        err_3sig_full[0] = err_3sig_bounds[0]
+                    if err_3sig_bounds[1] == 0.:
+                        err_3sig_full[1] = AllModels(1)(comp_par[1]).values[5]
+                    else:
+                        err_3sig_full[1] = err_3sig_bounds[1]
+                    # err_3sig_rel = err_3sig[0][comp_par[1]]
+                    #
+                    # #storing no error if the value is unconstrained
+                    # # (for that we're testing if it's close to the main value)
+                    # err_3sig_full = np.array([-err_3sig_rel[0],err_3sig_rel[1]]) + AllModels(1)(comp_par[1]+1).values[0]
+                    #
+                    # #safeguards to correctly put the info for pegged values
+                    # if (err_3sig_rel/AllModels(1)(comp_par[1]+1).values[0])[0]>0.9999 and \
+                    #         (err_3sig_rel / AllModels(1)(comp_par[1] + 1).values[0])[0]<1.0001:
+                    #     err_3sig_full[0]=AllModels(1)(comp_par[1] + 1).values[2]
+                    #
+                    # if (err_3sig_rel/AllModels(1)(comp_par[1]+1).values[0])[1]>0.9999 and \
+                    #         (err_3sig_rel / AllModels(1)(comp_par[1] + 1).values[0])[1]<1.0001:
+                    #     err_3sig_full[1]=AllModels(1)(comp_par[1] + 1).values[5]
 
-                nh_lim_distrib[2][i_iter] = err_3sig_full[1]
+                    nh_val_distrib[2][i_iter] = err_3sig_full[1]
+
+                if nh_photo_mode=='noise':
+
+                    assert photo_mod == 'pion_abs_canon_soft'
+
+                    #freezing requested parameters
+                    for par_conti in par_freeze_steppar:
+                        par_conti_now=par_conti if par_conti<min(comp_par) else par_conti+len(comp_par)
+                        AllModels(1)(par_conti_now).frozen=True
+
+                    #setting up parallel computation
+                    Fit.parallel.steppar=os.cpu_count()-n_cores if n_cores<0 else n_cores
+
+
+                    #removing the logs for the steppar run to avoid issues
+                    curr_chatter=Xset.chatter
+                    curr_logChatter=Xset.logChatter
+                    Xset.chatter=0
+                    Xset.logChatter=0
+
+                    #for now, we assume whether there is a density parameters from the number of parameters
+                    #in the table. If 4, then there should be no density. If 5, then there should be a density
+                    id_delta_photomod=len(comp_par)==4
+
+                    #steppar command. we remove 1 for the number of steps in each dimension because steppar
+                    #adds 1 step by default.
+                    Fit.steppar(
+                    'log '+str(comp_par[3-id_delta_photomod])
+                           +' '+str(AllModels(1)(comp_par[3-id_delta_photomod]).values[2])
+                           +' '+str(AllModels(1)(comp_par[3-id_delta_photomod]).values[-1])
+                           +' '+str(photo_nsteppar_turb-1)
+                    +'nolog ' + str(comp_par[4-id_delta_photomod])
+                    + ' ' + str(AllModels(1)(comp_par[4 - id_delta_photomod]).values[2])
+                    + ' ' + str(AllModels(1)(comp_par[4 - id_delta_photomod]).values[-1])
+                    + ' ' + str(photo_nsteppar_v-1)
+                    )
+
+                    Xset.chatter=Xset.chatter
+                    Xset.logChatter=Xset.logChatter
+
+                    #storing the maximum value found for NH within the parameter space of the steppar
+                    nh_val_distrib[i_iter]=max(Fit.stepparResults(comp_par[1]))
+
+                    #storing in the save file
+
+                    file_edit(elem_flux_save_path,str(instance_id),str(instance_id)+'\t'+nh_val_distrib[i_iter],
+                              header=save_header)
 
                 pbar.update()
 
-            nh_lim_distrib = np.array(nh_lim_distrib, dtype=float)
+            #at the end of the n_iter computations for a single flux point
 
-            nh_lim_distrib.sort()
+            if nh_photo_mode=='lim':
+                nh_val_distrib = np.array(nh_val_distrib, dtype=float)
 
-            # storing the median of the distribution of the limits for this flux value
-            nh_lim_arr[i_flux] = nh_lim_distrib.T[n_iter // 2]
+                nh_val_distrib.sort()
+
+                # storing the median of the distribution of the limits for this flux value
+                nh_lim_arr[i_flux] = nh_val_distrib.T[n_iter // 2]
+
+            if nh_photo_mode=='noise':
+
+                #reloading the full values array from the save file in case the computation isn't full
+                nh_val_distrib=np.loadtxt(elem_flux_save_path)
+                nh_val_distrib.sort()
+                nh_lim_arr[i_flux]=[nh_val_distrib[n_iter*0.68],
+                                    nh_val_distrib[n_iter*0.95],
+                                    nh_val_distrib[n_iter*0.997]]
 
     save_arr = np.concatenate((np.array([flux_inter]), nh_lim_arr.T)).T
 
@@ -305,9 +422,15 @@ def simu_NH_photo(mode,
                     'photo xi range' + photo_xi_range,
                     'photo turb range' + str(photo_turb_range),
                     'photo v range' + str(photo_v_range),
-                    'columns: flux | nh median limit at 1/2/3 sigma (1e22 cm^{-2})']
+                    'n cores'+str(n_cores),
+                    'photo nsteppar turb'+str(photo_nsteppar_turb),
+                    'photo nsteppar v'+str(photo_nsteppar_v),
+                    'par freeze steppar'+str(par_freeze_steppar)+
+                    'columns: flux | '
+                    +('nh median limit at 1/2/3 sigma (1e22 cm^{-2})' if nh_photo_mode=='lim' else
+                      '1/2/3 photon noise sigma max nh fitted value from seppar runs')]
 
-    np.savetxt('photo_nh_'+mode+'_mod_' + mod_path[:mod_path.rfind('.')] +
+    np.savetxt('photo_nh_'+nh_photo_mode+'_mod_' + mod_path[:mod_path.rfind('.')] +
                ('_regroup' if regroup else '') +
                ('_nostat' if not fakestats else '') +
                '_' + str(expos) + 'ks' +

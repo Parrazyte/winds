@@ -5,6 +5,10 @@ import time
 import pexpect
 import matplotlib.pyplot as plt
 from tqdm import tqdm
+
+#to check whether iPython is working
+import builtins
+
 from xspec import AllModels,AllData,Fit,Spectrum,Model,Plot,Xset,FakeitSettings,Chain
 from fitting_tools import sign_sigmas_delchi_1dof
 #custom script with a few shorter xspec commands
@@ -12,7 +16,7 @@ from xspec_config_multisp import allmodel_data,model_load,addcomp,Pset,Pnull,res
                          calc_error,delcomp,fitmod,calc_fit,xcolors_grp,xPlot,xscorpeon,catch_model_str,\
                          load_fitmod, ignore_data_indiv,par_degroup,xspec_globcomps,is_abs,lines_e_dict,calc_EW,set_ener
 
-from simu_NH_photo import simu_NH_photo
+from line_simu.simu_NH_photo import simu_nh_photo
 
 reset()
 Fit.query='yes'
@@ -103,11 +107,22 @@ def line_simu(outdir='./',mod_path=None,mode='ew_lim',
               photo_mod='',photo_comp_pos=3,photo_xi_range='warm',vshift_err_NH=1,
               photo_turb_range=[100,'min',300],
               photo_v_range=[0,-1000,1000],
+
+              #note: in actual step numbers. The values provided to steppar (which adds 1) are these -1
+              photo_nsteppar_turb=10,
+              photo_nsteppar_v=20,
+
+              reload=True,
               line='FeKa26abs',line_v=[-3000,3000],line_w=[0.005,0.005],
               width_test_val=0.005,width_EW_resol=0.05,width_EW_inter=[0.1,100],
-              EW_bshift_lim=20,width_bshift_val=0.005,sampl_gabs_string='-3_2_500'):
+              EW_bshift_lim=20,width_bshift_val=0.005,sampl_gabs_string='-3_2_500',
+              n_cores=-2):
 
     '''
+
+    Note: if n_cores is set to >1 (or <1 for max - a given value), will crash if the console has iPython
+    This is on purpose, since steppar runs with iPython become unresponsive after the command finishes.
+
     REGROUP IS OUTDATED
 
     Computes simulations of line detection with given rmf and paths
@@ -209,6 +224,9 @@ def line_simu(outdir='./',mod_path=None,mode='ew_lim',
     #TODO: add low width_EW_interval threshold
 
     '''
+
+    if n_cores!=1:
+        assert "__IPYTHON__" not in builtins.__dict__,'Error: cannot run with n_cores!=1 in an iPython console.'
 
     old_chatter=Xset.chatter
     Xset.chatter=chatter
@@ -329,12 +347,25 @@ def line_simu(outdir='./',mod_path=None,mode='ew_lim',
 
     line_E = lines_e_dict[line][0]
 
-    if mode=='NH_lim_photo':
+    if mode in ['NH_lim_photo','NH_noise_photo']:
 
-        simu_NH_photo(mode='noise')
-
+        nh_photo_mode=mode.split('_')[1]
+        save_arr=simu_nh_photo(nh_photo_mode,
+                  flux_inter,n_iter,
+                  mod_cont,flux_base,
+                  fakeset,fakestats,
+                  regroup,rmf_path_use,arf_path_use,bkg_path_use,bashproc,
+                  analysis_lowe,analysis_highe,
+                  set_ener_data,set_ener_data_str,
+                  mod_dict,photo_mod,photo_comp_pos,
+                  photo_xi_range,photo_turb_range,photo_v_range,
+                  logfile,to_error,
+                  mod_path,expos,flux_range,flux_band,
+                  n_cores=n_cores)
 
         Xset.chatter = old_chatter
+
+        return save_arr
 
 
     if mode=='vshift_err_photo':

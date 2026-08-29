@@ -6,12 +6,13 @@ import matplotlib as mpl
 import matplotlib.gridspec as gridspec
 import glob
 import pandas as pd
-from general_tools import ravel_ragged
+from general_tools import ravel_ragged,edd_factor
 from line_simu_tools import loglog_regressor
 import matplotlib.ticker as tkr
 from scipy.stats import linregress
 from matplotlib.collections import LineCollection
 import getpass
+import warnings
 username=getpass.getuser()
 
 ap = argparse.ArgumentParser(description='Script to plot line detectability from various instruments.\n)')
@@ -23,7 +24,8 @@ mpl.rcParams.update({'font.size': 18})
 ap.add_argument('-vert',nargs=1,help='plot vertical figure',default=False)
 
 ap.add_argument('-dir',nargs=1,help='simulations and plotting directory',
-                default='/media/'+username+'/crucial_SSD/Observ/highres/linedet_compa/AO2/4U1957',type=str)
+                default='/media/'+username+'/crucial_SSD/Observ/highres/linedet_compa/AO2/4U1957',
+                type=str)
 
 ap.add_argument('-all_subdirs',nargs=1,help='make the plots from all simulations in the subdirectories',
                 default=True,type=bool)

@@ -57,6 +57,14 @@ else:
 if not streamlit_mode and (1 or model_dir!=None):
     AllModels.lmod('relxill',dirPath=model_dir+'/relxill/2.9')
 
+    #for xspec-version of the SPEX slab model from Tomaru+20
+    # (https://github.com/ryotatomaru/Ionabs)
+    AllModels.lmod('ionabs', dirPath=model_dir + '/ionabs')
+
+    #note: apparently needs to be put in the bashrc instead
+    os.environ['IONABS_DATA_PATH'] = os.path.join(model_dir, 'ionabs','data_ionabs')
+    # Xset.addModelString(os.path.join(model_dir, 'ionabs','data_ionabs'))
+
     # AllModels.lmod('fullkerr',dirPath=model_dir+'/fullkerr')
     # #swiftJ1658 dust scattering halo model from Jin2019
     #
@@ -107,6 +115,7 @@ xspec_multmods=\
       clumin      kdblur     lsmooth     rfxconv     vashift     zashift
       cpflux     kdblur2     partcov     rgsxsrc     vmshift     zmshift
      gsmooth    kerrconv      rdblur       simpl    crabcorr     dscor
+     ionabs
 '''.split()
 
 def is_abs(comp_split):
@@ -402,7 +411,7 @@ def make_ls(low_e,high_e):
     freeze()
     mod_cont=allmodel_data()
 
-    from linedet_utils import narrow_line_search,plot_line_search
+    from line_detect.linedet_utils import narrow_line_search,plot_line_search
 
     Xset.chatter=1
     narrow_out_val=narrow_line_search(mod_cont,'mod_cont',[1.5,1.5],

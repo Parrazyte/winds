@@ -1,6 +1,6 @@
 import matplotlib.pyplot as plt
 from stingray import Lightcurve, Powerspectrum
-
+from astropy.io import fits
 
 def plot_PDS(lc,save=True):
     if save:

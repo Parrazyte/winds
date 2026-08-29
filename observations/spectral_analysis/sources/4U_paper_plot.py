@@ -5,11 +5,11 @@ import matplotlib as mpl
 from matplotlib.gridspec import GridSpec
 import matplotlib.pyplot as plt
 
-from linedet_utils import narrow_line_search,plot_line_ratio,coltour_chi2map
+from line_detect.linedet_utils import plot_line_ratio,coltour_chi2map
 
-from xspec_config_multisp import allmodel_data, xPlot, delcomp, model_load, reset, Plot, plot_std_ener
+from xspec_config_multisp import allmodel_data, xPlot, delcomp, model_load, reset, plot_std_ener
 
-from xspec import Xset,AllData,Plot,AllModels,Fit
+from xspec import Xset, Plot,AllModels
 
 reset()
 Plot.xLog=False

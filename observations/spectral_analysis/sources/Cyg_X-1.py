@@ -67,7 +67,7 @@ def load_first(integral=True):
         hdul.flush()
 
     # sp_nub=Spectrum('nu80902318004B01_sr.grp')
-    os.chdir('../../')
+    os.chdir('../../../../')
 
     AllData('1:1 NuSTAR/14-06/nu80902318004A01_sr.grp '+
             '2:2 NuSTAR/14-06/nu80902318004B01_sr.grp '+
@@ -133,7 +133,7 @@ def load_second(NICER='gtis', integral=True):
         hdul.flush()
 
     # sp_nub=Spectrum('nu80902318004B01_sr.grp')
-    os.chdir('../../')
+    os.chdir('../../../../')
 
     if NICER=='obsid':
 

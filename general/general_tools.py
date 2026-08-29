@@ -32,9 +32,9 @@ Ryd2eV = 13.605693
 compton_thick_thresh=1.5e24
 
 # ! light speed in Km/s unit
-c_Km = 2.99792e5
+c_Km = 2.99792458e5
 # ! light speed in cm/s unit
-c_cgs = 2.99792e10
+c_cgs = 2.99792458e10
 sigma_thomson_cgs = 6.6525e-25
 PI = 3.14159265
 

@@ -1,15 +1,14 @@
-import os,sys
+import os
 
 import matplotlib.pyplot as plt
 import glob
 import argparse
 import numpy as np
 
-from xspec import AllModels,Fit,Xset,Plot,AllData
-from xspec_config_multisp import calc_error,reset,load_mod,xscorpeon,addcomp,calc_fit,Plot_screen,rescale,\
-                                 catch_model_str,store_fit,allmodel_data,freeze,delcomp
+from xspec import AllModels, Xset,Plot,AllData
+from xspec_config_multisp import calc_error,reset,load_mod,xscorpeon,addcomp,calc_fit,Plot_screen, store_fit,allmodel_data,freeze,delcomp
 
-from linedet_utils import narrow_line_search,plot_line_search
+from line_detect.linedet_utils import narrow_line_search,plot_line_search
 
 ap = argparse.ArgumentParser(description='Script to fit photoionization models\n)')
 

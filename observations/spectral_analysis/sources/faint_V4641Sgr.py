@@ -1,7 +1,5 @@
 from xspec_config_multisp import *
-from linedet_utils import narrow_line_search,plot_line_search
 import os
-import dill
 
 os.chdir('/media/parrama/crucial_SSD/Observ/BHLMXB/XRISM/V4641Sgr/v4641sgr')
 

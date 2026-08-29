@@ -7,7 +7,7 @@ import matplotlib.gridspec as gridspec
 import glob
 import pandas as pd
 from general_tools import ravel_ragged
-from line_simus_tools import loglog_regressor
+from line_simu_tools import loglog_regressor
 import matplotlib.ticker as tkr
 from scipy.stats import linregress
 from matplotlib.collections import LineCollection

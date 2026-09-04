@@ -33,7 +33,8 @@ def simu_nh_photo(nh_photo_mode,
                   n_cores,
                   photo_nsteppar_turb,
                   photo_nsteppar_v,
-                  par_freeze_steppar
+                  par_freeze_steppar,
+                  instance_id,
                   ):
 
     '''
@@ -41,7 +42,9 @@ def simu_nh_photo(nh_photo_mode,
     Wrapper for the part of line_simu specialized in NH upper limits estimates from photoionization models
 
     mode:
-        -lim: computes 1/2/3 sigma NH upper limits for a photoionization model convolved to the source model
+        -lim: deprecated.
+        computes the median of the 1/2/3 sigma NH upper limits distirbution,
+                for a photoionization model convolved to the source model
 
         -noise: computes photon noise 1/2/3 sigma of best fit noise NH for a photoionization model
             convolved to the source model. The NH value is taken to be the highest in a 2D steppar fit
@@ -49,7 +52,7 @@ def simu_nh_photo(nh_photo_mode,
 
             photo_nsteppar_vturb/v:
             the number of steppar steps for each dimension
-            note: to be provided in actual step numbers.
+            note: must provided in actual step numbers.
             The values actually given to steppar (which adds 1) are these -1
 
             par_freeze_steppar: array-like of integers
@@ -60,6 +63,15 @@ def simu_nh_photo(nh_photo_mode,
 
                 In noise mode, freezing parameters that tend to be pegged or unconstrained
                 can considerably help improving the speed
+
+        -Nion: computes photon noise 1/2/3 sigma of the best fit noise Nion for a ionabs model convolved to the source
+                model.
+                uses the same arguments than the noise mode, ionisation parameter aside
+
+                photo_mod should then be in the form of 'ionabs_XXXX'
+                    where XXXX the ion identifier in ionabs (e.g. 2601 for FeXXVI)
+                see https://github.com/ryotatomaru/Ionabs and
+                    https://ui.adsabs.harvard.edu/abs/2020MNRAS.497.4970T/abstract for details about ionabs
 
 
         photo_xi_range:
@@ -73,16 +85,16 @@ def simu_nh_photo(nh_photo_mode,
 
     '''
 
-    print('Computing NH '+('limits' if nh_photo_mode=='lim' else 'photon noise' if nh_photo_mode=='noise' else '')+
+    print('Computing '+('Nion noise' if nh_photo_mode=='Nion' else 'NH '+('limits' if nh_photo_mode=='lim' else 'photon noise' if nh_photo_mode=='noise' else ''))+
           ' for photoionization within the given flux range...')
     
     n_flux=len(flux_inter)
     
     nh_lim_arr = np.zeros((n_flux, 3))
 
-    instance_id=time.time()
-    
-    with (tqdm(total=n_flux * n_iter) as pbar):
+    with tqdm(total=n_flux * n_iter) as pbar:
+
+        time.sleep(1)
 
         for i_flux, elem_flux in enumerate(flux_inter):
 
@@ -92,7 +104,9 @@ def simu_nh_photo(nh_photo_mode,
             if nh_photo_mode=='lim':
                 nh_val_distrib = np.repeat(None, 3 * n_iter).reshape(3, n_iter)
 
-            elif nh_photo_mode=='noise':
+            elif nh_photo_mode in ['noise','Nion']:
+
+                #note: will be used in the same way for Nion
                 nh_val_distrib = np.repeat(None, n_iter)
 
                 #testing whether a save file exists
@@ -102,25 +116,39 @@ def simu_nh_photo(nh_photo_mode,
                 # fetching dynamicallly all the functio arguments to ensure we are doing the same computation
                 # from https://stackoverflow.com/questions/10724495/getting-all-arguments-and-values-passed-to-a-function
                 sig, simu_locals = inspect.signature(simu_nh_photo), locals()
-                par_list = [[param.name,simu_locals[param.name]] for param in sig.parameters.values()]
-                save_header = str(par_list)
 
+                par_list = [[param.name,simu_locals[param.name]] for param in sig.parameters.values()]
+
+                par_list_forsave=[elem for elem in par_list if elem[0]
+                                  not in ['mod_cont','mod_dict','bashproc','logfile','fakeset','instance_id','n_cores']]
+
+                save_header =np.array(["# ''''''''''''''''''''''''''''''''''''''''''''"]+
+                                      ("# '"+np.array(str(par_list_forsave).replace('\n','')\
+                                    .replace("[['",'').replace(']]]',']').split("], ['"))).tolist()\
+                    +["# ''''''''''''''''''''''''''''''''''''''''''''",
+                      '# time identifier\t'+('Nion' if nh_photo_mode=='Nion' else 'NH')+' noise value (10^'+('18' if nh_photo_mode=='Nion' else '22')+' cm^{-2]'])+'\n'
 
                 if os.path.isfile(elem_flux_save_path):
                     with open(elem_flux_save_path) as f_save:
                         pre_save_lines=f_save.readlines()
-                    assert pre_save_lines[0].replace('\n','')==save_header,\
+
+                    assert str(pre_save_lines[:len(save_header)])==str(save_header.tolist()),\
                             'Error: previous save file has different arguments'
 
                     #removing a number of iterations equal to the number of saved results
-                    n_iter_use=n_iter-(len(pre_save_lines)-1)
-                    pbar.update(len(pre_save_lines)-1)
+                    n_iter_use=n_iter-(len(pre_save_lines)-len(save_header))
+                    pbar.update(len(pre_save_lines)-len(save_header))
+
+            time.sleep(1)
 
             for i_iter in range(n_iter_use):
                 mod_cont.load()
 
                 # freezing the parameters before faking
                 freeze()
+
+                if set_ener_data:
+                    set_ener(set_ener_data_str, xrism=True)
 
                 AllModels(1)(1).values = elem_flux / flux_base
 
@@ -174,8 +202,45 @@ def simu_nh_photo(nh_photo_mode,
                 XRISM_sp = AllData(1).fileinfo('TELESCOP') == 'XRISM'
 
                 # adding the photoionization component
-                comp_par, comp_num = addcomp(mod_dict[photo_mod][0] + '{' + mod_dict[photo_mod][1].split('/')[-1] + '}',
+
+                if nh_photo_mode=='Nion':
+
+                    #normally should be ionabs
+                    newcomp_str=photo_mod.split('_')[0]
+
+                else:
+                    newcomp_str=mod_dict[photo_mod][0] + '{' + os.path.relpath(mod_dict[photo_mod][1]) + '}'
+
+
+                comp_par, comp_num = addcomp(newcomp_str,
                                              position=photo_comp_pos, return_pos=True)
+
+                if photo_mod.startswith('ionabs'):
+
+                    #takes some time to load all the tables
+                    photo_mod_ion = photo_mod.split('_')[1]
+
+                    # ion number
+                    AllModels(1)(comp_par[0]).values = int(photo_mod_ion)
+
+                    # ion LoS column density
+                    AllModels(1)(comp_par[1]).values = [1.0, 0.1, 1e-5, 1e-5, 1e3, 1e3]
+
+                    # ion turbulence velcity (directly in DeltaE/E units when put negative)
+                    # note: must be inverted between min and max since we're working in fully negative units
+                    AllModels(1)(comp_par[2]).values = [-photo_turb_range[0] / c_0,
+                                                        (-1e-5 if photo_turb_range[1] == photo_turb_range[2] else
+                                                         photo_turb_range[0] / 10 / c_0),
+                                                        -photo_turb_range[2] / c_0, -photo_turb_range[2] / c_0,
+                                                        -photo_turb_range[1] / c_0, -photo_turb_range[1] / c_0]
+
+                    AllModels(1)(comp_par[3]).values = [photo_v_range[0] / c_0,
+                                                        (-1e-5 if photo_v_range[1] == photo_v_range[2] else
+                                                         max(1e-5, photo_v_range[0] / 10 / c_0)),
+                                                        photo_v_range[1] / c_0, photo_v_range[1] / c_0,
+                                                        photo_v_range[2] / c_0, photo_v_range[2] / c_0]
+
+                    AllModels.show()
 
                 # with appropriate parameter range
                 if photo_mod == 'pion_abs_NS':
@@ -195,6 +260,7 @@ def simu_nh_photo(nh_photo_mode,
                     AllModels(1)(comp_par[3]).values = [0.0, 1e-3, -0.00333, -0.00333, 0.00333, 0.00333]
 
                 if photo_mod == 'pion_abs_canon_soft':
+
                     if photo_xi_range.split('_')[0] == 'cold':
                         AllModels(1)(comp_par[0]).values = [0., 0.02, 0., 0., 0.5, 0.5]
                     if photo_xi_range.split('_')[0] == 'warm':
@@ -202,11 +268,18 @@ def simu_nh_photo(nh_photo_mode,
                     elif photo_xi_range.split('_')[0] == 'hot':
                         AllModels(1)(comp_par[0]).values = [4., 0.02, 2.0, 3.5, 4.5, 4.5]
 
+
                     if '_' in photo_xi_range and photo_xi_range.split('_')[1] == 'freeze':
                         AllModels(1)(comp_par[0]).frozen = True
 
-                    AllModels(1)(comp_par[1]).values = [1.0, 0.1, 1e-2, 1e-2, 10.0, 10.0]
+                    AllModels(1)(comp_par[1]).values = [1.0, 0.1,
+                                                        AllModels(1)(comp_par[1]).values[2], AllModels(1)(comp_par[1]).values[2],
+                                                        10.0, 10.0]
+                    AllModels(1)(comp_par[2]).values = [0.1, -0.1, 1e-2, 1e-2, 10.0, 10.0]
+
                     AllModels(1)(comp_par[3]).values = [photo_turb_range[0], photo_turb_range[0] / 10,
+
+                                                        #notes: adding 1 to avoid issues with rounding errors
                                                         AllModels(1)(comp_par[3]).values[2] if photo_turb_range[
                                                                                                    1] == 'min' else
                                                         photo_turb_range[1],
@@ -222,9 +295,19 @@ def simu_nh_photo(nh_photo_mode,
                                                         ]
 
                     # equivalent to +/-1000km/s
-                    AllModels(1)(comp_par[4]).values = [photo_v_range[0] / c_0, photo_v_range[0] / 10 / c_0,
+                    AllModels(1)(comp_par[4]).values = [photo_v_range[0] / c_0,
+                                                        (-1e-5 if photo_v_range[1]==photo_v_range[2] else
+                                                        min(1e-5,photo_v_range[0] / 10 / c_0)),
                                                         photo_v_range[1] / c_0, photo_v_range[1] / c_0,
                                                         photo_v_range[2] / c_0, photo_v_range[2] / c_0]
+
+
+                #freezing requested parameters
+                for par_conti in par_freeze_steppar:
+                    par_conti_now=par_conti if par_conti<min(comp_par) else par_conti+len(comp_par)
+                    AllModels(1)(par_conti_now).frozen=True
+
+                AllModels.show()
 
                 # fitting
                 calc_fit()
@@ -343,21 +426,19 @@ def simu_nh_photo(nh_photo_mode,
 
                     assert photo_mod == 'pion_abs_canon_soft'
 
-                    #freezing requested parameters
-                    for par_conti in par_freeze_steppar:
-                        par_conti_now=par_conti if par_conti<min(comp_par) else par_conti+len(comp_par)
-                        AllModels(1)(par_conti_now).frozen=True
 
                     #setting up parallel computation
-                    Fit.parallel.steppar=os.cpu_count()-n_cores if n_cores<0 else n_cores
+                    Xset.parallel.steppar=os.cpu_count()-n_cores if n_cores<0 else n_cores
 
 
                     #removing the logs for the steppar run to avoid issues
                     curr_chatter=Xset.chatter
                     curr_logChatter=Xset.logChatter
-                    Xset.chatter=0
-                    Xset.logChatter=0
+                    curr_query=Fit.query
 
+                    Xset.chatter=0
+                    Xset.logChatter=10
+                    Fit.query='no'
                     #for now, we assume whether there is a density parameters from the number of parameters
                     #in the table. If 4, then there should be no density. If 5, then there should be a density
                     id_delta_photomod=len(comp_par)==4
@@ -365,27 +446,75 @@ def simu_nh_photo(nh_photo_mode,
                     #steppar command. we remove 1 for the number of steps in each dimension because steppar
                     #adds 1 step by default.
                     Fit.steppar(
-                    'log '+str(comp_par[3-id_delta_photomod])
+                    ('' if AllModels(1)(comp_par[3-id_delta_photomod]).frozen else 'log '+str(comp_par[3-id_delta_photomod])
                            +' '+str(AllModels(1)(comp_par[3-id_delta_photomod]).values[2])
                            +' '+str(AllModels(1)(comp_par[3-id_delta_photomod]).values[-1])
-                           +' '+str(photo_nsteppar_turb-1)
-                    +'nolog ' + str(comp_par[4-id_delta_photomod])
-                    + ' ' + str(AllModels(1)(comp_par[4 - id_delta_photomod]).values[2])
-                    + ' ' + str(AllModels(1)(comp_par[4 - id_delta_photomod]).values[-1])
+                           +' '+str(photo_nsteppar_turb-1))
+                    +' nolog ' + str(comp_par[4-id_delta_photomod])
+                    + ' %.3f' %(AllModels(1)(comp_par[4 - id_delta_photomod]).values[2])
+                    + ' %.3f' %(AllModels(1)(comp_par[4 - id_delta_photomod]).values[-1])
                     + ' ' + str(photo_nsteppar_v-1)
                     )
 
                     Xset.chatter=Xset.chatter
                     Xset.logChatter=Xset.logChatter
+                    Fit.query=curr_query
 
                     #storing the maximum value found for NH within the parameter space of the steppar
                     nh_val_distrib[i_iter]=max(Fit.stepparResults(comp_par[1]))
 
+                    print(nh_val_distrib[i_iter])
                     #storing in the save file
 
-                    file_edit(elem_flux_save_path,str(instance_id),str(instance_id)+'\t'+nh_val_distrib[i_iter],
+                    file_edit(elem_flux_save_path,
+                              str(instance_id)+'_'+str(pbar.n+1),
+                              str(instance_id)+'_'+str(pbar.n+1)+'\t'+str(nh_val_distrib[i_iter])+'\n',
                               header=save_header)
 
+                if nh_photo_mode=='Nion':
+
+                    # setting up parallel computation
+                    Xset.parallel.steppar = os.cpu_count() - n_cores if n_cores < 0 else n_cores
+
+                    # removing the logs for the steppar run to avoid issues
+                    curr_chatter = Xset.chatter
+                    curr_logChatter = Xset.logChatter
+                    curr_query = Fit.query
+
+                    Xset.chatter = 0
+                    Xset.logChatter = 10
+                    Fit.query = 'no'
+                    # for now, we assume whether there is a density parameters from the number of parameters
+                    # in the table. If 4, then there should be no density. If 5, then there should be a density
+                    id_delta_photomod = len(comp_par) == 4
+
+                    # steppar command. we remove 1 for the number of steps in each dimension because steppar
+                    # adds 1 step by default.
+                    Fit.steppar(
+                        ('' if AllModels(1)(comp_par[2]).frozen else
+                        'log ' + str(comp_par[2])
+                        + ' ' + str(AllModels(1)(comp_par[2]).values[2])
+                        + ' ' + str(AllModels(1)(comp_par[2]).values[-1])
+                        + ' ' + str(photo_nsteppar_turb - 1))
+                        + ' nolog ' + str(comp_par[3])
+                        + ' %.3f' % (AllModels(1)(comp_par[3]).values[2])
+                        + ' %.3f' % (AllModels(1)(comp_par[3]).values[-1])
+                        + ' ' + str(photo_nsteppar_v - 1))
+
+                    Xset.chatter = Xset.chatter
+                    Xset.logChatter = Xset.logChatter
+                    Fit.query = curr_query
+
+                    # storing the maximum value found for NH within the parameter space of the steppar
+                    nh_val_distrib[i_iter] = max(Fit.stepparResults(comp_par[1]))
+
+                    print(nh_val_distrib[i_iter])
+                    # storing in the save file
+
+                    file_edit(elem_flux_save_path,
+                              str(instance_id) + '_' + str(pbar.n + 1),
+                              str(instance_id) + '_' + str(pbar.n + 1) + '\t' + str(nh_val_distrib[i_iter]) + '\n',
+                              header=save_header)
                 pbar.update()
 
             #at the end of the n_iter computations for a single flux point
@@ -398,14 +527,14 @@ def simu_nh_photo(nh_photo_mode,
                 # storing the median of the distribution of the limits for this flux value
                 nh_lim_arr[i_flux] = nh_val_distrib.T[n_iter // 2]
 
-            if nh_photo_mode=='noise':
+            if nh_photo_mode in ['noise','Nion']:
 
                 #reloading the full values array from the save file in case the computation isn't full
-                nh_val_distrib=np.loadtxt(elem_flux_save_path)
+                nh_val_distrib=np.loadtxt(elem_flux_save_path,delimiter='\t',usecols=1).astype(float)
                 nh_val_distrib.sort()
-                nh_lim_arr[i_flux]=[nh_val_distrib[n_iter*0.68],
-                                    nh_val_distrib[n_iter*0.95],
-                                    nh_val_distrib[n_iter*0.997]]
+                nh_lim_arr[i_flux]=[nh_val_distrib[round(n_iter*0.68)-1],
+                                    nh_val_distrib[round(n_iter*0.95)-1],
+                                    nh_val_distrib[round(n_iter*0.997)-1]]
 
     save_arr = np.concatenate((np.array([flux_inter]), nh_lim_arr.T)).T
 
@@ -419,16 +548,18 @@ def simu_nh_photo(nh_photo_mode,
                     'flux_range logspace(' + flux_range + ') (e-10 erg/s/cm²) in ' + str(
                         flux_band.replace('.', 'p').replace(' ', '_')) + '_keV',
                     'photo mod ' + photo_mod,
-                    'photo xi range' + photo_xi_range,
-                    'photo turb range' + str(photo_turb_range),
-                    'photo v range' + str(photo_v_range),
-                    'n cores'+str(n_cores),
-                    'photo nsteppar turb'+str(photo_nsteppar_turb),
-                    'photo nsteppar v'+str(photo_nsteppar_v),
-                    'par freeze steppar'+str(par_freeze_steppar)+
+                    'photo xi range ' + photo_xi_range,
+                    'photo turb range ' + str(photo_turb_range),
+                    'photo v range ' + str(photo_v_range),
+                    'n cores '+str(n_cores),
+                    'photo nsteppar turb '+str(photo_nsteppar_turb),
+                    'photo nsteppar v '+str(photo_nsteppar_v),
+                    'par freeze steppar '+str(par_freeze_steppar),
                     'columns: flux | '
                     +('nh median limit at 1/2/3 sigma (1e22 cm^{-2})' if nh_photo_mode=='lim' else
-                      '1/2/3 photon noise sigma max nh fitted value from seppar runs')]
+                      '1/2/3 photon noise sigma max nh fitted value from seppar runs (1e22 cm^{-2})' if nh_photo_mode=='noise' else
+                      '1/2/3 photon noise sigma max Nion for line '+str(photo_mod.split('_')[1])
+                      +' fitted value from seppar runs (1e18 cm^{-2})' if nh_photo_mode=='Nion' else '')]
 
     np.savetxt('photo_nh_'+nh_photo_mode+'_mod_' + mod_path[:mod_path.rfind('.')] +
                ('_regroup' if regroup else '') +
@@ -441,4 +572,47 @@ def simu_nh_photo(nh_photo_mode,
                '.txt',
                save_arr, header='\n'.join(header_elems))
 
+
     return save_arr
+
+'''
+
+start of setups for the detectabilities
+
+
+
+os.chdir('/media/parrazyte/crucial_SSD/Observ/highres/NewAthena/SpecialIssue/NHdet')
+line_simu(outdir='hotbright',mode='NH_noise_photo',rmf_path='NewAthena_4eV',
+arf_path='NewAthena_nofilter',bkg_path='NewAthena_NXB_1arcmin',
+expos=5,n_iter=1000,flux_range='100_1_5',flux_band='0.3 10.0',
+mod_path='SED_soft_0p1Edd_2e22.xcm',set_ener_data=True,set_ener_data_str='large_canon',
+photo_mod='pion_abs_canon_soft',photo_comp_pos=3,photo_xi_range='hot_freeze',
+photo_turb_range=[100,'min',300],photo_v_range=[0,-1000,1000],photo_nsteppar_turb=10,
+photo_nsteppar_v=20,par_freeze_steppar=[3,5],n_cores=10)
+
+for Nion Her X-1 flux start of main high (~2/3 of peak) on FeXXVI
+https://doi.org/10.3847/1538-4357/ac897e e.g. give 3e37 for the main high luminosity, which is about a third higher than
+this SED
+the flux is mostly at high energies though
+
+#note: we take a second flux value as 1/5th, for a conservative estimate of the short high flux
+
+line_simu(outdir='Nion_FeXXVI_HerX-1',
+mode='empi_Nion',rmf_path='NewAthena_4eV',arf_path='NewAthena_nofilter',bkg_path='NewAthena_NXB_1arcmin',
+expos=50,n_iter=1000,flux_range='2.928_2.928_1',flux_band='0.3 10.0',
+mod_path='HerX1_orb1_partlyfrozen_forsim.xcm',set_ener_data=True,set_ener_data_str='thcomp',
+ photo_mod='ionabs_2601',photo_comp_pos=2,photo_xi_range='hot_freeze',
+ photo_turb_range=[300,300,300],photo_v_range=[0,-1000,1000],photo_nsteppar_turb=1,
+ photo_nsteppar_v=100,par_freeze_steppar=[3,5],n_cores=1)
+
+
+FeXXVI on canonical 10% LEdd soft state (7.824e-09 in 0.3-10.)
+line_simu(outdir='Nion_FeXXVI_softcanon',
+mode='empi_Nion',rmf_path='NewAthena_4eV',arf_path='NewAthena_nofilter',bkg_path='NewAthena_NXB_1arcmin',
+expos=50,n_iter=1000,flux_range='78.24_78.24_1',flux_band='0.3 10.0',
+mod_path='SED_soft_0p1Edd_2e22.xcm',set_ener_data=True,set_ener_data_str='thcomp',
+ photo_mod='ionabs_2601',photo_comp_pos=2,photo_xi_range='hot_freeze',
+ photo_turb_range=[300,300,300],photo_v_range=[0,-1000,1000],photo_nsteppar_turb=1,
+ photo_nsteppar_v=100,par_freeze_steppar=[3,5],n_cores=1)
+ 
+'''

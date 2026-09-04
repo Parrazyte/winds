@@ -46,8 +46,8 @@ rmf_abv = {'XRISM_Hp_AO2': '/media/'+username+'/crucial_SSD/Observ/BHLMXB/XRISM/
            'RGS_r1o2':'/media/'+username+'/crucial_SSD/Observ/highres/linedet_compa/RGS_AO25/R1o2.rmf',
            'RGS_r2o2':'/media/'+username+'/crucial_SSD/Observ/highres/linedet_compa/RGS_AO25/R2o2.rmf',
            'SQUDE_indev':'/media/'+username+'/crucial_SSD/Observ/highres/linedet_compa/SQUDE/SQUDE_rsp_v1.1.2.rmf',
-           'NewAthena_4eV':'/media/'+username+'/crucial_SSD/Observ/highres/linedet_compa/NewAthena/new_athena_xifu_rb_4eV_gaussian.rmf',
-            'NewAthena_3eV':'/media/' + username + '/crucial_SSD/Observ/highres/linedet_compa/NewAthena/new_athena_xifu_rb_3eV_gaussian.rmf'}
+           'NewAthena_4eV':'/media/'+username+'/crucial_SSD/Observ/highres/linedet_compa/NewAthena/new_athena_xifu_mar_v2_4eV_gaussian.rmf',
+            'NewAthena_3eV':'/media/' + username + '/crucial_SSD/Observ/highres/linedet_compa/NewAthena/new_athena_xifu_mar_v2_3eV_gaussian.rmf'}
 
 
 rmf_abv_list = list(rmf_abv.keys())
@@ -62,9 +62,9 @@ arf_abv = {'XRISM_pointsource_GVclosed_AO2':'/media/'+username+'/crucial_SSD/Obs
            'heg_graded_-1': '/media/'+username+'/crucial_SSD/Observ/highres/linedet_compa/AO2/resp_Chandra/graded/13716_heg_-1.arf',
            'heg_graded_1': '/media/'+username+'/crucial_SSD/Observ/highres/linedet_compa/AO2/resp_Chandra/graded/13716_heg_1.arf',
            'SQUDE_indev':'/media/'+username+'/crucial_SSD/Observ/highres/linedet_compa/SQUDE/SQUDE_rsp_v1.1.1.arf',
-           'NewAthena_nofilter':'/media/'+username+'/crucial_SSD/Observ/highres/linedet_compa/NewAthena/new_athena_xifu_rb_no_filter.arf',
-           'NewAthena_optfilter': '/media/' + username + '/crucial_SSD/Observ/highres/linedet_compa/NewAthena/new_athena_xifu_rb_optical_filter.arf',
-           'NewAthena_befilter': '/media/' + username + '/crucial_SSD/Observ/highres/linedet_compa/NewAthena/new_athena_xifu_rb_be_filter_100um.arf'}
+           'NewAthena_nofilter':'/media/'+username+'/crucial_SSD/Observ/highres/linedet_compa/NewAthena/new_athena_xifu_mar_v2_no_filter.arf',
+           'NewAthena_optfilter': '/media/' + username + '/crucial_SSD/Observ/highres/linedet_compa/NewAthena/new_athena_xifu_mar_v2_optical_filter.arf',
+           'NewAthena_befilter': '/media/' + username + '/crucial_SSD/Observ/highres/linedet_compa/NewAthena/new_athena_xifu_mar_v2_be_filter_100um.arf'}
 
 
 
@@ -72,15 +72,16 @@ arf_abv = {'XRISM_pointsource_GVclosed_AO2':'/media/'+username+'/crucial_SSD/Obs
 arf_abv_list = list(arf_abv.keys())
 
 bkg_abv={'SQUDE_indev':"/media/parrazyte/crucial_SSD/Observ/highres/linedet_compa/SQUDE/Background_files/full_bkg_1e6s_1am_X06.pha",
-         'NewAthena_NXB_10asec':'/media/' + username + '/crucial_SSD/Observ/highres/linedet_compa/NewAthena/new_athena_xifu_rb_nxb_10asec_radius.pha',
-         'NewAthena_NXB_1arcmin':'/media/' + username + '/crucial_SSD/Observ/highres/linedet_compa/NewAthena/new_athena_xifu_rb_nxb_1amin2.pha',
-         'NewAthena_NXB_1pix':'/media/' + username + '/crucial_SSD/Observ/highres/linedet_compa/NewAthena/new_athena_xifu_rb_nxb_1pix.pha'}
+         'NewAthena_NXB_10asec':'/media/' + username + '/crucial_SSD/Observ/highres/linedet_compa/NewAthena/new_athena_xifu_mar_v2_nxb_10asec_radius.pha',
+         'NewAthena_NXB_1arcmin':'/media/' + username + '/crucial_SSD/Observ/highres/linedet_compa/NewAthena/new_athena_xifu_mar_v2_nxb_1amin2.pha',
+         'NewAthena_NXB_1pix':'/media/' + username + '/crucial_SSD/Observ/highres/linedet_compa/NewAthena/new_athena_xifu_mar_v2_nxb_1pix.pha'}
 
 bkg_abv_list = list(bkg_abv.keys())
 
-mod_dict={'pion_abs_NS':['mtable','/media/'+username+'/crucial_SSD/Observ/highres/linedet_compa/mods/pionabsAXJ1745.fits'],
-          'pion_abs_softMAXIJ1543':['mtable','/media/'+username+'/crucial_SSD/Observ/highres/linedet_compa/mods/pionabsMAXIJ1543.fits'],
-          'pion_abs_canon_soft':['mtable','/media/'+username+'/crucial_SSD/Observ/highres/linedet_compa/mods/pionabsmtablecanonical.fits'],
+#note: will be transformed into a relative path, but this relative path cannot contain a _ otherwise there will be issues
+mod_dict={'pion_abs_NS':['mtable','/media/'+username+'/crucial_SSD/Observ/highres/mods/pionabsAXJ1745.fits'],
+          'pion_abs_softMAXIJ1543':['mtable','/media/'+username+'/crucial_SSD/Observ/highres/mods/pionabsMAXIJ1543.fits'],
+          'pion_abs_canon_soft':['mtable','/media/'+username+'/crucial_SSD/Observ/highres/mods/pionabsmtablecanonicallarge.fits'],
           }
 #line_simu('test_SED.xcm',mode='ew_lim',rmf_path='XRISM_Hp_AO2',
 #                          arf_path='XRISM_pointsource_GVclosed_AO2',expos=50,
@@ -97,7 +98,9 @@ mod_dict={'pion_abs_NS':['mtable','/media/'+username+'/crucial_SSD/Observ/highre
 def line_simu(outdir='./',mod_path=None,mode='ew_lim',
               rmf_path='XRISM_Hp_AO2',arf_path='XRISM_pointsource_GVclosed_AO2',
               bkg_path='',
-              expos=50,flux_range='1_100_10',flux_band='2.0 10.0',to_error=30,
+              #in ks
+              expos=50,
+              flux_range='1_100_10',flux_band='2.0 10.0',to_error=30,
               analysis_lowe=0.3,
               analysis_highe=10.,
 
@@ -111,7 +114,7 @@ def line_simu(outdir='./',mod_path=None,mode='ew_lim',
               #note: in actual step numbers. The values provided to steppar (which adds 1) are these -1
               photo_nsteppar_turb=10,
               photo_nsteppar_v=20,
-
+              par_freeze_steppar=[],
               reload=True,
               line='FeKa26abs',line_v=[-3000,3000],line_w=[0.005,0.005],
               width_test_val=0.005,width_EW_resol=0.05,width_EW_inter=[0.1,100],
@@ -144,6 +147,14 @@ def line_simu(outdir='./',mod_path=None,mode='ew_lim',
                     
                 photo_turb_range/photo_v_range: the allowed velocity and turbulence parameter spaces for this mode
 
+                par_freeze_steppar: the parameters to freeze during the steppar (in continuum numbering)
+
+            -empi_Nion: same method as NH_noise_photo, but applied to an empirical ionabs convolution model
+                        the line is given by
+                        photo_mod, which must be set to ionabs_XXXX with XXXX the line number in ionabs format
+                        see https://github.com/ryotatomaru/Ionabs and
+                    https://ui.adsabs.harvard.edu/abs/2020MNRAS.497.4970T/abstract for details about ionabs
+
             -vshift_err_photo: computes 1/2/3 sigma velocity errors for a photoinization model added to the source model
                 -for this, we always return the maximum between the + and - error compared to the base 0 value
 
@@ -154,6 +165,7 @@ def line_simu(outdir='./',mod_path=None,mode='ew_lim',
             -bshift_err: computes the bshift errors with the given response files for a series of luminosity
                         for a given line, with a given EW and width
             -width_lim, computes the
+
         -mod_path:xspec_mod_path. if None, uses the currently loaded model instead
 
         -rmf_path/arf_path: rmf/arf to use for the fakes. must be an absolute path. available shortcuts:
@@ -305,7 +317,10 @@ def line_simu(outdir='./',mod_path=None,mode='ew_lim',
 
     os.chdir(outdir)
 
-    logfile_write=Xset.openLog('line_simu_'+mode+'.log')
+
+    instance_id=time.time()
+
+    logfile_write=Xset.openLog('line_simu_'+mode+'_'+str(int(instance_id))+'.log')
     #ensuring the log information gets in the correct place in the log file by forcing line to line buffering
     logfile_write.reconfigure(line_buffering=True)
 
@@ -347,9 +362,10 @@ def line_simu(outdir='./',mod_path=None,mode='ew_lim',
 
     line_E = lines_e_dict[line][0]
 
-    if mode in ['NH_lim_photo','NH_noise_photo']:
+    if mode in ['NH_lim_photo','NH_noise_photo','empi_Nion']:
 
         nh_photo_mode=mode.split('_')[1]
+
         save_arr=simu_nh_photo(nh_photo_mode,
                   flux_inter,n_iter,
                   mod_cont,flux_base,
@@ -361,7 +377,12 @@ def line_simu(outdir='./',mod_path=None,mode='ew_lim',
                   photo_xi_range,photo_turb_range,photo_v_range,
                   logfile,to_error,
                   mod_path,expos,flux_range,flux_band,
-                  n_cores=n_cores)
+                  n_cores,
+                   photo_nsteppar_turb,
+                   photo_nsteppar_v,
+                   par_freeze_steppar,
+                    instance_id
+                               )
 
         Xset.chatter = old_chatter
 

@@ -124,7 +124,7 @@ def hid_graph(ax_hid, dict_linevis,
     base_sample_points_bool=dict_linevis['base_sample_points_bool']
 
     # weird setup but due to the variable being either a bool or a str
-    if not broad_mode == False:
+    if broad_mode != False:
         HR_broad_bands = dict_linevis['HR_broad_bands']
         lum_broad_bands = dict_linevis['lum_broad_bands']
         lum_plot = dict_linevis['lum_plot']
@@ -1772,7 +1772,7 @@ def hid_graph(ax_hid, dict_linevis,
 
         perform_unzoom=zoom=='auto'
             
-        # recomputing the x and ylims
+        # recomputing the x and ylims (once again weird broad_mode test due to bool or str nature)
         if broad_mode != False and len(point_list_LEdd_HR_hard) > 0:
             if xlims is None:
                 xlims = [min(point_list_LEdd_HR_hard),
@@ -1783,7 +1783,7 @@ def hid_graph(ax_hid, dict_linevis,
             if xlims[0]<plt.xlim()[0] or xlims[1]>plt.xlim()[1]:
                 perform_unzoom=True
                     
-        if broad_mode == False and len(point_list_LEdd_HR_soft) > 0:
+        if not broad_mode and len(point_list_LEdd_HR_soft) > 0:
 
             if xlims is None:
                 xlims = [min(point_list_LEdd_HR_soft),
@@ -2267,7 +2267,7 @@ def hid_graph(ax_hid, dict_linevis,
     # ax_hid.set_ylim(5.713386220172999e-05, 0.6740380679468638)
 
     #Fig. 9 of global 4U paper
-    # if broad_mode==False:
+    # if not broad_mode:
     #     ax_hid.set_xlim(0.4, 1.1)
     #     ax_hid.set_ylim(1e-2, 4e-1)
     # else:

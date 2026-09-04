@@ -526,7 +526,7 @@ def plot_line_search(chi_dict_plot,outdir,sat,save=True,suffix=None,epoch_observ
                  force_side_lines=force_side_lines,minor_locator=minor_locator,
                  show_peak_pos=show_peak_pos,show_peak_width=show_peak_width)
 
-    if save==True:
+    if save:
         # saving it and closing it
         plt.savefig(os.path.join(outdir,epoch_observ[0] + '_' + suffix + '_line_comb_plot_' +\
                     line_search_e_str.replace(' ','_') + '_' + line_search_norm_str.replace(' ', '_') + '.'+format))
@@ -718,7 +718,7 @@ def color_chi2map(fig, axe, chi_map, title='', combined=False, ax_bar=None):
     axe.set_ylabel('Line normalisation iteration')
     axe.set_xlabel('Line energy parameter iteration')
 
-    if combined == False:
+    if not combined:
         axe.set_title(title)
 
     if np.max(chi_map) >= 1e3:
@@ -729,7 +729,7 @@ def color_chi2map(fig, axe, chi_map, title='', combined=False, ax_bar=None):
 
     img = axe.imshow(chi_map, interpolation='none', cmap='plasma', aspect='auto')
 
-    if combined == False:
+    if not combined:
         colorbar = plt.colorbar(img, ax=axe)
         fig.tight_layout()
 
@@ -757,7 +757,7 @@ def contour_chi2map(fig, axe, chi_dict, title='', combined=False):
 
     axe.set_ylabel('Gaussian line normalisation\n in units of local continuum Flux')
     axe.set_yscale('symlog', linthresh=line_threshold, linscale=0.1)
-    if combined == False:
+    if not combined:
         axe.set_xlabel('Energy (keV)')
 
     chi_contours = [chi_base - 9.21, chi_base - 4.61, chi_base - 2.3]
@@ -821,7 +821,7 @@ def contour_chi2map(fig, axe, chi_dict, title='', combined=False):
     # using a weird class to get correct tickers on the axes since it doesn't work natively
     axe.yaxis.set_minor_locator(MinorSymLogLocator(line_search_norm[0]))
 
-    if combined == False:
+    if not combined:
         axe.legend()
         fig.tight_layout()
     else:
@@ -865,7 +865,7 @@ def coltour_chi2map(fig, axe, chi_dict, title='', combined=False, ax_bar=None, n
     axe.set_ylabel('Gaussian line normalisation\n in units of local continuum Flux')
     axe.set_yscale('symlog', linthresh=line_threshold, linscale=0.1)
 
-    if combined == False:
+    if not combined:
         axe.set_xlabel('Energy (keV)')
         axe.set_title(title)
 
@@ -942,7 +942,7 @@ def coltour_chi2map(fig, axe, chi_dict, title='', combined=False, ax_bar=None, n
             colorbar = plt.colorbar(img, location='bottom', orientation='horizontal', spacing='proportional',
                                     ticks=cm_ticks,aspect=50)
             colorbar.ax.set_xticklabels(cm_ticklabels)
-        elif combined == False:
+        elif not combined:
             colorbar = plt.colorbar(img, ax=axe, spacing='proportional', ticks=cm_ticks)
             colorbar.ax.set_yticklabels(cm_ticklabels)
         else:
@@ -1030,7 +1030,7 @@ def coltour_chi2map(fig, axe, chi_dict, title='', combined=False, ax_bar=None, n
 
     axe.set_yticks(full_yticks[:len(full_yticks)//2-1].tolist()+[0]+full_yticks[len(full_yticks)//2+2:].tolist())
 
-    if combined == False:
+    if not combined:
         fig.tight_layout()
     else:
         if combined == 'paper':

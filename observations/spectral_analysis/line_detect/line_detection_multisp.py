@@ -940,7 +940,7 @@ spfile_list=[]
 glob_summary_reg=[]
 glob_summary_sp=[]
 
-if multi_obj==False:
+if not multi_obj:
 
     #assuming the last top directory is the object name
     if object_name_arg!='False':

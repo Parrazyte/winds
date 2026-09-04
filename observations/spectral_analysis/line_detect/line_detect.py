@@ -608,7 +608,7 @@ def line_detect(epoch_id,arg_dict):
             except:
                 print_xlog('\nNo pile-up information available for spectrum ' + elem_sp)
                 pileup_value = -1
-                if pileup_missing == False:
+                if not pileup_missing:
                     print_xlog('\nSkipping the spectrum...')
                     epoch_result[i_sp] = 'No pile-up info available'
                     continue
@@ -619,7 +619,7 @@ def line_detect(epoch_id,arg_dict):
                 curr_expmode = hdul[0].header['DATAMODE']
                 curr_cam = hdul[1].header['INSTRUME'][1:].swapcase()
 
-            if curr_expmode == 'IMAGING' and bg_off_flag == False:
+            if curr_expmode == 'IMAGING' and not bg_off_flag:
 
                 AllData.ignore(
                     '**-' + str(e_sat_low_indiv_init[i_sp]) + ' ' + str(e_sat_high_indiv_init[i_sp]) + '.-**')
@@ -653,12 +653,12 @@ def line_detect(epoch_id,arg_dict):
             if os.path.isfile(elem_sp.replace('.ds', '_bgtested.ds')):
                 os.remove(elem_sp.replace('.ds', '_bgtested.ds'))
             with fits.open(elem_sp) as hdul:
-                if bg_off_flag == True:
+                if bg_off_flag:
                     hdul[1].header['BACKFILE'] = ''
                 hdul.writeto(elem_sp.replace('.ds', '_bgtested.ds'))
 
             # SNR limit (only tested when the bg is kept)
-            if bg_off_flag == False:
+            if not bg_off_flag:
                 with open(epoch_observ[i_sp] + '_regex_results.txt', 'r') as regex_file:
                     regex_lines = regex_file.readlines()
                     curr_SNR = float(regex_lines[3].split('\t')[1])
@@ -2850,7 +2850,7 @@ def line_detect(epoch_id,arg_dict):
                     if len(np.nonzero(value_arr)[0]) == 0:
                         newstr = '/'
                     else:
-                        if is_shift == True and value_arr[1] == 'linked':
+                        if is_shift and value_arr[1] == 'linked':
                             # we do not show uncertainties for the linked parameters since it is just a repeat
                             newstr = str(round(value_arr[0], 2))
 

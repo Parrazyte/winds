@@ -3189,7 +3189,7 @@ def run_actions(obs_dir,action_list,parallel=False):
         return
 
     # directory overwrite check
-    if obs_dir in done_folders and folder_over == False:
+    if obs_dir in done_folders and not folder_over:
         print('Actions already computed for directory ' + obs_dir + '\nSkipping...')
         return
 

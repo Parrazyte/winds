@@ -2499,7 +2499,7 @@ if not local:
             continue
 
         #directory overwrite check
-        if directory in done_folders and folder_over==False:
+        if directory in done_folders and not folder_over:
             print('Actions already computed for directory '+directory+'\nSkipping...')
             continue
 
@@ -2748,7 +2748,7 @@ else:
                 # bright flag is set to false to avoid infinite computations
                 bright_flag_dir = bright_flag_dir or output_lc
 
-                if bright_check and output_lc == True:
+                if bright_check and output_lc:
                     print("bright obsd detected. Restarting the computations in bright mode...")
                     # resetting the position to the start of the actions to relaunch the computations now that the bright flag has
                     # and ensuring we rebuild first

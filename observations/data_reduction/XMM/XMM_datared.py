@@ -1517,7 +1517,7 @@ def extract_reg(directory,mode='manual',cams='all',expos_mode='all',use_file_tar
             file_readable=False
 
             try_load_lc=0
-            while file_readable==False:
+            while not file_readable:
                 try:
                     fits.open(lc_path)
                     file_readable=True
@@ -1665,7 +1665,7 @@ def extract_reg(directory,mode='manual',cams='all',expos_mode='all',use_file_tar
 
             #waiting for the file to be readable to continue
             file_readable=False
-            while file_readable==False:
+            while not file_readable:
                 try:
                     fits.open(path_img_clean)
                     file_readable=True
@@ -1921,7 +1921,7 @@ def extract_reg(directory,mode='manual',cams='all',expos_mode='all',use_file_tar
                     if len(src_snr_arr.nonzero()[0])==0:
                         print('\nCould not compute SNR for a single region. Exiting...')
                         spawn.sendline('\ncd $currdir')
-                        if excised==False:
+                        if not excised:
                             return None,None,None,None,None
                         else:
                             return None,None,None,None
@@ -2014,7 +2014,7 @@ def extract_reg(directory,mode='manual',cams='all',expos_mode='all',use_file_tar
                             
                     #When we perform the SNR optimisation after the pile-up computation, there's no need to rescreen and thus
                     #return a new ds9 pid
-                    if excised==False:
+                    if not excised:
                         ds9_pid=disp_ds9(spawn,file_img_cleaned,regfile=reg_name,screenfile=fulldir+'/'+camera+suffix_evt
                                                 +prefix+'_reg'+add_str+'_screen.png',give_pid=True,kill_last=ds9_pid_prev,kill_current=True,sudo_mode=sudo_mode,sudo_mdp=sudo_mdp)
                         
@@ -2024,7 +2024,7 @@ def extract_reg(directory,mode='manual',cams='all',expos_mode='all',use_file_tar
                 
                 #waiting for the ds9 window to be launched
                 ds9launch=False
-                while ds9launch==False:
+                while not ds9launch:
                     try:
                         ds9_pid_sp_start=ds9_pid_sp_start
                         ds9launch=True
@@ -2410,7 +2410,7 @@ def extract_reg(directory,mode='manual',cams='all',expos_mode='all',use_file_tar
                         hole_exists=False
                         alphashape_iter=0.1
                         
-                        while hole_exists==False:
+                        while not hole_exists:
                             CCD_shape=alphashape(CCD_on,alpha=alphashape_iter)
                             
                             #converting the polygon to a mask
@@ -3016,7 +3016,7 @@ def extract_reg(directory,mode='manual',cams='all',expos_mode='all',use_file_tar
                     force_pileup=True
 
                 #testing the pileup progression when no limit is given
-                if p_iter!=0 and force_pileup==False:
+                if p_iter!=0 and not force_pileup:
                     
                     if pileup_val_list[-1]>=pileup_val_list[-2]:
                         print('\nThe excision is not improving the pile-up anymore.'+\
@@ -3621,7 +3621,7 @@ def extract_lc(directory,mode='manual',cams='all',expos_mode='all',broad_emin=0.
 
             #waiting for the file to be readable to continue
             file_readable=False
-            while file_readable==False:
+            while not file_readable:
                 try:
                     fits.open(lc_path)
                     file_readable=True
@@ -4355,7 +4355,7 @@ def startdir_state(action):
     
 started_folders,done_folders=startdir_state(args.action)
 prev_started_folders,prev_done_folders=startdir_state(gm_action)
-if local==False:
+if not local:
     #checking them in search for ODF directories
     for directory in subdirs:
         
@@ -4365,7 +4365,7 @@ if local==False:
             continue
         
         #directory overwrite check
-        if directory in done_folders and folder_over==False:
+        if directory in done_folders and not folder_over:
             print('Actions already computed for directory '+directory+'\nSkipping...')
             continue
         

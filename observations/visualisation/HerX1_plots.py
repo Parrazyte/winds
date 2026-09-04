@@ -773,14 +773,15 @@ def plot_los(cmap='plasma'):
 
     ax_launching.plot(thermal_gx13_nh_xxvi[0],np.log10(thermal_gx13_nh_xxvi[1]),color="red",alpha=0.5,
                       ls='-',
-             label=r'thermal-radiative wind 0.5 L$_{Edd}$ | 1.4 M$_{\odot}$ | R$_d$=10   $\;$R$_{IC}$ | R$_{is}$=0.20 R$_{IC}$')
+             label=r'0.5 L$_{Edd}$ | 1.4 M$_{\odot}$ | R$_d$=10   $\;$R$_{IC}$ | R$_{is}$=0.20 R$_{IC}$')
 
     ax_launching.plot(thermal_gx13_nh_xxvi[0],np.log10(thermal_gx13_nh_xxvi[2]),color="red",alpha=0.5,
                       ls='--',
-             label=r'thermal-radiative wind 0.5 L$_{Edd}$ | 1.4 M$_{\odot}$ | R$_d$=1   $\;$$\;$ R$_{IC}$ | R$_{is}$=0.20 R$_{IC}$')
+             label=r'0.5 L$_{Edd}$ | 1.4 M$_{\odot}$ | R$_d$=1   $\;$$\;$ R$_{IC}$ | R$_{is}$=0.20 R$_{IC}$')
 
-    ax_launching.plot(thermal_h1743_nh_xxvi[0],np.log10(thermal_h1743_nh_xxvi[1]),color="magenta",alpha=0.5,
-             label=r'thermal-radiative wind 0.3 L$_{Edd}$ | 8.0 M$_{\odot}$ | R$_d$=0.18 R$_{IC}$ | R$_{is}$=0.18 R$_{IC}$')
+    ax_launching.plot(thermal_h1743_nh_xxvi[0],np.log10(thermal_h1743_nh_xxvi[1]),color="red",alpha=0.5,
+                      ls='dashdot',
+             label=r'0.3 L$_{Edd}$ | 8.0 M$_{\odot}$ | R$_d$=0.18 R$_{IC}$ | R$_{is}$=0.18 R$_{IC}$')
 
     csv_mhd_0p1Ledd=pd.read_csv('/home/parrazyte/Documents/Work/PostDoc/docs/NewAthena/SpecialIssue/DiskWinds/launching/mhd/'+
                             'KeigoTanimoto/Solutions/0p1_Ledd/structure/monaco_Nion.csv')
@@ -800,11 +801,38 @@ def plot_los(cmap='plasma'):
     #(the density spreads approximately equally accross an even angle range accross each value)
     csv_MHD_angl=np.floor(csv_mhd_Nion_ok['angle']/10)*10
 
+
+    #note: computing T_IC and R_IC on the deabsorbed canonical soft state SED gives:
+    #T_IC=1.06keV
+    #R_IC=5.19e5 Rg
+    #means for the MHD simulations, R_disk=0.48 R_IC
+
     ax_launching.plot(csv_MHD_angl,np.log10(csv_mhd_Nion_ok['Fe01_Nion']),
                       color='dodgerblue',alpha=1.0,
-                      label='MHD wind 0.1 L$_{Edd}$ | 8.0 M$_{\odot}$ | R$_d$=0.?? R$_{IC}$ | n$_0$=1.7 $\cdot$10$^{18}$ | p=1.2')
+                      label='0.1 L$_{Edd}$ | 8.0 M$_{\odot}$ | R$_d$=0.48 R$_{IC}$ | n$_0$=1.7 $\cdot$10$^{18}$ | p=1.2')
 
-    ax_launching.legend(title='launching mechanisms',loc='lower left')
+    ax_launching.legend(title=r'$\;\;\;\;\;\;\;\;\;\;\;\;\;\;\;\;\;\;\;\;\;\;\;\;\;\;\;\;\;\;$',loc='lower left',
+                        framealpha=1.0)
 
+    ax_launching.axhline(np.log10(1.735e16), color='grey', alpha=0.5, )
+    ax_launching.text(68,16.13, '3$\sigma$ NewAthena limit for Her X-1 main high in 50ks',
+                      color='grey',alpha=1)
+
+
+    #modifies the vertical alignment for saves (which move the text slightly
+    v_hm=0.09
+
+    plt.text(87, 16.325-v_hm, 'launching mechanisms:', color='black', zorder=10)
+
+    x_hm=1.0
+
+    plt.text(77.5+x_hm, 16.325-v_hm, 'thermal', color='red', zorder=10)
+
+    plt.text(74.7+x_hm, 16.325-v_hm, '/', color='black', zorder=10)
+
+
+    plt.text(74.3+x_hm, 16.325-v_hm, 'MHD', color='dodgerblue', zorder=10,)
+
+    #for 2/3 of main high peak.
 
 

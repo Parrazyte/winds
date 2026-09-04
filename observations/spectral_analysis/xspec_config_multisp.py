@@ -230,7 +230,7 @@ def screen_term(screenfile,wind_type='Spyder',kill=False):
                 terminal_wid=elem.split(' ')[0]
             os.system('import -window '+terminal_wid+' '+screenfile)
 
-            if kill==True:
+            if kill:
                 os.system('xkill -id '+terminal_wid)
 
 def catch_model_str(logfile,savepath=None):
@@ -968,6 +968,48 @@ def save_mo_Stefano(outfile,put_err_col=True,factor=1):
         save_arr=np.array([x,y]).T
     np.savetxt(outfile, save_arr,header='E[keV] '+('E_err[keV] ' if put_err_col else '')+'emo[Jy]')
 
+
+def compute_T_IC():
+    '''
+    Computes the compton temperature of the currently loaded model
+
+    formula taken from http://arxiv.org/abs/1008.2287 p.33
+    '''
+
+
+    Plot.xAxis='keV'
+
+    Plot('eemo')
+    y_up=np.array(Plot.model())
+    x_up=np.array(Plot.x())
+
+    Plot('emo')
+    y_down=np.array(Plot.model())
+    x_down=np.array(Plot.x())
+
+    T_IC=trapezoid(y_up,x_up)/(4*trapezoid(y_down,x_down))
+
+    #result in keV if units in keV
+    return T_IC
+
+def compute_R_IC(T_IC=None):
+
+    '''
+    Computes the compton radius assuming a mean particle mass of 0.61mp
+    (from formula of https://doi.org/10.1093/mnras/stx2400 p.2)
+    T_IC is computed on the fly if not given
+
+    returns in units of Rg
+    '''
+
+    if T_IC is not None:
+        T_IC_use=T_IC
+    else:
+        T_IC_use=compute_T_IC()
+
+    R_IC=6.4e4/(T_IC_use*11604518/1e8)
+
+    return R_IC
 
 def compute_snr(sp_source,emin,emax,sp_back=None,rmf_source=None,e_step=None,mode='keV'):
 
@@ -6282,12 +6324,12 @@ def Pset(window='/xs',xlog=False,ylog=False):
 
     Plot.xAxis="keV"
 
-    if xlog==True:
+    if xlog:
         Plot.xLog=True
     else:
         Plot.xLog=False
 
-    if ylog==True:
+    if ylog:
         Plot.yLog=True
     else:
         Plot.yLog=False
@@ -6318,9 +6360,9 @@ def rescale(auto=False,autoxspec=False,xmin=None,xmax=None,ymin=None,ymax=None,r
 
     To be improved to add x auto rescaling in Log mode
     '''
-    if reset==True:
+    if reset:
         Plot.commands=()
-    if auto==False:
+    if not auto:
         Plot.addCommand('rescale y '+str(ymin)+' '+str(ymax))
         Plot.addCommand('rescale x '+str(xmin)+' '+str(xmax))
     else:
@@ -7150,7 +7192,7 @@ def plot_comp_ratio(cont_addcomps,other_addcomps,ener_low,ener_high,
                     ylims=None,
                    cont_addcomps_xcm='',other_addcomps_xcm=None,
                    other_addcomps_labels=None,other_addcomps_colors=None,figsize=(10,5),
-                    other_addcomps_type=None,other_addcomps_alpha=None,
+                    other_addcomps_type=None,other_addcomps_alpha=None,other_addcomps_ls=None,
                     plot_transi=True,minor_locator=10,ylabel_prefix='',manual_bbox=False):
 
     '''
@@ -7182,7 +7224,7 @@ def plot_comp_ratio(cont_addcomps,other_addcomps,ener_low,ener_high,
 
     ener_low/ener_high: x axis limits of the plot
 
-    other_addcomps_names/colors/alpha: None or iterable of same len as other_addcomps
+    other_addcomps_names/colors/alpha/ls: None or iterable of same len as other_addcomps
         labels and colors for the additional components
 
     other_addcomps_type: None or iterable of same len as other_addcomps
@@ -7283,17 +7325,24 @@ def plot_comp_ratio(cont_addcomps,other_addcomps,ener_low,ener_high,
     else:
         other_addcomps_alpha_use=other_addcomps_alpha
 
+    if other_addcomps_ls is None:
+        other_addcomps_ls_use=np.repeat('-',len(other_addcomps))
+    else:
+        other_addcomps_ls_use=other_addcomps_ls
+
     if other_addcomps_type is None:
         other_addcomps_type_use=np.repeat('em',len(other_addcomps))
     else:
         other_addcomps_type_use =other_addcomps_type
 
-    for elem_ratio,elem_color,elem_label,elem_type,elem_alpha in \
+    for elem_ratio,elem_color,elem_label,elem_type,elem_alpha,elem_ls in \
      zip(other_addcomps_ratio,other_addcomps_colors_use,other_addcomps_labels_use,other_addcomps_type_use,
-         other_addcomps_alpha_use):
+         other_addcomps_alpha_use,other_addcomps_ls_use):
         plt.plot([] if elem_ratio is None else Plot.x(1),
                   [] if elem_ratio is None else ((1 if elem_type=='em' else 0)+elem_ratio),
-                 color=elem_color,label=elem_label,lw=0 if elem_color==None else None,alpha=elem_alpha)
+                 color=elem_color,label=elem_label,lw=0 if elem_color==None else None,alpha=elem_alpha,
+                 ls=elem_ls,
+                 )
 
     if ylims is not None:
         plt.ylim(ylims)
@@ -7509,8 +7558,8 @@ def plot_std_ener(ax_ratio, ax_contour=None, plot_em=False, mode='ratio',exclude
             if line in lines_resolved and line not in lines_resolved_restrict:
                 continue
         else:
-            if not 'em' in line and (line not in lines_resolved and plot_indiv_transi==True \
-                                 or line in lines_resolved and plot_indiv_transi==False):
+            if not 'em' in line and (line not in lines_resolved and plot_indiv_transi \
+                                 or line in lines_resolved and not plot_indiv_transi):
                 continue
 
 

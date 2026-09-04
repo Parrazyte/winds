@@ -770,7 +770,7 @@ def file_edit(path,line_id,line_data,header):
                         
                         lines[l]=single_content
                         line_exists=True
-                if line_exists==False:
+                if not line_exists:
                     lines+=[single_content]
                 
     else:

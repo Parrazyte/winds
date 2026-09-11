@@ -254,6 +254,8 @@ def standard_plots(path_22='/media/parrama/crucial_SSD/Observ/BHLMXB/NICER/IGRJ1
                    path_lc_22='/media/parrama/crucial_SSD/Observ/BHLMXB/NICER/IGRJ17091/2022/obsid/lcbatch/lc_a/infos_var.txt',
                    path_lc_25='/media/parrama/crucial_SSD/Observ/BHLMXB/Swift/Sample/IGRJ17091/2025-ToO/timing/infos_fit_timing.txt',
                    path_BAT_lc='/media/parrama/crucial_SSD/Observ/BHLMXB/Swift/Sample/IGRJ17091/IGRJ17091-3624_lc_BAT.txt'):
+
+    from sources.rise_17091 import evol_plots
     evol_plots(path_22,path_25,path_lc_22,path_lc_25,path_BAT_lc)
 
 def lc_anal(lc_path):
@@ -319,9 +321,183 @@ def compute_RMS(lc_path):
 
     return excess_variance(lc)
 
-from stingray import Powerspectrum
+# from stingray import Powerspectrum
+#
+# plop=Powerspectrum(data=None)
+# from stingray import fourier
 
-plop=Powerspectrum(data=None)
-from stingray import fourier
+
+def lc_EP():
+
+    import matplotlib.dates as mdates
+
+    from astropy.time import Time
+
+    os.chdir('/home/parrazyte/Documents/Work/PostDoc/docs/Propal/rise_4U')
+
+    ep_csv=pd.read_csv('ep_37657_wxt.csv')
+
+    flux_err_withul=np.array([ep_csv['flux'][i]/10 if ep_csv['upper_limit'][i] else ep_csv['flux_err'][i]\
+                     for i in range(len(ep_csv))])
 
 
+    dates_ep=mdates.date2num(Time(ep_csv['mjd'].values,format='mjd').isot)
+
+    fig,ax=plt.subplots(figsize=(14,10))
+    # ax.xaxis.set_major_formatter(mdates.DateFormatter('%Y-%m-%d %H H'))
+
+    ul_mask=ep_csv['upper_limit']
+
+    #plotting upper limits
+    plt.errorbar(ep_csv['mjd'][ul_mask],ep_csv['flux'][ul_mask],yerr=flux_err_withul[ul_mask],
+                 uplims=ep_csv['upper_limit'][ul_mask],
+                 ls='None',marker='.',color='grey',ecolor='grey',alpha=0.1)
+
+    #plotting non upper limits
+    mask2025=(ep_csv['mjd']<60820) & ~(ep_csv['upper_limit']) & (ep_csv['mjd']>60760)
+
+    #from NuSTAR obs with transition on 13-04-2025
+    tday25=60778.75
+
+    #plotting upper limits
+    plt.errorbar(ep_csv['mjd'][ul_mask]-tday25,ep_csv['flux'][ul_mask],yerr=flux_err_withul[ul_mask],
+                 uplims=ep_csv['upper_limit'][ul_mask],
+                 ls='None',marker='.',color='grey',ecolor='grey',alpha=0.2)
+
+    #plotting the 2025 outburst normalized to the transition date
+    plt.errorbar(ep_csv['mjd'][mask2025]-tday25,ep_csv['flux'][mask2025],yerr=flux_err_withul[mask2025],
+                 uplims=ep_csv['upper_limit'][mask2025],
+                 ls=':',marker='d',color='midnightblue',alpha=0.5,label='EP 2025 detections')
+
+    mask2026=(ep_csv['mjd']>61270) & ~(ep_csv['upper_limit'])
+
+    #plotting the 2026 outburst normalized to an equal flux value date offset (~equal points at 61287.19 and 60778.5)
+    plt.errorbar(ep_csv['mjd'][mask2026]-tday25-(61287.19-60778.5),
+                 ep_csv['flux'][mask2026],yerr=flux_err_withul[mask2026],
+                 uplims=ep_csv['upper_limit'][mask2026],
+                 ls=':',marker='o',color='darkred',alpha=1.0,label='EP 2026 (detections just started today) shifted to match EP 2025')
+
+    plt.xlim(-2,5)
+    plt.ylim(1.5e-11,1.5e-9)
+    plt.yscale('log')
+    plt.axvline(0,color='black',label='2025 start of transition (from NuSTAR seeing it happen in real time)')
+
+    plt.axvspan(60779-tday25,60779-tday25+1.83,color='black',alpha=0.2,
+                label='2021 start of transition\n(NICER/BAT vs 2025 Swift XRT/BAT, period of eq. HR_hard and/flux)')
+
+    plt.axvline(Time.now().to_value('mjd')-tday25-(61287.19-60778.5),color="limegreen",alpha=1,
+                                label='now: UTC '+Time.now().isot)
+    plt.legend()
+
+    plt.xlabel('time w.r.t. start of transition (days)')
+    plt.ylabel('Einstein Probe flux 0.5-4keV flux (cgs)')
+    plt.tight_layout()
+
+
+'''
+This source is one of the targets of XMM LP 094484. It was just detected as entering a new outburst as of less than 24 hours ago.
+The flux increase has been remarkable, rising from non-detections in EP in September 01 to a flux level today that is extremely similar to the transition luminosities in the last 2 outbursts which covered the rise of this source (2021 and 2025). 
+The figure at this URL https://drive.google.com/file/d/1LFHiX84nhu-2v-tQll5LX7F_P1odlSi8/view?usp=sharing summarizes our current monitoring of the source, normalized to its behavior during past outbursts. 
+
+Our XMM-NuSTAR LP targets the state transition of a source like this, normally for a period of 10 days with 10 daily observations.
+
+I have requested daily Swift observations of the source to start as soon as possible, but as we are expecting the transition to start imminently, I would like to schedule the first XMM-NuSTAR observation as soon as possible. 
+
+
+'''
+
+'''
+NuSTAR SIMU
+
+test=[FakeitSettings(response='nu91201307002A01_sr.rmf',arf='nu91201307002A01_sr.arf',exposure=1e4,
+                              background='nu91201307002A01_bk.pha',
+                              fileName='fake_NuSTARA_10ks.pha'),
+    FakeitSettings(response='nu91201307002B01_sr.rmf',arf='nu91201307002B01_sr.arf',exposure=1e4,
+                              background='nu91201307002B01_bk.pha',
+                              fileName='fake_NuSTARB_10ks.pha')]
+                  
+#SPL normalized at 7e-9 cgs in absorbed 1-10keV luminosity            
+Xset.restore('testmod.xcm')
+set_ener('thcomp')
+AllData.fakeit(settings=test)
+
+'''
+
+'''
+First NuSTAR obs
+
+ABSORBED
+AllModels.calcFlux("3. 79.")
+Spectrum Number: 1
+Data Group Number: 1
+ Model Flux   0.48686 photons (7.582e-09 ergs/cm^2/s) range (3.0000 - 79.000 keV)
+Spectrum Number: 2
+Data Group Number: 2
+ Model Flux   0.48974 photons (7.6268e-09 ergs/cm^2/s) range (3.0000 - 79.000 keV)
+AllModels.calcFlux("3. 10.")
+Spectrum Number: 1
+Data Group Number: 1
+ Model Flux    0.3539 photons (3.1119e-09 ergs/cm^2/s) range (3.0000 - 10.000 keV)
+Spectrum Number: 2
+Data Group Number: 2
+ Model Flux     0.356 photons (3.1303e-09 ergs/cm^2/s) range (3.0000 - 10.000 keV)
+AllModels.calcFlux("6. 10.")
+Spectrum Number: 1
+Data Group Number: 1
+ Model Flux   0.12269 photons (1.4972e-09 ergs/cm^2/s) range (6.0000 - 10.000 keV)
+Spectrum Number: 2
+Data Group Number: 2
+ Model Flux   0.12342 photons (1.506e-09 ergs/cm^2/s) range (6.0000 - 10.000 keV)
+AllModels.calcFlux("3. 6.")
+Spectrum Number: 1
+Data Group Number: 1
+ Model Flux   0.23121 photons (1.6148e-09 ergs/cm^2/s) range (3.0000 - 6.0000 keV)
+Spectrum Number: 2
+Data Group Number: 2
+ Model Flux   0.23258 photons (1.6243e-09 ergs/cm^2/s) range (3.0000 - 6.0000 keV)
+AllModels.calcFlux("15. 50.")
+Spectrum Number: 1
+Data Group Number: 1
+ Model Flux  0.068774 photons (2.724e-09 ergs/cm^2/s) range (15.000 - 50.000 keV)
+Spectrum Number: 2
+Data Group Number: 2
+ Model Flux  0.069181 photons (2.7401e-09 ergs/cm^2/s) range (15.000 - 50.000 keV)
+ 
+
+
+UNABSORBED FPMA
+
+AllModels.calcFlux("0.3 10.")
+Spectrum Number: 1
+Data Group Number: 1
+ Model Flux   0.41709 photons (3.3672e-09 ergs/cm^2/s) range (0.30000 - 10.000 keV)
+
+AllModels.calcFlux("3. 10.")
+Spectrum Number: 1
+Data Group Number: 1
+ Model Flux   0.50304 photons (4.118e-09 ergs/cm^2/s) range (3.0000 - 10.000 keV)
+
+AllModels.calcFlux("3. 6.")
+Spectrum Number: 1
+Data Group Number: 1
+ Model Flux   0.36525 photons (2.4396e-09 ergs/cm^2/s) range (3.0000 - 6.0000 keV)
+ 
+ AllModels.calcFlux("6. 10.")
+Spectrum Number: 1
+Data Group Number: 1
+ Model Flux   0.13779 photons (1.6785e-09 ergs/cm^2/s) range (6.0000 - 10.000 keV)
+
+AllModels.calcFlux("15. 50.")
+Spectrum Number: 1
+Data Group Number: 1
+ Model Flux  0.069382 photons (2.7428e-09 ergs/cm^2/s) range (15.000 - 50.000 keV)
+ 
+  Edd ratio factor 15701344.992
+
+15701344.992
+
+FALSE		4U1630-47	81002318002	2026-09-06 07:44:00	NuSTAR	0.064658138677056	0.6880226266601082	1.1242826692900476
+
+
+
+'''

@@ -282,11 +282,12 @@ def simu_nh_photo(nh_photo_mode,
 
                     if photo_xi_range.split('_')[0] == 'cold':
                         AllModels(1)(comp_par[0]).values = [0., 0.02, 0., 0., 0.5, 0.5]
-                    if photo_xi_range.split('_')[0] == 'warm':
+                    elif photo_xi_range.split('_')[0] == 'warm':
                         AllModels(1)(comp_par[0]).values = [2., 0.02, 1., 1., 3., 3.]
                     elif photo_xi_range.split('_')[0] == 'hot':
                         AllModels(1)(comp_par[0]).values = [4., 0.02, 2.0, 3.5, 4.5, 4.5]
                     else:
+
                         AllModels(1)(comp_par[0]).values =float(photo_xi_range.split('_')[0])
 
                     if '_' in photo_xi_range and photo_xi_range.split('_')[1] == 'freeze':

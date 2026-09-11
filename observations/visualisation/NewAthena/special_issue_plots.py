@@ -4,12 +4,142 @@ from xspec import Xset,AllModels
 import matplotlib.pyplot as plt
 from matplotlib.ticker import MultipleLocator
 
+def model_compa_MHD_highE(model_mhd_list,colors=[],save=None):
 
-def model_compa_highE(save=None):
+    dict_mhd_baseload={'Tanimoto25':'/home/parrazyte/Documents/Work/PostDoc/docs/NewAthena/SpecialIssue/DiskWinds/launching/mhd/KeigoTanimoto/init',
+                       '0p1':'/home/parrazyte/Documents/Work/PostDoc/docs/NewAthena/SpecialIssue/DiskWinds/launching/mhd/KeigoTanimoto/Solutions/0p1_Ledd'}
+
+    currdir = os.getcwd()
+    fig, ax = plt.subplots(figsize=(10, 8))
+
+    for elem_mod,elem_color in zip(model_mhd_list,colors):
+
+        # for mhd
+        os.chdir(dict_mhd_baseload[elem_mod])
+
+        Xset.restore('baseload.xcm')
+        set_ener('thcomp', xrism=True)
+
+        plt.axhline(1, color='gray', lw=0.5, alpha=0.5, ls='--')
+        plt.axhline(0.1, color='gray', lw=0.5, alpha=0.5, ls='--')
+        plt.axhline(0.01, color='gray', lw=0.5, alpha=0.5, ls='--')
+        plt.axhline(0.001, color='gray', lw=0.5, alpha=0.5, ls='--')
+        AllModels(1)(2).values = 30.
+        AllModels(1)(4).values = 1.
+        AllModels(1)(8).link = 'p4'
+        xPlot('eemo', xlims=(6, 7.1), axes_input=ax, model_colors=elem_color)
+        AllModels(1)(2).values = 50.
+        AllModels(1)(4).values = 0.1
+        xPlot('eemo', xlims=(6, 7.1), axes_input=ax, model_colors=elem_color)
+        AllModels(1)(2).values = 70.
+        AllModels(1)(4).values = 0.01
+        xPlot('eemo', xlims=(6, 7.1), axes_input=ax, model_colors=elem_color)
+
+        # since we cannot really go below 80 degrees for Ryota's setup
+        AllModels(1)(2).values = 80
+        AllModels(1)(4).values = 0.001
+        AllModels(1)(8).link = ''
+        AllModels(1)(4).values = 0.
+        xPlot('eemo', xlims=(6, 7.1), axes_input=ax, model_colors=elem_color)
+        plt.xscale('linear')
+        plt.gca().get_children()[-3].remove()
+        plt.gca().get_children()[-3].remove()
+        plt.gca().get_children()[-3].remove()
+        ax.tick_params(labelbottom=True)
+
+        plt.plot([],[],color=elem_color,label=elem_mod)
+
+
+        plt.legend()
+        plt.ylabel('residuals to continuum (shifted for clarity)')
+        ax_right=ax.secondary_yaxis('right')
+        ax_right.set_yticks([1e-3,1e-2,1e-1,1])
+        ax_right.set_yticklabels(['80°\n(scatt. \nonly)','70°','50°','30°',])
+        ax_right.set_ylabel('sightline (0°=face-on)')
+        plt.ylim(1e-5,plt.ylim()[1])
+        plt.tight_layout()
+
+        ax.xaxis.set_minor_locator(MultipleLocator(0.02))
+
+        os.chdir(currdir)
+        if save is not None:
+            plt.savefig(save)
+
+def model_compa_MHD_lowE(model_mhd_list,colors=[],save=None):
+
+    dict_mhd_baseload={'Tanimoto25':'/home/parrazyte/Documents/Work/PostDoc/docs/NewAthena/SpecialIssue/DiskWinds/launching/mhd/KeigoTanimoto/init',
+                       '0p1':'/home/parrazyte/Documents/Work/PostDoc/docs/NewAthena/SpecialIssue/DiskWinds/launching/mhd/KeigoTanimoto/Solutions/0p1_Ledd'}
+
+    currdir = os.getcwd()
+    fig, ax = plt.subplots(figsize=(10, 8))
+
+    for elem_mod,elem_color in zip(model_mhd_list,colors):
+
+        # for mhd
+        os.chdir(dict_mhd_baseload[elem_mod])
+
+        Xset.restore('baseload.xcm')
+        set_ener('thcomp', xrism=True)
+
+        plt.axhline(1, color='gray', lw=0.5, alpha=0.5, ls='--')
+        plt.axhline(0.1, color='gray', lw=0.5, alpha=0.5, ls='--')
+        plt.axhline(0.01, color='gray', lw=0.5, alpha=0.5, ls='--')
+        plt.axhline(0.001, color='gray', lw=0.5, alpha=0.5, ls='--')
+        AllModels(1)(2).values = 30.
+        AllModels(1)(4).values = 1.
+        AllModels(1)(8).link = 'p4'
+        xPlot('eemo', xlims=(2., 3.), axes_input=ax, model_colors=elem_color)
+        AllModels(1)(2).values = 50.
+        AllModels(1)(4).values = 0.1
+        xPlot('eemo', xlims=(2., 3.), axes_input=ax, model_colors=elem_color)
+        AllModels(1)(2).values = 70.
+        AllModels(1)(4).values = 0.01
+        xPlot('eemo', xlims=(2., 3.), axes_input=ax, model_colors=elem_color)
+
+        # since we cannot really go below 80 degrees for Ryota's setup
+        AllModels(1)(2).values = 80
+        AllModels(1)(4).values = 0.001
+        AllModels(1)(8).link = ''
+        AllModels(1)(4).values = 0.
+        xPlot('eemo', xlims=(2., 3.), axes_input=ax, model_colors=elem_color)
+        plt.xscale('linear')
+        plt.gca().get_children()[-3].remove()
+        plt.gca().get_children()[-3].remove()
+        plt.gca().get_children()[-3].remove()
+
+        plt.plot([],[],color=elem_color,label=elem_mod)
+
+
+        plt.legend()
+        plt.ylabel('residuals to continuum (shifted for clarity)')
+        ax_right=ax.secondary_yaxis('right')
+        ax_right.set_yticks([1e-3,1e-2,1e-1,1])
+        ax_right.set_yticklabels(['80°\n(scatt. \nonly)','70°','50°','30°',])
+        ax_right.set_ylabel('sightline (0°=face-on)')
+        plt.ylim(1e-5,plt.ylim()[1])
+        plt.tight_layout()
+
+        ax.xaxis.set_minor_locator(MultipleLocator(0.02))
+
+        # if combining
+        # plt.gca().get_children()[-3].remove()
+        ax.tick_params(labelbottom=True)
+        plt.tight_layout()
+
+        os.chdir(currdir)
+        if save is not None:
+            plt.savefig(save)
+
+
+def model_compa_highE(save=None,model_mhd='0p1'):
     #for mhd
 
     currdir=os.getcwd()
-    os.chdir('/home/parrazyte/Documents/Work/PostDoc/docs/NewAthena/SpecialIssue/DiskWinds/launching/mhd/KeigoTanimoto')
+    # for mhd
+    if model_mhd=='old':
+        os.chdir('/home/parrazyte/Documents/Work/PostDoc/docs/NewAthena/SpecialIssue/DiskWinds/launching/mhd/KeigoTanimoto')
+    elif model_mhd=='0p1':
+        os.chdir('/home/parrazyte/Documents/Work/PostDoc/docs/NewAthena/SpecialIssue/DiskWinds/launching/mhd/KeigoTanimoto/Solutions/0p1_Ledd')
 
     Xset.restore('baseload.xcm')
     set_ener('thcomp',xrism=True)
@@ -93,18 +223,26 @@ def model_compa_highE(save=None):
     plt.ylim(1e-5,plt.ylim()[1])
     plt.tight_layout()
 
+    # #if combining
+    # plt.gca().get_children()[-3].remove()
+    # ax.tick_params(labelbottom=True)
+    # plt.tight_layout()
+
     ax.xaxis.set_minor_locator(MultipleLocator(0.02))
 
     os.chdir(currdir)
     if save is not None:
         plt.savefig(save)
 
-def model_compa_lowE(save=None):
+def model_compa_lowE(save=None,model_mhd='0p1'):
 
     currdir=os.getcwd()
 
     # for mhd
-    os.chdir('/home/parrazyte/Documents/Work/PostDoc/docs/NewAthena/SpecialIssue/DiskWinds/launching/mhd/KeigoTanimoto')
+    if model_mhd=='old':
+        os.chdir('/home/parrazyte/Documents/Work/PostDoc/docs/NewAthena/SpecialIssue/DiskWinds/launching/mhd/KeigoTanimoto')
+    elif model_mhd=='0p1':
+        os.chdir('/home/parrazyte/Documents/Work/PostDoc/docs/NewAthena/SpecialIssue/DiskWinds/launching/mhd/KeigoTanimoto/Solutions/0p1_Ledd')
 
     Xset.restore('baseload.xcm')
     set_ener('thcomp', xrism=True)
@@ -210,43 +348,6 @@ def SED_soft_factors(edd_ratio=0.1,m_BH=8):
 
 
 
-def incl_NH_dep_HerX1():
-    '''
-    '''
-    os.chdir('/home/parrazyte/Documents/Work/PostDoc/docs/NewAthena/SpecialIssue/DiskWinds/Obs/Inclination')
-    wind_arr = np.loadtxt('HerX1_XMM_Chandra_results.txt', skiprows=1).T
-    #given by Peter
-
-    #note: the uncertainties are with + first then - in this table, and - uncertainties are negative
-
-    plt.figure()
-    plt.errorbar(wind_arr[2], wind_arr[5], xerr=abs(wind_arr[3:5])[::-1], yerr=abs(wind_arr[6:8])[::-1], ls='')
-
-    plt.xlabel('wind x position (cm)')
-    plt.ylabel('wind y position (cm)')
-    plt.xscale('log')
-    plt.yscale('log')
-    plt.xlim(6e9, 6.5e10)
-    plt.ylim(1e9, 1.5e10)
-
-    x_curves=np.logspace(8,12,300)
-    [plt.plot(x_curves,x_curves*np.tan(i*np.pi/180),color='red',alpha=0.3) for i in range(1,89)]
-
-    tan_theta=wind_arr[5]/wind_arr[2]
-    tan_theta_bounds=[(wind_arr[5]+wind_arr[7])/(wind_arr[2]+wind_arr[3]),
-                   (wind_arr[5]+wind_arr[6])/(wind_arr[2]+wind_arr[4])]
-    
-    theta=np.arctan(tan_theta)*180/np.pi
-    theta_bounds=np.arctan(tan_theta_bounds)*180/np.pi
-    theta_err=[theta-theta_bounds[0],theta_bounds[1]-theta]
-    
-    plt.figure()
-    plt.errorbar(theta,wind_arr[8],xerr=theta_err,yerr=abs(wind_arr[9:11])[::-1],ls='')
-    plt.xlabel('theta (°)')
-    plt.ylabel(r'wind NH ($10^{22}$ cm$^-2$)')
-    plt.yscale('log')
-
-    pass
 
 def compa_ion_par(logxi=[0,1,2,3,4],nh_22=[1,1,1,10,10],
                   np_14=None,v_rms=None,z=None,
@@ -332,7 +433,6 @@ def compa_ion_par(logxi=[0,1,2,3,4],nh_22=[1,1,1,10,10],
     if ylims is not None:
         plt.ylim(ylims)
 
-
 #for density
 #compa_ion_par(logxi=np.repeat(3,7),nh_22=np.repeat(1,7),
 # np_14=[0.001001     , 0.00316228, 0.01      , 0.03162278, 0.1       ,0.31622777, 1.        ],
@@ -349,3 +449,145 @@ for merching chandra spectra
 in CIAO
 combine_spectra src_spectra="fake_highxi_src_50ks*" src_arf="*garf" src_rmf="*grmf" clob+ bkg_spectra=none verbose=5 method=avg
 '''
+
+def AMD_det(figsize=(10,8)):
+    '''
+    wrapper to reproduce and add elements to the AMDs of Keshet et al. 2025, 2026
+    '''
+
+    #from Keshet25, digitized by ChatGPT
+    # logxi, logNH
+
+    #new integrated figure with weird results
+    # amd_GROJ = np.array([
+    #     [1.10, 15.4],
+    #     [2.95, 21.7],
+    #     [3.30, 22.5],
+    #     [3.45, 22.5],
+    #     [5.00, 23.4],
+    # ]).T
+    #
+    #old figure
+    amd_GROJ = np.array([
+        [1.10, 16.4],
+        [2.95, 22.85],
+        [3.30, 23.6],
+        [5.00, 23.5],
+    ]).T
+
+    #full values without actual bounds for the non-probed parts of the AMD
+    # amd_GRS_soft = np.array([
+    #     [0.00, 17.20],
+    #     [6.50, 23.70],
+    # ]).T
+    #
+    # amd_GX = np.array([
+    #     [0.00, 17.9],
+    #     [5.40, 23.30],
+    # ]).T
+    #
+    # amd_4U = np.array([
+    #     [0.00, 18.70],
+    #     [5.40, 24.10],
+    # ]).T
+
+    #new integrated figure with weird results
+    # amd_GRS_soft = np.array([
+    #     [2.4, 17.20+2.4],
+    #     [5.7, 17.20+5.7],
+    # ]).T
+
+    amd_GX = np.array([
+        [2.4, 17.85+2.4],
+        [5.40, 23.30],
+    ]).T
+
+
+    amd_4U = np.array([
+        [2.4, 18.70+2.4],
+        [5.40, 24.10],
+    ]).T
+
+
+    # logNH_GRS1915 = logxi + 17.20
+    # logNH_GX13 = logxi + 17.85
+    # logNH_4U1630 = logxi + 18.70
+
+    #from Keshet et al. 26, digitized by ChatGPT and verified with automeris.io
+    # amd_GRS_hard1 = np.array([
+    #     [1.00, 18.70],
+    #     [3.0, 22.70],
+    #     [3.3, 22.70],
+    #     [4.00, 22.00],
+    # ]).T
+    #
+    # amd_GRS_hard2 = np.array([
+    #     [1.00, 20.40],
+    #     [3.40, 22.80],
+    #     [4.0, 22.20],
+    # ]).T
+
+    #cropped version starting at the logxi peak of Si12+
+
+    amd_GRS_hard1 = np.array([
+        [2.00, 21.20],
+        [3.0, 22.70],
+        [3.3, 22.70],
+        [4.00, 22.00],
+    ]).T
+
+    amd_GRS_hard2 = np.array([
+        [2.00, 21.40],
+        [3.40, 22.80],
+        [4.0, 22.20],
+    ]).T
+
+    # amd_GRS_soft= np.array([
+    #     [2.00, 18.50],
+    #     [6.50, 23.00],
+    # ]).T
+
+    amd_GRS_soft= np.array([
+        [2.00, 18.50],
+        [5.7, 22.3],
+    ]).T
+
+    fig,ax=plt.subplots(1,figsize=figsize)
+    plt.xlabel(r'log$\xi$')
+    plt.ylabel(r'dlogN$_H$/dlog$\xi$')
+    plt.plot(amd_GROJ[0],amd_GROJ[1],color='darkorange',label='hypersoft',marker='o')
+
+    plt.plot(amd_GRS_soft[0],amd_GRS_soft[1],color='red',label='soft',marker='D')
+    plt.plot(amd_GX[0],amd_GX[1],color='red',label='',ls='--',marker='X')
+    plt.plot(amd_4U[0],amd_4U[1],color='red',label='',ls=':',marker='+')
+
+    plt.plot(amd_GRS_hard1[0],amd_GRS_hard1[1],color='blue',label='obscured',marker='D')
+    plt.plot(amd_GRS_hard2[0],amd_GRS_hard2[1],color='blue',label='',ls='--',marker='D')
+    
+    plt.scatter(amd_GROJ[0],amd_GROJ[1],color='darkorange',label='',marker='o')
+
+    plt.scatter(amd_GRS_soft[0],amd_GRS_soft[1],color='red',label='',marker='D')
+    plt.scatter(amd_GX[0],amd_GX[1],color='red',label='',ls='--',marker='X')
+    plt.scatter(amd_4U[0],amd_4U[1],color='red',label='',ls=':',marker='+')
+
+    plt.scatter(amd_GRS_hard1[0],amd_GRS_hard1[1],color='blue',label='',marker='D')
+    plt.scatter(amd_GRS_hard2[0],amd_GRS_hard2[1],color='blue',label='',ls='--',marker='D')
+
+    plt.legend(loc='upper left')
+
+    ax_obj=plt.twinx()
+    # ax_obj.yaxis.set_visible(False)
+
+    ax_obj.scatter([],[],marker='D',label='GRS 1915+105',color='black')
+
+
+    ax_obj.scatter([],[],marker='+',label='4U 1630-47',color='black')
+    ax_obj.scatter([],[],marker='X',label='GX 13+1',color='black')
+    ax_obj.scatter([],[],marker='o',label='GRO J1655-40',color='black')
+
+    plt.legend(loc='lower right')
+
+    ax_obj.yaxis.set_visible(False)
+
+    plt.xlim(0,6)
+    plt.tight_layout()

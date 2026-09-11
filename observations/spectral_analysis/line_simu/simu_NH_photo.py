@@ -607,8 +607,8 @@ arf_path='NewAthena_nofilter',bkg_path='NewAthena_NXB_1arcmin',
 expos=5,n_iter=1000,flux_range='100_1_5',flux_band='0.3 10.0',
 mod_path='SED_soft_0p1Edd_2e22.xcm',set_ener_data=True,set_ener_data_str='large_canon',
 photo_mod='pion_abs_canon_soft',photo_comp_pos=3,photo_xi_range='hot_freeze',
-photo_turb_range=[100,'min',300],photo_v_range=[0,-1000,1000],photo_nsteppar_turb=10,
-photo_nsteppar_v=20,par_freeze_steppar=[3,5],n_cores=10)
+photo_turb_range=[100,'min',300],photo_v_range=[0,-1000,1000],photo_nsteppar_turb=11,
+photo_nsteppar_v=21,par_freeze_steppar=[3,5],n_cores=10)
 
 for mini pc
 
@@ -622,7 +622,17 @@ photo_turb_range=[100,'min',300],photo_v_range=[0,-1000,1000],photo_nsteppar_tur
 photo_nsteppar_v=20,par_freeze_steppar=[3,5],n_cores=14)
 
 
-for Nion Her X-1 flux start of main high (~2/3 of peak) on FeXXVI
+os.chdir('/media/parrazyte/crucial_SSD/Observ/highres/NewAthena/SpecialIssue/NHdet')
+line_simu(outdir='coldbright',mode='NH_noise_photo',rmf_path='NewAthena_4eV',
+arf_path='NewAthena_nofilter',bkg_path='NewAthena_NXB_1arcmin',
+expos=5,n_iter=1000,flux_range='100_1_5',flux_band='0.3 10.0',
+mod_path='SED_soft_0p1Edd_2e22.xcm',set_ener_data=True,set_ener_data_str='large_canon',
+photo_mod='pion_abs_canon_soft',photo_comp_pos=3,photo_xi_range='cold_freeze',
+photo_turb_range=[100,'min',300],photo_v_range=[0,-1000,1000],photo_nsteppar_turb=11,
+photo_nsteppar_v=21,par_freeze_steppar=[3,5],n_cores=22)
+
+for Nion Her X-1 flux start of
+ main high (~2/3 of peak) on FeXXVI
 https://doi.org/10.3847/1538-4357/ac897e e.g. give 3e37 for the main high luminosity, which is about a third higher than
 this SED
 the flux is mostly at high energies though

@@ -1136,3 +1136,18 @@ def combi_sp_plot_hard():
     plt.gca().get_legend().remove()
 
     plt.ylabel('normalized ratios to continuum')
+
+
+def fakes_CygX3():
+
+    os.chdir('/media/parrazyte/crucial_SSD/Observ/highres/IXPE_AO4')
+
+    #for the soft
+    Xset.restore('cygx3_softstate_model.xcm')
+    set_ener('thcomp', xrism=True)
+
+    #0.65 HP+MP rate derived from webpimms
+    test = FakeitSettings(exposure=3e4 * 0.65,
+                          response='comb_from_1744.rmf',
+                          arf='rsl_pntsrc_GVC_2025.arf')
+    AllData.fakeit(settings=test)

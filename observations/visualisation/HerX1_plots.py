@@ -3,8 +3,47 @@ import matplotlib.pyplot as plt
 import matplotlib as mpl
 import seaborn as sns
 import pandas as pd
+import os
 
-def plot_los(cmap='plasma'):
+def incl_NH_dep_HerX1():
+    '''
+    '''
+    os.chdir('/home/parrazyte/Documents/Work/PostDoc/docs/NewAthena/SpecialIssue/DiskWinds/Obs/Inclination')
+    wind_arr = np.loadtxt('HerX1_XMM_Chandra_results.txt', skiprows=1).T
+    # given by Peter
+
+    # note: the uncertainties are with + first then - in this table, and - uncertainties are negative
+
+    plt.figure()
+    plt.errorbar(wind_arr[2], wind_arr[5], xerr=abs(wind_arr[3:5])[::-1], yerr=abs(wind_arr[6:8])[::-1], ls='')
+
+    plt.xlabel('wind x position (cm)')
+    plt.ylabel('wind y position (cm)')
+    plt.xscale('log')
+    plt.yscale('log')
+    plt.xlim(6e9, 6.5e10)
+    plt.ylim(1e9, 1.5e10)
+
+    x_curves = np.logspace(8, 12, 300)
+    [plt.plot(x_curves, x_curves * np.tan(i * np.pi / 180), color='red', alpha=0.3) for i in range(1, 89)]
+
+    tan_theta = wind_arr[5] / wind_arr[2]
+    tan_theta_bounds = [(wind_arr[5] + wind_arr[7]) / (wind_arr[2] + wind_arr[3]),
+                        (wind_arr[5] + wind_arr[6]) / (wind_arr[2] + wind_arr[4])]
+
+    theta = np.arctan(tan_theta) * 180 / np.pi
+    theta_bounds = np.arctan(tan_theta_bounds) * 180 / np.pi
+    theta_err = [theta - theta_bounds[0], theta_bounds[1] - theta]
+
+    plt.figure()
+    plt.errorbar(theta, wind_arr[8], xerr=theta_err, yerr=abs(wind_arr[9:11])[::-1], ls='')
+    plt.xlabel('theta (°)')
+    plt.ylabel(r'wind NH ($10^{22}$ cm$^-2$)')
+    plt.yscale('log')
+
+    pass
+
+def plot_los(cmap='plasma',show_launching=True,figsize=(10,8)):
 
 
     '''
@@ -188,7 +227,7 @@ def plot_los(cmap='plasma'):
     #note: phase 0 for main high
     phase_precess=np.arange(0,2.0001,1e-3)
 
-    fig,ax=plt.subplots(1,figsize=(10,8))
+    fig,ax=plt.subplots(1,figsize=figsize)
     plt.xlabel('Precession phase [35 days] with 0=main high')
     plt.ylabel('angle from orbital plane (°)')
     plt.xlim(0.,2.)
@@ -666,7 +705,7 @@ def plot_los(cmap='plasma'):
     # [ 89.96015, 1.00004885e+16, 1.00004885e+16],
     ]).T
 
-    fig_NH,ax_NH=plt.subplots(1,figsize=(10,8))
+    fig_NH,ax_NH=plt.subplots(1,figsize=figsize)
 
     ax_NH.set_yscale('linear')
     ax_NH.set_xscale('linear')
@@ -763,76 +802,77 @@ def plot_los(cmap='plasma'):
     ax_NH.legend(title='Her X-1: 0.14 L$_{Edd}$ 1.6 M$_{\odot}$| R$_d$=2.5R$_{IC}$')
     plt.tight_layout()
 
-    #launching mechanisms
-    ax_launching=ax_NH.twinx()
+    # launching mechanisms
+    ax_launching = ax_NH.twinx()
     ax_launching.yaxis.set_visible(False)
     ax_launching.set_xscale(ax_NH.get_xscale())
     ax_launching.set_yscale(ax_NH.get_yscale())
     ax_launching.set_ylim(ax_NH.get_ylim())
     ax_launching.set_xlim(ax_NH.get_xlim())
 
-    ax_launching.plot(thermal_gx13_nh_xxvi[0],np.log10(thermal_gx13_nh_xxvi[1]),color="red",alpha=0.5,
-                      ls='-',
-             label=r'0.5 L$_{Edd}$ | 1.4 M$_{\odot}$ | R$_d$=10   $\;$R$_{IC}$ | R$_{is}$=0.20 R$_{IC}$')
+    if show_launching:
 
-    ax_launching.plot(thermal_gx13_nh_xxvi[0],np.log10(thermal_gx13_nh_xxvi[2]),color="red",alpha=0.5,
-                      ls='--',
-             label=r'0.5 L$_{Edd}$ | 1.4 M$_{\odot}$ | R$_d$=1   $\;$$\;$ R$_{IC}$ | R$_{is}$=0.20 R$_{IC}$')
+        ax_launching.plot(thermal_gx13_nh_xxvi[0],np.log10(thermal_gx13_nh_xxvi[1]),color="red",alpha=0.5,
+                          ls='-',
+                 label=r'0.5 L$_{Edd}$ | 1.4 M$_{\odot}$ | R$_d$=10   $\;$R$_{IC}$ | R$_{is}$=0.20 R$_{IC}$')
 
-    ax_launching.plot(thermal_h1743_nh_xxvi[0],np.log10(thermal_h1743_nh_xxvi[1]),color="red",alpha=0.5,
-                      ls='dashdot',
-             label=r'0.3 L$_{Edd}$ | 8.0 M$_{\odot}$ | R$_d$=0.18 R$_{IC}$ | R$_{is}$=0.18 R$_{IC}$')
+        ax_launching.plot(thermal_gx13_nh_xxvi[0],np.log10(thermal_gx13_nh_xxvi[2]),color="red",alpha=0.5,
+                          ls='--',
+                 label=r'0.5 L$_{Edd}$ | 1.4 M$_{\odot}$ | R$_d$=1   $\;$$\;$ R$_{IC}$ | R$_{is}$=0.20 R$_{IC}$')
 
-    csv_mhd_0p1Ledd=pd.read_csv('/home/parrazyte/Documents/Work/PostDoc/docs/NewAthena/SpecialIssue/DiskWinds/launching/mhd/'+
-                            'KeigoTanimoto/Solutions/0p1_Ledd/structure/monaco_Nion.csv')
+        ax_launching.plot(thermal_h1743_nh_xxvi[0],np.log10(thermal_h1743_nh_xxvi[1]),color="red",alpha=0.5,
+                          ls='dashdot',
+                 label=r'0.3 L$_{Edd}$ | 8.0 M$_{\odot}$ | R$_d$=0.18 R$_{IC}$ | R$_{is}$=0.18 R$_{IC}$')
 
-    #restricting to the first value of each density jump to prepare the interpolation
-    n_val=[csv_mhd_0p1Ledd['Fe01_Nion'].values.tolist().count(elem)\
-           for elem in np.unique(csv_mhd_0p1Ledd['Fe01_Nion'])]
-    val_nodup = np.unique(csv_mhd_0p1Ledd['Fe01_Nion'].values)[np.array(n_val) == 1]
-    val_dens_dupdrop=csv_mhd_0p1Ledd['Fe01_Nion'].drop_duplicates(keep='last')
+        csv_mhd_0p1Ledd=pd.read_csv('/home/parrazyte/Documents/Work/PostDoc/docs/NewAthena/SpecialIssue/DiskWinds/launching/mhd/'+
+                                'KeigoTanimoto/Solutions/0p1_Ledd/structure/monaco_Nion.csv')
 
-    #finishing with the densities at the first angles where the MHD solution was computed
-    val_dens_startdval=val_dens_dupdrop[np.array([val_dens_dupdrop != elem for elem in val_nodup]).sum(0) == 3]
+        #restricting to the first value of each density jump to prepare the interpolation
+        n_val=[csv_mhd_0p1Ledd['Fe01_Nion'].values.tolist().count(elem)\
+               for elem in np.unique(csv_mhd_0p1Ledd['Fe01_Nion'])]
+        val_nodup = np.unique(csv_mhd_0p1Ledd['Fe01_Nion'].values)[np.array(n_val) == 1]
+        val_dens_dupdrop=csv_mhd_0p1Ledd['Fe01_Nion'].drop_duplicates(keep='last')
 
-    csv_mhd_Nion_ok=csv_mhd_0p1Ledd.iloc[val_dens_startdval.index]
+        #finishing with the densities at the first angles where the MHD solution was computed
+        val_dens_startdval=val_dens_dupdrop[np.array([val_dens_dupdrop != elem for elem in val_nodup]).sum(0) == 3]
 
-    #rescaling the angles to groups of 10 which is what the initial MHD computation was created with
-    #(the density spreads approximately equally accross an even angle range accross each value)
-    csv_MHD_angl=np.floor(csv_mhd_Nion_ok['angle']/10)*10
+        csv_mhd_Nion_ok=csv_mhd_0p1Ledd.iloc[val_dens_startdval.index]
+
+        #rescaling the angles to groups of 10 which is what the initial MHD computation was created with
+        #(the density spreads approximately equally accross an even angle range accross each value)
+        csv_MHD_angl=np.floor(csv_mhd_Nion_ok['angle']/10)*10
 
 
-    #note: computing T_IC and R_IC on the deabsorbed canonical soft state SED gives:
-    #T_IC=1.06keV
-    #R_IC=5.19e5 Rg
-    #means for the MHD simulations, R_disk=0.48 R_IC
+        #note: computing T_IC and R_IC on the deabsorbed canonical soft state SED gives:
+        #T_IC=1.06keV
+        #R_IC=5.19e5 Rg
+        #means for the MHD simulations, R_disk=0.48 R_IC
 
-    ax_launching.plot(csv_MHD_angl,np.log10(csv_mhd_Nion_ok['Fe01_Nion']),
-                      color='dodgerblue',alpha=1.0,
-                      label='0.1 L$_{Edd}$ | 8.0 M$_{\odot}$ | R$_d$=0.48 R$_{IC}$ | n$_0$=1.7 $\cdot$10$^{18}$ | p=1.2')
+        ax_launching.plot(csv_MHD_angl,np.log10(csv_mhd_Nion_ok['Fe01_Nion']),
+                          color='dodgerblue',alpha=1.0,
+                          label='0.1 L$_{Edd}$ | 8.0 M$_{\odot}$ | R$_d$=0.48 R$_{IC}$ | n$_0$=1.7 $\cdot$10$^{18}$ | p=1.2')
 
-    ax_launching.legend(title=r'$\;\;\;\;\;\;\;\;\;\;\;\;\;\;\;\;\;\;\;\;\;\;\;\;\;\;\;\;\;\;$',loc='lower left',
-                        framealpha=1.0)
+        ax_launching.legend(title=r'$\;\;\;\;\;\;\;\;\;\;\;\;\;\;\;\;\;\;\;\;\;\;\;\;\;\;\;\;\;\;$',loc='lower left',
+                            framealpha=1.0)
 
+
+        #modifies the vertical alignment for saves (which move the text slightly
+        v_hm=0.09
+
+        plt.text(87, 16.325-v_hm, 'launching mechanisms:', color='black', zorder=10)
+
+        x_hm=1.0
+
+        plt.text(77.5+x_hm, 16.325-v_hm, 'thermal', color='red', zorder=10)
+
+        plt.text(74.7+x_hm, 16.325-v_hm, '/', color='black', zorder=10)
+
+
+        plt.text(74.3+x_hm, 16.325-v_hm, 'MHD', color='dodgerblue', zorder=10,)
+
+    #for 2/3 of main high peak.
     ax_launching.axhline(np.log10(1.735e16), color='grey', alpha=0.5, )
     ax_launching.text(68,16.13, '3$\sigma$ NewAthena limit for Her X-1 main high in 50ks',
                       color='grey',alpha=1)
-
-
-    #modifies the vertical alignment for saves (which move the text slightly
-    v_hm=0.09
-
-    plt.text(87, 16.325-v_hm, 'launching mechanisms:', color='black', zorder=10)
-
-    x_hm=1.0
-
-    plt.text(77.5+x_hm, 16.325-v_hm, 'thermal', color='red', zorder=10)
-
-    plt.text(74.7+x_hm, 16.325-v_hm, '/', color='black', zorder=10)
-
-
-    plt.text(74.3+x_hm, 16.325-v_hm, 'MHD', color='dodgerblue', zorder=10,)
-
-    #for 2/3 of main high peak.
 
 

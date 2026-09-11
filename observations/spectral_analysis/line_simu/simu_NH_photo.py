@@ -122,17 +122,36 @@ def simu_nh_photo(nh_photo_mode,
                 par_list_forsave=[elem for elem in par_list if elem[0]
                                   not in ['mod_cont','mod_dict','bashproc','logfile','fakeset','instance_id','n_cores']]
 
-                save_header =np.array(["# ''''''''''''''''''''''''''''''''''''''''''''"]+
-                                      ("# '"+np.array(str(par_list_forsave).replace('\n','')\
-                                    .replace("[['",'').replace(']]]',']').split("], ['"))).tolist()\
+                if np.__version__=='1.26.4':
+
+                    for i in range(len(par_list_forsave)):
+                        par_list_forsave[i][0] = "# '" + par_list_forsave[i][0]
+
+                    save_header =np.array(["# ''''''''''''''''''''''''''''''''''''''''''''"]+
+                                      np.array(str(par_list_forsave).replace('\n','')\
+                                    .replace("[[\"","").replace(']]]',']').
+                                               replace("\"# '","# '").replace('", ',"', ").
+                                               split("], [")).tolist()\
                     +["# ''''''''''''''''''''''''''''''''''''''''''''",
-                      '# time identifier\t'+('Nion' if nh_photo_mode=='Nion' else 'NH')+' noise value (10^'+('18' if nh_photo_mode=='Nion' else '22')+' cm^{-2]'])+'\n'
+                      '# time identifier\t'+('Nion' if nh_photo_mode=='Nion' else 'NH')+' noise value (10^'+('18' if nh_photo_mode=='Nion' else '22')+' cm^{-2]']).tolist()
+                    for i in range(len(save_header)):
+                        save_header[i]=save_header[i]+'\n'
+
+                else:
+                    save_header = np.array(["# ''''''''''''''''''''''''''''''''''''''''''''"] +
+                                           ("# '" + np.array(str(par_list_forsave).replace('\n', '') \
+                                                             .replace("[['", '').replace(']]]', ']').split(
+                                               "], ['"))).tolist() \
+                                           + ["# ''''''''''''''''''''''''''''''''''''''''''''",
+                                              '# time identifier\t' + (
+                                                  'Nion' if nh_photo_mode == 'Nion' else 'NH') + ' noise value (10^' + (
+                                                  '18' if nh_photo_mode == 'Nion' else '22') + ' cm^{-2]']) + '\n'
 
                 if os.path.isfile(elem_flux_save_path):
                     with open(elem_flux_save_path) as f_save:
                         pre_save_lines=f_save.readlines()
 
-                    assert str(pre_save_lines[:len(save_header)])==str(save_header.tolist()),\
+                    assert str(pre_save_lines[:len(save_header)])==str(np.array(save_header).tolist()),\
                             'Error: previous save file has different arguments'
 
                     #removing a number of iterations equal to the number of saved results
@@ -259,7 +278,7 @@ def simu_nh_photo(nh_photo_mode,
                     # equivalent to +/-1000km/s
                     AllModels(1)(comp_par[3]).values = [0.0, 1e-3, -0.00333, -0.00333, 0.00333, 0.00333]
 
-                if photo_mod == 'pion_abs_canon_soft':
+                if photo_mod.startswith('pion_abs_canon_soft'):
 
                     if photo_xi_range.split('_')[0] == 'cold':
                         AllModels(1)(comp_par[0]).values = [0., 0.02, 0., 0., 0.5, 0.5]
@@ -267,7 +286,8 @@ def simu_nh_photo(nh_photo_mode,
                         AllModels(1)(comp_par[0]).values = [2., 0.02, 1., 1., 3., 3.]
                     elif photo_xi_range.split('_')[0] == 'hot':
                         AllModels(1)(comp_par[0]).values = [4., 0.02, 2.0, 3.5, 4.5, 4.5]
-
+                    else:
+                        AllModels(1)(comp_par[0]).values =float(photo_xi_range.split('_')[0])
 
                     if '_' in photo_xi_range and photo_xi_range.split('_')[1] == 'freeze':
                         AllModels(1)(comp_par[0]).frozen = True
@@ -424,7 +444,7 @@ def simu_nh_photo(nh_photo_mode,
 
                 if nh_photo_mode=='noise':
 
-                    assert photo_mod == 'pion_abs_canon_soft'
+                    assert photo_mod.startswith('pion_abs_canon_soft')
 
 
                     #setting up parallel computation
@@ -589,6 +609,18 @@ mod_path='SED_soft_0p1Edd_2e22.xcm',set_ener_data=True,set_ener_data_str='large_
 photo_mod='pion_abs_canon_soft',photo_comp_pos=3,photo_xi_range='hot_freeze',
 photo_turb_range=[100,'min',300],photo_v_range=[0,-1000,1000],photo_nsteppar_turb=10,
 photo_nsteppar_v=20,par_freeze_steppar=[3,5],n_cores=10)
+
+for mini pc
+
+os.chdir('/home/parrazyte/Observ_SA/NewAthena/NHdet')
+line_simu(outdir='warmbright',mode='NH_noise_photo',rmf_path='NewAthena_4eV_minipc',
+arf_path='NewAthena_nofilter_minipc',bkg_path='NewAthena_NXB_1arcmin_minipc',
+expos=5,n_iter=1000,flux_range='100_1_5',flux_band='0.3 10.0',
+mod_path='SED_soft_0p1Edd_2e22.xcm',set_ener_data=True,set_ener_data_str='large_canon',
+photo_mod='pion_abs_canon_soft_minipc',photo_comp_pos=3,photo_xi_range='warm_freeze',
+photo_turb_range=[100,'min',300],photo_v_range=[0,-1000,1000],photo_nsteppar_turb=10,
+photo_nsteppar_v=20,par_freeze_steppar=[3,5],n_cores=14)
+
 
 for Nion Her X-1 flux start of main high (~2/3 of peak) on FeXXVI
 https://doi.org/10.3847/1538-4357/ac897e e.g. give 3e37 for the main high luminosity, which is about a third higher than

@@ -892,7 +892,8 @@ def fetch_rxte_lightcurve(name,dict_rxte=dict_lc_rxte):
 def plot_lightcurve(dict_linevis,ctl_maxi_df,ctl_maxi_simbad,name,ctl_bat_df,ctl_bat_simbad,
                     lc_integral_sw_dict,fit_integral_revol_dict,dist_factor=None,
                     dict_rxte=dict_lc_rxte,
-                    mode='full',display_hid_interval=True,superpose_ew=False,binning='day'):
+                    mode='full',display_hid_interval=True,
+                    superpose_ew=False,binning='day'):
 
     '''
     plots various  lightcurves for sources in the Sample if a match is found in RXTE, MAXI or BAT source lists

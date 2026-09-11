@@ -47,6 +47,7 @@ rmf_abv = {'XRISM_Hp_AO2': '/media/'+username+'/crucial_SSD/Observ/BHLMXB/XRISM/
            'RGS_r2o2':'/media/'+username+'/crucial_SSD/Observ/highres/linedet_compa/RGS_AO25/R2o2.rmf',
            'SQUDE_indev':'/media/'+username+'/crucial_SSD/Observ/highres/linedet_compa/SQUDE/SQUDE_rsp_v1.1.2.rmf',
            'NewAthena_4eV':'/media/'+username+'/crucial_SSD/Observ/highres/linedet_compa/NewAthena/new_athena_xifu_mar_v2_4eV_gaussian.rmf',
+           'NewAthena_4eV_minipc': '/home/' + username + '/Observ_SA/NewAthena/NHdet/rsp/new_athena_xifu_mar_v2_4eV_gaussian.rmf',
             'NewAthena_3eV':'/media/' + username + '/crucial_SSD/Observ/highres/linedet_compa/NewAthena/new_athena_xifu_mar_v2_3eV_gaussian.rmf'}
 
 
@@ -63,6 +64,7 @@ arf_abv = {'XRISM_pointsource_GVclosed_AO2':'/media/'+username+'/crucial_SSD/Obs
            'heg_graded_1': '/media/'+username+'/crucial_SSD/Observ/highres/linedet_compa/AO2/resp_Chandra/graded/13716_heg_1.arf',
            'SQUDE_indev':'/media/'+username+'/crucial_SSD/Observ/highres/linedet_compa/SQUDE/SQUDE_rsp_v1.1.1.arf',
            'NewAthena_nofilter':'/media/'+username+'/crucial_SSD/Observ/highres/linedet_compa/NewAthena/new_athena_xifu_mar_v2_no_filter.arf',
+           'NewAthena_nofilter_minipc': '/home/' + username + '/Observ_SA/NewAthena/NHdet/rsp/new_athena_xifu_mar_v2_no_filter.arf',
            'NewAthena_optfilter': '/media/' + username + '/crucial_SSD/Observ/highres/linedet_compa/NewAthena/new_athena_xifu_mar_v2_optical_filter.arf',
            'NewAthena_befilter': '/media/' + username + '/crucial_SSD/Observ/highres/linedet_compa/NewAthena/new_athena_xifu_mar_v2_be_filter_100um.arf'}
 
@@ -74,6 +76,7 @@ arf_abv_list = list(arf_abv.keys())
 bkg_abv={'SQUDE_indev':"/media/parrazyte/crucial_SSD/Observ/highres/linedet_compa/SQUDE/Background_files/full_bkg_1e6s_1am_X06.pha",
          'NewAthena_NXB_10asec':'/media/' + username + '/crucial_SSD/Observ/highres/linedet_compa/NewAthena/new_athena_xifu_mar_v2_nxb_10asec_radius.pha',
          'NewAthena_NXB_1arcmin':'/media/' + username + '/crucial_SSD/Observ/highres/linedet_compa/NewAthena/new_athena_xifu_mar_v2_nxb_1amin2.pha',
+         'NewAthena_NXB_1arcmin_minipc': '/home/'+username+'/Observ_SA/NewAthena/NHdet/rsp/new_athena_xifu_mar_v2_nxb_1amin2.pha',
          'NewAthena_NXB_1pix':'/media/' + username + '/crucial_SSD/Observ/highres/linedet_compa/NewAthena/new_athena_xifu_mar_v2_nxb_1pix.pha'}
 
 bkg_abv_list = list(bkg_abv.keys())
@@ -82,6 +85,7 @@ bkg_abv_list = list(bkg_abv.keys())
 mod_dict={'pion_abs_NS':['mtable','/media/'+username+'/crucial_SSD/Observ/highres/mods/pionabsAXJ1745.fits'],
           'pion_abs_softMAXIJ1543':['mtable','/media/'+username+'/crucial_SSD/Observ/highres/mods/pionabsMAXIJ1543.fits'],
           'pion_abs_canon_soft':['mtable','/media/'+username+'/crucial_SSD/Observ/highres/mods/pionabsmtablecanonicallarge.fits'],
+            'pion_abs_canon_soft_minipc':['mtable','/home/'+username+'/Observ_SA/NewAthena/NHdet/pionabsmtablecanonicallarge.fits'],
           }
 #line_simu('test_SED.xcm',mode='ew_lim',rmf_path='XRISM_Hp_AO2',
 #                          arf_path='XRISM_pointsource_GVclosed_AO2',expos=50,

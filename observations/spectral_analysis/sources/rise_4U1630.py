@@ -492,12 +492,43 @@ Spectrum Number: 1
 Data Group Number: 1
  Model Flux  0.069382 photons (2.7428e-09 ergs/cm^2/s) range (15.000 - 50.000 keV)
  
-  Edd ratio factor 15701344.992
+ 
+Edd ratio factor 15701344.992
 
-15701344.992
+07-09
+Spectrum Number: 1
+Data Group Number: 1
+ Model Flux   0.57679 photons (4.6654e-09 ergs/cm^2/s) range (3.0000 - 10.000 keV)
 
+6-10/3-6 0.658
+15-50/3-6 1.025
+edd 3-10 0.0733
+
+10-09
+AllModels.calcFlux("3. 10.")
+Spectrum Number: 1
+Data Group Number: 1
+ Model Flux       2.3 photons (1.8928e-08 ergs/cm^2/s)
+
+6-10/3-6 0.692
+15-50/3-6 0.625
+edd 3-10 0.297
+
+12-09:
+AllModels.calcFlux("3. 10.")
+Spectrum Number: 1
+Data Group Number: 1
+ Model Flux    1.8695 photons (1.4307e-08 ergs/cm^2/s) range (3.0000 - 10.000 keV)
+6-10/3-6 0.445
+15-50/3-6 0.219
+edd 3-10 0.224
+tbd. with rest of exposure
+
+deabsorbed NuSTAR obs fluxes
 FALSE		4U1630-47	81002318002	2026-09-06 07:44:00	NuSTAR	0.064658138677056	0.6880226266601082	1.1242826692900476
-
+FALSE		4U1630-47	81002318004	2026-09-07 07:44:00	NuSTAR	0.0733	0.658	1.025
+FALSE		4U1630-47	81002318006	2026-09-10 07:44:00	NuSTAR	0.297	0.692	0.625
+FALSE		4U1630-47	81002318008	2026-09-12 07:44:00	NuSTAR	0.224	0.445	0.219
 
 
 '''

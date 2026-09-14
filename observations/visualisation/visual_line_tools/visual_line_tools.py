@@ -893,7 +893,7 @@ def plot_lightcurve(dict_linevis,ctl_maxi_df,ctl_maxi_simbad,name,ctl_bat_df,ctl
                     lc_integral_sw_dict,fit_integral_revol_dict,dist_factor=None,
                     dict_rxte=dict_lc_rxte,
                     mode='full',display_hid_interval=True,
-                    superpose_ew=False,binning='day'):
+                    superpose_ew=False,binning='day',show_obs_dates=True):
 
     '''
     plots various  lightcurves for sources in the Sample if a match is found in RXTE, MAXI or BAT source lists
@@ -1246,108 +1246,108 @@ def plot_lightcurve(dict_linevis,ctl_maxi_df,ctl_maxi_simbad,name,ctl_bat_df,ctl
     #displaying observations with other instruments
     
     label_tel_list=[]
-        
-    if superpose_ew and not no_obs:
-        #creating a second y axis with common x axis
-        ax_lc_ew=ax_lc.twinx()
-        ax_lc_ew.set_yscale('log')
-        ax_lc_ew.set_ylabel('absorption line EW (eV)')
-        
-        #plotting the detection and upper limits following what we do for the scatter graphs
-    
-        date_list_repeat=np.array([date_list for repeater in range(sum(mask_lines))])
+    if show_obs_dates:
+        if superpose_ew and not no_obs:
+            #creating a second y axis with common x axis
+            ax_lc_ew=ax_lc.twinx()
+            ax_lc_ew.set_yscale('log')
+            ax_lc_ew.set_ylabel('absorption line EW (eV)')
 
-        instru_list_repeat=np.array([instru_list for repeater in range(sum(mask_lines))])
-        
-        #these boolean arrays distinguish non detections (i.e. 0/nan significance) and statistically significant detections from the others            
-        val_sign=ravel_ragged(abslines_plot_restrict[4][0]).astype(float)
-        
-        #standard detection mask (we don't need the intime here since the graph bounds will be cut if needed
-        bool_detsign=(val_sign>=conf_thresh) & (~np.isnan(val_sign))
-        
-        #mask used for upper limits only
-        bool_nondetsign=((val_sign<conf_thresh) | (np.isnan(val_sign)))
+            #plotting the detection and upper limits following what we do for the scatter graphs
 
-        #makers for different lines
-        marker_style_lines=np.array(['+','x','.','P','X','*'])
+            date_list_repeat=np.array([date_list for repeater in range(sum(mask_lines))])
 
-        markers_arr=np.array([np.repeat(marker_style_lines[mask_lines][i_line],
-                                        len(ravel_ragged(abslines_plot_restrict[4][0][i_line])))\
-                              for i_line in range(sum(mask_lines))])
+            instru_list_repeat=np.array([instru_list for repeater in range(sum(mask_lines))])
 
-        markers_arr_det=ravel_ragged(markers_arr)[bool_detsign]
-        markers_arr_ul=ravel_ragged(markers_arr)[bool_nondetsign]
+            #these boolean arrays distinguish non detections (i.e. 0/nan significance) and statistically significant detections from the others
+            val_sign=ravel_ragged(abslines_plot_restrict[4][0]).astype(float)
 
-        x_data_det=mdates.date2num(ravel_ragged(date_list_repeat))[bool_detsign]
-        y_data_det=ravel_ragged(abslines_plot_restrict[0][0])[bool_detsign]
-        
-        y_error_det=np.array([ravel_ragged(abslines_plot_restrict[0][1])[bool_detsign],
-                              ravel_ragged(abslines_plot_restrict[0][2])[bool_detsign]]).T
-        
-        x_data_ul=mdates.date2num(ravel_ragged(date_list_repeat))[bool_nondetsign]
-        y_data_ul=ravel_ragged(abslines_plot_restrict[5][0])[bool_nondetsign]
-                    
-        color_det=[telescope_colors_monit[elem] for elem in ravel_ragged(instru_list_repeat)[bool_detsign]]
-        
-        color_ul=[telescope_colors_monit[elem] for elem in ravel_ragged(instru_list_repeat)[bool_nondetsign]]
+            #standard detection mask (we don't need the intime here since the graph bounds will be cut if needed
+            bool_detsign=(val_sign>=conf_thresh) & (~np.isnan(val_sign))
 
-        ax_lc_ew.set_ylim(min(4,min(min(ravel_ragged(abslines_plot_restrict[0][0])[bool_detsign]),
-                                    min(ravel_ragged(abslines_plot_restrict[5][0])[bool_nondetsign]))),
-                          max(100,max(ravel_ragged(abslines_plot_restrict[0][0])[bool_detsign])))
+            #mask used for upper limits only
+            bool_nondetsign=((val_sign<conf_thresh) | (np.isnan(val_sign)))
 
-        markers_legend_done_list=[]
-        #zipping the errorbars to allow different colors
-        for x_data,y_data,y_err,color,marker in zip(x_data_det,y_data_det,y_error_det,color_det,markers_arr_det):
+            #makers for different lines
+            marker_style_lines=np.array(['+','x','.','P','X','*'])
 
-            line_name=lines_std_names[3+np.argwhere(marker_style_lines==marker)[0][0]]
-            #not putting the time of the obs as an xerr to avoid display issues
-            ax_lc_ew.errorbar(x_data,y_data,xerr=0.,yerr=np.array([y_err]).T,color=color,marker=marker,markersize=4,elinewidth=1,label=lines_std[line_name] if marker not in markers_legend_done_list else '')
+            markers_arr=np.array([np.repeat(marker_style_lines[mask_lines][i_line],
+                                            len(ravel_ragged(abslines_plot_restrict[4][0][i_line])))\
+                                  for i_line in range(sum(mask_lines))])
 
-            if marker not in markers_legend_done_list:
-                markers_legend_done_list+=[marker]
+            markers_arr_det=ravel_ragged(markers_arr)[bool_detsign]
+            markers_arr_ul=ravel_ragged(markers_arr)[bool_nondetsign]
 
-        for x_data,y_data,color,marker in zip(x_data_ul,y_data_ul,color_ul,markers_arr_ul):
+            x_data_det=mdates.date2num(ravel_ragged(date_list_repeat))[bool_detsign]
+            y_data_det=ravel_ragged(abslines_plot_restrict[0][0])[bool_detsign]
 
-            #not putting the time of the obs as an xerr to avoid display issues
-            ax_lc_ew.errorbar(x_data,y_data,xerr=0.,yerr=0.05*y_data,marker=marker,color=color,uplims=True,markersize=4,elinewidth=1,capsize=2,alpha=1.,label=lines_std[line_name] if marker not in markers_legend_done_list else '')
+            y_error_det=np.array([ravel_ragged(abslines_plot_restrict[0][1])[bool_detsign],
+                                  ravel_ragged(abslines_plot_restrict[0][2])[bool_detsign]]).T
 
-            if marker not in markers_legend_done_list:
-                markers_legend_done_list+=[marker]
-                
-    for i_obs,date_obs in enumerate(date_list):
-        
-        num_date_obs=mdates.date2num(Time(date_obs).datetime)
-        
-        #we add a condition for the label to only plot each instrument once
-        ax_lc.axvline(x=num_date_obs,ymin=0,ymax=1,color=telescope_colors_monit[instru_list[i_obs]],
-                        label=instru_list[i_obs]+' exposure' if instru_list[i_obs] not in label_tel_list else '',
-                      ls='dashdot' if instru_list[i_obs]=='Suzaku' else ':' if instru_list[i_obs] not in ['Chandra','NuSTAR'] else '--',lw=1.)
+            x_data_ul=mdates.date2num(ravel_ragged(date_list_repeat))[bool_nondetsign]
+            y_data_ul=ravel_ragged(abslines_plot_restrict[5][0])[bool_nondetsign]
 
-        if instru_list[i_obs] not in label_tel_list:
-            label_tel_list+=[instru_list[i_obs]]
+            color_det=[telescope_colors_monit[elem] for elem in ravel_ragged(instru_list_repeat)[bool_detsign]]
 
-    if name[0] == 'GROJ1655-40':
-        # showing the Swift photodiode exposures for GRO J1655-40 for the manuscript plots
-        mjd_arr_swift_1655 = [53448,
-                              53449.2,
-                              53450.2,
-                              53456.4,
-                              53463.5,
-                              53463.7,
-                              53470.4,
-                              53481.9,
-                              53494,
-                              53504.3,
-                              53505.4,
-                              53506.5,
-                              53511.4,
-                              53512.3,
-                              53512.9]
-        num_date_swift_1655 = mdates.date2num(Time(mjd_arr_swift_1655, format='mjd').datetime)
+            color_ul=[telescope_colors_monit[elem] for elem in ravel_ragged(instru_list_repeat)[bool_nondetsign]]
 
-        for i_obs_swift_1655,date_obs_swift_1655 in enumerate(num_date_swift_1655):
-            ax_lc.axvline(x=date_obs_swift_1655, ymin=0, ymax=1, color='grey',
-                          label='Swift PD exposure' if i_obs_swift_1655==0 else '', ls=':', lw=1.)
+            ax_lc_ew.set_ylim(min(4,min(min(ravel_ragged(abslines_plot_restrict[0][0])[bool_detsign]),
+                                        min(ravel_ragged(abslines_plot_restrict[5][0])[bool_nondetsign]))),
+                              max(100,max(ravel_ragged(abslines_plot_restrict[0][0])[bool_detsign])))
+
+            markers_legend_done_list=[]
+            #zipping the errorbars to allow different colors
+            for x_data,y_data,y_err,color,marker in zip(x_data_det,y_data_det,y_error_det,color_det,markers_arr_det):
+
+                line_name=lines_std_names[3+np.argwhere(marker_style_lines==marker)[0][0]]
+                #not putting the time of the obs as an xerr to avoid display issues
+                ax_lc_ew.errorbar(x_data,y_data,xerr=0.,yerr=np.array([y_err]).T,color=color,marker=marker,markersize=4,elinewidth=1,label=lines_std[line_name] if marker not in markers_legend_done_list else '')
+
+                if marker not in markers_legend_done_list:
+                    markers_legend_done_list+=[marker]
+
+            for x_data,y_data,color,marker in zip(x_data_ul,y_data_ul,color_ul,markers_arr_ul):
+
+                #not putting the time of the obs as an xerr to avoid display issues
+                ax_lc_ew.errorbar(x_data,y_data,xerr=0.,yerr=0.05*y_data,marker=marker,color=color,uplims=True,markersize=4,elinewidth=1,capsize=2,alpha=1.,label=lines_std[line_name] if marker not in markers_legend_done_list else '')
+
+                if marker not in markers_legend_done_list:
+                    markers_legend_done_list+=[marker]
+
+        for i_obs,date_obs in enumerate(date_list):
+
+            num_date_obs=mdates.date2num(Time(date_obs).datetime)
+
+            #we add a condition for the label to only plot each instrument once
+            ax_lc.axvline(x=num_date_obs,ymin=0,ymax=1,color=telescope_colors_monit[instru_list[i_obs]],
+                            label=instru_list[i_obs]+' exposure' if instru_list[i_obs] not in label_tel_list else '',
+                          ls='dashdot' if instru_list[i_obs]=='Suzaku' else ':' if instru_list[i_obs] not in ['Chandra','NuSTAR'] else '--',lw=1.)
+
+            if instru_list[i_obs] not in label_tel_list:
+                label_tel_list+=[instru_list[i_obs]]
+
+        if name[0] == 'GROJ1655-40':
+            # showing the Swift photodiode exposures for GRO J1655-40 for the manuscript plots
+            mjd_arr_swift_1655 = [53448,
+                                  53449.2,
+                                  53450.2,
+                                  53456.4,
+                                  53463.5,
+                                  53463.7,
+                                  53470.4,
+                                  53481.9,
+                                  53494,
+                                  53504.3,
+                                  53505.4,
+                                  53506.5,
+                                  53511.4,
+                                  53512.3,
+                                  53512.9]
+            num_date_swift_1655 = mdates.date2num(Time(mjd_arr_swift_1655, format='mjd').datetime)
+
+            for i_obs_swift_1655,date_obs_swift_1655 in enumerate(num_date_swift_1655):
+                ax_lc.axvline(x=date_obs_swift_1655, ymin=0, ymax=1, color='grey',
+                              label='Swift PD exposure' if i_obs_swift_1655==0 else '', ls=':', lw=1.)
 
     #resizing the x axis and highlighting depending on wether we are zooming on a restricted time interval or not
     
@@ -1454,7 +1454,7 @@ def plot_lightcurve(dict_linevis,ctl_maxi_df,ctl_maxi_simbad,name,ctl_bat_df,ctl
     # ax_lc.legend(loc='upper right' if name[0]=="GROJ1655-40" else 'center right',ncols=2,
     #              bbox_to_anchor=(0.5, 0.53, 0.5, 0.5))
 
-    if superpose_ew:
+    if show_obs_dates and superpose_ew:
         # ax_lc_ew.legend(loc='upper center')
         ax_lc_ew.legend(loc='upper right')
 

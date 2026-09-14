@@ -1527,7 +1527,8 @@ with expander_monit:
     fig_lc_bat=None
     fig_lc_int=None
 
-    plot_maxi_ew=st.toggle('Superpose measured EW',value=False)
+    monit_plot_sampling=st.toggle('highlight sample observations',value=False)
+    monit_plot_ew=st.toggle('highlight measured EWs',value=False)
 
     if not online:
         def save_lc_local():
@@ -3459,7 +3460,8 @@ with tab_monitoring:
                                              catal_bat_df,catal_bat_simbad,
                                              lc_integral_sw_dict=lc_int_sw_dict,fit_integral_revol_dict=fit_int_revol_dict,
                                              display_hid_interval=monit_highlight_hid,
-                                                 superpose_ew=plot_maxi_ew,dict_rxte=dict_lc_rxte,
+                                                 show_obs_dates=monit_plot_sampling,
+                                                 superpose_ew=monit_plot_ew,dict_rxte=dict_lc_rxte,
                                              binning=monit_binning)
 
                 #wrapper to avoid streamlit trying to plot a None when resetting while loading
@@ -3477,7 +3479,8 @@ with tab_monitoring:
                                                   catal_bat_df, catal_bat_simbad,
                                              lc_integral_sw_dict=lc_int_sw_dict,fit_integral_revol_dict=fit_int_revol_dict,
                                              mode='HR_soft',display_hid_interval=monit_highlight_hid,
-                                                 superpose_ew=plot_maxi_ew,dict_rxte=dict_lc_rxte,
+                                                 show_obs_dates=monit_plot_sampling,
+                                                  superpose_ew=monit_plot_ew,dict_rxte=dict_lc_rxte,
                                              binning=monit_binning)
                 # fig_maxi_lc_html = mpld3.fig_to_html(fig_maxi_lc)
                 # components.html(fig_maxi_lc_html,height=500,width=1000)
@@ -3492,7 +3495,8 @@ with tab_monitoring:
                                              lc_integral_sw_dict=lc_int_sw_dict,fit_integral_revol_dict=fit_int_revol_dict,
                                                mode='HR_hard',
                                                display_hid_interval=monit_highlight_hid,
-                                               superpose_ew=plot_maxi_ew, dict_rxte=dict_lc_rxte,
+                                               show_obs_dates=monit_plot_sampling,
+                                                    superpose_ew=monit_plot_ew, dict_rxte=dict_lc_rxte,
                                              binning=monit_binning)
                 # fig_maxi_lc_html = mpld3.fig_to_html(fig_maxi_lc)
                 # components.html(fig_maxi_lc_html,height=500,width=1000)
@@ -3512,7 +3516,8 @@ with tab_monitoring:
                                                catal_bat_df, catal_bat_simbad,mode='BAT',
                                              lc_integral_sw_dict=lc_int_sw_dict,fit_integral_revol_dict=fit_int_revol_dict,
                                                display_hid_interval=monit_highlight_hid,
-                                               superpose_ew=plot_maxi_ew, dict_rxte=dict_lc_rxte,
+                                               show_obs_dates=monit_plot_sampling,
+                                            superpose_ew=monit_plot_ew, dict_rxte=dict_lc_rxte,
                                              binning=monit_binning)
 
                 # wrapper to avoid streamlit trying to plot a None when resetting while loading
@@ -3531,7 +3536,8 @@ with tab_monitoring:
                                              lc_integral_sw_dict=lc_int_sw_dict,fit_integral_revol_dict=fit_int_revol_dict,
                                             dist_factor=dist_factor_restrict[0],
                                                display_hid_interval=monit_highlight_hid,
-                                               superpose_ew=plot_maxi_ew, dict_rxte=dict_lc_rxte,
+                                               show_obs_dates=monit_plot_sampling,
+                                            superpose_ew=monit_plot_ew, dict_rxte=dict_lc_rxte,
                                              binning=integral_binning)
 
                 # wrapper to avoid streamlit trying to plot a None when resetting while loading

@@ -576,6 +576,9 @@ def AMD_det(figsize=(10,8)):
     plt.legend(loc='upper left')
 
     ax_obj=plt.twinx()
+    ax_obj.set_xlim(ax.get_xlim())
+    ax_obj.set_ylim(ax.get_ylim())
+
     # ax_obj.yaxis.set_visible(False)
 
     ax_obj.scatter([],[],marker='D',label='GRS 1915+105',color='black')
@@ -585,9 +588,22 @@ def AMD_det(figsize=(10,8)):
     ax_obj.scatter([],[],marker='X',label='GX 13+1',color='black')
     ax_obj.scatter([],[],marker='o',label='GRO J1655-40',color='black')
 
-    plt.legend(loc='lower right')
 
     ax_obj.yaxis.set_visible(False)
+
+    lim_NA_1e10_5ks_2sigma=np.array([[0.,1.163038007000000013e-01],
+                            [0.5, 1.148900907999999971e-01],
+                            [1.0, 4.938150109000000176e-02],
+                            [1.5, 3.152955156000000064e-02],
+                            [2., 2.437411701999999888e-02],
+                            [2.5, 5.248109659999999899e-02],
+                            [3, 1.393062539000000100e-01],
+                            [4, 7.465951670999999568e-01]
+                            ]).T
+
+    ax_obj.plot(lim_NA_1e10_5ks_2sigma[0],np.log10(lim_NA_1e10_5ks_2sigma[1])+22,ls='--',color='grey',
+             label=r'NewAthena soft state 1e-10cgs (4mCrab) 2$\sigma$ NH photon noise in 5ks')
+    plt.legend(loc='lower right')
 
     plt.xlim(0,6)
     plt.tight_layout()

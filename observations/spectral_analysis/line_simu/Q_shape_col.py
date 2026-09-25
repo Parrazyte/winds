@@ -666,6 +666,11 @@ def Q_shape_mult(val_csvs, cmaps=('viridis_r', 'magma_r', 'cividis_r'),
                  ledd_tail=1e-5,
                  lws=10, ring_gap_pt=0.,
                  highlight_range_cmap=False,
+                 show_equations=True,  # <-- new
+                 c_norm=None,  # <-- new: defaults to ledd_highbranch (0.1 Ledd)
+                 eq_fontsize=12,  # <-- new
+                 eq_dy=0.06,  # <-- new: vertical spacing between equation lines
+                 eq_suffixes=['hot','warm','cold'],
                  figsize=(7, 5)):
     """
     Plot 2-3 Q-shapes as concentric rings using a common NH normalization.
@@ -704,6 +709,14 @@ def Q_shape_mult(val_csvs, cmaps=('viridis_r', 'magma_r', 'cividis_r'),
 
     figsize : tuple
         Figure size.
+
+
+    paper setup:
+
+    os.chdir('/media/parrazyte/crucial_SSD/Observ/highres/NewAthena/SpecialIssue/NHdet/merger')
+    Q_shape_mult(['hotbright_photo_nh_noise_mod_SED_soft_0p1Edd_2e22_5ks_1000_iter_flux_100_1_5_in_0p3_10p0_keV_mod_pion_abs_canon_soft.txt','warm_merge_photo_nh_noise_mod_SED_soft_0p1Edd_2e22_5ks_1000_iter_flux_100_1_5_in_0p3_10p0_keV_mod_pion_abs_canon_soft_minipc.txt','coldbright_photo_nh_noise_mod_SED_soft_0p1Edd_2e22_5ks_1000_iter_flux_100_1_5_in_0p3_10p0_keV_mod_pion_abs_canon_soft.txt'],cmaps=['managua','managua','managua'],figsize=(7,5),factor_hard=0.5,highlight_range_cmap=True,
+    logxi_labels=[4,2,0])
+
     """
 
     n = len(val_csvs)
@@ -745,7 +758,7 @@ def Q_shape_mult(val_csvs, cmaps=('viridis_r', 'magma_r', 'cividis_r'),
     all_valid_log_nh = []
 
     #to test the interpolation uncomment this
-    #plt.figure()
+    # plt.figure()
     # plt.xscale('log')
     # plt.yscale('log')
     # test_edd_range=np.logspace(-5, 1, 100)
@@ -761,7 +774,6 @@ def Q_shape_mult(val_csvs, cmaps=('viridis_r', 'magma_r', 'cividis_r'),
         # nh_hard = _nh_predict(test_edd_range,1, logslope,logintercept,)*1e22
         # plt.plot(np.loadtxt(csv).T[0]*edd_conv,np.loadtxt(csv).T[-1]*1e22,)
         # plt.plot(test_edd_range,nh_hard,ls='--')
-
 
         _, _, nh = build_q_path(
             logslope,
@@ -1219,9 +1231,9 @@ def Q_shape_mult(val_csvs, cmaps=('viridis_r', 'magma_r', 'cividis_r'),
 
             # NH caption above the tick labels.
             cbar.ax.text(
-                2.2,
-                1.02,
-                r'NH$_{\rm{det}}$',
+                2.0,
+                1.01,
+                r'NH$_{\rm{det}}^{5\rm{ks}}$'+'\n'+'(cm$^{-2}$)',
                 transform=cbar.ax.transAxes,
                 ha='left',
                 va='bottom',
@@ -1254,6 +1266,52 @@ def Q_shape_mult(val_csvs, cmaps=('viridis_r', 'magma_r', 'cividis_r'),
                 va='bottom',
                 fontsize=9
             )
+
+    # ==============================================================
+    # NH DETECTABILITY EQUATIONS
+    # ==============================================================
+
+    if show_equations:
+
+        # c_norm defaults to the Eddington fraction used for the
+        # high branch (0.1 Ledd in the default setup), matching the
+        # units of `x` used in the original log10(NH) vs log10(x) fit.
+        c_norm_val = ledd_highbranch if c_norm is None else c_norm
+
+        for i, (cmap_name, ring) in enumerate(zip(cmaps, rings)):
+
+            A = ring['logslope']
+            B = A * np.log10(c_norm_val) + ring['logintercept'] +22
+
+            sign = '+' if B >= 0 else '-'
+
+            eq_str = (
+                r'$\log \mathrm{NH}^{'+eq_suffixes[i]+r'}_{\rm det} = %.2f \, \log(C_{norm}) \, %s \, %.2f$'
+                % (A, sign, abs(B))
+            )
+
+            color = plt.get_cmap(cmap_name)(0.7)
+
+            fig.text(
+                ax_left + ax_width *0.7,
+                ax_bottom + 0.1 + (n-i) * eq_dy,
+                eq_str,
+                ha='right',
+                va='top',
+                fontsize=eq_fontsize,
+                color='black'
+            )
+
+        # single defining line for C_0, placed below the last equation
+        fig.text(
+            ax_left + ax_width *0.7,
+            ax_bottom + 0.1 - 0.5 * eq_dy,
+            r'$C_{norm} = F/F_{0.1L_{\rm Edd},8M_\odot,8\,\rm kpc} \times \rm exp/5\,ks$',
+            ha='right',
+            va='top',
+            fontsize=eq_fontsize,
+            color='black'
+        )
 
     # ==============================================================
     # RETURN

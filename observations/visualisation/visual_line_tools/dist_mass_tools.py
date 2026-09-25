@@ -47,6 +47,9 @@ dist_dict={
     'XTEJ1908+094':[6.5,3.5,3.5]
 }
 
+
+####TODO: update with https://arxiv.org/abs/2609.14154
+
 mass_dict={
     '4U1543-475':[9.4,1,1,1],
     '4U1957+115':[3,1,2.5,1],

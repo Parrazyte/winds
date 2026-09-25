@@ -1,8 +1,10 @@
 import os
+import numpy as np
 from xspec_config_multisp import *
 from xspec import Xset,AllModels
 import matplotlib.pyplot as plt
 from matplotlib.ticker import MultipleLocator
+from matplotlib.lines import Line2D
 
 def model_compa_MHD_highE(model_mhd_list,colors=[],save=None):
 
@@ -355,10 +357,17 @@ def compa_ion_par(logxi=[0,1,2,3,4],nh_22=[1,1,1,10,10],
                   mtable='pionabsmtablecanonicallarge.fits',
                   xlims=[0.3,2.],
                   nh_cold=0.1,
-                  ylims=[1e-15,1]):
+                  ylims=[1e-15,1],
+                  figsize=(10,8),
+                  show_labels=True,
+                  show_cb=False):
 
     '''
     comparator for different sets of pion_abs solutions
+
+    show_cb:
+        if not False, a string for a parameter type:
+        e.g. "density" will show the different values of density across the model
     '''
 
     if np_14 is not None and type(np_14) not in (list,tuple,np.ndarray):
@@ -382,6 +391,16 @@ def compa_ion_par(logxi=[0,1,2,3,4],nh_22=[1,1,1,10,10],
         nh_cold_use=nh_cold
 
 
+    def truncate_colormap(cmap, minval=0.0, maxval=1.0, n=256):
+
+        '''
+        returns a new colormap that only uses the [minval, maxval] portion of cmap
+        (minval, maxval in [0,1])
+        '''
+        new_cmap = mpl.colors.LinearSegmentedColormap.from_list(
+            'trunc({n},{a:.2f},{b:.2f})'.format(n=cmap.name, a=minval, b=maxval),
+            cmap(np.linspace(minval, maxval, n)))
+        return new_cmap
 
     os.chdir('/home/parrazyte/Documents/Work/PostDoc/docs/NewAthena/SpecialIssue/DiskWinds/Obs/ion_soft')
 
@@ -391,11 +410,12 @@ def compa_ion_par(logxi=[0,1,2,3,4],nh_22=[1,1,1,10,10],
 
     getattr(AllModels(1),AllModels(1).componentNames[0]).z.values=0.
 
-    fig, ax = plt.subplots(figsize=(10, 8))
+    fig, ax = plt.subplots(figsize=figsize)
 
     color_cmap = getattr(mpl.cm,cmap)
+    color_cmap = truncate_colormap(color_cmap, minval=0., maxval=0.9)
     c_norm= mpl.colors.Normalize(vmin=0,
-                                         vmax=len(logxi))
+                                         vmax=len(logxi)-1)
     set_ener(set_ener_str,xrism=True)
     time.sleep(1)
     colors_func = mpl.cm.ScalarMappable(norm=c_norm, cmap=color_cmap)
@@ -422,10 +442,26 @@ def compa_ion_par(logxi=[0,1,2,3,4],nh_22=[1,1,1,10,10],
                            ('' if np_14 is None else '_np_%.2e'%(np_14_use[i_model]*1e14))+
                             ('' if v_rms is None else '_v_rms_'+str(v_rms_use[i_model]))+
                            ('' if z is None else '_z'+str(v_rms_use[i_model]))+
-                                                 ('_nhcold_'+str(elem_nh_cold))])
+                                                 ('_nhcold_'+str(elem_nh_cold))],secondary_x=i_model==0)
         ax.tick_params(labelbottom=True)
 
+    if not show_labels:
+        plt.gca().legend().remove()
+
     plt.xscale('linear')
+
+    if show_cb is not False:
+        colors_func.set_array([])
+        cb=plt.colorbar(colors_func,ax=ax)
+
+        if show_cb=="density":
+            cb_ticks=np.arange(0, 7, 2)
+            cb.set_ticks(cb_ticks)
+            cb_ticklabels=(np.log10(np.array(np_14_use)*1e14)[cb_ticks]).astype(int)
+            # cb_ticklabels=np.array(['%.1e'%elem for elem in np.log10(np.array(np_14_use)*1e14)])[cb_ticks]
+            cb.set_ticklabels(cb_ticklabels)
+
+        fig.get_children()[-1].set_title(r'logn$_{p}$')
 
     if xlims is not None:
         plt.xlim(xlims)
@@ -433,10 +469,14 @@ def compa_ion_par(logxi=[0,1,2,3,4],nh_22=[1,1,1,10,10],
     if ylims is not None:
         plt.ylim(ylims)
 
+    plt.tight_layout()
+
+    if show_cb:
+        return cb
 #for density
-#compa_ion_par(logxi=np.repeat(3,7),nh_22=np.repeat(1,7),
+# compa_ion_par(logxi=np.repeat(3,7),nh_22=np.repeat(1,7),
 # np_14=[0.001001     , 0.00316228, 0.01      , 0.03162278, 0.1       ,0.31622777, 1.        ],
-# xlims=[1.,1.1],ylims=[8e-4,4e-3])
+# xlims=[1.,1.1],ylims=[8e-4,4e-3],,figsize=(6,5),show_cb='density',show_labels=False)
 
 # compa_ion_par(logxi=np.repeat(3.,7),nh_22=np.repeat(0.1,7),
 # np_14=[0.001001     , 0.00316228, 0.01      , 0.03162278, 0.1       ,0.31622777, 1.        ],xlims=[1.,1.1],ylims=[8e-4,4e-3])
@@ -449,161 +489,3 @@ for merching chandra spectra
 in CIAO
 combine_spectra src_spectra="fake_highxi_src_50ks*" src_arf="*garf" src_rmf="*grmf" clob+ bkg_spectra=none verbose=5 method=avg
 '''
-
-def AMD_det(figsize=(10,8)):
-    '''
-    wrapper to reproduce and add elements to the AMDs of Keshet et al. 2025, 2026
-    '''
-
-    #from Keshet25, digitized by ChatGPT
-    # logxi, logNH
-
-    #new integrated figure with weird results
-    # amd_GROJ = np.array([
-    #     [1.10, 15.4],
-    #     [2.95, 21.7],
-    #     [3.30, 22.5],
-    #     [3.45, 22.5],
-    #     [5.00, 23.4],
-    # ]).T
-    #
-    #old figure
-    amd_GROJ = np.array([
-        [1.10, 16.4],
-        [2.95, 22.85],
-        [3.30, 23.6],
-        [5.00, 23.5],
-    ]).T
-
-    #full values without actual bounds for the non-probed parts of the AMD
-    # amd_GRS_soft = np.array([
-    #     [0.00, 17.20],
-    #     [6.50, 23.70],
-    # ]).T
-    #
-    # amd_GX = np.array([
-    #     [0.00, 17.9],
-    #     [5.40, 23.30],
-    # ]).T
-    #
-    # amd_4U = np.array([
-    #     [0.00, 18.70],
-    #     [5.40, 24.10],
-    # ]).T
-
-    #new integrated figure with weird results
-    # amd_GRS_soft = np.array([
-    #     [2.4, 17.20+2.4],
-    #     [5.7, 17.20+5.7],
-    # ]).T
-
-    amd_GX = np.array([
-        [2.4, 17.85+2.4],
-        [5.40, 23.30],
-    ]).T
-
-
-    amd_4U = np.array([
-        [2.4, 18.70+2.4],
-        [5.40, 24.10],
-    ]).T
-
-
-    # logNH_GRS1915 = logxi + 17.20
-    # logNH_GX13 = logxi + 17.85
-    # logNH_4U1630 = logxi + 18.70
-
-    #from Keshet et al. 26, digitized by ChatGPT and verified with automeris.io
-    # amd_GRS_hard1 = np.array([
-    #     [1.00, 18.70],
-    #     [3.0, 22.70],
-    #     [3.3, 22.70],
-    #     [4.00, 22.00],
-    # ]).T
-    #
-    # amd_GRS_hard2 = np.array([
-    #     [1.00, 20.40],
-    #     [3.40, 22.80],
-    #     [4.0, 22.20],
-    # ]).T
-
-    #cropped version starting at the logxi peak of Si12+
-
-    amd_GRS_hard1 = np.array([
-        [2.00, 21.20],
-        [3.0, 22.70],
-        [3.3, 22.70],
-        [4.00, 22.00],
-    ]).T
-
-    amd_GRS_hard2 = np.array([
-        [2.00, 21.40],
-        [3.40, 22.80],
-        [4.0, 22.20],
-    ]).T
-
-    # amd_GRS_soft= np.array([
-    #     [2.00, 18.50],
-    #     [6.50, 23.00],
-    # ]).T
-
-    amd_GRS_soft= np.array([
-        [2.00, 18.50],
-        [5.7, 22.3],
-    ]).T
-
-    fig,ax=plt.subplots(1,figsize=figsize)
-    plt.xlabel(r'log$\xi$')
-    plt.ylabel(r'dlogN$_H$/dlog$\xi$')
-    plt.plot(amd_GROJ[0],amd_GROJ[1],color='darkorange',label='hypersoft',marker='o')
-
-    plt.plot(amd_GRS_soft[0],amd_GRS_soft[1],color='red',label='soft',marker='D')
-    plt.plot(amd_GX[0],amd_GX[1],color='red',label='',ls='--',marker='X')
-    plt.plot(amd_4U[0],amd_4U[1],color='red',label='',ls=':',marker='+')
-
-    plt.plot(amd_GRS_hard1[0],amd_GRS_hard1[1],color='blue',label='obscured',marker='D')
-    plt.plot(amd_GRS_hard2[0],amd_GRS_hard2[1],color='blue',label='',ls='--',marker='D')
-    
-    plt.scatter(amd_GROJ[0],amd_GROJ[1],color='darkorange',label='',marker='o')
-
-    plt.scatter(amd_GRS_soft[0],amd_GRS_soft[1],color='red',label='',marker='D')
-    plt.scatter(amd_GX[0],amd_GX[1],color='red',label='',ls='--',marker='X')
-    plt.scatter(amd_4U[0],amd_4U[1],color='red',label='',ls=':',marker='+')
-
-    plt.scatter(amd_GRS_hard1[0],amd_GRS_hard1[1],color='blue',label='',marker='D')
-    plt.scatter(amd_GRS_hard2[0],amd_GRS_hard2[1],color='blue',label='',ls='--',marker='D')
-
-    plt.legend(loc='upper left')
-
-    ax_obj=plt.twinx()
-    ax_obj.set_xlim(ax.get_xlim())
-    ax_obj.set_ylim(ax.get_ylim())
-
-    # ax_obj.yaxis.set_visible(False)
-
-    ax_obj.scatter([],[],marker='D',label='GRS 1915+105',color='black')
-
-
-    ax_obj.scatter([],[],marker='+',label='4U 1630-47',color='black')
-    ax_obj.scatter([],[],marker='X',label='GX 13+1',color='black')
-    ax_obj.scatter([],[],marker='o',label='GRO J1655-40',color='black')
-
-
-    ax_obj.yaxis.set_visible(False)
-
-    lim_NA_1e10_5ks_2sigma=np.array([[0.,1.163038007000000013e-01],
-                            [0.5, 1.148900907999999971e-01],
-                            [1.0, 4.938150109000000176e-02],
-                            [1.5, 3.152955156000000064e-02],
-                            [2., 2.437411701999999888e-02],
-                            [2.5, 5.248109659999999899e-02],
-                            [3, 1.393062539000000100e-01],
-                            [4, 7.465951670999999568e-01]
-                            ]).T
-
-    ax_obj.plot(lim_NA_1e10_5ks_2sigma[0],np.log10(lim_NA_1e10_5ks_2sigma[1])+22,ls='--',color='grey',
-             label=r'NewAthena soft state 1e-10cgs (4mCrab) 2$\sigma$ NH photon noise in 5ks')
-    plt.legend(loc='lower right')
-
-    plt.xlim(0,6)
-    plt.tight_layout()

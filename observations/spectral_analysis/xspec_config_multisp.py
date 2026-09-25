@@ -974,6 +974,8 @@ def compute_T_IC():
     Computes the compton temperature of the currently loaded model
 
     formula taken from http://arxiv.org/abs/1008.2287 p.33
+
+    for canonical soft state of the NA paper: T_IC=1.06keV
     '''
 
 
@@ -6977,6 +6979,8 @@ def xPlot(types,axes_input=None,plot_saves_input=None,plot_arg=None,includedlist
                 if model_ls is not None:
                     if model_ls == 'group':
                         model_ls_group=ls_types_group[id_grp]
+                    else:
+                        model_ls_group = model_ls[id_grp]
                 else:
                     model_ls_group='-'
 

@@ -5,6 +5,11 @@ import seaborn as sns
 import pandas as pd
 import os
 
+import matplotlib as mpl
+from matplotlib.lines import Line2D
+from matplotlib.patches import Rectangle
+from matplotlib.legend_handler import HandlerBase
+
 def incl_NH_dep_HerX1():
     '''
     '''
@@ -43,7 +48,7 @@ def incl_NH_dep_HerX1():
 
     pass
 
-def plot_los(cmap='plasma',show_launching=True,figsize=(10,8)):
+def plot_los(cmap='plasma',show_launching=True,figsize=(7.5,7.5*8/10)):
 
 
     '''
@@ -750,8 +755,8 @@ def plot_los(cmap='plasma',show_launching=True,figsize=(10,8)):
         ax_NH.errorbar(90-elem_angle_sampl_los,y=data_wind_XRISM.T[5],
                        xerr=elem_angle_sampl_err.T,
                        yerr=data_wind_XRISM.T[6:8],ls='',
-                       color=indiv_color,label='innermost node data' if i_node==0 else
-                                                'outermost node data' if i_node==n_nodes-1 else '',
+                       color=indiv_color,label='conversion for innermost launching radius' if i_node==0 else
+                                                'conversion for outermost launching radius' if i_node==n_nodes-1 else '',
                        alpha=0.5)
 
         '''
@@ -799,8 +804,6 @@ def plot_los(cmap='plasma',show_launching=True,figsize=(10,8)):
     #note: outer disk radius 2e11cm from  Cheng+98
     #R_IC estimated at 8e10cm in Kosec+20 (careful they quote the wind launching radius which they take as 0.1 Ric)
 
-    ax_NH.legend(title='Her X-1: 0.14 L$_{Edd}$ 1.6 M$_{\odot}$| R$_d$=2.5R$_{IC}$')
-    plt.tight_layout()
 
     # launching mechanisms
     ax_launching = ax_NH.twinx()
@@ -811,18 +814,6 @@ def plot_los(cmap='plasma',show_launching=True,figsize=(10,8)):
     ax_launching.set_xlim(ax_NH.get_xlim())
 
     if show_launching:
-
-        ax_launching.plot(thermal_gx13_nh_xxvi[0],np.log10(thermal_gx13_nh_xxvi[1]),color="red",alpha=0.5,
-                          ls='-',
-                 label=r'0.5 L$_{Edd}$ | 1.4 M$_{\odot}$ | R$_d$=10   $\;$R$_{IC}$ | R$_{is}$=0.20 R$_{IC}$')
-
-        ax_launching.plot(thermal_gx13_nh_xxvi[0],np.log10(thermal_gx13_nh_xxvi[2]),color="red",alpha=0.5,
-                          ls='--',
-                 label=r'0.5 L$_{Edd}$ | 1.4 M$_{\odot}$ | R$_d$=1   $\;$$\;$ R$_{IC}$ | R$_{is}$=0.20 R$_{IC}$')
-
-        ax_launching.plot(thermal_h1743_nh_xxvi[0],np.log10(thermal_h1743_nh_xxvi[1]),color="red",alpha=0.5,
-                          ls='dashdot',
-                 label=r'0.3 L$_{Edd}$ | 8.0 M$_{\odot}$ | R$_d$=0.18 R$_{IC}$ | R$_{is}$=0.18 R$_{IC}$')
 
         csv_mhd_0p1Ledd=pd.read_csv('/home/parrazyte/Documents/Work/PostDoc/docs/NewAthena/SpecialIssue/DiskWinds/launching/mhd/'+
                                 'KeigoTanimoto/Solutions/0p1_Ledd/structure/monaco_Nion.csv')
@@ -852,27 +843,101 @@ def plot_los(cmap='plasma',show_launching=True,figsize=(10,8)):
                           color='dodgerblue',alpha=1.0,
                           label='0.1 L$_{Edd}$ | 8.0 M$_{\odot}$ | R$_d$=0.48 R$_{IC}$ | n$_0$=1.7 $\cdot$10$^{18}$ | p=1.2')
 
-        ax_launching.legend(title=r'$\;\;\;\;\;\;\;\;\;\;\;\;\;\;\;\;\;\;\;\;\;\;\;\;\;\;\;\;\;\;$',loc='lower left',
+
+        ax_launching.plot(thermal_gx13_nh_xxvi[0],np.log10(thermal_gx13_nh_xxvi[1]),color="red",alpha=0.65,
+                          ls='-',
+                 label=r'0.5 L$_{Edd}$ | 1.4 M$_{\odot}$ | R$_d$=10   $\;$R$_{IC}$ | R$_{is}$=0.20 R$_{IC}$')
+
+        ax_launching.plot(thermal_gx13_nh_xxvi[0],np.log10(thermal_gx13_nh_xxvi[2]),color="red",alpha=0.65,
+                          ls='--',
+                 label=r'0.5 L$_{Edd}$ | 1.4 M$_{\odot}$ | R$_d$=1   $\;$$\;$ R$_{IC}$ | R$_{is}$=0.20 R$_{IC}$')
+
+        ax_launching.plot(thermal_h1743_nh_xxvi[0],np.log10(thermal_h1743_nh_xxvi[1]),color="red",alpha=0.65,
+                          ls='dashdot',
+                 label=r'0.3 L$_{Edd}$ | 8.0 M$_{\odot}$ | R$_d$=0.18 R$_{IC}$ | R$_{is}$=0.18 R$_{IC}$')
+
+
+        ax_launching.legend(title=r'$\;\;\;\;\;\;\;\;\;\;\;\;\;\;\;\;\;\;\;\;\;\;\;\;\;\;\;\;\;\;$',loc='upper right',
                             framealpha=1.0)
 
 
-        #modifies the vertical alignment for saves (which move the text slightly
+        full_mod_x=-18.
+        full_mod_y=3.95
+
+        #modifies the vertical alignment for saves (which move the text slightly)
         v_hm=0.09
 
-        plt.text(87, 16.325-v_hm, 'launching mechanisms:', color='black', zorder=10)
+        plt.text(87+full_mod_x, 16.325-v_hm+full_mod_y, 'launching mechanisms:', color='black', zorder=10)
 
-        x_hm=1.0
+        x_hm=-2.0
 
-        plt.text(77.5+x_hm, 16.325-v_hm, 'thermal', color='red', zorder=10)
+        plt.text(77.5+x_hm+full_mod_x+0., 16.325-v_hm+full_mod_y, 'thermal', color='red', zorder=10)
 
-        plt.text(74.7+x_hm, 16.325-v_hm, '/', color='black', zorder=10)
+        plt.text(74.7+x_hm+full_mod_x-1.2, 16.325-v_hm+full_mod_y, '/', color='black', zorder=10)
 
 
-        plt.text(74.3+x_hm, 16.325-v_hm, 'MHD', color='dodgerblue', zorder=10,)
+        plt.text(74.3+x_hm+full_mod_x-1.4, 16.325-v_hm+full_mod_y, 'MHD', color='dodgerblue', zorder=10,)
 
     #for 2/3 of main high peak.
-    ax_launching.axhline(np.log10(1.735e16), color='grey', alpha=0.5, )
-    ax_launching.text(68,16.13, '3$\sigma$ NewAthena limit for Her X-1 main high in 50ks',
+    ax_NH.axhline(np.log10(1.735e16), color='grey', alpha=0.5, zorder=-1)
+    ax_NH.text(65.5,np.log10(1.735e16)+0.05, '3$\sigma$ NewAthena limit in 50ks',
                       color='grey',alpha=1)
+    ax_NH.text(65.5,np.log10(1.735e16)-0.15, 'for Her X-1 main high phase',
+                      color='grey',alpha=1)
+
+    class GradientProxy:
+        """Dummy handle; only used to select GradientHandler."""
+        pass
+
+    class GradientHandler(HandlerBase):
+        def __init__(self, cmap="plasma", vmin=0.0, vmax=1.0,
+                     n=100, extra=2.0, **kwargs):
+            """
+            vmin, vmax : fraction of the colormap at the top / bottom
+                         (top = blue end, bottom = yellow end)
+            extra      : how far below the first row the rectangle extends,
+                         in units of the legend fontsize (tune to reach the
+                         bottom of the second row)
+            """
+            super().__init__(**kwargs)
+            self.cmap = mpl.colormaps[cmap]
+            self.vmin, self.vmax, self.n, self.extra = vmin, vmax, n, extra
+
+        def create_artists(self, legend, orig_handle, xdescent, ydescent,
+                           width, height, fontsize, trans):
+            total = height + self.extra * fontsize
+            top = ydescent + height+2
+            dh = total / self.n
+            artists = []
+            for i in range(self.n):
+                frac = self.vmin + (self.vmax - self.vmin) * i / (self.n - 1)
+                r = Rectangle((xdescent +(0.25-0.1) * width, top - (i + 1) * dh),
+                              (0.5+0.1)* width, dh * 1.02,  # tiny overlap: no seams
+                              facecolor=self.cmap(frac), edgecolor="none",
+                              linewidth=0, antialiased=False, transform=trans)
+                artists.append(r)
+            return artists
+
+    handles, labels = ax_NH.get_legend_handles_labels()
+
+    # drop the two errorbar entries (filtering by label is safer than by position)
+    drop = {"conversion for innermost launching radius",
+            "conversion for outermost launching radius"}
+    keep = [(h, l) for h, l in zip(handles, labels) if l not in drop]
+    handles = [h for h, _ in keep]
+    labels = [l for _, l in keep]
+
+    # append the gradient and the invisible placeholder
+    handles += [GradientProxy(), Line2D([], [], color="none")]
+    labels += ["conversion for innermost launching radius",
+               "conversion for outermost launching radius"]
+
+    leg = ax_NH.legend(handles, labels,
+                    title=r'Her X-1: 0.14 L$_{Edd}$ 1.6 M$_{\odot}$| R$_d$=2.5R$_{IC}$',
+                    handler_map={GradientProxy: GradientHandler(cmap="plasma")},
+                       loc='lower left', framealpha=1.0)
+
+    # ax_NH.legend(title='Her X-1: 0.14 L$_{Edd}$ 1.6 M$_{\odot}$| R$_d$=2.5R$_{IC}$',loc='lower left',framealpha=1.0)
+    plt.tight_layout()
 
 

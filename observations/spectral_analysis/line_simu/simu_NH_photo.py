@@ -278,7 +278,7 @@ def simu_nh_photo(nh_photo_mode,
                     # equivalent to +/-1000km/s
                     AllModels(1)(comp_par[3]).values = [0.0, 1e-3, -0.00333, -0.00333, 0.00333, 0.00333]
 
-                if photo_mod.startswith('pion_abs_canon_soft'):
+                if photo_mod.startswith('pion_abs_canon'):
 
                     if photo_xi_range.split('_')[0] == 'cold':
                         AllModels(1)(comp_par[0]).values = [0., 0.02, 0., 0., 0.5, 0.5]
@@ -445,7 +445,7 @@ def simu_nh_photo(nh_photo_mode,
 
                 if nh_photo_mode=='noise':
 
-                    assert photo_mod.startswith('pion_abs_canon_soft')
+                    assert photo_mod.startswith('pion_abs_canon')
 
 
                     #setting up parallel computation

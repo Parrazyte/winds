@@ -75,6 +75,7 @@ arf_abv_list = list(arf_abv.keys())
 
 bkg_abv={'SQUDE_indev':"/media/parrazyte/crucial_SSD/Observ/highres/linedet_compa/SQUDE/Background_files/full_bkg_1e6s_1am_X06.pha",
          'NewAthena_NXB_10asec':'/media/' + username + '/crucial_SSD/Observ/highres/linedet_compa/NewAthena/new_athena_xifu_mar_v2_nxb_10asec_radius.pha',
+         'NewAthena_NXB_10asec_minipc': '/home/' + username + '/Observ_SA/NewAthena/NHdet/rsp/new_athena_xifu_mar_v2_nxb_10asec_radius.pha',
          'NewAthena_NXB_1arcmin':'/media/' + username + '/crucial_SSD/Observ/highres/linedet_compa/NewAthena/new_athena_xifu_mar_v2_nxb_1amin2.pha',
          'NewAthena_NXB_1arcmin_minipc': '/home/'+username+'/Observ_SA/NewAthena/NHdet/rsp/new_athena_xifu_mar_v2_nxb_1amin2.pha',
          'NewAthena_NXB_1pix':'/media/' + username + '/crucial_SSD/Observ/highres/linedet_compa/NewAthena/new_athena_xifu_mar_v2_nxb_1pix.pha'}
@@ -86,6 +87,7 @@ mod_dict={'pion_abs_NS':['mtable','/media/'+username+'/crucial_SSD/Observ/highre
           'pion_abs_softMAXIJ1543':['mtable','/media/'+username+'/crucial_SSD/Observ/highres/mods/pionabsMAXIJ1543.fits'],
           'pion_abs_canon_soft':['mtable','/media/'+username+'/crucial_SSD/Observ/highres/mods/pionabsmtablecanonicallarge.fits'],
             'pion_abs_canon_soft_minipc':['mtable','/home/'+username+'/Observ_SA/NewAthena/NHdet/pionabsmtablecanonicallarge.fits'],
+            'pion_abs_canon_hard_minipc':['mtable','/home/'+username+'/Observ_SA/NewAthena/NHdet/pionhardabsmtablecanonicallarge.fits'],
           }
 #line_simu('test_SED.xcm',mode='ew_lim',rmf_path='XRISM_Hp_AO2',
 #                          arf_path='XRISM_pointsource_GVclosed_AO2',expos=50,

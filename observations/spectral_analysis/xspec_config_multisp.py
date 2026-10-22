@@ -55,14 +55,14 @@ else:
 
 # custom model loads
 if not streamlit_mode and (1 or model_dir!=None):
-    AllModels.lmod('relxill',dirPath=model_dir+'/relxill/2.9')
-
-    #for xspec-version of the SPEX slab model from Tomaru+20
-    # (https://github.com/ryotatomaru/Ionabs)
-    AllModels.lmod('ionabs', dirPath=model_dir + '/ionabs')
-
-    #note: apparently needs to be put in the bashrc instead
-    os.environ['IONABS_DATA_PATH'] = os.path.join(model_dir, 'ionabs','data_ionabs')
+    # AllModels.lmod('relxill',dirPath=model_dir+'/relxill/2.9')
+    #
+    # #for xspec-version of the SPEX slab model from Tomaru+20
+    # # (https://github.com/ryotatomaru/Ionabs)
+    # AllModels.lmod('ionabs', dirPath=model_dir + '/ionabs')
+    #
+    # #note: apparently needs to be put in the bashrc instead
+    # os.environ['IONABS_DATA_PATH'] = os.path.join(model_dir, 'ionabs','data_ionabs')
     # Xset.addModelString(os.path.join(model_dir, 'ionabs','data_ionabs'))
 
     # AllModels.lmod('fullkerr',dirPath=model_dir+'/fullkerr')
@@ -6646,7 +6646,8 @@ def xPlot(types,axes_input=None,plot_saves_input=None,plot_arg=None,includedlist
           mult_factors=None,label_indivcomps=False,
           no_name_data='auto',force_ylog_ratio=False,legend_ncols=None,
           force_xlin=False,force_ylin=False,
-          data_colors=None,model_colors=None,model_ls=None,addcomp_colors=None,addcomp_ls=None,
+          data_colors=None,model_colors=None,model_ls=None,model_alpha=0.5,
+          addcomp_colors=None,addcomp_ls=None,
           data_zorders=None,
           data_alpha=1,
           auto_figsize=(10,8),auto_panel_hratio=None,
@@ -6713,7 +6714,10 @@ def xPlot(types,axes_input=None,plot_saves_input=None,plot_arg=None,includedlist
                  overwrite the default xspec colors for the models
                 if set to 'data', copies the data_colors
     model_ls: if not None:
-                if 'group', cycles through different ls for each datagroups
+                if 'group', cycles through different ls for each datagroups, else an array of ls
+
+    model_alpha: value or array for different datagroups
+
     addcomp_colors: if not None or 'data', should be an AllData.nGroups size iterable.
                     overwrite the default xspec colors for the models.
                     if set to 'data', copies the data_colors
@@ -6984,9 +6988,15 @@ def xPlot(types,axes_input=None,plot_saves_input=None,plot_arg=None,includedlist
                 else:
                     model_ls_group='-'
 
+                if type(model_alpha) not in [list,tuple,np.ndarray]:
+                    model_alpha_group=model_alpha
+                else:
+                    model_alpha_group=model_alpha[id_grp]
+
+
                 curr_ax.plot(curr_save.x[id_grp],curr_save.model[id_grp]*(1 if ('data' not in plot_type and 'uf' not in plot_type and 'ratio' not in plot_type) else mult_factor_grp),
                              color=xcolors_grp[id_grp] if model_color_grp is None else model_color_grp,
-                             ls=model_ls_group,alpha=0.5,
+                             ls=model_ls_group,alpha=model_alpha_group,
                              label='' if 'mo' not in plot_type else ('' if group_names=='nolabel' else ('' if legend_addcomp_groups else\
                             ('' if group_names=='nolabel' or (no_name_data=='auto' and i_ax!=len(types_split)-1) else grp_name))))
 

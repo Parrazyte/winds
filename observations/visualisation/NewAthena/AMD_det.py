@@ -1,9 +1,11 @@
-
+#largely created by CC
 
 # 10x the base flux for 0p1Edd 8Msun 8kpc, to get 50ks in this setup
 def AMD_det(figsize=(6,5),
             #for 50ks at 0.1LEdd
             flux_lim_NA=7.824e-08,
+            #for 50ks at 0.1LEdd
+            flux_lim_Ch=7.824e-09,
             plot_AMD_photo=True):
     '''
     wrapper to reproduce and add elements to the AMDs of Keshet et al. 2025, 2026
@@ -574,7 +576,7 @@ def AMD_det(figsize=(6,5),
 
     ax_obj.yaxis.set_visible(False)
 
-    lim_NA_1e10_5ks_2sigma = np.array([[0., 1.163038007000000013e-01],
+    lim_NA_1em10_5ks_2sigma = np.array([[0., 1.163038007000000013e-01],
                                        [0.5, 1.148900907999999971e-01],
                                        [1.0, 4.938150109000000176e-02],
                                        [1.5, 3.152955156000000064e-02],
@@ -584,13 +586,13 @@ def AMD_det(figsize=(6,5),
                                        [4, 7.465951670999999568e-01]
                                        ]).T
 
-    lim_NA_1e9_5ks_3sigma = np.array([[4.0, 2.844292897999999847e-01],
+    lim_NA_1em9_5ks_3sigma = np.array([[4.0, 2.844292897999999847e-01],
                                        [4.5, 8.620929412000000180e-01],
                                        # lower limit
                                        [5.0, 3.134139536000000170e+00]
                                        ]).T
 
-    lim_NA_1e10_5ks_3sigma = np.array([[0., 2.039911264000000002e-01],
+    lim_NA_1em10_5ks_3sigma = np.array([[0., 2.039911264000000002e-01],
                                        [0.5, 1.571857617000000096e-01],
                                        [1.0, 7.572973450000000661e-02],
                                        [1.5, 4.782817921999999e-02],
@@ -605,7 +607,7 @@ def AMD_det(figsize=(6,5),
                                        ]).T
 
 
-    lim_NA_1e11_5ks_3sigma = np.array([[0., 6.476325112999999911e-01],
+    lim_NA_1em11_5ks_3sigma = np.array([[0., 6.476325112999999911e-01],
                                        [0.5, 5.651231459000000124e-01],
                                        [1.0, 2.796046930000000152e-01],
                                        [1.5, 2.032934363999999994e-01],
@@ -637,13 +639,90 @@ def AMD_det(figsize=(6,5),
                                 [5.0, -0.58]
                                 ]).T
 
+    lim_Ch_1em10_100ks_3sigma= np.array([[0., 2.019718473999999819e+00],
+                                       [0.5, 1.779589257999999896e+00],
+                                       [1.0, 7.798472491000000284e-01],
+                                       [1.5, 4.226000455000000211e-01],
+                                       [2., 4.573443133999999799e-01],
+                                       [2.5, 8.392712371999999643e-01],
+                                       [3, 1.968144920000000075e+00],
+                                       [3.5, 0],
+                                       [4.0, 0],
+                                       # lower limit
+
+                                       [4.5, 0],
+                                       # lower limit
+                                       [5.0, 0]
+                                       ]).T
+
+    #reminder that the expoure here is set at 100ks to mimic a 50ks with both orders
+    lim_Ch_1em9_100ks_3sigma= np.array([[0., 9.951222187999999580e-01],
+                                       [0.5, 5.021197881000000196e-01],
+                                       [1.0, 1.484941741999999953e-01],
+                                       [1.5, 1.007605971999999961e-01],
+                                       [2., 6.693046491000000098e-02],
+                                       [2.5, 1.303253091999999891e-01],
+                                       [3, 3.262190005000000226e-01],
+                                       [3.5, 9.251455692000000175e-01],
+                                       [4.0, 3.616462467999999930e+00],
+                                       # lower limit
+
+                                       [4.5, 9.998323729999999188e+00],
+                                       # lower limit
+                                       [5.0, 1.000000000000000000e+01]
+                                       ]).T
+
+
+    #reminder that the expoure here is set at 100ks to mimic a 50ks with both orders
+    lim_Ch_1em8_100ks_3sigma= np.array([[3.5, 1.990229041999999893e-01],
+                                       [4.0, 3.689520569999999999e-01],
+                                       [4.5, 8.326483184999999843e-01],
+                                       [5.0, 3.118509147999999787e+00]
+                                       ]).T
+
+    lim_Ch_1em7_100ks_3sigma= np.array([[3.5, 5.248241666999999694e-02],
+                                       [4.0, 8.919733453000000534e-02],
+                                       [4.5, 2.759897350000000138e-01],
+                                       [5.0, 8.769110074000000532e-01]
+                                       ]).T
+
+    # flux_scalings (need to be remade)
+    slope_Ch_3sigma = np.array([[0., -0.30741441],
+                                [0.5, -0.54951244],
+                                [1.0, -0.72030013],
+                                [1.5, -0.62263881],
+                                [2., -0.83461944],
+                                [2.5, -0.80887358],
+                                [3, -0.78],
+                                #should be recalculated
+                                [3.5, -0.57888923],
+                                [4.0,  -0.61661806],
+                                [4.5, -0.47956868],
+                                # lower limit
+                                [5.0, -0.5509915]
+                                ]).T
+
     # note: base flux for 0p1 Edd is 7.824e-09
-    c_rescale = np.log10(flux_lim_NA / 1e-10)
+    c_rescale_NA = np.log10(flux_lim_NA / 1e-10)
 
-    resc_lim_NA = np.log10(lim_NA_1e10_5ks_3sigma[1]) + c_rescale * slope_NA_3sigma[1]
+    c_rescale_Ch = np.log10(flux_lim_Ch / 1e-10)
 
-    ax_obj.plot(lim_NA_1e10_5ks_3sigma[0], resc_lim_NA + 22, ls='--', color='grey',
-                label=r'NewAthena'+'\n'+r'detectability')
+
+    resc_lim_NA = np.log10(lim_NA_1em10_5ks_3sigma[1]) + c_rescale_NA * slope_NA_3sigma[1]
+
+    resc_lim_Ch = np.log10(lim_Ch_1em10_100ks_3sigma[1]) + c_rescale_Ch * slope_Ch_3sigma[1]
+
+    #for now we only take some values
+
+    plt.plot([], [], ' ', label=r"detectability:")
+
+    ax_obj.plot(lim_NA_1em10_5ks_3sigma[0], resc_lim_NA + 22, ls='--', color='grey',
+                label=r'NewAthena')
+
+    #for now we only take some values
+    ax_obj.plot(lim_Ch_1em10_100ks_3sigma[0], resc_lim_Ch + 22, ls='dashdot', color='grey',
+                label=r'Chandra')
+
     plt.legend(loc='lower right')
 
     plt.tight_layout()

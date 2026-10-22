@@ -350,7 +350,7 @@ def SIXTE_run(outdir='./',
             pbar.update()
 
 
-def flux_explo(save=False):
+def flux_explo(save=False,flux_elow=0.3,flux_ehigh=10):
 
     '''
     used to summarize the branching ratio outputs of a flux exploration
@@ -381,23 +381,25 @@ def flux_explo(save=False):
 
                 elem_grades+=[hdul[1].header['NGRAD'+str(i)]/hdul[1].header['EXPOSURE']]
             evt_grades+=[elem_grades]
-            # evt_invalid+=[hdul[1].header['NINVALID']]
+            evt_invalid+=[hdul[1].header['NINVALID']/hdul[1].header['EXPOSURE']]
 
     evt_flux=np.array(evt_flux)
     evt_grades=np.array(evt_grades)
+    evt_invalid=np.array(evt_invalid)
     evt_grades=evt_grades[evt_flux.argsort()].T
+    evt_invalid=evt_invalid[evt_flux.argsort()].T
     evt_flux.sort()
 
     plt.figure(figsize=(10,8))
     plt.xscale('log')
     plt.yscale('log')
-    plt.xlabel('flux (cgs)')
+    plt.xlabel('['+str(flux_elow)+'-'+str(flux_ehigh)+'] keV flux (cgs)')
     plt.ylabel('counts')
     plt.title('evolution of count rate with flux for canonical soft SED')
     for i_grade in range(6):
         plt.plot(evt_flux,evt_grades[i_grade],label='GRADE '+str(i_grade+1))
     plt.plot(evt_flux, evt_grades[:3].sum(0), label='sum of GRADES 1-2-3',color='black',ls='--')
-    # plt.plot(evt_flux, evt_invalid, label='Invalid',color='grey',ls=':')
+    plt.plot(evt_flux, evt_invalid, label='Invalid',color='grey',ls=':')
 
     plt.legend()
     plt.tight_layout()
@@ -407,13 +409,18 @@ def flux_explo(save=False):
     plt.figure(figsize=(10, 8))
     plt.xscale('log')
     plt.yscale('log')
-    plt.xlabel('flux (cgs)')
-    plt.ylabel('grade ratio (not counting null events)')
-    plt.title('evolution of total counts with flux for canonical soft SED')
+    plt.xlabel('['+str(flux_elow)+'-'+str(flux_ehigh)+'] keV flux (cgs)')
+    plt.ylabel('grade ratio (normalized to total number of events)')
+    plt.title('evolution of branching ratio with flux for canonical soft SED')
 
     for i_grade in range(6):
-        plt.plot(evt_flux, evt_grades[i_grade]/(evt_grades.sum(0)), label='GRADE ' + str(i_grade+1))
-    plt.plot(evt_flux, evt_grades[:3].sum(0)/(evt_grades.sum(0)), label='sum of GRADES 1-2-3', color='black', ls='--')
+        plt.plot(evt_flux, evt_grades[i_grade]/(evt_grades.sum(0)+evt_invalid),
+                 label='GRADE ' + str(i_grade+1))
+    plt.plot(evt_flux, evt_grades[:3].sum(0)/(evt_grades.sum(0)+evt_invalid),
+             label='sum of GRADES 1-2-3', color='black', ls='--')
+
+    plt.plot(evt_flux, evt_invalid/(evt_grades.sum(0)+evt_invalid),
+             label='Invalid',color='grey',ls=':')
 
     plt.legend()
     plt.tight_layout()

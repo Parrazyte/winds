@@ -10,7 +10,13 @@ from matplotlib.patches import Rectangle
 from matplotlib.lines import Line2D
 from matplotlib.legend_handler import HandlerBase
 
-def plot_redbook_lowE(figsize=(10,8)):
+def plot_redbook_lowE(figsize=(10,8),show_Chandra=False):
+
+    '''
+
+    paper setup is
+    plot_redbook_lowE(figsize=(7,7*8/10),show_Chandra=False)
+    '''
 
     os.chdir('/media/parrazyte/crucial_SSD/Observ/highres/NewAthena/SpecialIssue/Redbook/SIXTE/common')
     Xset.restore('mod_full_NA_Chandra.xcm')
@@ -34,6 +40,9 @@ def plot_redbook_lowE(figsize=(10,8)):
 
     Plot.add=False
     n=15
+
+    ch_data_alpha=show_Chandra/2
+
     xPlot('eeuf',xlims=[0.8,2.05],mult_factors=np.array([n**-5.4,n**-2.35,n**-0.5,n**-5.1,n**-1.5,n**-0,
                                                          n**-5.4,n**-2.35,n**-0.5,n**-5.1,n**-1.5,n**-0]),
           data_colors=['orange','darkred','darkblue','orange','darkred','darkblue',
@@ -46,7 +55,8 @@ def plot_redbook_lowE(figsize=(10,8)):
                        "","","",
                        "","","",
                        "","",""],
-          data_alpha=[1, 1, 1, 1, 1,1, 0.5, 0.5, 0.5, 0.5,0.5,0.5],
+          data_alpha=[1, 1, 1, 1, 1,1, ch_data_alpha/2,ch_data_alpha/2,ch_data_alpha/2,
+                                    ch_data_alpha/2,ch_data_alpha/2,ch_data_alpha/2,],
           model_colors=['orange','darkred','darkblue','orange','darkred','darkblue',
                         'None','None','None','None','None','None'],
           model_ls=['-', '-', '-', ':', ':', ':',
@@ -73,7 +83,8 @@ def plot_redbook_lowE(figsize=(10,8)):
                         'None','None','None','None','None','None'],
           model_ls=['-','-','-','--','--','--',
                         '-','-','-','--','--','--',],
-          data_alpha=[1, 1, 1, 1, 1,1, 0.5, 0.5, 0.5, 0.5,0.5,0.5],)
+          data_alpha=[1, 1, 1, 1, 1,1, ch_data_alpha/2,ch_data_alpha/2,ch_data_alpha/2,
+                                    ch_data_alpha/2,ch_data_alpha/2,ch_data_alpha/2,],)
     axins.set_ylabel('')
     axins.set_xlabel('')
     axins.set_title('')
@@ -360,15 +371,19 @@ def plot_redbook_lowE(figsize=(10,8)):
     # fig, (ax, ax_secleg) = plt.subplots(1, 2, figsize=(8, 4))
     # ax_secleg.axis("off")
 
-    handles = [
+    handles = np.array([
         TriColorRect(("darkblue", "darkred","orange")),
         Rectangle((0, 0), 1, 1., facecolor="grey", edgecolor="k", lw=0.5),
         # ErrBarProxy(x_frac=0.4, y_frac=0.4),  # small
         # ErrBarProxy(x_frac=1.5, y_frac=1.0),  # large
         Line2D([], [], color="k", ls="-", lw=1),   # plain line
         Line2D([], [], color="k", ls=":", lw=1),
-    ]
-    labels = ["NewAthena", "Chandra", "5ks", "50s"]
+    ])
+    labels = np.array(["NewAthena", "Chandra", "5ks", "50s"])
+
+    if not show_Chandra:
+        handles=handles[[0,2,3]]
+        labels=labels[[0,2,3]]
 
     ax_secleg.legend(
         handles, labels,
@@ -377,18 +392,21 @@ def plot_redbook_lowE(figsize=(10,8)):
             ErrBarProxy: HandlerErrBar(),
         },
         loc="upper left", frameon=True,
-        handlelength=2.0, handleheight=1.5, labelspacing=1.0,ncol=2,columnspacing=0.5,
+        handlelength=2.0, handleheight=1.5, labelspacing=1.0,ncol=1+show_Chandra,columnspacing=0.5,
         fontsize=9 if figsize[0]<9 else None,
     )
 
     plt.tight_layout()
 
     # plt.show()
-'''
-HIGH ENERGIES 
-'''
 
-def plot_redbook_highE(figsize=(10,8)):
+
+def plot_redbook_highE(figsize=(10,8),show_Chandra=False):
+
+    '''
+    paper setup is
+    plot_redbook_highE(figsize=(7,7*8/10),show_Chandra=False)
+    '''
 
     os.chdir('/media/parrazyte/crucial_SSD/Observ/highres/NewAthena/SpecialIssue/Redbook/SIXTE/common')
     Xset.restore('mod_full_NA_Chandra.xcm')
@@ -411,6 +429,8 @@ def plot_redbook_highE(figsize=(10,8)):
     rebinv_xrism(11,3,max_bins=60000)
     rebinv_xrism(12,3,max_bins=60000)
 
+    ch_data_alpha=show_Chandra/2
+
     xPlot('eeuf',xlims=[6.6,8.55],mult_factors=np.array([n**-2.5,n**-1.5,n**-0.5,n**-2.,n**-1.,n**-0,
                                                          n**-2.5,n**-1.5,n**-0.5,n**-2.,n**-1.,n**-0]),
           data_colors=['orange','darkred','darkblue', 'orange','darkred','darkblue',
@@ -423,7 +443,8 @@ def plot_redbook_highE(figsize=(10,8)):
                        "", "", "",
                        "", "", "",
                        "", "", ""],
-          data_alpha=[1, 1, 1, 1, 1, 1, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5],
+          data_alpha=[1, 1, 1, 1, 1, 1, ch_data_alpha/2,ch_data_alpha/2,ch_data_alpha/2,
+                                    ch_data_alpha/2,ch_data_alpha/2,ch_data_alpha/2,],
           model_colors=['orange','darkred','darkblue','orange','darkred','darkblue',
                         'None', 'None', 'None', 'None', 'None', 'None'],
           model_ls=['-', '-', '-', ':', ':', ':',
@@ -449,7 +470,8 @@ def plot_redbook_highE(figsize=(10,8)):
                         'None','None','None','None','None','None'],
           model_ls=['-', '-', '-', ':', ':', ':',
                     '-', '-', '-', ':', ':', ':', ],
-          data_alpha=[1, 1, 1, 1, 1,1, 0.5, 0.5, 0.5, 0.5,0.5,0.5],)
+          data_alpha=[1, 1, 1, 1, 1,1, ch_data_alpha/2,ch_data_alpha/2,ch_data_alpha/2,
+                                    ch_data_alpha/2,ch_data_alpha/2,ch_data_alpha/2,],)
 
     axins.set_ylabel('')
     axins.set_xlabel('')

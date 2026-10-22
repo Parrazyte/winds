@@ -29,6 +29,7 @@ sys.path.append(os.path.join(project_dir,'general/'))
 sys.path.append(os.path.join(project_dir,'modeling/PyXstar'))
 
 from general_tools import interval_extract,ravel_ragged
+from general_tools import media_root
 
 from solution_tools import func_density_sol,func_vel_sol,func_logxi_sol,func_nh_sol,load_solutions,sample_angle,interp_yaxis
 
@@ -92,14 +93,14 @@ online=''+username+'' not in os.getcwd()
 if not online:
     update_online = st.sidebar.button('Update online version')
 
-    solutions_path='/media/'+username+'/crucial_SSD/Simu/MHD/solutions/nathan_init/nathan_init.txt'
+    solutions_path=media_root+'/crucial_SSD/Simu/MHD/solutions/nathan_init/nathan_init.txt'
 
-    possible_sol_path='/media/'+username+'/crucial_SSD/Simu/MHD/solutions/nathan_init/super_a_0.0.dat'
+    possible_sol_path=media_root+'/crucial_SSD/Simu/MHD/solutions/nathan_init/super_a_0.0.dat'
 
-    #solutions_path='/media/'+username+'/SSD/Simu/MHD/solutions/nathan_init/nathan_init.txt'
+    #solutions_path=media_root+'/SSD/Simu/MHD/solutions/nathan_init/nathan_init.txt'
     #refaire un merge des trois epsilon
 
-    #possible_sol_path='/media/'+username+'/SSD/Simu/MHD/solutions/nathan_new/a_alphat_0.0_ep_0.10.dat'
+    #possible_sol_path=media_root+'/SSD/Simu/MHD/solutions/nathan_new/a_alphat_0.0_ep_0.10.dat'
     #et le reste
 
 else:

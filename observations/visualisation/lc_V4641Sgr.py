@@ -34,6 +34,7 @@ from astropy.time import Time, TimeDelta
 from astroquery.simbad import Simbad
 
 from general_tools import interval_extract,edd_factor
+from general_tools import media_root
 from xspec_config_multisp import xPlot
 
 from copy import deepcopy
@@ -73,7 +74,7 @@ def lc_internal_paper():
 
     binning=128
 
-    figdir='/media/parrazyte/crucial_SSD/Observ/BHLMXB/XRISM/V4641Sgr/timeres/v4641dat/xtd/lc'
+    figdir=media_root+'/crucial_SSD/Observ/BHLMXB/XRISM/V4641Sgr/timeres/v4641dat/xtd/lc'
     lc_03_4 = fits.open(figdir+'/xa901001010xtd_src_0p3to4p0_bin128s.lc')
     lc_03_4_bg = fits.open(figdir+'/xa901001010xtd_bgd_0p3to4p0_bin128s.lc')
 
@@ -167,7 +168,7 @@ def vcor_porb(vrotsini,Q,phi_obj):
 
 def lc_optical_monit():
 
-    lc_optical_dir='/media/parrazyte/crucial_SSD/Observ/BHLMXB/Optical/V4641Sgr'
+    lc_optical_dir=media_root+'/crucial_SSD/Observ/BHLMXB/Optical/V4641Sgr'
 
     lc_V=pd.read_csv(os.path.join(lc_optical_dir,'v4641Vpe-ccd_clean.dat'),
                      sep=' ',names=['MJD','V','ST'])
@@ -304,7 +305,7 @@ def lc_paper_monit(spec_mode='Eddington',shade_obscur=True,MAXI_counts=True):
                                          'rate_soft','rate_soft_err',
                                          'rate_hard','rate_hard_err'],sep=' ')
 
-    sp_anal_dir='/media/parrazyte/crucial_SSD/Observ/BHLMXB/XRISM/V4641Sgr/simultaneous'
+    sp_anal_dir=media_root+'/crucial_SSD/Observ/BHLMXB/XRISM/V4641Sgr/simultaneous'
     swift_csv=pd.read_csv(os.path.join(sp_anal_dir,'infos_fit_deabs_minus_highbg_Swift_NH_015.txt'),
                           header=0,sep='\t')
     NICER_csv=pd.read_csv(os.path.join(sp_anal_dir,'infos_fit_deabs_minus_highbg_NICER_NH_015.txt'),

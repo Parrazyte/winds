@@ -1,3 +1,4 @@
+from general_tools import media_root
 
 #unfortunately for these we really don't have time so I'm scraping the plots
 #with AI to combine them
@@ -896,7 +897,7 @@ def combi_sp_plot_soft():
     import os
     from xspec_config_multisp import plot_comp_ratio
     import matplotlib.pyplot as plt
-    os.chdir('/media/parrazyte/crucial_SSD/Observ/BHLMXB/XRISM/MAXIJ1543-564/photo/pion/comp_plots')
+    os.chdir(media_root+'/crucial_SSD/Observ/BHLMXB/XRISM/MAXIJ1543-564/photo/pion/comp_plots')
     plot_comp_ratio([1, 2], [[1, 2, 3], [1, 2], [1, 2], [1, 2], [3]], 6.38, 7.13,
                     other_addcomps_labels=['combined', 'photo 1',
                                            'photo 2',
@@ -1096,7 +1097,7 @@ def combi_sp_plot_hard():
     import os
     from xspec_config_multisp import plot_comp_ratio
     import matplotlib.pyplot as plt
-    os.chdir('/media/parrazyte/crucial_SSD/Observ/BHLMXB/XRISM/MAXIJ1543-564/photo/pion/comp_plots')
+    os.chdir(media_root+'/crucial_SSD/Observ/BHLMXB/XRISM/MAXIJ1543-564/photo/pion/comp_plots')
     plot_comp_ratio([1, 2], [[1, 2, 3], [1, 2], [1, 2], [1, 2], [3]], 6.38, 7.13,
                     other_addcomps_labels=['combined', 'photo 1',
                                            'photo 2',
@@ -1140,7 +1141,7 @@ def combi_sp_plot_hard():
 
 def fakes_CygX3():
 
-    os.chdir('/media/parrazyte/crucial_SSD/Observ/highres/IXPE_AO4')
+    os.chdir(media_root+'/crucial_SSD/Observ/highres/IXPE_AO4')
 
     #for the soft
     Xset.restore('cygx3_softstate_model.xcm')

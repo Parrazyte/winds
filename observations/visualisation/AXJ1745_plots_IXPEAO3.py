@@ -1,6 +1,7 @@
+from general_tools import media_root
 #load
 
-os.chdir('/media/parrazyte/crucial_SSD/Observ/BHLMXB/XRISM/MAXIJ1744-294/new_anal/fit_duo')
+os.chdir(media_root+'/crucial_SSD/Observ/BHLMXB/XRISM/MAXIJ1744-294/new_anal/fit_duo')
 Xset.restore('mod_NSdg_contonly.xcm')
 
 rebinv_xrism(1,5)

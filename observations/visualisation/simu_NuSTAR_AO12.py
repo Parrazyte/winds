@@ -1,9 +1,10 @@
 
 import os,sys
+from general_tools import media_root
 import matplotlib.pyplot as plt
 from xspec_config_multisp import *
 from xspec import *
-os.chdir('/media/parrazyte/crucial_SSD/Observ/highres/simu_NuSTAR_AO12')
+os.chdir(media_root+'/crucial_SSD/Observ/highres/simu_NuSTAR_AO12')
 
 fakeall=[FakeitSettings(response='nu90002004004A01_sr.rmf',arf='nu90002004004A01_sr.arf',
                      exposure=5e4,fileName='A1'),
@@ -38,7 +39,7 @@ FakeitSettings(response='nu90002004004B01_sr.rmf',arf='nu90002004004B01_sr.arf',
 background='nu90102011002B01_bk.pha',
                      exposure=5e4,fileName='fakeB_fhard.pi')]
 
-os.chdir('/media/parrazyte/crucial_SSD/Observ/highres/simu_NuSTAR_AO12')
+os.chdir(media_root+'/crucial_SSD/Observ/highres/simu_NuSTAR_AO12')
 set_ener('thcomp',xrism=True)
 #100mCrab in 1-10keV, ~200mCrab in 1-100keV, gamma=1.6 taking example on bright hard MAXIJ180
 #here the disk is around 10%flux compared to the refl+corona comp in 1-10keV
@@ -62,7 +63,7 @@ AllData.fakeit(nSpectra=2,settings=fake3,applyStats=True)
 
 
 #for plotting
-os.chdir('/media/parrazyte/crucial_SSD/Observ/highres/simu_NuSTAR_AO12')
+os.chdir(media_root+'/crucial_SSD/Observ/highres/simu_NuSTAR_AO12')
 Xset.restore('mod_merge.xcm')
 AllData.ignore('**-3. 79.-**')
 for i in [1, 2, 3, 4, 5, 6]:

@@ -18,6 +18,7 @@ from xspec_config_multisp import allmodel_data,model_load,addcomp,Pset,Pnull,res
 
 from general_tools import c_Km as c_0
 from general_tools import file_edit
+from general_tools import media_root
 
 def simu_nh_photo(nh_photo_mode,
                   flux_inter,n_iter,
@@ -602,7 +603,7 @@ start of setups for the detectabilities
 
 
 
-os.chdir('/media/parrazyte/crucial_SSD/Observ/highres/NewAthena/SpecialIssue/NHdet')
+os.chdir(media_root+'/crucial_SSD/Observ/highres/NewAthena/SpecialIssue/NHdet')
 line_simu(outdir='hotbright',mode='NH_noise_photo',rmf_path='NewAthena_4eV',
 arf_path='NewAthena_nofilter',bkg_path='NewAthena_NXB_1arcmin',
 expos=5,n_iter=1000,flux_range='100_1_5',flux_band='0.3 10.0',
@@ -623,7 +624,7 @@ photo_turb_range=[100,'min',300],photo_v_range=[0,-1000,1000],photo_nsteppar_tur
 photo_nsteppar_v=20,par_freeze_steppar=[3,5],n_cores=14)
 
 
-os.chdir('/media/parrazyte/crucial_SSD/Observ/highres/NewAthena/SpecialIssue/NHdet')
+os.chdir(media_root+'/crucial_SSD/Observ/highres/NewAthena/SpecialIssue/NHdet')
 line_simu(outdir='coldbright',mode='NH_noise_photo',rmf_path='NewAthena_4eV',
 arf_path='NewAthena_nofilter',bkg_path='NewAthena_NXB_1arcmin',
 expos=5,n_iter=1000,flux_range='100_1_5',flux_band='0.3 10.0',

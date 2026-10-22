@@ -1,5 +1,6 @@
 import numpy as np
 import matplotlib.pyplot as plt
+from general_tools import media_root
 
 def calc_branchingratios(rate, debug=False):
 
@@ -158,7 +159,7 @@ plop2=FakeitSettings(response='new_athena_xifu_mar_v2_4eV_gaussian.rmf',
                     exposure=5e3*0.8,)
 AllData.fakeit(settings=plop2,applyStats=True)
 
-os.chdir('/media/parrazyte/crucial_SSD/Observ/highres/simu_NewAthena/SpecialIssue')
+os.chdir(media_root+'/crucial_SSD/Observ/highres/simu_NewAthena/SpecialIssue')
 Xset.restore('mod_bothsim_5ks.xcm')
 set_ener('thcomp',xrism=True)
 rebinv_xrism(1,10)
@@ -167,7 +168,7 @@ Plot.add=False
 xPlot('ldata',xlims=[0.8,2.05],mult_factors=[1.,0.5],ylims=[5,2600])
 
 
-os.chdir('/media/parrazyte/crucial_SSD/Observ/highres/simu_NewAthena/SpecialIssue')
+os.chdir(media_root+'/crucial_SSD/Observ/highres/simu_NewAthena/SpecialIssue')
 Xset.restore('mod_allsim.xcm')
 set_ener('thcomp',xrism=True)
 rebinv_xrism(1,10)
@@ -188,7 +189,7 @@ xPlot('ldata',xlims=[0.8,2.05],mult_factors=[1.,0.5,0.1,0.04],
 EEUF PLOT OLD CONSTRAINTS
 '''''''''''''''
 
-os.chdir('/media/parrazyte/crucial_SSD/Observ/highres/simu_NewAthena/SpecialIssue/Redbook/SIXTE/common')
+os.chdir(media_root+'/crucial_SSD/Observ/highres/simu_NewAthena/SpecialIssue/Redbook/SIXTE/common')
 Xset.restore('mod_highmid_NA.xcm')
 set_ener('large_canon',xrism=True)
 rebinv_xrism(1,10,max_bins=60000)
@@ -417,7 +418,7 @@ With merged Chandra
 
 '''
 
-os.chdir('/media/parrazyte/crucial_SSD/Observ/highres/simu_NewAthena/SpecialIssue/Redbook/SIXTE/common')
+os.chdir(media_root+'/crucial_SSD/Observ/highres/simu_NewAthena/SpecialIssue/Redbook/SIXTE/common')
 Xset.restore('mod_highmid_NA_Chandra.xcm')
 set_ener('large_canon',xrism=True)
 
@@ -517,7 +518,7 @@ plt.tight_layout()
 # ax.legend(loc='lower right')
 # plt.tight_layout()
 
-os.chdir('/media/parrazyte/crucial_SSD/Observ/highres/simu_NewAthena/SpecialIssue/Redbook/SIXTE/common')
+os.chdir(media_root+'/crucial_SSD/Observ/highres/simu_NewAthena/SpecialIssue/Redbook/SIXTE/common')
 Xset.restore('mod_full_NA.xcm')
 AllData(4).ignore('**-0.8')
 AllData(5).ignore('**-0.8')
@@ -800,7 +801,7 @@ WITH CHANDRA DATA
 RATIO PLOT
 '''''''''''''''
 
-os.chdir('/media/parrazyte/crucial_SSD/Observ/highres/simu_NewAthena/SpecialIssue')
+os.chdir(media_root+'/crucial_SSD/Observ/highres/simu_NewAthena/SpecialIssue')
 Xset.restore('mod_allsim.xcm')
 set_ener('thcomp',xrism=True)
 rebinv_xrism(1,10)
@@ -821,7 +822,7 @@ plt.axhline(y=0.55,xmin=0,xmax=1,color='green')
 plt.axhline(y=0.1,xmin=0.162,xmax=1,color='green')
 plt.axhline(y=0.04,xmin=0.162,xmax=1,color='green')
 
-os.chdir('/media/parrazyte/crucial_SSD/Observ/highres/simu_NewAthena/SpecialIssue')
+os.chdir(media_root+'/crucial_SSD/Observ/highres/simu_NewAthena/SpecialIssue')
 Xset.restore('mod_test_soft_highxi_1e23.xcm')
 set_ener('thcomp',xrism=True)
 plop2=[FakeitSettings(response='aciss_heg-1_cy28.grmf',
@@ -845,7 +846,7 @@ plt.yscale('log')
 
 Xset.restore('mod_test_soft_midxi_1e22.xcm')
 
-os.chdir('/media/parrazyte/crucial_SSD/Observ/highres/simu_NewAthena/SpecialIssue')
+os.chdir(media_root+'/crucial_SSD/Observ/highres/simu_NewAthena/SpecialIssue')
 Xset.restore('mod_test_soft_midxi_1e22.xcm')
 set_ener('thcomp',xrism=True)
 plop2=[FakeitSettings(response='aciss_heg-1_cy28.grmf',
@@ -860,7 +861,7 @@ plop2=[FakeitSettings(response='aciss_heg-1_cy28.grmf',
 AllData.fakeit(nSpectra=2,settings=plop2,applyStats=True)
 
 
-os.chdir('/media/parrazyte/crucial_SSD/Observ/highres/simu_NewAthena/SpecialIssue')
+os.chdir(media_root+'/crucial_SSD/Observ/highres/simu_NewAthena/SpecialIssue')
 Xset.restore('mod_allsim_Chandra_highexp.xcm')
 rebinv_xrism(1,10)
 rebinv_xrism(2,10)
@@ -893,7 +894,7 @@ plt.legend(ncol=1,loc='upper left')
 plt.tight_layout()
 plt.savefig('5Ms_50ks_compa_eeuf_Chandra.pdf')
 
-os.chdir('/media/parrazyte/crucial_SSD/Observ/highres/simu_NewAthena/SpecialIssue')
+os.chdir(media_root+'/crucial_SSD/Observ/highres/simu_NewAthena/SpecialIssue')
 Xset.restore('mod_allsim_Chandra_lowexp.xcm')
 rebinv_xrism(1,10)
 rebinv_xrism(2,10)
@@ -934,7 +935,7 @@ energy average of the 2 transitions is (2.0060*2+2.0043)/3=2.0054333
 
 '''
 
-os.chdir('/media/parrazyte/crucial_SSD/Observ/highres/simu_NewAthena/SpecialIssue')
+os.chdir(media_root+'/crucial_SSD/Observ/highres/simu_NewAthena/SpecialIssue')
 Xset.restore("postfit_gaussian_SiXIVKa_5ksNA.xcm")
 set_ener('thcomp',xrism=True)
 

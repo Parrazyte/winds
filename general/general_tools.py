@@ -22,7 +22,10 @@ import matplotlib.pyplot as plt
 import matplotlib.dates as mdates
 from astropy.time import Time,TimeDelta
 from matplotlib.widgets import Slider,Button
+import getpass
 
+# mount point of the external drives (/run/media/<user> since Ubuntu 26.04, was /media/<user> before)
+media_root = '/run/media/'+getpass.getuser()
 
 h_cgs = 6.624e-27
 eV2erg = 1.6021773E-12

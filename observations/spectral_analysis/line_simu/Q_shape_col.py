@@ -7,6 +7,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 from general_tools import ravel_ragged,edd_factor
+from general_tools import media_root
 
 from scipy.stats import linregress
 from matplotlib.collections import LineCollection
@@ -713,7 +714,7 @@ def Q_shape_mult(val_csvs, cmaps=('viridis_r', 'magma_r', 'cividis_r'),
 
     paper setup:
 
-    os.chdir('/media/parrazyte/crucial_SSD/Observ/highres/NewAthena/SpecialIssue/NHdet/merger')
+    os.chdir(media_root+'/crucial_SSD/Observ/highres/NewAthena/SpecialIssue/NHdet/merger')
     Q_shape_mult(['hotbright_photo_nh_noise_mod_SED_soft_0p1Edd_2e22_5ks_1000_iter_flux_100_1_5_in_0p3_10p0_keV_mod_pion_abs_canon_soft.txt','warm_merge_photo_nh_noise_mod_SED_soft_0p1Edd_2e22_5ks_1000_iter_flux_100_1_5_in_0p3_10p0_keV_mod_pion_abs_canon_soft_minipc.txt','coldbright_photo_nh_noise_mod_SED_soft_0p1Edd_2e22_5ks_1000_iter_flux_100_1_5_in_0p3_10p0_keV_mod_pion_abs_canon_soft.txt'],cmaps=['managua','managua','managua'],figsize=(7,5),factor_hard=0.5,highlight_range_cmap=True,
     logxi_labels=[4,2,0])
 

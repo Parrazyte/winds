@@ -65,6 +65,7 @@ from rasterio.features import rasterize
 from scipy.ndimage import binary_dilation
 
 from general_tools import file_edit, ravel_ragged,MinorSymLogLocator,interval_extract,str_orbit,source_catal,plot_lc
+from general_tools import media_root
 
 
 '''
@@ -5028,7 +5029,7 @@ def loop_anal_pix(pixlist='all',rmf_type='L',repro_suffix = 'reprocorr',
                     suffix='SgrAEast',
                     source_type='IMAGE',
                     flatradius=3,
-                    arf_image='/media/parrazyte/crucial_SSD/Observ/BHLMXB/XRISM/MAXIJ1744-294/Hideki/chandra_SgrAeast_FeKa25.img',
+                    arf_image=media_root+'/crucial_SSD/Observ/BHLMXB/XRISM/MAXIJ1744-294/Hideki/chandra_SgrAeast_FeKa25.img',
                     instru='resolve',use_comb_rmf_rsl=rmf_type=='X',
                     use_raw_evt_xtd=False, use_raw_evt_rsl=False,
                     region_src_xtd='auto', region_bg_xtd='auto',

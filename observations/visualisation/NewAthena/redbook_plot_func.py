@@ -1,4 +1,5 @@
 import os
+from general_tools import media_root
 import matplotlib.pyplot as plt
 from xspec import *
 from xspec_config_multisp import set_ener, rebinv_xrism, xPlot
@@ -18,7 +19,7 @@ def plot_redbook_lowE(figsize=(10,8),show_Chandra=False):
     plot_redbook_lowE(figsize=(7,7*8/10),show_Chandra=False)
     '''
 
-    os.chdir('/media/parrazyte/crucial_SSD/Observ/highres/NewAthena/SpecialIssue/Redbook/SIXTE/common')
+    os.chdir(media_root+'/crucial_SSD/Observ/highres/NewAthena/SpecialIssue/Redbook/SIXTE/common')
     Xset.restore('mod_full_NA_Chandra.xcm')
 
     AllData.ignore('**-0.8')
@@ -408,7 +409,7 @@ def plot_redbook_highE(figsize=(10,8),show_Chandra=False):
     plot_redbook_highE(figsize=(7,7*8/10),show_Chandra=False)
     '''
 
-    os.chdir('/media/parrazyte/crucial_SSD/Observ/highres/NewAthena/SpecialIssue/Redbook/SIXTE/common')
+    os.chdir(media_root+'/crucial_SSD/Observ/highres/NewAthena/SpecialIssue/Redbook/SIXTE/common')
     Xset.restore('mod_full_NA_Chandra.xcm')
     set_ener('large_canon',xrism=True)
 

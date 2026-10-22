@@ -7,6 +7,7 @@ import matplotlib.gridspec as gridspec
 import glob
 import pandas as pd
 from general_tools import ravel_ragged,edd_factor
+from general_tools import media_root
 from line_simu.line_simu_tools import loglog_regressor
 import matplotlib.ticker as tkr
 from scipy.stats import linregress
@@ -24,7 +25,7 @@ mpl.rcParams.update({'font.size': 18})
 ap.add_argument('-vert',nargs=1,help='plot vertical figure',default=False)
 
 ap.add_argument('-dir',nargs=1,help='simulations and plotting directory',
-                default='/media/'+username+'/crucial_SSD/Observ/highres/linedet_compa/AO2/4U1957',
+                default=media_root+'/crucial_SSD/Observ/highres/linedet_compa/AO2/4U1957',
                 type=str)
 
 ap.add_argument('-all_subdirs',nargs=1,help='make the plots from all simulations in the subdirectories',
@@ -141,7 +142,7 @@ id_sigmas=np.array(args.sigmas)-1
     # plt.show()
 
 def plot_indiv_panel(ax_use,panel_mode,show_yaxis=True,legend=True,
-                     base_dir='/media/'+username+'/crucial_SSD/Observ/highres/linedet_compa/AO2/',
+                     base_dir=media_root+'/crucial_SSD/Observ/highres/linedet_compa/AO2/',
                      subdir='auto',secax=None,
                      display_lims=True,line_csv='line_table_AO2.csv',obs_csv='observ_table_AO2.csv',
                      #custom commands for non-auto subdir
@@ -282,7 +283,7 @@ def old_plot_function():
             # necessary to have the constrained layout saved
             plt.show()
 
-            plt.savefig('/media/'+username+'/crucial_SSD/Observ/highres/linedet_compa/AO1/EW_detec_compa'+
+            plt.savefig(media_root+'/crucial_SSD/Observ/highres/linedet_compa/AO1/EW_detec_compa'+
                     ('_nostat' if not fakestats else '')+
                     '_'+str(expos_ew)+
                     '_' + str(n_iter) + '_iter' +
@@ -297,7 +298,7 @@ def old_plot_function():
             # necessary to have the constrained layout saved
             plt.show()
 
-            plt.savefig('/media/'+username+'/crucial_SSD/Observ/highres/linedet_compa/AO1/bshift_err_compa'+
+            plt.savefig(media_root+'/crucial_SSD/Observ/highres/linedet_compa/AO1/bshift_err_compa'+
                     ('_nostat' if not fakestats else '')+
                     '_' + str(expos_bshift) +
                     '_' + str(n_iter) + '_iter' +
@@ -512,7 +513,7 @@ def compa_plots_SQUDE_XRB():
     mpl.rcParams.update({'font.size': 14})
 
 
-    os.chdir('/media/parrazyte/crucial_SSD/Observ/highres/simu_SQUDE_propal/plot_NH')
+    os.chdir(media_root+'/crucial_SSD/Observ/highres/simu_SQUDE_propal/plot_NH')
 
     plt.figure(figsize=(4.5,4),layout='constrained')
 
@@ -571,7 +572,7 @@ def compa_plots_SQUDE_XRB():
 
 
     ##VSHIFT ERROR
-    os.chdir('/media/parrazyte/crucial_SSD/Observ/highres/simu_SQUDE_propal/plot_verr')
+    os.chdir(media_root+'/crucial_SSD/Observ/highres/simu_SQUDE_propal/plot_verr')
 
     mpl.rcParams.update({'font.size': 14})
     plt.figure(figsize=(4.5,4),layout='constrained')

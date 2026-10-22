@@ -1,5 +1,6 @@
+from general_tools import media_root
 
-os.chdir('/media/parrazyte/crucial_SSD/Observ/BHLMXB/XRISM/MAXIJ1543-564/photo/comp_plots')
+os.chdir(media_root+'/crucial_SSD/Observ/BHLMXB/XRISM/MAXIJ1543-564/photo/comp_plots')
 plot_comp_ratio([1,2],[[1,2,3],[1,2],[1,2],[1,2],[3]],6.38,7.13,
                 other_addcomps_labels=['combined','photo 1',
                                        'photo 2',
@@ -17,7 +18,7 @@ plot_comp_ratio([1,2],[[1,2,3],[1,2],[1,2],[1,2],[3]],6.38,7.13,
                 ylims=[0.01,1.],figsize=(10,8),minor_locator=10,ylabel_prefix='')
 
 
-os.chdir('/media/parrazyte/crucial_SSD/Observ/BHLMXB/XRISM/MAXIJ1543-564/902003010_repro/analysis_tr/sp/comp_plots')
+os.chdir(media_root+'/crucial_SSD/Observ/BHLMXB/XRISM/MAXIJ1543-564/902003010_repro/analysis_tr/sp/comp_plots')
 Xset.restore('NXB_unfrozen_lines_prep_error_forvisu.xcm')
 set_ener('thcomp',xrism=True)
 plot_comp_ratio([1,22],[[2,3,14,15],[4,5,6,7,8,9,16,17],[10,11],[12,13],[18,19],[20,21]],6.2,7.13,

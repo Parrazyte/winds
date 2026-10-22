@@ -1,4 +1,5 @@
 from xspec_config_multisp import *
+from general_tools import media_root
 
 fake_hard=[FakeitSettings(response='comb_from_1744.rmf',
                           arf='rsl_pntsrc_GVC_2025.arf',
@@ -121,7 +122,7 @@ Xset.restore('mod_wind_soft_0p2Edd_8kpc.xcm')
 AllData.fakeit(nSpectra=1,settings=fakens_soft,applyStats=True)
 
 #PLOTS
-os.chdir('/media/parrazyte/crucial_SSD/Observ/highres/simu_XRISM_AO3/NS')
+os.chdir(media_root+'/crucial_SSD/Observ/highres/simu_XRISM_AO3/NS')
 Xset.restore('mod_mergens_8kpc.xcm')
 
 
@@ -199,7 +200,7 @@ AllModels.clear()
 AllData.fakeit(nSpectra=1,settings=fakens_soft,applyStats=True)
 
 #PLOTS
-os.chdir('/media/parrazyte/crucial_SSD/Observ/highres/simu_XRISM_AO3/obscured')
+os.chdir(media_root+'/crucial_SSD/Observ/highres/simu_XRISM_AO3/obscured')
 Xset.restore('mod_merge_narrow10_refl100.xcm')
 
 

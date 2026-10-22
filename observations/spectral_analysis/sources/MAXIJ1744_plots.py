@@ -1,5 +1,6 @@
 #imgs
 from XRISM.XRISM_datared_tools import *
+from general_tools import media_root
 #
 mpdaf_plot_img('xa901002010xtd_p031300010_cl_SFP_img_sky_0.3_10.ds',
                rad_crop=[124,124],target_name_list=[None,None],crop_coords=[266.424,-29.0094],
@@ -70,7 +71,7 @@ mpdaf_plot_img('xa901002010xtd_p031300010_cl_img_DET_1p4_1p55.ds',
 # #slight offet to avoid pixel offset in xtend
 #
 #
-# # cd /media/parrazyte/crucial_SSD/Observ/BHLMXB/XRISM/MAXIJ1744-294/new_anal/fit_duo
+# # cd /run/media/parrazyte/crucial_SSD/Observ/BHLMXB/XRISM/MAXIJ1744-294/new_anal/fit_duo
 # xPlot('eeuf',mult_factors=[1,5],group_names=['MAXI J1744-294','AX J1745.6-2901'],force_ylog_ratio=True,ylims=[5e-2,2])
 #
 # plt.savefig('testfig.pdf')
@@ -93,8 +94,8 @@ mpdaf_plot_img('xa901002010xtd_p031300010_cl_img_DET_1p4_1p55.ds',
 
 
 #in DDT
-# os.chdir('/media/parrazyte/crucial_SSD/Observ/BHLMXB/XRISM/MAXIJ1744-294/new_anal/901002010_reprocorr/compa_arf/pix_NS')
-# os.chdir('/media/parrazyte/crucial_SSD/Observ/BHLMXB/XRISM/MAXIJ1744-294/new_anal/901002010_reprocorr/compa_arf/pix_smallpix')
+# os.chdir(media_root+'/crucial_SSD/Observ/BHLMXB/XRISM/MAXIJ1744-294/new_anal/901002010_reprocorr/compa_arf/pix_NS')
+# os.chdir(media_root+'/crucial_SSD/Observ/BHLMXB/XRISM/MAXIJ1744-294/new_anal/901002010_reprocorr/compa_arf/pix_smallpix')
 
 
 #ARF COMPA PLOTS REVISION
@@ -675,7 +676,7 @@ EMPIRICAL
 '''
 '''BIGPIX'''
 
-os.chdir('/media/parrazyte/crucial_SSD/Observ/BHLMXB/XRISM/MAXIJ1744-294/new_anal/fit_duo_empirical_bigpix/2025_updated/comp_mod')
+os.chdir(media_root+'/crucial_SSD/Observ/BHLMXB/XRISM/MAXIJ1744-294/new_anal/fit_duo_empirical_bigpix/2025_updated/comp_mod')
 Xset.restore('mod_noabs.xcm')
 set_ener('thcomp',xrism=True)
 plot_comp_ratio([1],[None,[9,10,11,12],[7,8],None,6,4,5,[2,3]],6.38,7.13,
@@ -692,7 +693,7 @@ plt.savefig('mod_empi_bigpix_deabs_nobfekblor_comp_ratio.pdf')
 
 '''SMALLPIX'''
 
-os.chdir('/media/parrazyte/crucial_SSD/Observ/BHLMXB/XRISM/MAXIJ1744-294/new_anal/fit_duo_smallpix/2025/rsp_CALDB11/comp_mod')
+os.chdir(media_root+'/crucial_SSD/Observ/BHLMXB/XRISM/MAXIJ1744-294/new_anal/fit_duo_smallpix/2025/rsp_CALDB11/comp_mod')
 Xset.restore('mod_intrinsic_deabs_adjFeKa_widthmin2e-3.xcm')
 set_ener('thcomp',xrism=True)
 plot_comp_ratio([1],[None,[11,12,13,14],[9,10],[2,8],None,7,5,[3,4],],6.38,7.13,
@@ -713,7 +714,7 @@ plt.savefig('mod_empi_smallpix_deabs_rightfek_comp_ratio.pdf')
 '''PHOTO'''
 '''BIGPIX'''
 
-os.chdir('/media/parrazyte/crucial_SSD/Observ/BHLMXB/XRISM/MAXIJ1744-294/physical/photo/new/bigpix/comp_mod')
+os.chdir(media_root+'/crucial_SSD/Observ/BHLMXB/XRISM/MAXIJ1744-294/physical/photo/new/bigpix/comp_mod')
 Xset.restore('mod_intrinsic_photo_bigpix_max500_2e-3.xcm')
 set_ener('thcomp',xrism=True)
 plot_comp_ratio([1],[2,3,5,4,[7,8]],6.38,7.13,
@@ -725,7 +726,7 @@ plt.savefig('mod_photo_bigpix_deabs_nobfekblor_comp_ratio.pdf')
 
 '''SMALLPIX'''
 
-os.chdir('/media/parrazyte/crucial_SSD/Observ/BHLMXB/XRISM/MAXIJ1744-294/physical/photo/new/smallpix/comp_mod')
+os.chdir(media_root+'/crucial_SSD/Observ/BHLMXB/XRISM/MAXIJ1744-294/physical/photo/new/smallpix/comp_mod')
 Xset.restore('mod_intrinsic_photo_smallpix_sig_2e-3_adjFeKratio.xcm')
 set_ener('thcomp',xrism=True)
 plot_comp_ratio([1],[2,3,4,[5,8],[6,7]],6.38,7.13,
@@ -739,7 +740,7 @@ plt.savefig('mod_photo_smallpix_deabs_comp_ratio_adjFeKratio.pdf')
 '''COLLI'''
 '''BIGPIX'''
 
-os.chdir('/media/parrazyte/crucial_SSD/Observ/BHLMXB/XRISM/MAXIJ1744-294/physical/colli/bigpix/comp_mod')
+os.chdir(media_root+'/crucial_SSD/Observ/BHLMXB/XRISM/MAXIJ1744-294/physical/colli/bigpix/comp_mod')
 Xset.restore('mod_intrinsic_colli_bigpix.xcm')
 set_ener('thcomp',xrism=True)
 plot_comp_ratio([1],[2,3,4,5,[7,8]],6.38,7.13,
@@ -750,7 +751,7 @@ plot_comp_ratio([1],[2,3,4,5,[7,8]],6.38,7.13,
 plt.savefig('mod_cie_bigpix_deabs_nobfekblor_comp_ratio.pdf')
 
 '''SMALLPIX'''
-os.chdir('/media/parrazyte/crucial_SSD/Observ/BHLMXB/XRISM/MAXIJ1744-294/physical/colli/smallpix/comp_mod')
+os.chdir(media_root+'/crucial_SSD/Observ/BHLMXB/XRISM/MAXIJ1744-294/physical/colli/smallpix/comp_mod')
 Xset.restore('mod_intrinsic_sig2e-3_adjFeKratio.xcm')
 set_ener('thcomp',xrism=True)
 plot_comp_ratio([1],[2,3,4,[5,8],[6,7]],6.38,7.13,
@@ -768,7 +769,7 @@ REVISION PSF FIGURES
 
 '''
 
-os.chdir('/media/parrazyte/crucial_SSD/Observ/BHLMXB/XRISM/MAXIJ1744-294/new_anal/901002010_reprocorr/non_corrected/analysis_rspfull_forpix_test')
+os.chdir(media_root+'/crucial_SSD/Observ/BHLMXB/XRISM/MAXIJ1744-294/new_anal/901002010_reprocorr/non_corrected/analysis_rspfull_forpix_test')
 PSF_frac_plot(raytrace_files=['rsp_MAXIJ1744/xa901002010rsl_p0px1000_cl_RTS_raytracing.evt',
 'rsp_AXJ1745/xa901002010rsl_p0px1000_cl_RTS_raytracing.evt',
 'rsp_diffuse/xa901002010rsl_p0px1000_cl_RTS_raytracing.evt',
@@ -776,14 +777,14 @@ PSF_frac_plot(raytrace_files=['rsp_MAXIJ1744/xa901002010rsl_p0px1000_cl_RTS_rayt
 weight_dirs=['arf_weights_MAXIJ1744','arf_weights_AXJ1745','arf_weights_diffuse','arf_weights_SgrAEast'],
               figsize=(7,7),frac_display_percent=True)
 
-os.chdir('/media/parrazyte/crucial_SSD/Observ/BHLMXB/XRISM/MAXIJ1744-294/previous_GC_obs/300044010_repro/analysis_full_forpix_1745')
+os.chdir(media_root+'/crucial_SSD/Observ/BHLMXB/XRISM/MAXIJ1744-294/previous_GC_obs/300044010_repro/analysis_full_forpix_1745')
 
 
 
 
 def for_simu_with_Kai():
 
-    os.chdir('/media/parrazyte/crucial_SSD/Observ/BHLMXB/XRISM/MAXIJ1744-294/Kai/for_MC/20260415_bestfit_files_to_Maxime')
+    os.chdir(media_root+'/crucial_SSD/Observ/BHLMXB/XRISM/MAXIJ1744-294/Kai/for_MC/20260415_bestfit_files_to_Maxime')
     Xset.restore('fullmod_1comp_postrefit_fewunfreeze.xcm')
     Fit.perform()
     # from xspec import AllChains
@@ -812,7 +813,7 @@ def blind_search_imprint():
         plt.plot(plop['line_search_e_space'][i:i + 2], [1, 1], color=test_col.to_rgba(color_val))
 
     os.chdir(
-        '/media/parrazyte/crucial_SSD/Observ/BHLMXB/XRISM/MAXIJ1744-294/new_anal/fit_duo_empirical_bigpix/2025_updated/blindsearch/prelines/BH')
+        media_root+'/crucial_SSD/Observ/BHLMXB/XRISM/MAXIJ1744-294/new_anal/fit_duo_empirical_bigpix/2025_updated/blindsearch/prelines/BH')
     f = open('post_refit_edge_Tbfeo_onlyBH_narrow_out_6.3_7.1_lw_5.dill', 'rb')
     chi_dict = dill.load(f)
 

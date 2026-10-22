@@ -1,5 +1,6 @@
+from general_tools import media_root
 
-os.chdir('/media/parrazyte/crucial_SSD/Observ/BHLMXB/XRISM/MAXIJ1750-327/simu_DDT')
+os.chdir(media_root+'/crucial_SSD/Observ/BHLMXB/XRISM/MAXIJ1750-327/simu_DDT')
 
 AllData.clear()
 Xset.restore('basemod_2Crab_2-10_cons.xcm')

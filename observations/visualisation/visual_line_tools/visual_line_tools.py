@@ -76,6 +76,7 @@ sys.path.append(os.path.join(project_dir,'observations/visualisation/visual_line
 from fitting_tools import lines_std,c_light,lines_std_names,lines_e_dict
 
 from general_tools import ravel_ragged,MinorSymLogLocator,rescale_flex,expand_epoch,ang2kev
+from general_tools import media_root
 
 #Catalogs and manipulation
 from astroquery.vizier import Vizier
@@ -506,7 +507,7 @@ convert_BAT_count_flux={
 sources_det_dic=['GRS1915+105','GRS 1915+105','GROJ1655-40','H1743-322','4U1630-47','IGRJ17451-3022']
 
 #should be moved somewhere for online
-rxte_lc_path='/media/'+username+'/crucial_SSD/Observ/BHLMXB/RXTE/RXTE_lc_dict.pickle'
+rxte_lc_path=media_root+'/crucial_SSD/Observ/BHLMXB/RXTE/RXTE_lc_dict.pickle'
 
 if os.path.exists(rxte_lc_path):
     with open(rxte_lc_path,'rb') as rxte_lc_file:

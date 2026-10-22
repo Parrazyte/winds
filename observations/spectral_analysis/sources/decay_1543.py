@@ -4,6 +4,7 @@ import matplotlib.pyplot as plt
 from astropy.time import Time
 import pandas as pd
 from general_tools import combo_legend
+from general_tools import media_root
 import matplotlib.dates as mdates
 vals_counts_Swift=[
     [],
@@ -207,7 +208,7 @@ rxte_times=Time(rxte_dates_str.split('\n')[1:],format='iso')
 
 def plot_stiele():
 
-    os.chdir('/media/parrazyte/crucial_SSD/Observ/BHLMXB/Swift/MAXIJ1543-564')
+    os.chdir(media_root+'/crucial_SSD/Observ/BHLMXB/Swift/MAXIJ1543-564')
     vals_2011=pd.read_csv('RXTE_compa_2011_stiele.csv',header=None)
 
     plt.figure(figsize=(8,6))
@@ -318,21 +319,21 @@ def plot_bs():
                     ratio_bounds=[0.8, 1.2], squished_mode=False, show_indiv_transi=False, force_side_lines='abs')
 
 def fake_bright_endtransi_FeKaXXVI():
-    os.chdir('/media/parrazyte/crucial_SSD/Observ/BHLMXB/XRISM/MAXIJ1543-564/simu_DDT')
+    os.chdir(media_root+'/crucial_SSD/Observ/BHLMXB/XRISM/MAXIJ1543-564/simu_DDT')
     Xset.restore('mod_baseline_XRISM_endtransi_FeKaXXVIduet.xcm')
     settings=FakeitSettings(response='rsl_Hp_L_2025.rmf',arf='rsl_pntsrc_GVC_2025.arf',
                             exposure=5e4,fileName='test_50k_endtransi.pi')
     AllData.fakeit(settings=settings,applyStats=True)
 
 def fake_bright_endtransi_pion1e23():
-    os.chdir('/media/parrazyte/crucial_SSD/Observ/BHLMXB/XRISM/MAXIJ1543-564/simu_DDT')
+    os.chdir(media_root+'/crucial_SSD/Observ/BHLMXB/XRISM/MAXIJ1543-564/simu_DDT')
     Xset.restore('mod_pion_1e23_8p5e-10.xcm')
     settings=FakeitSettings(response='rsl_Hp_L_2025.rmf',arf='rsl_pntsrc_GVC_2025.arf',
                             exposure=5e4,fileName='test_50k_endtransi_pion_1e23.pi')
     AllData.fakeit(settings=settings,applyStats=True)
 
 def fake_bright_endtransi_pion2e23():
-    os.chdir('/media/parrazyte/crucial_SSD/Observ/BHLMXB/XRISM/MAXIJ1543-564/simu_DDT')
+    os.chdir(media_root+'/crucial_SSD/Observ/BHLMXB/XRISM/MAXIJ1543-564/simu_DDT')
     Xset.restore('mod_pion_2p5e23_narrow_8p5e-10.xcm')
     settings=FakeitSettings(response='rsl_Hp_L_2025.rmf',arf='rsl_pntsrc_GVC_2025.arf',
                             exposure=5e4,fileName='test_50k_endtransi_pion_2p5e23.pi')
@@ -358,7 +359,7 @@ def make_plot_spectrum():
 
 def make_plot_spectrum_all_highE():
 
-    os.chdir('/media/parrazyte/crucial_SSD/Observ/BHLMXB/XRISM/MAXIJ1543-564/simu_DDT')
+    os.chdir(media_root+'/crucial_SSD/Observ/BHLMXB/XRISM/MAXIJ1543-564/simu_DDT')
     Xset.restore('mod_compa_all3.xcm')
     #bright
     rebinv_xrism(1, 7)
@@ -438,14 +439,14 @@ def plot_decay_HSS():
     #zoom to fullscreen
     # plt.tight_layout()
     # plt.subplots_adjust(top=0.9)
-    # os.chdir('/media/parrazyte/crucial_SSD/Observ/BHLMXB/Swift/MAXIJ1543-564')
+    # os.chdir(media_root+'/crucial_SSD/Observ/BHLMXB/Swift/MAXIJ1543-564')
     # plt.savefig('lc_decay.pdf')
     # plt.savefig('lc_decay.png')
 
 
 def make_plot_spectrum_all_lowE():
 
-    os.chdir('/media/parrazyte/crucial_SSD/Observ/BHLMXB/XRISM/MAXIJ1543-564/simu_DDT')
+    os.chdir(media_root+'/crucial_SSD/Observ/BHLMXB/XRISM/MAXIJ1543-564/simu_DDT')
     Xset.restore('mod_compa_all3.xcm')
 
     #bright
@@ -471,14 +472,14 @@ def make_plot_spectrum_all_lowE():
     # plt.savefig('mod_compa_all3_lines_lowe.png')
 
 def fake_faint_softfloor_pion2e23():
-    os.chdir('/media/parrazyte/crucial_SSD/Observ/BHLMXB/XRISM/MAXIJ1543-564/simu_DDT')
+    os.chdir(media_root+'/crucial_SSD/Observ/BHLMXB/XRISM/MAXIJ1543-564/simu_DDT')
     Xset.restore('mod_pion_2p5e23_narrow_1p2e-10_adaptedlogxi.xcm')
     settings=FakeitSettings(response='rsl_Hp_L_2025.rmf',arf='rsl_pntsrc_GVC_2025.arf',
                             exposure=1.5e5,fileName='test_150k_softfloor_pion_2p5e23_adaptedlogxi.pi')
     AllData.fakeit(settings=settings,applyStats=True)
 
 def fake_faint_softmid_pion2e23():
-    os.chdir('/media/parrazyte/crucial_SSD/Observ/BHLMXB/XRISM/MAXIJ1543-564/simu_DDT')
+    os.chdir(media_root+'/crucial_SSD/Observ/BHLMXB/XRISM/MAXIJ1543-564/simu_DDT')
     Xset.restore('mod_pion_2p5e23_narrow_3p6e-10_adaptedlogxi.xcm')
     settings=FakeitSettings(response='rsl_Hp_L_2025.rmf',arf='rsl_pntsrc_GVC_2025.arf',
                             exposure=1e5,fileName='test_100k_softfmid_pion_2p5e23_adaptedlogxi.pi')
@@ -491,7 +492,7 @@ def proc_for_lcanal():
 
     note: I don't know if these are net or raw counts
     '''
-    os.chdir('/media/parrazyte/crucial_SSD/Observ/BHLMXB/Swift/MAXIJ1543-564/archive/lc/curve')
+    os.chdir(media_root+'/crucial_SSD/Observ/BHLMXB/Swift/MAXIJ1543-564/archive/lc/curve')
     lc_tot = pd.read_csv('WTCURVE.qdp', skiprows=2, sep='\t')
 
     #separating periods with more than 100 seconds

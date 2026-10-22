@@ -47,6 +47,7 @@ def plot_cross_NuSTAR(lc,save=True):
 
 
     '''
+
     if save:
         plt.ioff()
 

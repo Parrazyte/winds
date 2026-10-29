@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
+Assisted by Claude Code, model Opus 5.5 (claude-opus-5-5), 2026-10-23.
 Created on Wed Oct 13 11:01:03 2021
 
 @author: parrama
@@ -384,6 +385,11 @@ def obs_loader(grp_str,i_grp=1,mode='swift_mela',save_baseload=True):
     if save_baseload:
         Xset.save('baseload.xcm')
 
+def disable_anal_grad():
+    #see Xspec manual appendix H. Can speed up computations for large responses.
+    # also fits with free gain fall back to finite-difference gradients by default
+    Xset.addModelString('DISABLE_ANALYTIC_GRAD', 'yes')
+
 def set_ener(mode='thcomp',xrism=False):
 
     if mode=='thcomp':
@@ -392,17 +398,24 @@ def set_ener(mode='thcomp',xrism=False):
         else:
             AllModels.setEnergies('0.01 1000. 3000 log')
 
-    if mode=='OIR':
+    elif mode=='OIR':
         AllModels.setEnergies('0.0001 0.1 100000 log, 10. 19800 lin, 1000. 1000 log')
 
-    if mode=='log_highres':
+    elif mode=='log_highres':
         AllModels.setEnergies('0.01 0.1 1000 log, 10. 100000 log, 1000. 1000 log')
 
-    if mode=='large_canon':
+    elif mode=='large_canon':
         #reproducing Ryota's binning in pionabsmtablecanonicallarge.fits
         #normally the final binning to 1000 is 221 bins but we're increasing it a bit in case other instruments are there
         #normally the first binning is 0.001 but there is a huge numerical error at 1.006eV that causes a bunch of issues
         AllModels.setEnergies('0.0011 0.0136 26102 log, 0.2 81 log, 12. 40944 log, 1000. 1000 log')
+
+    elif mode=='':
+        #used as "keep the current energy grid" by some callers (e.g. the mc_sim_line default)
+        pass
+
+    else:
+        raise ValueError('Unknown set_ener mode "%s". Known: thcomp, OIR, log_highres, large_canon' % mode)
 
 
 def make_ls(low_e,high_e):
@@ -7201,185 +7214,7 @@ def xPlot(types,axes_input=None,plot_saves_input=None,plot_arg=None,includedlist
     else:
         return None,None
 
-def plot_comp_ratio(cont_addcomps,other_addcomps,ener_low,ener_high,
-                   plot_type='eemo',
-                    ylims=None,
-                   cont_addcomps_xcm='',other_addcomps_xcm=None,
-                   other_addcomps_labels=None,other_addcomps_colors=None,figsize=(10,5),
-                    other_addcomps_type=None,other_addcomps_alpha=None,other_addcomps_ls=None,
-                    plot_transi=True,minor_locator=10,ylabel_prefix='',manual_bbox=False):
-
-    '''
-    Makes a ratio plot of individual components compared to the sum of others related to a specific weight
-
-    plot_type (eemo or other xspec type where addcomp is expressed)
-        will be used to get the addcomp values
-
-    other_addcomps_xcm : path or array of paths or None
-        will load a model or take the current one. If several models are put in an iterable, then will attempt
-        to load one different model for each set of "other_addcomps" and assume a separate continuum model file
-
-    cont_addcomps_xcm: path or ''
-        if not '', will load a model to use for the continuum components only
-        Note: in this case the cont_addcomps numbering must be adapted to the components of that xcm instead
-
-    comp_addcomps: iterable of ints
-        the list of addcomps ids (in xspec, so with indexes starting at 1)
-        to be summed to create the continuum, to which
-        all the "other_addcomps" will individually be normalized
-
-    other_addcomps: iterable of either ints or iterables of ints
-        the list of the addcomps ids (in xspec, so with indexes starting at 1)
-        which will appear individually as the ratio on top of comp_addcomps
-        note: can be combined by passing iterables within the list
-        In this case, will sum all the addcomps in that iterable for a single displayed component
-        if some elements are None, will not plot anything but keeps the label spot for additional lines in the legend
-
-
-    ener_low/ener_high: x axis limits of the plot
-
-    other_addcomps_names/colors/alpha/ls: None or iterable of same len as other_addcomps
-        labels and colors for the additional components
-
-    other_addcomps_type: None or iterable of same len as other_addcomps
-        'em' for emission components, 'abs' for absorption components
-        if None, all components are assumed in emission (1 is added to their ratio)
-        Note that when combining absorption and emission it can be useful to use the "abs" type for emission components
-        to see the overlap
-
-
-    figsize:
-        python plot figure size
-
-    plot_transi: plot individual transitions with plt_std_ener (in grey)
-
-    minor_locator: if not False, the sampling of the x axis minor locator
-
-    ylabel_prefix: optional string to add before y label
-
-    '''
-
-
-    if cont_addcomps_xcm!='':
-        #now doing the same thing with a second model for the continuum if requested
-
-        Xset.restore(cont_addcomps_xcm)
-
-        # generally better
-        set_ener('thcomp', xrism=True)
-
-        Plot(plot_type)
-        cont_addcomps_sum = np.array([Plot.addComp(addCompNum=i_comp, plotGroup=1) for i_comp in cont_addcomps]).sum(0)
-
-
-    if other_addcomps_xcm is not None:
-        single_man_xcm=type(other_addcomps_xcm)==str
-        if single_man_xcm:
-            Xset.restore(other_addcomps_xcm)
-
-            # generally better
-        set_ener('thcomp', xrism=True)
-    else:
-        single_man_xcm=True
-
-    other_addcomps_vals=[]
-
-    #individual loop for each set of comps to load a model if needed
-    for i_id,indiv_cont_id in enumerate(other_addcomps):
-
-        if not single_man_xcm:
-            Xset.restore(other_addcomps_xcm[i_id])
-
-            #generally better
-            set_ener('thcomp',xrism=True)
-
-        Plot(plot_type)
-
-        if cont_addcomps_xcm=='':
-            cont_addcomps_sum = np.array([Plot.addComp(addCompNum=i_comp, plotGroup=1) for i_comp in cont_addcomps]).sum(0)
-        else:
-            assert cont_addcomps_xcm!='','several xcms without a separate continuum not implemented'
-
-        if indiv_cont_id is None:
-            other_addcomps_vals+=[None]
-            continue
-
-        if type(indiv_cont_id)==int:
-            indiv_cont_id_list=[indiv_cont_id]
-        else:
-            indiv_cont_id_list=indiv_cont_id
-        try:
-            other_addcomps_vals+=[np.array([Plot.addComp(addCompNum=i_comp, plotGroup=1) for i_comp in indiv_cont_id_list]).sum(0)]
-        except:
-            breakpoint()
-            pass
-
-    other_addcomps_ratio=[None if elem is None else np.nan_to_num(elem/cont_addcomps_sum) for elem in other_addcomps_vals]
-
-
-    plt.figure(figsize=figsize)
-    ax_comp=plt.gca()
-
-    plt.xlim(ener_low,ener_high)
-    plt.xlabel('Energy '+Plot.xAxis)
-    plt.ylabel(ylabel_prefix+(' ' if ylabel_prefix!='' else '')+'ratio to continuum')
-
-    if other_addcomps_labels is None:
-        other_addcomps_labels_use=np.repeat('',len(other_addcomps))
-    else:
-        other_addcomps_labels_use=other_addcomps_labels
-
-    if other_addcomps_colors is None:
-        other_addcomps_colors_use=np.repeat(None,len(other_addcomps))
-    else:
-        other_addcomps_colors_use=other_addcomps_colors
-
-    if other_addcomps_alpha is None:
-        other_addcomps_alpha_use=np.repeat(None,len(other_addcomps))
-    else:
-        other_addcomps_alpha_use=other_addcomps_alpha
-
-    if other_addcomps_ls is None:
-        other_addcomps_ls_use=np.repeat('-',len(other_addcomps))
-    else:
-        other_addcomps_ls_use=other_addcomps_ls
-
-    if other_addcomps_type is None:
-        other_addcomps_type_use=np.repeat('em',len(other_addcomps))
-    else:
-        other_addcomps_type_use =other_addcomps_type
-
-    for elem_ratio,elem_color,elem_label,elem_type,elem_alpha,elem_ls in \
-     zip(other_addcomps_ratio,other_addcomps_colors_use,other_addcomps_labels_use,other_addcomps_type_use,
-         other_addcomps_alpha_use,other_addcomps_ls_use):
-        plt.plot([] if elem_ratio is None else Plot.x(1),
-                  [] if elem_ratio is None else ((1 if elem_type=='em' else 0)+elem_ratio),
-                 color=elem_color,label=elem_label,lw=0 if elem_color==None else None,alpha=elem_alpha,
-                 ls=elem_ls,
-                 )
-
-    if ylims is not None:
-        plt.ylim(ylims)
-
-    if plot_transi:
-        plot_std_ener(ax_comp,plot_indiv_transi=True,force_side='none',
-                      plot_em=True,squished_mode=False,color='grey')
-
-    if minor_locator is not False:
-        ax_comp.xaxis.set_minor_locator(AutoMinorLocator(minor_locator))
-
-    plt.tight_layout()
-
-    plt.tight_layout()
-
-
-    if manual_bbox is not False:
-        #plt.legend(loc='upper left', bbox_to_anchor=(0.045, 1), )
-        plt.legend(loc='upper left', bbox_to_anchor=manual_bbox, )
-
-    else:
-        plt.legend()
-
+#plot_comp_ratio moved to comp_ratio/comp_ratio_plots.py (2026-10-24)
 
 def store_fit(mode, epoch_id, outdir, logfile, fitmod=None):
     '''
@@ -7501,7 +7336,8 @@ def store_plot(datatype='data',comps=False):
 
 def plot_std_ener(ax_ratio, ax_contour=None, plot_em=False, mode='ratio',exclude_last=False,plot_indiv_transi=False,
                   squished_mode=False,force_side='none',alpha_line=1.,
-                  noname=False,noline=False,color='default'):
+                  noname=False,noline=False,color='default',
+                  line_lw=1.5,line_ls='dashed',full_height=False,text_y_grey=1.1):
     '''
     Plots the current absorption (and emission if asked) standard lines in the current axis
     also used in the autofit plots further down
@@ -7513,6 +7349,11 @@ def plot_std_ener(ax_ratio, ax_contour=None, plot_em=False, mode='ratio',exclude
     -squished mode: makes the absorption text slightly higher to avoid it going lower than the plot
 
     -force_side: shows all lines either in emission if 'em' or in absorption if 'abs'
+
+    -line_lw, line_ls: width and style of the transition lines
+    -full_height: if True, the transition lines span the whole height of ax_ratio (instead of starting at y=1)
+    -text_y_grey: height (in axis fraction) of the higher row of labels with color='grey'; the other row is
+        0.08 above it
     '''
     # since for the first plot the 1. ratio is not necessarily centered,
     # we need to fetch the absolute position of the y=1.0 line in graph height fraction
@@ -7585,10 +7426,10 @@ def plot_std_ener(ax_ratio, ax_contour=None, plot_em=False, mode='ratio',exclude
         if not noline:
             # plotting the lines on the two parts of the graphs
             ax_ratio.axvline(x=lines_e_dict[line][0],
-                             ymin=ax_ratio.get_ylim()[0] if mode=='misc' else (0 if mode not in ['ratio','chimap'] else pos_ctr_ratio if not abs_bool else 0.),
-                             ymax=ax_ratio.get_ylim()[1] if mode=='misc' else (1 if mode not in ['ratio','chimap'] else pos_ctr_ratio if not em_bool else 1.),
+                             ymin=0. if full_height else ax_ratio.get_ylim()[0] if mode=='misc' else (0 if mode not in ['ratio','chimap'] else pos_ctr_ratio if not abs_bool else 0.),
+                             ymax=1. if full_height else ax_ratio.get_ylim()[1] if mode=='misc' else (1 if mode not in ['ratio','chimap'] else pos_ctr_ratio if not em_bool else 1.),
                              color=color if color!='default' else 'blue' if em_bool else 'brown',
-                             linestyle='dashed', linewidth=1.5,zorder=-1,alpha=alpha_line)
+                             linestyle=line_ls, linewidth=line_lw,zorder=-1,alpha=alpha_line)
             if ax_contour is not None:
                 ax_contour.axvline(x=lines_e_dict[line][0], ymin=0.5 if em_bool else 0, ymax=1 if em_bool else 0.5,
                                    color=color if color!='default' else 'blue' if em_bool else 'brown', linestyle='dashed', linewidth=0.5)
@@ -7666,10 +7507,191 @@ def plot_std_ener(ax_ratio, ax_contour=None, plot_em=False, mode='ratio',exclude
 
             # but the legend on the top part only
             ax_ratio.text(x=line_x_text,
-                          y=1.1 + 0.08*(y_line_pos)%2 if color=='grey' else 0.96 if not abs_bool else (0.06+(0.02+add_height_squished if squished_mode else 0)
+                          y=text_y_grey + 0.08*(y_line_pos)%2 if color=='grey' else 0.96 if not abs_bool else (0.06+(0.02+add_height_squished if squished_mode else 0)
                                                   if i_line % 2 == 1 else 0.12+(0.01 if squished_mode else 0)),
                           s=txt_line,
                           color=color if color!='default' else 'blue' if em_bool else 'brown',
                           transform=ax_ratio.get_xaxis_transform(), ha='center',
                           fontsize=None,
                           va='top')
+
+
+def plot_transi(ax, lines=None, plot_em=True, plot_abs=True, color='grey', line_lw=0.5, line_ls='--',
+                line_alpha=1., full_height=True, noline=False, noname=False, transi_angle=45., min_dx=0.03,
+                transi_alternate=True, merge_close=True, merge_tol=0.6, label_pad=2., fontsize=None,
+                ion_fontsize=None):
+    '''
+    Marks the individual (resolved) standard transitions in the x range of ax: one vertical line per transition,
+    and labels above the panel, with the ion names separated from the transition names.
+    Alternative to plot_std_ener for plot_indiv_transi=True displays (used by comp_ratio.plot_comp_ratio).
+
+    lines: None (all the lines_std_names whose label has a resolved transition, e.g. 'FeXXV K$\\alpha$ (z)')
+        or a list of lines_std_names to show
+    plot_em/plot_abs: include the emission ('em' in the name) / absorption ('abs') lines
+    color: color of the lines and labels
+    line_lw, line_ls, line_alpha: width, style and alpha of the transition lines
+    full_height: lines over the whole panel height (True) or only above y=1 (False, as plot_std_ener)
+    noline/noname: no lines / no labels
+
+    Labels, above the panel:
+        -transition names (the part between parentheses, e.g. 'z', 'P$^{1/2}$') are centered on their transition
+         energy, rotated by transi_angle (degrees, counterclockwise). With transi_alternate=True, each goes on the
+         lower row unless the previous label of that row is closer than min_dx (in axis fraction), then on the
+         upper row (above the ion names), to avoid overlaps between close energies. With transi_alternate=False,
+         all of them are on the lower row (no upper row)
+        -ion names (the part before the parentheses, e.g. 'FeXXV K$\\alpha$') are written once per ion, horizontal,
+         at the mean energy of its transitions, between the two rows. They are kept inside the panel width
+         (aligned to the panel edge when the mean energy is close to it)
+        The heights come from the drawn text sizes (rotated extents), in points above the frame: lower row, ion
+        names, upper row, separated by label_pad points, so nothing overlaps whatever the angle, font sizes or
+        figure size
+        -merge_close: transition names of the same ion that would overlap (e.g. doublets a few eV apart on a wide
+         energy range) are merged into one label at their mean energy ('y, w'). The test uses the rotated geometry:
+         two parallel labels overlap if their positions are closer than their mean width along the text direction
+         and than merge_tol times the font size across it. The distance is taken from the last transition of the
+         previous label, so chains of close transitions merge together ('y, x, w'). merge_tol=0.6: on the MAXI J1543
+         plots (10 inch wide, measured when the labels are placed), FeI Kalpha P1/2-P3/2 at 0.68 font size are
+         readable, NiXXVII Kalpha y-x and x-w at 0.55 and 0.50 touch
+        -ion names that would overlap horizontally go on additional ion rows above (the upper transition row, if
+         any, goes above all of them)
+    fontsize, ion_fontsize: None for the matplotlib default
+    '''
+
+    x_low, x_high = ax.get_xlim()
+
+    if lines is None:
+        lines = [elem for elem in lines_std_names if '(' in lines_std[elem] and ')' in lines_std[elem]]
+
+    #transitions in the plotted range, sorted by energy, one per energy
+    transitions = {}
+    for line in lines:
+        if ('em' in line and not plot_em) or ('abs' in line and not plot_abs):
+            continue
+        ener = lines_e_dict[line][0]
+        if x_low <= ener <= x_high and ener not in transitions:
+            transitions[ener] = line
+    energies = sorted(transitions)
+
+    if not noline:
+        if full_height:
+            line_ymin = 0.
+        elif ax.get_yscale() == 'log':
+            line_ymin = np.log10(1 / ax.get_ylim()[0]) / np.log10(ax.get_ylim()[1] / ax.get_ylim()[0])
+        else:
+            line_ymin = (1 - ax.get_ylim()[0]) / (ax.get_ylim()[1] - ax.get_ylim()[0])
+        for ener in energies:
+            ax.axvline(x=ener, ymin=line_ymin, ymax=1., color=color, ls=line_ls, lw=line_lw, alpha=line_alpha,
+                       zorder=-1)
+
+    if noname or len(energies) == 0:
+        return
+
+    from matplotlib.transforms import ScaledTranslation
+
+    fig = ax.figure
+    renderer = fig.canvas.get_renderer()
+
+    def axis_frac(ener):
+        return (ener - x_low) / (x_high - x_low)
+
+    def height_pt(text):
+        #height of the (rotated) text extent, in points
+        return text.get_window_extent(renderer).height * 72. / fig.dpi
+
+    def raise_by(text, base_transform, dy_pt):
+        text.set_transform(base_transform + ScaledTranslation(0, dy_pt / 72., fig.dpi_scale_trans))
+
+    def size_px(text):
+        #width and height of the text before rotation, in pixels
+        rotation = text.get_rotation()
+        text.set_rotation(0)
+        box = text.get_window_extent(renderer)
+        text.set_rotation(rotation)
+        return box.width, box.height
+
+    def labels_overlap(label_a, label_b):
+        #parallel rotated labels: center distance projected along and across the text direction
+        x_a = ax.transData.transform((label_a['energies'][-1], 0))[0]
+        x_b = ax.transData.transform((np.mean(label_b['energies']), 0))[0]
+        w_a, h_a = size_px(label_a['text'])
+        w_b, h_b = size_px(label_b['text'])
+        angle = np.radians(transi_angle)
+        font_px = (label_a['text'].get_size() + label_b['text'].get_size()) / 2 * fig.dpi / 72.
+        return abs((x_b - x_a) * np.cos(angle)) < (w_a + w_b) / 2 and \
+            abs((x_b - x_a) * np.sin(angle)) < merge_tol * font_px
+
+    def x_overlap(text_a, text_b):
+        #horizontal texts closer than label_pad
+        box_a, box_b = text_a.get_window_extent(renderer), text_b.get_window_extent(renderer)
+        pad_px = label_pad * fig.dpi / 72.
+        return box_a.x0 < box_b.x1 + pad_px and box_b.x0 < box_a.x1 + pad_px
+
+    #transition names, drawn at the frame top and raised once all the sizes are known
+    labels = []
+    last_x = {0: -np.inf, 1: -np.inf}
+    for ener in energies:
+        label = lines_std[transitions[ener]]
+        ion_name = label.split('(')[0].strip()
+        transi_name = label.split('(')[1].split(')')[0]
+
+        new = dict(ion=ion_name, names=[transi_name], energies=[ener],
+                   text=ax.text(ener, 1., transi_name, color=color, transform=ax.get_xaxis_transform(), ha='center',
+                                va='center', rotation=transi_angle, rotation_mode='anchor', fontsize=fontsize,
+                                clip_on=False))
+
+        prev = labels[-1] if len(labels) > 0 else None
+        if merge_close and prev is not None and prev['ion'] == ion_name and labels_overlap(prev, new):
+            new['text'].remove()
+            prev['names'].append(transi_name)
+            prev['energies'].append(ener)
+            prev['text'].set_text(', '.join(prev['names']))
+            prev['text'].set_x(np.mean(prev['energies']))
+            continue
+
+        x_frac = axis_frac(ener)
+        if not transi_alternate or x_frac - last_x[0] >= min_dx:
+            new['row'] = 0
+        elif x_frac - last_x[1] >= min_dx:
+            new['row'] = 1
+        else:
+            new['row'] = 0 if last_x[0] <= last_x[1] else 1
+        last_x[new['row']] = x_frac
+        labels.append(new)
+
+    rows = {row: [elem['text'] for elem in labels if elem['row'] == row] for row in (0, 1)}
+    ions = {}
+    for elem in labels:
+        ions.setdefault(elem['ion'], []).extend(elem['energies'])
+
+    #ion names, kept inside the panel width, on as many rows as needed to avoid overlaps
+    ion_texts = []
+    last_on_level = {}
+    for ion_name, ion_energies in sorted(ions.items(), key=lambda item: np.mean(item[1])):
+        x_frac = axis_frac(np.mean(ion_energies))
+        if x_frac < 0.08:
+            x_pos, ha = 0., 'left'
+        elif x_frac > 0.92:
+            x_pos, ha = 1., 'right'
+        else:
+            x_pos, ha = x_frac, 'center'
+        text = ax.text(x_pos, 1., ion_name, color=color, transform=ax.transAxes, ha=ha, va='center',
+                       fontsize=ion_fontsize, clip_on=False)
+        level = 0
+        while level in last_on_level and x_overlap(last_on_level[level], text):
+            level += 1
+        last_on_level[level] = text
+        ion_texts.append((text, level))
+
+    #vertical layout in points above the frame: lower row, ion name rows, upper row
+    h_low = max([height_pt(elem) for elem in rows[0]], default=0.)
+    h_ion = max([height_pt(elem) for elem, level in ion_texts], default=0.)
+    h_up = max([height_pt(elem) for elem in rows[1]], default=0.)
+    n_levels = 1 + max([level for elem, level in ion_texts], default=0)
+
+    for elem in rows[0]:
+        raise_by(elem, ax.get_xaxis_transform(), label_pad + h_low / 2)
+    for elem, level in ion_texts:
+        raise_by(elem, ax.transAxes, label_pad + h_low + label_pad + level * (h_ion + label_pad) + h_ion / 2)
+    for elem in rows[1]:
+        raise_by(elem, ax.get_xaxis_transform(),
+                 label_pad + h_low + label_pad + n_levels * (h_ion + label_pad) + h_up / 2)

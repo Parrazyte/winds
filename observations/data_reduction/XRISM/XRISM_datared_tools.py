@@ -397,7 +397,7 @@ def repro_dir(directory='auto',repro_suffix='repro',overwrite=True,instru='all',
             #replacing each file for which xaapipeline created a new version
             #listing the files in one of the subdirs. We need 2 / to ensure we're in one
             file_list=\
-                [elem for elem in np.unique(glob.glob(os.path.join(repro_dir,'repro','**'),
+                [elem for elem in np.unique(glob.glob(os.path.join(repro_dir,'**'),
                                                       recursive=True))
                  if 'repro_logs' not in elem and elem.count('/')>1]
 
@@ -413,7 +413,9 @@ def repro_dir(directory='auto',repro_suffix='repro',overwrite=True,instru='all',
                 bashproc.timeout=30
 
             for elem_file_repro in file_move_list:
+
                 file_arbo_pos=[elem for elem in file_list if elem_file_repro==elem.split('/')[-1].replace('.gz','')]
+
                 if len(file_arbo_pos)>1:
                     breakpoint()
                 elif len(file_arbo_pos)==0:
@@ -428,7 +430,9 @@ def repro_dir(directory='auto',repro_suffix='repro',overwrite=True,instru='all',
                 bashproc.sendline('rm '+file_arbo_spawn_path.replace('.gz',''))
 
                 time.sleep(1)
+
                 bashproc.sendline('mv '+elem_file_repro+' '+file_arbo_spawn_dir)
+
                 while not os.path.isfile(os.path.join(file_arbo_dir,elem_file_repro)):
                     time.sleep(0.5)
                     print('Wating for file move...')
@@ -441,10 +445,15 @@ def repro_dir(directory='auto',repro_suffix='repro',overwrite=True,instru='all',
                             breakpoint()
                             pass
 
-                time.sleep(0.5)
-
                 bashproc.sendline('echo validxx')
                 bashproc.expect('validxx')
+
+                # reading all the lines to reset the buffer
+                try:
+                    bashproc.timeout = 1
+                    bashproc.readlines()
+                except:
+                    bashproc.timeout = 30
 
                 print('Replaced file '+elem_file_repro)
 
@@ -467,7 +476,8 @@ def repro_dir(directory='auto',repro_suffix='repro',overwrite=True,instru='all',
 
         bashproc.sendline('exit')
 
-def init_anal(directory='auto_repro',anal_dir_suffix='',resolve_filters='open',xtd_config='all',gz=False,
+def init_anal(directory='auto_repro',anal_dir_suffix='',resolve_filters='open',
+              xtd_config='all',gz=False,
               repro_suffix='repro'):
     '''
 
@@ -1303,7 +1313,7 @@ def resolve_BR(directory='auto_repro', anal_dir_suffix='',
                lightcurves=False,
                emin=2,emax=12,
                remove_cal_pxl_resolve=False,
-               pixel_filter_rule='ratio_LS_6+remove_27',
+               pixel_filter_rule='ratio_LS_10+remove_27+remove_24',
                heasoft_init_alias='heainit', caldb_init_alias='caldbinit',
                parallel=False,repro_suffix='repro',plot_hp_sim_curve_band=True):
     '''

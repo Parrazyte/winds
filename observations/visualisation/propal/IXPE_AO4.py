@@ -895,7 +895,7 @@ def robust_smooth(
 def combi_sp_plot_soft():
 
     import os
-    from xspec_config_multisp import plot_comp_ratio
+    from comp_ratio.comp_ratio_plots import plot_comp_ratio
     import matplotlib.pyplot as plt
     os.chdir(media_root+'/crucial_SSD/Observ/BHLMXB/XRISM/MAXIJ1543-564/photo/pion/comp_plots')
     plot_comp_ratio([1, 2], [[1, 2, 3], [1, 2], [1, 2], [1, 2], [3]], 6.38, 7.13,
@@ -914,7 +914,8 @@ def combi_sp_plot_soft():
                                         '3comp1em_closersol_2-10_deabs_tot_abs2.xcm',
                                         '3comp1em_closersol_2-10_deabs_tot_abs3.xcm',
                                         '3comp1em_closersol_2-10_deabs_tot.xcm', ],
-                    ylims=[0.01, 1.], figsize=(6, 4), minor_locator=10, ylabel_prefix='',plot_transi=False)
+                    ylims=[0.01, 1.], figsize=(6, 4), minor_locator=10, ylabel_prefix='',plot_transi=False,
+                    set_ener_str='thcomp', set_ener_xrism=True)
 
     ax=plt.gca()
 
@@ -1095,7 +1096,7 @@ def combi_sp_plot_soft():
 def combi_sp_plot_hard():
 
     import os
-    from xspec_config_multisp import plot_comp_ratio
+    from comp_ratio.comp_ratio_plots import plot_comp_ratio
     import matplotlib.pyplot as plt
     os.chdir(media_root+'/crucial_SSD/Observ/BHLMXB/XRISM/MAXIJ1543-564/photo/pion/comp_plots')
     plot_comp_ratio([1, 2], [[1, 2, 3], [1, 2], [1, 2], [1, 2], [3]], 6.38, 7.13,
@@ -1114,7 +1115,8 @@ def combi_sp_plot_hard():
                                         '3comp1em_closersol_2-10_deabs_tot_abs2.xcm',
                                         '3comp1em_closersol_2-10_deabs_tot_abs3.xcm',
                                         '3comp1em_closersol_2-10_deabs_tot.xcm', ],
-                    ylims=[0.01, 1.], figsize=(6, 4), minor_locator=10, ylabel_prefix='',plot_transi=False)
+                    ylims=[0.01, 1.], figsize=(6, 4), minor_locator=10, ylabel_prefix='',plot_transi=False,
+                    set_ener_str='thcomp', set_ener_xrism=True)
 
     ax=plt.gca()
 

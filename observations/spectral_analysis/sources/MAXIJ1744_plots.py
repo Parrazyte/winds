@@ -1,6 +1,7 @@
 #imgs
 from XRISM.XRISM_datared_tools import *
 from general_tools import media_root
+from comp_ratio.comp_ratio_plots import plot_comp_ratio
 #
 mpdaf_plot_img('xa901002010xtd_p031300010_cl_SFP_img_sky_0.3_10.ds',
                rad_crop=[124,124],target_name_list=[None,None],crop_coords=[266.424,-29.0094],

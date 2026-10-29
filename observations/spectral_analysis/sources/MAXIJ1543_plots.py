@@ -1,4 +1,6 @@
+import os
 from general_tools import media_root
+from comp_ratio.comp_ratio_plots import plot_comp_ratio
 
 os.chdir(media_root+'/crucial_SSD/Observ/BHLMXB/XRISM/MAXIJ1543-564/photo/comp_plots')
 plot_comp_ratio([1,2],[[1,2,3],[1,2],[1,2],[1,2],[3]],6.38,7.13,
@@ -15,7 +17,8 @@ plot_comp_ratio([1,2],[[1,2,3],[1,2],[1,2],[1,2],[3]],6.38,7.13,
                           '3comp1em_closersol_2-10_deabs_tot_abs2.xcm',
                           '3comp1em_closersol_2-10_deabs_tot_abs3.xcm',
                           '3comp1em_closersol_2-10_deabs_tot.xcm',],
-                ylims=[0.01,1.],figsize=(10,8),minor_locator=10,ylabel_prefix='')
+                ylims=[0.01,1.],figsize=(10,8),minor_locator=10,ylabel_prefix='',
+                set_ener_str='thcomp',set_ener_xrism=True)
 
 
 os.chdir(media_root+'/crucial_SSD/Observ/BHLMXB/XRISM/MAXIJ1543-564/902003010_repro/analysis_tr/sp/comp_plots')
@@ -33,4 +36,10 @@ plot_comp_ratio([1,22],[[2,3,14,15],[4,5,6,7,8,9,16,17],[10,11],[12,13],[18,19],
 
 
 plt.savefig('mod_empi.pdf')
+
+'''
+photo errors computation
+'''
+
+os.chdir(media_root+'/crucial_SSD/Observ/BHLMXB/XRISM/MAXIJ1543-564/photo/pion')
 
